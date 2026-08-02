@@ -1,0 +1,41 @@
+# plex-channels curated queues — RICH HARNESS FIXTURE (offline screenshot iteration).
+#
+# Used by e2e/dev.sh (QUEUES_PATH points at a /tmp copy). Titles/collection names are REAL
+# entries on the live Plex server so they resolve (posters, counts, collection expansion).
+# Covers every queue-entry shape the grid renders:
+#   * plain title strings                       (the normal movie/anime entry)
+#   * a {ratingKey, title} mapping              (what the UI/AI write)
+#   * a Collection entry  "Collection: <name>"  -> tile shows the collection poster + count
+#   * a done-tagged entry {title, done: true}   -> greyed, targeted by "Remove all completed"
+#   * a series entry with an `episodes:` batch   (anime)
+bob:
+- "Jin-Roh: The Wolf Brigade (1999)"
+- "Ronin (1998)"
+- "The Good, the Bad and the Ugly (1966)"
+- "Highlander (1986)"
+- "Duel (1971)"
+- "Collection: Godzilla Collection"
+- "Apocalypse Now (1979)"
+- "Conan the Barbarian (1982)"
+- ratingKey: "267576"
+  title: 20,000 Leagues Under the Sea (1954)
+- {title: "Barry Lyndon (1975)", done: true}
+- {title: "Fargo (1996)", done: true}
+
+bob_alice:
+- "Shutter Island (2010)"
+- "Predator (1987)"
+- "District 9 (2009)"
+- "Collection: The Chronicles of Riddick Collection"
+- "Timecop (1994)"
+
+bob_anime:
+- "Cowboy Bebop"
+- title: Space Dandy
+  episodes: 2
+- "Sword Art Online"
+- "Steins;Gate"
+# A collection of SERIES (not movies) — the tile shows the member series that plays next,
+# with the collection itself in the badge.
+- "Collection: Chaika: The Coffin Princess"
+- {title: "Darker Than Black (2007)", done: true}

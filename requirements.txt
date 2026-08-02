@@ -1,0 +1,7 @@
+paho-mqtt>=2.1,<3
+# Playback = Plex Cast to the Shield as the account token (correct-account attribution).
+PlexAPI>=4.15,<5
+PyChromecast>=14,<15
+# Round-trip YAML for the curated-queue store (queues.py) — preserves the wishlist's
+# hand-written comments + ordering when the service prunes finished entries.
+ruamel.yaml>=0.18,<0.19

@@ -1,0 +1,11 @@
+.git
+__pycache__/
+*.pyc
+**/__pycache__/
+web/node_modules/
+web/dist/
+__screenshots__/
+.env
+.env.local
+docs/
+*.md

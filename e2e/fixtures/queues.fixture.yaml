@@ -1,0 +1,149 @@
+# plex-channels curated queues -- Bob's per-audience wishlists (top = plays next).
+#
+# Edit by hand here, over SMB (\\nas.example.com\App-Configs\plex-channels\queues.yaml),
+# or in the web UI (plex-channels.example.com). Order = play order, TOP plays next. A MOVIE
+# plays once and drops off when watched; a SERIES plays its next unwatched episodes in
+# order and drops off when fully watched. Finished entries are auto-removed on each scan.
+#
+# ENTRY FORMATS (decision 2026-07-20-queue-entries-are-title-strings.md) -- a human never
+# needs a ratingKey; just type a title. An entry is any of:
+#     - Duel (1971)                          # title + year (the normal form)
+#     - 86 Eighty-Six (2021) [anidb-16172]   # + a [source-id] hint (folder-name style)
+#     - Cowboy Bebop                         # bare title
+#     - 210338                               # a bare ratingKey (what the UI / AI write)
+#     - {ratingKey: 459608, title: "Duel (1971)"}   # ratingKey with a label
+# Titles resolve at scan time against the card's section (movies=1, anime=11). One that
+# matches nothing is kept + flagged (never dropped, never rewritten) -- fix the title/year.
+#
+# SEEDED 2026-07-20 from Bob's Plex Watchlist (73) + On Deck, best-guess by audience --
+# REARRANGE FREELY. Mapping used:
+#   * movies routed by contentRating: G/PG -> family (Family), everything else -> bob.
+#   * couple picks aren't inferable, so bob_alice / bob_alice_anime were left EMPTY.
+#   * every Watchlist "movie" (incl. anime films like Jin-Roh, Steamboy) lives in the
+#     Movies section, so they all landed in the movie queues; the anime queues were seeded
+#     from On Deck (Continue Watching) shows in the Anime section.
+#   * bob_anime excludes Dragon Ball Z + Daemons of the Shadow Realm (Bob's recorded
+#     anime exclusions); no On Deck show was clearly kid-anime, so family_anime is EMPTY.
+#   * "# not in library yet" = a Watchlist wish not currently in Plex; it's skipped at scan
+#     until it's added (kept here so the wishlist is complete).
+
+# QUEUE KEY -> AUDIENCE (per-set '# Plex: ...' labels were removed 2026-07-20: they drifted
+# on every edit and only duplicated this. The web UI and NFC cards key off the names below,
+# NOT these comments):
+#   bob               = Bob - Movies
+#   bob_alice        = Bob & Alice - Movies
+#   family          = Family - Movies (G/PG)
+#   bob_anime         = Bob - Anime
+#   bob_alice_anime  = Bob & Alice - Anime
+#   family_anime    = Family - Anime
+
+bob:
+- "Jin-Roh: The Wolf Brigade (1999)"
+- "Mean Streets (1973)"
+- "Ronin (1998)"
+- "Witness (1985)"
+- "Marathon Man (1976)"
+- "Barbarella (1968)"
+- "The Good, the Bad and the Ugly (1966)"
+- "For a Few Dollars More (1965)"
+- "A Fistful of Dollars (1964)"
+- "Highlander (1986)"
+- "Duel (1971)"
+- "The Beastmaster (1982)"
+- "Tenet (2020)"
+- "Barry Lyndon (1975)"
+- "Fargo (1996)"
+- "The Big Country (1958)"
+- "Black Hawk Down (2001)"
+- "Citizen Kane (1941)"
+- "Django (1966)"
+- "Unforgiven (1992)"
+- "The Dirty Dozen (1967)"
+- "Batman v Superman: Dawn of Justice (2016)"
+- "The Story of Film: A New Generation (2021)" # not in library yet
+- "Carlito's Way (1993)"
+- "Godzilla (1954)"
+- "Godzilla: King of the Monsters! (1956)"
+- "Apocalypse Now (1979)"
+- "Conan the Barbarian (1982)"
+- "Streets of Fire (1984)"
+
+bob_alice:
+- "Shutter Island (2010)"
+- "The Great Gatsby (1974)"
+- "The Jerk (1979)"
+- "Flatliners (1990)"
+- "Predator (1987)"
+- "Moulin Rouge! (2001)"
+- "Somewhere in Time (1980)"
+- "Pitch Black (2000)"
+- "The Chronicles of Riddick: Into Pitch Black (2000)"
+- "The Chronicles of Riddick: Dark Fury (2004)"
+- "The Chronicles of Riddick (2004)"
+- "Arion (1986)"
+- "Clash of the Titans (2010)"
+- "Tommy (1975)"
+- "Ghostbusters: Afterlife (2021)"
+- "Macbeth (2015)"
+- "District 9 (2009)"
+- "Bedazzled (1967)"
+- "Timecop (1994)"
+
+family:
+- "Field of Dreams (1989)"
+- "Legend (1985)"
+- "The Cat Returns (2002)"
+- "The Lord of the Rings: The Fellowship of the Ring (2001)"
+- "Princess Mononoke (1997)"
+- "Muppet Treasure Island (1996)"
+- "The Man with One Red Shoe (1985)"
+- "Lost in Space (1998)"
+- "Venus Wars (1989)"
+- "Short Circuit 2 (1988)"
+- "A Kid in King Arthur's Court (1995)"
+- "Time Bandits (1981)"
+- "Master and Commander: The Far Side of the World (2003)"
+- "My Neighbors the Yamadas (1999)"
+- "RoboCop (1987)"
+- "Star Trek: The Motion Picture (1979)"
+- "The Goonies (1985)"
+- "Willow (1988)"
+- "The Sandlot (1993)"
+- "Roujin Z (1991)"
+- "The Pink Panther (1963)"
+- "Ghostbusters II (1989)"
+- "The Pink Panther (2006)"
+- "The Indian in the Cupboard (1995)"
+- "Steamboy (2004)"
+- "Days of Thunder (1990)"
+- "Le Mans (1971)"
+- "Grand Prix (1966)"
+- ratingKey: "267329"
+  title: Best of Cinerama (1963)
+
+bob_anime:
+- ratingKey: "453867"
+  title: Daemons of the Shadow Realm (2026)
+- title: Argevollen
+  episodes: 2
+- "Detectives These Days Are Crazy!"
+- "Iria Zeiram: The Animation"
+- "Space Dandy"
+- "Infinite Ryvius"
+- "Toilet-bound Hanako-kun"
+- "Occultic;Nine"
+
+bob_alice_anime:
+- "Kurozuka"
+- ratingKey: "222867"
+  title: Darker Than Black (2007)
+- "Space Patrol Luluco"
+
+family_anime:
+- ratingKey: "325805"
+  title: Dragon Ball Z (1989)
+  episodes: 2
+- ratingKey: "361112"
+  title: "Mecha-Ude: Mechanical Arms TV (2024)"
+- ratingKey: "208765"
+  title: Sword Art Online (2012)

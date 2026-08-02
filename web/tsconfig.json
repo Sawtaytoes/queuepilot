@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "esModuleInterop": true,
+    "exactOptionalPropertyTypes": false,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "lib": ["DOM", "DOM.Iterable", "ES2023"],
+    "module": "ESNext",
+    // `bundler` rather than `NodeNext`: Vite is what compiles this
+    // package, so extensionless relative imports are the resolution
+    // the bundler actually performs.
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": false,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "target": "ES2023",
+    // Empty, deliberately — mirrors rip-deck's and gallery-downloader's
+    // browser programs. Leaving the Node types out is what makes an
+    // accidental `node:fs` import in a component a typecheck failure
+    // rather than a blank page. `vite/client` arrives through the
+    // triple-slash reference in `src/vite-env.d.ts`.
+    "types": [],
+    "useDefineForClassFields": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src", "vite.config.ts", "vitest.config.ts"]
+}

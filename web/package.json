@@ -1,0 +1,33 @@
+{
+  "name": "plex-channels-web",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "React 19 + TypeScript + Vite + Tailwind v4 frontend for plex-channels. Built to web/dist, which server/src/server.js serves as its static root.",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@charcuterie/tokens": "^1.0.0",
+    "@charcuterie/ui": "^1.0.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "tailwindcss": "^4.3.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.9"
+  }
+}

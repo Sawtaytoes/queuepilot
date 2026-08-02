@@ -1,0 +1,48 @@
+# Decision records — plex-channels
+
+One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newest first.
+
+| Date | Decision |
+| --- | --- |
+| 2026-08-02 | [Adopting a `@charcuterie/ui` component means DELETING the app's skin for it](2026-08-02-adopting-a-component-means-deleting-its-skin.md) *(frontend convention — `app.css` is unlayered and outranks every Tailwind utility, so a kept `padding`/`color` makes the component's props a silent no-op; app keeps layout + selectors only)* |
+| 2026-08-02 | [An uncontrolled `@charcuterie/ui` control is keyed on its SECOND writer, never on its value](2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer.md) *(frontend convention — `value`/`expandedKeys` are initial-only; keying on the value remounts under the user's own pick)* |
+| 2026-08-02 | [Five `@charcuterie/ui` components plex-channels cannot adopt yet, and why each is a library gap](2026-08-02-components-that-cannot-be-adopted-yet.md) *(migration scope — `Field` overwrites the control's `id`; `Menu` has no point anchor and no non-item states; `Modal` has no form; `Badge` has no `asChild` and no two-part shape)* |
+| 2026-07-31 | [The web frontend is React 19 + TypeScript + Vite + Tailwind v4 on `@charcuterie/tokens`](2026-07-31-frontend-is-react-typescript-vite-tailwind-on-charcuterie-tokens.md) *(architecture / build — charcuterie M6d phase 1; adds a build step, keeps the hash routing + the whole DOM contract, applies Plex amber as the accent intent)* |
+| 2026-07-31 | [The start episode is PICKED in a modal — no inline control on the tile](2026-07-31-start-episode-is-picked-in-a-modal.md) *(UI — supersedes the inline "Start" field; adds the collection series+season+episode picker and the tile context menu)* |
+| 2026-07-31 | [A Collection tile shows the MEMBER that plays next — the collection moves to the badge](2026-07-31-collection-tiles-are-member-first.md) *(UI — member poster/name + episode-only line; also drops the "Play" label before the eps dropdown)* |
+| 2026-07-31 | [A show entry can pin a manual START episode — a floor for "next", never a watched-write](2026-07-31-per-entry-start-episode-override.md) *(direction — implementation pending; season+episode, single-season → episode-only, collection → series+season+episode)* |
+| 2026-07-31 | [Curated members are additive includes on top of the rule pool — a channel can be a mix](2026-07-31-curated-members-are-additive-includes.md) *(behavior — supersedes the "curated vs dynamic, no convergence" point; member search spans all libraries)* |
+| 2026-07-29 | [Each binding card renders its OWN ratings, not the active profile's scoped list](2026-07-29-binding-ratings-render-per-profile-not-shared-scope.md) *(bug fix — a non-active profile's binding came up blank in Configure)* |
+| 2026-07-29 | [A rewatch channel's pool follows the libraries IT names — and a show library contributes its one-episode films](2026-07-29-rewatch-pool-follows-the-channels-own-libraries.md) *(selection logic — drops the SEC_MOVIES hardwire; anime films reachable; supersedes the "hide the inert pickers" clause)* |
+| 2026-07-29 | [The eligible pool lists every short by name — a library bucket is not a show](2026-07-29-shorts-preview-lists-each-short.md) *(UI / preview payload — per-short tiles + per-short Exclude)* |
+| 2026-07-29 | [Every dynamic channel is a first-class UI entry, and rotation channels are deletable](2026-07-29-dynamic-channels-first-class-and-deletable.md) *(UI / data model — per-channel rows + Delete button; rewatch hides its inert library pickers; supersedes the no-delete clause)* |
+| 2026-07-29 | [Drop `set:"auto"` ("Shield pick") from the UI — every play is explicit](2026-07-29-drop-set-auto-from-ui-every-play-explicit.md) *(UI / interaction — backend auto path unchanged)* |
+| 2026-07-27 | [Younger Kids gets Shows and Shorts as two cards; Older Kids keeps them combined](2026-07-27-younger-kids-shows-and-shorts-are-two-cards.md) *(channel + card model — adds the `shows`/`shorts` channels; a rotation channel may now have no show library)* |
+| 2026-07-26 | [Spoken status is a sentence, not a diagnostic — and it only speaks when something is actually wrong](2026-07-26-spoken-status-is-a-sentence-not-a-diagnostic.md) *(UX — `state.error` is read aloud verbatim; no timeouts/jargon, and the wait announcement fires at 25s not 6s)* |
+| 2026-07-26 | [A card names a Plex profile, and the scan waits for the Shield to really be on it](2026-07-26-cards-name-a-profile-and-the-scan-waits-for-it.md) *(playback gating — the per-tier cards; extends `requires_profile` from per-SET to per-SCAN, plus the ADB auto-switch)* |
+| 2026-07-25 | [A set can require a Plex Home profile (`requires_profile`); the scan waits for the on-screen switch](2026-07-25-sets-can-require-a-plex-profile.md) *(playback gating — the demo reel's libraries are invisible to the kid profiles)* |
+| 2026-07-23 | [Live migration: `younger`/`older` tiers → `shows_shorts` + `movies` function channels (soak + `channel_for` routing)](2026-07-23-live-tier-migration-to-function-channels.md) *(migration — v3 PR 4)* |
+| 2026-07-23 | [`sets.yaml` rotation channels carry a `profiles[]` binding array + a `behavior` field (back-compat reader)](2026-07-23-sets-yaml-profiles-array-schema.md) *(schema — v3 PR 2a)* |
+| 2026-07-21 | [Human-readable YAML is no longer a goal; stable IDs (ratingKeys) are canonical entry identity, not title strings](2026-07-21-drop-human-readable-yaml-canonical-ids.md) *(direction; supersedes the hand-editable goal)* |
+| 2026-07-21 | [Every interactive element must have obvious hover, focus (keyboard), and motion states](2026-07-21-ui-interaction-states-standard.md) *(UI standard)* |
+| 2026-07-21 | [Defer the queue_builder Python → Node port (revisit later, not now)](2026-07-21-defer-python-to-node-port.md) *(scope)* |
+| 2026-07-21 | [Channels are function-first with a profile selector; members generalize (show/collection/movie/short) and behavior is progress-vs-rewatch](2026-07-21-channels-function-first-generalized-members.md) *(direction — v3)* |
+| 2026-07-21 | [Dynamic (rotation) channels are created + fully configured in Node, not hardcoded in Python](2026-07-21-dynamic-channels-fully-configurable-in-node.md) *(v2)* |
+| 2026-07-21 | [Channels split into "Dynamic Channels" vs "Curated Channels"; consistent nav + config surface, fix the "queue" noun](2026-07-21-dynamic-vs-curated-channel-categories.md) *(v2)* |
+| 2026-07-21 | [Plex Collections are first-class queue entries, expanded in collection order](2026-07-21-plex-collections-as-ordered-queue-entries.md) *(v2)* |
+| 2026-07-21 | [Finished queue entries are kept + marked `done`, not pruned — removed only on "remove all completed"](2026-07-21-finished-queue-entries-marked-done-not-pruned.md) *(v2; supersedes the prune half of the movie-queue wishlist)* |
+| 2026-07-21 | [Queues vs channels taxonomy (anime sets are channels, random rotation; Movies is its own channel) + play-first entry IA](2026-07-21-queues-vs-channels-taxonomy-play-first-ia.md) *(shipped)* |
+| 2026-07-21 | [Shelf/tile UI conventions: reserved scrollbar space, edge shadows, zoom-proof glyphs, 480px posters](2026-07-21-shelf-ui-conventions.md) *(shipped)* |
+| 2026-07-21 | [Sets are data (sets.yaml): immutable ids, renameable labels, per-set libraries, global excludes](2026-07-21-sets-registry-immutable-ids.md) *(shipped)* |
+| 2026-07-21 | [The editor is a real live webapp (SSE, no Refresh); monorepo server/+web/; YAML stays, no SQLite](2026-07-21-real-webapp-sse-yaml-not-sqlite.md) *(shipped)* |
+| 2026-07-20 | [`queues.yaml` carries no per-set label comments; audience→key map lives in the header](2026-07-20-queues-yaml-no-per-set-label-comments.md) |
+| 2026-07-20 | [Queue web UI: Plex-style UX, ratingKey writes, docs count as movies](2026-07-20-queue-web-ui-ux-and-write-format.md) *(shipped)* |
+| 2026-07-20 | [The queue web UI is a monorepo in one container, not a separate app](2026-07-20-queue-web-ui-monorepo-single-container.md) *(shipped)* |
+| 2026-07-20 | [Queue entries are human-readable title strings, not ratingKeys](2026-07-20-queue-entries-are-title-strings.md) *(shipped)* |
+| 2026-07-20 | [The queue config web UI is a Node.js app (like mux-magic), not embedded Flask](2026-07-20-queue-web-ui-is-nodejs-not-flask.md) *(packaging amended → monorepo/one container)* |
+| 2026-07-17 | [A queued/rotated series never plays specials — Season 0 is excluded entirely](2026-07-17-anime-series-never-open-on-specials-exclude-season-0.md) |
+| 2026-07-16 | [The queue config web app is embedded in plex-channels, and edits the same YAML](2026-07-16-config-web-app-embedded-in-plex-channels.md) *(stack + process model amended 2026-07-20 → Node.js)* |
+| 2026-07-16 | [Anime becomes three curated queues; the On Deck set is retired](2026-07-16-anime-queues-retire-ondeck-set.md) |
+| 2026-07-16 | [Movie-queue sets are a hand-edited YAML wishlist, pruned on finish, played as Bob](2026-07-16-movie-queue-sets-yaml-wishlist.md) |
+| 2026-07-09 | [Bob's "anime" set = On Deck (Continue Watching), not whole-library](2026-07-09-anime-continue-watching-set.md) (superseded; specials rule survives) |
+| 2026-07-08 | [Kids' channels draw from Shows + Shorts only — no Anime](2026-07-08-kids-channels-shows-and-shorts-only-no-anime.md) |

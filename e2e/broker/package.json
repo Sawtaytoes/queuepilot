@@ -1,0 +1,7 @@
+{
+  "name": "plex-channels-fake-broker",
+  "private": true,
+  "type": "module",
+  "description": "Harness-only: embedded aedes MQTT broker + mock responder for offline UI screenshots. NOT shipped. Run `npm install` here to (re)hydrate.",
+  "dependencies": { "aedes": "^0.51.3" }
+}

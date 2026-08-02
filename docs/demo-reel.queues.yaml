@@ -1,0 +1,31 @@
+# Theater DEMO reel — an ORDERED showcase that replays IN FULL on every card scan
+# (source=queue + reel:true; never marked done). File order = play order: a deliberate arc
+# from lights-down logos, through 4K/Atmos reference showpieces, to a musical crescendo and
+# a quiet outro. Curated 2026-07-21 from the Demo profile's most-played clips (1,751 plays).
+# Rearrange / trim freely; entries are Demos (sec 2) + Movie Clips (sec 7) ratingKeys.
+demo:
+# --- Lights down: logos & Atmos ambience ---
+- {ratingKey: 230859, title: "[Dolby] Dolby Universe (4K DoVi Atmos)"}
+- {ratingKey: 231084, title: "[Dolby] Amaze (Atmos overhead)"}
+- {ratingKey: 231083, title: "[Dolby] Leaf (Atmos ambience)"}
+# --- Reference video + Atmos showpieces ---
+- {ratingKey: 180325, title: "Ready Player One [The Race] (4K Atmos)"}
+- {ratingKey: 232686, title: "Edge of Tomorrow [Intro Bass Drop] (4K)"}
+- {ratingKey: 180808, title: "Hunter Killer [1st Attack] (4K Atmos, deep LFE)"}
+- {ratingKey: 196322, title: "Alita: Battle Angel [Motorball] (4K DoVi HDR10+)"}
+- {ratingKey: 180891, title: "Overlord [Air Landing] (4K Atmos)"}
+- {ratingKey: 182231, title: "Top Gun: Maverick [Jet Fight] (4K DoVi Atmos)"}
+- {ratingKey: 205232, title: "John Wick 4 [Isometric Incendiary] (4K DoVi Atmos)"}
+# --- Dynamics & surround torture ---
+- {ratingKey: 184373, title: "[THX] Genesis / Deep Note (DTS-X)"}
+- {ratingKey: 181678, title: "[Dolby] Conductor (orchestral Atmos)"}
+- {ratingKey: 182949, title: "Jumanji: The Next Level [Ostrich Stampede] (IMAX DTS-X)"}
+- {ratingKey: 231987, title: "TMNT [Truck in Snow] (4K DoVi Atmos)"}
+# --- Color, animation, music ---
+- {ratingKey: 182146, title: "Spider-Verse [Co-op Battle] (4K Atmos)"}
+- {ratingKey: 180261, title: "Guardians of the Galaxy Vol.2 [Intro] (4K Atmos)"}
+- {ratingKey: 231854, title: "[Trinnov] Music Machine 2 (4K Atmos)"}
+# --- Crescendo + quiet outro ---
+- {ratingKey: 231976, title: "The Greatest Showman [Opening] (4K DoVi Atmos)"}
+- {ratingKey: 181687, title: "[Dolby] Horizon (soaring Atmos finale)"}
+- {ratingKey: 181706, title: "[Dolby] Silent (quiet outro)"}

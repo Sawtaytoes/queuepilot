@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Run the plex-channels-web E2E suites against a LOCAL server + temp data copies.
+# Needs: the root agentic .env (PLEX token), mux-magic's node_modules (playwright),
+# and PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers (agent-sandbox-base).
+# live-smoke.mjs is separate: it drives https://plex-channels.example.com read-only.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+set -a; source /srv/repos/agentic/.env; set +a
+# The frontend is a Vite build since M6d — server/src/server.js serves web/dist,
+# so a stale (or missing) dist means every browser suite drives an empty page.
+[ -d web/node_modules ] || npm --prefix web ci --no-audit --no-fund
+npm --prefix web run build
+unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS   # suites assert the degraded no-broker paths
+export QUEUES_PATH=/tmp/queues-ui.yaml SETS_PATH=/tmp/sets-ui.yaml WEB_PORT=18768 \
+       NODE_TLS_REJECT_UNAUTHORIZED=0 PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}
+TOTAL=0
+echo "=== collection-start-test (python, offline) ==="   # engine floor for collection starts
+python3 e2e/collection-start-test.py || TOTAL=$((TOTAL+1))
+echo "=== history-persist-test ==="   # manages its own server (port 18770) + files
+node e2e/history-persist-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)
+node e2e/api-v2-test.mjs || TOTAL=$((TOTAL+1))
+for t in kbd-undo-test ui-test homedrag-test channels-test sse-test; do
+  echo "=== $t ==="
+  # Fresh server + files PER SUITE — stale lock dirs / shared servers made runs flaky.
+  rm -rf /tmp/sets-ui.yaml /tmp/sets-ui.yaml.lock /tmp/queues-ui.yaml.lock /tmp/.history.json
+  cp e2e/fixtures/queues.fixture.yaml /tmp/queues-ui.yaml
+  node server/src/server.js >/tmp/web-e2e.log 2>&1 &
+  SRV=$!; sleep 1.5
+  node "e2e/$t.mjs" || TOTAL=$((TOTAL+1))
+  kill $SRV 2>/dev/null; wait $SRV 2>/dev/null || true
+done
+echo "suites failed: $TOTAL"; exit $TOTAL

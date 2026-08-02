@@ -1,0 +1,58 @@
+# plex-channels set registry — RICH HARNESS FIXTURE (offline screenshot iteration).
+#
+# Used by e2e/dev.sh (SETS_PATH points at a /tmp copy of this). Real section ids from the
+# live Plex server (so the web UI's library pickers + posters resolve): Movies=1,
+# Documentaries=14, Shorts=15, Anime=11, Shows=5. Covers every registry case the UI renders:
+#   * curated MOVIE queues (source: queue, kind: movies)  -> bob, bob_alice
+#   * a curated ANIME channel (source: queue, kind: anime) -> bob_anime
+#   * rule-based ROTATION channels WITH an account binding (source: rotation) -> younger, older
+# The rotation channels drive the #/channels Dynamic group + the Play-landing tier dropdown;
+# their preview pools + the "Play on" device menu come from the fake MQTT responder
+# (e2e/fake-mqtt.mjs), since the real broker is unreachable from the harness.
+global:
+  excluded_sections: []
+
+sets:
+  - id: bob
+    label: Bob — Movies
+    kind: movies
+    source: queue
+    sections: [1, 14]
+  - id: bob_alice
+    label: Bob & Alice — Movies
+    kind: movies
+    source: queue
+    sections: [1, 14]
+  - id: bob_anime
+    label: Bob — Anime
+    kind: anime
+    source: queue
+    sections: [11]
+  # Rule-based kid channels (cards send set:"auto"; the signed-in profile picks the tier).
+  # Both carry a full account binding so the Configure form + preview render realistically.
+  - id: younger
+    label: Younger Kids
+    kind: cartoons
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
+    movie_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
+    blocklist: []
+    plex_user: Younger Kids
+    account_id: 11111111
+    user_uuid: "1111111111111111"
+    watch_count_accounts: [11111111]
+  - id: older
+    label: Older Kids
+    kind: cartoons
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-PG, PG]
+    movie_ratings: [TV-PG, PG]
+    blocklist: []
+    plex_user: Older Kids
+    account_id: 22222222
+    user_uuid: "2222222222222222"
+    watch_count_accounts: [22222222]
