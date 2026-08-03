@@ -1,6 +1,6 @@
 # CI runs on GitHub Actions and the image is built-on-push to GHCR
 
-- **Status:** Accepted (deploy cutover owner-gated — see "Remaining")
+- **Status:** Accepted — **production cutover DONE 2026-08-02** (see "Cutover")
 - **Date:** 2026-08-02
 - **Type:** infrastructure / CI-CD
 - **Supersedes:** the manual `build.sh` → `docker-registry.example.com/plex-channels:latest`
@@ -56,16 +56,28 @@ bundles the merged code produces.
   UI is the charcuterie three-column layout (screenshot in `__screenshots__/`), while the live
   `plex-channels.example.com` still returns the vanilla `/style.css` markup.
 
-## Remaining (owner-gated — NOT done here)
+## Cutover (owner-approved, done 2026-08-02)
 
-The production cutover was deliberately not performed; the live deploy has been owner-gated
-all along ("gated on Bob watching — live cutover of the kids' cards"). Two steps remain:
+The owner approved the live cutover; both steps were executed and verified live:
 
-1. **Make the GHCR package `plex-channels` public.** New GHCR packages default to private, and
-   the fleet's TrueNAS apps pull uncredentialed (no `imagePullSecret`), so an anonymous pull of
-   `ghcr.io/sawtaytoes/plex-channels:latest` currently 401s. mux-magic's package is public;
-   this matches that precedent, but is an account-level exposure decision.
-2. **Repoint the TrueNAS `plex-channels` app image** `repository` from
-   `docker-registry.example.com/plex-channels` → `ghcr.io/sawtaytoes/plex-channels` (keep tag
-   `latest`) via `app.update`. With `pull_policy: always` this triggers the redeploy chain
-   above. This is the live cutover of the kids' cards and needs the owner watching.
+1. **GHCR package is public.** Anonymous pull of `ghcr.io/sawtaytoes/plex-channels:latest`
+   returns HTTP 200 with the real manifest (verified via the anon `ghcr.io/token` flow; a
+   private/absent package returns 403 by contrast). Matches mux-magic's public-package
+   precedent, so the TrueNAS app pulls uncredentialed with no `imagePullSecret`.
+   *(Correction to the first draft of this record: an earlier "package is private / 401"
+   claim was a flawed test — it omitted the `Authorization: Bearer <anon-token>` header that
+   even public GHCR requires after the token exchange. The corrected test shows public.)*
+2. **App image repointed.** `midclt call -j app.update plex-channels` set
+   `image.repository` `docker-registry.example.com/plex-channels` →
+   `ghcr.io/sawtaytoes/plex-channels` (tag `latest`, `pull_policy: always`). The app pulled
+   the GHCR image and redeployed: state `RUNNING`, active container
+   `ghcr.io/sawtaytoes/plex-channels:latest`, **0 restarts**, both processes healthy (web on
+   :8768, MQTT connected rc=Success, discovery published).
+
+**Live evidence:** `plex-channels.example.com` now serves the hashed Vite bundles
+(`/assets/index-*.js` + `/assets/index-*.css`, `<div id="root">`, `data-scheme="dark"`); the
+old vanilla `/style.css` + hand-written markup is gone. Full three-column React/Tailwind UI
+renders with real Plex data (screenshot: `__screenshots__/live-cutover-ghcr-new-build.png`).
+
+The old LAN registry `docker-registry.example.com/plex-channels` is now unused for this app;
+`build.sh` (the manual path) is superseded by the GitHub Actions → GHCR build.
