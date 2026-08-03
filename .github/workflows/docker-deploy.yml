@@ -1,0 +1,73 @@
+# plex-channels image build+push — GitHub Actions, added 2026-08-02.
+#
+# Mirrors the mux-magic build-on-push wiring (`.github/workflows/docker-deploy.yml`):
+# a `workflow_run` trigger fires after CI concludes, and on success this builds the
+# app image and pushes it to GHCR. The Dockerfile is self-contained (it builds the
+# React `web/` in its own stage), so unlike mux-magic there are no host-side Node
+# build steps here — just checkout + build-push.
+#
+# Registry: GHCR (`ghcr.io/sawtaytoes/plex-channels`), the fleet's GitHub-Actions
+# build target (same as mux-magic). This SUPERSEDES the old manual path that pushed
+# to the LAN registry `docker-registry.example.com/plex-channels:latest` via build.sh
+# on nas — a GitHub-hosted runner can't reach that private LAN registry.
+#
+# NOTE: pushing `:latest` here does NOT by itself redeploy the running TrueNAS app —
+# the app's image reference must point at GHCR and a redeploy must be triggered. See
+# docs/decisions/2026-08-02-ci-and-deploy-on-github-actions-to-ghcr.md for the cutover.
+name: Docker Deploy
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    branches:
+      - main
+    types: [completed]
+  workflow_dispatch:
+
+# Group by the branch that actually ran CI, not github.ref — under a workflow_run
+# trigger github.ref is always the default branch.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.workflow_run.head_branch || github.ref }}
+
+jobs:
+  build:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+        with:
+          # workflow_run's github.sha resolves to the DEFAULT branch, not the
+          # branch that ran CI — use the triggering run's head_sha so the image
+          # matches its tag.
+          ref: "${{ github.event.workflow_run.head_sha || github.sha }}"
+
+      - name: Log in to GitHub Docker Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute branch tag
+        id: tags
+        run: |
+          branch_tag="${{ github.event.workflow_run.head_branch || github.ref_name }}"
+          branch_tag="${branch_tag//\//-}"
+          echo "branch_tag=${branch_tag}" >> $GITHUB_OUTPUT
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ghcr.io/sawtaytoes/plex-channels:${{ github.event.workflow_run.head_sha || github.sha }}
+            ghcr.io/sawtaytoes/plex-channels:${{ steps.tags.outputs.branch_tag }}
+            ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'ghcr.io/sawtaytoes/plex-channels:latest' || '' }}

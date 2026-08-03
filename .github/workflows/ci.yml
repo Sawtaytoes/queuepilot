@@ -1,0 +1,132 @@
+# plex-channels CI — GitHub Actions (github.com), ported 2026-08-02 from the
+# retired Forgejo workflow `.gitea/workflows/ci.yml` when the repo moved to public
+# GitHub. Steps are a faithful 1:1 translation; only the runner home changed.
+#
+# The workflow name MUST stay "CI" — `docker-deploy.yml` keys its `workflow_run`
+# trigger on `workflows: ["CI"]`, mirroring the mux-magic ci.yml → docker-deploy.yml
+# pair.
+#
+# Action versions are pinned to the CURRENT latest majors (per Bob's "no @v4,
+# pick the latest" rule), same pins the Forgejo file used:
+#   actions/checkout      @v7
+#   actions/setup-node    @v7
+#   actions/setup-python  @v7
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    env:
+      # Job-level so the browser-suite step can gate on `env.PLEX_TOKEN != ''`
+      # (GitHub forbids referencing `secrets` in a job-level `if:`, but a
+      # step-level `if:` can read `env`). Empty when the secret is unset → the
+      # browser suites are skipped and the job still concludes success.
+      PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.13'
+
+      # server deps are needed so the e2e suites can spawn server/src/server.js
+      # (node_modules is gitignored; package-lock.json is committed → npm ci).
+      - name: Install server deps
+        run: npm ci --prefix server
+
+      # `node --check` takes ONE file at a time, so loop the glob rather than
+      # passing them all in one invocation. The frontend is no longer a plain
+      # script — it is typechecked and built below instead.
+      - name: Node syntax check
+        run: |
+          for f in server/src/*.js; do
+            echo "--check $f"
+            node --check "$f"
+          done
+
+      # --- the React frontend (M6d) --------------------------------------------
+      # `web/` is React 19 + TypeScript + Vite + Tailwind v4 on @charcuterie/tokens.
+      # These three are the frontend's gates and they must run BEFORE the browser
+      # suites, which drive server/src/server.js — and that serves web/dist.
+      - name: Install web deps
+        run: npm ci --prefix web --no-audit --no-fund
+
+      - name: Web typecheck
+        run: npm --prefix web run typecheck
+
+      - name: Web unit tests
+        run: npm --prefix web test
+
+      - name: Web build
+        run: npm --prefix web run build
+
+      - name: Install Python deps
+        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
+
+      # Parse smoke (bytecode-compile every module) + import smoke (each submodule
+      # imports cleanly with its deps present). service.py only opens the MQTT
+      # connection inside functions, so import has no network side effects.
+      - name: Python parse + import smoke
+        run: |
+          python -m compileall -q queue_builder
+          python - <<'PY'
+          import importlib, pkgutil, queue_builder
+          for m in pkgutil.iter_modules(queue_builder.__path__):
+              importlib.import_module(f"queue_builder.{m.name}")
+              print("imported queue_builder.%s" % m.name)
+          PY
+
+      # Engine unit tests that stub Plex entirely (no token, no network) — today the
+      # collection START floor (skip earlier members, floor the named one).
+      - name: Python engine tests
+        run: python3 e2e/collection-start-test.py
+
+      # Browserless e2e — self-contained: each spawns its own server on a private
+      # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
+      # paths, so they need neither a Plex token nor Playwright. Always run.
+      - name: Browserless e2e
+        run: |
+          node e2e/history-persist-test.mjs
+          node e2e/api-v2-test.mjs
+
+      # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
+      # `require('playwright')` and drive a Chromium browser, and the shared
+      # server they hit talks to Plex. We can't call e2e/run.sh directly (it
+      # `source`s the sandbox-only /mnt/.../agentic/.env), so we replicate its
+      # per-suite loop inline: fresh server + fixture files per suite. Playwright
+      # is installed at the repo root so `require('playwright')` from e2e/
+      # resolves up into ./node_modules.
+      - name: Browser e2e (Playwright, gated on PLEX_TOKEN secret)
+        if: env.PLEX_TOKEN != ''
+        env:
+          QUEUES_PATH: /tmp/queues-ui.yaml
+          SETS_PATH: /tmp/sets-ui.yaml
+          WEB_PORT: '18768'
+          NODE_TLS_REJECT_UNAUTHORIZED: '0'
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+          # suites assert the degraded no-broker path — keep MQTT unset
+          unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
+          fail=0
+          for t in kbd-undo-test ui-test homedrag-test channels-test sse-test; do
+            echo "=== $t ==="
+            rm -rf /tmp/sets-ui.yaml /tmp/sets-ui.yaml.lock /tmp/queues-ui.yaml.lock /tmp/.history.json
+            cp e2e/fixtures/queues.fixture.yaml /tmp/queues-ui.yaml
+            node server/src/server.js >/tmp/web-e2e.log 2>&1 &
+            SRV=$!; sleep 1.5
+            node "e2e/$t.mjs" || fail=$((fail+1))
+            kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
+          done
+          echo "browser suites failed: $fail"; exit $fail
