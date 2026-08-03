@@ -1,13 +1,19 @@
 <!doctype html>
-<!-- The three Charcuterie axes live on `<html>` and are static.
+<!-- The Charcuterie axes live on `<html>`.
+
+     `data-scheme` is NOT hardcoded here any more: the app follows the OS light/dark
+     scheme (and a persisted override via `<ColorSchemeSwitcher>`). An inline
+     first-paint script — injected head-prepend by the `firstPaint` Vite plugin from
+     `@charcuterie/tokens`' `buildFirstPaintScript(daylight)` — sets `data-scheme`
+     AND the anti-flash background from the resolved choice before the first frame,
+     so there is no flash and no second source of truth to keep in sync. See
+     `vite/firstPaint.ts` and the guard in `src/firstPaintColour.test.ts`.
 
      `data-variant` is omitted deliberately — `daylight` is the default and `:root`
      carries it, so naming it here would be a second place to change if the fleet
-     ever moves. `daylight`'s dark scheme is also, near enough, the palette this app
-     hand-rolled: its `surface.base` is `#131822` against the old `--bg: #16181d`. -->
+     ever moves. -->
 <html
   lang="en"
-  data-scheme="dark"
   data-density="comfortable"
 >
   <head>
@@ -15,27 +21,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Plex Channels</title>
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
-    <style>
-      /* Prevents a white flash before the bundled CSS parses — the one moment on
-         the page at which no custom property has been declared yet, so this rule
-         needs a literal. The hex is `daylight`'s `surface.base` at
-         `data-scheme="dark"`, and `color-scheme` is here for the same reason: the
-         scrollbar is painted before the token stylesheet lands.
-
-         **The `var()` around it is load-bearing, not decoration.** An inline
-         `<style>` is UNLAYERED, and unlayered CSS beats every `@layer` regardless
-         of specificity — so a flat `background-color: #131822` here silently
-         outranks `bg-surface-base` and pins the whole page dark forever. Light
-         mode then renders as light cards on a dark canvas. Written as a fallback,
-         the literal applies only while `--color-surface-base` is still undefined,
-         and the token takes over the instant the stylesheet lands. This exact bug
-         shipped in gallery-downloader's port, and the form is guarded here by
-         `src/firstPaintColour.test.ts`.
-
-         `color-scheme` needs no such treatment: the tokens' `[data-scheme]` rule
-         is also unlayered and wins on specificity. */
-      html, body { background-color: var(--color-surface-base, #131822); color-scheme: dark; }
-    </style>
   </head>
   <body>
     <div id="root"></div>

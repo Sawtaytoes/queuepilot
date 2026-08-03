@@ -4,57 +4,70 @@ import { expect, test } from "vitest"
 // Read through Vite's `?raw` rather than `node:fs`, so this file stays inside the
 // browser program and the tsconfig can keep `"types": []`.
 import indexHtml from "../index.html?raw"
+import { firstPaintScriptBody } from "../vite/firstPaint"
 
 /**
- * The trap gallery-downloader's port fell into, guarded.
+ * The trap gallery-downloader's port fell into, guarded — now for the DYNAMIC
+ * first-paint script.
  *
- * An inline `<style>` is UNLAYERED, and unlayered author CSS beats every `@layer`
- * regardless of specificity. Tailwind v4 emits utilities into `@layer utilities`.
- * So a flat `background-color: #131822` in the anti-flash rule silently outranks
- * the token on `<body>` and pins the canvas dark forever — light mode then renders
- * as light cards on a dark page. Neither a typecheck nor a build nor an axe run can
- * see it: the CSS is valid, the utility is emitted, and it just loses.
- *
- * Written as a `var()` FALLBACK, the literal applies only while
- * `--color-surface-base` is undefined, which is the only thing the rule was ever
- * for.
+ * The app follows the OS light/dark scheme, so `data-scheme` and the anti-flash
+ * background are no longer static in `index.html`: they are set before first paint
+ * by the inline snippet the `firstPaint` Vite plugin injects
+ * (`@charcuterie/tokens`' `buildFirstPaintScript(daylight)`). These tests pin the
+ * two properties that a wrong port silently loses — the anti-flash literal must be a
+ * `var()` FALLBACK (never a raw colour that outranks the token and pins the canvas),
+ * and both surface hexes must come from the `daylight` token source.
  */
 
-test("the anti-flash background is daylight's dark surface", () => {
-  const expected = daylight.schemes.dark.surface.base
+const script = firstPaintScriptBody()
 
-  expect(expected).toMatch(/^#[0-9A-Fa-f]{6}$/)
-  expect(indexHtml).toContain(`var(--color-surface-base, ${expected})`)
+test("the anti-flash background is a var() fallback, never a raw pinned colour", () => {
+  // The one form that is safe: the literal applies only while
+  // `--color-surface-base` is still undefined, then the token takes over.
+  expect(script).toContain("background-color:var(--color-surface-base,")
+
+  // A bare `background: #hex` / `background-color: #hex` is the exact regression —
+  // unlayered, it beats Tailwind's `@layer utilities` token and pins the page.
+  expect(script).not.toMatch(/background(?:-color)?\s*:\s*#/)
 })
 
-test("no unlayered rule pins a raw colour on the canvas", () => {
-  const inlineStyle = indexHtml.match(/<style>([\s\S]*?)<\/style>/)?.[1]
+test("both surface hexes come from the daylight token source", () => {
+  const darkBase = daylight.schemes.dark.surface.base
+  const lightBase = daylight.schemes.light.surface.base
 
-  expect(inlineStyle).toBeTypeOf("string")
+  expect(darkBase).toMatch(/^#[0-9A-Fa-f]{6}$/)
+  expect(lightBase).toMatch(/^#[0-9A-Fa-f]{6}$/)
 
-  const declarations = (inlineStyle ?? "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
-    .match(/background(?:-color)?\s*:[^;}]+/g)
-
-  expect(declarations?.length).toBeGreaterThan(0)
-
-  for (const declaration of declarations ?? []) {
-    expect(declaration).toContain("var(--color-")
-  }
+  // Branches on the resolved scheme rather than pinning one — otherwise a
+  // dark-default fallback flashes on a light-resolved load.
+  expect(script).toContain(darkBase)
+  expect(script).toContain(lightBase)
 })
 
-test("the document declares the scheme it is painted in", () => {
-  expect(indexHtml).toContain('data-scheme="dark"')
-  expect(indexHtml).toContain("color-scheme: dark")
+test("the script sets data-scheme from the shared storage key", () => {
+  // Same key the runtime `localStoragePersistence` uses, or the pre-paint attribute
+  // and the hydrated state disagree by exactly one flash.
+  expect(script).toContain('"charcuterie-scheme"')
+  expect(script).toContain('setAttribute("data-scheme"')
 })
 
-test("data-variant is omitted — daylight is the default and :root carries it", () => {
-  // Only the real `<html>` tag matters; the file's own comment says the word
-  // (which is why the comments come out first).
+test("index.html no longer statically pins a scheme", () => {
+  // The scheme is resolved at runtime; a hardcoded `data-scheme` would be a second,
+  // stale source of truth that fights the switcher.
   const htmlTag = indexHtml
     .replace(/<!--[\s\S]*?-->/g, "")
     .match(/<html[\s\S]*?>/)?.[0]
 
-  expect(htmlTag).toContain("data-scheme")
+  expect(htmlTag).not.toContain("data-scheme")
+  // No leftover static anti-flash block, either — the script owns it now.
+  expect(indexHtml).not.toContain("<style>")
+})
+
+test("data-variant is omitted and data-density is carried", () => {
+  const htmlTag = indexHtml
+    .replace(/<!--[\s\S]*?-->/g, "")
+    .match(/<html[\s\S]*?>/)?.[0]
+
+  expect(htmlTag).toContain("data-density")
   expect(htmlTag).not.toContain("data-variant")
 })
