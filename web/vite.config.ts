@@ -2,6 +2,8 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
 
+import { firstPaint } from "./vite/firstPaint.ts"
+
 /**
  * One entry: the editor is a single-page app routed on
  * `location.hash` (`#/`, `#/queues`, `#/q/<id>`, `#/channels/<id>`).
@@ -26,6 +28,10 @@ export default defineConfig({
   plugins: [
     react(),
     tailwindcss(),
+    // Sets `<html data-scheme>` + the anti-flash background from the persisted/OS
+    // choice before first paint. Must precede the token stylesheet, so it is
+    // injected head-prepend.
+    firstPaint(),
   ],
   /**
    * `@charcuterie/ui` is not a dependency yet (M6d phase 2), but the

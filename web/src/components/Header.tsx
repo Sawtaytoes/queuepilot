@@ -1,3 +1,4 @@
+import { ColorSchemeSwitcher } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import { api } from "../lib/api"
@@ -11,6 +12,7 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
+import { schemeIcons } from "./SchemeIcons"
 
 /**
  * The sticky header: back, the heading (which is also the rename field), the status
@@ -208,6 +210,11 @@ export function Header({
         >
           ↷
         </button>
+        {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
+            the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`
+            on `<html>`. All three seams are the browser defaults the component ships;
+            the app only supplies its own glyphs. */}
+        <ColorSchemeSwitcher icons={schemeIcons} />
       </div>
       {/* Home toolbar: global add-search + queue filter. Desktop: lives here in the
           sticky header; mobile: it re-mounts at the top of the Home content. */}
