@@ -15,8 +15,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@charcuterie/tokens": "^1.0.0",
-    "@charcuterie/ui": "^1.0.0",
+    "@charcuterie/logic": "^1.1.0",
+    "@charcuterie/tokens": "^1.1.0",
+    "@charcuterie/ui": "^1.1.0",
     "react": "^19.2.6",
     "react-dom": "^19.2.6"
   },
