@@ -1,7 +1,5 @@
 // Ad-hoc visual screenshot of the Play landing at a wide viewport.
-import { createRequire } from 'node:module';
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
+import { chromium } from './playwright.mjs';
 const PORT = process.env.WEB_PORT || 18768;
 const W = parseInt(process.env.SHOT_W || '1680', 10);
 const out = process.env.SHOT_OUT || '__screenshots__/play.png';

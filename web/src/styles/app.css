@@ -93,7 +93,13 @@
 
 html {
   font-size: 17px;
+  /* F4: an anchor jump (and the browser's own scroll-into-view for focus) must clear the
+     sticky header, which nothing accounted for before. Keyed to the measured --header-h so
+     it tracks a wrapped toolbar. */
+  scroll-padding-top: calc(var(--header-h, 96px) + 12px);
 }
+/* Same offset for any element scrolled to by id. */
+[id] { scroll-margin-top: calc(var(--header-h, 96px) + 12px); }
 
 body {
   background: var(--color-surface-base);
@@ -106,15 +112,35 @@ body {
 header {
   background: var(--color-surface-base);
   border-bottom: 1px solid var(--color-border-default);
-  padding: 16px 24px 12px;
+  /* F4: tighter top/bottom (was 16/12) — with the toolbar merged onto the bar row and F2's
+     compact selects, the desktop header lands ~96px (target), ~74px when the toolbar fits
+     inline. The real height is measured into --header-h by Header.tsx's ResizeObserver. */
+  padding: 10px 24px 10px;
   position: sticky;
   top: 0;
   z-index: 10;
 }
-header .bar { display: flex; align-items: center; gap: 14px; }
+header .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+/* F4: the toolbar shares the bar row, pushed to the right. When it doesn't fit, `flex-wrap`
+   on `.bar` drops it to a second line and the ResizeObserver picks up the taller height. */
+#gslot-desktop { margin-left: auto; }
+#gslot-desktop:empty { display: none; }
 header h1 { margin: 0; font-size: 1.5rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-header .sub { margin: 8px 0 0; color: var(--color-content-muted); }
-#status { color: var(--color-content-muted); font-size: 0.9rem; }
+/* `min-height` because the sub-line is toggled with the `hidden` attribute, and a
+   node that appears and disappears in normal flow pushes everything below it. Reserving
+   one line's worth costs nothing and removes the shift. (CLS, 2026-08-03.) */
+header .sub { margin: 4px 0 0; min-height: 1.25rem; color: var(--color-content-muted); }
+/* Fixed basis + right alignment. #status is a flex SIBLING of the h1, and its text
+   changes ("Loading…" → "Ready" → "Order saved"), so an auto-width status re-solved the
+   h1's flex basis and slid the heading sideways on every toast. 9ch fits the longest
+   status the app sets. */
+#status {
+  color: var(--color-content-muted);
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  text-align: right;
+  width: 9ch;
+}
 
 /* ===================================================================
    Two things Tailwind's preflight takes away that this markup assumed.
@@ -153,7 +179,17 @@ button.ghost:hover { border-color: var(--color-intent-accent-solid); }
 .view { padding: 20px 24px 40px; }
 
 /* ---- HOME: Plex-style horizontal shelves ---- */
-.shelf { margin-bottom: 28px; }
+/* `content-visibility: auto` skips layout and paint for shelves that are off-screen.
+   The Home page carries ~10 of them and only two are ever visible, so this takes most
+   of the first-paint layout cost off the critical path. `contain-intrinsic-size` is
+   what makes it safe: without a size estimate a skipped shelf measures 0 and the
+   scrollbar jumps as you scroll into it. 320px is a shelf's real height (tile +
+   caption + heading). */
+.shelf {
+  margin-bottom: 28px;
+  contain-intrinsic-size: auto 320px;
+  content-visibility: auto;
+}
 .shelf h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 2px; }
 .shelf .collapse {
   background: none; border: none; color: var(--color-content-muted); font-size: 0.95rem;
@@ -299,6 +335,14 @@ ul.grid {
 /* ---- Poster tile (shared by shelf + grid) ---- */
 .tile { width: 100%; }
 .strip .tile { width: var(--tile); flex: 0 0 var(--tile); }
+/* The loading placeholders in the eligible pool (F3): the SAME geometry as a real tile so
+   nothing shifts when data lands, but a distinct class so `#chpool li.tile` (the e2e "pool
+   loaded" wait) never matches a placeholder. */
+.skeltile { width: 100%; list-style: none; }
+.skeltile .thumb {
+  position: relative; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
+  background: var(--color-surface-overlay);
+}
 .tile .thumb {
   position: relative; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
   background: var(--color-surface-overlay); border: 2px solid transparent;
@@ -496,14 +540,19 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
 .qmenu {
   position: absolute; right: 8px; top: calc(100% - 6px); z-index: 9;
   background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 10px;
-  box-shadow: var(--shadow-high); padding: 6px; min-width: 220px;
-  display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--shadow-high); min-width: 220px;
+  /* F1: the rows are 44px each (Button's MIN_TOUCH_TARGET — an accessibility floor, not
+     padding to trim), so the height comes off the CONTAINER instead. padding 4px, gap 0, and
+     a hairline between rows rather than a gap. `data-density="compact"` on the root (set in
+     PlayMenu/Toolbar) brings the 44px floor itself down over --control-height. */
+  padding: 4px; display: flex; flex-direction: column; gap: 0;
 }
-.qmenu button {
-  background: none; border: none; color: var(--color-content-primary); text-align: left;
-  padding: 8px 10px; border-radius: 7px; font-size: 0.92rem;
-}
-.qmenu button:hover { background: var(--color-surface-overlay); color: var(--color-intent-accent-content); }
+/* Skin DELETED (2026-08-02-adopting-a-component-means-deleting-its-skin): background, border,
+   color, padding, font-size and border-radius now come from `Button`'s ghost intent. Only
+   layout stays — left-align the label, full width. */
+.qmenu button { justify-content: flex-start; width: 100%; text-align: left; }
+/* Hairline dividers between rows in place of the old gap. */
+.qmenu button + button { border-top: 1px solid var(--color-border-subtle); }
 .qmenu p { margin: 4px 6px; color: var(--color-content-muted); font-size: 0.85rem; max-width: 260px; }
 
 /* ---- Play on ▾ ---- */
@@ -525,6 +574,13 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
 .chnote { color: var(--color-content-muted); font-size: 0.85rem; }
 #chbody { display: grid; grid-template-columns: 1fr 300px; gap: 26px; align-items: start; }
 #chbody h2 { margin: 0 0 12px; font-size: 1.1rem; }
+/* The pool heading + its loading spinner sit on one row so the Spinner reads as attached to
+   the heading, not floating in the grid. The h2 keeps its own bottom margin via the row. */
+.chpool-head { display: flex; align-items: center; gap: 10px; }
+.chpool-head h2 { margin: 0 0 12px; }
+/* The delayed "first load can take a minute" hint (F3): muted, slim, appears after 3 s so a
+   fast load never shows it. */
+.chpool-hint { margin: -6px 0 12px; color: var(--color-content-muted); font-size: 0.85rem; }
 /* Members + pool stack in the LEFT column; the filters aside keeps the right one (the
    members section is a grid child, so it must be pinned or it would steal the 300px col). */
 .chmembers, #chbody .chpool { grid-column: 1; }
@@ -545,11 +601,28 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
   .chmembers .grid { animation: none; }
   .tile.justadded .thumb { animation: none; }
 }
+/* F5: the aside stacks 7 fieldsets / ~40 checkboxes, so it is taller than the viewport and a
+   plain `position: sticky` never engaged — `#ch-save`, its last child, sat permanently below
+   the fold. Now the aside is a flex column capped at the viewport height, its fieldsets live
+   in an inner scroller, and `#ch-save` is a pinned footer that is ALWAYS on screen.
+   `min-height: 0` on the scroller is load-bearing — without it a flex child refuses to shrink
+   and the scroller never engages. `100dvh` (not `vh`) so mobile browser chrome doesn't hide
+   the button. `top`/`max-height` use F4's measured --header-h (96px fallback). */
 #chfilters {
   background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 12px;
-  padding: 14px 16px; position: sticky; top: 90px;
+  padding: 14px 16px; position: sticky;
+  top: calc(var(--header-h, 96px) + 12px);
   grid-column: 2; grid-row: 1 / span 2;
+  display: flex; flex-direction: column;
+  /* The aside sits in `#chbody`, which is itself below `.chhead` + the sub line, so its
+     flow-top is ~header + ~130px. Subtract that whole run (not just the header) so `#ch-save`
+     clears the fold even UNSCROLLED; once the user scrolls, `position: sticky` pins the aside
+     at `top` above and it has even more room. `100dvh` keeps mobile browser chrome from
+     eating the footer. */
+  max-height: calc(100dvh - var(--header-h, 96px) - 140px);
 }
+#chfilters .chfilters-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+#ch-save { flex: 0 0 auto; margin-top: 12px; }
 #chfilters fieldset { border: 1px solid var(--color-border-default); border-radius: 10px; margin-bottom: 12px; padding: 8px 10px; }
 #chfilters legend { color: var(--color-content-muted); font-size: 0.85rem; padding: 0 6px; }
 #chfilters .libs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }

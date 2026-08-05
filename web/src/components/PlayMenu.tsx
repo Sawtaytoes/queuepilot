@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 
 import { api } from "../lib/api"
@@ -72,6 +73,10 @@ export function PlayMenu() {
   return (
     <div
       className="qmenu playmenu"
+      // The token density axis, not a hand-written height: `compact` takes the 44px
+      // MIN_TOUCH_TARGET floor down over --control-height, which is what made the rows
+      // read too tall on a phone (F1). One attribute, zero overrides.
+      data-density="compact"
       style={{
         left: `${Math.max(8, Math.min(anchor.left, window.innerWidth - 260))}px`,
         position: "fixed",
@@ -90,7 +95,14 @@ export function PlayMenu() {
                 </p>
               )
             : devices.map((d) => (
-                <button
+                // Charcuterie `Button`, `ghost` (nothing until hover) — the app's own row
+                // skin is DELETED per 2026-08-02-adopting-a-component-means-deleting-its-skin;
+                // `.qmenu button` keeps only layout. Still a native <button> with the label,
+                // so `ui-test`/`kbd-undo`'s `.qmenu button` reads are unchanged.
+                <Button
+                  appearance="ghost"
+                  intent="neutral"
+                  isFullWidth
                   key={d.id}
                   onClick={async () => {
                     closePlayMenus()
@@ -108,10 +120,9 @@ export function PlayMenu() {
                       setStatus("Play failed: " + (e as Error).message, "err")
                     }
                   }}
-                  type="button"
                 >
                   {d.default ? `${d.name} (default)` : d.name}
-                </button>
+                </Button>
               ))}
     </div>
   )

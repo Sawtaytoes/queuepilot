@@ -220,7 +220,10 @@ function Shelf({
                       </>
                     }
                     className={[
-                      item.resolved ? null : "unresolved",
+                      // `pending` is not `unresolved`: the red border means "this
+                      // entry names something Plex does not have", and a tile that
+                      // simply hasn't been resolved YET has made no such claim.
+                      item.resolved || item.pending ? null : "unresolved",
                       item.done ? "done" : null,
                       isPlaying ? "playing" : null,
                     ]
@@ -228,6 +231,7 @@ function Shelf({
                       .join(" ")}
                     dataKey={item.key}
                     dataSet={setId}
+                    isPending={item.pending}
                     key={item.key}
                     next={{
                       isDone: face.nextDone,

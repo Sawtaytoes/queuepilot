@@ -8,10 +8,8 @@
 // Checks: no inline start control anywhere; the next-up line opens the picker; a right-click
 // opens the tile menu; a SHOW start writes {season, episode}; a COLLECTION start writes
 // {series, season, episode} for the picked member; the chip appears and clears again.
-import { createRequire } from 'node:module';
+import { chromium } from './playwright.mjs';
 import { readFileSync } from 'node:fs';
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
 
 const PORT = process.env.WEB_PORT || 18780;
 const YAML = process.env.QUEUES_PATH || '/tmp/queues-harness.yaml';

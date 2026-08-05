@@ -1,6 +1,4 @@
-import { createRequire } from 'node:module';
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
+import { chromium } from './playwright.mjs';
 const PORT = process.env.WEB_PORT || 18769;
 const BASE = `http://localhost:${PORT}`;
 const browser = await chromium.launch();

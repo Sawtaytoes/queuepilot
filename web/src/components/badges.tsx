@@ -1,7 +1,7 @@
-import { Badge } from "@charcuterie/ui"
+import { Badge, Skeleton } from "@charcuterie/ui"
 
 import type { TileFace } from "../lib/tileFace"
-import type { TileEntry } from "../lib/types"
+import type { QueueItem, TileEntry } from "../lib/types"
 
 /**
  * The type badge. A collection whose tile shows a MEMBER names the collection here
@@ -16,6 +16,17 @@ export function TypeBadge({
   face: TileFace
   item: TileEntry
 }) {
+  /**
+   * The SKELETON phase (`/api/shelves` landed, `/api/queues` has not). The type is
+   * genuinely unknown yet, so neither the real badge nor "Not in library" is
+   * truthful — and flashing a red "Not in library" on every tile for two seconds of
+   * every page load is exactly the bug this phase exists to remove. A placeholder at
+   * badge height keeps the caption block from growing when the real badge arrives.
+   */
+  if ((item as QueueItem).pending) {
+    return <Skeleton blockSize="1.25rem" inlineSize="4.5rem" shape="block" />
+  }
+
   if (!item.resolved) {
     return (
       <Badge appearance="outline" className="badge warn" intent="danger" size="sm">

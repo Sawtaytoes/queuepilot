@@ -1,5 +1,5 @@
-import { Select } from "@charcuterie/ui"
-import { useState } from "react"
+import { Button, Select } from "@charcuterie/ui"
+import { useEffect, useState } from "react"
 
 import { api, thumbUrl } from "../lib/api"
 import type { SearchHit } from "../lib/types"
@@ -29,6 +29,32 @@ export function Toolbar() {
   const [openMenu, setOpenMenu] = useState<number | null>(null)
   const [addPosition, setAddPosition] = useState("top")
 
+  /**
+   * Escape closes the Add-to menu, from wherever focus happens to be.
+   *
+   * The menu already handles Escape on its own `onKeyDown`, and its `ref` focuses
+   * the first button so that handler can hear it — but the menu has a state with NO
+   * buttons ("No queue includes … — add it to a queue via its ⚙"). In that state
+   * focus stays on the `.addto` trigger, which is a SIBLING of the menu, so the
+   * menu's handler never fires and Escape did nothing at all. The menu then stayed
+   * open indefinitely and the next click on `.addto` read as a toggle-CLOSED.
+   *
+   * A document listener is the right level for this: a menu is a dismissable layer,
+   * and "Escape dismisses the topmost layer" is not a property of any one node
+   * inside it.
+   */
+  useEffect(() => {
+    if (openMenu === null) return
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null)
+    }
+
+    document.addEventListener("keydown", onKey)
+
+    return () => document.removeEventListener("keydown", onKey)
+  }, [openMenu])
+
   const ids = queueIds(data)
   const isAllCollapsed = ids.length > 0 && ids.every((id) => collapsed.has(id))
 
@@ -37,7 +63,11 @@ export function Toolbar() {
     `Library ${sectionId}`
 
   return (
-    <div id="tools">
+    // F2: `compact` density takes the 44px MIN_TOUCH_TARGET floor down over
+    // --control-height-md (2.25rem), de-chunkifying the header selects on desktop via the
+    // token axis rather than an app override. (The real rich-select fix is a Charcuterie
+    // Listbox/Combobox — out of scope; see docs/handoff-charcuterie-listbox-combobox.md.)
+    <div data-density="compact" id="tools">
       <div className="gsearch-wrap">
         <SearchDropdown<SearchHit>
           doSearch={async (q) => {
@@ -80,6 +110,7 @@ export function Toolbar() {
                     ? (
                         <div
                           className="qmenu"
+                          data-density="compact"
                           onKeyDown={(e) => {
                             const btns = [
                               ...e.currentTarget.querySelectorAll("button"),
@@ -113,7 +144,13 @@ export function Toolbar() {
                                 </p>
                               )
                             : compatible.map((s) => (
-                                <button
+                                // ghost Button, skin deleted — see PlayMenu. Still a native
+                                // <button> (the qmenu keyboard nav queries `button` and
+                                // focuses via document.activeElement).
+                                <Button
+                                  appearance="ghost"
+                                  intent="neutral"
+                                  isFullWidth
                                   key={s.id}
                                   onClick={async (e) => {
                                     e.stopPropagation()
@@ -147,10 +184,9 @@ export function Toolbar() {
                                       )
                                     }
                                   }}
-                                  type="button"
                                 >
                                   {s.label}
-                                </button>
+                                </Button>
                               ))}
                         </div>
                       )

@@ -11,8 +11,10 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "compression": "^1.8.1",
     "express": "^4.21.2",
     "mqtt": "^5.15.2",
+    "undici": "^7.29.0",
     "yaml": "^2.7.0"
   }
 }

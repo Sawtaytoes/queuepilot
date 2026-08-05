@@ -4,7 +4,9 @@
 - **Date:** 2026-07-21
 - **Type:** Architecture
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** — *(clarified, not reversed, by
+  [2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store](2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store.md):
+  YAML remains the source of truth; SQLite enters strictly as a deletable cache of Plex reads.)*
 
 ## Decision
 

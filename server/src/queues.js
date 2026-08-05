@@ -97,6 +97,7 @@ function seqFor(doc, setName) {
 const YAML_OUT = { indentSeq: false, lineWidth: 0 };
 
 async function writeDoc(doc) {
+  _allCache = null; // see listAll(): stat-keyed memo, busted explicitly on our own writes
   const text = doc.toString(YAML_OUT);
   const tmp = QUEUES_PATH + '.tmp';
   await fs.writeFile(tmp, text, 'utf8');
@@ -109,9 +110,7 @@ async function writeDoc(doc) {
   }
 }
 
-// Ordered raw entries for one set: [{ key, value }]. `value` is plain JS (scalar or object).
-export async function listSet(setName) {
-  const doc = await readDoc();
+function entriesOf(doc, setName) {
   const seq = doc.get(setName);
   if (!(seq instanceof YAMLSeq)) return [];
   return seq.items
@@ -120,6 +119,46 @@ export async function listSet(setName) {
       return { key: entryKey(value), value, done: entryDone(value) };
     })
     .filter((e) => e.key !== null);
+}
+
+// Ordered raw entries for one set: [{ key, value }]. `value` is plain JS (scalar or object).
+export async function listSet(setName) {
+  return entriesOf(await readDoc(), setName);
+}
+
+// EVERY set's entries in ONE parse: Map<setId, entries[]>.
+//
+// /api/queues used to call listSet() once per set, and each call re-read and re-parsed the
+// whole file — ten full parses of one document to render ten shelves. The file is only 2-5 KB
+// so this was never the 2.7 s (that is Plex I/O), but it is pure waste on the request path
+// and it is what /api/shelves needs to answer in ~15 ms with no Plex call at all.
+//
+// Memoized on the file's (mtimeMs, size). Any writer — this process, an SMB hand-edit, the
+// Python prune — moves at least one of those, so a stale hit is not reachable through a normal
+// write. writeDoc() also busts it explicitly, because two writes inside the same millisecond
+// that happen to produce the same length would otherwise collide on the key.
+let _allCache = null; // { mtimeMs, size, map }
+
+export async function listAll() {
+  let st = null;
+  try {
+    st = await fs.stat(QUEUES_PATH);
+  } catch {
+    st = null; // no file yet: parse the empty document, don't memoize
+  }
+  if (st && _allCache && _allCache.mtimeMs === st.mtimeMs && _allCache.size === st.size) {
+    return _allCache.map;
+  }
+  const doc = await readDoc();
+  const map = new Map();
+  const root = doc.contents && doc.contents.items ? doc.contents.items : [];
+  for (const pair of root) {
+    const name = pair.key && pair.key.value != null ? String(pair.key.value) : null;
+    if (name == null) continue;
+    map.set(name, entriesOf(doc, name));
+  }
+  if (st) _allCache = { mtimeMs: st.mtimeMs, size: st.size, map };
+  return map;
 }
 
 // Remove EVERY done entry from a set's list (the "Remove all completed" button). Done entries

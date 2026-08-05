@@ -5,6 +5,7 @@ import type {
   NowState,
   QueuesResponse,
   SetsResponse,
+  ShelvesResponse,
   StatusKind,
 } from "../lib/types"
 
@@ -137,11 +138,92 @@ export async function fetchAll(): Promise<[QueuesResponse, SetsResponse]> {
   ])
 }
 
+/**
+ * Widen the `/api/shelves` skeleton into the `QueuesResponse` shape the whole app
+ * renders against, with every item marked `pending`. Nothing branches on which
+ * endpoint the data came from — the tile checks `pending` and draws a skeleton
+ * poster, and `/api/queues` later replaces the object wholesale.
+ */
+function shelvesAsQueues(shelves: ShelvesResponse): QueuesResponse {
+  const sets: QueuesResponse["sets"] = {}
+
+  for (const id of shelves.order) {
+    const s = shelves.sets[id]
+
+    if (!s) continue
+
+    sets[id] = {
+      items: s.items.map((it) => ({
+        childCount: null,
+        done: it.done,
+        episodes: 1,
+        key: it.key,
+        nextEp: null,
+        pending: true,
+        ratingKey: null,
+        raw: it.raw,
+        resolved: false,
+        start: null,
+        title: it.title,
+        type: null,
+        year: null,
+      })),
+      kind: s.kind,
+      label: s.label,
+      sections: s.sections,
+      source: s.source,
+    }
+  }
+
+  return { order: shelves.order, sets }
+}
+
 export async function load() {
   setStatus("Loading…")
 
+  /**
+   * TWO phases, deliberately.
+   *
+   * `/api/queues` has to talk to Plex — roughly sixty calls to resolve titles, next
+   * episodes and collection children — and takes 2.6-2.8 s. Waiting for it left the
+   * page blank and then inserted ten shelves at once, which is where the 0.398 CLS
+   * came from and most of what "the app feels slow" meant.
+   *
+   * Phase 1 paints the COMPLETE page structure: `/api/shelves` (~15 ms, no Plex at
+   * all) for the shelves and their tile count, and `/api/sets` for the registry.
+   * Phase 2 swaps in resolved posters and next-episode lines. The second response
+   * changes pixels, not layout.
+   *
+   * **The registry belongs in phase 1, not phase 2.** It is what the Play landing's
+   * Dynamic group renders from, and `/api/sets` costs exactly one Plex call
+   * (`/library/sections`) that already degrades to an empty library list when Plex is
+   * down. Leaving it in phase 2 painted a landing page with an empty Dynamic group
+   * for as long as `/api/queues` took, and those rows then popped in — reintroducing
+   * the shift this phase exists to remove. `e2e/ui-test.mjs` catches it.
+   *
+   * Phase 1 is best-effort as a whole: if it throws, phase 2 still renders the page
+   * exactly as it did before any of this existed.
+   */
+  let havePhase1 = false
+
   try {
-    const [data, reg] = await fetchAll()
+    const [shelves, reg] = await Promise.all([
+      api<ShelvesResponse>("GET", "/api/shelves"),
+      api<SetsResponse>("GET", "/api/sets"),
+    ])
+
+    setState({ data: shelvesAsQueues(shelves), reg })
+    havePhase1 = true
+  }
+  catch {
+    /* skeleton is an optimization — fall through to the full fetch */
+  }
+
+  try {
+    // Phase 1 already has the registry, so don't ask for it twice.
+    const [data, reg] = havePhase1
+      ? [await api<QueuesResponse>("GET", "/api/queues"), getState().reg!]
+      : await fetchAll()
 
     setState({ data, reg })
 

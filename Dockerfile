@@ -13,7 +13,11 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
-RUN npm run build
+# `npm run build` = vite build + scripts/precompress.mjs (the `.br`/`.gz` siblings the
+# server's staticCompressed middleware serves). vite.config.ts uses `sourcemap: "hidden"`,
+# so the maps are emitted but never referenced by the bundle — delete them here so the
+# runtime image doesn't carry 1.2 MB of unreachable files.
+RUN npm run build && find dist -name '*.map' -delete
 
 # --- stage 2: the runtime image ----------------------------------------------- #
 FROM node:26-trixie-slim

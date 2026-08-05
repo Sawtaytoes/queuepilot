@@ -5,13 +5,11 @@
 //   node e2e/shots.mjs            # all screens
 // Needs: root agentic .env (Plex token), e2e/broker deps (aedes), mux-magic playwright,
 // PLAYWRIGHT_BROWSERS_PATH. Copies fixtures to /tmp — never touches real data.
-import { createRequire } from 'node:module';
+import { chromium } from './playwright.mjs';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { startFakeMqtt } from './fake-mqtt.mjs';
 
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
 
 const PORT = parseInt(process.env.WEB_PORT || '18780', 10);
 const FAKE_MQTT_PORT = parseInt(process.env.FAKE_MQTT_PORT || '11883', 10);

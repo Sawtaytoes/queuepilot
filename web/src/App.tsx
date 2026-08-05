@@ -1,12 +1,8 @@
-import { useEffect } from "react"
+import { lazy, Suspense, useEffect } from "react"
 
-import { DynModal } from "./components/DynModal"
 import { Header } from "./components/Header"
 import { PlayMenu } from "./components/PlayMenu"
 import { SelectionBar } from "./components/SelectionBar"
-import { SetModal } from "./components/SetModal"
-import { StartModal } from "./components/StartModal"
-import { TileMenu } from "./components/TileMenu"
 import { Toolbar } from "./components/Toolbar"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { activeSet } from "./lib/nowPlaying"
@@ -15,7 +11,7 @@ import {
   useChannelSelection,
 } from "./state/channelSelection"
 import { startLiveUpdates } from "./state/live"
-import { closePlayMenus } from "./state/overlays"
+import { closePlayMenus, useOverlays } from "./state/overlays"
 import {
   getRouteOrigin,
   labelForHash,
@@ -29,6 +25,36 @@ import { ChannelsView } from "./views/ChannelsView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
 import { QueueView } from "./views/QueueView"
+
+/**
+ * The four overlays are code-split and hung off overlay state — they are ~1,400
+ * lines of TSX (`DynModal` alone is 671) that the landing route never renders, and
+ * the landing route is the LCP.
+ *
+ * **The four VIEWS are deliberately NOT split.** They stay permanently mounted and
+ * toggle `hidden`, and the e2e suites read their internals in the same tick they
+ * assert the container is visible — `channels-test` does
+ * `waitForSelector('#queue:not([hidden])')` and then `$('#qplay:not([hidden])')`,
+ * and `ui-test` reads `#search`'s placeholder the same way. A `Suspense` boundary
+ * inside the view would paint the shell one commit before the body, so those reads
+ * would race a fallback. That is a poor trade for ~15 KB against a DOM contract
+ * seventeen suites depend on.
+ *
+ * The overlays have no such contract: every suite CLICKS them open first, and
+ * Playwright's selectors auto-wait, so the one-time chunk fetch is invisible.
+ */
+const DynModal = lazy(async () => ({
+  default: (await import("./components/DynModal")).DynModal,
+}))
+const SetModal = lazy(async () => ({
+  default: (await import("./components/SetModal")).SetModal,
+}))
+const StartModal = lazy(async () => ({
+  default: (await import("./components/StartModal")).StartModal,
+}))
+const TileMenu = lazy(async () => ({
+  default: (await import("./components/TileMenu")).TileMenu,
+}))
 
 /**
  * The whole editor. Four view containers are ALWAYS mounted and toggle the `hidden`
@@ -118,6 +144,14 @@ export function App() {
   const isMobile = useMediaQuery("(max-width: 760px)")
   const toolbar = <Toolbar />
 
+  // Gate each lazy overlay's chunk fetch on its own overlay state, so importing it
+  // is deferred until the user actually opens it. The overlays self-gate to `null`
+  // when their state is falsy, but a lazy component still triggers its import the
+  // moment it is mounted — so the mount itself has to be conditional, not just the
+  // render inside it. `PlayMenu` stays eager: it is small and the play button is on
+  // the landing route.
+  const overlays = useOverlays()
+
   return (
     <>
       <Header
@@ -146,10 +180,14 @@ export function App() {
 
       <SelectionBar currentSet={route.view === "queue" ? route.id : null} />
 
-      <SetModal />
-      <DynModal />
-      <StartModal />
-      <TileMenu />
+      {/* A single Suspense with a null fallback: an overlay opens on a user gesture,
+          and a spinner for the ~15 ms chunk fetch would flash worse than nothing. */}
+      <Suspense fallback={null}>
+        {overlays.setModal ? <SetModal /> : null}
+        {overlays.dynModal ? <DynModal /> : null}
+        {overlays.startModal ? <StartModal /> : null}
+        {overlays.tileMenu ? <TileMenu /> : null}
+      </Suspense>
       <PlayMenu />
     </>
   )

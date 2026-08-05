@@ -51,6 +51,29 @@ export function Header({
   const [draft, setDraft] = useState("")
   const settledRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
+  const headerRef = useRef<HTMLElement>(null)
+
+  // F4: publish the header's MEASURED height to `--header-h`, replacing the hardcoded 90px
+  // that `#chfilters`'s sticky `top` and the (missing) scroll offsets assumed. The header
+  // grows when the toolbar wraps, so a constant was always going to be wrong for someone;
+  // this self-corrects. A ResizeObserver is the right tool — it fires on the wrap, not just
+  // on a viewport resize.
+  useEffect(() => {
+    const el = headerRef.current
+
+    if (!el) return
+
+    const ro = new ResizeObserver(([entry]) => {
+      document.documentElement.style.setProperty(
+        "--header-h",
+        `${entry.contentRect.height}px`,
+      )
+    })
+
+    ro.observe(el)
+
+    return () => ro.disconnect()
+  }, [])
 
   // Leaving the view (or losing the editable set) must not strand the input.
   useEffect(() => {
@@ -131,7 +154,7 @@ export function Header({
   }
 
   return (
-    <header>
+    <header ref={headerRef}>
       <div className="bar">
         <button
           className="ghost"
@@ -215,10 +238,13 @@ export function Header({
             on `<html>`. All three seams are the browser defaults the component ships;
             the app only supplies its own glyphs. */}
         <ColorSchemeSwitcher icons={schemeIcons} />
+        {/* F4: the Home toolbar now shares the `.bar` row (was its own third row), pushed
+            right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and ellipsises,
+            so it yields to the toolbar's width. Desktop only — on mobile `children` is null
+            here and the toolbar re-mounts at the top of the Home content. `ui-test` reads
+            `#gslot-desktop #tools`, so the id and its child stay put. */}
+        <div id="gslot-desktop">{children}</div>
       </div>
-      {/* Home toolbar: global add-search + queue filter. Desktop: lives here in the
-          sticky header; mobile: it re-mounts at the top of the Home content. */}
-      <div id="gslot-desktop">{children}</div>
       <p className="sub" hidden={isSubHidden} id="sub">
         {sub}
       </p>

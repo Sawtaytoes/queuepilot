@@ -4,7 +4,11 @@
 - **Date:** 2026-07-21
 - **Type:** architecture / scope
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by (in part):**
+  [2026-08-03-retiring-python-except-the-cast-sidecar](2026-08-03-retiring-python-except-the-cast-sidecar.md).
+  The stated blocker was *"Plex Cast + account-token minting is high-risk"* — account-token
+  minting is **already ported** (`server/src/plex.js:48`), and the cast half is preserved as a
+  minimal Python sidecar rather than reimplemented.
 
 ## Decision
 

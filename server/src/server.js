@@ -3,16 +3,21 @@
 // one container. Read-only against Plex (search + poster proxy); its writes go to
 // queues.yaml (coordinated with the Python prune via the cross-process lock in
 // queues.js) and sets.yaml (which the Python service re-reads before every command).
+import compression from 'compression';
 import express from 'express';
-import { watch } from 'node:fs';
+import { existsSync, watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WEB_PORT, QUEUES_PATH } from './config.js';
+import * as cache from './cache.js';
 import * as history from './history.js';
 import * as mqttc from './mqttc.js';
 import * as plex from './plex.js';
 import * as queues from './queues.js';
 import * as sets from './sets.js';
+import * as tiles from './tiles.js';
+import * as warm from './warm.js';
+import { statSync } from 'node:fs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // Monorepo layout: server/ (this JS API) + web/ (the React frontend) + queue_builder/
@@ -27,7 +32,78 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'web', 'dist');
 
 const app = express();
 app.use(express.json());
-app.use(express.static(PUBLIC_DIR));
+
+// --- transfer encoding + caching for the static build ------------------------- //
+// Measured 2026-08-03 against the live host: 376 KB of JS+CSS on EVERY load, served
+// uncompressed with `cache-control: max-age=0` on content-hashed filenames. Both halves of
+// that are fixed here rather than in the reverse proxy, because openresty is not versioned
+// with this app (see web/scripts/precompress.mjs).
+
+// Dynamic responses (the JSON API). Two exclusions are load-bearing:
+//   * text/event-stream — compression buffers, so /api/events would deliver nothing until
+//     the buffer filled and SSE would look dead. e2e/sse-test.mjs is the regression gate.
+//   * image/* — /api/thumb already serves a Plex-transcoded JPEG; re-compressing spends CPU
+//     to make it marginally bigger.
+app.use(
+  compression({
+    filter: (req, res) => {
+      const type = String(res.getHeader('Content-Type') || '');
+      if (type.includes('text/event-stream')) return false;
+      if (type.startsWith('image/')) return false;
+      return compression.filter(req, res);
+    },
+  }),
+);
+
+// Serve the `.br` / `.gz` sibling that `npm run build` produced, when the client accepts it.
+// Mounted BEFORE express.static: it rewrites req.url to the encoded file and falls through,
+// so express.static does the actual sending (and keeps ETag/Range/304 handling).
+const ENCODINGS = [
+  ['br', '.br'],
+  ['gzip', '.gz'],
+];
+const CONTENT_TYPES = { '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.svg': 'image/svg+xml' };
+
+function staticCompressed(req, res, next) {
+  if (req.method !== 'GET' && req.method !== 'HEAD') return next();
+  // Only the content-hashed build output. index.html is negotiated by `compression` above.
+  if (!req.path.startsWith('/assets/')) return next();
+  const ext = path.extname(req.path);
+  const type = CONTENT_TYPES[ext];
+  if (!type) return next();
+  const accept = String(req.headers['accept-encoding'] || '');
+  for (const [token, suffix] of ENCODINGS) {
+    if (!accept.includes(token)) continue;
+    // req.path is already URL-decoded and normalized by Express; join() then rejects any
+    // traversal that survived, because the result must stay under PUBLIC_DIR.
+    const abs = path.join(PUBLIC_DIR, req.path + suffix);
+    if (!abs.startsWith(PUBLIC_DIR + path.sep) || !existsSync(abs)) continue;
+    // The Content-Type must come from the ORIGINAL extension — express.static would
+    // otherwise type a `.js.br` as application/octet-stream and the browser would refuse it.
+    res.setHeader('Content-Encoding', token);
+    res.setHeader('Content-Type', type);
+    // Caches key on Accept-Encoding, or a `br` body reaches a gzip-only client.
+    res.setHeader('Vary', 'Accept-Encoding');
+    req.url = req.url.replace(req.path, req.path + suffix);
+    return next();
+  }
+  next();
+}
+app.use(staticCompressed);
+
+// Content-hashed filenames — the whole point of the hash is that the URL changes when the
+// bytes do, so a year of `immutable` is safe and a repeat visit costs ZERO asset bytes.
+app.use(
+  '/assets',
+  express.static(path.join(PUBLIC_DIR, 'assets'), { immutable: true, maxAge: '1y' }),
+);
+// index.html and /icon.svg are NOT hashed, so they must revalidate. `no-cache` (revalidate
+// before use), not `no-store` (never cache) — the cheap 304 path stays available.
+app.use(
+  express.static(PUBLIC_DIR, {
+    setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache'),
+  }),
+);
 
 // Every data mutation snapshots the files first → the undo/redo stack. /api/play only
 // publishes MQTT and /api/undo|redo manage the stack themselves.
@@ -68,76 +144,118 @@ function displayFor(value) {
   return String(value);
 }
 
-// Every queue in registry order, each curated entry resolved (poster + type) for
-// rendering. Rotation channels appear with their metadata but no items — their lineup is
-// computed, not stored (the Channels view previews it separately).
-app.get('/api/queues', async (_req, res) => {
+// The SHELF SKELETON: the registry plus, per curated set, one entry per queued item carrying
+// only the raw title string already written in queues.yaml. ZERO Plex calls — one queues.yaml
+// read and one sets.yaml read, both memoized on mtime, so this answers in ~15 ms cold.
+//
+// This exists to unblock first paint. /api/queues has to talk to Plex (~60 calls: resolve,
+// next-episode, collection children) and takes 2.6-2.8 s, and until it landed the page was
+// blank and then inserted ten shelves at once — a 0.398 CLS and the entire "feels slow"
+// complaint. The frontend now renders the full shelf structure from THIS response, at final
+// geometry with skeleton tiles, then swaps posters and next-episode in place when /api/queues
+// arrives. Nothing moves when the second response lands.
+//
+// The response is deliberately a SUBSET of /api/queues' shape (same `sets`/`order` envelope,
+// same per-item `key`/`raw`/`title`/`done` fields) so the client can render one component
+// against either and the swap is a field-by-field merge, not a different code path.
+app.get('/api/shelves', async (_req, res) => {
   try {
     const reg = await sets.getRegistry();
+    const all = await queues.listAll();
     const result = {};
     for (const s of reg.sets) {
-      const base = {
+      const entries = s.source === 'queue' ? all.get(s.id) || [] : [];
+      result[s.id] = {
         label: s.label,
         kind: s.kind,
         source: s.source,
         sections: s.sections,
-        items: [],
-      };
-      result[s.id] = base;
-      if (s.source !== 'queue') continue;
-      const entries = await queues.listSet(s.id);
-      base.items = await mapLimit(entries, 6, async (e) => {
-        let resolved = null;
-        try {
-          resolved = await plex.resolveValue(s.sections, e.value);
-        } catch {
-          /* leave unresolved */
-        }
-        // For a series, surface the next unwatched episode (queue plays it TV-style,
-        // staying until the whole show is watched). For a Collection, surface its first
-        // still-unwatched member (the show/movie that plays next in collection order) so
-        // the tile shows a concrete "Next: <member>" instead of an opaque "N in order".
-        // A manual start override {season, episode} on the entry floors the next-up pick.
-        const start =
-          e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null;
-        let nextEp = null;
-        if (resolved && resolved.type === 'show') {
-          try {
-            nextEp = await plex.nextEpisode(resolved.ratingKey, start);
-          } catch {
-            /* ignore */
-          }
-        } else if (resolved && resolved.type === 'collection') {
-          try {
-            // A collection's start override names {series, season, episode} — the member to
-            // begin at plus the floor inside it.
-            nextEp = await plex.collectionNext(resolved.ratingKey, start);
-          } catch {
-            /* ignore — the tile falls back to the childCount "N in order" label */
-          }
-        }
-        const episodes =
-          e.value && typeof e.value === 'object' && e.value.episodes ? e.value.episodes : 1;
-        return {
+        count: entries.length,
+        items: entries.map((e) => ({
           key: e.key,
           raw: displayFor(e.value),
-          resolved: Boolean(resolved),
-          ratingKey: resolved ? resolved.ratingKey : null,
-          type: resolved ? resolved.type : null,
-          title: resolved ? resolved.title : displayFor(e.value),
-          year: resolved ? resolved.year : null,
-          // For a Collection entry: how many items it expands to (shown on the tile).
-          childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
-          nextEp,
+          // Unresolved: the title line shows the raw string until /api/queues supplies the
+          // real Plex title. Same field the resolved response fills, so the merge is a
+          // straight overwrite rather than a branch.
+          title: displayFor(e.value),
+          resolved: false,
+          done: Boolean(e.done),
+        })),
+      };
+    }
+    res.json({ sets: result, order: reg.sets.map((s) => s.id) });
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// The (mtimeMs, size) of a config file, for the ETag — a stat, not a read.
+function statPair(p) {
+  try {
+    const st = statSync(p);
+    return `${Math.round(st.mtimeMs)}-${st.size}`;
+  } catch {
+    return '0-0';
+  }
+}
+
+// Every queue in registry order, each curated entry resolved (poster + type) for
+// rendering. Rotation channels appear with their metadata but no items — their lineup is
+// computed, not stored (the Channels view previews it separately).
+//
+// The fan-out is FLATTENED (B4.3): instead of ten sets resolved one after another (each set's
+// entries concurrent but the sets serial — ten serial batches), one work list across ALL sets
+// runs through a single mapLimit(8), then regroups. Wall-clock becomes the slowest single
+// batch, not their sum. Backed by the SQLite cache in plex.js, a warm call makes zero Plex
+// requests; a watch on the Shield busts exactly the affected show (mqttc.onNowPlaying below).
+app.get('/api/queues', async (req, res) => {
+  try {
+    // ETag (B7): the two config files' stat pairs + the cache generation (bumped on every
+    // invalidation, so a watch on the Shield correctly busts a browser's cached copy).
+    // `private` because the response is per-install; must-revalidate so the browser always
+    // sends If-None-Match rather than serving a stale body without asking.
+    const tag = `W/"${statPair(QUEUES_PATH)}-${statPair(sets.SETS_PATH)}-${await cache.generation()}"`;
+    res.set('ETag', tag);
+    res.set('Cache-Control', 'private, max-age=0, must-revalidate');
+    if (req.headers['if-none-match'] === tag) return res.status(304).end();
+
+    const reg = await sets.getRegistry();
+    const all = await queues.listAll();
+    const result = {};
+    // One flat work list across every set, so the concurrency budget is spent globally.
+    const work = [];
+    for (const s of reg.sets) {
+      result[s.id] = { label: s.label, kind: s.kind, source: s.source, sections: s.sections, items: [] };
+      if (s.source !== 'queue') continue;
+      for (const e of all.get(s.id) || []) work.push({ s, e });
+    }
+    const resolvedItems = await mapLimit(work, 8, async ({ s, e }) => {
+      // resolveTile surfaces, for a series, the next unwatched episode (queue plays it
+      // TV-style until the whole show is watched); for a Collection, its first still-unwatched
+      // member ("Next: <member>", not an opaque "N in order"). A manual start override on the
+      // entry floors the pick — {season,episode} for a show, {series,season,episode} for a
+      // collection (which member to begin at plus the floor inside it).
+      const start = e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null;
+      const core = await tiles.resolveTile(s.sections, e.value, start);
+      const episodes = e.value && typeof e.value === 'object' && e.value.episodes ? e.value.episodes : 1;
+      return {
+        setId: s.id,
+        tile: {
+          key: e.key,
+          raw: tiles.displayFor(e.value),
+          ...core,
           episodes,
           // The manual start override (null = automatic next-unwatched).
           start,
           // A finished-but-kept entry (Python tagged it done); the grid greys it and the
           // "Remove all completed" button targets these. False for every plain entry.
           done: Boolean(e.done),
-        };
-      });
-    }
+        },
+      };
+    });
+    // Regroup by set, preserving the flat list's order (set-then-entry order).
+    for (const { setId, tile } of resolvedItems) result[setId].items.push(tile);
+
     res.json({ sets: result, order: reg.sets.map((s) => s.id) });
   } catch (e) {
     res.status(500).json({ error: String(e) });
@@ -189,6 +307,15 @@ app.patch('/api/sets/:id', async (req, res) => {
   try {
     const out = await sets.updateSet(req.params.id, req.body || {});
     mqttc.invalidatePreview(req.params.id); // a filter change moves the channel's pool
+    // Config mutation → cache invalidation (B3.3), cheapest useful thing: bump the generation
+    // so open browsers' /api/queues ETags bust, and if the libraries a set draws from changed,
+    // drop those section listings so the next read reflects the new pool.
+    await cache.bumpGeneration();
+    const body = req.body || {};
+    if ('sections' in body || 'item_sections' in body) {
+      const secs = [...(Array.isArray(body.sections) ? body.sections : []), ...(Array.isArray(body.item_sections) ? body.item_sections : [])];
+      await cache.dropSectionListings(secs.map(String));
+    }
     res.json(out);
   } catch (e) {
     res.status(400).json({ error: String(e.message || e) });
@@ -220,39 +347,14 @@ app.get('/api/sets/:id/members', async (req, res) => {
       const v = value && typeof value === 'object' && value.collection && value.ratingKey == null
         ? `Collection: ${value.collection}`
         : value;
-      let resolved = null;
-      try {
-        resolved = await plex.resolveValue(sections, v);
-      } catch {
-        /* leave unresolved */
-      }
       const start = value && typeof value === 'object' && value.start ? value.start : null;
-      let nextEp = null;
-      if (resolved && resolved.type === 'show') {
-        try {
-          nextEp = await plex.nextEpisode(resolved.ratingKey, start);
-        } catch {
-          /* ignore */
-        }
-      } else if (resolved && resolved.type === 'collection') {
-        // Same next-up member as the queue grid, so a member tile and a queue tile of the
-        // same collection read identically (member poster + title, collection as the badge).
-        try {
-          nextEp = await plex.collectionNext(resolved.ratingKey, start);
-        } catch {
-          /* ignore — the tile falls back to the childCount "N in order" label */
-        }
-      }
+      // The SAME resolver the queue grid uses, so a member tile and a queue tile of the same
+      // collection read identically (member poster + title, collection as the badge).
+      const core = await tiles.resolveTile(sections, v, start);
       return {
         index,
-        raw: value,
-        resolved: Boolean(resolved),
-        ratingKey: resolved ? resolved.ratingKey : null,
-        type: resolved ? resolved.type : null,
-        title: resolved ? resolved.title : displayFor(v),
-        year: resolved ? resolved.year : null,
-        childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
-        nextEp,
+        raw: value, // the ORIGINAL value (not the collection-mapped `v`) round-trips for PATCH
+        ...core,
         start,
       };
     });
@@ -622,6 +724,9 @@ const sseClients = new Set();
 export function broadcast(type, data = {}) {
   const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`;
   for (const res of sseClients) res.write(msg);
+  // A `data` event means the config changed (edit, prune, SMB hand-edit) — warm the cache so
+  // the next load is hot. Debounced inside warm.kick(), so an edit burst coalesces.
+  if (type === 'data') warm.kick();
 }
 
 app.get('/api/events', (req, res) => {
@@ -670,6 +775,20 @@ mqttc.onNowPlaying(async (now) => {
   } catch {
     LAST_NOW = now || null; // an unresolvable key still moves the play/pause state
   }
+  // Precise, free cache invalidation (B3.1): the now-playing event already tells us which
+  // show is on screen. When something is playing, drop that show's cached allLeaves so the
+  // next /api/queues refetches exactly the one show whose watched-state may have moved, and
+  // bump the cache generation so a browser's /api/queues ETag busts. Nothing else refetches.
+  try {
+    const showRk = LAST_NOW && LAST_NOW.context && LAST_NOW.context.showRatingKey;
+    const st = LAST_NOW && (LAST_NOW.state === 'playing' || LAST_NOW.state === 'stopped' || LAST_NOW.state === 'paused');
+    if (showRk && st) {
+      await cache.dropLeaves(showRk);
+      await cache.bumpGeneration();
+    }
+  } catch {
+    /* cache is best-effort */
+  }
   broadcast('now', { now: LAST_NOW, set: (mqttc.lastState() || {}).set || null });
 });
 
@@ -697,6 +816,12 @@ app.get('/api/thumb/:ratingKey', async (req, res) => {
   }
 });
 
+// Open the derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache) before
+// listening. A failure here disables caching but never blocks the server — every reader in
+// cache.js degrades to a miss.
+await cache.init();
+
 app.listen(WEB_PORT, () => {
   console.log(`[plex-channels-web] listening on :${WEB_PORT}`);
+  warm.start();
 });

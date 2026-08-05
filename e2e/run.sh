@@ -12,7 +12,9 @@ set -a; source /srv/repos/agentic/.env; set +a
 npm --prefix web run build
 unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS   # suites assert the degraded no-broker paths
 export QUEUES_PATH=/tmp/queues-ui.yaml SETS_PATH=/tmp/sets-ui.yaml WEB_PORT=18768 \
+       CACHE_PATH=/tmp/cache-e2e.sqlite \
        NODE_TLS_REJECT_UNAUTHORIZED=0 PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}
+rm -f /tmp/cache-e2e.sqlite /tmp/cache-e2e.sqlite-wal /tmp/cache-e2e.sqlite-shm
 TOTAL=0
 echo "=== collection-start-test (python, offline) ==="   # engine floor for collection starts
 python3 e2e/collection-start-test.py || TOTAL=$((TOTAL+1))
@@ -20,6 +22,14 @@ echo "=== history-persist-test ==="   # manages its own server (port 18770) + fi
 node e2e/history-persist-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)
 node e2e/api-v2-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== yaml-roundtrip-test ==="   # browserless; comments survive every queues/sets mutation (Phase E)
+node e2e/yaml-roundtrip-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile detection port
+node e2e/profile-gate-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== headers-test ==="   # browserless; asserts compression + cache headers (Phase A)
+node e2e/headers-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== perf-queues ==="   # browserless; stub Plex + broker, asserts the cache/ETag (Phase B)
+node e2e/perf-queues.mjs || TOTAL=$((TOTAL+1))
 for t in kbd-undo-test ui-test homedrag-test channels-test sse-test; do
   echo "=== $t ==="
   # Fresh server + files PER SUITE — stale lock dirs / shared servers made runs flaky.

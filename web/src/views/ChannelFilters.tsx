@@ -147,6 +147,10 @@ export function ChannelFilters({
     <aside id="chfilters">
       <h2>Channel filters</h2>
 
+      {/* F5: the 7 fieldsets scroll inside here; `#ch-save` stays OUTSIDE as the aside's
+          pinned footer, always on screen. Every fieldset id and `.showsonly` is untouched,
+          so channels-test / verify-pr4-cutover keep passing. */}
+      <div className="chfilters-scroll">
       <fieldset>
         <legend>Allowed ratings</legend>
         <CheckboxGroup
@@ -321,6 +325,7 @@ export function ChannelFilters({
           value={audio}
         />
       </fieldset>
+      </div>
 
       <button id="ch-save" onClick={() => void onSave()} type="button">
         Save filters

@@ -52,6 +52,13 @@ export type QueueItem = {
   episodes: number
   start: StartPoint | null
   done: boolean
+  /**
+   * True while this item came from the SKELETON response (`GET /api/shelves`) and
+   * `/api/queues` has not landed yet. The tile renders at final geometry with a
+   * `Skeleton` poster instead of a `<img>`, so the swap when the resolved response
+   * arrives moves nothing. Absent (falsy) on every resolved item.
+   */
+  pending?: boolean
 }
 
 /** One resolved member of a rotation channel (`GET /api/sets/:id/members`). */
@@ -83,6 +90,34 @@ export type QueueSet = {
 
 export type QueuesResponse = {
   sets: Record<string, QueueSet>
+  order: string[]
+}
+
+/**
+ * `GET /api/shelves` — the shelf SKELETON. Same envelope as `QueuesResponse`, but each
+ * item carries only what `queues.yaml` already knows (its key, its raw title string,
+ * whether it is done). No Plex call is made to build it, so it answers in ~15 ms while
+ * `/api/queues` takes seconds.
+ */
+export type ShelfItem = {
+  key: string
+  raw: string
+  title: string
+  resolved: false
+  done: boolean
+}
+
+export type ShelfSet = {
+  label: string
+  kind: string
+  source: "queue" | "rotation" | string
+  sections: number[]
+  count: number
+  items: ShelfItem[]
+}
+
+export type ShelvesResponse = {
+  sets: Record<string, ShelfSet>
   order: string[]
 }
 

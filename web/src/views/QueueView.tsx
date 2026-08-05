@@ -441,7 +441,8 @@ export function QueueView({
                       </>
                     }
                     className={[
-                      item.resolved ? null : "unresolved",
+                      // See QueuesView: a pending tile has not claimed to be missing.
+                      item.resolved || item.pending ? null : "unresolved",
                       item.done ? "done" : null,
                       isPlaying ? "playing" : null,
                       setId && selected.has(`${setId}::${item.key}`)
@@ -452,6 +453,7 @@ export function QueueView({
                       .join(" ")}
                     dataKey={item.key}
                     dataSet={setId ?? undefined}
+                    isPending={item.pending}
                     key={item.key}
                     next={{
                       isDone: face.nextDone,

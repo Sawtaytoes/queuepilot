@@ -1,3 +1,4 @@
+import { Skeleton } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 import { thumbUrl } from "../lib/api"
@@ -34,6 +35,14 @@ type Props = {
   removeTitle?: string
   /** Right-click / long-press opens the per-entry menu (editable grids only). */
   onContextMenu?: (e: React.MouseEvent<HTMLLIElement>) => void
+  /**
+   * This entry came from `/api/shelves` and `/api/queues` has not resolved it yet.
+   * The tile still occupies its full final geometry (`.thumb` carries
+   * `aspect-ratio: 2/3` unconditionally), so this only changes what fills the
+   * poster box — a shimmer instead of an empty rectangle. The swap when the
+   * resolved response lands moves nothing.
+   */
+  isPending?: boolean
 }
 
 export function PosterTile({
@@ -41,6 +50,7 @@ export function PosterTile({
   className,
   dataKey,
   dataSet,
+  isPending,
   next,
   onCheck,
   onContextMenu,
@@ -54,13 +64,18 @@ export function PosterTile({
 
   return (
     <li
-      className={`tile${className ? ` ${className}` : ""}`}
+      className={`tile${isPending ? " pending" : ""}${className ? ` ${className}` : ""}`}
       data-key={dataKey}
       data-set={dataSet}
       onContextMenu={onContextMenu}
       tabIndex={0}
     >
       <div className="thumb">
+        {/* `aria-hidden` on Skeleton is the component's contract — the LOAD is
+            announced by the owning region's `aria-busy`, never by the placeholder. */}
+        {isPending
+          ? <Skeleton blockSize="100%" inlineSize="100%" shape="block" />
+          : null}
         {posterRatingKey
           ? (
               <img

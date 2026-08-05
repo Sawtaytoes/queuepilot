@@ -16,6 +16,19 @@ import { parseDocument, YAMLSeq } from 'yaml';
 
 export const SETS_PATH = process.env.SETS_PATH || '/config/sets.yaml';
 
+// Set a map key while PRESERVING any inline/leading comment on the value being replaced.
+// `map.set(key, node)` swaps the value node wholesale, which drops a `label: Bob  # comment`
+// annotation a human typed over SMB — the exact loss `e2e/yaml-roundtrip-test.mjs` guards.
+// The comment lives on the scalar VALUE node (`pair.value.comment`), so carry it across.
+function setKeepingComment(map, key, newNode) {
+  const pair = map.items.find((p) => p.key && String(p.key.value) === key);
+  if (pair && pair.value) {
+    if (pair.value.comment != null && newNode && typeof newNode === 'object') newNode.comment = pair.value.comment;
+    if (pair.value.commentBefore != null && newNode && typeof newNode === 'object') newNode.commentBefore = pair.value.commentBefore;
+  }
+  map.set(key, newNode);
+}
+
 const LOCK_DIR = SETS_PATH + '.lock';
 const LOCK_STALE_MS = 15000;
 const LOCK_WAIT_MS = 10000;
@@ -210,6 +223,7 @@ async function readDoc() {
 const YAML_OUT = { indentSeq: false, lineWidth: 0 };
 
 async function writeDoc(doc) {
+  _regCache = null; // see registryCache(): stat-keyed memo, busted on our own writes
   const text = doc.toString(YAML_OUT);
   const tmp = SETS_PATH + '.tmp';
   await fs.writeFile(tmp, text, 'utf8');
@@ -356,15 +370,43 @@ function normalize(ent) {
 }
 
 // The whole registry, normalized: { sets: [..] } (file order kept).
-export async function getRegistry() {
+//
+// Memoized on the file's (mtimeMs, size), same rule as queues.listAll(): every writer moves
+// one of the two, and writeDoc() busts it explicitly for same-millisecond same-length writes.
+// getSet() is called several times per mutating request (requireQueueSet checks both ends of
+// a cross-queue move, then the mutation re-reads), and each call was a full read + parse +
+// re-normalize of the registry. `byId` is built once per parse so getSet is a Map lookup.
+let _regCache = null; // { mtimeMs, size, reg, byId }
+
+async function registryCache() {
+  let st = null;
+  try {
+    st = await fs.stat(SETS_PATH);
+  } catch {
+    st = null; // not seeded yet — readDoc() creates it, then the next call memoizes
+  }
+  if (st && _regCache && _regCache.mtimeMs === st.mtimeMs && _regCache.size === st.size) {
+    return _regCache;
+  }
   const doc = await readDoc();
   const raw = doc.toJSON() || {};
   const sets = (raw.sets || []).map(normalize).filter(Boolean);
-  return { sets };
+  const entry = {
+    mtimeMs: st ? st.mtimeMs : 0,
+    size: st ? st.size : 0,
+    reg: { sets },
+    byId: new Map(sets.map((s) => [s.id, s])),
+  };
+  if (st) _regCache = entry;
+  return entry;
+}
+
+export async function getRegistry() {
+  return (await registryCache()).reg;
 }
 
 export async function getSet(id) {
-  return (await getRegistry()).sets.find((s) => s.id === id) || null;
+  return (await registryCache()).byId.get(id) || null;
 }
 
 export async function setIds() {
@@ -551,7 +593,9 @@ export async function updateSet(id, patch) {
         v = String(v).trim();
         if (!v) throw new Error('label required');
       }
-      node.set(k, doc.createNode(v));
+      // Preserve an inline comment on the value being replaced (e.g. `label: Bob  # rename
+      // freely` typed over SMB) — see setKeepingComment + e2e/yaml-roundtrip-test.mjs.
+      setKeepingComment(node, k, doc.createNode(v));
     }
     await writeDoc(doc);
     return { ok: true };

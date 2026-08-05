@@ -7,3 +7,8 @@ web/node_modules/
 *.local
 __screenshots__/
 web/dist/
+# The derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store):
+# regenerable from Plex, never backed up, safe to delete.
+cache.sqlite
+cache.sqlite-wal
+cache.sqlite-shm

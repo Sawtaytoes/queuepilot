@@ -1,9 +1,7 @@
 // E2E for the new Home toolbar + queue CRUD + shelf reorder, against a local server.
-import { createRequire } from 'node:module';
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
 
 // Port is overridable (WEB_PORT) so this suite can run on a private port outside run.sh.
+import { chromium } from './playwright.mjs';
 const PORT = process.env.WEB_PORT || 18768;
 const BASE = `http://localhost:${PORT}`;
 const ok = (name, cond) => {

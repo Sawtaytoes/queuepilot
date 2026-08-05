@@ -1,7 +1,5 @@
-import { createRequire } from 'node:module';
+import { chromium } from './playwright.mjs';
 import { readFileSync, writeFileSync } from 'node:fs';
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
 const ok = (n, c) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });

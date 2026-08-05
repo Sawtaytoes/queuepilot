@@ -1,13 +1,11 @@
 // Focused visual verification for the v3 backlog items #4 (✕ contrast) and #5 (drag feedback).
 // Boots the same offline stack as shots.mjs, then: (a) zooms the modal ✕ glyph, and (b) drives
 // a real mouse drag on a queue tile and screenshots MID-gesture so the lift/FLIP is visible.
-import { createRequire } from 'node:module';
+import { chromium } from './playwright.mjs';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { startFakeMqtt } from './fake-mqtt.mjs';
 
-const require = createRequire('/srv/repos/mux-magic/node_modules/');
-const { chromium } = require('playwright');
 
 const PORT = 18781;
 const FAKE_MQTT_PORT = 11884;

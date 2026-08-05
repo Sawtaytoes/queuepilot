@@ -1,4 +1,4 @@
-import { Badge } from "@charcuterie/ui"
+import { Badge, Skeleton, Spinner } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import { WatchesBadge } from "../components/badges"
@@ -62,6 +62,15 @@ export function ChannelPool({
 }) {
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
   const [heading, setHeading] = useState("Eligible pool")
+  // The load state drives the indicator. `#chpool-title` text stays STABLE at "Eligible
+  // pool" while loading — `live-smoke.mjs` and `verify-shorts-pool.mjs` read its
+  // textContent and match on the LOADED counts, and a heading that changes mid-load is
+  // both a CLS source and a screen-reader nuisance. The load is announced by the
+  // Spinner's `role="status"` region and the grid's `aria-busy`, not by the heading.
+  const [isLoading, setIsLoading] = useState(true)
+  // "first load can take a minute" moves OUT of the heading into a hint that appears only
+  // after 3 s — so a fast load never shows it, and a slow one explains itself.
+  const [showSlowHint, setShowSlowHint] = useState(false)
   const reqRef = useRef(0)
 
   const isRewatch = channel.behavior === "rewatch"
@@ -71,7 +80,12 @@ export function ChannelPool({
     const chId = channel.id
 
     setPreview(null)
-    setHeading("Eligible pool — loading… (first load can take a minute)")
+    setIsLoading(true)
+    setShowSlowHint(false)
+    setHeading("Eligible pool")
+    const slowTimer = setTimeout(() => {
+      if (req === reqRef.current) setShowSlowHint(true)
+    }, 3000)
 
     const run = async () => {
       try {
@@ -99,6 +113,7 @@ export function ChannelPool({
         if (data.error) throw new Error(data.error)
 
         setPreview(data)
+        setIsLoading(false)
 
         if (isRewatch) {
           const movies = data.movie_pool || []
@@ -130,13 +145,20 @@ export function ChannelPool({
         if (req !== reqRef.current) return // a newer load owns the pool now
 
         setHeading("Eligible pool")
+        setIsLoading(false)
         setStatus("Preview failed: " + (e as Error).message, "err")
       }
     }
 
     void run()
+
+    return () => clearTimeout(slowTimer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.id, currentProfile, resampleToken])
+
+  // The skeleton count: enough to fill the visible pool row so nothing shifts when the real
+  // tiles land. A fixed dozen at tile geometry (`--tile` wide, aspect-ratio 2/3 via `.tile`).
+  const SKELETON_COUNT = 12
 
   const excludeFromBlocklist = async (ratingKey: string, label: string) => {
     setStatus(`Blocking ${label}…`)
@@ -180,9 +202,32 @@ export function ChannelPool({
 
   return (
     <section className="chpool">
-      <h2 id="chpool-title">{heading}</h2>
-      <ul className="grid" id="chpool">
-        {isRewatch
+      <div className="chpool-head">
+        <h2 id="chpool-title">{heading}</h2>
+        {/* The load's ACTUAL announcement — a `role="status"` live region. The heading
+            stays stable, so this is what a screen reader hears. */}
+        {isLoading ? <Spinner label="Loading the eligible pool…" size="sm" /> : null}
+      </div>
+      {/* Out of the heading (a heading that changes is a CLS + a11y nuisance), and only
+          after 3 s, so a fast load never shows it. */}
+      {isLoading && showSlowHint
+        ? <p className="chpool-hint">First load can take a minute.</p>
+        : null}
+      {/* `aria-busy` pairs with the `aria-hidden` Skeletons: the container announces the
+          load, the placeholders stay invisible to AT (Skeleton's own contract). */}
+      <ul aria-busy={isLoading || undefined} className="grid" id="chpool">
+        {isLoading
+          ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
+              // NOT `li.tile`: the e2e suites `waitForSelector('#chpool li.tile')` to detect a
+              // LOADED pool, so a skeleton wearing that class would resolve the wait early on
+              // empty placeholders. `.skeltile` carries the same geometry, different name.
+              <li className="skeltile" key={`skeleton-${i}`}>
+                <div className="thumb">
+                  <Skeleton blockSize="100%" inlineSize="100%" shape="block" />
+                </div>
+              </li>
+            ))
+          : isRewatch
           ? renderRewatchPool()
           : (preview?.buckets ?? []).flatMap((b) =>
               b.items
