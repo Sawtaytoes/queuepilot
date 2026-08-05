@@ -8,7 +8,7 @@
 # `web/` is a Vite project since M6d, so the runtime image needs its `dist/`, not
 # its sources — and none of its ~48 dev dependencies. Keeping the build in its own
 # stage means React, Vite, Tailwind and TypeScript never reach the final image.
-FROM node:24-trixie-slim AS web-build
+FROM node:26-trixie-slim AS web-build
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -16,7 +16,7 @@ COPY web/ ./
 RUN npm run build
 
 # --- stage 2: the runtime image ----------------------------------------------- #
-FROM node:24-trixie-slim
+FROM node:26-trixie-slim
 
 WORKDIR /app
 
