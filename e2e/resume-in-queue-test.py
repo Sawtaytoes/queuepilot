@@ -46,8 +46,10 @@ ok("resume_offset: fresh item returns 0",
    plex.resume_offset("fresh", set()) == 0)
 ok("resume_offset: viewCount>0 (finished, then rewound) returns 0",
    plex.resume_offset("rewound", set()) == 0)
-ok("resume_offset: an item in the watched history returns 0",
-   plex.resume_offset("inprog", {"inprog"}) == 0)
+# Live view-state is authoritative: an in-progress item RESUMES even if the set's history
+# flagged it watched (the OAD bug — a history row must never override a live partial view).
+ok("resume_offset: in-progress resumes even if history flagged it watched",
+   plex.resume_offset("inprog", {"inprog"}) == 45000)
 
 
 # --------------------------------------------------------------------------- #
@@ -56,7 +58,9 @@ ok("resume_offset: an item in the watched history returns 0",
 config.SETS = {"bob": {"kind": "movie", "source": "queue"}}  # kind != anime -> ordered queue
 plex.account_token = lambda uuid: None
 plex._watched_for_set = lambda cfg, binding=None: set(WATCHED)
-queues.mark_done = lambda set_name, keys: True  # never write a file in the test
+queues.mark_done = lambda set_name, keys: True   # never write a file in the test
+queues.clear_done = lambda set_name, keys: True
+queues.sweep_completed = lambda set_name, cfg, now=None: False
 WATCHED = set()
 
 # A tiny descriptor + resolver stand-in: each queues.yaml entry maps to a canned batch.
@@ -67,7 +71,7 @@ def fake_entries(set_name):
     return ENTRIES
 
 
-def fake_resolve_member(desc, cfg, watched, token=None, default_batch=None):
+def fake_resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=False):
     return RESOLVE.get(desc["key"])
 
 
