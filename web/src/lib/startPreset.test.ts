@@ -57,6 +57,32 @@ describe("memberPreset", () => {
       memberPreset({ episode: 8, series: "111" }, nextUp, "999"),
     ).toBeNull()
   })
+
+  // "The Disastrous Life of Saiki K.": 4 member series, #1–#3 finished (their raw
+  // viewedLeafCount is BELOW leafCount only because specials inflate the total — the
+  // real regular episodes are all watched), #4 "Reawakened" not started. The server's
+  // `collectionNext` (which excludes specials the same way) picks #4 as the next-up
+  // member and carries its E1, so `nextEp.memberRatingKey` names #4. The modal must
+  // therefore seed the ACTIVE series' episode only, and only for #4.
+  test("multi-series collection seeds the next-up series' episode, not the first series'", () => {
+    const saikiNext: NextEp = {
+      episode: 1,
+      kind: "show",
+      member: "The Disastrous Life of Saiki K.: Reawakened",
+      memberRatingKey: "s4",
+      multiSeason: false,
+      season: null,
+    }
+
+    // #4 (the not-fully-watched series) gets its next episode…
+    expect(memberPreset(null, saikiNext, "s4")).toEqual({
+      episode: 1,
+      season: undefined,
+    })
+    // …and the already-finished #1 is NOT seeded (so opening it wouldn't default to a
+    // stale E1 as if it were the start point).
+    expect(memberPreset(null, saikiNext, "s1")).toBeNull()
+  })
 })
 
 describe("defaultStartPoint", () => {
