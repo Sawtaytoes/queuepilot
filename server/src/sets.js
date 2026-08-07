@@ -381,6 +381,12 @@ function normalize(ent) {
         }
       : {}),
     audio_language: ent.audio_language != null ? String(ent.audio_language) : null,
+    // Gate a curated queue to a Plex Home profile (the value is the PMS-log profile title,
+    // e.g. "Demo"). A scan WAITS (and ADB-switches the Shield) until that profile is signed
+    // in before playing — the demo/IVTC-test reels' libraries are invisible to other
+    // profiles. Rotation channels are ungated by design, so this is only meaningful/editable
+    // on queue sets. null = ungated. (decision `2026-08-07-choose-profile-for-queues`)
+    requires_profile: ent.requires_profile != null ? String(ent.requires_profile) : null,
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
     enabled: ent.enabled !== false,
@@ -518,6 +524,10 @@ export async function createSet(body = {}) {
       curated = { id, label: String(label).trim(), kind: kind === 'anime' ? 'anime' : 'movies', source: 'queue', sections: secs };
       const mi = toPosIntOrNull(body.max_items);
       if (mi) curated.max_items = mi;
+      // Optional profile gate (blank => ungated). Only curated queues carry it; rotation
+      // channels are profile-driven and reject it (see updateSet).
+      const rp = body.requires_profile == null ? '' : String(body.requires_profile).trim();
+      if (rp) curated.requires_profile = rp;
     }
     const node = doc.createNode(isRotation ? rotationCreateObj(id, body) : curated);
     // Curated shelves land after the last curated queue, before the rotation block; new
@@ -543,7 +553,7 @@ export async function updateSet(id, patch) {
     const node = seq.items.find((n) => n.get && String(n.get('id')) === id);
     if (!node) throw new Error(`unknown set ${id}`);
     const isRotation = node.get('source') === 'rotation';
-    const allow = ['label', 'kind', 'sections', 'enabled', 'max_items'];
+    const allow = ['label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile'];
     if (isRotation) {
       allow.push(
         'item_sections', 'allowed_ratings', 'movie_ratings', 'blocklist',
@@ -588,6 +598,17 @@ export async function updateSet(id, patch) {
         const s = v == null ? '' : String(v).trim();
         if (!s) { node.delete('default_profile'); continue; }
         node.set('default_profile', doc.createNode(s));
+        continue;
+      }
+      if (k === 'requires_profile') {
+        // Gate a curated queue to a Plex Home profile (blank => ungated, drop the key). The
+        // value is the PMS-log profile title the play-gate matches on. Rotation channels are
+        // profile-DRIVEN (their set:"auto" scan lets the signed-in profile pick the tier), so
+        // a fixed gate here would break routing — reject a non-empty value on rotation.
+        const s = v == null ? '' : String(v).trim();
+        if (isRotation && s) throw new Error('rotation channels cannot require a profile (they are profile-driven)');
+        if (!s) { node.delete('requires_profile'); continue; }
+        node.set('requires_profile', doc.createNode(s));
         continue;
       }
       if (k === 'sections' || k === 'item_sections') {

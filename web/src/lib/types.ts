@@ -168,6 +168,9 @@ export type RegistrySet = {
   /** Which binding the Play/Channels dropdowns seed to (a binding's `plex_user`).
    * A stale value falls back to `profiles[0]`. */
   default_profile?: string | null
+  /** Curated-queue play gate: a scan waits (and ADB-switches the Shield) until this Plex
+   * Home profile is signed in before playing. null/absent = ungated. */
+  requires_profile?: string | null
   audio_language?: string
   superseded_by?: string | null
   // The ultra-legacy single-binding mirror, still read by `activeBinding`.
@@ -205,6 +208,8 @@ export type Profile = {
   id?: number | null
   uuid?: string | null
   name: string
+  /** plex.tv username — the PMS-log stamp for the owner (managed users stamp their title). */
+  username?: string | null
   admin?: boolean
 }
 
