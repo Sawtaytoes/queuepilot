@@ -52,9 +52,12 @@ against one of:
   same approach as `e2e/fixtures/routing.sets.yaml` for D2), committed and CI-safe; or
 - a **scrubbed** corpus (titles/ratingKeys/account-ids remapped) generated from a real recording.
 
-**Open decision for the owner:** which of those two backs CI. Synthetic is the least effort to
-keep private but the most effort to make representative; scrubbed is representative but needs a
-trustworthy scrubber. Until that's settled, engine-parity runs locally against a real corpus.
+**Decided 2026-08-07 (owner): SYNTHETIC.** CI's engine-parity corpus is hand-authored minimal
+Plex responses (the `e2e/fixtures/routing.sets.yaml` approach), private by construction — no real
+library data ever enters this public repo. A real recorded corpus stays a *local* convenience for
+spot-checking, never the CI oracle. The synthetic corpus must cover each engine branch
+(multi-show rotation, in-progress vs unwatched, Season-0 specials/extras index rules, rewatch
+weighting buckets, a curated queue, a collection expansion, a reel).
 
 ## The RNG caveat (shapes what parity can compare)
 
