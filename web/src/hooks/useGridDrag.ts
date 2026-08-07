@@ -194,6 +194,16 @@ export function useGridDrag(
       }
     }
 
+    // The one thing that beats `touch-action: pan-y`: a non-passive touchmove.
+    // Once a touch drag is live, `preventDefault` on the POINTER move is not enough
+    // — the spec lets the browser keep the pan-y (vertical) axis for native scroll,
+    // so dragging BETWEEN ROWS (vertical motion) was stolen by the scroller and, on
+    // a touch-only device like a Windows tablet, every drag just scrolled. The Home
+    // shelves already carry this exact listener; the grid needs it too.
+    const onTouchMove = (e: TouchEvent) => {
+      if (press?.isDragging) e.preventDefault()
+    }
+
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement
 
@@ -248,11 +258,13 @@ export function useGridDrag(
     }
 
     grid.addEventListener("pointerdown", onPointerDown)
+    grid.addEventListener("touchmove", onTouchMove, { passive: false })
     grid.addEventListener("dragstart", onDragStart)
     grid.addEventListener("contextmenu", onContextMenu)
 
     return () => {
       grid.removeEventListener("pointerdown", onPointerDown)
+      grid.removeEventListener("touchmove", onTouchMove)
       grid.removeEventListener("dragstart", onDragStart)
       grid.removeEventListener("contextmenu", onContextMenu)
       endPress()

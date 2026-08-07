@@ -42,6 +42,26 @@ export function Modal({
   titleId,
 }: Props) {
   const ref = useRef<HTMLDialogElement>(null)
+  // True while THIS modal holds the page-scroll lock + its slot in `openModals`, so
+  // the lock is dropped exactly once no matter HOW the modal goes away.
+  const isLocking = useRef(false)
+
+  // Release the scroll-lock + busy count this modal holds. Idempotent — the native
+  // `close` path and the unmount backstop both call it, but only the first wins.
+  const release = () => {
+    if (!isLocking.current) return
+
+    isLocking.current = false
+    busy.openModals = Math.max(0, busy.openModals - 1)
+
+    if (!document.querySelector("dialog[open]")) {
+      document.documentElement.classList.remove("modal-open")
+    }
+  }
+
+  // Always call the freshest `release` from the mount-once unmount effect below.
+  const releaseRef = useRef(release)
+  releaseRef.current = release
 
   useEffect(() => {
     const dlg = ref.current
@@ -51,6 +71,7 @@ export function Modal({
     if (isOpen && !dlg.open) {
       document.documentElement.classList.add("modal-open")
       busy.openModals += 1
+      isLocking.current = true
       dlg.showModal()
     }
     else if (!isOpen && dlg.open) {
@@ -64,19 +85,22 @@ export function Modal({
     if (!dlg) return
 
     const onNativeClose = () => {
-      busy.openModals = Math.max(0, busy.openModals - 1)
-
-      if (!document.querySelector("dialog[open]")) {
-        document.documentElement.classList.remove("modal-open")
-      }
-
+      release()
       onClose()
     }
 
     dlg.addEventListener("close", onNativeClose)
 
     return () => dlg.removeEventListener("close", onNativeClose)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onClose])
+
+  // A `<dialog>` removed from the DOM while still open never fires `close`, so a
+  // modal that unmounts mid-open — App.tsx renders each overlay as `x ? <M/> : null`,
+  // and an optimistic add + background refresh can swap the item out from under an
+  // open picker — would strand `html.modal-open` and the page would silently stop
+  // scrolling with no dialog in sight. Releasing on unmount is the backstop.
+  useEffect(() => () => releaseRef.current(), [])
 
   return (
     <dialog
