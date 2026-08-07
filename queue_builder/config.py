@@ -333,6 +333,15 @@ def _load_sets_yaml():
         cfg["label"] = ent.get("label") or sid
         cfg["kind"] = ent.get("kind")
         cfg["enabled"] = ent.get("enabled", True)
+        # §B.3 TTL auto-remove of completed entries: a per-set override of the global
+        # REMOVE_COMPLETED_AFTER window (a duration string like "24h"/"7d"/"90m", or
+        # "0"/"never" to disable), plus the keep_completed exemption (a set that keeps its
+        # finished entries forever). Both are passed straight through to the cfg;
+        # queues.sweep_completed interprets them (a `reel` set is exempt structurally).
+        if ent.get("remove_completed_after") is not None:
+            cfg["remove_completed_after"] = str(ent.get("remove_completed_after")).strip()
+        if ent.get("keep_completed"):
+            cfg["keep_completed"] = True
         # A set whose libraries only SOME Plex Home profiles can see (e.g. the demo reel
         # lives in Demos + Movie Clips, hidden from both kid profiles). do_start blocks
         # until the Shield is signed into this profile, so a scan on the wrong one waits
@@ -404,6 +413,14 @@ QUEUES_PATH = os.environ.get("QUEUES_PATH", "/config/queues.yaml")
 # safety cap so a bad override can't queue an entire series at once.
 QUEUE_SERIES_DEFAULT = int(os.environ.get("QUEUE_SERIES_DEFAULT", "1"))
 QUEUE_SERIES_LENGTH = int(os.environ.get("QUEUE_SERIES_LENGTH", "40"))
+# --- Completed-entry TTL (§B.3) ------------------------------------------------ #
+# Finished queue entries are kept + tagged `done: true`/`done_at:<epoch>` (queues.mark_done)
+# instead of being pruned (decision 2026-07-21-finished-queue-entries-marked-done-not-pruned).
+# This is the GLOBAL default window after which a done entry is auto-removed on the next scan;
+# a set may override it with `remove_completed_after` in sets.yaml, and `keep_completed: true`
+# or `reel: true` exempts a set entirely. A duration string ("24h"/"7d"/"90m"); "0"/"never"
+# disables auto-removal fleet-wide. Parsed by queues.parse_duration.
+REMOVE_COMPLETED_AFTER = os.environ.get("REMOVE_COMPLETED_AFTER", "24h")
 
 def set_sections(cfg):
     """All library sections a set draws from (episodic + item)."""

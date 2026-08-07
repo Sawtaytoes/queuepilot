@@ -87,10 +87,12 @@ jobs:
               print("imported queue_builder.%s" % m.name)
           PY
 
-      # Engine unit tests that stub Plex entirely (no token, no network) — today the
-      # collection START floor (skip earlier members, floor the named one).
+      # Engine unit tests that stub Plex entirely (no token, no network) — the collection
+      # START floor and the §B.3 completed-entry TTL sweep (done_at stamp + auto-remove).
       - name: Python engine tests
-        run: python3 e2e/collection-start-test.py
+        run: |
+          python3 e2e/collection-start-test.py
+          python3 e2e/ttl-remove-completed-test.py
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
@@ -99,6 +101,7 @@ jobs:
         run: |
           node e2e/history-persist-test.mjs
           node e2e/api-v2-test.mjs
+          node e2e/ttl-sweep-test.mjs
 
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # `require('playwright')` and drive a Chromium browser, and the shared
