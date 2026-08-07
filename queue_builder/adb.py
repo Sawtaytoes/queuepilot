@@ -56,6 +56,9 @@ _SETTLE = 0.35
 # HomeActivityTV goes foreground before its hubs can take a D-pad press. Hold still this
 # long before walking the sidebar, or the presses land on a screen that is still rendering.
 _HOME_SETTLE = 2.0
+# How long to let the panel come up after a WAKEUP before re-reading the foreground. A wake
+# takes ~1s to settle; a launch issued before then lands behind the still-dissolving dream.
+_WAKE_SETTLE = 1.0
 # Attempts at Plex's own Switch-user route before falling back to a force-stop. Two,
 # because the force-stop kills playback and costs ~20s, while a retry costs ~10s.
 _MAX_MENU_TRIES = 2
@@ -122,6 +125,23 @@ def foreground_activity():
     return m.group(1) if m else None
 
 
+def is_awake():
+    """True if the Shield's display is awake, False if dozing/asleep, None if unreadable.
+
+    Reads `dumpsys power` wakefulness (Awake / Dozing / Asleep / Dreaming) so ensure_plex_open
+    can decide whether a WAKEUP must precede the Plex launch. No `grep -m1` (closing the pipe
+    early makes dumpsys fail with a broken pipe); take the first match here. A None (unreadable)
+    is treated by the caller as "not known-awake", i.e. wake to be safe.
+    """
+    out = _run(["shell", "dumpsys power | grep mWakefulness"])
+    if not out:
+        return None
+    m = re.search(r"mWakefulness=(\w+)", out)
+    if not m:
+        return None
+    return m.group(1).strip().lower() == "awake"
+
+
 def ensure_plex_open(wait=None):
     """Foreground the Shield's Plex app via its `plex://` deep link if it isn't already up.
 
@@ -140,6 +160,24 @@ def ensure_plex_open(wait=None):
     act = foreground_activity() or ""
     if _PLEX_PKG in act:
         return True
+    # device_on transition: a dozing / screen-off Shield reports a null or screensaver
+    # foreground, and `am start plex://` on a SLEEPING device does not bring Plex forward -
+    # the launch queues behind the dream, so ensure_plex_open used to log "launching via
+    # plex://" -> "Plex did not reach the foreground in time" on every retry until something
+    # else happened to wake the panel (e.g. the profile step's WAKEUP). For a non-gated set
+    # nothing else wakes it, so Plex never opens. WAKEUP is safe to send blind (it cannot
+    # select or dismiss anything) and restores whatever was up behind the screensaver, so
+    # wake FIRST when the device isn't already awake, then re-read (the wake alone may have
+    # brought Plex back to the foreground).
+    if is_awake() is not True or not act:
+        print(f"[adb] Shield not awake (foreground '{act or 'unknown'}'); sending WAKEUP",
+              flush=True)
+        _press("KEYCODE_WAKEUP")
+        time.sleep(_WAKE_SETTLE)
+        act = foreground_activity() or ""
+        if _PLEX_PKG in act:
+            print("[adb] Plex is foreground after waking the Shield", flush=True)
+            return True
     print(f"[adb] Plex not foreground (on '{act or 'unknown'}'); launching via plex://",
           flush=True)
     if _run(["shell", "am", "start", "-a", "android.intent.action.VIEW",
