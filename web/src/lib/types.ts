@@ -156,6 +156,9 @@ export type RegistrySet = {
   members?: unknown[]
   profiles?: Binding[]
   has_explicit_profiles?: boolean
+  /** Which binding the Play/Channels dropdowns seed to (a binding's `plex_user`).
+   * A stale value falls back to `profiles[0]`. */
+  default_profile?: string | null
   audio_language?: string
   superseded_by?: string | null
   // The ultra-legacy single-binding mirror, still read by `activeBinding`.

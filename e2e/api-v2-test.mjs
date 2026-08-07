@@ -191,6 +191,36 @@ try {
   const curatedNoSecs = await post('/sets', { label: 'Bad Queue', sections: [], item_sections: [15] });
   ok('curated createSet still requires sections', /library section/.test(String(curatedNoSecs.error || '')));
 
+  // --- default_profile: the UI-seed hint the Play/Channels dropdowns start on --- //
+  // A two-binding rotation channel that names one binding as its default; it must
+  // round-trip on create, be re-pointable, and clear back to "no default" (dropdowns
+  // then fall back to profiles[0]). (decision 2026-08-07-default-profile-per-channel)
+  const dp = await post('/sets', {
+    label: 'Default Profile Chan', source: 'rotation', kind: 'cartoons',
+    sections: [5], item_sections: [15],
+    profiles: [
+      { plex_user: 'Younger Kids', account_id: 1, allowed_ratings: ['TV-Y'] },
+      { plex_user: 'Older Kids', account_id: 2, allowed_ratings: ['TV-PG'] },
+    ],
+    default_profile: 'Older Kids',
+  });
+  const dpid = dp.id;
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === dpid);
+  ok('createSet persists default_profile', ns && ns.default_profile === 'Older Kids');
+  ok('default_profile channel has explicit profiles', ns.has_explicit_profiles === true);
+
+  await patch(`/sets/${dpid}`, { default_profile: 'Younger Kids' });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === dpid);
+  ok('updateSet re-points default_profile', ns.default_profile === 'Younger Kids');
+
+  await patch(`/sets/${dpid}`, { default_profile: '' });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === dpid);
+  ok('updateSet clears default_profile to null', ns.default_profile == null);
+  await api(`/sets/${dpid}`, { method: 'DELETE' });
+
   // --- Rotation channels are now DELETABLE (2026-07-27; was blocked before) ---- //
   const del = await api(`/sets/${sid}`, { method: 'DELETE' });
   ok('rotation channel deletes (no longer blocked)', del.deleted === true);
