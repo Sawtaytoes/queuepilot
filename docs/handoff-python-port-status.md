@@ -5,6 +5,77 @@
 which is the plan. This file records what is DONE and what each remaining phase is blocked on,
 so the port can resume without re-deriving the state.
 
+---
+
+## Resume — 2026-08-07 (start here for D2+)
+
+Re-checked against `origin/main` today. **The port is still parked at D1**: `ENGINE` and
+`PLAYBACK_ENGINE` both default `python` (`server/src/env.js`), `queue_builder/` still ships and
+runs live (the Dockerfile still builds a Python venv and runs `queue_builder.service`), and only
+D1 (`server/src/profiles.js`) is ported as dead-but-correct code behind the switch. Nothing below
+D1 has been done. The 2026-08-03 blocker table below is still the map — but **two of its blockers
+have dissolved**, which reopens D2 (and the D2/D4 gates):
+
+1. **`ruamel` is no longer a blocker for the parity gates.** `ruamel.yaml` is in
+   `requirements.txt`, and CI now installs it (`.github/workflows/ci.yml` → "Install Python deps"
+   → `pip install -r requirements.txt`), so any gate that shells `python -m queue_builder.cli
+   route …` runs in CI. Locally, `pip install -r requirements.txt` (or just `pip install
+   ruamel.yaml`) makes it importable in the sandbox too — the 2026-08-03 "this environment has no
+   ruamel" note was a not-installed state, not a hard wall.
+2. **Live Plex IS reachable from the sandbox.** The root `.env` has `PLEX_API_SERVER_URL` +
+   `PLEX_API_KEY`; this session read live watch-state through them (e.g. `GET
+   /library/metadata/<rk>`). So D3's "controlled live-Plex access" for corpus recording is
+   available here — what's genuinely missing for D3 is (a) the `PLEX_RECORD_DIR` shim, which does
+   **not** exist yet (`grep -r PLEX_RECORD queue_builder` is empty), and (b) the one-week
+   dual-engine soak, a calendar constraint, not an access one.
+
+**CI exists now** (workflow name must stay `"CI"` — `docker-deploy.yml` keys off it). It runs:
+server `npm ci` + `node --check`, web typecheck/unit/build, `pip install -r requirements.txt`,
+Python parse+import smoke, the Python engine tests, and the browserless node e2e. Browser
+(Playwright) e2e is gated on the `PLEX_TOKEN` secret. **Any new parity gate must be added to a CI
+step to actually guard the port.**
+
+### D2 is fully actionable now (no live Plex, no soak)
+
+The four read-side functions to port live in `queue_builder/config.py`:
+`binding_for` (:223), `channel_for` (:240), `set_sections` (:438), `rewatch_sections` (:443).
+They are pure config/YAML logic — no Plex. `server/src/config.js` already holds the Node read
+side; extend it there.
+
+- **Reference behaviour:** `python -m queue_builder.cli route <args>` (the `route` subcommand,
+  `queue_builder/cli.py` `main` → `_route`). It resolves a `set:"auto"` + profile to a channel and
+  its sections/binding — exactly what these four functions decide.
+- **The gate does not exist yet — write it.** `e2e/binding-parity.mjs` (referenced in the table
+  below as if it existed; it does not) must diff the Node port against `python -m queue_builder.cli
+  route` over a fixture `sets.yaml` that covers every set × binding × behaviour (progress/rewatch,
+  explicit-`profiles[]` vs legacy single-binding, `set:auto` for each tier, a Shorts-only channel
+  with empty `sections`). Add it to CI (a Python-present step, since it shells the CLI).
+- **Wire behind `ENGINE=node`** with the preview endpoint as the only consumer, logging any
+  divergence — same shape the plan prescribes for D3. D2 landing this way is what unblocks D3's
+  consumer wiring.
+
+**Recommended first task for the next agent: land D2 end-to-end** (port the four fns + write
+`binding-parity.mjs` + green in CI). It is the only phase with zero live/soak dependencies.
+
+### D3+ (shape unchanged; access caveat updated)
+
+Build the `PLEX_RECORD_DIR` recording shim in `cli.py`/`plex.py`, record a corpus off live Plex
+(doable from the sandbox now), then port the selection engine (~1,200 lines) with a
+**to-be-written** `e2e/engine-parity.mjs`, then the one-week soak behind `ENGINE=node` on the
+preview endpoint before anything plays from it. D5 (`adb.js`) needs the real Shield; D6
+(`mqttd.js`) is portable but load-bearing; D7 (playback + `cast_sidecar/`) needs the TV + a
+family-hours soak; D8 (deletions + the lock→optimistic-concurrency swap) is last. See the table
+and the decision doc for the acceptance bar on each.
+
+### Loose end noticed 2026-08-07
+
+`feat/node-port-phase-d` has an **uncommitted** edit to this file (mtime 2026-08-06 21:29, a prior
+session — not live) that adds a "What actually runs live vs. what is inert" section absent from
+`main`. It is useful orientation; a future commit should land it on `main` or discard it. It was
+left untouched here to avoid entangling this docs update.
+
+---
+
 ## Done
 
 - **`server/src/env.js`** — every runtime knob from `queue_builder/config.py`, one place, Python
