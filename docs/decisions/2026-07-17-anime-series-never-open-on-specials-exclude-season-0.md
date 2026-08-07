@@ -7,6 +7,7 @@
   [2026-07-09-anime-continue-watching-set.md](2026-07-09-anime-continue-watching-set.md) (point 5)
   and [2026-07-16-anime-queues-retire-ondeck-set.md](2026-07-16-anime-queues-retire-ondeck-set.md) (point 6)
 - **Superseded by:** —
+- **Refined by:** [2026-08-07 — Episode counts exclude trailers/OP-ED by Season-0 index range](2026-08-07-specials-count-excludes-op-ed-trailer-extras.md) (adds the COUNT rule + a shared `is_extra_or_promo` predicate; the never-OPEN-on-a-special behavior here is unchanged)
 
 ## Decision
 `_keep_episode` (the shared per-episode filter used by every series-playing set) now **drops all

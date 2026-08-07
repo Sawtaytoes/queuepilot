@@ -18,6 +18,49 @@ import urllib.request
 
 from . import config, queues
 
+# --------------------------------------------------------------------------- #
+# Shared "is this a real episode?" predicate (decision
+# 2026-08-07-specials-count-excludes-op-ed-trailer-extras, REFINES 2026-07-17).
+#
+# The owner's library encodes an item's kind in the SEASON-0 episode INDEX (Plex
+# `parentIndex == 0`, `index` = the number). That deterministic range — NOT any duration/title
+# heuristic — is the rule:
+#   * index 1-99    -> regular specials (e.g. an OAD)      -> INCLUDE (count + eligible)
+#   * index 100-199 -> unspecified                          -> INCLUDE (conservative; owner to confirm)
+#   * index 200-299 -> trailers                             -> EXCLUDE
+#   * index 300-399 -> openings/endings (OP/ED theme songs) -> EXCLUDE (this inflated "25/29")
+#   * index 400-499 -> "other"                              -> INCLUDE (meant to be played)
+# So a Season-0 leaf is an extra exactly when 200 <= index <= 399. Real seasons (>=1) are never
+# extras. Plex Extras/clips (a `clip` type or an `extraType`) are excluded too, if any appear.
+# --------------------------------------------------------------------------- #
+_S0_EXTRA_INDEX_MIN = 200  # trailers (200-299) + OP/ED (300-399)
+_S0_EXTRA_INDEX_MAX = 399
+
+
+def is_extra_or_promo(ep):
+    """True if `ep` is a Plex Extra/clip, or a Season-0 trailer/OP/ED (index 200-399).
+
+    Mirrors plex.js `isExtraOrPromo`. A regular Season-0 special (index outside 200-399) does NOT
+    match, so it still counts and still resolves. `ep` may be a raw Plex Metadata row
+    (`parentIndex`/`index`) or a normalised show_episodes() dict (`season`/`episode`).
+    """
+    if not ep:
+        return False
+    if ep.get("type") == "clip":
+        return True
+    if ep.get("extraType"):
+        return True
+    season = ep.get("season", ep.get("parentIndex"))
+    if str(season) == "0":
+        raw = ep.get("index", ep.get("episode"))
+        try:
+            idx = int(raw)
+        except (TypeError, ValueError):
+            idx = None
+        if idx is not None and _S0_EXTRA_INDEX_MIN <= idx <= _S0_EXTRA_INDEX_MAX:
+            return True
+    return False
+
 _CTX = ssl.create_default_context()
 _CTX.check_hostname = False
 _CTX.verify_mode = ssl.CERT_NONE
@@ -263,6 +306,10 @@ def show_episodes(show_rating_key, token=None):
             "season": e.get("parentIndex"),
             "episode": e.get("index"),
             "duration": e.get("duration"),
+            # Carried so is_extra_or_promo can drop Plex Extras/clips (a `clip` type or an
+            # `extraType`) from both the count and the play list.
+            "type": e.get("type"),
+            "extraType": e.get("extraType"),
             "viewCount": _int0(e.get("viewCount")),
             "viewOffset": _int0(e.get("viewOffset")),
         })
@@ -491,9 +538,14 @@ def _in_progress(view_offset, view_count):
 
 
 def _keep_episode(ep, cfg, specials_ok=False):
-    """Filter out specials and unplayable items.
+    """Filter out extras, specials, and unplayable items.
 
-    * Specials (Season 0) are excluded ENTIRELY by default: Plex sorts Season 0 ahead of
+    * Plex **Extras / trailers / OP-ED** (is_extra_or_promo) never play — a clip or `extraType`,
+      or a Season-0 leaf whose index is 200-399 (trailers / openings-endings). Dropped even when
+      `include_specials` is set, so opting specials back in still never surfaces the junk
+      (decision 2026-08-07, refining 2026-07-17). Regular Season-0 specials (index 1-99 / 400+)
+      are NOT extras.
+    * Specials (Season 0) are otherwise excluded by default: Plex sorts Season 0 ahead of
       Season 1, so an unwatched special would front-load a series and it would "open on a
       special" — which the user explicitly does not want (decision 2026-07-17). Real seasons
       (>=1) are always kept. A set may opt back in with `include_specials: True`, and the
@@ -501,6 +553,11 @@ def _keep_episode(ep, cfg, specials_ok=False):
       film-as-series) so its sole Season-0 leaf stays playable instead of vanishing.
     * Drop zero-/missing-duration entries (script text, CM stubs — nothing to cast).
     """
+    # JUNK GATE FIRST: a clip/extraType or a Season-0 trailer/OP-ED (index 200-399) is never a
+    # real episode, so it is dropped even for a specials-only show (specials_ok) or when
+    # include_specials is set — the OAD survives (its s0e1 index is 1-99), the ED songs don't.
+    if is_extra_or_promo(ep):
+        return False
     if not cfg.get("include_specials") and not specials_ok and str(ep.get("season")) == "0":
         return False
     if not ep.get("duration"):
