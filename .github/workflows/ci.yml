@@ -50,7 +50,7 @@ jobs:
       # script — it is typechecked and built below instead.
       - name: Node syntax check
         run: |
-          for f in server/src/*.js; do
+          for f in $(find server/src -name '*.js'); do
             echo "--check $f"
             node --check "$f"
           done
@@ -102,6 +102,14 @@ jobs:
           python3 e2e/specials-count-test.py
           python3 e2e/playback-fsm-test.py
           python3 e2e/fsm-wake-and-skip-test.py
+
+      # D2 of the Python→Node port: prove server/src/engine/routing.js decides set:"auto"
+      # routing (channel_for/binding_for/set_sections/rewatch_sections) byte-for-byte like
+      # queue_builder/config.py, by diffing it against `python -m queue_builder.cli route` +
+      # `… sections` over e2e/fixtures/routing.sets.yaml. Needs BOTH node deps (server) and
+      # ruamel (installed above) — the gate shells the Python CLI. Guards the port cutover.
+      - name: D2 routing parity (Node engine ↔ Python)
+        run: node e2e/binding-parity.mjs
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)

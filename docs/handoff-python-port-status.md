@@ -35,27 +35,31 @@ Python parse+import smoke, the Python engine tests, and the browserless node e2e
 (Playwright) e2e is gated on the `PLEX_TOKEN` secret. **Any new parity gate must be added to a CI
 step to actually guard the port.**
 
-### D2 is fully actionable now (no live Plex, no soak)
+### D2 — LANDED (2026-08-07)
 
-The four read-side functions to port live in `queue_builder/config.py`:
-`binding_for` (:223), `channel_for` (:240), `set_sections` (:438), `rewatch_sections` (:443).
-They are pure config/YAML logic — no Plex. `server/src/config.js` already holds the Node read
-side; extend it there.
+The four read-side functions are ported into **`server/src/engine/routing.js`**
+(`bindingFor` / `channelFor` / `setSections` / `rewatchSections`), together with the
+routing-relevant slice of `config._load_sets_yaml`'s normalization they read (on-disk
+`sections` → `episodic_sections`, the `_binding_from` coercions, `has_explicit_profiles` /
+`superseded_by` guards). It is dead-but-correct behind `ENGINE=node`; the default `python` path
+is untouched.
 
-- **Reference behaviour:** `python -m queue_builder.cli route <args>` (the `route` subcommand,
-  `queue_builder/cli.py` `main` → `_route`). It resolves a `set:"auto"` + profile to a channel and
-  its sections/binding — exactly what these four functions decide.
-- **The gate does not exist yet — write it.** `e2e/binding-parity.mjs` (referenced in the table
-  below as if it existed; it does not) must diff the Node port against `python -m queue_builder.cli
-  route` over a fixture `sets.yaml` that covers every set × binding × behaviour (progress/rewatch,
-  explicit-`profiles[]` vs legacy single-binding, `set:auto` for each tier, a Shorts-only channel
-  with empty `sections`). Add it to CI (a Python-present step, since it shells the CLI).
-- **Wire behind `ENGINE=node`** with the preview endpoint as the only consumer, logging any
-  divergence — same shape the plan prescribes for D3. D2 landing this way is what unblocks D3's
-  consumer wiring.
+- **Consumer seam:** `GET /api/generic/:id/preview` calls `engineRouting.forSet(id, profile)`
+  **only when `ENGINE=node`** and attaches it to the response as `routing` (additive — the pool
+  is still Python until D3). A startup log announces the mode. This is the seam D3 fills.
+- **Parity gate:** `e2e/binding-parity.mjs` diffs the Node port against the Python oracle —
+  `python -m queue_builder.cli route <kind> <title>` (channel/binding) and the new
+  `python -m queue_builder.cli sections` subcommand (section pools) — over
+  `e2e/fixtures/routing.sets.yaml`, which covers every branch: the `enabled`/`superseded_by`
+  guards (two decoy channels ahead of the real ones), explicit-`profiles[]` progress vs rewatch,
+  empty-`sections` shorts, legacy single-binding + `PROFILE_SET_MAP` fallback, `NO MAPPING`, and
+  queue/reel pools. It is a **required CI step** ("D2 routing parity"). Green as of this commit.
+- **Gotcha for the next agent:** `set_sections`/`rewatch_sections` aren't printed by `route`, so
+  the gate uses the added `sections` subcommand (it calls the real `config` functions, so it can
+  never drift). Run locally with `PYTHONPATH=/tmp/pylibs:. node e2e/binding-parity.mjs` after a
+  `pip install --target /tmp/pylibs ruamel.yaml` (the sandbox venv is read-only).
 
-**Recommended first task for the next agent: land D2 end-to-end** (port the four fns + write
-`binding-parity.mjs` + green in CI). It is the only phase with zero live/soak dependencies.
+**Next: D3.** D2's `forSet` seam is where the ported selection engine plugs in.
 
 ### D3+ (shape unchanged; access caveat updated)
 
@@ -111,6 +115,11 @@ undici `plexGet` and the SQLite cache being the two worth checking first.
   until the switch, timeout→null, truncation survived, other-IP ignored. **This module is not yet
   wired into anything** — it activates when playback goes Node (D7). It is dead-but-correct code
   behind the switch until then.
+- **D2 — `server/src/engine/routing.js`** — full port of the `set:"auto"` routing read-side
+  (`binding_for` / `channel_for` / `set_sections` / `rewatch_sections` + the normalization they
+  read). Consumed by `/api/generic/:id/preview` behind `ENGINE=node`; verified byte-for-byte
+  against the Python oracle by `e2e/binding-parity.mjs` (required CI step). Details in the
+  "D2 — LANDED" section above.
 
 ## Blocked here, and on what
 
@@ -118,7 +127,7 @@ The rest of Phase D cannot be completed in a headless dev sandbox. The blockers 
 
 | Phase | What it is | Blocked on |
 |---|---|---|
-| D2 | `config.py` read-side gaps (`binding_for`, `channel_for`, `set_sections`, `rewatch_sections`) | The parity test (`e2e/binding-parity.mjs`) diffs against `python -m queue_builder.cli route`, and **this environment has no `ruamel`** — the Python can't even load `sets.yaml` (`No module named 'ruamel'`). The functions are portable; the *parity gate* the plan requires is not runnable here. |
+| ~~D2~~ | ~~`config.py` read-side (`binding_for`, `channel_for`, `set_sections`, `rewatch_sections`)~~ | **DONE 2026-08-07** — `server/src/engine/routing.js`, gated `ENGINE=node`, parity-gated in CI (`e2e/binding-parity.mjs`). See the "D2 — LANDED" section above. |
 | D3 | The selection engine (~1,200 lines) + `e2e/engine-parity.mjs` | The harness needs a **recorded Plex corpus** produced by running the real `cli.py` (with the `PLEX_RECORD_DIR` shim) against the live config — needs `ruamel` + controlled live-Plex access — **plus a one-week dual-engine soak with divergence logging** before anything plays from it. Neither the corpus nor the soak is producible in one session. |
 | D4 | `queues.py` gaps (`mark_done`, descriptor normalization) | Small; portable. Gate is a byte-compare against a ruamel-written file — same `ruamel` blocker as D2 for the *comparison*, though `e2e/yaml-roundtrip-test.mjs` (shipped) already covers Node-writer comment fidelity. |
 | D5 | `adb.py` → `adb.js` | The XML-fixture unit test is portable, but acceptance is **a manual checklist against the real Shield** (`ADB_ENABLED`, a profile switch on a gated card). Needs the physical TV. |
