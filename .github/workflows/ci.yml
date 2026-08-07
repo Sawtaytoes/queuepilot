@@ -101,6 +101,7 @@ jobs:
           python3 e2e/keep-completed-test.py
           python3 e2e/specials-count-test.py
           python3 e2e/playback-fsm-test.py
+          python3 e2e/fsm-wake-and-skip-test.py
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
