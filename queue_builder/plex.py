@@ -1120,8 +1120,11 @@ def next_queue(set_name, rng=None):
     last = ({"title": batches[0]["title"], "type": batches[0]["type"],
              "ratingKey": play_items[0]["ratingKey"]} if play_items else None)
 
-    if newly_done:                               # keep + tag finished; never auto-remove
-        queues.mark_done(set_name, newly_done)
+    # A keep_completed (non-consuming / playlist) set — `reel` implies it — NEVER marks its
+    # entries done, so the owner can re-show the whole lineup every scan. No done_at/`done`
+    # is ever written, so it is inherently exempt from any finished-entry sweep.
+    if newly_done and not (cfg.get("keep_completed") or cfg.get("reel")):
+        queues.mark_done(set_name, newly_done)   # keep + tag finished; never auto-remove
     return {"set": set_name, "play": play_items, "last": last,
             "done": done_flagged, "unresolved": unresolved, "remaining": remaining}
 

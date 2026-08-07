@@ -90,7 +90,9 @@ jobs:
       # Engine unit tests that stub Plex entirely (no token, no network) — today the
       # collection START floor (skip earlier members, floor the named one).
       - name: Python engine tests
-        run: python3 e2e/collection-start-test.py
+        run: |
+          python3 e2e/collection-start-test.py
+          python3 e2e/keep-completed-test.py
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
