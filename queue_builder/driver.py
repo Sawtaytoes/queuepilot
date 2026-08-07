@@ -81,20 +81,38 @@ def _is_conn_refused(result):
     return "connection refused" in err or "errno 111" in err or "urlopen error" in err
 
 
+def _on_required(required):
+    """Is the Shield already signed into `required`, per the cached LAST_SEEN? Alias-aware.
+
+    The one place the skip decision is made, so the picker is never walked when a cheap,
+    alias-resolved read of the last-seen profile already proves we're on the right one.
+    """
+    seen = profiles.LAST_SEEN.get("title")
+    return bool(seen and adb.same_profile(seen, required))
+
+
 def _drive_profile(client, required, cancel):
     """signed_in(required). Returns None on success, or a terminal result (cancelled / error).
 
     NON-DESTRUCTIVE fast path: if the Shield is already signed into `required`
     (profiles.LAST_SEEN, alias-aware via adb.same_profile), this is a no-op — it never walks
-    the picker, which is what used to back a just-started movie out of playback. Only when a
-    real change is needed does it drive adb.switch_to, bounded-retried. The gate is satisfied
-    by a picker read-back (switch_to ok) OR LAST_SEEN == required — NOT solely a fresh PMS-log
-    sign-in line, which never comes when already signed in.
+    the picker, which is what used to back a just-started movie out of playback and flash the
+    Switch-user UI on the TV on every gated scan. Only when a real change is needed does it
+    drive adb.switch_to, bounded-retried. The gate is satisfied by a picker read-back
+    (switch_to ok) OR LAST_SEEN == required — NOT solely a fresh PMS-log sign-in line, which
+    never comes when already signed in.
+
+    LAST_SEEN is the load-bearing cache for the skip, and the display↔username split makes
+    the alias matter: the picker tile reads the owner's display name ('Bob Smith') while
+    the PMS log + a set's `requires_profile` use the username ('sawtaytoes'). adb.same_profile
+    resolves those to one slot, so any representation of the signed-in profile short-circuits.
+    A successful switch RECORDS `required` into LAST_SEEN so the next gated scan skips without
+    a read — the FSM gated path never called wait_for_profile, so nothing else populated it
+    and every gated scan walked the picker.
     """
-    current = profiles.LAST_SEEN.get("title")
-    if current and adb.same_profile(current, required):
-        print(f"[driver] already signed in as '{current}' (== '{required}'); no picker walk",
-              flush=True)
+    if _on_required(required):
+        print(f"[driver] already signed in as '{profiles.LAST_SEEN.get('title')}' "
+              f"(== '{required}'); no picker walk", flush=True)
         return None
 
     _publish_await(client, f"profile:{required}")
@@ -104,7 +122,9 @@ def _drive_profile(client, required, cancel):
         title = profiles.wait_for_profile(cancel=cancel, match=required)
         if cancel is not None and cancel.is_set():
             return {"cancelled": True}
-        return None if title is not None else {"error": _SWITCH_ERROR, "_profile": required}
+        if title is None:
+            return {"error": _SWITCH_ERROR, "_profile": required}
+        return None
 
     attempts = max(1, config.PLAYBACK_FSM_SWITCH_ATTEMPTS)
     for i in range(attempts):
@@ -114,11 +134,13 @@ def _drive_profile(client, required, cancel):
                                    known_current=profiles.LAST_SEEN.get("title"))
         if ok:  # pressed center on a tile reading `required` — the read-back proves the gate
             print(f"[driver] switched to '{required}': {detail}", flush=True)
+            # Cache the confirmed profile so the NEXT gated scan short-circuits (no picker).
+            profiles.LAST_SEEN["title"] = required
             return None
         # A human or HA may have signed in meanwhile — a fresh LAST_SEEN also clears the gate.
-        seen = profiles.LAST_SEEN.get("title")
-        if seen and adb.same_profile(seen, required):
-            print(f"[driver] gate cleared out-of-band: signed in as '{seen}'", flush=True)
+        if _on_required(required):
+            print(f"[driver] gate cleared out-of-band: signed in as "
+                  f"'{profiles.LAST_SEEN.get('title')}'", flush=True)
             return None
         print(f"[driver] switch attempt {i + 1}/{attempts} to '{required}' failed: {detail}",
               flush=True)

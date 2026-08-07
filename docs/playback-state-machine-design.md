@@ -85,16 +85,28 @@ primitives. `service._do_start` keeps ALL its selection logic and, when the flag
 only the launch + profile gate + `_adb_switch_async` + join + `play_rating_keys` block with one
 call to it. Each observed failure mode → how it's fixed:
 
+0. **Device asleep — Plex never launches (the `device_on` transition).** `adb.ensure_plex_open`
+   reads wakefulness (`adb.is_awake`, `dumpsys power`); when the Shield is dozing/screen-off (or
+   the foreground reads unknown) it sends `KEYCODE_WAKEUP` and settles BEFORE `am start plex://`
+   — a launch issued to a sleeping panel queues behind the screensaver and never foregrounds, so
+   pre-fix a non-gated set (which has no later profile-step WAKEUP) never opened Plex at all.
+   WAKEUP is safe to send blind and often restores Plex on its own (no launch needed). *(Fixed
+   post-live-test, 2026-08-07.)*
 1. **Companion refused (Errno 111).** `_drive_play` verifies Plex is foreground AND the
    Companion port is accepting a TCP connect (`playback.companion_ready`) *immediately before*
    `playMedia`; if either is false it `ensure_plex_open()`s + waits, and it RETRIES a
    connection-refused play a bounded few times (`PLAYBACK_FSM_PLAY_ATTEMPTS`), re-opening Plex
    between attempts. Play is the LAST action and it is verified. Client-mode only (cast doesn't
-   use `:32500`).
+   use `:32500`). Confirmed zero Errno-111 across live runs.
 2. **Destructive switch when already on the right profile.** `_drive_profile` reads the current
-   profile from `profiles.LAST_SEEN` (alias-aware via `adb.same_profile`) FIRST and, when it
-   already matches `required`, is a no-op — it never summons or walks the picker. Only a real
-   change drives `adb.switch_to`.
+   profile from `profiles.LAST_SEEN` (alias-aware via `adb.same_profile`, so the picker's
+   display name 'Bob Smith' == the username 'sawtaytoes' the log + `requires_profile` use)
+   FIRST and, when it already matches `required`, is a no-op — it never summons or walks the
+   picker. Only a real change drives `adb.switch_to`. **The cache is load-bearing:** the FSM
+   gated path never calls `wait_for_profile`, so nothing else populates `LAST_SEEN` — a
+   successful switch therefore RECORDS `required` into it so the next gated scan short-circuits
+   with no picker flash (without this it walked the picker on every gated scan). *(Fixed
+   post-live-test, 2026-08-07.)*
 3. **Gate never clears when already signed in.** The gate is satisfied by a picker read-back
    (`switch_to` returning ok) OR `LAST_SEEN == required` — not solely a fresh PMS-log sign-in
    line. With ADB off it still falls back to `wait_for_profile`.
