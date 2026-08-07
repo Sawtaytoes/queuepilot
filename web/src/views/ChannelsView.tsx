@@ -64,6 +64,11 @@ export function ChannelsView({
   const { channelId: currentChannel, profile: currentProfile } =
     useChannelSelection()
   const [resampleToken, setResampleToken] = useState(0)
+  // Distinct from `resampleToken`: a blocklist / exclude write moves the pool but
+  // must NOT trigger a `fresh=1` reshuffle — it re-reads the (already
+  // blocklist-filtered) preview in place. `PATCH /api/sets/:id` busts the server
+  // preview cache, so this cheap re-read returns the excluded show already gone.
+  const [reloadToken, setReloadToken] = useState(0)
 
   const all = rotationChannels(reg)
   const channel = resolveChannel(reg, routeId, currentChannel)
@@ -221,7 +226,8 @@ export function ChannelsView({
                 channel={channel}
                 currentProfile={currentProfile}
                 key={channel.id}
-                onChanged={() => setResampleToken((n) => n)}
+                onChanged={() => setReloadToken((n) => n + 1)}
+                reloadToken={reloadToken}
                 resampleToken={resampleToken}
               />
             )}
@@ -230,7 +236,7 @@ export function ChannelsView({
           currentProfile={currentProfile}
           isMovies={isMovies}
           key={`${channel.id}::${currentProfile ?? ""}`}
-          onChanged={() => {}}
+          onChanged={() => setReloadToken((n) => n + 1)}
         />
       </div>
     </main>

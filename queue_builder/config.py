@@ -308,6 +308,13 @@ def _load_sets_yaml():
                 # mapping — queues._describe parses them). Non-empty => the channel's pool is
                 # these members; [] / absent => the pure dynamic rule below.
                 "members": list(ent.get("members") or []),
+                # Per-show manual start override for the DYNAMIC rule pool (decision
+                # 2026-08-07-dynamic-pool-start-override): ratingKey -> {season, episode}.
+                # The mirror of a curated member's embedded `start`, but for a rule-derived
+                # show that has no stored entry to hang one on. unwatched_buckets applies it
+                # via _at_or_after_start, so both the preview AND the play path begin there.
+                "starts": {str(k): dict(v) for k, v in (ent.get("starts") or {}).items()
+                           if isinstance(v, dict)},
                 "profiles": profiles,
                 # PR 4 cutover flags: only a channel with a REAL profiles[] array (not a
                 # synthesized legacy binding) may capture set:"auto" scans (channel_for);
