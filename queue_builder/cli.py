@@ -6,6 +6,7 @@
   python -m queue_builder.cli movie movies "Younger Kids"          # ...under one binding
   python -m queue_builder.cli shows younger            # shows in the set + unwatched counts
   python -m queue_builder.cli route cartoons "Younger Kids"  # set:"auto" routing dry-run
+  python -m queue_builder.cli sections                 # per-set section pools as JSON (parity oracle)
   python -m queue_builder.cli watched-count movies "Younger Kids"  # rewatch-pool histogram
   python -m queue_builder.cli queue bob                # curated-queue pick + prune preview
   python -m queue_builder.cli reel demo                # reel (DEMO) ordered lineup, read-only
@@ -60,6 +61,20 @@ def _route(kind="cartoons", *title_parts):
     b = config.binding_for(config.SETS[sid], title)
     print(f"route[{kind} × {title!r}] -> set '{sid}' (via {via}), "
           f"binding plex_user={b.get('plex_user')!r} account_id={b.get('account_id')}")
+
+
+def _sections():
+    """Dump set_sections + rewatch_sections per set as JSON — the parity oracle for the Node
+    port's routing.setSections / routing.rewatchSections (e2e/binding-parity.mjs). Calls the
+    real config functions, so it can never drift from what the scan actually pools."""
+    out = {
+        sid: {
+            "set_sections": config.set_sections(config.SETS[sid]),
+            "rewatch_sections": config.rewatch_sections(config.SETS[sid]),
+        }
+        for sid in config.SET_ORDER
+    }
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def _queue(set_name="bob"):
@@ -160,6 +175,8 @@ def main(argv=None):
         _resolve(*rest)
     elif cmd == "route":
         _route(*rest)
+    elif cmd == "sections":
+        _sections()
     elif cmd == "watched-count":
         _watched_count(*rest)
     elif cmd == "machine-id":

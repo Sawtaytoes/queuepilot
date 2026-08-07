@@ -9,6 +9,8 @@ import { existsSync, watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WEB_PORT, QUEUES_PATH } from './config.js';
+import { ENGINE } from './env.js';
+import * as engineRouting from './engine/routing.js';
 import * as cache from './cache.js';
 import * as history from './history.js';
 import * as mqttc from './mqttc.js';
@@ -705,10 +707,19 @@ app.get('/api/generic/:id/preview', async (req, res) => {
   try {
     const s = await sets.getSet(req.params.id);
     if (!s || s.source !== 'rotation') return res.status(400).json({ error: 'not a rotation channel' });
-    const data = await mqttc.preview(s.id, {
-      fresh: req.query.fresh === '1',
-      profile: req.query.profile ? String(req.query.profile) : '',
-    });
+    const profile = req.query.profile ? String(req.query.profile) : '';
+    const data = await mqttc.preview(s.id, { fresh: req.query.fresh === '1', profile });
+    // D2 seam (decision 2026-08-03-retiring-python…): behind ENGINE=node, attach the Node
+    // read-side routing for THIS set+profile (binding + section pools) alongside the
+    // Python-computed pool. Purely additive — the pool itself is still Python until D3 wires
+    // the selection engine onto this same seam. Default ENGINE=python omits it entirely.
+    if (ENGINE === 'node') {
+      try {
+        data.routing = engineRouting.forSet(s.id, profile);
+      } catch (e) {
+        console.log(`[engine] routing preview failed for ${s.id}: ${e.message}`);
+      }
+    }
     res.json(data);
   } catch (e) {
     res.status(503).json({ error: String(e.message || e) });
@@ -831,5 +842,6 @@ await cache.init();
 
 app.listen(WEB_PORT, () => {
   console.log(`[plex-channels-web] listening on :${WEB_PORT}`);
+  if (ENGINE === 'node') console.log('[engine] ENGINE=node — preview attaches Node read-side routing (D2)');
   warm.start();
 });
