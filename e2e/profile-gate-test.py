@@ -36,7 +36,7 @@ plex.build_rotation = lambda s, binding=None: [{"title": "Ep", "ratingKey": "1",
 plex.pick_rewatch = lambda s, exclude_rating_key=None, binding=None: {"title": "M", "ratingKey": "2"}
 plex.next_queue = lambda s: {"play": [{"title": "Q", "ratingKey": "3"}], "last": {}}
 plex.build_reel = plex.next_queue
-playback.play_rating_keys = lambda keys, set_name=None, device=None: {"ok": True}
+playback.play_rating_keys = lambda keys, set_name=None, device=None, offset=0: {"ok": True}
 config.reload_sets = lambda: None
 
 SETS = {

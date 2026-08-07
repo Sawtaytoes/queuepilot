@@ -18,10 +18,14 @@ rm -f /tmp/cache-e2e.sqlite /tmp/cache-e2e.sqlite-wal /tmp/cache-e2e.sqlite-shm
 TOTAL=0
 echo "=== collection-start-test (python, offline) ==="   # engine floor for collection starts
 python3 e2e/collection-start-test.py || TOTAL=$((TOTAL+1))
+echo "=== resume-in-queue-test (python, offline) ==="   # resume a started-but-unfinished queued item
+python3 e2e/resume-in-queue-test.py || TOTAL=$((TOTAL+1))
 echo "=== history-persist-test ==="   # manages its own server (port 18770) + files
 node e2e/history-persist-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)
 node e2e/api-v2-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== sse-resync-test ==="   # browserless; SSE now-playing replay on (re)connect (+ retained snapshot via fake broker)
+node e2e/sse-resync-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== yaml-roundtrip-test ==="   # browserless; comments survive every queues/sets mutation (Phase E)
 node e2e/yaml-roundtrip-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile detection port
