@@ -19,6 +19,7 @@ import {
   useStore,
 } from "../state/store"
 import { schemeIcons } from "./SchemeIcons"
+import { Tip } from "./Tip"
 
 /**
  * The sticky header: back, the heading (which is also the rename field), the status
@@ -239,16 +240,18 @@ export function Header({
               )
             : heading}
         </h1>
-        <button
-          className="ghost namepen"
-          hidden={!editableSetId}
-          id="editname"
-          onClick={begin}
-          title="Rename"
-          type="button"
-        >
-          ✎
-        </button>
+        <Tip label="Rename">
+          <button
+            aria-label="Rename"
+            className="ghost namepen"
+            hidden={!editableSetId}
+            id="editname"
+            onClick={begin}
+            type="button"
+          >
+            ✎
+          </button>
+        </Tip>
         {/* The desktop chrome cluster: undo / redo / scheme / the Home toolbar slot,
             pushed right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and
             ellipsises, so it yields to this width. On mobile the whole cluster is
@@ -256,26 +259,30 @@ export function Header({
             tight on a phone to carry it inline (that was the 300px-tall header bug).
             `ui-test` reads `#gslot-desktop #tools`, so that id and its child stay put. */}
         <div className="chrome">
-          <button
-            className="ghost"
-            disabled={!history.undo}
-            id="undo"
-            onClick={() => void runHistory("undo")}
-            title="Undo last change"
-            type="button"
-          >
-            ↶
-          </button>
-          <button
-            className="ghost"
-            disabled={!history.redo}
-            id="redo"
-            onClick={() => void runHistory("redo")}
-            title="Redo"
-            type="button"
-          >
-            ↷
-          </button>
+          <Tip label="Undo last change">
+            <button
+              aria-label="Undo last change"
+              className="ghost"
+              disabled={!history.undo}
+              id="undo"
+              onClick={() => void runHistory("undo")}
+              type="button"
+            >
+              ↶
+            </button>
+          </Tip>
+          <Tip label="Redo">
+            <button
+              aria-label="Redo"
+              className="ghost"
+              disabled={!history.redo}
+              id="redo"
+              onClick={() => void runHistory("redo")}
+              type="button"
+            >
+              ↷
+            </button>
+          </Tip>
           {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
               the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`
               on `<html>`. */}
@@ -377,27 +384,28 @@ export function Header({
           `#status` used to sit on the `.bar` pinned to `width: 9ch`, so a real message
           ("Play failed on … Connection refused") wrapped into a ~12-line column that
           forced the header ~300px tall. Here it shares the full-width row with `#sub`,
-          each on ONE ellipsised line (full text on hover via `title`), so the header
+          each on ONE ellipsised line (full text on hover via a `Tooltip`), so the header
           height is stable no matter the message. Kept as two elements so `#sub` always
           carries its own text (channels-test reads it) independent of any active toast. */}
       <div className="infoline">
         <p className="sub" hidden={isSubHidden} id="sub">
           {sub}
         </p>
-        <span
-          id="status"
-          style={{
-            color:
-              status.kind === "err"
-                ? "var(--color-intent-danger-content)"
-                : status.kind === "ok"
-                  ? "var(--color-intent-success-content)"
-                  : "var(--color-content-muted)",
-          }}
-          title={status.msg}
-        >
-          {status.msg}
-        </span>
+        <Tip label={status.msg}>
+          <span
+            id="status"
+            style={{
+              color:
+                status.kind === "err"
+                  ? "var(--color-intent-danger-content)"
+                  : status.kind === "ok"
+                    ? "var(--color-intent-success-content)"
+                    : "var(--color-content-muted)",
+            }}
+          >
+            {status.msg}
+          </span>
+        </Tip>
       </div>
     </header>
   )
