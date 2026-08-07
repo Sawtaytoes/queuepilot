@@ -65,16 +65,78 @@ _CTX = ssl.create_default_context()
 _CTX.check_hostname = False
 _CTX.verify_mode = ssl.CERT_NONE
 
+# --------------------------------------------------------------------------- #
+# Corpus record / replay (D3 engine-parity oracle, decision 2026-08-03).
+#
+# With config.PLEX_RECORD_DIR set, every read-only response is written to disk keyed by
+# (kind, path, token-alias); with config.PLEX_REPLAY_DIR set, those recordings are served
+# instead of the network so a run is deterministic offline. The corpus is the FIXED oracle the
+# Node selection engine is diffed against — the Node engine.parity harness replays the SAME
+# files. Tokens are never stored: files are bucketed by a stable alias ("admin"/"acct:<uuid>"),
+# and plex.tv bodies are redacted before writing.
+# --------------------------------------------------------------------------- #
+import hashlib
+import os
+
+_TOKEN_ALIAS = {}  # raw token -> stable alias, so an account's calls bucket by uuid not secret
+
+
+def _token_alias(token):
+    tok = token or config.PLEX_TOKEN
+    if not tok or tok == config.PLEX_TOKEN:
+        return "admin"
+    return _TOKEN_ALIAS.get(tok, "tok-" + hashlib.sha1(tok.encode()).hexdigest()[:8])
+
+
+def _corpus_path(base, kind, path, token):
+    h = hashlib.sha1(path.encode("utf-8")).hexdigest()[:16]
+    return os.path.join(base, kind, _token_alias(token), h + ".json")
+
+
+_SECRET_KEYS = {"authToken", "token", "accessToken", "X-Plex-Token"}
+
+
+def _redact(obj):
+    """Deep copy with any token-ish value replaced — corpus files never store a live secret."""
+    if isinstance(obj, dict):
+        return {k: ("REDACTED" if k in _SECRET_KEYS else _redact(v)) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_redact(v) for v in obj]
+    return obj
+
+
+def _corpus_record(kind, path, token, data):
+    p = _corpus_path(config.PLEX_RECORD_DIR, kind, path, token)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump({"kind": kind, "path": path, "alias": _token_alias(token),
+                   "data": _redact(data) if kind == "plextv" else data}, f, ensure_ascii=False)
+
+
+def _corpus_replay(kind, path, token):
+    p = _corpus_path(config.PLEX_REPLAY_DIR, kind, path, token)
+    try:
+        with open(p, "r", encoding="utf-8") as f:
+            return json.load(f)["data"]
+    except FileNotFoundError:
+        raise RuntimeError(
+            f"corpus miss: {kind} {path} (alias {_token_alias(token)}) — re-record with PLEX_RECORD_DIR")
+
 
 def _get(path, token=None):
     """GET a Plex JSON endpoint. `path` may include a query string."""
+    if config.PLEX_REPLAY_DIR:
+        return _corpus_replay("get", path, token)
     url = config.PLEX_URL + path
     req = urllib.request.Request(
         url,
         headers={"X-Plex-Token": token or config.PLEX_TOKEN, "Accept": "application/json"},
     )
     with urllib.request.urlopen(req, timeout=120, context=_CTX) as r:
-        return json.load(r)
+        data = json.load(r)
+    if config.PLEX_RECORD_DIR:
+        _corpus_record("get", path, token, data)
+    return data
 
 
 def _container(path, token=None):
@@ -94,6 +156,8 @@ _ACCOUNT_TOKENS = {}  # user_uuid -> server-scoped access token
 
 def _plextv(path, token, method="GET"):
     """Call plex.tv (not the local server) with a stable client identifier."""
+    if config.PLEX_REPLAY_DIR:
+        return _corpus_replay("plextv", f"{method} {path}", token)
     req = urllib.request.Request(
         "https://plex.tv" + path, method=method,
         headers={"X-Plex-Token": token,
@@ -102,7 +166,10 @@ def _plextv(path, token, method="GET"):
     )
     with urllib.request.urlopen(req, timeout=60, context=_CTX) as r:
         body = r.read().decode() or ""
-        return json.loads(body) if body else {}
+        data = json.loads(body) if body else {}
+    if config.PLEX_RECORD_DIR:
+        _corpus_record("plextv", f"{method} {path}", token, data)
+    return data
 
 
 _COMPANION_TARGET = {}  # cache: name/machine-id -> {"name", "machineIdentifier", "uri"}
@@ -201,6 +268,13 @@ def account_token(user_uuid):
         return None
     if user_uuid in _ACCOUNT_TOKENS:
         return _ACCOUNT_TOKENS[user_uuid]
+    if config.PLEX_REPLAY_DIR:
+        # Offline: skip the plex.tv token dance (its bodies are redacted in the corpus). Hand
+        # back a synthetic token whose alias matches the account's recorded _get bucket.
+        tok = f"replay-acct-{user_uuid}"
+        _TOKEN_ALIAS[tok] = f"acct:{user_uuid}"
+        _ACCOUNT_TOKENS[user_uuid] = tok
+        return tok
     switch = _plextv(f"/api/v2/home/users/{user_uuid}/switch", config.PLEX_TOKEN, method="POST")
     auth = switch.get("authToken")
     if not auth:
@@ -210,8 +284,12 @@ def account_token(user_uuid):
     mid = machine_identifier()
     for r in rows:
         if r.get("clientIdentifier") == mid:
-            _ACCOUNT_TOKENS[user_uuid] = r.get("accessToken")
-            return _ACCOUNT_TOKENS[user_uuid]
+            access = r.get("accessToken")
+            _ACCOUNT_TOKENS[user_uuid] = access
+            # Bucket this account's subsequent _get recordings by uuid, not by the secret token.
+            if config.PLEX_RECORD_DIR and access:
+                _TOKEN_ALIAS[access] = f"acct:{user_uuid}"
+            return access
     return None
 
 

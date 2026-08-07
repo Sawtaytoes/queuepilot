@@ -12,3 +12,6 @@ web/dist/
 cache.sqlite
 cache.sqlite-wal
 cache.sqlite-shm
+
+# D3 engine-parity corpus (docs/d3-engine-parity-corpus.md): real library data, never committed.
+__corpus__/
