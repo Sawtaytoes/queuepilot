@@ -1,6 +1,12 @@
 import { ColorSchemeSwitcher } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
+/** Which header popover is open. Only one at a time, mux-magic's `PageHeader` model:
+ * a left "nav" menu (back / rename) and a right "actions" menu (undo / redo / scheme).
+ * These are the MOBILE mechanism — on desktop the same controls sit inline on the bar
+ * and the toggles are `display:none`. */
+type OpenMenu = "nav" | "actions" | null
+
 import { api } from "../lib/api"
 import { busy } from "../state/busy"
 import { refreshData } from "../state/live"
@@ -49,6 +55,7 @@ export function Header({
   const { history, status } = useStore()
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState("")
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
   const settledRef = useRef(false)
   const inputRef = useRef<HTMLInputElement>(null)
   const headerRef = useRef<HTMLElement>(null)
@@ -89,6 +96,34 @@ export function Header({
     inputRef.current?.focus()
     inputRef.current?.select()
   }, [isEditing])
+
+  // The two header popovers are a dismissable layer: a click anywhere outside a
+  // toggle or an open panel closes it, and Escape closes the topmost. Same shape as
+  // mux-magic's `PageHeader` — a document listener, not a per-node handler, because
+  // "click-away dismisses the layer" is not a property of any one node inside it.
+  useEffect(() => {
+    if (!openMenu) return
+
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement | null
+
+      if (t?.closest(".menu-toggle, .hmenu")) return
+
+      setOpenMenu(null)
+    }
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpenMenu(null)
+    }
+
+    document.addEventListener("mousedown", onDown)
+    document.addEventListener("keydown", onKey)
+
+    return () => {
+      document.removeEventListener("mousedown", onDown)
+      document.removeEventListener("keydown", onKey)
+    }
+  }, [openMenu])
 
   const begin = () => {
     if (!editableSetId || isEditing) return
@@ -156,6 +191,20 @@ export function Header({
   return (
     <header ref={headerRef}>
       <div className="bar">
+        {/* Mobile-only left toggle → the nav popover (back / rename). Hidden when it
+            would open empty (the Play landing has neither). Desktop shows #back inline. */}
+        <button
+          aria-expanded={openMenu === "nav"}
+          aria-haspopup="menu"
+          aria-label="Navigation menu"
+          className="ghost menu-toggle"
+          hidden={!back && !editableSetId}
+          id="menu-nav"
+          onClick={() => setOpenMenu((m) => (m === "nav" ? null : "nav"))}
+          type="button"
+        >
+          ☰
+        </button>
         <button
           className="ghost"
           hidden={!back}
@@ -200,6 +249,141 @@ export function Header({
         >
           ✎
         </button>
+        {/* The desktop chrome cluster: undo / redo / scheme / the Home toolbar slot,
+            pushed right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and
+            ellipsises, so it yields to this width. On mobile the whole cluster is
+            `display:none` and the right popover below mirrors it — the header is far too
+            tight on a phone to carry it inline (that was the 300px-tall header bug).
+            `ui-test` reads `#gslot-desktop #tools`, so that id and its child stay put. */}
+        <div className="chrome">
+          <button
+            className="ghost"
+            disabled={!history.undo}
+            id="undo"
+            onClick={() => void runHistory("undo")}
+            title="Undo last change"
+            type="button"
+          >
+            ↶
+          </button>
+          <button
+            className="ghost"
+            disabled={!history.redo}
+            id="redo"
+            onClick={() => void runHistory("redo")}
+            title="Redo"
+            type="button"
+          >
+            ↷
+          </button>
+          {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
+              the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`
+              on `<html>`. */}
+          <ColorSchemeSwitcher icons={schemeIcons} />
+          <div id="gslot-desktop">{children}</div>
+        </div>
+
+        {/* Mobile-only right toggle → the actions popover. */}
+        <button
+          aria-expanded={openMenu === "actions"}
+          aria-haspopup="menu"
+          aria-label="Actions menu"
+          className="ghost menu-toggle"
+          id="menu-actions"
+          onClick={() => setOpenMenu((m) => (m === "actions" ? null : "actions"))}
+          type="button"
+        >
+          ⋮
+        </button>
+
+        {/* LEFT popover (nav). Mounted in both states so it can transition; `.hmenu` is
+            `display:none` on desktop entirely. */}
+        <div
+          aria-hidden={openMenu !== "nav"}
+          className={`hmenu hmenu-left${openMenu === "nav" ? " open" : ""}`}
+          role="menu"
+        >
+          {back
+            ? (
+                <button
+                  className="ghost hmenu-item"
+                  onClick={() => {
+                    setOpenMenu(null)
+                    navigate(back.target)
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  {back.label}
+                </button>
+              )
+            : null}
+          {editableSetId
+            ? (
+                <button
+                  className="ghost hmenu-item"
+                  onClick={() => {
+                    setOpenMenu(null)
+                    begin()
+                  }}
+                  role="menuitem"
+                  type="button"
+                >
+                  ✎ Rename
+                </button>
+              )
+            : null}
+        </div>
+
+        {/* RIGHT popover (actions) — the mobile mirror of `.chrome`. Undo/redo here carry
+            no id: the canonical `#undo`/`#redo` live inline in `.chrome` (the e2e suite
+            clicks those at desktop width), and duplicate ids would be invalid. */}
+        <div
+          aria-hidden={openMenu !== "actions"}
+          className={`hmenu hmenu-right${openMenu === "actions" ? " open" : ""}`}
+          role="menu"
+        >
+          <button
+            className="ghost hmenu-item"
+            disabled={!history.undo}
+            onClick={() => {
+              setOpenMenu(null)
+              void runHistory("undo")
+            }}
+            role="menuitem"
+            type="button"
+          >
+            ↶ Undo
+          </button>
+          <button
+            className="ghost hmenu-item"
+            disabled={!history.redo}
+            onClick={() => {
+              setOpenMenu(null)
+              void runHistory("redo")
+            }}
+            role="menuitem"
+            type="button"
+          >
+            ↷ Redo
+          </button>
+          <div className="hmenu-scheme">
+            <ColorSchemeSwitcher icons={schemeIcons} />
+          </div>
+        </div>
+      </div>
+
+      {/* The info line: the sub help/now-playing text, and the status toast beside it.
+          `#status` used to sit on the `.bar` pinned to `width: 9ch`, so a real message
+          ("Play failed on … Connection refused") wrapped into a ~12-line column that
+          forced the header ~300px tall. Here it shares the full-width row with `#sub`,
+          each on ONE ellipsised line (full text on hover via `title`), so the header
+          height is stable no matter the message. Kept as two elements so `#sub` always
+          carries its own text (channels-test reads it) independent of any active toast. */}
+      <div className="infoline">
+        <p className="sub" hidden={isSubHidden} id="sub">
+          {sub}
+        </p>
         <span
           id="status"
           style={{
@@ -210,44 +394,11 @@ export function Header({
                   ? "var(--color-intent-success-content)"
                   : "var(--color-content-muted)",
           }}
+          title={status.msg}
         >
           {status.msg}
         </span>
-        <button
-          className="ghost"
-          disabled={!history.undo}
-          id="undo"
-          onClick={() => void runHistory("undo")}
-          title="Undo last change"
-          type="button"
-        >
-          ↶
-        </button>
-        <button
-          className="ghost"
-          disabled={!history.redo}
-          id="redo"
-          onClick={() => void runHistory("redo")}
-          title="Redo"
-          type="button"
-        >
-          ↷
-        </button>
-        {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
-            the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`
-            on `<html>`. All three seams are the browser defaults the component ships;
-            the app only supplies its own glyphs. */}
-        <ColorSchemeSwitcher icons={schemeIcons} />
-        {/* F4: the Home toolbar now shares the `.bar` row (was its own third row), pushed
-            right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and ellipsises,
-            so it yields to the toolbar's width. Desktop only — on mobile `children` is null
-            here and the toolbar re-mounts at the top of the Home content. `ui-test` reads
-            `#gslot-desktop #tools`, so the id and its child stay put. */}
-        <div id="gslot-desktop">{children}</div>
       </div>
-      <p className="sub" hidden={isSubHidden} id="sub">
-        {sub}
-      </p>
     </header>
   )
 }

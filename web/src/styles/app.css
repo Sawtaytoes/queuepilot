@@ -120,26 +120,97 @@ header {
   top: 0;
   z-index: 10;
 }
-header .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
-/* F4: the toolbar shares the bar row, pushed to the right. When it doesn't fit, `flex-wrap`
-   on `.bar` drops it to a second line and the ResizeObserver picks up the taller height. */
-#gslot-desktop { margin-left: auto; }
+/* `.bar` is the popover anchor: the two `.hmenu` panels are absolutely positioned to
+   its edges. `position: relative` scopes them here rather than to the sticky header. */
+header .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; position: relative; }
+/* F4: the chrome cluster (undo/redo/scheme/toolbar) shares the bar row, pushed right.
+   When it doesn't fit, `flex-wrap` drops it to a second line and the ResizeObserver
+   picks up the taller height. */
+.chrome { display: flex; align-items: center; gap: 14px; margin-left: auto; }
 #gslot-desktop:empty { display: none; }
 header h1 { margin: 0; font-size: 1.5rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* `min-height` because the sub-line is toggled with the `hidden` attribute, and a
-   node that appears and disappears in normal flow pushes everything below it. Reserving
-   one line's worth costs nothing and removes the shift. (CLS, 2026-08-03.) */
-header .sub { margin: 4px 0 0; min-height: 1.25rem; color: var(--color-content-muted); }
-/* Fixed basis + right alignment. #status is a flex SIBLING of the h1, and its text
-   changes ("Loading…" → "Ready" → "Order saved"), so an auto-width status re-solved the
-   h1's flex basis and slid the heading sideways on every toast. 9ch fits the longest
-   status the app sets. */
+
+/* The info line carries the sub help/now-playing text and the status toast, side by
+   side on ONE full-width row. Each stays a single ellipsised line, so neither can grow
+   the header the way `#status` at `width: 9ch` did (a long "Play failed … Connection
+   refused" wrapped into a ~12-line tower). `min-height` reserves the row so toggling
+   `#sub`'s `hidden` attribute doesn't shift the grid below. (CLS, 2026-08-03.) */
+.infoline { display: flex; align-items: baseline; gap: 12px; min-height: 1.25rem; margin-top: 4px; }
+header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-content-muted); }
 #status {
-  color: var(--color-content-muted);
-  flex: 0 0 auto;
-  font-size: 0.9rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: right;
-  width: 9ch;
+  font-size: 0.9rem;
+  color: var(--color-content-muted);
+}
+
+/* The left/right popover menus — mux-magic's PageHeader mechanism. They are the MOBILE
+   layout: the toggles and panels are `display:none` on desktop (where `.chrome` sits
+   inline). Panels stay mounted in both states so opacity/transform can transition. */
+.menu-toggle { display: none; }
+.hmenu { display: none; }
+@media (max-width: 760px) {
+  /* Toggles are ≥44px tall (the token minTouchTarget) so they're a comfortable tap. */
+  .menu-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    font-size: 1.25rem;
+  }
+  /* Everything the popovers absorb comes off the bar on mobile. */
+  header #back, header .namepen, .chrome { display: none; }
+  #menu-actions { margin-left: auto; }
+
+  .hmenu {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    position: absolute;
+    top: calc(100% - 4px);
+    min-width: 12rem;
+    padding: 8px;
+    background: var(--color-surface-raised, var(--color-surface-base));
+    border: 1px solid var(--color-border-default);
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
+    z-index: 50;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0.18s;
+  }
+  .hmenu-left { inset-inline-start: 0; transform: translateX(-110%); }
+  .hmenu-right { inset-inline-end: 0; transform: translateX(110%); }
+  .hmenu.open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateX(0);
+    transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0s;
+  }
+  .hmenu-item {
+    justify-content: flex-start;
+    width: 100%;
+    min-height: 44px;
+    text-align: start;
+    font-size: 1rem;
+  }
+  .hmenu-item:disabled { opacity: 0.4; }
+  .hmenu-scheme { display: flex; justify-content: flex-start; padding-top: 2px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hmenu { transition: opacity 0.18s ease-out, visibility 0s linear 0.18s; }
+  .hmenu-left, .hmenu-right { transform: none; }
+  .hmenu.open { transition: opacity 0.18s ease-out, visibility 0s linear 0s; }
 }
 
 /* ===================================================================
@@ -862,10 +933,13 @@ header h1 input {
   :root { --tile: 132px; }
   header { padding: 10px 14px 8px; }
   .view { padding: 16px 14px 40px; }
-  header h1 { font-size: 1.1rem; }
-  /* The Play header eats the screen on a phone — drop the helper line and un-stick it. */
-  header .sub { display: none; }
+  header h1 { font-size: 1.2rem; text-align: center; }
+  /* The info line now costs one truncated row, so it stays on mobile — the now-playing
+     state and status toasts are worth the line. Un-stick the Play header still. */
   body.play-view header { position: static; }
+  .infoline { justify-content: center; }
+  header .sub { flex: 0 1 auto; text-align: center; }
+  #status { max-width: 100%; }
   #selbar { left: 12px; right: 12px; transform: none; flex-wrap: wrap; justify-content: center; }
   #gslot-mobile #tools { margin: 0 0 16px; }
   #setmodal .libs, #dynmodal .libs { grid-template-columns: 1fr; }
