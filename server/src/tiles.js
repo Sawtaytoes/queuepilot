@@ -47,11 +47,20 @@ export async function resolveTile(sections, value, start = null) {
   // watched — the exact state the engine's resume_offset picks up. Per-EPISODE, not
   // "partway through a series": a MOVIE reads its own viewOffset; a SHOW/COLLECTION reads it
   // off the next-up leaf (nextEpisode/collectionNext). It must win over a stale "Completed".
+  // The in-progress leaf/movie's own resume point + runtime (ms), so the tile's "In Progress"
+  // badge can say how far in and how long. A MOVIE reads its own; a SHOW/COLLECTION reads it
+  // off the next-up leaf (nextEpisode/collectionNext), matching partiallyWatched's source.
   let partiallyWatched = false;
+  let viewOffset = 0;
+  let duration = 0;
   if (resolved && resolved.type === 'movie') {
-    partiallyWatched = Number(resolved.viewOffset) > 0 && !(Number(resolved.viewCount) > 0);
+    viewOffset = Number(resolved.viewOffset) || 0;
+    duration = Number(resolved.duration) || 0;
+    partiallyWatched = viewOffset > 0 && !(Number(resolved.viewCount) > 0);
   } else if (nextEp && nextEp.partiallyWatched) {
     partiallyWatched = true;
+    viewOffset = Number(nextEp.viewOffset) || 0;
+    duration = Number(nextEp.duration) || 0;
   }
 
   return {
@@ -63,6 +72,8 @@ export async function resolveTile(sections, value, start = null) {
     childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
     nextEp,
     partiallyWatched,
+    viewOffset,
+    duration,
   };
 }
 

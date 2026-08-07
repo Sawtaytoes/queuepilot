@@ -2,6 +2,7 @@ import { Badge, Skeleton } from "@charcuterie/ui"
 
 import type { TileFace } from "../lib/tileFace"
 import type { QueueItem, TileEntry } from "../lib/types"
+import { Tip } from "./Tip"
 
 /**
  * The type badge. A collection whose tile shows a MEMBER names the collection here
@@ -48,13 +49,12 @@ export function TypeBadge({
    */
   if (item.type === "collection" && face.from) {
     return (
-      <span
-        className="badge collection"
-        title={`Plays in order through the “${face.from}” collection`}
-      >
-        <span className="badgekind">Collection</span>
-        <span className="badgename">{face.from}</span>
-      </span>
+      <Tip label={`Plays in order through the “${face.from}” collection`}>
+        <span className="badge collection">
+          <span className="badgekind">Collection</span>
+          <span className="badgename">{face.from}</span>
+        </span>
+      </Tip>
     )
   }
 
@@ -88,22 +88,23 @@ export function WatchesBadge({ count }: { count: number }) {
   const n = Number(count) || 0
 
   return (
-    <Badge
-      appearance="outline"
-      className="badge watches"
-      icon={
-        <svg aria-hidden="true" height="12" viewBox="0 0 16 16" width="12">
-          <path
-            d="M8 3.5C4.6 3.5 1.8 5.6.7 8c1.1 2.4 3.9 4.5 7.3 4.5S14.2 10.4 15.3 8C14.2 5.6 11.4 3.5 8 3.5zm0 7.5A3 3 0 1 1 8 5a3 3 0 0 1 0 6zm0-1.6A1.4 1.4 0 1 0 8 6.6a1.4 1.4 0 0 0 0 2.8z"
-            fill="currentColor"
-          />
-        </svg>
-      }
-      intent="neutral"
-      size="sm"
-      title={`Watched ${n} ${n === 1 ? "time" : "times"}`}
-    >
-      {`${n} ${n === 1 ? "watch" : "watches"}`}
-    </Badge>
+    <Tip label={`Watched ${n} ${n === 1 ? "time" : "times"}`}>
+      <Badge
+        appearance="outline"
+        className="badge watches"
+        icon={
+          <svg aria-hidden="true" height="12" viewBox="0 0 16 16" width="12">
+            <path
+              d="M8 3.5C4.6 3.5 1.8 5.6.7 8c1.1 2.4 3.9 4.5 7.3 4.5S14.2 10.4 15.3 8C14.2 5.6 11.4 3.5 8 3.5zm0 7.5A3 3 0 1 1 8 5a3 3 0 0 1 0 6zm0-1.6A1.4 1.4 0 1 0 8 6.6a1.4 1.4 0 0 0 0 2.8z"
+              fill="currentColor"
+            />
+          </svg>
+        }
+        intent="neutral"
+        size="sm"
+      >
+        {`${n} ${n === 1 ? "watch" : "watches"}`}
+      </Badge>
+    </Tip>
   )
 }

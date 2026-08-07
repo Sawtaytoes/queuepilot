@@ -2,10 +2,11 @@ import { Badge, EmptyState } from "@charcuterie/ui"
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
 
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { tileFace } from "../lib/tileFace"
+import { progressLabel, tileFace } from "../lib/tileFace"
 import type { NowState, QueueItem } from "../lib/types"
 import { TypeBadge } from "../components/badges"
 import { PosterTile } from "../components/PosterTile"
+import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
 import { openPlayMenu, openSetModal } from "../state/overlays"
 import { navigate } from "../state/route"
@@ -126,33 +127,39 @@ function Shelf({
           {isLive && now.now?.state === "paused" ? "Paused" : "Playing"}
         </span>
         <span className="shelfspacer" />
-        <button
-          className="shelfplay"
-          onClick={(e) =>
-            openPlayMenu({
-              anchor: e.currentTarget.getBoundingClientRect(),
-              setId,
-            })}
-          title="Play this queue on a device"
-          type="button"
-        >
-          ▶
-        </button>
-        <button
-          className="shelfedit"
-          onClick={() => openSetModal(setId)}
-          title="Edit queue"
-          type="button"
-        >
-          ⚙
-        </button>
-        <button
-          className="shelfdrag"
-          title="Drag to reorder queues"
-          type="button"
-        >
-          ≡
-        </button>
+        <Tip label="Play this queue on a device">
+          <button
+            aria-label="Play this queue on a device"
+            className="shelfplay"
+            onClick={(e) =>
+              openPlayMenu({
+                anchor: e.currentTarget.getBoundingClientRect(),
+                setId,
+              })}
+            type="button"
+          >
+            ▶
+          </button>
+        </Tip>
+        <Tip label="Edit queue">
+          <button
+            aria-label="Edit queue"
+            className="shelfedit"
+            onClick={() => openSetModal(setId)}
+            type="button"
+          >
+            ⚙
+          </button>
+        </Tip>
+        <Tip label="Drag to reorder queues">
+          <button
+            aria-label="Drag to reorder queues"
+            className="shelfdrag"
+            type="button"
+          >
+            ≡
+          </button>
+        </Tip>
       </h2>
       <div className="strip-wrap" ref={wrapRef}>
         <button
@@ -193,14 +200,21 @@ function Shelf({
                             finished — the Prison School OAD case must never read "Completed". */}
                         {item.partiallyWatched
                           ? (
-                              <Badge
-                                appearance="outline"
-                                className="badge progressbadge"
-                                intent="accent"
-                                size="sm"
+                              <Tip
+                                label={progressLabel(
+                                  item.viewOffset,
+                                  item.duration,
+                                )}
                               >
-                                In Progress
-                              </Badge>
+                                <Badge
+                                  appearance="outline"
+                                  className="badge progressbadge"
+                                  intent="accent"
+                                  size="sm"
+                                >
+                                  In Progress
+                                </Badge>
+                              </Tip>
                             )
                           : item.done
                             ? (

@@ -15,6 +15,7 @@ import {
 } from "../state/overlays"
 import { navigate } from "../state/route"
 import { channelSetIds, rotationChannels, useStore } from "../state/store"
+import { Tip } from "../components/Tip"
 import { ChannelFilters } from "./ChannelFilters"
 import { ChannelMembers } from "./ChannelMembers"
 import { ChannelPool } from "./ChannelPool"
@@ -178,15 +179,16 @@ export function ChannelsView({
         >
           Resample
         </button>
-        <button
-          className="ghost"
-          id="chconfigure"
-          onClick={() => openDynModal(channel.id)}
-          title="Full channel config"
-          type="button"
-        >
-          ⚙ Configure
-        </button>
+        <Tip label="Full channel config">
+          <button
+            className="ghost"
+            id="chconfigure"
+            onClick={() => openDynModal(channel.id)}
+            type="button"
+          >
+            ⚙ Configure
+          </button>
+        </Tip>
         <button
           className="ghost accent"
           id="newdyn"

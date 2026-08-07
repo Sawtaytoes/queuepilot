@@ -6,12 +6,13 @@ import { useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
+import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
 import { useGridDrag } from "../hooks/useGridDrag"
 import { api, thumbUrl } from "../lib/api"
 import { flashTile } from "../lib/flip"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { byTitle, isStartable, startLabel, tileFace } from "../lib/tileFace"
+import { byTitle, isStartable, progressLabel, startLabel, tileFace } from "../lib/tileFace"
 import type { QueueItem, SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import {
@@ -312,15 +313,16 @@ export function QueueView({
           >
             Remove all completed
           </button>
-          <button
-            className="ghost"
-            id="qconfigure"
-            onClick={() => setId && openSetModal(setId)}
-            title="Configure this set"
-            type="button"
-          >
-            ⚙ Configure
-          </button>
+          <Tip label="Configure this set">
+            <button
+              className="ghost"
+              id="qconfigure"
+              onClick={() => setId && openSetModal(setId)}
+              type="button"
+            >
+              ⚙ Configure
+            </button>
+          </Tip>
           <button
             className="playbtn"
             id="qplay"
@@ -367,14 +369,21 @@ export function QueueView({
                             finished — the Prison School OAD case must never read "Completed". */}
                         {item.partiallyWatched
                           ? (
-                              <Badge
-                                appearance="outline"
-                                className="badge progressbadge"
-                                intent="accent"
-                                size="sm"
+                              <Tip
+                                label={progressLabel(
+                                  item.viewOffset,
+                                  item.duration,
+                                )}
                               >
-                                In Progress
-                              </Badge>
+                                <Badge
+                                  appearance="outline"
+                                  className="badge progressbadge"
+                                  intent="accent"
+                                  size="sm"
+                                >
+                                  In Progress
+                                </Badge>
+                              </Tip>
                             )
                           : item.done
                             ? (
@@ -411,10 +420,8 @@ export function QueueView({
                             2026-07-31-collection-tiles-are-member-first). */}
                         {item.resolved && item.type === "show"
                           ? (
-                              <label
-                                className="eps"
-                                title="Episodes queued per play"
-                              >
+                              <Tip label="Episodes queued per play">
+                                <label className="eps">
                                 {/* Keyed on the SERVER's value, because that is
                                     who owns it: the pick round-trips through a
                                     PATCH and can also arrive from another device
@@ -433,25 +440,29 @@ export function QueueView({
                                   size="sm"
                                   value={String(item.episodes || 1)}
                                 />
-                              </label>
+                                </label>
+                              </Tip>
                             )
                           : null}
                         {/* An entry that HAS an override wears one amber chip,
                             which is also a button back into the picker. */}
                         {item.start
                           ? (
-                              <button
-                                className="badge startbadge"
-                                onClick={() => openStartModal(entry)}
-                                title={`Manual start point${
+                              <Tip
+                                label={`Manual start point${
                                   item.nextEp?.startMember
                                     ? ` — begins at “${item.nextEp.startMember}”`
                                     : ""
                                 }. Click to change it or go back to automatic.`}
-                                type="button"
                               >
-                                {startLabel(item.start)}
-                              </button>
+                                <button
+                                  className="badge startbadge"
+                                  onClick={() => openStartModal(entry)}
+                                  type="button"
+                                >
+                                  {startLabel(item.start)}
+                                </button>
+                              </Tip>
                             )
                           : null}
                       </>

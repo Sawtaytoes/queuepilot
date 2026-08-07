@@ -38,6 +38,8 @@ export type NextEp = {
   partiallyWatched?: boolean
   /** The leaf's resume offset in ms (0 when not started). */
   viewOffset?: number
+  /** The leaf's runtime in ms (0 when unknown). */
+  duration?: number
 }
 
 export type EntryType = "show" | "movie" | "collection" | null
@@ -62,6 +64,13 @@ export type QueueItem = {
    * "In Progress" badge, which reads over a stale "Completed".
    */
   partiallyWatched?: boolean
+  /**
+   * The in-progress leaf/movie's resume offset and runtime, both in ms (0 when unknown).
+   * Only meaningful while `partiallyWatched`; drives the "In Progress" badge's tooltip
+   * ("12:30 of 24:00").
+   */
+  viewOffset?: number
+  duration?: number
   /**
    * True while this item came from the SKELETON response (`GET /api/shelves`) and
    * `/api/queues` has not landed yet. The tile renders at final geometry with a

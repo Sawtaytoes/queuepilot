@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
+import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
 import { api, thumbUrl } from "../lib/api"
 import { byTitle, isStartable, startLabel, tileFace } from "../lib/tileFace"
@@ -322,18 +323,21 @@ export function ChannelMembers({
                   <TypeBadge face={face} item={m} />
                   {m.start
                     ? (
-                        <button
-                          className="badge startbadge"
-                          onClick={() => openStartModal(entry)}
-                          title={`Manual start point${
+                        <Tip
+                          label={`Manual start point${
                             m.nextEp?.startMember
                               ? ` — begins at “${m.nextEp.startMember}”`
                               : ""
                           }. Click to change it or go back to automatic.`}
-                          type="button"
                         >
-                          {startLabel(m.start)}
-                        </button>
+                          <button
+                            className="badge startbadge"
+                            onClick={() => openStartModal(entry)}
+                            type="button"
+                          >
+                            {startLabel(m.start)}
+                          </button>
+                        </Tip>
                       )
                     : null}
                 </>

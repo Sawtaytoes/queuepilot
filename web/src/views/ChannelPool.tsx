@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 
 import { WatchesBadge } from "../components/badges"
 import { PosterTile } from "../components/PosterTile"
+import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import type { PreviewResponse, RegistrySet } from "../lib/types"
@@ -36,14 +37,15 @@ function ExcludeButton({
   onExclude: () => Promise<void>
 }) {
   return (
-    <button
-      className="exclude"
-      onClick={() => void onExclude()}
-      title={title}
-      type="button"
-    >
-      {label}
-    </button>
+    <Tip label={title}>
+      <button
+        className="exclude"
+        onClick={() => void onExclude()}
+        type="button"
+      >
+        {label}
+      </button>
+    </Tip>
   )
 }
 

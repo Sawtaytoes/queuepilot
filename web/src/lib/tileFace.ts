@@ -54,6 +54,39 @@ export function withoutCollectionPrefix(
   return rest || m
 }
 
+/**
+ * "12:30" from milliseconds — `H:MM:SS` once past an hour, `M:SS` below it. Feeds the
+ * "In Progress" badge's hover readout (how far a resume point sits into the episode).
+ */
+export function clock(ms: number | null | undefined): string {
+  const total = Math.max(0, Math.round((Number(ms) || 0) / 1000))
+  const h = Math.floor(total / 3600)
+  const m = Math.floor((total % 3600) / 60)
+  const s = total % 60
+  const mm = h ? String(m).padStart(2, "0") : String(m)
+
+  return `${h ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`
+}
+
+/**
+ * The "In Progress" badge's tooltip: "12:30 of 24:00 (52%)". Falls back to a bare
+ * "12:30 in" when Plex gave a resume point but no runtime, and null when there is
+ * nothing to say (the badge then keeps just its label).
+ */
+export function progressLabel(
+  offsetMs?: number | null,
+  durationMs?: number | null,
+): string | null {
+  const off = Number(offsetMs) || 0
+  const dur = Number(durationMs) || 0
+
+  if (dur <= 0) return off > 0 ? `${clock(off)} in` : null
+
+  const pct = Math.min(100, Math.max(0, Math.round((off / dur) * 100)))
+
+  return `${clock(off)} of ${clock(dur)} (${pct}%)`
+}
+
 export type TileFace = {
   ratingKey: string | null
   title: string

@@ -2,6 +2,7 @@ import { Skeleton } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 import { thumbUrl } from "../lib/api"
+import { Tip } from "./Tip"
 
 /**
  * The poster tile shell — the vanilla `#tile-tpl` template, as a component.
@@ -100,51 +101,59 @@ export function PosterTile({
           : null}
         {onRemove
           ? (
-              <button
-                className="remove"
-                onClick={onRemove}
-                title={removeTitle}
-                type="button"
-              >
-                <svg aria-hidden="true" height="12" viewBox="0 0 12 12" width="12">
-                  <path
-                    d="M1.5 1.5l9 9M10.5 1.5l-9 9"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeWidth="2"
-                  />
-                </svg>
-              </button>
+              <Tip label={removeTitle}>
+                <button
+                  aria-label={removeTitle}
+                  className="remove"
+                  onClick={onRemove}
+                  type="button"
+                >
+                  <svg aria-hidden="true" height="12" viewBox="0 0 12 12" width="12">
+                    <path
+                      d="M1.5 1.5l9 9M10.5 1.5l-9 9"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeWidth="2"
+                    />
+                  </svg>
+                </button>
+              </Tip>
             )
           : null}
       </div>
       <div className="cap">
-        <span className="title" title={titleTooltip ?? title}>
-          {title}
-        </span>
+        <Tip label={titleTooltip ?? title}>
+          <span className="title">{title}</span>
+        </Tip>
         {/* The manual start point has NO always-on control — the next-up line
             itself is the button, which is touch-reachable in a way a right-click is
-            not (decision 2026-07-31-start-episode-is-picked-in-a-modal). */}
-        <span
-          className={`next${next?.isDone ? " done" : ""}${isStartable ? " startable" : ""}`}
-          onClick={isStartable ? next?.onStart : undefined}
-          onKeyDown={
-            isStartable
-              ? (e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault()
-                    next?.onStart?.()
+            not (decision 2026-07-31-start-episode-is-picked-in-a-modal).
+
+            The episode line's readout is the styled Charcuterie `Tooltip`, not a
+            native `title` — it carries extra ("N in order", "Tap to choose where this
+            starts"), which is what a Tooltip is for, and it matches the rest of the
+            chrome instead of the OS's slow grey box. */}
+        <Tip label={next?.tooltip ?? next?.text}>
+          <span
+            className={`next${next?.isDone ? " done" : ""}${isStartable ? " startable" : ""}`}
+            onClick={isStartable ? next?.onStart : undefined}
+            onKeyDown={
+              isStartable
+                ? (e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault()
+                      next?.onStart?.()
+                    }
                   }
-                }
-              : undefined
-          }
-          role={isStartable ? "button" : undefined}
-          tabIndex={isStartable ? 0 : undefined}
-          title={next?.tooltip ?? next?.text}
-        >
-          {next?.text ?? ""}
-        </span>
+                : undefined
+            }
+            role={isStartable ? "button" : undefined}
+            tabIndex={isStartable ? 0 : undefined}
+          >
+            {next?.text ?? ""}
+          </span>
+        </Tip>
         <span className="badges">{badges}</span>
       </div>
     </li>
