@@ -2,7 +2,9 @@ import { SelectListbox } from "./SelectListbox"
 import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
+import { fetchProfiles } from "../lib/channels"
 import { byTitle } from "../lib/tileFace"
+import type { Profile } from "../lib/types"
 import { closeSetModal, useOverlays } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
 import { Modal } from "./Modal"
@@ -31,6 +33,8 @@ export function SetModal() {
   const [label, setLabel] = useState("")
   const [kind, setKind] = useState("movies")
   const [sections, setSections] = useState<number[]>([])
+  const [requiresProfile, setRequiresProfile] = useState("")
+  const [profiles, setProfiles] = useState<Profile[]>([])
 
   useEffect(() => {
     if (!setModal) return
@@ -38,6 +42,8 @@ export function SetModal() {
     setLabel(editing ? editing.label : "")
     setKind(editing ? editing.kind : setModal.presetKind || "movies")
     setSections(editing ? [...editing.sections] : [])
+    setRequiresProfile(editing ? editing.requires_profile || "" : "")
+    void fetchProfiles().then(setProfiles)
     // Only re-seed when the modal is (re-)opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setModal])
@@ -48,6 +54,24 @@ export function SetModal() {
     () => (reg?.libraries ?? []).filter((l) => l.video).sort(byTitle),
     [reg],
   )
+
+  // Profile-gate options. The play gate matches the PMS-log stamp: managed users stamp
+  // their title, the owner stamps the plex.tv username. Blank = ungated. A current hand-set
+  // value that is no longer a live profile is kept as its own option so an edit never
+  // silently drops it.
+  const profileOptions = useMemo(() => {
+    const opts = [
+      { label: "Any — no profile lock", value: "" },
+      ...profiles.map((p) => ({
+        label: p.admin ? `${p.name} (owner)` : p.name,
+        value: p.admin ? p.username || p.name : p.name,
+      })),
+    ]
+    if (requiresProfile && !opts.some((o) => o.value === requiresProfile)) {
+      opts.push({ label: `${requiresProfile} (current)`, value: requiresProfile })
+    }
+    return opts
+  }, [profiles, requiresProfile])
 
   const onSubmit = async () => {
     const name = label.trim()
@@ -66,10 +90,10 @@ export function SetModal() {
 
     try {
       if (setId) {
-        await api("PATCH", `/api/sets/${setId}`, { kind, label: name, sections })
+        await api("PATCH", `/api/sets/${setId}`, { kind, label: name, sections, requires_profile: requiresProfile })
       }
       else {
-        await api("POST", "/api/sets", { kind, label: name, sections })
+        await api("POST", "/api/sets", { kind, label: name, sections, requires_profile: requiresProfile })
       }
 
       const word = kind === "anime" ? "Channel" : "Queue"
@@ -169,6 +193,7 @@ export function SetModal() {
             control remounts in lockstep with it. Not keyed on `kind`, which the
             user's own pick writes. */}
         <SelectListbox
+          className="fieldselect"
           id="set-kind"
           key={setModal ? (setId ?? "new") : "closed"}
           label="Type"
@@ -183,6 +208,25 @@ export function SetModal() {
           value={kind}
         />
       </label>
+      <label className="field">
+        Plays under profile
+        {/* Keyed on modal-open identity, same reason as the Type select above: the control
+            re-seeds from `value` only on remount, and this modal never unmounts. */}
+        <SelectListbox
+          className="fieldselect"
+          id="set-profile"
+          key={setModal ? (setId ?? "new") : "closed"}
+          label="Plays under profile"
+          onChange={setRequiresProfile}
+          options={profileOptions}
+          value={requiresProfile}
+        />
+      </label>
+      <p className="subhint" id="set-profile-hint">
+        Locks this queue to a Plex Home profile — a scan waits (and switches the Shield)
+        until that profile is signed in before it plays. Leave “Any” for no lock. Needed when
+        the queue’s libraries are only shared with one profile (e.g. Demos → Demo).
+      </p>
       <fieldset className="field">
         <legend>Libraries this queue can search &amp; hold</legend>
         <div className="libs" id="set-libs">
