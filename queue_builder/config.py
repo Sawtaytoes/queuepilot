@@ -12,8 +12,42 @@ adult tier) is a dict entry, no code change.
 import json
 import os
 
+
+def _load_host_config():
+    """Host/deploy values (real Shield IP, Plex LAN URL, client names) live in a YAML file
+    on the persisted /config volume — NOT baked into this (public) image. A missing file is
+    fine: every value falls back to a deliberately non-routable placeholder, so a
+    misconfigured deploy fails loudly instead of silently reaching a stranger's LAN."""
+    path = os.environ.get("CONFIG_PATH", "/config/config.yaml")
+    try:
+        from ruamel.yaml import YAML
+        with open(path, "r", encoding="utf-8") as f:
+            return YAML(typ="safe").load(f) or {}
+    except FileNotFoundError:
+        return {}
+    except Exception as e:  # a malformed file must never crash boot
+        print(f"[config] could not read {path}: {e}", flush=True)
+        return {}
+
+
+_HOST = _load_host_config()
+
+
+def _hostval(env_key, yaml_key, default):
+    """Resolve a host value: an env override wins, then the /config YAML, then the
+    placeholder default. Keeps real IPs/hostnames out of the public image."""
+    v = os.environ.get(env_key)
+    if v:
+        return v
+    y = _HOST.get(yaml_key)
+    if y is not None and y != "":
+        return str(y)
+    return default
+
+
 # --- Plex server (self-signed cert -> TLS unverified, like music-ingest tools) ---
-PLEX_URL = os.environ.get("PLEX_API_SERVER_URL", "https://plex.example.com").rstrip("/")
+PLEX_URL = _hostval("PLEX_API_SERVER_URL", "plex_api_server_url",
+                    "https://plex.example.com").rstrip("/")
 # Prefer an officially-minted token (PLEX_TOKEN); fall back to the legacy key name.
 PLEX_TOKEN = os.environ.get("PLEX_TOKEN") or os.environ.get("PLEX_API_KEY", "")
 # Stable client identifier used when minting per-account (managed-user) tokens. Must be
@@ -415,23 +449,24 @@ ROTATION_LENGTH = int(os.environ.get("ROTATION_LENGTH", "12"))
 #              signed into the matching account.
 PLAYBACK_MODE = os.environ.get("PLAYBACK_MODE", "cast")
 # Google-Cast friendly name of the theater Shield (as it advertises on the LAN).
-SHIELD_CAST_NAME = os.environ.get("SHIELD_CAST_NAME", "Family Room SHIELD")
+SHIELD_CAST_NAME = _hostval("SHIELD_CAST_NAME", "shield_cast_name", "Family Room SHIELD")
 # Used by the "client" mode only.
-SHIELD_CLIENT_MACHINE_ID = os.environ.get("SHIELD_CLIENT_MACHINE_ID", "")
-SHIELD_CLIENT_NAME = os.environ.get("SHIELD_CLIENT_NAME", "Family Room SHIELD")
+SHIELD_CLIENT_MACHINE_ID = _hostval("SHIELD_CLIENT_MACHINE_ID", "shield_client_machine_id", "")
+SHIELD_CLIENT_NAME = _hostval("SHIELD_CLIENT_NAME", "shield_client_name", "Family Room SHIELD")
 # Direct Plex Companion endpoint of the Shield (http://<ip>:32500). Blank = resolve it from
 # plex.tv's device list at runtime, which is the normal path — see playback.find_client.
-SHIELD_CLIENT_URI = os.environ.get("SHIELD_CLIENT_URI", "")
+SHIELD_CLIENT_URI = _hostval("SHIELD_CLIENT_URI", "shield_client_uri", "")
 # LAN address of the Plex server, handed to the client in playMedia so it knows where to
 # stream from. Must be reachable FROM the Shield (not from this container).
-PLEX_LOCAL_URL = os.environ.get("PLEX_LOCAL_URL", "http://192.0.2.10:32400").rstrip("/")
+PLEX_LOCAL_URL = _hostval("PLEX_LOCAL_URL", "plex_local_url",
+                          "http://192.0.2.10:32400").rstrip("/")
 
 # --- Profile-driven set selection (set="auto") ---
 # The signed-in Plex Home profile on the Shield decides the tier; cards carry only the
 # KIND (cartoons/movie). Detection reads the PMS DEBUG log (see profiles.py) - the log
 # volume must be mounted read-only at PMS_LOG_PATH's parent.
 PMS_LOG_PATH = os.environ.get("PMS_LOG_PATH", "/pms-logs/Plex Media Server.log")
-SHIELD_IP = os.environ.get("SHIELD_IP", "192.0.2.30")
+SHIELD_IP = _hostval("SHIELD_IP", "shield_ip", "192.0.2.30")
 PROFILE_WAIT_SECONDS = int(os.environ.get("PROFILE_WAIT_SECONDS", "120"))
 # Plex Home profile title -> set name. Titles must match plex.tv exactly.
 PROFILE_SET_MAP = json.loads(os.environ.get(
@@ -471,6 +506,9 @@ ADB_PICKER_WAIT_SECONDS = int(os.environ.get("ADB_PICKER_WAIT_SECONDS", "45"))
 ADB_RESTART_TO_PICKER = os.environ.get(
     "ADB_RESTART_TO_PICKER", "true").lower() in ("1", "true", "yes")
 ADB_TIMEOUT = int(os.environ.get("ADB_TIMEOUT", "15"))
+# How long to wait for Plex to reach the foreground after we launch it over ADB. Companion
+# playback (:32500) and the picker both need Plex running, so a scan blocks on this.
+ADB_PLEX_LAUNCH_WAIT_SECONDS = int(os.environ.get("ADB_PLEX_LAUNCH_WAIT_SECONDS", "20"))
 
 # --- MQTT (Mosquitto HA add-on) ---
 MQTT_HOST = os.environ.get("MQTT_HOST", "")

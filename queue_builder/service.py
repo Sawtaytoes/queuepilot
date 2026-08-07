@@ -104,12 +104,21 @@ def _adb_switch_async(target, cancel):
         print(f"[adb] switch to '{target}': {'ok' if ok else 'FAILED'} - {detail}",
               flush=True)
 
-    threading.Thread(target=run, daemon=True).start()
+    t = threading.Thread(target=run, daemon=True)
+    t.start()
+    result["thread"] = t  # so the caller can join it before firing playback
     return result
 
 
 def _do_start(client, payload, cancel):
     config.reload_sets()  # a queue created/edited in the web UI is playable immediately
+    # Playback (Companion :32500) and the profile picker both need the Shield's Plex app
+    # running. HA's `plex://` app link is supposed to foreground it, but when that silently
+    # fails Plex stays closed and the scan errors out with nothing playing. Open it
+    # ourselves over ADB first — never force-stops, so a movie already on screen is
+    # untouched. Best-effort: if ADB is off/unreachable we fall back to whatever HA did.
+    if config.ADB_ENABLED:
+        adb.ensure_plex_open()
     kind = payload.get("kind", "cartoons")
     set_name = payload.get("set", "auto")
     # A per-tier card (or the web Play landing) can name the Plex Home profile to play
@@ -178,6 +187,7 @@ def _do_start(client, payload, cancel):
         return
     if not required and not is_auto:
         required = card_profile
+    switched = {}  # set below if we drive an ADB profile switch; joined before playback
     if required and detected_profile != required:
         _publish_state(client, awaiting=f"profile:{required}")
         # Best-effort: drive the picker there ourselves, concurrently with the log wait.
@@ -290,6 +300,17 @@ def _do_start(client, payload, cancel):
     # Optional per-command target (a device-registry id from the web UI's "Play on ▾");
     # absent/unknown -> the env-default Shield, exactly as before.
     device = DEVICES.get(str(payload.get("target") or "")) or None
+    # An ADB profile switch drives the Shield's UI - it backs out of whatever is on screen
+    # to reach the picker. It runs concurrently with the log-wait above, so by now it may
+    # still be mid-navigation. playMedia lands on the client regardless of the current
+    # screen, so if we fire it while the switch is still walking the UI, the switch backs
+    # out of the movie we just started and playback dies - even when the profile was
+    # ALREADY correct (the picker walk happens anyway, committing 0 presses). Join the
+    # switch first so play is always the LAST action; the bounded timeout means a hung
+    # switch never blocks playback indefinitely.
+    _switch_thread = switched.get("thread")
+    if _switch_thread:
+        _switch_thread.join(timeout=config.ADB_PICKER_WAIT_SECONDS + 10)
     result = playback.play_rating_keys([i["ratingKey"] for i in SESSION.queue],
                                        set_name=set_name, device=device)
     client.publish(config.T_RESP_LAST_PLAYED, json.dumps(last), qos=1, retain=True)

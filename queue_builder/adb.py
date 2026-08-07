@@ -122,6 +122,40 @@ def foreground_activity():
     return m.group(1) if m else None
 
 
+def ensure_plex_open(wait=None):
+    """Foreground the Shield's Plex app via its `plex://` deep link if it isn't already up.
+
+    This is the reliable launch path for when HA's own `plex://` app link doesn't fire (an
+    Android TV remote integration that has lost its adb authorization launches nothing, and
+    the Shield just sits on its launcher). Companion playback (:32500) AND the profile
+    picker both need Plex running, so this has to succeed before either can.
+
+    Unlike restart_to_picker() this NEVER force-stops: if Plex is already foreground
+    (playing or on Home) it is left untouched, so a running movie is never interrupted.
+    Best-effort — returns True if Plex is (now) foreground, False if ADB is unreachable or
+    Plex didn't come up in time (the caller still tries; HA may have launched it).
+    """
+    if not connect():
+        return False
+    act = foreground_activity() or ""
+    if _PLEX_PKG in act:
+        return True
+    print(f"[adb] Plex not foreground (on '{act or 'unknown'}'); launching via plex://",
+          flush=True)
+    if _run(["shell", "am", "start", "-a", "android.intent.action.VIEW",
+             "-d", "plex://"]) is None:
+        return False
+    deadline = time.monotonic() + (
+        wait if wait is not None else config.ADB_PLEX_LAUNCH_WAIT_SECONDS)
+    while time.monotonic() < deadline:
+        if _PLEX_PKG in (foreground_activity() or ""):
+            print("[adb] Plex is foreground", flush=True)
+            return True
+        time.sleep(0.5)
+    print("[adb] Plex did not reach the foreground in time", flush=True)
+    return False
+
+
 def _dump():
     """The screen's UI hierarchy as an ElementTree root, or None.
 
