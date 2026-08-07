@@ -700,6 +700,48 @@ def item_type(rating_key, token=None):
     return res
 
 
+def item_view_state(rating_key, token=None):
+    """(viewOffset_ms, viewCount) for one item under `token`'s account.
+
+    viewOffset is how far (in ms) into the item that account last got — 0 if it never
+    started or was reset — and viewCount its completed-play tally. Read straight off the
+    item's metadata, which (like every read here) reflects the passed account token's own
+    view state, so a queue set sees ITS profile's resume point (admin/Bob for the people
+    queues). (0, 0) on any miss (dead id, network hiccup) so the caller just starts at 0.
+    """
+    def _int(v):
+        try:
+            return int(v)
+        except (TypeError, ValueError):
+            return 0
+
+    try:
+        mc = _container(f"/library/metadata/{rating_key}", token)
+    except Exception:  # noqa: BLE001 — bad/removed id or network hiccup: no resume point
+        return (0, 0)
+    md = mc.get("Metadata", [])
+    if not md:
+        return (0, 0)
+    return (_int(md[0].get("viewOffset")), _int(md[0].get("viewCount")))
+
+
+def resume_offset(rating_key, watched, token=None):
+    """Milliseconds to resume `rating_key` at — its Plex viewOffset when IN-PROGRESS, else 0.
+
+    In-progress = a partial view (viewOffset > 0) that is NOT finished: not in this set's
+    `watched` history and viewCount 0. A finished item (watched, or counted) or a fresh one
+    (no offset) returns 0, so it plays from the top — exactly today's behavior. This is what
+    lets a QUEUED item that was started but not finished pick up where it left off on the next
+    scan instead of restarting (decision 2026-07-16-movie-queue-sets-yaml-wishlist: the user
+    chose "resume partially-watched"). Queue sets only — callers on the rotation / reel /
+    general-playback paths never invoke this, leaving their from-the-top behavior untouched.
+    """
+    if str(rating_key) in watched:
+        return 0
+    offset, count = item_view_state(rating_key, token=token)
+    return offset if offset > 0 and not count else 0
+
+
 def _match_guid_hint(hint, guids):
     """True if a `source-id` folder hint (`anidb-16172`, `imdb-tt0067023`) is in `guids`.
 
@@ -1083,7 +1125,7 @@ def next_queue(set_name, rng=None):
     descs = queues.entries(set_name)
     if not descs:                                # empty/absent queue: nothing to resolve
         return {"set": set_name, "play": [], "last": None,
-                "done": [], "unresolved": [], "remaining": 0}
+                "done": [], "unresolved": [], "remaining": 0, "offset": 0}
     tok = account_token(cfg.get("user_uuid"))    # None => admin PLEX_TOKEN (Bob)
     watched = _watched_for_set(cfg)              # this set's own accounts, over its section
 
@@ -1120,10 +1162,19 @@ def next_queue(set_name, rng=None):
     last = ({"title": batches[0]["title"], "type": batches[0]["type"],
              "ratingKey": play_items[0]["ratingKey"]} if play_items else None)
 
+    # Resume-in-queue: if the item leading this scan was STARTED but not finished, pick up at
+    # its Plex viewOffset rather than restarting at 0. It is already the in-progress item — a
+    # partial view never lands in `watched` history, so selection stopped on it instead of
+    # advancing — so we only recover its offset here and thread it out to playback. A finished
+    # item is watched (already advanced past) and a fresh one has no offset, so both stay 0
+    # (see resume_offset). A finished item still advances exactly as before.
+    offset = resume_offset(play_items[0]["ratingKey"], watched, token=tok) if play_items else 0
+
     if newly_done:                               # keep + tag finished; never auto-remove
         queues.mark_done(set_name, newly_done)
     return {"set": set_name, "play": play_items, "last": last,
-            "done": done_flagged, "unresolved": unresolved, "remaining": remaining}
+            "done": done_flagged, "unresolved": unresolved, "remaining": remaining,
+            "offset": offset}
 
 
 def build_reel(set_name, limit=60):
@@ -1145,7 +1196,7 @@ def build_reel(set_name, limit=60):
     descs = queues.entries(set_name)
     if not descs:
         return {"set": set_name, "play": [], "last": None,
-                "done": [], "unresolved": [], "remaining": 0}
+                "done": [], "unresolved": [], "remaining": 0, "offset": 0}
     tok = account_token(cfg.get("user_uuid"))    # None => admin PLEX_TOKEN (Bob)
     play_items, unresolved = [], []
     for desc in descs:
@@ -1175,5 +1226,7 @@ def build_reel(set_name, limit=60):
                               for e in eps[:batch])
     last = ({"title": play_items[0]["title"], "type": "movie",
              "ratingKey": play_items[0]["ratingKey"]} if play_items else None)
+    # A reel replays IN FULL from the top every scan (nothing is ever "in progress" to it),
+    # so its offset is always 0 — carried only so do_start sees the same result shape.
     return {"set": set_name, "play": play_items, "last": last,
-            "done": [], "unresolved": unresolved, "remaining": len(play_items)}
+            "done": [], "unresolved": unresolved, "remaining": len(play_items), "offset": 0}

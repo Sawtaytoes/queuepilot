@@ -222,6 +222,10 @@ def _do_start(client, payload, cancel):
     binding = config.binding_for(cfg, profile_title)
 
     SESSION.kind, SESSION.set, SESSION.profile = kind, set_name, profile_title
+    # Resume point (ms) for the first queued item — set only on the curated-queue path below
+    # when its lead was started but not finished (plex.next_queue's `offset`). Rotation / reel
+    # playback leaves it 0, so they play from the top exactly as before.
+    resume_ms = 0
     if cfg.get("source") == "queue":
         # Curated wishlist: play the first not-finished entry (movie, a series' next unwatched
         # episodes, or a Collection in order). Finished entries are KEPT + marked done (not
@@ -242,6 +246,9 @@ def _do_start(client, payload, cancel):
             return
         SESSION.queue = res["play"]
         last = res["last"]
+        # A reel never resumes (always 0); a queue carries its lead item's viewOffset when it
+        # was started but not finished, so it picks up where it left off instead of restarting.
+        resume_ms = res.get("offset") or 0
     else:
         # Rotation set — pick the path by `behavior` (v3 PR 2), falling back to the legacy
         # `mode` field (workstream E) and then to the card's `kind` when neither is set, so
@@ -312,7 +319,7 @@ def _do_start(client, payload, cancel):
     if _switch_thread:
         _switch_thread.join(timeout=config.ADB_PICKER_WAIT_SECONDS + 10)
     result = playback.play_rating_keys([i["ratingKey"] for i in SESSION.queue],
-                                       set_name=set_name, device=device)
+                                       set_name=set_name, device=device, offset=resume_ms)
     client.publish(config.T_RESP_LAST_PLAYED, json.dumps(last), qos=1, retain=True)
     _publish_state(client, playback=result)
 
