@@ -328,6 +328,27 @@ function memberWriteValue(v) {
 }
 const toMembers = (a) => (Array.isArray(a) ? a.map(memberWriteValue).filter((m) => m != null) : []);
 
+// A rotation channel's per-show manual start map (decision 2026-08-07-dynamic-pool-start-
+// override): ratingKey -> {season?, episode?, series?}. The mirror of a curated member's
+// embedded `start`, but for a rule-derived pool show that has no stored entry. Cleaned to
+// the same {series?, season?, episode?} floor shape the engine's _at_or_after_start reads;
+// entries with neither an episode nor a series are dropped (a cleared start removes its key).
+function toStarts(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out = {};
+  for (const [rk, s] of Object.entries(v)) {
+    if (!s || typeof s !== 'object' || Array.isArray(s)) continue;
+    const start = {};
+    if (s.series != null && String(s.series).trim()) start.series = String(s.series).trim();
+    const season = parseInt(s.season, 10);
+    const episode = parseInt(s.episode, 10);
+    if (Number.isFinite(season)) start.season = season;
+    if (Number.isFinite(episode)) start.episode = episode;
+    if (start.series != null || start.episode != null) out[String(rk)] = start;
+  }
+  return out;
+}
+
 function normalize(ent) {
   const id = String(ent.id || '').trim();
   if (!id) return null;
@@ -378,6 +399,9 @@ function normalize(ent) {
           superseded_by: ent.superseded_by != null ? String(ent.superseded_by) : null,
           behavior: BEHAVIORS.includes(ent.behavior) ? ent.behavior : null,
           members: toMembers(ent.members),
+          // Per-show manual start overrides for the dynamic rule pool (the Channels view
+          // reads channel.starts[ratingKey] to seed the "Start from…" picker + chip).
+          starts: toStarts(ent.starts),
         }
       : {}),
     audio_language: ent.audio_language != null ? String(ent.audio_language) : null,
@@ -562,6 +586,8 @@ export async function updateSet(id, patch) {
         'audio_language', 'movie_excludes',
         // v3 PR 2: per-profile bindings + behavior. PR 3: explicit members.
         'profiles', 'behavior', 'members',
+        // Per-show start overrides for the dynamic rule pool.
+        'starts',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
         'default_profile',
       );
@@ -575,6 +601,15 @@ export async function updateSet(id, patch) {
         const list = toMembers(v);
         if (!list.length) { node.delete('members'); continue; }
         node.set('members', doc.createNode(list));
+        continue;
+      }
+      if (k === 'starts') {
+        // Whole-map replace, like members: the Channels view sends the full desired
+        // {ratingKey: {season, episode}} map. An empty map drops the key entirely (every
+        // show back to its natural next-unwatched).
+        const map = toStarts(v);
+        if (!Object.keys(map).length) { node.delete('starts'); continue; }
+        node.set('starts', doc.createNode(map));
         continue;
       }
       if (k === 'profiles') {

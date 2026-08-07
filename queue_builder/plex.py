@@ -486,11 +486,19 @@ def unwatched_buckets(set_name, rng=None, binding=None):
     # their members so the whole collection drops out of both the show and the item scan.
     blocked = _expanded_blocklist(cfg, token=tok)
 
+    # Per-show manual start floors (decision 2026-08-07-dynamic-pool-start-override): a
+    # ratingKey -> {season, episode} map that lets a rule-pool show begin at a chosen
+    # episode. Applied here so BOTH this preview and the play path (channel_buckets ->
+    # unwatched_buckets) skip earlier episodes — without marking them watched on Plex.
+    starts = cfg.get("starts") or {}
+
     buckets = []
     # Episodic shows: one bucket each.
     for show in episodic_shows(cfg["episodic_sections"], allowed, blocked, token=tok):
         all_eps = show_episodes(show["ratingKey"], token=tok)
-        eps = [e for e in all_eps if e["ratingKey"] not in watched]
+        start = starts.get(str(show["ratingKey"]))
+        eps = [e for e in all_eps
+               if e["ratingKey"] not in watched and _at_or_after_start(e, start)]
         if eps:
             buckets.append({"show": show["title"], "ratingKey": show["ratingKey"],
                             "episodes": eps, "multi_season": _multi_season(all_eps)})

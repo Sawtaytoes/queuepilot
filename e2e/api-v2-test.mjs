@@ -146,6 +146,28 @@ try {
   ok('updateSet changed audio_language', ns.audio_language === 'eng');
   ok('updateSet changed movie_excludes', ns.movie_excludes.join(',') === '333');
   ok('updateSet changed watch_count_accounts', ns.watch_count_accounts.join(',') === '1,2');
+
+  // Per-show start overrides for the dynamic rule pool (decision
+  // 2026-08-07-dynamic-pool-start-override): a {ratingKey: {season, episode}} map that the
+  // Channels view writes and reads back to seed the "Start from…" picker. Whole-map replace,
+  // and an empty map drops the key — same shape the members[] write uses.
+  await patch(`/sets/${rid}`, { starts: { 777: { season: 2, episode: 5 }, 888: { episode: 3 } } });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === rid);
+  ok('updateSet persists starts keyed by ratingKey',
+    ns.starts && ns.starts['777'] && ns.starts['777'].season === 2 && ns.starts['777'].episode === 5);
+  ok('a single-season start stores just the episode', ns.starts['888'].episode === 3 && ns.starts['888'].season == null);
+  // A cleared entry (no episode, no series) is dropped, not stored as an empty object.
+  await patch(`/sets/${rid}`, { starts: { 777: { season: 2, episode: 5 } } });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === rid);
+  ok('updateSet whole-map replace drops the omitted key', ns.starts['888'] == null && ns.starts['777'] != null);
+  // An empty map removes the field entirely (every show back to natural next-unwatched).
+  await patch(`/sets/${rid}`, { starts: {} });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === rid);
+  ok('updateSet empty starts map clears to {}', !ns.starts || Object.keys(ns.starts).length === 0);
+
   const badMode = await patch(`/sets/${rid}`, { mode: 'bogus' });
   ok('updateSet rejects an invalid mode', /invalid mode/.test(String(badMode.error || '')));
   // id + source are immutable — a patch attempting them is ignored, not applied.

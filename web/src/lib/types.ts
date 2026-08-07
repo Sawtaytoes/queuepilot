@@ -163,6 +163,10 @@ export type RegistrySet = {
   mode?: string
   blocklist: string[]
   members?: unknown[]
+  /** Per-show manual start floors for the dynamic rule pool, keyed by show ratingKey.
+   * The Channels view seeds the "Start from…" picker from this and writes it back with a
+   * whole-map `PATCH /api/sets/:id { starts }`. */
+  starts?: Record<string, StartPoint>
   profiles?: Binding[]
   has_explicit_profiles?: boolean
   /** Which binding the Play/Channels dropdowns seed to (a binding's `plex_user`).

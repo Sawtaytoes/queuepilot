@@ -6,7 +6,15 @@ import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
-import type { PreviewResponse, RegistrySet } from "../lib/types"
+import { startLabel } from "../lib/tileFace"
+import type {
+  ChannelMember,
+  PreviewBucket,
+  PreviewResponse,
+  RegistrySet,
+  StartPoint,
+} from "../lib/types"
+import { type EntryActions, openStartModal } from "../state/overlays"
 import { fetchAll, setState, setStatus } from "../state/store"
 
 /**
@@ -53,13 +61,21 @@ export function ChannelPool({
   channel,
   currentProfile,
   onChanged,
+  reloadToken,
   resampleToken,
 }: {
   channel: RegistrySet
   currentProfile: string | null
   /** Bumped by the Resample button to force a `fresh=1` reload. */
   resampleToken: number
-  /** Re-read the registry after a blocklist / exclude write. */
+  /**
+   * Bumped after a blocklist / exclude write to re-read the preview WITHOUT a
+   * `fresh=1` reshuffle — the excluded show is already gone server-side (the
+   * `PATCH /api/sets/:id` busted the preview cache), so the pool just needs a
+   * cheap re-read, not a full rescan that would scramble every other tile.
+   */
+  reloadToken: number
+  /** Notify the parent to bump `reloadToken` after a blocklist / exclude write. */
   onChanged: () => void
 }) {
   const [preview, setPreview] = useState<PreviewResponse | null>(null)
@@ -74,6 +90,12 @@ export function ChannelPool({
   // after 3 s — so a fast load never shows it, and a slow one explains itself.
   const [showSlowHint, setShowSlowHint] = useState(false)
   const reqRef = useRef(0)
+  // `fresh=1` is a full reshuffle/rescan and must fire ONLY when the Resample
+  // button actually bumped `resampleToken` — not on a `reloadToken` re-read, a
+  // channel switch, or the initial load. Comparing against the previous value is
+  // robust to those; the old `resampleToken > 0` test wrongly forced fresh on
+  // every load once you'd resampled once.
+  const prevResampleRef = useRef(resampleToken)
 
   const isRewatch = channel.behavior === "rewatch"
 
@@ -93,7 +115,11 @@ export function ChannelPool({
       try {
         const qs = new URLSearchParams()
 
-        if (resampleToken > 0) qs.set("fresh", "1")
+        const isResample = resampleToken !== prevResampleRef.current
+
+        prevResampleRef.current = resampleToken
+
+        if (isResample) qs.set("fresh", "1")
 
         // A `profiles[]` channel's pool is per-binding — thread the selected
         // profile through so the Python side previews that binding (legacy sets
@@ -156,7 +182,7 @@ export function ChannelPool({
 
     return () => clearTimeout(slowTimer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.id, currentProfile, resampleToken])
+  }, [channel.id, currentProfile, resampleToken, reloadToken])
 
   // The skeleton count: enough to fill the visible pool row so nothing shifts when the real
   // tiles land. A fixed dozen at tile geometry (`--tile` wide, aspect-ratio 2/3 via `.tile`).
@@ -200,6 +226,122 @@ export function ChannelPool({
     catch (e) {
       setStatus("Exclude failed: " + (e as Error).message, "err")
     }
+  }
+
+  // Persist (or clear) a manual start floor for one rule-pool show. Same whole-map
+  // replace + registry refresh as the blocklist write above; `PATCH /api/sets/:id` busts
+  // the server preview cache, so the following onChanged() re-read shows the new "next".
+  const saveStart = async (ratingKey: string, start: StartPoint | null) => {
+    const next: Record<string, StartPoint> = { ...(channel.starts ?? {}) }
+
+    if (start) next[String(ratingKey)] = start
+    else delete next[String(ratingKey)]
+
+    await api("PATCH", `/api/sets/${channel.id}`, { starts: next })
+
+    const [data, reg] = await fetchAll()
+
+    setState({ data, reg })
+  }
+
+  // A rule-pool show reuses the queue/member "Start from…" flow: build the same
+  // EntryActions the modal reads, with an item shaped like a resolved show. The pool is
+  // rule-derived (no stored entry), so `save` writes the set's `starts` map keyed by
+  // ratingKey rather than an array slot, and `index` is unused here (-1).
+  const poolEntry = (b: PreviewBucket): EntryActions => {
+    const start = (channel.starts ?? {})[String(b.ratingKey)] ?? null
+    const item: ChannelMember = {
+      childCount: null,
+      index: -1,
+      nextEp: b.next
+        ? {
+            episode: b.next.episode,
+            multiSeason: b.next.multiSeason,
+            season: b.next.season,
+            title: b.next.title,
+          }
+        : null,
+      ratingKey: String(b.ratingKey),
+      resolved: true,
+      start,
+      title: b.show,
+      type: "show",
+      year: null,
+    }
+
+    return {
+      item,
+      refresh: () => onChanged(),
+      save: (s) => saveStart(b.ratingKey, s),
+    }
+  }
+
+  // One eligible-pool SHOW tile: the unwatched badge + Exclude, PLUS the shared start
+  // affordances (a clickable "next" line and, once set, a "Start …" chip). A Shorts
+  // ("section-") bucket is not a series, so it carries neither. (The `items` split — one
+  // tile per short — is handled by the caller before this runs.)
+  const renderShowBucket = (b: PreviewBucket) => {
+    const isSection = String(b.ratingKey).startsWith("section-")
+    const entry = isSection ? null : poolEntry(b)
+    const start = entry?.item.start ?? null
+
+    return (
+      <PosterTile
+        badges={
+          <>
+            <Badge
+              appearance="outline"
+              className="badge show"
+              intent="accent"
+              size="sm"
+            >
+              {`${b.unwatched} unwatched`}
+            </Badge>
+            {isSection
+              ? null
+              : (
+                  <ExcludeButton
+                    label="Exclude"
+                    onExclude={() => excludeFromBlocklist(b.ratingKey, b.show)}
+                    title={`Exclude ${b.show} from this channel`}
+                  />
+                )}
+            {start && entry
+              ? (
+                  <Tip label="Manual start point. Click to change it or go back to automatic.">
+                    <button
+                      className="badge startbadge"
+                      onClick={() => openStartModal(entry)}
+                      type="button"
+                    >
+                      {startLabel(start)}
+                    </button>
+                  </Tip>
+                )
+              : null}
+          </>
+        }
+        dataKey={String(b.ratingKey)}
+        key={b.ratingKey}
+        next={
+          b.next && !isSection
+            ? {
+                // Clicking opens the same picker the queue tiles use; the label matches
+                // the queue-grid tiles (single-season anime drops the "S1").
+                onStart: entry ? () => openStartModal(entry) : undefined,
+                text: `${
+                  b.next.multiSeason
+                    ? `S${b.next.season ?? "?"} · E${b.next.episode ?? "?"}`
+                    : `E${b.next.episode ?? "?"}`
+                } · ${b.next.title}`,
+                tooltip: "Tap to choose where this show starts",
+              }
+            : undefined
+        }
+        posterRatingKey={isSection ? (b.next?.ratingKey ?? null) : b.ratingKey}
+        title={b.show}
+      />
+    )
   }
 
   return (
@@ -249,54 +391,7 @@ export function ChannelPool({
                       title={it.title}
                     />
                   ))
-                : [
-                    <PosterTile
-                      badges={
-                        <>
-                          <Badge
-                            appearance="outline"
-                            className="badge show"
-                            intent="accent"
-                            size="sm"
-                          >
-                            {`${b.unwatched} unwatched`}
-                          </Badge>
-                          {String(b.ratingKey).startsWith("section-")
-                            ? null
-                            : (
-                                <ExcludeButton
-                                  label="Exclude"
-                                  onExclude={() =>
-                                    excludeFromBlocklist(b.ratingKey, b.show)}
-                                  title={`Exclude ${b.show} from this channel`}
-                                />
-                              )}
-                        </>
-                      }
-                      dataKey={String(b.ratingKey)}
-                      key={b.ratingKey}
-                      next={
-                        b.next && !String(b.ratingKey).startsWith("section-")
-                          ? {
-                              // `multiSeason` comes from the Python preview;
-                              // single-season shows (all anime) drop the "S1",
-                              // matching the queue-grid tiles.
-                              text: `${
-                                b.next.multiSeason
-                                  ? `S${b.next.season ?? "?"} · E${b.next.episode ?? "?"}`
-                                  : `E${b.next.episode ?? "?"}`
-                              } · ${b.next.title}`,
-                            }
-                          : undefined
-                      }
-                      posterRatingKey={
-                        String(b.ratingKey).startsWith("section-")
-                          ? (b.next?.ratingKey ?? null)
-                          : b.ratingKey
-                      }
-                      title={b.show}
-                    />,
-                  ],
+                : [renderShowBucket(b)],
             )}
       </ul>
     </section>
