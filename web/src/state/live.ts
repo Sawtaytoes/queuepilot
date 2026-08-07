@@ -1,5 +1,5 @@
-import { apiConditional, NOT_MODIFIED } from "../lib/api"
-import type { QueuesResponse, SetsResponse } from "../lib/types"
+import { api, apiConditional, NOT_MODIFIED } from "../lib/api"
+import type { NowState, QueuesResponse, SetsResponse } from "../lib/types"
 import { uiBusy } from "./busy"
 import {
   getState,
@@ -75,12 +75,41 @@ export async function liveRefresh() {
   }
 }
 
+/**
+ * Reconcile the now-playing tile after a gap in the SSE stream. A backgrounded tab
+ * (a phone sleeping the browser) drops the EventSource and misses the `now` events
+ * published while it was gone, so on return the tile shows the stale page-load value.
+ * Re-fetching `/api/now` — the same shape the store hydrates from on first load —
+ * pulls the current snapshot in one shot. Cosmetic on failure: the next `now` event
+ * fills it in.
+ */
+async function resyncNow() {
+  try {
+    const n = await api<NowState>("GET", "/api/now")
+
+    setState({ now: { now: n.now || null, set: n.set || null } })
+  }
+  catch {
+    /* the next `now` SSE event fills it in */
+  }
+}
+
 let source: EventSource | null = null
 
 export function startLiveUpdates() {
   if (source) return () => {}
 
   source = new EventSource("/api/events")
+
+  // A resumed/reconnected stream re-syncs both halves: `/api/now` for the playing tile
+  // and `liveRefresh` (conditional GET — a 304 no-ops) for the queues/sets. `open` fires
+  // on the initial connect AND on every automatic reconnect, so a dropped-then-restored
+  // connection reconciles without a manual refresh. (The server also replays the current
+  // `now` snapshot to a freshly-connected client; this covers the client-driven wake.)
+  source.addEventListener("open", () => {
+    void resyncNow()
+    void liveRefresh()
+  })
 
   source.addEventListener("data", () => void liveRefresh())
 
@@ -165,12 +194,25 @@ export function startLiveUpdates() {
     }
   })
 
+  // A tab returning to the foreground reconciles immediately rather than waiting for the
+  // browser to notice the SSE socket died and reconnect (which is what fires `open` above).
+  // Mobile Safari in particular can hold a zombie EventSource open across a long sleep, so
+  // `visibilitychange` is the reliable signal that the user is looking again.
+  const onVisible = () => {
+    if (document.visibilityState !== "visible") return
+
+    void resyncNow()
+    void liveRefresh()
+  }
+  document.addEventListener("visibilitychange", onVisible)
+
   const timer = setInterval(() => {
     if (livePending && !uiBusy()) void liveRefresh()
   }, 2000)
 
   return () => {
     clearInterval(timer)
+    document.removeEventListener("visibilitychange", onVisible)
     source?.close()
     source = null
   }
