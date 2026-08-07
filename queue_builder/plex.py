@@ -237,8 +237,22 @@ def section_items(sections, allowed, blocklist=frozenset(), token=None):
     return items
 
 
+def _int0(v):
+    """int(v), or 0 for None / a non-numeric value. Plex OMITS viewCount when it is 0, so a
+    MISSING viewCount reads as 0 = UNWATCHED here — never as watched (the resume-in-queue bug)."""
+    try:
+        return int(v)
+    except (TypeError, ValueError):
+        return 0
+
+
 def show_episodes(show_rating_key, token=None):
-    """Ordered flat episode list for a show (allLeaves), season/episode preserved."""
+    """Ordered flat episode list for a show (allLeaves), season/episode preserved.
+
+    Each leaf also carries `viewCount` and `viewOffset` (ms) as Plex reports them under this
+    token's account — the raw signal an in-progress leaf resumes from. viewCount is coerced
+    through _int0, so an ABSENT viewCount (Plex omits it at 0) is 0 = unwatched, not watched.
+    """
     mc = _container(f"/library/metadata/{show_rating_key}/allLeaves", token)
     eps = []
     for e in mc.get("Metadata", []):
@@ -249,6 +263,8 @@ def show_episodes(show_rating_key, token=None):
             "season": e.get("parentIndex"),
             "episode": e.get("index"),
             "duration": e.get("duration"),
+            "viewCount": _int0(e.get("viewCount")),
+            "viewOffset": _int0(e.get("viewOffset")),
         })
     return eps
 
@@ -453,16 +469,39 @@ def unwatched_by_show(set_name):
 # --------------------------------------------------------------------------- #
 # Episode-selection helpers (shared by the curated queues + the kid rotations)
 # --------------------------------------------------------------------------- #
-def _keep_episode(ep, cfg):
+def _has_real_seasons(all_eps):
+    """True if a show has any NON-special season (>= 1).
+
+    A show whose only leaves are Season 0 is a pure OAD / film-scanned-as-single-episode
+    series (e.g. "Prison School: Mad Wax") — its "special" IS the whole show. Such a show has
+    NO real seasons, so the queue path must NOT drop its sole leaf as a front-loading special
+    (that mis-marked it finished and stuck it `done: true` while the owner was mid-episode).
+    """
+    return any(str(e.get("season")) not in ("0", "None", "") for e in all_eps)
+
+
+def _in_progress(view_offset, view_count):
+    """True if a leaf/item is RESUMABLE: started (viewOffset > 0) and NOT finished.
+
+    "Not finished" is viewCount < 1 — and because Plex OMITS viewCount at 0, a MISSING/None
+    viewCount counts as 0 here (via _int0), so a partial view is never mistaken for watched.
+    This is the single predicate behind resume + the "don't mark an in-progress item done" fix.
+    """
+    return (_int0(view_offset) > 0) and (_int0(view_count) < 1)
+
+
+def _keep_episode(ep, cfg, specials_ok=False):
     """Filter out specials and unplayable items.
 
     * Specials (Season 0) are excluded ENTIRELY by default: Plex sorts Season 0 ahead of
       Season 1, so an unwatched special would front-load a series and it would "open on a
       special" — which the user explicitly does not want (decision 2026-07-17). Real seasons
-      (>=1) are always kept. A set may opt back in with `include_specials: True`.
+      (>=1) are always kept. A set may opt back in with `include_specials: True`, and the
+      queue path passes `specials_ok=True` for a show that has NO real seasons (a pure OAD /
+      film-as-series) so its sole Season-0 leaf stays playable instead of vanishing.
     * Drop zero-/missing-duration entries (script text, CM stubs — nothing to cast).
     """
-    if not cfg.get("include_specials") and str(ep.get("season")) == "0":
+    if not cfg.get("include_specials") and not specials_ok and str(ep.get("season")) == "0":
         return False
     if not ep.get("duration"):
         return False
@@ -709,12 +748,6 @@ def item_view_state(rating_key, token=None):
     view state, so a queue set sees ITS profile's resume point (admin/Bob for the people
     queues). (0, 0) on any miss (dead id, network hiccup) so the caller just starts at 0.
     """
-    def _int(v):
-        try:
-            return int(v)
-        except (TypeError, ValueError):
-            return 0
-
     try:
         mc = _container(f"/library/metadata/{rating_key}", token)
     except Exception:  # noqa: BLE001 — bad/removed id or network hiccup: no resume point
@@ -722,24 +755,36 @@ def item_view_state(rating_key, token=None):
     md = mc.get("Metadata", [])
     if not md:
         return (0, 0)
-    return (_int(md[0].get("viewOffset")), _int(md[0].get("viewCount")))
+    return (_int0(md[0].get("viewOffset")), _int0(md[0].get("viewCount")))
 
 
-def resume_offset(rating_key, watched, token=None):
+def resume_offset(rating_key, watched=None, token=None):
     """Milliseconds to resume `rating_key` at — its Plex viewOffset when IN-PROGRESS, else 0.
 
-    In-progress = a partial view (viewOffset > 0) that is NOT finished: not in this set's
-    `watched` history and viewCount 0. A finished item (watched, or counted) or a fresh one
-    (no offset) returns 0, so it plays from the top — exactly today's behavior. This is what
-    lets a QUEUED item that was started but not finished pick up where it left off on the next
-    scan instead of restarting (decision 2026-07-16-movie-queue-sets-yaml-wishlist: the user
-    chose "resume partially-watched"). Queue sets only — callers on the rotation / reel /
-    general-playback paths never invoke this, leaving their from-the-top behavior untouched.
+    Live view-state is AUTHORITATIVE: resumable = viewOffset > 0 AND viewCount < 1 (a missing
+    viewCount is 0, so a partial view is never "watched"). A finished item (viewCount >= 1) or
+    a fresh one (no offset) returns 0, so it plays from the top. This is what lets a QUEUED
+    item that was started but not finished pick up where it left off on the next scan instead
+    of restarting (decision 2026-07-16-movie-queue-sets-yaml-wishlist: "resume
+    partially-watched"). `watched` (the set's history) is accepted for call-site compatibility
+    but deliberately NOT consulted — a history row must never override a live in-progress
+    state (that mismatch is exactly what wrongly marked an OAD finished). Queue sets only —
+    the rotation / reel / general-playback paths never call this, so they are untouched.
     """
-    if str(rating_key) in watched:
-        return 0
     offset, count = item_view_state(rating_key, token=token)
-    return offset if offset > 0 and not count else 0
+    return offset if _in_progress(offset, count) else 0
+
+
+def _head_resume_offset(item, token=None):
+    """Resume offset (ms) for a resolved play ITEM, reusing its live state when present.
+
+    A show leaf already carries `viewOffset`/`viewCount` (show_episodes) — use them directly,
+    no refetch. A movie / collection-member item carries none, so fall back to resume_offset's
+    metadata read. 0 whenever the head is finished or fresh (plays from the top)."""
+    if item.get("viewOffset") is not None:
+        return item["viewOffset"] if _in_progress(item.get("viewOffset"),
+                                                   item.get("viewCount")) else 0
+    return resume_offset(item["ratingKey"], token=token)
 
 
 def _match_guid_hint(hint, guids):
@@ -914,7 +959,7 @@ def _start_member_index(children, start):
     return -1
 
 
-def collection_items(cfg, name, watched, token=None, start=None):
+def collection_items(cfg, name, watched, token=None, start=None, resume=False):
     """Ordered playable items for a `Collection: <name>` entry, across the set's sections.
 
     Returns (in collection order):
@@ -952,11 +997,17 @@ def collection_items(cfg, name, watched, token=None, start=None):
         if ch.get("type") == "show":
             # The episode floor applies only to the member the start names, not to later ones.
             ep_start = start if i == floor_at else None
-            items.extend(e for e in show_episodes(rk, token=token)
-                         if e["ratingKey"] not in watched and _keep_episode(e, cfg)
-                         and _at_or_after_start(e, ep_start))
+            child_eps = show_episodes(rk, token=token)
+            specials_ok = resume and not _has_real_seasons(child_eps)
+            items.extend(
+                e for e in child_eps
+                if (e["ratingKey"] not in watched
+                    or (resume and _in_progress(e.get("viewOffset"), e.get("viewCount"))))
+                and _keep_episode(e, cfg, specials_ok=specials_ok)
+                and _at_or_after_start(e, ep_start))
         else:  # movie / episode / clip / standalone item
-            if rk in watched:
+            # A watched member drops out — unless (resume path) it is actually in-progress.
+            if rk in watched and not (resume and _in_progress(*item_view_state(rk, token=token))):
                 continue
             items.append({"ratingKey": rk, "title": ch.get("title"),
                           "show": ch.get("grandparentTitle") or name,
@@ -965,7 +1016,7 @@ def collection_items(cfg, name, watched, token=None, start=None):
     return items
 
 
-def resolve_member(desc, cfg, watched, token=None, default_batch=None):
+def resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=False):
     """Resolve ONE member descriptor (queues._describe shape) into a play batch.
 
     THE shared per-type dispatch (v3 PR 3): both a curated set's queues.yaml entries and a
@@ -982,10 +1033,17 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None):
     Returns None when the descriptor is UNRESOLVED (dead ratingKey, unmatched title, missing
     collection); otherwise {"title", "type", "ratingKey"?, "items": [...]} — empty `items`
     means FINISHED (everything already watched).
+
+    `resume` (queue path only) makes finished-detection IN-PROGRESS-AWARE: a leaf/movie that
+    is partially watched (viewOffset > 0, viewCount < 1) is KEPT even when history counts it
+    watched, and a specials-only show keeps its sole Season-0 leaf — so a started-but-unfinished
+    item is never mistaken for finished. The rotation/reel callers leave `resume` False and are
+    unchanged.
     """
     if desc.get("collection"):
         name = desc["collection"]
-        items = collection_items(cfg, name, watched, token=token, start=desc.get("start"))
+        items = collection_items(cfg, name, watched, token=token, start=desc.get("start"),
+                                 resume=resume)
         if items is None:
             return None
         return {"title": f"Collection: {name}", "type": "collection", "items": items}
@@ -993,16 +1051,27 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None):
     if typ is None:
         return None
     if typ == "movie":
-        # Padded to the episode-item shape (show/season None) so bucket/preview consumers
-        # can read the same keys off every item kind.
-        items = ([] if rk in watched else
-                 [{"title": title, "ratingKey": rk, "show": None,
-                   "season": None, "episode": None}])
+        # A watched movie is dropped — UNLESS (resume path) it is actually in-progress, in
+        # which case it stays so it can be resumed. Padded to the episode-item shape so
+        # bucket/preview consumers read the same keys off every item kind.
+        keep_movie = rk not in watched
+        if not keep_movie and resume:
+            off, cnt = item_view_state(rk, token=token)
+            keep_movie = _in_progress(off, cnt)
+        items = ([{"title": title, "ratingKey": rk, "show": None,
+                   "season": None, "episode": None}] if keep_movie else [])
         return {"title": title, "type": "movie", "ratingKey": rk, "items": items}
     all_eps = show_episodes(rk, token=token)
     start = desc.get("start")
+    # A pure OAD / film-as-series has no real seasons; on the queue path keep its Season-0
+    # leaf playable (specials_ok) instead of dropping it and calling the show "finished".
+    specials_ok = resume and not _has_real_seasons(all_eps)
     eps = [e for e in all_eps
-           if e["ratingKey"] not in watched and _keep_episode(e, cfg)
+           # keep an episode that is unwatched, OR (resume path) one that is IN-PROGRESS even
+           # if history flagged it watched — a partial view must never be treated as done.
+           if (e["ratingKey"] not in watched
+               or (resume and _in_progress(e.get("viewOffset"), e.get("viewCount"))))
+           and _keep_episode(e, cfg, specials_ok=specials_ok)
            and _at_or_after_start(e, start)]
     # Per-show batch: the entry's `episodes:` override, else the caller's default, clamped
     # to the hard cap so a bad value can't queue the whole series. No batch at all (a
@@ -1129,16 +1198,31 @@ def next_queue(set_name, rng=None):
     tok = account_token(cfg.get("user_uuid"))    # None => admin PLEX_TOKEN (Bob)
     watched = _watched_for_set(cfg)              # this set's own accounts, over its section
 
-    newly_done, done_flagged, unresolved = [], [], []
+    newly_done, done_flagged, unresolved, revived = [], [], [], []
     remaining = 0                                # not-done entries still active
     batches = []                                 # one not-finished entry each, file order
     for desc in descs:
-        if desc.get("done"):                     # already finished + kept: never replay
-            done_flagged.append(desc.get("title") or desc.get("ratingKey") or desc["key"])
+        # Resolve every entry IN-PROGRESS-AWARE (resume=True) — including ones flagged done, so
+        # a stale `done: true` can be caught. A partial view is never treated as watched/done.
+        res = resolve_member(desc, cfg, watched, token=tok,
+                             default_batch=config.QUEUE_SERIES_DEFAULT, resume=True)
+        if desc.get("done"):
+            # Stale-done recovery: an entry flagged done whose live Plex state is actually
+            # IN-PROGRESS (viewOffset > 0, viewCount 0/None) was mis-marked — the Prison School
+            # OAD is the case: a 1-leaf Season-0 special _keep_episode used to drop, so it read
+            # "finished" while the owner was mid-episode. Honor live state over the persisted
+            # flag: revive it, play/resume it, and clear the stale `done`/`done_at` (below) so it
+            # is not skipped or TTL-swept. A genuinely finished entry has no in-progress item, so
+            # it stays done + skipped, exactly as before.
+            head = res["items"][0] if res and res.get("items") else None
+            if head and _head_resume_offset(head, token=tok) > 0:
+                revived.append(desc["key"])
+                remaining += 1
+                batches.append({"title": res["title"], "type": res["type"], "items": res["items"]})
+            else:
+                done_flagged.append(desc.get("title") or desc.get("ratingKey") or desc["key"])
             continue
         remaining += 1
-        res = resolve_member(desc, cfg, watched, token=tok,
-                             default_batch=config.QUEUE_SERIES_DEFAULT)
         if res is None:
             # Show the human's own text (or the ratingKey) so the flag is legible.
             unresolved.append(f"Collection: {desc['collection']}" if desc.get("collection")
@@ -1150,26 +1234,47 @@ def next_queue(set_name, rng=None):
             continue
         batches.append({"title": res["title"], "type": res["type"], "items": res["items"]})
 
+    def _batch_leads_in_progress(b):
+        # A show batch's items carry live per-leaf viewOffset/viewCount (show_episodes), so an
+        # in-progress head is free to detect. Movie/collection-movie items don't, and read as
+        # not-in-progress here (their resume still works if they happen to lead) — good enough
+        # to hoist a resumable series to the front of a shuffled channel.
+        it = b["items"][0] if b["items"] else None
+        return bool(it and _in_progress(it.get("viewOffset"), it.get("viewCount")))
+
     if cfg.get("kind") == "anime":
-        rng.shuffle(batches)                     # channel: member order is irrelevant
+        # Channel: member order is irrelevant AND shuffled — but an in-progress member must
+        # still LEAD so it actually resumes (the Prison School OAD), not land mid-shuffle where
+        # only the head resumes. Hoist in-progress batches to the front (file order among them),
+        # shuffle the rest.
+        lead = [b for b in batches if _batch_leads_in_progress(b)]
+        rest = [b for b in batches if not _batch_leads_in_progress(b)]
+        rng.shuffle(rest)
+        ordered = lead + rest
         play_items = []
-        for b in batches:
+        for b in ordered:
             play_items.extend(b["items"][:config.ROTATION_LENGTH - len(play_items)])
             if len(play_items) >= config.ROTATION_LENGTH:
                 break
+        lead_batch = ordered[0] if ordered else None
     else:
         play_items = batches[0]["items"] if batches else []
-    last = ({"title": batches[0]["title"], "type": batches[0]["type"],
+        lead_batch = batches[0] if batches else None
+    last = ({"title": lead_batch["title"], "type": lead_batch["type"],
              "ratingKey": play_items[0]["ratingKey"]} if play_items else None)
 
     # Resume-in-queue: if the item leading this scan was STARTED but not finished, pick up at
-    # its Plex viewOffset rather than restarting at 0. It is already the in-progress item — a
-    # partial view never lands in `watched` history, so selection stopped on it instead of
-    # advancing — so we only recover its offset here and thread it out to playback. A finished
-    # item is watched (already advanced past) and a fresh one has no offset, so both stay 0
-    # (see resume_offset). A finished item still advances exactly as before.
-    offset = resume_offset(play_items[0]["ratingKey"], watched, token=tok) if play_items else 0
+    # its Plex viewOffset rather than restarting at 0. For a show leaf the live per-leaf state
+    # is already in hand (no refetch); a movie/collection item has none attached, so fall back
+    # to a metadata read (resume_offset). A finished/fresh head yields 0, so it plays from the
+    # top — a finished item still advances exactly as before.
+    offset = _head_resume_offset(play_items[0], token=tok) if play_items else 0
 
+    # Un-stick any entry we revived above: clear its stale `done`/`done_at` so it stops being
+    # skipped AND is no longer eligible for the TTL sweep below. Done BEFORE mark_done/sweep so
+    # live state wins the same scan (a re-marked-then-cleared race can't strand it).
+    if revived:
+        queues.clear_done(set_name, revived)
     # A keep_completed (non-consuming / playlist) set — `reel` implies it — NEVER marks its
     # entries done, so the owner can re-show the whole lineup every scan. No done_at/`done`
     # is ever written, so it is inherently exempt from any finished-entry sweep.

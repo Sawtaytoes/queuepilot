@@ -34,6 +34,10 @@ export type NextEp = {
   kind?: "show" | "movie"
   /** Which member the stored start point named — may be earlier than `member`. */
   startMember?: string
+  /** This next-up leaf has a Plex viewOffset (started, unwatched) — mid-episode resume. */
+  partiallyWatched?: boolean
+  /** The leaf's resume offset in ms (0 when not started). */
+  viewOffset?: number
 }
 
 export type EntryType = "show" | "movie" | "collection" | null
@@ -52,6 +56,12 @@ export type QueueItem = {
   episodes: number
   start: StartPoint | null
   done: boolean
+  /**
+   * The next-up episode (or the movie itself) is mid-playback: a Plex viewOffset > 0 and
+   * unwatched, the same in-progress state the engine resumes from. Drives the tile's
+   * "In Progress" badge, which reads over a stale "Completed".
+   */
+  partiallyWatched?: boolean
   /**
    * True while this item came from the SKELETON response (`GET /api/shelves`) and
    * `/api/queues` has not landed yet. The tile renders at final geometry with a

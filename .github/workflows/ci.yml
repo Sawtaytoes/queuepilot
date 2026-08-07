@@ -89,13 +89,15 @@ jobs:
 
       # Engine unit tests that stub Plex entirely (no token, no network) — the collection
       # START floor (skip earlier members, floor the named one), the §B.3 completed-entry TTL
-      # sweep (done_at stamp + auto-remove), and resume-in-queue (a started-but-unfinished
-      # queued item resumes at its viewOffset, threaded to playMedia).
+      # sweep (done_at stamp + auto-remove), resume-in-queue (a started-but-unfinished queued
+      # item resumes at its viewOffset, threaded to playMedia), and in-progress-not-done (a
+      # started OAD/special is never marked/kept done, and a stale done flag is revived).
       - name: Python engine tests
         run: |
           python3 e2e/collection-start-test.py
           python3 e2e/ttl-remove-completed-test.py
           python3 e2e/resume-in-queue-test.py
+          python3 e2e/resume-in-progress-done-test.py
           python3 e2e/keep-completed-test.py
 
       # Browserless e2e — self-contained: each spawns its own server on a private
