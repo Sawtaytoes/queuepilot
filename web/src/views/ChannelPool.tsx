@@ -270,6 +270,10 @@ export function ChannelPool({
     }
 
     return {
+      // The active binding's Plex Home uuid scopes the picker's "watched" marks to THIS
+      // channel's profile (e.g. Older Kids), matching the engine's per-account pool — the
+      // editor otherwise reads the admin account's history.
+      accountUuid: activeBinding(channel, currentProfile).user_uuid,
       item,
       refresh: () => onChanged(),
       save: (s) => saveStart(b.ratingKey, s),

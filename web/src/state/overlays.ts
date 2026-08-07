@@ -23,6 +23,10 @@ export type EntryActions = {
   refresh: () => void
   remove?: () => void
   removeLabel?: string
+  /** A Plex Home profile's `user_uuid`, set for a per-profile channel so the start
+   * picker scopes its "watched" marks to THAT profile (not the admin account). Omitted
+   * for queues/admin, which read Bob's view. */
+  accountUuid?: string | null
 }
 
 export type PlayMenuTarget = {

@@ -598,7 +598,15 @@ app.patch('/api/queues/:set/items/:key/episodes', async (req, res) => {
 // PICKED (season + real episode title) instead of typed blind into a tiny number box.
 app.get('/api/show/:ratingKey/episodes', async (req, res) => {
   try {
-    const out = await plex.showEpisodes(req.params.ratingKey);
+    // `uuid` (a Plex Home profile's user_uuid) scopes the `watched` marks to that profile, so
+    // a per-profile channel's start editor reflects that profile's history, not the admin's.
+    // Absent (queues/members/admin) => admin token, unchanged. A mint failure degrades to admin.
+    const uuidQ = String(req.query.uuid || '').trim();
+    let token = null;
+    if (uuidQ) {
+      try { token = await plex.accountToken(uuidQ); } catch { token = null; }
+    }
+    const out = await plex.showEpisodes(req.params.ratingKey, token);
     if (!out) return res.status(404).json({ error: 'no episodes' });
     res.json(out);
   } catch (e) {

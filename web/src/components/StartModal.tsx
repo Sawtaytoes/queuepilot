@@ -71,8 +71,13 @@ export function StartModal() {
 
       let data: ShowEpisodes | null = null
 
+      // A per-profile channel passes the binding's `user_uuid` so the "watched" marks
+      // reflect THAT profile's history, not the admin account's (queues/admin omit it).
+      const uuid = entry?.accountUuid
+      const q = uuid ? `?uuid=${encodeURIComponent(uuid)}` : ""
+
       try {
-        data = await api<ShowEpisodes>("GET", `/api/show/${ratingKey}/episodes`)
+        data = await api<ShowEpisodes>("GET", `/api/show/${ratingKey}/episodes${q}`)
       }
       catch {
         /* handled below */
@@ -97,7 +102,9 @@ export function StartModal() {
       setSeasonValue(season)
       setEpisodeValue(episode)
     },
-    [],
+    // Re-close over the profile uuid when it changes (once per open) so the fetch scopes
+    // its watched marks to the right account.
+    [entry?.accountUuid],
   )
 
   /** A collection member: a series opens its pickers, a movie member has nothing
