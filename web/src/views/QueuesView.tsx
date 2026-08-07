@@ -188,18 +188,32 @@ function Shelf({
                     badges={
                       <>
                         <TypeBadge face={face} item={item} />
-                        {item.done
+                        {/* "In Progress" wins over "Completed": a mid-episode resume point
+                            (Plex viewOffset, unwatched) means the item is being watched, not
+                            finished — the Prison School OAD case must never read "Completed". */}
+                        {item.partiallyWatched
                           ? (
                               <Badge
                                 appearance="outline"
-                                className="badge donebadge"
-                                intent="neutral"
+                                className="badge progressbadge"
+                                intent="accent"
                                 size="sm"
                               >
-                                Completed
+                                In Progress
                               </Badge>
                             )
-                          : null}
+                          : item.done
+                            ? (
+                                <Badge
+                                  appearance="outline"
+                                  className="badge donebadge"
+                                  intent="neutral"
+                                  size="sm"
+                                >
+                                  Completed
+                                </Badge>
+                              )
+                            : null}
                         {/* Solid, not outline: this one has to win against the
                             type and Completed chips beside it. Green rather than
                             amber so it never reads as the selection outline. */}

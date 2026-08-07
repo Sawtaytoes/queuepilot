@@ -43,6 +43,17 @@ export async function resolveTile(sections, value, start = null) {
     }
   }
 
+  // "In Progress" = the item is mid-playback at a resume point (a Plex viewOffset) and NOT
+  // watched — the exact state the engine's resume_offset picks up. Per-EPISODE, not
+  // "partway through a series": a MOVIE reads its own viewOffset; a SHOW/COLLECTION reads it
+  // off the next-up leaf (nextEpisode/collectionNext). It must win over a stale "Completed".
+  let partiallyWatched = false;
+  if (resolved && resolved.type === 'movie') {
+    partiallyWatched = Number(resolved.viewOffset) > 0 && !(Number(resolved.viewCount) > 0);
+  } else if (nextEp && nextEp.partiallyWatched) {
+    partiallyWatched = true;
+  }
+
   return {
     resolved: Boolean(resolved),
     ratingKey: resolved ? resolved.ratingKey : null,
@@ -51,6 +62,7 @@ export async function resolveTile(sections, value, start = null) {
     year: resolved ? resolved.year : null,
     childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
     nextEp,
+    partiallyWatched,
   };
 }
 

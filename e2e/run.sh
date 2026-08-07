@@ -20,6 +20,8 @@ echo "=== collection-start-test (python, offline) ==="   # engine floor for coll
 python3 e2e/collection-start-test.py || TOTAL=$((TOTAL+1))
 echo "=== resume-in-queue-test (python, offline) ==="   # resume a started-but-unfinished queued item
 python3 e2e/resume-in-queue-test.py || TOTAL=$((TOTAL+1))
+echo "=== resume-in-progress-done-test (python, offline) ==="   # in-progress OAD never reads finished/done
+python3 e2e/resume-in-progress-done-test.py || TOTAL=$((TOTAL+1))
 echo "=== history-persist-test ==="   # manages its own server (port 18770) + files
 node e2e/history-persist-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)
