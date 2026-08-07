@@ -138,7 +138,7 @@ def create_play_queue(rating_keys, token=None, continuous=True):
     return mc.get("playQueueID")
 
 
-def cast_play(rating_keys, set_name=None, cast_name=None):
+def cast_play(rating_keys, set_name=None, cast_name=None, offset=0):
     """Deterministic per-account playback: Plex Cast to the Shield AS the account token.
 
     Launches the Plex Cast receiver on the Shield's Google-Cast interface and hands it a
@@ -146,6 +146,11 @@ def cast_play(rating_keys, set_name=None, cast_name=None):
     THAT token, so the watch records on the correct account (Kids / Alice) regardless of
     which user the Shield's Plex app is signed into. Deps (plexapi, pychromecast) are
     imported lazily so the module still loads without them.
+
+    `offset` (ms) resumes the FIRST item mid-way — non-zero only for a started-but-unfinished
+    curated-queue lead. The Cast receiver has no start-offset arg on block_until_playing (the
+    2026-07-16 decision flagged this to verify), so we seek AFTER it reports playing;
+    best-effort and guarded, since it needs the physical TV to confirm.
 
     Must run on the LAN with the Shield awake (Cast advertises on 8009). Degrades to an
     error dict if the cast device isn't found.
@@ -193,6 +198,15 @@ def cast_play(rating_keys, set_name=None, cast_name=None):
         pc.block_until_playing(pq)
         result["played"] = True
         result["playQueueID"] = pq.playQueueID
+        # Resume-in-queue: the receiver started the lead item at 0, so seek it to the resume
+        # point once it is actually playing. Best-effort — a seek failure must not undo an
+        # otherwise-successful cast — and unverifiable without the TV (see the docstring).
+        if offset and offset > 0:
+            try:
+                pc.seek(offset / 1000.0)  # PlexController.seek takes SECONDS
+                result["resumeOffsetMs"] = int(offset)
+            except Exception as e:  # noqa: BLE001 — played fine; resume seek is a bonus
+                result["resumeSeekError"] = f"{type(e).__name__}: {e}"
         # KEEP the connection + discovery browser alive — the Plex receiver stops the moment
         # the sender disconnects, so hold refs at module scope until the next cast replaces them.
         _ACTIVE.update({"cast": cast, "browser": browser, "controller": pc})
@@ -251,7 +265,7 @@ def _apply_audio_language(rating_keys, token, lang):
             continue
 
 
-def play_rating_keys(rating_keys, set_name=None, device=None):
+def play_rating_keys(rating_keys, set_name=None, device=None, offset=0):
     """Play the queue on the target player. Dispatches on the device's mode (a registry
     entry passed via the start command's `target`), else config.PLAYBACK_MODE on the
     env-default Shield.
@@ -262,6 +276,11 @@ def play_rating_keys(rating_keys, set_name=None, device=None):
     the queue id + first item so the caller can publish last-played and surface the state.
     If the set carries an `audio_language`, the matching audio stream is selected on each item
     first (best-effort, both paths — see _apply_audio_language).
+
+    `offset` (ms) is the resume point for the FIRST queued item — non-zero only for a curated
+    queue whose lead item was started but not finished (plex.resume_offset). It maps onto
+    Companion's `offset` on the client path and a post-start seek on the cast path; 0 (every
+    other caller) plays from the top, unchanged.
     """
     cfg = config.SETS.get(set_name or "") or {}
     lang = cfg.get("audio_language")
@@ -272,7 +291,8 @@ def play_rating_keys(rating_keys, set_name=None, device=None):
             print(f"[audio] language '{lang}' not applied: {e}", flush=True)
     mode = (device or {}).get("mode") or config.PLAYBACK_MODE
     if mode == "cast":
-        return cast_play(rating_keys, set_name, cast_name=(device or {}).get("name"))
+        return cast_play(rating_keys, set_name, cast_name=(device or {}).get("name"),
+                         offset=offset)
 
     result = {"queued": len(rating_keys), "played": False, "mode": "client", "client": None}
     tok = _play_token(set_name)
@@ -292,7 +312,9 @@ def play_rating_keys(rating_keys, set_name=None, device=None):
     first = rating_keys[0]
     params = urllib.parse.urlencode({
         "key": f"/library/metadata/{first}",
-        "offset": 0,
+        # Resume point (ms) for the first item — non-zero only for a started-but-unfinished
+        # curated-queue lead (plex.resume_offset); 0 for everything else, i.e. play from 0.
+        "offset": int(offset or 0),
         "machineIdentifier": plex.machine_identifier(),
         # Where the Shield should stream FROM — it can't infer this when we bypass the
         # server's relay, so hand it the LAN address explicitly.
