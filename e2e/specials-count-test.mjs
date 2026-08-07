@@ -44,6 +44,13 @@ ok('a normal S1 episode is NOT an extra', isExtraOrPromo(s1('11', 1, false)) ===
 // The index rule fires ONLY on Season 0: a Season-1 episode 301 (a long-running show) is safe.
 ok('a Season-1 episode 301 is NOT dropped', isCountableEpisode({ parentIndex: 1, index: 301, title: 'Ep 301', duration: DUR }) === true);
 
+// A specials-only show (an OAD with no real season, e.g. "Prison School: Mad Wax") must still be
+// listable: showEpisodes passes includeSpecials when there are no real seasons, so a regular
+// Season-0 special is kept — but an OP/ED stays dropped; and a normal show still skips Season 0.
+ok('specials-only: S0 special (idx 1) IS playable when includeSpecials', isPlayableEpisode(s0('oad', 1, 'OAD'), { includeSpecials: true }) === true);
+ok('specials-only: S0 OP/ED (idx 301) still dropped even with includeSpecials', isPlayableEpisode(s0('ed', 301, 'Kokoro'), { includeSpecials: true }) === false);
+ok('normal show: S0 special (idx 1) dropped by default', isPlayableEpisode(s0('sp', 1, 'OVA')) === false);
+
 // A show: 3 normal S1 (two watched) + special(s0e1) + other(s0e401) + an OP/ED(s0e301) + trailer(s0e201).
 const showEps = [
   s1('11', 1, true), s1('12', 2, false), s1('13', 3, true),
