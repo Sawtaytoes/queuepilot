@@ -103,7 +103,7 @@ function Shelf({
       <h2>
         <button
           aria-label="collapse queue"
-          className="collapse"
+          className="collapse-toggle"
           onClick={() => toggleCollapsed(setId)}
           type="button"
         >

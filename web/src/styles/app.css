@@ -262,12 +262,15 @@ button.ghost:hover { border-color: var(--color-intent-accent-solid); }
   content-visibility: auto;
 }
 .shelf h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 2px; }
-.shelf .collapse {
+/* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
+   Tailwind v4 scans source for class tokens it emits that utility the moment the
+   word appears, hiding this very button. `-toggle` keeps us off the reserved name. */
+.shelf .collapse-toggle {
   background: none; border: none; color: var(--color-content-muted); font-size: 0.95rem;
   padding: 4px 6px; line-height: 1; cursor: pointer; transition: transform 0.15s, color 0.15s;
 }
-.shelf .collapse:hover { color: var(--color-intent-accent-solid); }
-.shelf.collapsed .collapse { transform: rotate(-90deg); }   /* ▾ down (open) → ► right (collapsed) */
+.shelf .collapse-toggle:hover { color: var(--color-intent-accent-solid); }
+.shelf.collapsed .collapse-toggle { transform: rotate(-90deg); }   /* ▾ down (open) → ► right (collapsed) */
 .shelf.collapsed { margin-bottom: 12px; }
 .shelf.collapsed .strip-wrap { display: none; }
 .shelf h2 .open {
