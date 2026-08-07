@@ -97,6 +97,7 @@ jobs:
           python3 e2e/ttl-remove-completed-test.py
           python3 e2e/resume-in-queue-test.py
           python3 e2e/keep-completed-test.py
+          python3 e2e/specials-count-test.py
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
@@ -107,6 +108,7 @@ jobs:
           node e2e/api-v2-test.mjs
           node e2e/sse-resync-test.mjs
           node e2e/ttl-sweep-test.mjs
+          node e2e/specials-count-test.mjs
 
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # `require('playwright')` and drive a Chromium browser, and the shared
