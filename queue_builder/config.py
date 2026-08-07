@@ -333,11 +333,11 @@ def _load_sets_yaml():
         cfg["label"] = ent.get("label") or sid
         cfg["kind"] = ent.get("kind")
         cfg["enabled"] = ent.get("enabled", True)
-        # §B.3 TTL auto-remove of completed entries: a per-set override of the global
-        # REMOVE_COMPLETED_AFTER window (a duration string like "24h"/"7d"/"90m", or
-        # "0"/"never" to disable), plus the keep_completed exemption (a set that keeps its
-        # finished entries forever). Both are passed straight through to the cfg;
-        # queues.sweep_completed interprets them (a `reel` set is exempt structurally).
+        # §B.3 TTL auto-remove of completed entries: how a set OPTS IN to auto-removal (the
+        # global default is keep-forever). A duration string like "24h"/"7d"/"90m" turns it on;
+        # "0"/"never"/absent keeps finished entries forever. `keep_completed` is the explicit
+        # exemption flag (a set that keeps them forever regardless). Both pass straight through
+        # to the cfg; queues.sweep_completed interprets them (a `reel` set is exempt too).
         if ent.get("remove_completed_after") is not None:
             cfg["remove_completed_after"] = str(ent.get("remove_completed_after")).strip()
         if ent.get("keep_completed"):
@@ -416,11 +416,15 @@ QUEUE_SERIES_LENGTH = int(os.environ.get("QUEUE_SERIES_LENGTH", "40"))
 # --- Completed-entry TTL (§B.3) ------------------------------------------------ #
 # Finished queue entries are kept + tagged `done: true`/`done_at:<epoch>` (queues.mark_done)
 # instead of being pruned (decision 2026-07-21-finished-queue-entries-marked-done-not-pruned).
-# This is the GLOBAL default window after which a done entry is auto-removed on the next scan;
-# a set may override it with `remove_completed_after` in sets.yaml, and `keep_completed: true`
-# or `reel: true` exempts a set entirely. A duration string ("24h"/"7d"/"90m"); "0"/"never"
-# disables auto-removal fleet-wide. Parsed by queues.parse_duration.
-REMOVE_COMPLETED_AFTER = os.environ.get("REMOVE_COMPLETED_AFTER", "24h")
+# Auto-removal is OPT-IN, off by default: a set KEEPS its finished entries forever (today's
+# behavior) unless it sets `remove_completed_after` in sets.yaml. That default matters — the
+# owner does NOT want anime completed-entries auto-removed (no "Season 2": the finished series
+# is the anchor a hand-added sequel lands next to), so a movie queue opts in with
+# `remove_completed_after: 24h` while anime channels stay on this keep-forever default.
+# This GLOBAL fallback applies only to a set with no `remove_completed_after` key; a duration
+# string ("24h"/"7d"/"90m") would turn removal on fleet-wide, "0"/"never" keeps it off. Parsed
+# by queues.parse_duration; also `keep_completed: true` / `reel: true` exempt a set entirely.
+REMOVE_COMPLETED_AFTER = os.environ.get("REMOVE_COMPLETED_AFTER", "never")
 
 def set_sections(cfg):
     """All library sections a set draws from (episodic + item)."""

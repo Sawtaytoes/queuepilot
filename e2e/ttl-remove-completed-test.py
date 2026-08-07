@@ -28,7 +28,7 @@ def ok(name, cond):
 
 TMP = tempfile.mkdtemp(prefix="ttl-test-")
 config.QUEUES_PATH = os.path.join(TMP, "queues.yaml")
-config.REMOVE_COMPLETED_AFTER = "24h"          # global default the sweep falls back to
+config.REMOVE_COMPLETED_AFTER = "never"        # global default: keep forever (opt-in per set)
 
 
 def write(text):
@@ -89,7 +89,7 @@ ok("un-marked entry stays not-done", bool(bebop) and not bebop.get("done"))
 ok("un-marked entry got no done_at", raw_done_at(bebop) is None)
 
 
-# --- sweep removes ONLY past-TTL done entries --------------------------------- #
+# --- sweep removes ONLY past-TTL done entries (opt-in via remove_completed_after) --- #
 NOW = 1_000_000_000
 OLD = NOW - 100_000          # ~27.7h ago: past a 24h TTL
 RECENT = NOW - 60            # a minute ago: within 24h
@@ -101,13 +101,21 @@ SWEEP_FIXTURE = (
     '  - "Active Movie"\n'
 ) % (OLD, RECENT)
 
+# Default (no remove_completed_after key + global default "never") = KEEP FOREVER: today's
+# behavior, so anime channels are never surprise-swept. Nothing is removed.
 write(SWEEP_FIXTURE)
-removed = queues.sweep_completed("bob", {}, now=NOW)     # cfg {} -> global 24h default
-ok("sweep reported a removal", removed is True)
-ok("sweep removed the past-TTL done entry", "title:Old Done" not in keys())
-ok("sweep kept the recent done entry", "title:Recent Done" in keys())
-ok("sweep kept the timestamp-less done entry", "title:Legacy Done" in keys())
-ok("sweep kept the active (not-done) entry", "title:Active Movie" in keys())
+removed = queues.sweep_completed("bob", {}, now=NOW)     # cfg {} -> global default (never)
+ok("default (no key) keeps everything — no sweep", removed is False)
+ok("default: past-TTL done entry survives", "title:Old Done" in keys())
+
+# A set OPTS IN with an explicit window; then only past-TTL done entries go.
+write(SWEEP_FIXTURE)
+removed = queues.sweep_completed("bob", {"remove_completed_after": "24h"}, now=NOW)
+ok("opt-in 24h reported a removal", removed is True)
+ok("opt-in removed the past-TTL done entry", "title:Old Done" not in keys())
+ok("opt-in kept the recent done entry", "title:Recent Done" in keys())
+ok("opt-in kept the timestamp-less done entry", "title:Legacy Done" in keys())
+ok("opt-in kept the active (not-done) entry", "title:Active Movie" in keys())
 
 
 # --- never / 0 disables the sweep --------------------------------------------- #
@@ -122,14 +130,16 @@ ok("remove_completed_after=0 disables the sweep", removed is False)
 ok("0: past-TTL done entry survives", "title:Old Done" in keys())
 
 
-# --- keep_completed / reel exempt the whole set ------------------------------- #
+# --- keep_completed / reel exempt the whole set (even with a window set) ------- #
+# An explicit 24h window would otherwise sweep Old Done — the exemption is the ONLY reason
+# nothing goes.
 write(SWEEP_FIXTURE)
-removed = queues.sweep_completed("bob", {"keep_completed": True}, now=NOW)
+removed = queues.sweep_completed("bob", {"keep_completed": True, "remove_completed_after": "24h"}, now=NOW)
 ok("keep_completed exempts the set", removed is False)
 ok("keep_completed: past-TTL done entry survives", "title:Old Done" in keys())
 
 write(SWEEP_FIXTURE)
-removed = queues.sweep_completed("bob", {"reel": True}, now=NOW)
+removed = queues.sweep_completed("bob", {"reel": True, "remove_completed_after": "24h"}, now=NOW)
 ok("reel exempts the set", removed is False)
 ok("reel: past-TTL done entry survives", "title:Old Done" in keys())
 

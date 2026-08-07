@@ -80,6 +80,13 @@ const DEFAULT_YAML = `# plex-channels set registry — the single source of trut
 #   * source  queue    = hand-curated wishlist in queues.yaml (orderable, prunes as watched)
 #             rotation = rule-based kid channel (computed fresh each scan; filters below)
 #   * sections / item_sections  which Plex libraries the set draws from / searches.
+#   * remove_completed_after  OPT-IN auto-removal of finished entries. Default (absent) =
+#             KEEP FOREVER — a finished entry stays, tagged done, until cleared by hand. Set
+#             a duration ("24h"/"7d"/"90m") to have finished entries auto-remove that long
+#             after they finish; "0"/"never" is the explicit keep-forever. MOVIE queues opt
+#             in (24h below); ANIME channels intentionally stay default (kept) — an anime
+#             series has no "Season 2", so the finished series is the anchor a hand-added
+#             sequel lands next to. keep_completed: true also exempts a set.
 #
 # Library membership is purely opt-in: a set draws only from the sections it lists, and
 # every video library is available in the pickers. Non-video libraries (Music, Photos)
@@ -91,16 +98,19 @@ sets:
     kind: movies
     source: queue
     sections: [1, 14]
+    remove_completed_after: 24h  # movie queues opt in; anime channels stay keep-forever
   - id: bob_alice
     label: Bob & Alice — Movies
     kind: movies
     source: queue
     sections: [1, 14]
+    remove_completed_after: 24h
   - id: family
     label: Family — Movies
     kind: movies
     source: queue
     sections: [1, 14]
+    remove_completed_after: 24h
   - id: bob_anime
     label: Bob — Anime
     kind: anime

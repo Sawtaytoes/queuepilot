@@ -57,15 +57,21 @@ ok('entryDoneAt of a scalar entry -> null', q.entryDoneAt('Active Movie') === nu
 
 const keys = async () => (await q.listSet('bob')).map((e) => e.key);
 
-// --- sweepCompleted removes ONLY past-TTL done entries ----------------------- //
+// --- default is keep-forever (opt-in) ---------------------------------------- //
 seed();
-let res = await q.sweepCompleted('bob', { now: NOW }); // default global 24h window
-ok('sweep removed exactly one entry', res.removed === 1, `removed=${res.removed}`);
+let res = await q.sweepCompleted('bob', { now: NOW }); // no override -> default 'never'
+ok('default (no override) keeps everything — no sweep', res.removed === 0, `removed=${res.removed}`);
+ok('default: past-TTL done entry survives', (await keys()).includes('title:Old Done'));
+
+// --- opt-in window removes ONLY past-TTL done entries ------------------------ //
+seed();
+res = await q.sweepCompleted('bob', { removeCompletedAfter: '24h', now: NOW });
+ok('opt-in removed exactly one entry', res.removed === 1, `removed=${res.removed}`);
 let ks = await keys();
-ok('sweep removed the past-TTL done entry', !ks.includes('title:Old Done'));
-ok('sweep kept the recent done entry', ks.includes('title:Recent Done'));
-ok('sweep kept the timestamp-less done entry', ks.includes('title:Legacy Done'));
-ok('sweep kept the active (not-done) entry', ks.includes('title:Active Movie'));
+ok('opt-in removed the past-TTL done entry', !ks.includes('title:Old Done'));
+ok('opt-in kept the recent done entry', ks.includes('title:Recent Done'));
+ok('opt-in kept the timestamp-less done entry', ks.includes('title:Legacy Done'));
+ok('opt-in kept the active (not-done) entry', ks.includes('title:Active Movie'));
 
 // --- never / 0 disables ------------------------------------------------------ //
 seed();
@@ -78,14 +84,14 @@ res = await q.sweepCompleted('bob', { removeCompletedAfter: '0', now: NOW });
 ok('0 disables the sweep', res.removed === 0);
 ok('0: past-TTL done entry survives', (await keys()).includes('title:Old Done'));
 
-// --- keep_completed / reel exempt the set ------------------------------------ //
+// --- keep_completed / reel exempt the set (even with a window set) ------------ //
 seed();
-res = await q.sweepCompleted('bob', { keepCompleted: true, now: NOW });
+res = await q.sweepCompleted('bob', { keepCompleted: true, removeCompletedAfter: '24h', now: NOW });
 ok('keepCompleted exempts the set', res.removed === 0);
 ok('keepCompleted: past-TTL done entry survives', (await keys()).includes('title:Old Done'));
 
 seed();
-res = await q.sweepCompleted('bob', { reel: true, now: NOW });
+res = await q.sweepCompleted('bob', { reel: true, removeCompletedAfter: '24h', now: NOW });
 ok('reel exempts the set', res.removed === 0);
 ok('reel: past-TTL done entry survives', (await keys()).includes('title:Old Done'));
 

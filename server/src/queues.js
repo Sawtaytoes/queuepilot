@@ -82,9 +82,11 @@ export function entryDoneAt(value) {
 }
 
 // The global default completed-entry TTL, mirroring config.REMOVE_COMPLETED_AFTER (Python) —
-// used when a set names no `remove_completed_after` override. "24h"/"7d"/"90m"; "0"/"never"
-// disables. Env-overridable so one TrueNAS app env feeds both processes.
-export const DEFAULT_REMOVE_COMPLETED_AFTER = process.env.REMOVE_COMPLETED_AFTER || '24h';
+// used when a set names no `remove_completed_after` override. Auto-removal is OPT-IN: the
+// default is 'never' (keep finished entries forever, today's behavior), so anime channels are
+// never surprise-swept; a movie queue opts in with `remove_completed_after: 24h` in sets.yaml.
+// "24h"/"7d"/"90m" enables; "0"/"never" disables. Env-overridable so one app env feeds both.
+export const DEFAULT_REMOVE_COMPLETED_AFTER = process.env.REMOVE_COMPLETED_AFTER || 'never';
 
 const DURATION_UNITS = { s: 1, m: 60, h: 3600, d: 86400, w: 604800, '': 1 };
 
