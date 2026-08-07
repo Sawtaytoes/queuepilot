@@ -426,3 +426,55 @@ def mark_done(set_name, keep_keys):
             except OSError:
                 pass
         return True
+
+
+def clear_done(set_name, keep_keys):
+    """Un-mark the given entries — strip `done` + `done_at`, keeping every other field/comment.
+
+    The inverse of mark_done, for STALE-DONE recovery: an entry mis-marked `done: true` whose
+    live Plex state is actually in-progress (a Season-0 OAD the specials filter used to drop,
+    or a partial view that briefly looked finished) must rejoin the lineup. Clearing the flag
+    here also lifts the TTL clock, so queues.sweep_completed can't auto-remove it while the
+    owner is mid-episode. A one-time write on the transition back to active — once genuinely
+    watched, next_queue re-marks it done normally.
+
+    Mirrors mark_done's round-trip discipline (re-read off disk, transform, atomic rewrite),
+    matched by `entry_key`. A scalar entry (never carrying `done`) is left untouched. No-op
+    (False) if ruamel is missing, the file/set is absent, or nothing changed.
+    """
+    want = set(keep_keys)
+    if not want:
+        return False
+    with _LOCK, _file_lock():
+        y = _ruamel()
+        path = config.QUEUES_PATH
+        if y is None or not os.path.exists(path):
+            return False
+        with open(path, "r", encoding="utf-8") as f:
+            data = y.load(f) or {}
+        seq = data.get(set_name)
+        if seq is None:
+            return False
+        changed = False
+        for item in seq:
+            if not isinstance(item, dict) or entry_key(item) not in want:
+                continue
+            for field in ("done", "done_at"):
+                if field in item:
+                    del item[field]
+                    changed = True
+        if not changed:
+            return False
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            y.dump(data, f)
+        try:
+            os.replace(tmp, path)
+        except OSError:
+            with open(path, "w", encoding="utf-8") as f:
+                y.dump(data, f)
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+        return True

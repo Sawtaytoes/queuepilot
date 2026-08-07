@@ -69,7 +69,7 @@ queues.mark_done = lambda set_name, keys: _marked.append((set_name, list(keys)))
 queues.entries = lambda set_name: [{"key": "rk:1", "done": False, "title": "Movie", "ratingKey": "1"}]
 plex.account_token = lambda user_uuid: None
 plex._watched_for_set = lambda cfg, binding=None: set()
-plex.resolve_member = lambda desc, cfg, watched, token=None, default_batch=None: {
+plex.resolve_member = lambda desc, cfg, watched, token=None, default_batch=None, resume=False: {
     "items": [], "title": "Movie", "type": "movie"}
 
 

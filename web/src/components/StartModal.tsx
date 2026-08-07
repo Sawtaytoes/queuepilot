@@ -2,8 +2,14 @@ import { Select } from "@charcuterie/ui"
 import { useCallback, useEffect, useState } from "react"
 
 import { api } from "../lib/api"
+import {
+  defaultStartPoint,
+  memberPreset,
+  pickOptionValue,
+} from "../lib/startPreset"
 import type {
   CollectionChild,
+  NextEp,
   ShowEpisodes,
   StartPoint,
 } from "../lib/types"
@@ -35,12 +41,12 @@ import { commitStart } from "./startCommit"
 type Option = { value: string; label: string }
 
 /** `fillOptions`' rule: keep `want` if it is one of the options, else fall to the
- * first — which is what a `<select>` does on its own when the value is unknown. */
-const pick = (options: Option[], want: string | number | null | undefined) => {
-  const w = want == null ? null : String(want)
-
-  return w && options.some((o) => o.value === w) ? w : (options[0]?.value ?? "")
-}
+ * first — delegating to the shared value-picker the default-selection maths uses. */
+const pick = (options: Option[], want: string | number | null | undefined) =>
+  pickOptionValue(
+    options.map((o) => o.value),
+    want,
+  )
 
 export function StartModal() {
   const { startModal: entry } = useOverlays()
@@ -84,29 +90,12 @@ export function StartModal() {
 
       setEpisodeData(data)
 
-      const seasonOptions = data.seasons.map((s) => ({
-        label: `Season ${s.season}`,
-        value: String(s.season),
-      }))
-      const season = pick(seasonOptions, preset?.season ?? null)
+      // The Season/Episode defaults come from one shared rule (`defaultStartPoint`),
+      // so a collection member seeds exactly like a show entry does.
+      const { season, episode } = defaultStartPoint(data, preset)
 
       setSeasonValue(season)
-
-      const row =
-        data.seasons.find((x) => x.season === Number(season)) ?? data.seasons[0]!
-      const episodeOptions = row.episodes.map((e) => ({
-        label: `E${e.episode}${e.title ? ` · ${e.title}` : ""}${e.watched ? "  — watched" : ""}`,
-        value: String(e.episode),
-      }))
-
-      setEpisodeValue(
-        pick(
-          episodeOptions,
-          preset && Number(preset.season ?? row.season) === row.season
-            ? preset.episode
-            : null,
-        ),
-      )
+      setEpisodeValue(episode)
     },
     [],
   )
@@ -114,7 +103,12 @@ export function StartModal() {
   /** A collection member: a series opens its pickers, a movie member has nothing
    * more to pick inside it. */
   const paintMember = useCallback(
-    async (rk: string, kids: CollectionChild[], stored: StartPoint | null) => {
+    async (
+      rk: string,
+      kids: CollectionChild[],
+      stored: StartPoint | null,
+      nextEp: NextEp | null,
+    ) => {
       const child = kids.find((c) => String(c.ratingKey) === String(rk))
 
       if (!child || child.type !== "show") {
@@ -131,8 +125,10 @@ export function StartModal() {
 
       setNote("")
 
-      const preset =
-        stored && String(stored.series) === String(rk) ? stored : null
+      // The stored override if it names this member, else where this member plays next
+      // anyway — the same next-unwatched the tile shows. Without this fallback a plain
+      // collection entry seeded null and the Episode dropdown fell to E1.
+      const preset = memberPreset(stored, nextEp, rk)
 
       await loadEpisodes(child.ratingKey, preset)
     },
@@ -204,7 +200,7 @@ export function StartModal() {
       )
 
       setSeriesValue(chosen)
-      await paintMember(chosen, kids, item.start)
+      await paintMember(chosen, kids, item.start, item.nextEp)
     }
 
     void run()
@@ -311,7 +307,7 @@ export function StartModal() {
           label="Series"
           onChange={(v) => {
             setSeriesValue(v)
-            void paintMember(v, children, item.start)
+            void paintMember(v, children, item.start, item.nextEp)
           }}
           options={
             children.length
