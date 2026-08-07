@@ -80,6 +80,9 @@ const DEFAULT_YAML = `# plex-channels set registry — the single source of trut
 #   * source  queue    = hand-curated wishlist in queues.yaml (orderable, prunes as watched)
 #             rotation = rule-based kid channel (computed fresh each scan; filters below)
 #   * sections / item_sections  which Plex libraries the set draws from / searches.
+#   * keep_completed  (queue sets) true = a NON-CONSUMING / playlist queue: entries are
+#             never marked done and never removed when played, so the whole lineup can be
+#             re-shown every scan (e.g. the Theater Demo Reel). reel: true implies this.
 #   * remove_completed_after  OPT-IN auto-removal of finished entries. Default (absent) =
 #             KEEP FOREVER — a finished entry stays, tagged done, until cleared by hand. Set
 #             a duration ("24h"/"7d"/"90m") to have finished entries auto-remove that long

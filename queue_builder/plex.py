@@ -1170,8 +1170,11 @@ def next_queue(set_name, rng=None):
     # (see resume_offset). A finished item still advances exactly as before.
     offset = resume_offset(play_items[0]["ratingKey"], watched, token=tok) if play_items else 0
 
-    if newly_done:                               # keep + tag finished (done: true + done_at)
-        queues.mark_done(set_name, newly_done)
+    # A keep_completed (non-consuming / playlist) set — `reel` implies it — NEVER marks its
+    # entries done, so the owner can re-show the whole lineup every scan. No done_at/`done`
+    # is ever written, so it is inherently exempt from any finished-entry sweep.
+    if newly_done and not (cfg.get("keep_completed") or cfg.get("reel")):
+        queues.mark_done(set_name, newly_done)   # keep + tag finished (done: true + done_at)
     # §B.3 TTL auto-remove: on each scan, drop entries whose done_at is older than the set's
     # remove_completed_after (per-set) / config.REMOVE_COMPLETED_AFTER (global default 24h).
     # keep_completed/reel sets are exempt inside sweep_completed. Runs AFTER mark_done, so an

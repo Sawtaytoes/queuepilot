@@ -330,6 +330,15 @@ def _load_sets_yaml():
             # everything else about the set is a normal queue. See do_start's source branch.
             if ent.get("reel"):
                 cfg["reel"] = True
+            # keep_completed: a NON-CONSUMING / playlist queue — its entries are never marked
+            # done and never removed when played, so the owner can re-show the whole lineup
+            # (e.g. the Theater Demo Reel) repeatedly. Decoupled from `reel`: reel ALSO replays
+            # the lineup every scan, whereas keep_completed governs ONLY consumption — but
+            # `reel: true` implies keep_completed (a reel never consumes either). Nothing is
+            # ever marked done, so it writes no state to sweep. plex.next_queue honors it at
+            # the mark_done call site. (decision 2026-08-07-non-consuming-keep-completed-queue-flag)
+            if ent.get("keep_completed") or ent.get("reel"):
+                cfg["keep_completed"] = True
         cfg["label"] = ent.get("label") or sid
         cfg["kind"] = ent.get("kind")
         cfg["enabled"] = ent.get("enabled", True)
