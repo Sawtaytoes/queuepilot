@@ -1170,8 +1170,14 @@ def next_queue(set_name, rng=None):
     # (see resume_offset). A finished item still advances exactly as before.
     offset = resume_offset(play_items[0]["ratingKey"], watched, token=tok) if play_items else 0
 
-    if newly_done:                               # keep + tag finished; never auto-remove
+    if newly_done:                               # keep + tag finished (done: true + done_at)
         queues.mark_done(set_name, newly_done)
+    # §B.3 TTL auto-remove: on each scan, drop entries whose done_at is older than the set's
+    # remove_completed_after (per-set) / config.REMOVE_COMPLETED_AFTER (global default 24h).
+    # keep_completed/reel sets are exempt inside sweep_completed. Runs AFTER mark_done, so an
+    # entry just marked this scan (done_at=now) is never immediately swept. Reuses prune for
+    # the atomic, comment-preserving removal.
+    queues.sweep_completed(set_name, cfg)
     return {"set": set_name, "play": play_items, "last": last,
             "done": done_flagged, "unresolved": unresolved, "remaining": remaining,
             "offset": offset}

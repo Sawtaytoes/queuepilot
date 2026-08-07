@@ -70,6 +70,40 @@ export function entryDone(value) {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value) && value.done === true);
 }
 
+// The epoch-seconds timestamp the Python service stamps alongside `done: true` (queues.mark_done),
+// or null when absent/non-numeric. queues.sweep_completed measures the TTL against this, so a
+// hand-marked `done: true` with no timestamp reads as null and is never auto-removed.
+export function entryDoneAt(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value) && value.done_at != null) {
+    const n = Number(value.done_at);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+// The global default completed-entry TTL, mirroring config.REMOVE_COMPLETED_AFTER (Python) —
+// used when a set names no `remove_completed_after` override. Auto-removal is OPT-IN: the
+// default is 'never' (keep finished entries forever, today's behavior), so anime channels are
+// never surprise-swept; a movie queue opts in with `remove_completed_after: 24h` in sets.yaml.
+// "24h"/"7d"/"90m" enables; "0"/"never" disables. Env-overridable so one app env feeds both.
+export const DEFAULT_REMOVE_COMPLETED_AFTER = process.env.REMOVE_COMPLETED_AFTER || 'never';
+
+const DURATION_UNITS = { s: 1, m: 60, h: 3600, d: 86400, w: 604800, '': 1 };
+
+// Parse a duration string to whole seconds, or null when auto-removal is disabled. Accepts
+// `24h`/`7d`/`90m`/`45` (bare = seconds); `0`/`never`/`off`/`none`/blank/unparseable → null.
+// Mirrors queue_builder.queues.parse_duration so both processes agree on a set's window.
+export function parseDuration(value) {
+  if (value == null) return null;
+  const s = String(value).trim().toLowerCase();
+  if (['', '0', 'never', 'off', 'none', 'disabled'].includes(s)) return null;
+  const m = /^(\d+)\s*([smhdw]?)$/.exec(s);
+  if (!m) return null;
+  const n = parseInt(m[1], 10);
+  if (!n) return null;
+  return n * DURATION_UNITS[m[2]];
+}
+
 async function readDoc() {
   let text = '';
   try {
@@ -116,7 +150,7 @@ function entriesOf(doc, setName) {
   return seq.items
     .map((node) => {
       const value = node.toJSON();
-      return { key: entryKey(value), value, done: entryDone(value) };
+      return { key: entryKey(value), value, done: entryDone(value), doneAt: entryDoneAt(value) };
     })
     .filter((e) => e.key !== null);
 }
@@ -171,6 +205,44 @@ export async function removeCompleted(setName) {
     if (!(seq instanceof YAMLSeq)) return { removed: 0 };
     const before = seq.items.length;
     seq.items = seq.items.filter((n) => !entryDone(n.toJSON()));
+    const removed = before - seq.items.length;
+    if (removed) {
+      if (seq.items.length === 0) seq.flow = true; // restore a compact `[]` when emptied
+      await writeDoc(doc);
+    }
+    return { removed };
+  });
+}
+
+// §B.3 TTL auto-remove: drop the entries this set finished longer ago than its window. The
+// Python service is the authority that runs this on every scan (queue_builder.queues.sweep_completed);
+// this mirror keeps the two writers in agreement and lets the Node side apply the identical rule
+// (e.g. a future scheduled sweep / the UI view). A done entry is eligible only once its `done_at`
+// (epoch seconds, stamped by the Python mark_done) is >= ttl old; a `keep_completed`/`reel` set is
+// exempt, as is a hand-marked `done:true` with no timestamp. `removeCompletedAfter` defaults to the
+// global DEFAULT_REMOVE_COMPLETED_AFTER when a set names no override (matching config.py). Returns
+// the count removed. `now` is epoch SECONDS (defaults to the wall clock), for deterministic tests.
+export async function sweepCompleted(setName, opts = {}) {
+  const {
+    keepCompleted = false,
+    reel = false,
+    removeCompletedAfter = DEFAULT_REMOVE_COMPLETED_AFTER,
+    now,
+  } = opts;
+  if (keepCompleted || reel) return { removed: 0 };
+  const ttl = parseDuration(removeCompletedAfter);
+  if (ttl == null) return { removed: 0 };
+  const nowSec = now == null ? Date.now() / 1000 : now;
+  return withLock(async () => {
+    const doc = await readDoc();
+    const seq = doc.get(setName);
+    if (!(seq instanceof YAMLSeq)) return { removed: 0 };
+    const before = seq.items.length;
+    seq.items = seq.items.filter((n) => {
+      const v = n.toJSON();
+      const doneAt = entryDoneAt(v);
+      return !(entryDone(v) && doneAt != null && nowSec - doneAt >= ttl);
+    });
     const removed = before - seq.items.length;
     if (removed) {
       if (seq.items.length === 0) seq.flow = true; // restore a compact `[]` when emptied

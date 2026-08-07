@@ -24,6 +24,8 @@ echo "=== history-persist-test ==="   # manages its own server (port 18770) + fi
 node e2e/history-persist-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)
 node e2e/api-v2-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== sse-resync-test ==="   # browserless; SSE now-playing replay on (re)connect (+ retained snapshot via fake broker)
+node e2e/sse-resync-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== yaml-roundtrip-test ==="   # browserless; comments survive every queues/sets mutation (Phase E)
 node e2e/yaml-roundtrip-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile detection port
