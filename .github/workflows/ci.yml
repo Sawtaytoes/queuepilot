@@ -101,6 +101,7 @@ jobs:
         run: |
           node e2e/history-persist-test.mjs
           node e2e/api-v2-test.mjs
+          node e2e/sse-resync-test.mjs
           node e2e/ttl-sweep-test.mjs
 
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites

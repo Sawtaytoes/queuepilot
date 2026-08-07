@@ -734,6 +734,14 @@ app.get('/api/events', (req, res) => {
   res.flushHeaders();
   res.write('event: hello\ndata: {}\n\n');
   sseClients.add(res);
+  // Re-sync on (re)connect: a phone that slept its tab dropped this SSE stream and missed
+  // every `now` published while it was gone, so it would show the stale page-load value until
+  // a manual refresh. Replay the CURRENT retained now-playing snapshot to JUST this client —
+  // same `{ now, set }` shape the live onNowPlaying/onState broadcasts use — so a resumed tab
+  // reconciles the playing tile + active-queue badge without waiting for the next MQTT change.
+  // (The `state` event only drives play-result toasts, so it is deliberately NOT replayed here
+  // — re-toasting an old result on every wake would be noise; the tile hydrates from `now`.)
+  res.write(`event: now\ndata: ${JSON.stringify({ now: LAST_NOW, set: (mqttc.lastState() || {}).set || null })}\n\n`);
   const ping = setInterval(() => res.write(': ping\n\n'), 25000); // keep proxies from idling us out
   req.on('close', () => { clearInterval(ping); sseClients.delete(res); });
 });
