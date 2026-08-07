@@ -540,6 +540,26 @@ ADB_TIMEOUT = int(os.environ.get("ADB_TIMEOUT", "15"))
 # playback (:32500) and the picker both need Plex running, so a scan blocks on this.
 ADB_PLEX_LAUNCH_WAIT_SECONDS = int(os.environ.get("ADB_PLEX_LAUNCH_WAIT_SECONDS", "20"))
 
+# --- Playback state machine (queue_builder/driver.py) ------------------------- #
+# OFF by default so the legacy fire-and-forget path in service._do_start stays live until
+# the owner verifies the FSM on the real Shield. When on, _do_start hands the launch +
+# profile gate + play to driver.drive_to_playing, which SAMPLES real state and drives
+# VERIFIED, RETRIED, NON-DESTRUCTIVE transitions (unreachable -> device_on ->
+# plex_foreground -> signed_in(required) -> playing(target)). Flip with PLAYBACK_FSM=true
+# once verified on-Shield. See docs/playback-state-machine-design.md.
+PLAYBACK_FSM = os.environ.get("PLAYBACK_FSM", "").lower() in ("1", "true", "yes")
+# The Plex Companion TCP port on the client (playMedia lands here). The FSM verifies this
+# port is accepting a connection immediately before it fires play, so a closed / mid-nav
+# Plex surfaces as "not ready, re-open + retry" instead of an Errno 111 that kills the scan.
+COMPANION_PORT = int(os.environ.get("COMPANION_PORT", "32500"))
+# Bounded retries for the FSM's two fragile transitions. `play` re-opens Plex between
+# connection-refused attempts; `switch` re-summons the picker between failed switches.
+PLAYBACK_FSM_PLAY_ATTEMPTS = int(os.environ.get("PLAYBACK_FSM_PLAY_ATTEMPTS", "3"))
+PLAYBACK_FSM_SWITCH_ATTEMPTS = int(os.environ.get("PLAYBACK_FSM_SWITCH_ATTEMPTS", "2"))
+# Seconds to wait on the Companion TCP connect probe, and the short pause between retries.
+PLAYBACK_FSM_COMPANION_TIMEOUT = float(os.environ.get("PLAYBACK_FSM_COMPANION_TIMEOUT", "1.5"))
+PLAYBACK_FSM_RETRY_BACKOFF = float(os.environ.get("PLAYBACK_FSM_RETRY_BACKOFF", "1.0"))
+
 # --- MQTT (Mosquitto HA add-on) ---
 MQTT_HOST = os.environ.get("MQTT_HOST", "")
 MQTT_PORT = int(os.environ.get("MQTT_PORT", "1883"))

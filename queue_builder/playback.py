@@ -11,12 +11,34 @@ until then `play_rating_keys` degrades gracefully and reports that no client was
 reachable — the selection + last-played publish still succeed.
 """
 import json
+import socket
 import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
 
 from . import config, plex
+
+
+def companion_ready(host=None, port=None, timeout=None):
+    """Is the Plex Companion endpoint (host:32500) accepting a TCP connection right now?
+
+    playMedia lands on the client's Companion server; when Plex is closed or mid-navigation
+    that port isn't listening and the GET fails with `<urlopen error [Errno 111] Connection
+    refused>`, which today kills the scan with nothing playing. The FSM (driver.py) probes
+    this immediately before firing play so it can re-open Plex and retry instead. A cheap
+    connect-and-drop — it proves the port is up without sending a request. Defaults to the
+    env-default Shield's SHIELD_IP:COMPANION_PORT; the caller passes a device's own address
+    when a start command targeted a non-default player.
+    """
+    host = host or config.SHIELD_IP
+    port = int(port or config.COMPANION_PORT)
+    timeout = config.PLAYBACK_FSM_COMPANION_TIMEOUT if timeout is None else timeout
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 _CTX = ssl.create_default_context()
 _CTX.check_hostname = False

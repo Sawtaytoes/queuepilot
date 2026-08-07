@@ -25,7 +25,7 @@ import time
 
 import paho.mqtt.client as mqtt
 
-from . import adb, config, plex, playback, profiles, soundtrack
+from . import adb, config, driver, plex, playback, profiles, soundtrack
 
 
 class Session:
@@ -188,7 +188,13 @@ def _do_start(client, payload, cancel):
     if not required and not is_auto:
         required = card_profile
     switched = {}  # set below if we drive an ADB profile switch; joined before playback
-    if required and detected_profile != required:
+    if config.PLAYBACK_FSM:
+        # The FSM (driver.drive_to_playing, below) owns the profile gate: it samples the
+        # current profile and only walks the picker on a real change, then verifies + retries.
+        # Selection still needs a binding, so point it at the profile we'll be signed in as.
+        if required and not profile_title:
+            profile_title = required
+    elif required and detected_profile != required:
         _publish_state(client, awaiting=f"profile:{required}")
         # Best-effort: drive the picker there ourselves, concurrently with the log wait.
         # Concurrently, not before - the HA script foregrounds Plex AFTER publishing this
@@ -307,6 +313,34 @@ def _do_start(client, payload, cancel):
     # Optional per-command target (a device-registry id from the web UI's "Play on ▾");
     # absent/unknown -> the env-default Shield, exactly as before.
     device = DEVICES.get(str(payload.get("target") or "")) or None
+
+    if config.PLAYBACK_FSM:
+        # State-machine path: sample real device/profile/Plex state and drive VERIFIED,
+        # RETRIED, NON-DESTRUCTIVE transitions to playing(target). It owns the launch, the
+        # profile gate (no picker walk when already on `required`), and the play — which it
+        # fires only after verifying Plex is foreground and the Companion port is accepting,
+        # retrying a Companion-refused play a bounded few times. Selection above is unchanged.
+        result = driver.drive_to_playing(
+            client,
+            rating_keys=[i["ratingKey"] for i in SESSION.queue],
+            required_profile=required,
+            offset=resume_ms,
+            device=device,
+            set_name=set_name,
+            cancel=cancel,
+            set_label=cfg.get("label") or set_name,
+        )
+        if result.get("cancelled"):
+            print("[driver] scan cancelled by a newer one", flush=True)
+            return
+        if result.get("error"):
+            _publish_state(client, error=result["error"])
+            return
+        client.publish(config.T_RESP_LAST_PLAYED, json.dumps(last), qos=1, retain=True)
+        _publish_state(client, playback=result)
+        return
+
+    # --- Legacy fire-and-forget path (PLAYBACK_FSM off) --------------------------------- #
     # An ADB profile switch drives the Shield's UI - it backs out of whatever is on screen
     # to reach the picker. It runs concurrently with the log-wait above, so by now it may
     # still be mid-navigation. playMedia lands on the client regardless of the current

@@ -1,8 +1,9 @@
-# Design: playback as a state machine (proposed)
+# Design: playback as a state machine
 
-Status: proposed — captures the intended direction. The current code is a partial,
-increment-by-increment version of this; the goal below is what "reliable, no manual
-babysitting" looks like.
+Status: **implemented behind the `PLAYBACK_FSM` flag** (default off) — `queue_builder/driver.py`
++ its wiring in `service._do_start`. The pre-FSM incremental version stays live and unchanged
+until `PLAYBACK_FSM=true` is verified on the real Shield (see "Rollout" at the bottom). The
+goal below is what "reliable, no manual babysitting" looks like.
 
 ## The problem
 
@@ -18,6 +19,10 @@ also *start* a movie and then navigate away from it. Observed failure modes:
   is already signed into the right profile → gate never clears → returns before playback.
 - The ADB profile "switch" walks to the picker even when already on the correct profile,
   backing out of a movie that just started.
+- **Companion refused (Errno 111).** Plex was closed / mid-navigation when `playMedia` fired,
+  so the Companion port (`SHIELD_IP:32500`) wasn't listening and the GET died with
+  `URLError <urlopen error [Errno 111] Connection refused>` — the scan errored with nothing
+  playing. Play was fired blind, assuming the launch/switch that ran before it had landed.
 - Repeated scans cancel each other's waits; the net result is nondeterministic.
 
 The through-line: the helper **acts blindly instead of reading state and reacting to it.**
@@ -72,15 +77,50 @@ must be a no-op, not a picker walk.
   pattern.
 - Host/deploy values resolve `env > /config/config.yaml > placeholder` (`config._hostval`).
 
-## What's left to make it a real FSM
+## What the FSM implements (`queue_builder/driver.py`, behind `PLAYBACK_FSM`)
 
-1. Sample **current profile without a destructive walk** (cache last picker read + PMS
-   `LAST_SEEN`; only open the picker when a *change* is required).
-2. A single **retry/backoff driver** wrapping each transition, replacing the scattered
-   one-shot waits, so a transient failure self-heals instead of erroring the scan.
-3. Treat a **picker read-back** as gate-satisfying (decouple from the fragile fresh-sign-in
-   log dependency).
-4. Idempotent re-entry: a second scan mid-flight should re-sample and converge, not just
-   cancel the first and start blind.
-5. (Later, explicitly deferred by the owner) **auto-discover** the Shield IP / client rather
-   than reading it from `config.yaml`.
+`drive_to_playing(client, *, rating_keys, required_profile, offset, device, set_name, cancel,
+set_label)` samples state and runs the transitions, reusing the `adb` / `profiles` / `playback`
+primitives. `service._do_start` keeps ALL its selection logic and, when the flag is on, replaces
+only the launch + profile gate + `_adb_switch_async` + join + `play_rating_keys` block with one
+call to it. Each observed failure mode → how it's fixed:
+
+1. **Companion refused (Errno 111).** `_drive_play` verifies Plex is foreground AND the
+   Companion port is accepting a TCP connect (`playback.companion_ready`) *immediately before*
+   `playMedia`; if either is false it `ensure_plex_open()`s + waits, and it RETRIES a
+   connection-refused play a bounded few times (`PLAYBACK_FSM_PLAY_ATTEMPTS`), re-opening Plex
+   between attempts. Play is the LAST action and it is verified. Client-mode only (cast doesn't
+   use `:32500`).
+2. **Destructive switch when already on the right profile.** `_drive_profile` reads the current
+   profile from `profiles.LAST_SEEN` (alias-aware via `adb.same_profile`) FIRST and, when it
+   already matches `required`, is a no-op — it never summons or walks the picker. Only a real
+   change drives `adb.switch_to`.
+3. **Gate never clears when already signed in.** The gate is satisfied by a picker read-back
+   (`switch_to` returning ok) OR `LAST_SEEN == required` — not solely a fresh PMS-log sign-in
+   line. With ADB off it still falls back to `wait_for_profile`.
+4. **Play raced the switch.** Play runs only after the profile transition has SETTLED (verified),
+   never concurrently — the concurrent `_adb_switch_async` + join dance is gone on this path.
+5. **Repeated scans.** The existing `cancel` event is threaded through every transition; a newer
+   scan cancels and the machine returns `{"cancelled": True}` from wherever it was, and the new
+   scan re-samples and converges (no blind restart).
+
+On exhausting a transition's bounded retries it returns ONE spoken-sentence `error` (the
+diagnostic detail is `print`ed to the log), matching
+`docs/decisions/2026-07-26-spoken-status-is-a-sentence-not-a-diagnostic.md`.
+
+## Still deferred
+
+- Idempotent *mid-flight* re-entry beyond cancel-and-reconverge (the machine re-samples on the
+  next scan, but does not yet hand a running transition off to a newer scan in place).
+- (Explicitly deferred by the owner) **auto-discover** the Shield IP / client rather than
+  reading it from `config.yaml`.
+
+## Rollout
+
+`PLAYBACK_FSM` defaults to **off** — `service._do_start` behaves exactly as before. Set
+`PLAYBACK_FSM=true` (env, or `playback_fsm: true` is not read — it's env-only) to route scans
+through the state machine. Verify on the real Shield first: tap a gated card while already on
+the right profile (should play with no picker flash), a card while Plex is closed (should launch
+then play), and a card mid-navigation (should not error with Errno 111). Tunables:
+`PLAYBACK_FSM_PLAY_ATTEMPTS` (3), `PLAYBACK_FSM_SWITCH_ATTEMPTS` (2), `COMPANION_PORT` (32500),
+`PLAYBACK_FSM_COMPANION_TIMEOUT` (1.5s), `PLAYBACK_FSM_RETRY_BACKOFF` (1.0s).
