@@ -1,4 +1,6 @@
-import { Button, Select } from "@charcuterie/ui"
+import { Button } from "@charcuterie/ui"
+
+import { SelectListbox } from "./SelectListbox"
 import { useEffect, useState } from "react"
 
 import { api, thumbUrl } from "../lib/api"
@@ -64,9 +66,10 @@ export function Toolbar() {
 
   return (
     // F2: `compact` density takes the 44px MIN_TOUCH_TARGET floor down over
-    // --control-height-md (2.25rem), de-chunkifying the header selects on desktop via the
-    // token axis rather than an app override. (The real rich-select fix is a Charcuterie
-    // Listbox/Combobox — out of scope; see docs/handoff-charcuterie-listbox-combobox.md.)
+    // --control-height-md (2.25rem), de-chunkifying the header controls on desktop via the
+    // token axis rather than an app override. The Add-to picker here is now a `SelectListbox`
+    // (themed Listbox, no native <select>) — the rich-select fix the Listbox handoff wanted.
+    // (decision `2026-08-07-plex-channels-pickers-are-listbox-not-native-select`)
     <div data-density="compact" id="tools">
       <div className="gsearch-wrap">
         <SearchDropdown<SearchHit>
@@ -207,7 +210,7 @@ export function Toolbar() {
                 else writes it, so the DOM and React have one owner between them.
                 Keying it would remount the control on the user's own pick and take
                 their focus with it. */}
-            <Select
+            <SelectListbox
               id="gaddpos"
               label="Add to"
               onChange={setAddPosition}

@@ -9,6 +9,7 @@
 // opens the tile menu; a SHOW start writes {season, episode}; a COLLECTION start writes
 // {series, season, episode} for the picked member; the chip appears and clears again.
 import { chromium } from './playwright.mjs';
+import { currentValue, pickIndex, pickValue, readOptions } from './pick.mjs';
 import { readFileSync } from 'node:fs';
 
 const PORT = process.env.WEB_PORT || 18780;
@@ -36,15 +37,15 @@ ok('no "Play" label before the eps dropdown', !(await page.locator('#grid .eps')
 // 2. A show tile: the next-up line opens the picker.
 const bebop = tileByTitle('Steins;Gate');
 await bebop.locator('.next').click();
-await page.waitForSelector('#startmodal[open]');
+await page.waitForSelector('#startmodal[data-open]');
 await page.waitForTimeout(1200);
 ok('show picker: season row hidden (single-season)', await page.locator('#start-seasonbox').isHidden());
 ok('show picker: series row hidden (not a collection)', await page.locator('#start-seriesbox').isHidden());
-const epOptions = await page.locator('#start-episode option').allInnerTexts();
+const epOptions = await readOptions(page, '[data-testid="start-episode"]');
 ok('show picker: episodes listed by name', epOptions.length > 3 && /^E\d+ · /.test(epOptions[0]));
 await page.screenshot({ path: `${SHOTS}/start-modal-show.png` });
-await page.selectOption('#start-episode', { index: 11 });
-const pickedEp = await page.locator('#start-episode').inputValue();
+await pickIndex(page, '[data-testid="start-episode"]', 11);
+const pickedEp = await currentValue(page, '[data-testid="start-episode"]');
 await page.click('#start-save');
 await page.waitForTimeout(2500);
 const yaml1 = readFileSync(YAML, 'utf8');
@@ -55,19 +56,19 @@ ok('show tile shows the start chip', (await tileByTitle('Steins;Gate').locator('
 // 3. A collection tile: pick WHICH member, then the episode inside it.
 const chaika = tileByTitle('Avenging Battle');
 await chaika.locator('.next').click();
-await page.waitForSelector('#startmodal[open]');
+await page.waitForSelector('#startmodal[data-open]');
 await page.waitForTimeout(1500);
 ok('collection picker: series row shown', await page.locator('#start-seriesbox').isVisible());
-const members = await page.locator('#start-series option').allInnerTexts();
+const members = await readOptions(page, '[data-testid="start-series"]');
 ok('collection picker: members in collection order', members.length === 3 && members[0].startsWith('1. '));
 ok('collection picker: defaults to the member that plays next',
-  (await page.locator('#start-series').inputValue()) === '365573');
+  (await currentValue(page, '[data-testid="start-series"]')) === '365573');
 // Start at the FIRST member instead (earlier members are skipped, so this is a real change).
-await page.selectOption('#start-series', '365591');
+await pickValue(page, '[data-testid="start-series"]', '365591');
 await page.waitForTimeout(1500);
 await page.screenshot({ path: `${SHOTS}/start-modal-collection.png` });
-await page.selectOption('#start-episode', { index: 4 });
-const collEp = await page.locator('#start-episode').inputValue();
+await pickIndex(page, '[data-testid="start-episode"]', 4);
+const collEp = await currentValue(page, '[data-testid="start-episode"]');
 await page.click('#start-save');
 await page.waitForTimeout(3000);
 const yaml2 = readFileSync(YAML, 'utf8');

@@ -2,6 +2,7 @@
 
 // Port is overridable (WEB_PORT) so this suite can run on a private port outside run.sh.
 import { chromium } from './playwright.mjs';
+import { readOptions } from './pick.mjs';
 const PORT = process.env.WEB_PORT || 18768;
 const BASE = `http://localhost:${PORT}`;
 const ok = (name, cond) => {
@@ -172,11 +173,14 @@ ok('F: Curated group holds the anime channels', cur.length >= 1);
 const groupHeads = await page.$$eval('#play .playgroup h2', (els) => els.map((e) => e.textContent.replace('Configure ›', '').trim()));
 ok('F: group headings named Dynamic/Curated Channels',
   groupHeads.includes('Dynamic Channels') && groupHeads.includes('Curated Channels'));
-// The Channels picker groups the same way (optgroups).
+// The Channels picker lists the same channels — now a flat SelectListbox, NOT a native
+// <select> with optgroups (Listbox has no option groups; dynamic channels come first,
+// then curated). 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
 await page.evaluate(() => { location.hash = '#/channels/shows'; });
-await page.waitForSelector('#chchannel optgroup', { state: 'attached', timeout: 20000 });
-const optgroups = await page.$$eval('#chchannel optgroup', (els) => els.map((e) => e.label));
-ok('F: channel picker optgroups', optgroups.includes('Dynamic Channels') && optgroups.includes('Curated Channels'));
+await page.waitForSelector('[data-testid="chchannel"]', { state: 'attached', timeout: 20000 });
+const chanOpts = await readOptions(page, '[data-testid="chchannel"]');
+ok('F: channel picker lists dynamic-then-curated (flat)',
+  chanOpts[0] === 'Shows & Shorts' && chanOpts[1] === 'Movies' && chanOpts.length >= 3);
 // Noun fix: open a curated (anime) channel's grid → its add box says "channel", not "queue".
 const animeId = cur.length ? await page.evaluate((label) =>
   fetch('/api/queues').then((r) => r.json()).then((j) => Object.keys(j.sets).find((id) => j.sets[id].label === label)),

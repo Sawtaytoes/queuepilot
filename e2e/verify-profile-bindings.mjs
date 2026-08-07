@@ -8,6 +8,7 @@
 // Needs: root agentic .env (Plex token), e2e/broker deps (aedes), mux-magic playwright,
 // PLAYWRIGHT_BROWSERS_PATH. Copies fixtures to /tmp — never touches real data.
 import { chromium } from './playwright.mjs';
+import { pickHandle, pickValueMaybe, readOptionValues, readOptionValuesFromHandle } from './pick.mjs';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -74,10 +75,10 @@ try {
   await page.goto(`${BASE}/#/channels`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#newdyn', { timeout: 30000 });
   await page.click('#newdyn');
-  await page.waitForSelector('#dynmodal[open]');
+  await page.waitForSelector('#dynmodal[data-open]');
   await page.waitForTimeout(400);
 
-  const behaviorOpts = await page.$$eval('#dyn-behavior option', (os) => os.map((o) => o.value));
+  const behaviorOpts = await readOptionValues(page, '[data-testid="dyn-behavior"]');
   ok('behavior select replaces mode (progress+rewatch)', behaviorOpts.join(',') === 'progress,rewatch');
   ok('no legacy #dyn-mode / #dyn-ratings left', !(await page.$('#dyn-mode')) && !(await page.$('#dyn-ratings')));
   ok('new channel opens with exactly one binding card', (await cards()) === 1);
@@ -91,12 +92,12 @@ try {
   ok('with two bindings, Remove is shown', !(await page.$eval('#dyn-bindings .binding .b-remove', (b) => b.hidden)));
 
   // Pick a distinct profile in each card; assert it fills the advanced Plex-user field.
-  const profVals = await page.$$eval('#dyn-bindings .binding .b-profile option',
-    (os) => os.filter((o) => o.value).map((o) => o.value));
+  const sels = await page.$$('#dyn-bindings .binding .b-profile');
+  // Every binding card shares the same profile option list — read it from the first.
+  const profVals = (await readOptionValuesFromHandle(page, sels[0])).filter(Boolean);
   if (profVals.length >= 2) {
-    const sels = await page.$$('#dyn-bindings .binding .b-profile');
-    await sels[0].selectOption(profVals[0]);
-    await sels[1].selectOption(profVals[1]);
+    await pickHandle(page, sels[0], profVals[0]);
+    await pickHandle(page, sels[1], profVals[1]);
     await page.waitForTimeout(400);
     const users = await page.$$eval('#dyn-bindings .binding .b-plexuser', (is) => is.map((i) => i.value));
     ok('picking a profile fills that card\'s Plex user', users[0] && users[1] && users[0] !== users[1]);
@@ -119,7 +120,9 @@ try {
     await firstRating.check();
   }
   await page.click('#dyn-save');
-  await page.waitForFunction(() => !document.getElementById('dynmodal').open, null, { timeout: 15000 });
+  // Save closes the modal; it's a body-portalled overlay now (not a native <dialog>), so
+  // "closed" = the element is detached, not `.open === false`.
+  await page.waitForSelector('#dynmodal', { state: 'detached', timeout: 15000 });
   const created = await page.evaluate(async () => {
     const r = await fetch('/api/sets').then((x) => x.json());
     return r.sets.find((s) => s.label === 'Verify Fn Channel');
@@ -131,10 +134,10 @@ try {
   // --- 4. Edit-load a LEGACY single-binding set → one prefilled card ---------- //
   await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
-  await page.selectOption('#chprofile', 'younger').catch(() => {});
+  await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForTimeout(300);
   await page.click('#chconfigure');
-  await page.waitForSelector('#dynmodal[open]');
+  await page.waitForSelector('#dynmodal[data-open]');
   await page.waitForTimeout(500);
   ok('legacy set edits as one binding card', (await cards()) === 1);
   const legUser = await page.$eval('#dyn-bindings .binding .b-plexuser', (i) => i.value);
@@ -150,7 +153,7 @@ try {
   // Older card came up blank because Younger's scoped list omitted PG/TV-PG). Create the
   // channel via API with disjoint per-profile ratings so the test doesn't depend on live
   // Plex data — the bug reproduces whenever the two bindings' ratings differ.
-  await page.evaluate(() => document.getElementById('dynmodal').close()); // step 4 left it open
+  await page.click('#dynmodal .modalx'); // step 4 left it open — close via the ✕ (no native dialog.close() now)
   await page.waitForTimeout(150);
   await page.evaluate(() => fetch('/api/sets', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -174,7 +177,7 @@ try {
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await page.waitForTimeout(300);
   await page.click('#chconfigure');
-  await page.waitForSelector('#dynmodal[open]');
+  await page.waitForSelector('#dynmodal[data-open]');
   await page.waitForTimeout(2500); // let every card's scopeBindingRatings settle
   ok('two-binding channel edits as two cards', (await cards()) === 2);
   const perCard = await page.$$eval('#dyn-bindings .binding', (els) => els.map((c) => ({

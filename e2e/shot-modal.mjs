@@ -15,10 +15,10 @@ await page.screenshot({ path: '__screenshots__/grid-header.png' });
 await page.goto(`${BASE}/#/channels`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#newdyn', { timeout: 15000 }).catch(() => {});
 const nd = await page.$('#newdyn');
-if (nd) { await nd.click(); await page.waitForSelector('#dynmodal[open]'); await page.screenshot({ path: '__screenshots__/dynmodal.png' });
+if (nd) { await nd.click(); await page.waitForSelector('#dynmodal[data-open]'); await page.screenshot({ path: '__screenshots__/dynmodal.png' });
   // click backdrop (top-left corner of dialog area) to verify close
   await page.mouse.click(5, 5);
-  const stillOpen = await page.$('#dynmodal[open]');
+  const stillOpen = await page.$('#dynmodal[data-open]');
   console.log('backdrop-close works:', !stillOpen);
 }
 await browser.close();

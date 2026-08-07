@@ -9,6 +9,7 @@
 // Needs: root agentic .env (Plex token), e2e/broker deps (aedes), mux-magic playwright,
 // PLAYWRIGHT_BROWSERS_PATH. Copies fixtures to /tmp — never touches real data.
 import { chromium } from './playwright.mjs';
+import { pickValue, pickValueMaybe } from './pick.mjs';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -99,7 +100,7 @@ try {
 
   await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
-  await page.selectOption('#chprofile', 'younger').catch(() => {});
+  await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForSelector('#chmembers li.tile', { timeout: 30000 });
   ok('members box visible on the shows view', await page.$eval('#chmembers-box', (el) => !el.hidden));
   const titles = await page.$$eval('#chmembers li.tile .title', (els) => els.map((e) => e.textContent));
@@ -171,7 +172,7 @@ try {
   // channel's bindings, so the old `selectOption('#chprofile', 'older')` could never work.
   // (The rewatch/movies sub-view is covered by channels-test; this fixture has no rewatch
   // channel, and adding one would break that suite's channel-count assertions.)
-  await page.selectOption('#chchannel', 'older');
+  await pickValue(page, '[data-testid="chchannel"]', 'older');
   await page.waitForSelector('#chmembers-box.no-members', { timeout: 30000 });
   // Empty channel: the member GRID is hidden (no poster-sized empty tile) and a slim
   // one-line hint shows instead.

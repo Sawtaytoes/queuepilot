@@ -1,4 +1,6 @@
-import { Accordion, Select } from "@charcuterie/ui"
+import { Accordion } from "@charcuterie/ui"
+
+import { SelectListbox } from "./SelectListbox"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "../lib/api"
@@ -352,7 +354,7 @@ export function DynModal() {
         {/* Keyed on openness for the same reason as `#set-kind`: this modal is
             mounted at App level for the life of the page and re-seeds `behavior`
             from the edited channel in an effect on `[dynModal]`. */}
-        <Select
+        <SelectListbox
           id="dyn-behavior"
           key={dynModal ? (setId ?? "new") : "closed"}
           label="Behavior"
@@ -455,7 +457,7 @@ export function DynModal() {
                       stuck on the placeholder even for a binding that already names
                       a profile. Not keyed on the resolved value, which the user's
                       own pick writes (through `patchBinding`). */}
-                  <Select
+                  <SelectListbox
                     className="b-profile"
                     key={profiles.length}
                     label="Plex profile"

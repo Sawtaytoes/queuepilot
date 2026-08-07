@@ -1,4 +1,4 @@
-import { Select } from "@charcuterie/ui"
+import { SelectListbox } from "./SelectListbox"
 import { useCallback, useEffect, useState } from "react"
 
 import { api } from "../lib/api"
@@ -301,7 +301,7 @@ export function StartModal() {
             `children.length` changes exactly then — and `setSeriesValue(chosen)`
             lands in the same tick — so the remount seeds the stored override.
             Picking a member does not change it. */}
-        <Select
+        <SelectListbox
           id="start-series"
           key={children.length}
           label="Series"
@@ -337,7 +337,7 @@ export function StartModal() {
             together, and it runs on open AND whenever a different member is picked
             above. The season numbers themselves are the key — they change exactly
             when that happens, and never when the user picks a season. */}
-        <Select
+        <SelectListbox
           id="start-season"
           key={(episodeData?.seasons ?? []).map((s) => s.season).join(",")}
           label="Season"
@@ -365,7 +365,7 @@ export function StartModal() {
             resets this to that season's first episode. So the key is the season
             being shown plus whether its episodes have landed yet. Picking an
             episode changes neither. */}
-        <Select
+        <SelectListbox
           id="start-episode"
           key={`${seasonRow?.season ?? ""}:${isLoadingEpisodes ? "loading" : "ready"}`}
           label="Episode"

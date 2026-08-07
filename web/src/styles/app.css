@@ -370,11 +370,16 @@ ul.grid .empty { grid-column: 1 / -1; padding: 0; }
    means letting it own its own look. */
 .addpos :has(> select),
 .chhead label :has(> select),
-.playrow :has(> .rowtier),
 .tile .eps :has(> select),
 #selbar label :has(> select) {
   flex: 0 0 auto;
   width: auto;
+}
+/* The tier picker is no longer a native <select> in a full-width wrapper — it is a
+   `Listbox` whose trigger IS `.rowtier` (a Button). It sizes to its content already; it
+   only needs to keep its intrinsic width in the flex row rather than being stretched. */
+.playrow > .rowtier {
+  flex: 0 0 auto;
 }
 
 /* ---- QUEUE view: add bar + wrapped poster grid ---- */
@@ -726,15 +731,12 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
   border: 1px solid var(--color-border-default);
   border-radius: 14px; padding: 20px 22px;
   max-height: 90vh; overflow: auto; overscroll-behavior: contain;
-  /* A `showModal()` dialog is centred by the UA's `inset: 0; margin: auto` — and
-     Tailwind's preflight sets `margin: 0` on `*`, which silently pins every dialog
-     to the top-left corner. Nothing fails; it just renders in the wrong place. */
-  margin: auto;
 }
 #startmodal { width: min(460px, 92vw); }
 #setmodal { width: min(440px, 92vw); }
 #dynmodal { width: min(520px, 94vw); }
-#startmodal::backdrop, #setmodal::backdrop, #dynmodal::backdrop { background: var(--color-scrim); }
+/* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
+   native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
 #startmodal form, #setmodal form, #dynmodal form { position: relative; }
 #startmodal h3, #setmodal h3, #dynmodal h3 { margin: 0 0 14px; padding-right: 28px; }
 #startmodal h3 { margin-bottom: 10px; }

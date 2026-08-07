@@ -1,4 +1,5 @@
 import { chromium } from './playwright.mjs';
+import { pickValue } from './pick.mjs';
 const ok = (n, c) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 }, ignoreHTTPSErrors: true });
@@ -28,11 +29,11 @@ const poolTitle = await page.textContent('#chpool-title');
 ok(`channels preview renders (${poolTitle.trim()})`, /\d+ shows/.test(poolTitle));
 
 // Movies channel: rewatch pool renders with counts.
-await page.selectOption('#chchannel', 'movies');
+await pickValue(page, '[data-testid="chchannel"]', 'movies');
 await page.waitForFunction(() => /rewatch pool/.test(document.querySelector('#chpool-title')?.textContent || ''), null, { timeout: 120000 });
 const mTitle = await page.textContent('#chpool-title');
 ok(`movies channel pool renders (${mTitle.trim()})`, /\d+ movies/.test(mTitle));
-await page.selectOption('#chchannel', 'shows');
+await pickValue(page, '[data-testid="chchannel"]', 'shows');
 await page.waitForSelector('#channels:not([hidden])');
 
 // Play menu lists real devices — do NOT click one. The Shield must appear exactly once

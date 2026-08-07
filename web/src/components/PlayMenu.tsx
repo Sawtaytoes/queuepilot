@@ -80,6 +80,10 @@ export function PlayMenu() {
       style={{
         left: `${Math.max(8, Math.min(anchor.left, window.innerWidth - 260))}px`,
         position: "fixed",
+        // `.qmenu` sets `right: 8px` for its in-flow (absolute) use. We pin an explicit
+        // `left` here, so `right` MUST be released — otherwise left+right both apply and
+        // the menu stretches edge-to-edge instead of sizing to its 220px min-width.
+        right: "auto",
         top: `${anchor.bottom + 6}px`,
       }}
     >

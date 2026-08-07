@@ -7,6 +7,7 @@
 // Needs: root agentic .env (Plex token), e2e/broker deps (aedes), mux-magic playwright,
 // PLAYWRIGHT_BROWSERS_PATH. Copies fixtures to /tmp — never touches real data.
 import { chromium } from './playwright.mjs';
+import { currentValue, pickValue, readOptionPairs, readOptionValues } from './pick.mjs';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -94,7 +95,7 @@ try {
   await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])');
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 });
-  const profOpts = await page.$$eval('#chprofile option', (os) => os.map((o) => [o.textContent, o.value]));
+  const profOpts = await readOptionPairs(page, '[data-testid="chprofile"]');
   ok('profile picker = the two bindings of shows_shorts',
     profOpts.map((o) => o[0]).join(',') === 'Younger Kids,Older Kids'
     && profOpts.every((o) => o[1].startsWith('shows_shorts::')));
@@ -105,7 +106,7 @@ try {
   await shot('pr4-channels-shows-younger.png');
 
   // --- 4. Switch binding → Older: filters + preview follow ---------------------- //
-  await page.selectOption('#chprofile', 'shows_shorts::Older Kids');
+  await pickValue(page, '[data-testid="chprofile"]', 'shows_shorts::Older Kids');
   await page.waitForFunction(
     () => [...document.querySelectorAll('#ch-ratings input')].some((i) => i.checked && i.value === 'PG'),
     null, { timeout: 15000 },
@@ -139,15 +140,15 @@ try {
   }
 
   // --- 6. Movies view: bindings of the movies channel; excludes are per-binding - //
-  await page.selectOption('#chchannel', 'movies');
+  await pickValue(page, '[data-testid="chchannel"]', 'movies');
   await page.waitForFunction(() => document.body.classList.contains('movies-channel'), null, { timeout: 15000 });
-  const mProfOpts = await page.$$eval('#chprofile option', (os) => os.map((o) => o.value));
+  const mProfOpts = await readOptionValues(page, '[data-testid="chprofile"]');
   ok('movies view lists the movies channel bindings', mProfOpts.every((v) => v.startsWith('movies::')));
   // Movie-pool tiles carry the watches badge — waiting on it avoids clicking a stale
   // shows-pool tile while the switched view is still loading.
   // The active binding on the movies view carries over from step 5 (Older Kids), so the
   // exclude must land on THAT binding only — the other stays empty.
-  const activeProf = await page.$eval('#chprofile', (e) => e.value); // `movies::<plex_user>`
+  const activeProf = await currentValue(page, '[data-testid="chprofile"]'); // `movies::<plex_user>`
   const activeUser = activeProf.split('::')[1];
   await page.waitForSelector('#chpool .watches + .exclude', { timeout: 30000 });
   await page.click('#chpool .watches + .exclude'); // first excludable pool tile
@@ -166,8 +167,14 @@ try {
   // --- 7. Play landing: profile options mirror the bindings; play carries profile //
   await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#play:not([hidden]) .playrow');
-  const tierOpts = await page.$$eval('#playdynamic .playrow:first-child .rowtier option',
-    (os) => os.map((o) => o.textContent));
+  // The tier picker is a themed Listbox now, not a native <select>
+  // (2026-08-07-plex-channels-pickers-are-listbox-not-native-select): open it, read the portalled
+  // options, then dismiss. The selected option carries a decorative ✓ — strip it.
+  await page.locator('#playdynamic .playrow:first-child .rowtier').click();
+  await page.waitForSelector('[role="listbox"] [role="option"]');
+  const tierOpts = await page.$$eval('[role="listbox"] [role="option"]',
+    (os) => os.map((o) => o.textContent.replace('✓', '').trim()));
+  await page.keyboard.press('Escape');
   // "Shield pick" (set:auto) was dropped from the UI 2026-07-29 — every play is explicit,
   // so the tier picker is just the channel's own bindings.
   ok('landing profile picker = both bindings (no Shield pick)',
@@ -178,7 +185,8 @@ try {
   ok('landing dynamic rows = the two function channels', rowNames.join(',') === 'Shows & Shorts,Movies');
   // Locators (auto-retrying) instead of stale element handles — the list can re-render.
   const movieRow = page.locator('#playdynamic .playrow').nth(1);
-  await movieRow.locator('.rowtier').selectOption({ label: 'Older Kids' });
+  await movieRow.locator('.rowtier').click();
+  await page.getByRole('option', { name: 'Older Kids', exact: true }).click();
   await movieRow.locator('.playbtn').click();
   await page.locator('.playmenu button').first().click(); // the default Shield
   await page.waitForFunction(

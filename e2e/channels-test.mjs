@@ -1,4 +1,5 @@
 import { chromium } from './playwright.mjs';
+import { pickValue, readOptions } from './pick.mjs';
 const ok = (n, c) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
@@ -10,12 +11,12 @@ ok('no Refresh button', !(await page.$('#refresh')));
 // Channels navigation: channel picker (2 generic + 3 anime channels) + tier picker.
 await page.click('#channelslink');
 await page.waitForSelector('#channels:not([hidden])');
-const channels = await page.$$eval('#chchannel option', (os) => os.map((o) => o.textContent));
+const channels = await readOptions(page, '[data-testid="chchannel"]');
 ok(`channel dropdown: 2 function channels + 3 curated (${channels.length})`,
   channels.length === 5 && channels[0] === 'Shows & Shorts' && channels[1] === 'Movies');
 // The tier picker lists ONLY the selected channel's own bindings — no cross-channel
 // duplicates (the split-channels bug: every progress channel folded into one dropdown).
-const profiles = await page.$$eval('#chprofile option', (os) => os.map((o) => o.textContent));
+const profiles = await readOptions(page, '[data-testid="chprofile"]');
 ok('tier dropdown has both tiers, once each', profiles.join(',') === 'Younger Kids,Older Kids');
 await page.waitForFunction(() => document.querySelector('#status')?.textContent.includes('Preview failed'), null, { timeout: 15000 });
 ok('preview fails gracefully without MQTT', true);
@@ -51,7 +52,7 @@ ok('movie_ratings NOT dragged along by the shows save', !movieRatings.includes('
 
 // Movies channel: ratings prefilled from movie_ratings, and the LIBRARY pickers show —
 // the rewatch pool follows them now (it used to be hardwired to the Movies section).
-await page.selectOption('#chchannel', 'movies');
+await pickValue(page, '[data-testid="chchannel"]', 'movies');
 await page.waitForFunction(() => document.body.classList.contains('movies-channel'), null, { timeout: 15000 });
 ok('movies channel hides the shows-only blocklist',
   await page.$eval('#chfilters .showsonly', (e) => getComputedStyle(e).display === 'none'));
@@ -63,7 +64,7 @@ const mratings = await page.$$eval('#ch-ratings input', (is) => is.filter((i) =>
 ok('movies ratings prefilled from movie_ratings (no PG)', mratings.includes('G') && !mratings.includes('PG'));
 
 // An anime channel in the picker opens the grid editor in channel mode: no ordering UI.
-await page.selectOption('#chchannel', 'q:bob_anime');
+await pickValue(page, '[data-testid="chchannel"]', 'q:bob_anime');
 await page.waitForSelector('#queue:not([hidden])');
 ok('anime channel opens grid editor in channel mode',
   await page.evaluate(() => document.body.classList.contains('channel-mode')));

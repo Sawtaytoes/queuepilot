@@ -1,6 +1,6 @@
-import { Select } from "@charcuterie/ui"
 import { type ReactNode, useState } from "react"
 
+import { SelectListbox } from "../components/SelectListbox"
 import type { RegistrySet } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
 import { navigate } from "../state/route"
@@ -102,16 +102,12 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
         })
       }}
       tier={
-        /* No `key` here, and that is the deliberate half of the rule: `tierValue`
-           is `useState` local to this row and nothing else ever writes it, so the
-           DOM and React have one owner between them. A key would remount the
-           control on the user's own pick and take their focus with it. */
-        <Select
+        <SelectListbox
           className="rowtier"
           label={`Profile for ${channel.label}`}
           onChange={setTierValue}
-          onClick={(e) => e.stopPropagation()}
           options={options}
+          size="sm"
           value={tierValue}
         />
       }

@@ -99,9 +99,9 @@ try {
   await page.waitForSelector('#newdyn', { timeout: 30000 }).catch(() => {});
   const nd = await page.$('#newdyn');
   if (nd) {
-    await nd.click(); await page.waitForSelector('#dynmodal[open]'); await page.waitForTimeout(400);
+    await nd.click(); await page.waitForSelector('#dynmodal[data-open]'); await page.waitForTimeout(400);
     await shot('harness-dynmodal.png');
-    await page.keyboard.press('Escape'); await page.waitForSelector('#dynmodal:not([open])').catch(() => {});
+    await page.keyboard.press('Escape'); await page.waitForSelector('#dynmodal', { state: 'detached' }).catch(() => {});
   }
 
   // 7. Queue Configure modal (setmodal) — the other ✕ (#4).
@@ -110,9 +110,9 @@ try {
   await page.hover('.shelf[data-set="bob"] h2').catch(() => {});
   const edit = await page.$('.shelf[data-set="bob"] .shelfedit');
   if (edit) {
-    await edit.click(); await page.waitForSelector('#setmodal[open]'); await page.waitForTimeout(400);
+    await edit.click(); await page.waitForSelector('#setmodal[data-open]'); await page.waitForTimeout(400);
     await shot('harness-setmodal.png');
-    await page.keyboard.press('Escape'); await page.waitForSelector('#setmodal:not([open])').catch(() => {});
+    await page.keyboard.press('Escape'); await page.waitForSelector('#setmodal', { state: 'detached' }).catch(() => {});
   }
 
   // 8. Device menu ("Play on ▾") open on the Play landing (fake MQTT devices — #0 enabler).

@@ -1,4 +1,4 @@
-import { Select } from "@charcuterie/ui"
+import { SelectListbox } from "../components/SelectListbox"
 import { useEffect, useState } from "react"
 
 import { activeBinding } from "../lib/channels"
@@ -97,7 +97,7 @@ export function ChannelsView({
                 than on `profileValueNow` is the point — picking a profile leaves
                 `channel.id` alone, so the user's own change never remounts the
                 control under their focus. */}
-          <Select
+          <SelectListbox
             id="chchannel"
             key={channel.id}
             label="Channel"
@@ -106,29 +106,22 @@ export function ChannelsView({
               if (v.startsWith("q:")) navigate(`#/q/${v.slice(2)}`)
               else navigate(`#/channels/${v}`)
             }}
+            // Flat list: `Listbox` has no option groups, so the old "Dynamic Channels" /
+            // "Curated Channels" headers are dropped — dynamic channels first, then the
+            // curated ones (the `q:` prefix still routes them to the grid editor).
             options={[
-              {
-                label: "Dynamic Channels",
-                options: all.map((s) => ({ label: s.label, value: s.id })),
-              },
-              ...(channelSetIds(data).length
-                ? [
-                    {
-                      label: "Curated Channels",
-                      options: channelSetIds(data).map((id) => ({
-                        label: data!.sets[id]!.label,
-                        value: `q:${id}`,
-                      })),
-                    },
-                  ]
-                : []),
+              ...all.map((s) => ({ label: s.label, value: s.id })),
+              ...channelSetIds(data).map((id) => ({
+                label: data!.sets[id]!.label,
+                value: `q:${id}`,
+              })),
             ]}
             value={channel.id}
           />
         </label>
         <label>
           Profile
-          <Select
+          <SelectListbox
             id="chprofile"
             key={channel.id}
             label="Profile"

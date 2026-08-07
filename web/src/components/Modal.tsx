@@ -1,23 +1,33 @@
-import { type ReactNode, useEffect, useRef } from "react"
+import { Modal as OverlayModal } from "@charcuterie/ui"
+import { type ReactNode, useEffect } from "react"
 
 import { busy } from "../state/busy"
 
 /**
- * A real `<dialog>` + `showModal()`, as the vanilla app used — not a hand-rolled
- * overlay. That is what gives Esc, the inert backdrop and focus containment for
- * free, and it is what `#dynmodal[open]` / `#setmodal[open]` select on in the e2e
- * suites.
+ * The app's modal, now built on Charcuterie's base `Modal` (a body-portalled overlay)
+ * instead of a native `<dialog>` + `showModal()`.
  *
- * Two things `<dialog>` does NOT do, both handled here:
+ * Why the switch: a `showModal()` dialog lives in the browser TOP LAYER, above every
+ * portal — so a Charcuterie `Listbox`/`Combobox` opened inside it (portalled to
+ * `document.body`) rendered BEHIND the modal and was unclickable. Charcuterie's overlay
+ * portals to `document.body` at `--layer-modal`, so a picker's dropdown now stacks above
+ * it. That is the whole reason in-modal pickers can be `SelectListbox`.
+ * (decision `2026-08-07-plex-channels-pickers-are-listbox-not-native-select`)
  *
- * - **It does not lock page scroll.** On a tablet the background scrolls under the
- *   open dialog. `html.modal-open { overflow: hidden }` is applied while any dialog
- *   is open, and released on every close path (Esc, backdrop, ✕, submit) by
- *   listening to the native `close` event rather than by remembering to call a
- *   helper at four sites.
- * - **A backdrop click does not close it.** The click lands on the dialog element
- *   itself (the form is the only child with area), so `e.target === dialog` is the
- *   backdrop test.
+ * The PUBLIC API and DOM contract are unchanged on purpose — the three consumers
+ * (DynModal/SetModal/StartModal) and the e2e suites are untouched:
+ *  - `id` stays on the box element (so `#dynmodal`/`#setmodal`/`#startmodal` still resolve),
+ *    and a real `open` attribute is kept while visible so `#{id}[open]` selectors work now
+ *    that this is no longer a native dialog.
+ *  - the `<form onSubmit>`, the `.modalbtns` footer and the `.modalx` ✕ are rendered here
+ *    exactly as before — all of app.css's `#id …` modal chrome keys off the box id, so
+ *    Charcuterie's own box surface is neutralised (below) and the app styling still owns
+ *    the look.
+ *  - `busy.openModals` + `html.modal-open` are maintained here (Charcuterie does its own
+ *    scroll lock, but `uiBusy()` reads this counter as "an edit is in progress").
+ *
+ * Escape and a backdrop press close via Charcuterie's dismiss (`isDismissable`), so the
+ * old native-close listener and manual backdrop test are gone.
  */
 
 type Props = {
@@ -41,107 +51,63 @@ export function Modal({
   title,
   titleId,
 }: Props) {
-  const ref = useRef<HTMLDialogElement>(null)
-  // True while THIS modal holds the page-scroll lock + its slot in `openModals`, so
-  // the lock is dropped exactly once no matter HOW the modal goes away.
-  const isLocking = useRef(false)
-
-  // Release the scroll-lock + busy count this modal holds. Idempotent — the native
-  // `close` path and the unmount backstop both call it, but only the first wins.
-  const release = () => {
-    if (!isLocking.current) return
-
-    isLocking.current = false
-    busy.openModals = Math.max(0, busy.openModals - 1)
-
-    if (!document.querySelector("dialog[open]")) {
-      document.documentElement.classList.remove("modal-open")
-    }
-  }
-
-  // Always call the freshest `release` from the mount-once unmount effect below.
-  const releaseRef = useRef(release)
-  releaseRef.current = release
-
   useEffect(() => {
-    const dlg = ref.current
+    if (!isOpen) return
 
-    if (!dlg) return
+    busy.openModals += 1
+    document.documentElement.classList.add("modal-open")
 
-    if (isOpen && !dlg.open) {
-      document.documentElement.classList.add("modal-open")
-      busy.openModals += 1
-      isLocking.current = true
-      dlg.showModal()
-    }
-    else if (!isOpen && dlg.open) {
-      dlg.close()
+    return () => {
+      busy.openModals = Math.max(0, busy.openModals - 1)
+
+      if (busy.openModals === 0) {
+        document.documentElement.classList.remove("modal-open")
+      }
     }
   }, [isOpen])
 
-  useEffect(() => {
-    const dlg = ref.current
-
-    if (!dlg) return
-
-    const onNativeClose = () => {
-      release()
-      onClose()
-    }
-
-    dlg.addEventListener("close", onNativeClose)
-
-    return () => dlg.removeEventListener("close", onNativeClose)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose])
-
-  // A `<dialog>` removed from the DOM while still open never fires `close`, so a
-  // modal that unmounts mid-open — App.tsx renders each overlay as `x ? <M/> : null`,
-  // and an optimistic add + background refresh can swap the item out from under an
-  // open picker — would strand `html.modal-open` and the page would silently stop
-  // scrolling with no dialog in sight. Releasing on unmount is the backstop.
-  useEffect(() => () => releaseRef.current(), [])
-
   return (
-    <dialog
-      id={id}
-      onClick={(e) => {
-        if (
-          e.target === ref.current ||
-          (e.target as HTMLElement).closest("[data-close]")
-        ) {
-          ref.current?.close()
-        }
-      }}
-      ref={ref}
+    <OverlayModal
+      aria-labelledby={titleId}
+      // Neutralise Charcuterie's own bordered/rounded/elevated box: the visible box is the
+      // app-styled `#id` element below (every `#startmodal|#setmodal|#dynmodal …` rule in
+      // app.css targets it), and its own `max-height`/`overflow` handle scrolling. Tailwind
+      // v4 takes `!` as a SUFFIX.
+      className="max-h-none! overflow-visible! rounded-none! border-0! bg-transparent! p-0! shadow-none!"
+      isVisible={isOpen}
+      onClose={onClose}
     >
-      <form
-        id={`${id.replace("modal", "")}form`}
-        onSubmit={(e) => {
-          e.preventDefault()
-          onSubmit?.()
-        }}
-      >
-        <button
-          aria-label="Close"
-          className="modalx"
-          data-close=""
-          type="button"
+      {/* `data-open` (not `open`, which React only renders on <dialog>/<details>) keeps the
+          e2e "modal is open" contract alive now that this is not a native <dialog>. */}
+      <div data-open="" id={id}>
+        <form
+          id={`${id.replace("modal", "")}form`}
+          onSubmit={(e) => {
+            e.preventDefault()
+            onSubmit?.()
+          }}
         >
-          <svg aria-hidden="true" height="15" viewBox="0 0 14 14" width="15">
-            <path
-              d="M2 2l10 10M12 2L2 12"
-              fill="none"
-              stroke="currentColor"
-              strokeLinecap="round"
-              strokeWidth="2"
-            />
-          </svg>
-        </button>
-        <h3 id={titleId}>{title}</h3>
-        {children}
-        <div className="modalbtns">{footer}</div>
-      </form>
-    </dialog>
+          <button
+            aria-label="Close"
+            className="modalx"
+            onClick={onClose}
+            type="button"
+          >
+            <svg aria-hidden="true" height="15" viewBox="0 0 14 14" width="15">
+              <path
+                d="M2 2l10 10M12 2L2 12"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeWidth="2"
+              />
+            </svg>
+          </button>
+          <h3 id={titleId}>{title}</h3>
+          {children}
+          <div className="modalbtns">{footer}</div>
+        </form>
+      </div>
+    </OverlayModal>
   )
 }

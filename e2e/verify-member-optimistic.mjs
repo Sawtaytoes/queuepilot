@@ -8,6 +8,7 @@
 //   set -a; source /srv/repos/agentic/.env; set +a
 //   node e2e/verify-member-optimistic.mjs
 import { chromium } from './playwright.mjs';
+import { pickValueMaybe } from './pick.mjs';
 import { spawn } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -85,7 +86,7 @@ try {
 
   await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
-  await page.selectOption('#chprofile', 'younger').catch(() => {});
+  await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForSelector('#chmembers li.tile', { timeout: 30000 });
   await page.waitForTimeout(1000);
   ok('starts with 2 members', (await tiles()) === 2);

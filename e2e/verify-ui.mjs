@@ -52,7 +52,7 @@ try {
   await page.waitForSelector('.shelf', { timeout: 30000 });
   await page.hover('.shelf[data-set="bob"] h2');
   await page.click('.shelf[data-set="bob"] .shelfedit');
-  await page.waitForSelector('#setmodal[open]');
+  await page.waitForSelector('#setmodal[data-open]');
   await page.waitForTimeout(300);
   const x = await page.$('#setmodal .modalx');
   const box = await x.boundingBox();
@@ -63,7 +63,7 @@ try {
     return { color: s.color, background: s.backgroundColor, radius: s.borderRadius, text: el.textContent };
   }));
   await page.keyboard.press('Escape');
-  await page.waitForFunction(() => !document.querySelector('#setmodal[open]'));
+  await page.waitForFunction(() => !document.querySelector('#setmodal[data-open]'));
 
   // --- #5: drive a real drag on a queue tile, screenshot MID-gesture --------- //
   await page.goto(`${BASE}/#/q/bob`, { waitUntil: 'domcontentloaded' });

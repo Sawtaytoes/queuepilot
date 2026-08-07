@@ -1,4 +1,4 @@
-import { Select } from "@charcuterie/ui"
+import { SelectListbox } from "./SelectListbox"
 import { useState } from "react"
 
 import { api } from "../lib/api"
@@ -38,7 +38,7 @@ export function SelectionBar({ currentSet }: { currentSet: string | null }) {
             so navigating to a different queue silently rewrites both the option list
             and the fallback value with nobody having touched the control. Keying on
             `value` instead would remount on the user's own pick. */}
-        <Select
+        <SelectListbox
           id="movetarget"
           key={currentSet}
           label="Move to"

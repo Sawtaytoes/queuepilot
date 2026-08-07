@@ -1,4 +1,4 @@
-import { Select } from "@charcuterie/ui"
+import { SelectListbox } from "./SelectListbox"
 import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
@@ -168,7 +168,7 @@ export function SetModal() {
             `[setModal]`; the key cycles through `"closed"` on every close, so the
             control remounts in lockstep with it. Not keyed on `kind`, which the
             user's own pick writes. */}
-        <Select
+        <SelectListbox
           id="set-kind"
           key={setModal ? (setId ?? "new") : "closed"}
           label="Type"

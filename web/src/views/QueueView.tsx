@@ -1,4 +1,6 @@
-import { Badge, EmptyState, Select } from "@charcuterie/ui"
+import { Badge, EmptyState } from "@charcuterie/ui"
+
+import { SelectListbox } from "../components/SelectListbox"
 import { useRef, useState } from "react"
 
 import { TypeBadge } from "../components/badges"
@@ -272,7 +274,7 @@ export function QueueView({
         >
           <label className="addpos">
             Add to
-            <Select
+            <SelectListbox
               id="addpos"
               label="Add to"
               onChange={setAddPosition}
@@ -419,7 +421,7 @@ export function QueueView({
                                     over SSE. Unkeyed, an uncontrolled select would
                                     keep a value the PATCH rejected and would never
                                     hear a change made elsewhere. */}
-                                <Select
+                                <SelectListbox
                                   key={String(item.episodes || 1)}
                                   label="Episodes queued per play"
                                   onChange={(v) =>
