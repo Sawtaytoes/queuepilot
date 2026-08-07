@@ -67,12 +67,36 @@ preview endpoint before anything plays from it. D5 (`adb.js`) needs the real Shi
 family-hours soak; D8 (deletions + the lock→optimistic-concurrency swap) is last. See the table
 and the decision doc for the acceptance bar on each.
 
-### Loose end noticed 2026-08-07
+### What actually runs live vs. what is inert (read this first if you're debugging behavior)
 
-`feat/node-port-phase-d` has an **uncommitted** edit to this file (mtime 2026-08-06 21:29, a prior
-session — not live) that adds a "What actually runs live vs. what is inert" section absent from
-`main`. It is useful orientation; a future commit should land it on `main` or discard it. It was
-left untouched here to avoid entangling this docs update.
+`ENGINE=python` (the default) gates the *ported selection/playback engine*. It does **NOT** gate
+several changes from the Phase-D commit (`52f7c9b`, now on `main`) that run on every request
+regardless of `ENGINE`. If live behavior changed, look here, not at the (inert) port modules:
+
+- **`queue_builder/` (the Python scan/prune) was NOT touched by the port commit** — `git show
+  --stat 52f7c9b` lists no `queue_builder/*` file. So a *Python scan* regression is not from this
+  work (more likely Node 24→26 in `#4`, the `@charcuterie/ui` 2.x cross, or config/env).
+- **`server/src/plex.js` `plexGet` was rewritten onto undici** (keepalive `Agent`, retry on
+  network/5xx, single-flight, `connect.rejectUnauthorized:false`). This is **not gated** and
+  changes *every* Node→Plex HTTP call (search, resolve, previews, `/api/queues`, posters). First
+  suspect for any Node-side Plex behavior change.
+- **`server/src/cache.js` opens `/config/cache.sqlite` at boot** and now backs `resolveTitle` /
+  `allLeaves` / `collectionChildren`. **Not gated.** It is deletable (`rm /config/cache.sqlite*`)
+  and schema-wiped on version mismatch. Invalidations: MQTT now-playing drops the show's `leaves`
+  row + bumps generation; `updateSet` drops section listings + bumps generation; and as of
+  `2026-08-07-leaves-cache-revalidates-on-read` (#24) `allLeaves` re-validates a show's leaves
+  against its live `(updatedAt, viewedLeafCount)` on read, so a watch finished OUTSIDE the app's
+  flow self-heals the next-up instead of going stale for up to the 24 h TTL.
+- **`server/src/server.js`**: compression + pre-compressed static + cache headers + `/api/shelves`
+  + ETag/304 on `/api/queues`. **Not gated.** Web-UI only, not the scan.
+- **`queues.js` / `sets.js`**: mtime-keyed memoization of `listAll()` / registry, and
+  `setKeepingComment`. **Not gated**, but a Python write to the YAML changes mtime so the memo
+  busts correctly.
+- **Inert until `ENGINE=node` (or `PLAYBACK_ENGINE=node`)**: `profiles.js` and every future
+  `server/src/engine/*`. Not wired to anything yet.
+
+Net: the scan pipeline is unchanged; the live-affecting surfaces are all Node-web-server-side,
+undici `plexGet` and the SQLite cache being the two worth checking first.
 
 ---
 
