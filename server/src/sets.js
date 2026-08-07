@@ -370,6 +370,11 @@ function normalize(ent) {
       ? {
           profiles,
           has_explicit_profiles: Array.isArray(ent.profiles) && ent.profiles.some((p) => p && typeof p === 'object'),
+          // Which binding the Play/Channels dropdowns seed to (a binding's plex_user). A pure
+          // UI-seed hint — the Python engine ignores it and still plays the profile the play
+          // menu passes. A stale value (profile renamed/removed) just falls back to profiles[0]
+          // on the web side. (decision `2026-08-07-default-profile-per-channel`)
+          default_profile: ent.default_profile != null ? String(ent.default_profile) : null,
           superseded_by: ent.superseded_by != null ? String(ent.superseded_by) : null,
           behavior: BEHAVIORS.includes(ent.behavior) ? ent.behavior : null,
           members: toMembers(ent.members),
@@ -477,6 +482,7 @@ function rotationCreateObj(id, body) {
   }
   const members = toMembers(body.members);
   if (members.length) obj.members = members;
+  if (body.default_profile != null && String(body.default_profile).trim()) obj.default_profile = String(body.default_profile).trim();
   if (BEHAVIORS.includes(body.behavior)) obj.behavior = body.behavior;
   if (MODES.includes(body.mode)) obj.mode = body.mode;
   if (body.audio_language != null && String(body.audio_language).trim()) obj.audio_language = String(body.audio_language).trim();
@@ -546,6 +552,8 @@ export async function updateSet(id, patch) {
         'audio_language', 'movie_excludes',
         // v3 PR 2: per-profile bindings + behavior. PR 3: explicit members.
         'profiles', 'behavior', 'members',
+        // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
+        'default_profile',
       );
     }
     for (const k of allow) {
@@ -572,6 +580,14 @@ export async function updateSet(id, patch) {
       if (k === 'behavior') {
         if (!BEHAVIORS.includes(v)) { node.delete('behavior'); continue; } // cleared/invalid => drop
         node.set('behavior', doc.createNode(v));
+        continue;
+      }
+      if (k === 'default_profile') {
+        // A UI-seed hint keyed by plex_user; blank/absent => no default (drop the key so the
+        // dropdowns fall back to profiles[0]).
+        const s = v == null ? '' : String(v).trim();
+        if (!s) { node.delete('default_profile'); continue; }
+        node.set('default_profile', doc.createNode(s));
         continue;
       }
       if (k === 'sections' || k === 'item_sections') {

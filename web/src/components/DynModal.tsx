@@ -102,6 +102,9 @@ export function DynModal() {
   const [itemSections, setItemSections] = useState<number[]>([])
   const [bindings, setBindings] = useState<BindingDraft[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
+  // Which binding the Play/Channels dropdowns seed to (a binding's plex_user); "" = none
+  // (fall back to the first binding). (decision `2026-08-07-default-profile-per-channel`)
+  const [defaultProfile, setDefaultProfile] = useState("")
 
   const knownRef = useRef<string[]>([])
 
@@ -141,6 +144,7 @@ export function DynModal() {
         : "progress",
     )
     setAudio(editing ? editing.audio_language || "" : "")
+    setDefaultProfile(editing ? editing.default_profile || "" : "")
 
     const checked = libSelection(editing)
 
@@ -253,6 +257,13 @@ export function DynModal() {
 
     if (collected.length) body.profiles = collected
 
+    // Only persist a default that still names one of the saved bindings; anything else
+    // (blank, or a since-renamed profile) clears it so the dropdowns fall back to the first.
+    const named = collected.map((b) => b.plex_user).filter(Boolean)
+
+    body.default_profile =
+      defaultProfile && named.includes(defaultProfile) ? defaultProfile : ""
+
     setStatus("Saving channel…")
 
     try {
@@ -302,6 +313,12 @@ export function DynModal() {
 
   const libOptions = (libs: typeof showLibs) =>
     libs.map((l) => ({ label: l.title, value: l.id }))
+
+  // The bindings the default-profile picker can point at — a default is only meaningful
+  // once a channel binds more than one named profile.
+  const namedProfiles = [
+    ...new Set(bindings.map((d) => d.plexUser.trim()).filter(Boolean)),
+  ]
 
   return (
     <Modal
@@ -650,6 +667,26 @@ export function DynModal() {
         >
           + Add profile
         </button>
+        {/* The default only means something with ≥2 bindings — with one profile there is
+            nothing to pick between, and Play already lands on it. */}
+        <label className="subfield" hidden={namedProfiles.length < 2} id="dyn-default-wrap">
+          Default profile
+          {/* Keyed on modal-open identity like the other seeded selects here: the control
+              is uncontrolled (value seeds defaultValue), so it must re-mount to pick up the
+              value set when a channel is (re-)opened for editing. */}
+          <SelectListbox
+            id="dyn-default-profile"
+            key={dynModal ? (setId ?? "new") : "closed"}
+            label="Default profile"
+            onChange={setDefaultProfile}
+            options={namedProfiles.map((p) => ({ label: p, value: p }))}
+            placeholder="— first profile —"
+            value={namedProfiles.includes(defaultProfile) ? defaultProfile : ""}
+          />
+          <span className="subhint">
+            The tier the Play and Channels dropdowns start on. Leave unset to use the first.
+          </span>
+        </label>
       </fieldset>
 
       <label className="field">

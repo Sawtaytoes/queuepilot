@@ -84,7 +84,19 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
       }))
     : [{ label: channel.label, value: channel.id }]
 
-  const [tierValue, setTierValue] = useState(options[0]?.value ?? channel.id)
+  // Seed to the channel's saved default profile when it names a real binding, so Play
+  // reaches for the right tier without the user re-picking; else the first binding.
+  // (decision `2026-08-07-default-profile-per-channel`)
+  const defaultValue =
+    channel.has_explicit_profiles && channel.default_profile
+      ? (channel.profiles || [])
+          .filter((b) => b.plex_user === channel.default_profile)
+          .map((b) => JSON.stringify({ profile: b.plex_user, set: channel.id }))[0]
+      : undefined
+
+  const [tierValue, setTierValue] = useState(
+    defaultValue ?? options[0]?.value ?? channel.id,
+  )
 
   return (
     <PlayRow

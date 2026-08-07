@@ -2,6 +2,7 @@ import { SelectListbox } from "../components/SelectListbox"
 import { useEffect, useState } from "react"
 
 import { activeBinding } from "../lib/channels"
+import type { RegistrySet } from "../lib/types"
 import {
   resolveChannel,
   setChannelSelection,
@@ -31,6 +32,26 @@ import { ChannelPool } from "./ChannelPool"
  * `sub`-view argument — that is what lets Shows & Shorts, Shows, Shorts and Movies
  * each be a first-class entry.
  */
+/**
+ * The profile to seed a channel on when it becomes the selection. A carried-over
+ * in-session pick that still matches a binding wins (so browsing keeps your choice);
+ * otherwise the channel's saved `default_profile`; otherwise its first binding.
+ * (decision `2026-08-07-default-profile-per-channel`)
+ */
+function resolveInitialProfile(
+  channel: RegistrySet,
+  currentProfile: string | null,
+): string | null {
+  const bindings = channel.profiles || []
+  const matches = (name: string | null) =>
+    Boolean(name) && bindings.some((b) => b.plex_user === name)
+
+  if (matches(currentProfile)) return currentProfile
+  if (matches(channel.default_profile ?? null)) return channel.default_profile ?? null
+
+  return activeBinding(channel, null).plex_user || null
+}
+
 export function ChannelsView({
   isHidden,
   routeId,
@@ -53,7 +74,7 @@ export function ChannelsView({
     setChannelSelection(
       channel.id,
       channel.has_explicit_profiles
-        ? activeBinding(channel, currentProfile).plex_user || null
+        ? resolveInitialProfile(channel, currentProfile)
         : null,
     )
     // Re-derive only when the selected channel changes.
