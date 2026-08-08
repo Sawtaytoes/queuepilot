@@ -272,6 +272,29 @@ export function SetModal() {
         until that profile is signed in before it plays. Leave “Any” for no lock. Needed when
         the queue’s libraries are only shared with one profile (e.g. Demos → Demo).
       </p>
+      {/* Everyday fields first (profile gate, libraries); playlist/reel/TTL sit below as
+          advanced options so a normal edit doesn't scroll past them. */}
+      <fieldset className="field">
+        <legend>Libraries this queue can search &amp; hold</legend>
+        <div className="libs" id="set-libs">
+          {libraries.map((l) => (
+            <label key={l.id}>
+              <input
+                checked={sections.includes(l.id)}
+                onChange={(e) =>
+                  setSections((prev) =>
+                    e.target.checked
+                      ? [...prev, l.id]
+                      : prev.filter((x) => x !== l.id),
+                  )}
+                type="checkbox"
+                value={String(l.id)}
+              />
+              {` ${l.title}`}
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <fieldset className="field flags" id="set-flags">
         <legend>Playback &amp; completion</legend>
         {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once). Remount on modal
@@ -315,27 +338,6 @@ export function SetModal() {
           `never` keeps them tagged done until you clear them. Playlist / reel queues never
           mark done, so this only applies to ordinary consuming queues.
         </p>
-      </fieldset>
-      <fieldset className="field">
-        <legend>Libraries this queue can search &amp; hold</legend>
-        <div className="libs" id="set-libs">
-          {libraries.map((l) => (
-            <label key={l.id}>
-              <input
-                checked={sections.includes(l.id)}
-                onChange={(e) =>
-                  setSections((prev) =>
-                    e.target.checked
-                      ? [...prev, l.id]
-                      : prev.filter((x) => x !== l.id),
-                  )}
-                type="checkbox"
-                value={String(l.id)}
-              />
-              {` ${l.title}`}
-            </label>
-          ))}
-        </div>
       </fieldset>
       <p className="idnote" id="set-idnote">
         {editing
