@@ -1,4 +1,4 @@
-import { SelectListbox } from "./SelectListbox"
+import { Checkbox } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
@@ -8,6 +8,7 @@ import type { Profile } from "../lib/types"
 import { closeSetModal, useOverlays } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
 import { Modal } from "./Modal"
+import { SelectListbox } from "./SelectListbox"
 
 /**
  * Create / edit a curated set. Create: empty; edit: prefilled + rename/delete.
@@ -19,6 +20,10 @@ import { Modal } from "./Modal"
  * The id is immutable and NFC cards / HA reference it, so the note says so on both
  * paths — renaming the label never breaks a card.
  * (decision `2026-07-21-sets-registry-immutable-ids`)
+ *
+ * Queue consumption flags (`keep_completed`, `reel`, `remove_completed_after`) are
+ * editable here via Charcuterie `Checkbox` — previously hand-YAML only.
+ * (decision `2026-08-08-set-modal-queue-flags`)
  */
 export function SetModal() {
   const { setModal } = useOverlays()
@@ -34,15 +39,35 @@ export function SetModal() {
   const [kind, setKind] = useState("movies")
   const [sections, setSections] = useState<number[]>([])
   const [requiresProfile, setRequiresProfile] = useState("")
+  const [isKeepCompleted, setIsKeepCompleted] = useState(false)
+  const [isReel, setIsReel] = useState(false)
+  const [removeCompletedAfter, setRemoveCompletedAfter] = useState("")
   const [profiles, setProfiles] = useState<Profile[]>([])
+
+  // Identity of the open modal instance — used to remount uncontrolled Charcuterie
+  // controls (Checkbox/SelectListbox seed only on mount). Keyed on openness, never on
+  // the values the user is currently editing (decision
+  // `2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`).
+  const modalKey = setModal ? (setId ?? "new") : "closed"
 
   useEffect(() => {
     if (!setModal) return
 
     setLabel(editing ? editing.label : "")
-    setKind(editing ? editing.kind : setModal.presetKind || "movies")
+    const nextKind = editing ? editing.kind : setModal.presetKind || "movies"
+    setKind(nextKind)
     setSections(editing ? [...editing.sections] : [])
     setRequiresProfile(editing ? editing.requires_profile || "" : "")
+    setIsKeepCompleted(editing ? Boolean(editing.keep_completed || editing.reel) : false)
+    setIsReel(editing ? Boolean(editing.reel) : false)
+    // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
+    // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
+    if (editing) {
+      setRemoveCompletedAfter(editing.remove_completed_after || "")
+    }
+    else {
+      setRemoveCompletedAfter(nextKind === "anime" ? "" : "24h")
+    }
     void fetchProfiles().then(setProfiles)
     // Only re-seed when the modal is (re-)opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -88,12 +113,25 @@ export function SetModal() {
       return
     }
 
+    // reel implies keep_completed at the engine; always send the effective pair so a
+    // re-opened edit prefill matches what was saved.
+    const body = {
+      kind,
+      label: name,
+      sections,
+      requires_profile: requiresProfile,
+      keep_completed: isKeepCompleted || isReel,
+      reel: isReel,
+      // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
+      remove_completed_after: removeCompletedAfter.trim(),
+    }
+
     try {
       if (setId) {
-        await api("PATCH", `/api/sets/${setId}`, { kind, label: name, sections, requires_profile: requiresProfile })
+        await api("PATCH", `/api/sets/${setId}`, body)
       }
       else {
-        await api("POST", "/api/sets", { kind, label: name, sections, requires_profile: requiresProfile })
+        await api("POST", "/api/sets", body)
       }
 
       const word = kind === "anime" ? "Channel" : "Queue"
@@ -129,6 +167,13 @@ export function SetModal() {
     catch (e) {
       setStatus("Delete failed: " + (e as Error).message, "err")
     }
+  }
+
+  const onReelChange = (nextIsReel: boolean) => {
+    setIsReel(nextIsReel)
+    // reel ⇒ keep_completed. When reel turns on, force the playlist flag on so the
+    // submitted body and the disabled checkbox both read the implied state.
+    if (nextIsReel) setIsKeepCompleted(true)
   }
 
   return (
@@ -195,7 +240,7 @@ export function SetModal() {
         <SelectListbox
           className="fieldselect"
           id="set-kind"
-          key={setModal ? (setId ?? "new") : "closed"}
+          key={modalKey}
           label="Type"
           onChange={setKind}
           options={[
@@ -215,7 +260,7 @@ export function SetModal() {
         <SelectListbox
           className="fieldselect"
           id="set-profile"
-          key={setModal ? (setId ?? "new") : "closed"}
+          key={modalKey}
           label="Plays under profile"
           onChange={setRequiresProfile}
           options={profileOptions}
@@ -227,6 +272,50 @@ export function SetModal() {
         until that profile is signed in before it plays. Leave “Any” for no lock. Needed when
         the queue’s libraries are only shared with one profile (e.g. Demos → Demo).
       </p>
+      <fieldset className="field flags" id="set-flags">
+        <legend>Playback &amp; completion</legend>
+        {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once). Remount on modal
+            open AND when reel forces keep_completed on, so the box reflects the implied
+            state without becoming a controlled input. */}
+        <Checkbox
+          id="set-keep-completed"
+          isChecked={isKeepCompleted || isReel}
+          isDisabled={isReel}
+          key={`${modalKey}-keep-${isReel ? "reel" : "free"}`}
+          label="Playlist mode — don’t mark entries done when played"
+          onChange={setIsKeepCompleted}
+        />
+        <p className="subhint" id="set-keep-hint">
+          Non-consuming queue: entries stay re-showable forever. Demo Reel and other
+          showcase lineups want this. Forced on when Demo reel is checked.
+        </p>
+        <Checkbox
+          id="set-reel"
+          isChecked={isReel}
+          key={`${modalKey}-reel`}
+          label="Demo reel — play the whole lineup every scan"
+          onChange={onReelChange}
+        />
+        <p className="subhint" id="set-reel-hint">
+          Ignores watched-state and plays every entry each scan (implies playlist mode).
+          Leave off for a normal ordered queue that advances one item at a time.
+        </p>
+        <label className="field" htmlFor="set-remove-after">
+          Remove finished entries after
+          <input
+            id="set-remove-after"
+            onChange={(e) => setRemoveCompletedAfter(e.target.value)}
+            placeholder='e.g. 24h — blank = keep forever'
+            type="text"
+            value={removeCompletedAfter}
+          />
+        </label>
+        <p className="subhint" id="set-remove-hint">
+          Opt-in TTL for auto-removing finished entries (`24h`, `7d`, `90m`). Blank or
+          `never` keeps them tagged done until you clear them. Playlist / reel queues never
+          mark done, so this only applies to ordinary consuming queues.
+        </p>
+      </fieldset>
       <fieldset className="field">
         <legend>Libraries this queue can search &amp; hold</legend>
         <div className="libs" id="set-libs">

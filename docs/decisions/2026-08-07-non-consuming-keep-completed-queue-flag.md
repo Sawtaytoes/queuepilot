@@ -4,7 +4,10 @@
 - **Date:** 2026-08-07
 - **Type:** feature / behavior
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** in part —
+  [2026-08-08-set-modal-queue-flags](2026-08-08-set-modal-queue-flags.md)
+  (the "Web UI needs no change" clause only — that meant the Completed badge
+  needs no special case; the flags themselves are now editable in SetModal)
 
 ## Decision
 

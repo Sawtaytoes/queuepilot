@@ -175,6 +175,23 @@ export type RegistrySet = {
   /** Curated-queue play gate: a scan waits (and ADB-switches the Shield) until this Plex
    * Home profile is signed in before playing. null/absent = ungated. */
   requires_profile?: string | null
+  /**
+   * Curated queues only. Non-consuming / playlist mode: the engine never marks entries
+   * done, so the lineup stays re-showable. `reel: true` implies this (normalize reports
+   * both). Absent/false on rotation channels.
+   */
+  keep_completed?: boolean
+  /**
+   * Curated queues only. Demo-reel mode: play the whole lineup every scan (and implies
+   * `keep_completed`). Orthogonal to the TTL sweep.
+   */
+  reel?: boolean
+  /**
+   * Curated queues only. Opt-in TTL for auto-removing finished entries
+   * (`"24h"` / `"7d"` / …). null/absent = keep forever. Movie queues often ship as
+   * `"24h"`; anime channels stay keep-forever by design.
+   */
+  remove_completed_after?: string | null
   audio_language?: string
   superseded_by?: string | null
   // The ultra-legacy single-binding mirror, still read by `activeBinding`.

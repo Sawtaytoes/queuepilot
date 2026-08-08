@@ -243,6 +243,40 @@ try {
   ok('updateSet clears default_profile to null', ns.default_profile == null);
   await api(`/sets/${dpid}`, { method: 'DELETE' });
 
+  // --- Queue flags: keep_completed / reel / remove_completed_after (Set editor) --- //
+  // These lived hand-YAML only until the SetModal exposure; the API must round-trip
+  // them so the UI can read and write. (decision 2026-08-08-set-modal-queue-flags)
+  const playlist = await post('/sets', {
+    label: 'Playlist Queue', kind: 'movies', sections: [1],
+    keep_completed: true, remove_completed_after: '24h',
+  });
+  const plid = playlist.id;
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === plid);
+  ok('createSet persists keep_completed', ns && ns.keep_completed === true);
+  ok('createSet persists remove_completed_after', ns && ns.remove_completed_after === '24h');
+  ok('createSet leaves reel false when unset', ns && ns.reel === false);
+
+  await patch(`/sets/${plid}`, { reel: true });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === plid);
+  ok('updateSet reel:true lands', ns.reel === true);
+  ok('updateSet reel implies keep_completed on normalize', ns.keep_completed === true);
+
+  await patch(`/sets/${plid}`, { reel: false, keep_completed: false, remove_completed_after: '' });
+  reg = await api('/sets');
+  ns = reg.sets.find((s) => s.id === plid);
+  ok('updateSet clears reel', ns.reel === false);
+  ok('updateSet clears keep_completed', ns.keep_completed === false);
+  ok('updateSet blank remove_completed_after → null (keep forever)', ns.remove_completed_after == null);
+
+  // Rotation channels reject the queue-only knobs (they have no consumption model).
+  const rotReject = await patch(`/sets/${sid}`, { keep_completed: true });
+  ok('rotation rejects keep_completed', /only valid on curated queues/.test(String(rotReject.error || '')));
+  const rotRejectTtl = await patch(`/sets/${sid}`, { remove_completed_after: '7d' });
+  ok('rotation rejects remove_completed_after', /only valid on curated queues/.test(String(rotRejectTtl.error || '')));
+  await api(`/sets/${plid}`, { method: 'DELETE' });
+
   // --- Rotation channels are now DELETABLE (2026-07-27; was blocked before) ---- //
   const del = await api(`/sets/${sid}`, { method: 'DELETE' });
   ok('rotation channel deletes (no longer blocked)', del.deleted === true);
