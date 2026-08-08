@@ -747,6 +747,15 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
 /* Profile-gate hint under the "Plays under profile" select — its own block line, below the
    inline label+control, so it never wraps around the listbox. */
 #setmodal .subhint { display: block; color: var(--color-content-muted); font-size: 0.8rem; margin: 4px 0 14px; }
+/* Playback & completion flag group: stack Charcuterie Checkboxes with their subhints. */
+#setmodal .flags {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 14px;
+}
+#setmodal .flags > .subhint { margin: 0 0 10px; }
+#setmodal .flags > .field { margin-bottom: 4px; }
 /* Breathing room between an inline field label ("Type", "Plays under profile") and its
    listbox trigger, which otherwise butts right against the text. */
 #setmodal .fieldselect { margin-left: 10px; }
