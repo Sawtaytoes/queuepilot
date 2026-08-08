@@ -411,6 +411,21 @@ function normalize(ent) {
     // profiles. Rotation channels are ungated by design, so this is only meaningful/editable
     // on queue sets. null = ungated. (decision `2026-08-07-choose-profile-for-queues`)
     requires_profile: ent.requires_profile != null ? String(ent.requires_profile) : null,
+    // Queue-only playback/consumption knobs (rotation channels ignore them). Exposed in the
+    // Set editor so they are not hand-YAML only. (decision `2026-08-08-set-modal-queue-flags`)
+    // keep_completed: never mark entries done. reel: play the whole lineup every scan AND
+    // implies keep_completed (normalize reports both so the UI prefill matches the engine).
+    // remove_completed_after: TTL string ("24h"/"7d"/…) or null = keep finished forever.
+    ...(isRotation
+      ? {}
+      : {
+          keep_completed: Boolean(ent.keep_completed || ent.reel),
+          reel: Boolean(ent.reel),
+          remove_completed_after:
+            ent.remove_completed_after != null && String(ent.remove_completed_after).trim()
+              ? String(ent.remove_completed_after).trim()
+              : null,
+        }),
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
     enabled: ent.enabled !== false,
@@ -552,6 +567,16 @@ export async function createSet(body = {}) {
       // channels are profile-driven and reject it (see updateSet).
       const rp = body.requires_profile == null ? '' : String(body.requires_profile).trim();
       if (rp) curated.requires_profile = rp;
+      // Playlist / reel / TTL knobs — same write rules as updateSet (queue-only).
+      if (body.reel) curated.reel = true;
+      // reel implies keep_completed on disk only when the client also asked for it; the
+      // engine treats reel as keep_completed regardless. Prefer an explicit true so a
+      // playlist-without-reel writes cleanly without a phantom reel key.
+      if (body.keep_completed || body.reel) curated.keep_completed = true;
+      const rca = body.remove_completed_after == null ? '' : String(body.remove_completed_after).trim();
+      if (rca && !['0', 'never', 'off', 'none', 'disabled'].includes(rca.toLowerCase())) {
+        curated.remove_completed_after = rca;
+      }
     }
     const node = doc.createNode(isRotation ? rotationCreateObj(id, body) : curated);
     // Curated shelves land after the last curated queue, before the rotation block; new
@@ -577,7 +602,11 @@ export async function updateSet(id, patch) {
     const node = seq.items.find((n) => n.get && String(n.get('id')) === id);
     if (!node) throw new Error(`unknown set ${id}`);
     const isRotation = node.get('source') === 'rotation';
-    const allow = ['label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile'];
+    const allow = [
+      'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
+      // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
+      'keep_completed', 'reel', 'remove_completed_after',
+    ];
     if (isRotation) {
       allow.push(
         'item_sections', 'allowed_ratings', 'movie_ratings', 'blocklist',
@@ -595,6 +624,32 @@ export async function updateSet(id, patch) {
     for (const k of allow) {
       if (!(k in patch)) continue;
       let v = patch[k];
+      if (k === 'keep_completed' || k === 'reel') {
+        // Queue-only booleans. false/absent drops the key so the file stays sparse.
+        // Rotation channels have no consumption model here — reject rather than no-op so a
+        // mis-pointed client surfaces immediately.
+        if (isRotation) throw new Error(`${k} is only valid on curated queues`);
+        const on = v === true || v === 'true' || v === 1 || v === '1';
+        if (!on) { node.delete(k); continue; }
+        setKeepingComment(node, k, doc.createNode(true));
+        // reel implies keep_completed at the engine; also write it so a hand-reader of
+        // sets.yaml sees the non-consuming intent without having to know the implication.
+        if (k === 'reel' && !node.get('keep_completed')) {
+          setKeepingComment(node, 'keep_completed', doc.createNode(true));
+        }
+        continue;
+      }
+      if (k === 'remove_completed_after') {
+        // Opt-in finished-entry TTL. Blank / never / 0 drops the key (= keep forever).
+        if (isRotation) throw new Error('remove_completed_after is only valid on curated queues');
+        const s = v == null ? '' : String(v).trim();
+        if (!s || ['0', 'never', 'off', 'none', 'disabled'].includes(s.toLowerCase())) {
+          node.delete('remove_completed_after');
+          continue;
+        }
+        setKeepingComment(node, 'remove_completed_after', doc.createNode(s));
+        continue;
+      }
       if (k === 'members') {
         // Whole-array replace, like profiles: the grid sends the full desired list. An
         // empty list drops the key entirely (back to the pure dynamic rule).
