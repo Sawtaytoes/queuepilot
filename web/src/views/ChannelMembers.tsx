@@ -6,6 +6,7 @@ import { SearchDropdown } from "../components/SearchDropdown"
 import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
 import { api, thumbUrl } from "../lib/api"
+import { activeBinding } from "../lib/channels"
 import { byTitle, isStartable, startLabel, tileFace } from "../lib/tileFace"
 import type { ChannelMember, RegistrySet, SearchHit } from "../lib/types"
 import {
@@ -40,12 +41,20 @@ import { getState, setState, setStatus } from "../state/store"
 
 export function ChannelMembers({
   channel,
+  currentProfile,
   isShown,
 }: {
   channel: RegistrySet
+  /** The selected tier, so member tiles' next-up "watched" state is scoped to THAT
+   * profile's account (matching the pool below), not the admin's. */
+  currentProfile: string | null
   /** Only a `progress` channel has a member grid. */
   isShown: boolean
 }) {
+  // The active binding's Plex Home uuid — threaded to the members fetch (so tile next-up is
+  // per-account) and onto each entry (so the start picker's watched marks match). Null on a
+  // legacy single-binding channel => admin view, unchanged.
+  const accountUuid = activeBinding(channel, currentProfile).user_uuid
   const [members, setMembers] = useState<ChannelMember[]>([])
   const gridRef = useRef<HTMLUListElement>(null)
   const reqRef = useRef(0)
@@ -69,7 +78,9 @@ export function ChannelMembers({
     try {
       const { members: found } = await api<{ members: ChannelMember[] }>(
         "GET",
-        `/api/sets/${chId}/members`,
+        `/api/sets/${chId}/members${
+          accountUuid ? `?uuid=${encodeURIComponent(accountUuid)}` : ""
+        }`,
       )
 
       if (req !== reqRef.current) return // switched away
@@ -101,7 +112,7 @@ export function ChannelMembers({
 
     void reload(channel.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.id, isShown, memberCount])
+  }, [channel.id, isShown, memberCount, accountUuid])
 
   /**
    * OPTIMISTIC write: put the new array into the local registry FIRST (so the grid
@@ -159,6 +170,9 @@ export function ChannelMembers({
   }
 
   const entryFor = (m: ChannelMember): EntryActions => ({
+    // Scope the start picker's watched marks to this channel's profile (matches the tile
+    // next-up above), not the admin account.
+    accountUuid,
     item: m,
     refresh: () => void reload(channel.id),
     remove: () => removeMember(m),
