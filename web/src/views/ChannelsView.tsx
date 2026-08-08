@@ -218,7 +218,11 @@ export function ChannelsView({
         </span>
       </div>
       <div id="chbody">
-        <ChannelMembers channel={channel} isShown={!isHidden && !isMovies} />
+        <ChannelMembers
+          channel={channel}
+          currentProfile={currentProfile}
+          isShown={!isHidden && !isMovies}
+        />
         {isHidden
           ? <section className="chpool"><h2 id="chpool-title">Eligible pool</h2><ul className="grid" id="chpool" /></section>
           : (

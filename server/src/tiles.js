@@ -20,7 +20,7 @@ function displayFor(value) {
 // Resolve one raw value to the fields a poster tile needs. `sections` scopes a title lookup;
 // `start` is the manual start floor ({season,episode} for a show, {series,season,episode} for
 // a collection). Returns the COMMON tile fields; the caller adds key/index/episodes/done.
-export async function resolveTile(sections, value, start = null) {
+export async function resolveTile(sections, value, start = null, opts = {}) {
   let resolved = null;
   try {
     resolved = await plex.resolveValue(sections, value);
@@ -28,16 +28,18 @@ export async function resolveTile(sections, value, start = null) {
     /* leave unresolved */
   }
 
+  // `opts` ({token, account}) scopes the next-up "watched" state to a Plex Home profile for a
+  // per-profile channel's member tiles; empty for queues/admin (Bob's view), unchanged.
   let nextEp = null;
   if (resolved && resolved.type === 'show') {
     try {
-      nextEp = await plex.nextEpisode(resolved.ratingKey, start);
+      nextEp = await plex.nextEpisode(resolved.ratingKey, start, opts);
     } catch {
       /* ignore */
     }
   } else if (resolved && resolved.type === 'collection') {
     try {
-      nextEp = await plex.collectionNext(resolved.ratingKey, start);
+      nextEp = await plex.collectionNext(resolved.ratingKey, start, opts);
     } catch {
       /* ignore — the tile falls back to the childCount "N in order" label */
     }

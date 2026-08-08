@@ -342,6 +342,14 @@ app.get('/api/sets/:id/members', async (req, res) => {
     const s = await sets.getSet(req.params.id);
     if (!s || s.source !== 'rotation') return res.status(400).json({ error: 'not a rotation channel' });
     const sections = [...new Set([...(s.sections || []), ...(s.item_sections || [])])];
+    // A per-profile channel passes the active binding's user_uuid so each member tile's next-up
+    // reflects THAT profile's watched state, not the admin's — matching the per-account pool
+    // below it. Absent (legacy/admin) => admin view, unchanged; a mint failure degrades to admin.
+    const uuidQ = String(req.query.uuid || '').trim();
+    let scope = {};
+    if (uuidQ) {
+      try { scope = { token: await plex.accountToken(uuidQ), account: uuidQ }; } catch { scope = {}; }
+    }
     const members = await mapLimit(s.members || [], 6, async (value, index) => {
       // A hand-written {collection: <name>} mapping resolves like its string spelling.
       const v = value && typeof value === 'object' && value.collection && value.ratingKey == null
@@ -350,7 +358,7 @@ app.get('/api/sets/:id/members', async (req, res) => {
       const start = value && typeof value === 'object' && value.start ? value.start : null;
       // The SAME resolver the queue grid uses, so a member tile and a queue tile of the same
       // collection read identically (member poster + title, collection as the badge).
-      const core = await tiles.resolveTile(sections, v, start);
+      const core = await tiles.resolveTile(sections, v, start, scope);
       return {
         index,
         raw: value, // the ORIGINAL value (not the collection-mapped `v`) round-trips for PATCH
@@ -602,11 +610,11 @@ app.get('/api/show/:ratingKey/episodes', async (req, res) => {
     // a per-profile channel's start editor reflects that profile's history, not the admin's.
     // Absent (queues/members/admin) => admin token, unchanged. A mint failure degrades to admin.
     const uuidQ = String(req.query.uuid || '').trim();
-    let token = null;
+    let scope = {};
     if (uuidQ) {
-      try { token = await plex.accountToken(uuidQ); } catch { token = null; }
+      try { scope = { token: await plex.accountToken(uuidQ), account: uuidQ }; } catch { scope = {}; }
     }
-    const out = await plex.showEpisodes(req.params.ratingKey, token);
+    const out = await plex.showEpisodes(req.params.ratingKey, scope);
     if (!out) return res.status(404).json({ error: 'no episodes' });
     res.json(out);
   } catch (e) {

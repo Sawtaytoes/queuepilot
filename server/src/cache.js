@@ -22,17 +22,19 @@ import { CACHE_PATH } from './env.js';
 
 // Bump on ANY schema change below. On open, a mismatch DROPs every table and recreates them —
 // a stale cache schema is never worth migrating (it is a cache).
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 
 const SCHEMA = `
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
 
--- allLeaves per show. Validated (not expired) against a section listing's per-show
--- (updatedAt, viewedLeafCount): if both still match, the cached episode list is provably
--- still correct — one section HTTP call revalidates every show in it.
+-- allLeaves per show, PER ACCOUNT. The episode STRUCTURE is account-independent, but each
+-- leaf's viewCount (watched) is the querying account's own — so a per-profile channel's editor
+-- must not share the admin account's row (account '' = admin/Bob). Validated (not expired)
+-- against that account's per-show (updatedAt, viewedLeafCount): if both still match, the cached
+-- episode list is provably still correct — one section HTTP call revalidates every show in it.
 CREATE TABLE leaves (
-  show_rk TEXT PRIMARY KEY, updated_at INT, leaf_count INT,
-  viewed_leaf_count INT, payload TEXT, fetched_at INT);
+  show_rk TEXT, account TEXT, updated_at INT, leaf_count INT,
+  viewed_leaf_count INT, payload TEXT, fetched_at INT, PRIMARY KEY (show_rk, account));
 
 -- title -> item, per section. title->ratingKey is stable, so no validator; 7-day TTL.
 CREATE TABLE resolved (
@@ -143,9 +145,11 @@ export async function bumpGeneration() {
 // is the fallback.
 const LEAVES_TTL_MS = 24 * 60 * 60 * 1000;
 
-export async function getLeaves(showRk, validator = null) {
+// `account` ('' = admin/Bob) scopes the row: the same show has a distinct watched (viewCount)
+// view per Plex Home profile, so a per-profile channel's editor reads its own account's row.
+export async function getLeaves(showRk, validator = null, account = '') {
   if (!ready()) return null;
-  const row = q('SELECT * FROM leaves WHERE show_rk = ?').get(String(showRk));
+  const row = q('SELECT * FROM leaves WHERE show_rk = ? AND account = ?').get(String(showRk), String(account || ''));
   if (!row) return null;
   if (validator) {
     // Provably-fresh path: identity on (updatedAt, viewedLeafCount).
@@ -161,17 +165,18 @@ export async function getLeaves(showRk, validator = null) {
   return JSON.parse(row.payload);
 }
 
-export async function putLeaves(showRk, { updatedAt, leafCount, viewedLeafCount, payload }) {
+export async function putLeaves(showRk, { updatedAt, leafCount, viewedLeafCount, payload }, account = '') {
   if (!ready()) return;
   q(
-    `INSERT INTO leaves (show_rk, updated_at, leaf_count, viewed_leaf_count, payload, fetched_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(show_rk) DO UPDATE SET
+    `INSERT INTO leaves (show_rk, account, updated_at, leaf_count, viewed_leaf_count, payload, fetched_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(show_rk, account) DO UPDATE SET
        updated_at = excluded.updated_at, leaf_count = excluded.leaf_count,
        viewed_leaf_count = excluded.viewed_leaf_count, payload = excluded.payload,
        fetched_at = excluded.fetched_at`,
   ).run(
     String(showRk),
+    String(account || ''),
     Number(updatedAt ?? 0),
     Number(leafCount ?? 0),
     Number(viewedLeafCount ?? 0),
@@ -181,7 +186,9 @@ export async function putLeaves(showRk, { updatedAt, leafCount, viewedLeafCount,
 }
 
 // A precise, free invalidation: MQTT now-playing (mqttc.onNowPlaying) already tells us which
-// show is being watched — drop its leaves row so the next read refetches exactly one show.
+// show is being watched — drop its leaves rows so the next read refetches exactly one show.
+// Drops EVERY account's row for the show: a watch shifts one account's viewCount, but
+// over-invalidating the others just refetches them lazily and stays correct.
 export async function dropLeaves(showRk) {
   if (!ready()) return;
   q('DELETE FROM leaves WHERE show_rk = ?').run(String(showRk));

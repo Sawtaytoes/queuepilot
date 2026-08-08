@@ -114,6 +114,7 @@ jobs:
           node e2e/ttl-sweep-test.mjs
           node e2e/specials-count-test.mjs
           node e2e/leaves-revalidate-test.mjs
+          node e2e/leaves-per-account-test.mjs
 
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # `require('playwright')` and drive a Chromium browser, and the shared
