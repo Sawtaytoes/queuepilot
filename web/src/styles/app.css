@@ -186,15 +186,29 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
+    /* The closed offset is VERTICAL, and small, on purpose — see below. */
+    transform: translateY(4px);
     transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0.18s;
   }
-  .hmenu-left { inset-inline-start: 0; transform: translateX(-110%); }
-  .hmenu-right { inset-inline-end: 0; transform: translateX(110%); }
+  /* These two only ANCHOR the panel; they must not move it sideways.
+     The closed state used to be `translateX(-110%)` / `translateX(110%)`, sliding each
+     panel a full panel-width off the page edge. A `transform` does not remove a box from
+     the document's scrollable overflow region, and neither does `visibility: hidden` — so
+     the right-hand panel (min-width 12rem = 204px, anchored flush to the bar's right edge)
+     extended `documentElement.scrollWidth` to ~600px at a 390px viewport. The whole page
+     scrolled ~210px sideways into dead space that nothing paints: the title cut off
+     mid-word, every card's text gone to the left, background ending partway across.
+     Reported 2026-08-10; regression-gated by `e2e/narrow-scroll-test.mjs`.
+
+     Fading up 4px matches this app's existing popover motion (`plex-channels-chmfade`,
+     `from { opacity: 0; transform: translateY(4px) }`) and never leaves the page box. */
+  .hmenu-left { inset-inline-start: 0; }
+  .hmenu-right { inset-inline-end: 0; }
   .hmenu.open {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
-    transform: translateX(0);
+    transform: none;
     transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0s;
   }
   .hmenu-item {
@@ -208,8 +222,9 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
   .hmenu-scheme { display: flex; justify-content: flex-start; padding-top: 2px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hmenu { transition: opacity 0.18s ease-out, visibility 0s linear 0.18s; }
-  .hmenu-left, .hmenu-right { transform: none; }
+  /* Later in source order than the `.hmenu` rule above and the same specificity, so the
+     closed panel doesn't move at all — it only fades. */
+  .hmenu { transition: opacity 0.18s ease-out, visibility 0s linear 0.18s; transform: none; }
   .hmenu.open { transition: opacity 0.18s ease-out, visibility 0s linear 0s; }
 }
 
@@ -842,6 +857,15 @@ html.modal-open { overflow: hidden; }
   display: flex;
   flex-direction: column;
   gap: 1px;
+  /* `anywhere`, NOT `break-word`. A channel/queue name is user-supplied and can be one
+     unbroken token with no break opportunity; with the default `normal` the text paints
+     straight past `min-width: 0` and grows `documentElement.scrollWidth` (measured: 797px
+     at a 390px viewport). The two values wrap identically — the difference is that only
+     `anywhere` also shrinks the MIN-CONTENT size, which is what a flex/grid item's
+     automatic minimum is resolved against, so only `anywhere` stops the item forcing the
+     track wider. The play landing wraps rather than ellipsises (`.rowmeta` is
+     `white-space: normal` on mobile), so wrapping is the right shape here. */
+  overflow-wrap: anywhere;
 }
 .playrow .rowname {
   max-width: 100%;
