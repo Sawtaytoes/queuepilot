@@ -214,8 +214,11 @@ The rest of Phase D cannot be completed in a headless dev sandbox. The blockers 
 
 ## Recommended resume order
 
-1. **Soak:** deploy with `ENGINE=node`, watch dual-run `[engine] DIVERGENCE` logs for ~a week on
-   real Channels previews. Default remains `python` until that passes.
+1. **Soak (STARTED 2026-08-10):** live app runs `ENGINE=node` + `PLAYBACK_FSM=true` on
+   `ghcr.io/sawtaytoes/plex-channels:latest` (#34 + #41). Dual-run samples match
+   (`shows`/`shows_shorts`/`movies` for both kid profiles — no real DIVERGENCE after the
+   Shorts-`next` signature fix). Watch container logs for `[engine] DIVERGENCE` for ~a week.
+   Flip back with `ENGINE=python` on the app env if needed.
 2. **D4** write-side queue persistence, then **D6** MQTT, then **D7** playback (+ cast sidecar)
    with real-TV acceptance outside family hours.
 3. **D5** ADB port + Shield checklist can parallel D6/D7 once TV time exists.
