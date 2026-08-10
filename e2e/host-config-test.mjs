@@ -29,11 +29,24 @@ const READ = `
       SHIELD_CLIENT_NAME: e.SHIELD_CLIENT_NAME, PLEX_URL: c.PLEX_URL,
     })));
 `;
+// Every host key under test is blanked before `env` is applied. Inheriting them would make
+// the result depend on whoever ran the suite — a developer with PLEX_API_SERVER_URL exported
+// (as e2e/run.sh does) silently tests the ENV layer while the assertion names the YAML one,
+// and it passes on a bare CI runner purely by luck.
+const HOST_KEYS = [
+  'SHIELD_IP',
+  'PLEX_LOCAL_URL',
+  'PLEX_API_SERVER_URL',
+  'SHIELD_CLIENT_NAME',
+  'SHIELD_CLIENT_URI',
+  'SHIELD_CLIENT_MACHINE_ID',
+  'SHIELD_CAST_NAME',
+];
 const resolve = (env) =>
   JSON.parse(
     execFileSync(process.execPath, ['--input-type=module', '-e', READ], {
       cwd: import.meta.dirname,
-      env: { ...process.env, ...env },
+      env: { ...process.env, ...Object.fromEntries(HOST_KEYS.map((k) => [k, ''])), ...env },
       encoding: 'utf8',
     }),
   );
@@ -50,7 +63,7 @@ const check = (label, actual, expected) => {
 };
 
 // 1. The YAML supplies the value when the env doesn't — the layer that was missing.
-const yaml = resolve({ CONFIG_PATH: yamlPath, SHIELD_IP: '', PLEX_LOCAL_URL: '' });
+const yaml = resolve({ CONFIG_PATH: yamlPath });
 check('yaml supplies shield_ip', yaml.SHIELD_IP, '192.0.2.99');
 check('ADB_TARGET derives from the yaml ip', yaml.ADB_TARGET, '192.0.2.99:5555');
 check('yaml supplies plex_local_url (trailing slash stripped)', yaml.PLEX_LOCAL_URL, 'http://192.0.2.98:32400');
@@ -64,12 +77,7 @@ check('ADB_TARGET follows the env override', overridden.ADB_TARGET, '192.0.2.55:
 
 // 3. No file at all → the non-routable placeholder, so a misconfigured deploy fails loudly
 //    instead of reaching a stranger's LAN.
-const missing = resolve({
-  CONFIG_PATH: path.join(dir, 'absent.yaml'),
-  SHIELD_IP: '',
-  PLEX_LOCAL_URL: '',
-  PLEX_API_SERVER_URL: '',
-});
+const missing = resolve({ CONFIG_PATH: path.join(dir, 'absent.yaml') });
 check('missing file → placeholder ip', missing.SHIELD_IP, '192.0.2.30');
 check('missing file → placeholder plex url', missing.PLEX_LOCAL_URL, 'http://192.0.2.10:32400');
 check('missing file → placeholder server url', missing.PLEX_URL, 'https://plex.example.com');
