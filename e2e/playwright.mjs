@@ -18,6 +18,12 @@ import { createRequire } from 'node:module';
 import { existsSync } from 'node:fs';
 
 const ROOTS = [
+  // This repo's OWN node_modules first, when it has one. The sibling-borrowing below is
+  // for the NAS sandbox, where those absolute paths exist; in CI they do not, and Node
+  // resolves a nonexistent `/mnt/...` prefix by walking up to `/`, never reaching the
+  // checkout — so `npm install playwright` at the repo root (which ci.yml does, and which
+  // its comment already assumed worked) was in fact unreachable from here.
+  new URL('../node_modules/', import.meta.url).pathname,
   '/mnt/TrueNAS-Apps/Repos/mux-magic/node_modules/',
   '/mnt/TrueNAS-Apps/Repos/castkit/node_modules/',
   '/mnt/TrueNAS-Apps/Repos/charcuterie/node_modules/',

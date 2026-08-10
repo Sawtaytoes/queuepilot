@@ -116,6 +116,36 @@ jobs:
           node e2e/leaves-revalidate-test.mjs
           node e2e/leaves-per-account-test.mjs
 
+      # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.
+      #
+      # It needs a browser but NOT Plex: it drives the Play landing on the degraded
+      # no-Plex path and measures `documentElement.scrollWidth`. That measurement is the
+      # only thing that catches the class of bug it guards — the 2026-08-10 narrow-view
+      # horizontal scroll passed typecheck, the unit tests, the build and all seventeen
+      # Playwright suites, because every one of them asserts behaviour and none asserts
+      # geometry. Putting it in the PLEX_TOKEN-gated step below would mean it never runs:
+      # the secret is unset, so that step is skipped on every PR today.
+      #
+      # Cost: ~1 min for the chromium download. If that is judged too expensive, move this
+      # step's `node e2e/narrow-scroll-test.mjs` into the gated loop below and accept that
+      # the gate only fires when the secret is present.
+      - name: Narrow-view horizontal-scroll gate (browser, no Plex needed)
+        env:
+          QUEUES_PATH: /tmp/queues-narrow.yaml
+          SETS_PATH: /tmp/sets-narrow.yaml
+          HISTORY_PATH: /tmp/.history-narrow.json
+          WEB_PORT: '18769'
+        run: |
+          npm install playwright
+          npx playwright install chromium --with-deps
+          unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
+          cp e2e/fixtures/queues.fixture.yaml /tmp/queues-narrow.yaml
+          node server/src/server.js >/tmp/narrow-e2e.log 2>&1 &
+          SRV=$!; sleep 1.5
+          node e2e/narrow-scroll-test.mjs; rc=$?
+          kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
+          exit $rc
+
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # `require('playwright')` and drive a Chromium browser, and the shared
       # server they hit talks to Plex. We can't call e2e/run.sh directly (it
