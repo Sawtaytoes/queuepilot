@@ -1,0 +1,119 @@
+# Parity fixture for e2e/binding-parity.mjs (D2 of the Python→Node port). Synthetic — fake
+# account ids / uuids, no real profiles — but it exercises every branch of channel_for /
+# binding_for / set_sections / rewatch_sections. FILE ORDER matters: channel_for returns the
+# FIRST matching set, so the two decoy channels (disabled, superseded) sit ahead of the real
+# ones to prove the guards skip them.
+#
+# The gate runs with PROFILE_SET_MAP='{"Younger Kids":"younger","Older Kids":"older","Legacy
+# Kid":"younger"}' so the legacy-map fallback ("Legacy Kid" binds no explicit channel) is
+# reachable; "Younger Kids"/"Older Kids" are captured by channel_for before the map is
+# consulted, exactly as in production.
+global:
+  excluded_sections: [8]
+
+sets:
+# DECOY 1 — binds "Younger Kids" but disabled: channel_for's `enabled` guard must skip it.
+- id: disabled_ch
+  label: Disabled Shows
+  source: rotation
+  enabled: false
+  behavior: progress
+  sections: [5]
+  profiles:
+  - { plex_user: "Younger Kids", account_id: 11110001, user_uuid: yk-uuid }
+
+# DECOY 2 — real profiles[] but superseded: channel_for's `superseded_by` guard must skip it.
+- id: old_shows
+  label: Old Shows (superseded)
+  source: rotation
+  behavior: progress
+  superseded_by: shows
+  sections: [5]
+  profiles:
+  - { plex_user: "Younger Kids", account_id: 11110001, user_uuid: yk-uuid }
+
+# Real episodic channel for the Younger tier (cartoons × "Younger Kids" → here).
+- id: shows
+  label: Shows
+  source: rotation
+  behavior: progress
+  sections: [5]
+  item_sections: [15]
+  profiles:
+  - { plex_user: "Younger Kids", account_id: 11110001, user_uuid: yk-uuid, allowed_ratings: [TV-Y, TV-G, G] }
+
+# Real episodic channel for the Older tier (cartoons × "Older Kids" → here).
+- id: shows_shorts
+  label: Shows & Shorts
+  source: rotation
+  behavior: progress
+  sections: [5]
+  item_sections: [15]
+  profiles:
+  - { plex_user: "Older Kids", account_id: 11110002, user_uuid: ok-uuid, allowed_ratings: [TV-PG, PG] }
+
+# Rewatch (movie) channel bound to BOTH tiers (movie × either → here; binding follows title).
+- id: movies
+  label: Movies
+  source: rotation
+  behavior: rewatch
+  item_sections: [1, 14]
+  profiles:
+  - { plex_user: "Younger Kids", account_id: 11110001, user_uuid: yk-uuid, movie_ratings: [G] }
+  - { plex_user: "Older Kids", account_id: 11110002, user_uuid: ok-uuid, movie_ratings: [PG, TV-PG] }
+
+# Shorts-only channel: EMPTY sections, item_sections only → set_sections is just [15],
+# rewatch_sections falls back (it is a progress channel, so [SEC_MOVIES]).
+- id: shorts_only
+  label: Shorts Only
+  source: rotation
+  behavior: progress
+  sections: []
+  item_sections: [15]
+  profiles:
+  - { plex_user: "Older Kids", account_id: 11110002, user_uuid: ok-uuid }
+
+# Un-migrated single-binding channel (NO profiles[]): has_explicit_profiles is false, so
+# channel_for must NOT capture it even though it "binds" a profile at the top level. Its
+# profile ("Guest") is in no PROFILE_SET_MAP either → routing to "Guest" is NO MAPPING.
+- id: unmigrated
+  label: Unmigrated Channel
+  source: rotation
+  behavior: progress
+  sections: [5]
+  plex_user: "Guest"
+  account_id: 11110003
+
+# Legacy tiers (superseded, single top-level binding, no profiles[]) — the PROFILE_SET_MAP
+# targets. route("cartoons","Legacy Kid") → younger via PROFILE_SET_MAP, binding synthesized.
+- id: younger
+  label: Younger (legacy)
+  source: rotation
+  superseded_by: shows
+  sections: [5]
+  item_sections: [15]
+  plex_user: "Younger Legacy"
+  account_id: 11119001
+  allowed_ratings: [TV-Y, G]
+
+- id: older
+  label: Older (legacy)
+  source: rotation
+  superseded_by: shows_shorts
+  sections: [5]
+  item_sections: [15]
+  plex_user: "Older Legacy"
+  account_id: 11119002
+
+# A curated queue: set_sections is its own sections; rewatch_sections → [SEC_MOVIES].
+- id: bob
+  label: Bob — Movies
+  source: queue
+  sections: [1]
+
+# A reel queue (replays in full) — still a queue for routing purposes.
+- id: demo_reel
+  label: Theater Demo Reel
+  source: queue
+  reel: true
+  sections: [2, 7]

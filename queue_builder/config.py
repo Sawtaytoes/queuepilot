@@ -54,6 +54,14 @@ PLEX_TOKEN = os.environ.get("PLEX_TOKEN") or os.environ.get("PLEX_API_KEY", "")
 # consistent so the plex.tv switch → server-scoped access token exchange is repeatable.
 PLEX_CLIENT_IDENTIFIER = os.environ.get("PLEX_CLIENT_IDENTIFIER", "plex-channels-helper")
 
+# --- Corpus record/replay (D3 engine-parity oracle) ---
+# PLEX_RECORD_DIR: while set, every read-only Plex response is written to disk (token-bucketed,
+# secrets redacted) so a run can be REPLAYED deterministically offline. PLEX_REPLAY_DIR: while
+# set, plex.py serves those recordings instead of touching the network — the fixed oracle the
+# Node selection engine (D3) is diffed against. Both empty in normal operation (live server).
+PLEX_RECORD_DIR = os.environ.get("PLEX_RECORD_DIR", "")
+PLEX_REPLAY_DIR = os.environ.get("PLEX_REPLAY_DIR", "")
+
 # --- Fallback accounts for "watched"/"rewatchable" ---
 # ONLY a default for a set that doesn't name its own `watch_count_accounts`. Every set
 # currently does, so nothing uses this: each card reflects its OWN profile's history.

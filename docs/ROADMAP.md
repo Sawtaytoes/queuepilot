@@ -33,17 +33,23 @@ Detail: `queue-and-playback-roadmap.md` + `playback-state-machine-design.md`.
    new `/api/events` connection; client refetches `/api/now` on `visibilitychange`/reopen. Fixes
    the phone showing a stale tile after the tab sleeps.
 
-## C. In progress elsewhere — Node port / Python removal *(handed to another agent)*
+## C. Node port / Python removal — D3 through live adapter landed
 Plan: `decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md`.
-Status + blockers (each phase's gate): `handoff-python-port-status.md`.
-- **D2–D8** — config read-side, selection engine, `queues.py` gaps, `adb.js`, MQTT service,
-  Node playback, dual-engine soak. Gated behind `ENGINE=python`; most blocked on a live-Plex
-  corpus + soak, or the physical Shield (D5). See the handoff table.
+Status: `handoff-python-port-status.md` (start there).
+- **D1–D3 done** (routing, selection engine, curated resolve, rotation, **live undici client**,
+  `ENGINE=node` preview dual-run + divergence log). Default still `ENGINE=python`.
+- **Next:** calendar soak with `ENGINE=node` → D4 queue write-side → D5 ADB / D6 MQTT / D7
+  playback → D8 delete Python. Shield needed for D5/D7.
 - **Phase E** — file-lock swap; rides with D8.
 - **F6** — `app.css` `@layer` reorder: `decisions/2026-08-03-app-css-layer-fix-is-a-separate-screenshot-gated-change.md`.
-- **DB / SQLite cache** — `cache.js` (derived Plex cache, not a store:
-  `decisions/2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store.md`) + the `plexGet`→undici
-  rewrite run live on every request regardless of `ENGINE`. Safely deletable: `rm /config/cache.sqlite*`.
+- **DB / SQLite cache** — shipped (`cache.js`, derived Plex cache only:
+  `decisions/2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store.md`). Deletable:
+  `rm /config/cache.sqlite*`.
+
+## B′. Shipped — queue lifecycle + playback FSM (was roadmap B)
+All merged on `main`: SSE re-sync (#9), TTL (#10), resume-in-queue (#11), `keep_completed` (#8),
+Set-editor flags (#36), FSM driver (#15 + #20). **`PLAYBACK_FSM` still defaults off** — enable
+and soak on the real Shield to finish that track.
 
 ### Scan-regression suspects (for whoever debugs a scan issue)
 Per the port handoff: the Python scan path (`queue_builder/`) was **not** touched by the port

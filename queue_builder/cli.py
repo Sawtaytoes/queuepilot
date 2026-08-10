@@ -6,14 +6,20 @@
   python -m queue_builder.cli movie movies "Younger Kids"          # ...under one binding
   python -m queue_builder.cli shows younger            # shows in the set + unwatched counts
   python -m queue_builder.cli route cartoons "Younger Kids"  # set:"auto" routing dry-run
+  python -m queue_builder.cli sections                 # per-set section pools as JSON (parity oracle)
   python -m queue_builder.cli watched-count movies "Younger Kids"  # rewatch-pool histogram
   python -m queue_builder.cli queue bob                # curated-queue pick + prune preview
   python -m queue_builder.cli reel demo                # reel (DEMO) ordered lineup, read-only
   python -m queue_builder.cli resolve bob "Duel (1971)"   # dry-run: resolve one title string
   python -m queue_builder.cli machine-id               # server machineIdentifier
+  python -m queue_builder.cli channel-buckets-json kidsplus  # rule pool + members, deduped (parity oracle)
+  python -m queue_builder.cli next-queue-json bobq      # next_queue deterministic result (parity oracle)
+  python -m queue_builder.cli reel-json demo            # build_reel ordered lineup (parity oracle)
 """
 import json
+import shutil
 import sys
+import tempfile
 
 from . import config, plex
 
@@ -60,6 +66,68 @@ def _route(kind="cartoons", *title_parts):
     b = config.binding_for(config.SETS[sid], title)
     print(f"route[{kind} × {title!r}] -> set '{sid}' (via {via}), "
           f"binding plex_user={b.get('plex_user')!r} account_id={b.get('account_id')}")
+
+
+def _buckets(set_name="kids", *profile_parts):
+    """Dump a set's unwatched_buckets as deterministic JSON — the parity oracle for the Node
+    engine's unwatchedBuckets (e2e/engine-parity.mjs). Episodic buckets keep allLeaves order;
+    the shorts bucket is emitted SORTED (it is rng-shuffled, so parity compares the set)."""
+    profile = " ".join(profile_parts) or None
+    buckets = plex.unwatched_buckets(set_name, binding=_binding(set_name, profile))
+    out = []
+    for bk in buckets:
+        eps = [e["ratingKey"] for e in bk["episodes"]]
+        if str(bk["ratingKey"]).startswith("section-"):
+            eps = sorted(eps)  # shorts are shuffled — compare as a set
+        out.append({"show": bk["show"], "ratingKey": bk["ratingKey"],
+                    "multi_season": bool(bk.get("multi_season", False)), "episodes": eps})
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def _channel_buckets_json(set_name="kidsplus", *profile_parts):
+    """Dump a channel's channel_buckets (rule pool + curated members, deduped) as deterministic
+    JSON — the parity oracle for the Node engine's channelBuckets (e2e/engine-parity.mjs). Same
+    normalization as _buckets (episodic in allLeaves order; a shorts bucket sorted, as it is
+    rng-shuffled). The member/rule interleave (build_rotation) is rng and stays a per-language test;
+    only this pre-shuffle pool cross-checks."""
+    profile = " ".join(profile_parts) or None
+    buckets = plex.channel_buckets(set_name, binding=_binding(set_name, profile))
+    out = []
+    for bk in buckets:
+        eps = [str(e["ratingKey"]) for e in bk["episodes"]]
+        if str(bk["ratingKey"]).startswith("section-"):
+            eps = sorted(eps)  # shorts are shuffled — compare as a set
+        out.append({"show": bk["show"], "ratingKey": str(bk["ratingKey"]),
+                    "multi_season": bool(bk.get("multi_season", False)), "episodes": eps})
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def _rewatch_counts(set_name="kids", *profile_parts):
+    """Dump the rewatch pool's per-item view counts as deterministic JSON (sorted by ratingKey)
+    — the parity oracle for the Node engine's rewatchCounts (e2e/engine-parity.mjs). The weighted
+    PICK is rng and stays a per-language seeded test; only these counts cross-check."""
+    profile = " ".join(profile_parts) or None
+    cfg = config.SETS[set_name]
+    b = _binding(set_name, profile)
+    counts, titles = plex.rewatch_counts(config.rewatch_sections(cfg), b["movie_ratings"],
+                                         b.get("watch_count_accounts"),
+                                         token=plex.account_token(b.get("user_uuid")))
+    out = [{"ratingKey": rk, "count": counts[rk], "title": titles.get(rk)} for rk in sorted(counts)]
+    print(json.dumps(out, ensure_ascii=False))
+
+
+def _sections():
+    """Dump set_sections + rewatch_sections per set as JSON — the parity oracle for the Node
+    port's routing.setSections / routing.rewatchSections (e2e/binding-parity.mjs). Calls the
+    real config functions, so it can never drift from what the scan actually pools."""
+    out = {
+        sid: {
+            "set_sections": config.set_sections(config.SETS[sid]),
+            "rewatch_sections": config.rewatch_sections(config.SETS[sid]),
+        }
+        for sid in config.SET_ORDER
+    }
+    print(json.dumps(out, ensure_ascii=False))
 
 
 def _queue(set_name="bob"):
@@ -124,6 +192,41 @@ def _resolve(set_name, *title_parts):
         print(f"  -> {typ.upper()}: {resolved!r} (rk={rk})")
 
 
+def _next_queue_json(set_name="bobq"):
+    """Dump next_queue's DETERMINISTIC result as JSON — the parity oracle for the Node engine's
+    nextQueue (e2e/curated-parity.mjs). next_queue mutates queues.yaml (mark_done/sweep) as a side
+    effect, so run it against a THROWAWAY copy: the returned dict is identical and the real file is
+    untouched (and the Node side, which never mutates, reads the pristine file). Non-anime queues
+    are fully deterministic (no rng); the play list is projected to ratingKeys for a stable diff."""
+    orig = config.QUEUES_PATH
+    tmp = tempfile.NamedTemporaryFile("w", suffix=".yaml", delete=False)
+    tmp.close()
+    shutil.copyfile(orig, tmp.name)
+    try:
+        config.QUEUES_PATH = tmp.name
+        res = plex.next_queue(set_name)
+    finally:
+        config.QUEUES_PATH = orig
+    print(json.dumps({
+        "set": res["set"],
+        "play": [str(e["ratingKey"]) for e in res["play"]],
+        "last": res["last"], "done": res["done"], "unresolved": res["unresolved"],
+        "remaining": res["remaining"], "offset": res["offset"],
+    }, ensure_ascii=False))
+
+
+def _reel_json(set_name="demo"):
+    """Dump build_reel's ORDERED lineup as JSON — the parity oracle for the Node engine's buildReel
+    (e2e/curated-parity.mjs). build_reel never marks anything done, so no copy is needed. Play items
+    are projected to {ratingKey, title} (movie/series/collection shapes normalize to that)."""
+    res = plex.build_reel(set_name)
+    print(json.dumps({
+        "set": res["set"],
+        "play": [{"ratingKey": str(e["ratingKey"]), "title": e.get("title")} for e in res["play"]],
+        "last": res["last"], "unresolved": res["unresolved"], "remaining": res["remaining"],
+    }, ensure_ascii=False))
+
+
 def _watched_count(set_name="younger", profile=None):
     # Same accounts + libraries the card itself uses, so this reports what the service
     # will actually do (the pool follows the channel's own libraries, not a fixed one).
@@ -160,6 +263,18 @@ def main(argv=None):
         _resolve(*rest)
     elif cmd == "route":
         _route(*rest)
+    elif cmd == "sections":
+        _sections()
+    elif cmd == "buckets":
+        _buckets(*rest)
+    elif cmd == "rewatch-counts":
+        _rewatch_counts(*rest)
+    elif cmd == "channel-buckets-json":
+        _channel_buckets_json(*rest)
+    elif cmd == "next-queue-json":
+        _next_queue_json(*rest)
+    elif cmd == "reel-json":
+        _reel_json(*rest)
     elif cmd == "watched-count":
         _watched_count(*rest)
     elif cmd == "machine-id":
