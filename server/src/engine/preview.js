@@ -33,20 +33,31 @@ export function formatBuckets(buckets) {
   });
 }
 
-// Stable signature for divergence logging (ignore item title order noise on next-only buckets).
+// Stable signature for divergence logging.
+// Show buckets: compare next (the meaningful "what plays first").
+// Library/section buckets (Shorts): compare the ITEM SET only — `next` is the first
+// episode of whatever listing order each engine happened to see, while play-time
+// shuffles the pile; matching item keys is the real parity signal (live soak saw a
+// false DIVERGENCE on shows_shorts where only Shorts.next differed).
 export function bucketsSignature(buckets) {
   return JSON.stringify(
-    (buckets || []).map((b) => ({
-      show: b.show,
-      ratingKey: String(b.ratingKey),
-      unwatched: b.unwatched,
-      next: b.next
-        ? { ratingKey: String(b.next.ratingKey), season: b.next.season, episode: b.next.episode }
-        : null,
-      items: b.items
-        ? b.items.map((i) => String(i.ratingKey)).sort()
-        : null,
-    })),
+    (buckets || []).map((b) => {
+      const rk = String(b.ratingKey);
+      const isLib = rk.startsWith('section-') || Array.isArray(b.items);
+      const base = {
+        show: b.show,
+        ratingKey: rk,
+        unwatched: b.unwatched,
+        items: b.items ? b.items.map((i) => String(i.ratingKey)).sort() : null,
+      };
+      if (isLib) return base;
+      return {
+        ...base,
+        next: b.next
+          ? { ratingKey: String(b.next.ratingKey), season: b.next.season, episode: b.next.episode }
+          : null,
+      };
+    }),
   );
 }
 
