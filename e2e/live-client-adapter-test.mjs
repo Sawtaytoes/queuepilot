@@ -52,6 +52,21 @@ ok('formatBuckets has unwatched + next', formatted.every((b) => 'unwatched' in b
 ok('signature is stable', preview.bucketsSignature(formatted) === preview.bucketsSignature(formatted));
 ok('signature changes if emptied', preview.bucketsSignature(formatted) !== preview.bucketsSignature([]));
 
+// Library buckets: next is non-deterministic at preview time; item set is the signal.
+{
+  const a = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 2,
+    next: { ratingKey: '1', title: 'A', season: null, episode: null },
+    items: [{ ratingKey: '1', title: 'A' }, { ratingKey: '2', title: 'B' }] }];
+  const b = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 2,
+    next: { ratingKey: '2', title: 'B', season: null, episode: null },
+    items: [{ ratingKey: '2', title: 'B' }, { ratingKey: '1', title: 'A' }] }];
+  ok('library bucket ignores next for signature', preview.bucketsSignature(a) === preview.bucketsSignature(b));
+  const c = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 1,
+    next: { ratingKey: '1', title: 'A', season: null, episode: null },
+    items: [{ ratingKey: '1', title: 'A' }] }];
+  ok('library bucket still sees item-set change', preview.bucketsSignature(a) !== preview.bucketsSignature(c));
+}
+
 // liveClient factory exists and exposes the contract (don't call Plex — no token in CI).
 const { liveClient } = await import('../server/src/engine/plex-live.js');
 const live = liveClient();
