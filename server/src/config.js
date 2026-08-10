@@ -1,10 +1,11 @@
 // Runtime config for the plex-channels-web queue editor. Mirrors the Python
 // queue_builder/config.py env names so ONE TrueNAS app env feeds both processes.
 import path from 'node:path';
+import { hostval } from './hostConfig.js';
 
 const rstrip = (s) => (s || '').replace(/\/+$/, '');
 
-export const PLEX_URL = rstrip(process.env.PLEX_API_SERVER_URL || 'https://plex.example.com');
+export const PLEX_URL = rstrip(hostval('PLEX_API_SERVER_URL', 'plex_api_server_url', 'https://plex.example.com'));
 // The OWNER/admin token (same one the Python service uses). PLEX_TOKEN wins, then the
 // legacy PLEX_API_KEY name, matching config.py's precedence.
 export const PLEX_TOKEN = process.env.PLEX_TOKEN || process.env.PLEX_API_KEY || '';

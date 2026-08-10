@@ -32,6 +32,8 @@ echo "=== yaml-roundtrip-test ==="   # browserless; comments survive every queue
 node e2e/yaml-roundtrip-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile detection port
 node e2e/profile-gate-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > placeholder
+node e2e/host-config-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== headers-test ==="   # browserless; asserts compression + cache headers (Phase A)
 node e2e/headers-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== perf-queues ==="   # browserless; stub Plex + broker, asserts the cache/ETag (Phase B)
