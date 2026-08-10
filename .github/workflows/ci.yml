@@ -130,6 +130,13 @@ jobs:
       - name: D3 live-client adapter (offline)
         run: node e2e/live-client-adapter-test.mjs
 
+      # D4: Node markDone/clearDone/sweepCompleted write-side
+      - name: D4 queue write-side (markDone/clearDone)
+        run: node e2e/mark-done-parity.mjs
+
+      - name: D5 adb pure helpers
+        run: node e2e/adb-unit-test.mjs
+
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
       # paths, so they need neither a Plex token nor Playwright. Always run.

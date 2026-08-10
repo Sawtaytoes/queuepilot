@@ -54,6 +54,8 @@ async function withLock(fn) {
 export function entryKey(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     if (value.ratingKey != null) return `rk:${value.ratingKey}`;
+    // {collection: X} keys like a `Collection: X` string (matches Python queues.entry_key).
+    if (value.collection) return `title:Collection: ${String(value.collection).trim()}`;
     if (value.title) return `title:${String(value.title).trim()}`;
     return null;
   }
@@ -214,14 +216,13 @@ export async function removeCompleted(setName) {
   });
 }
 
-// §B.3 TTL auto-remove: drop the entries this set finished longer ago than its window. The
-// Python service is the authority that runs this on every scan (queue_builder.queues.sweep_completed);
-// this mirror keeps the two writers in agreement and lets the Node side apply the identical rule
-// (e.g. a future scheduled sweep / the UI view). A done entry is eligible only once its `done_at`
-// (epoch seconds, stamped by the Python mark_done) is >= ttl old; a `keep_completed`/`reel` set is
-// exempt, as is a hand-marked `done:true` with no timestamp. `removeCompletedAfter` defaults to the
-// global DEFAULT_REMOVE_COMPLETED_AFTER when a set names no override (matching config.py). Returns
-// the count removed. `now` is epoch SECONDS (defaults to the wall clock), for deterministic tests.
+// §B.3 TTL auto-remove: drop the entries this set finished longer ago than its window.
+// Both the Python service (queue_builder.queues.sweep_completed) and the Node playback
+// path (PLAYBACK_ENGINE=node) call this after markDone. A done entry is eligible only once
+// its `done_at` (epoch seconds) is >= ttl old; a `keep_completed`/`reel` set is exempt, as
+// is a hand-marked `done:true` with no timestamp. `removeCompletedAfter` defaults to the
+// global DEFAULT_REMOVE_COMPLETED_AFTER when a set names no override. Returns the count
+// removed. `now` is epoch SECONDS (defaults to the wall clock), for deterministic tests.
 export async function sweepCompleted(setName, opts = {}) {
   const {
     keepCompleted = false,
@@ -424,6 +425,76 @@ async function rewriteEntry(setName, key, mutate) {
     seq.flow = false;
     await writeDoc(doc);
     return true;
+  });
+}
+
+
+// Tag the given entry keys **done** in place — kept in the file, excluded from play.
+// Port of queue_builder.queues.mark_done (D4). Scalar entries become mappings so they can
+// carry `done` + `done_at` (epoch seconds). Match is by entryKey. Returns { changed: bool }.
+export async function markDone(setName, keepKeys, nowSec = null) {
+  const want = new Set((keepKeys || []).filter(Boolean));
+  if (!want.size) return { changed: false };
+  const now = nowSec == null ? Math.floor(Date.now() / 1000) : Math.floor(nowSec);
+  return withLock(async () => {
+    const doc = await readDoc();
+    const seq = doc.get(setName);
+    if (!(seq instanceof YAMLSeq)) return { changed: false };
+    let changed = false;
+    for (let i = 0; i < seq.items.length; i += 1) {
+      const cur = seq.items[i].toJSON();
+      const key = entryKey(cur);
+      if (!want.has(key)) continue;
+      if (cur && typeof cur === 'object' && !Array.isArray(cur)) {
+        if (cur.done === true && cur.done_at != null) continue;
+        const split = splitEntry(cur);
+        split.extras.done = true;
+        split.extras.done_at = now;
+        seq.items[i] = entryNode(doc, split);
+        changed = true;
+      } else {
+        // Scalar → mapping carrying identity + done flags (mirrors Python CommentedMap wrap).
+        const split = splitEntry(cur);
+        split.extras.done = true;
+        split.extras.done_at = now;
+        seq.items[i] = entryNode(doc, split);
+        changed = true;
+      }
+    }
+    if (changed) {
+      seq.flow = false;
+      await writeDoc(doc);
+    }
+    return { changed };
+  });
+}
+
+// Un-mark the given entry keys — strip `done` + `done_at` (stale-done recovery).
+// Port of queue_builder.queues.clear_done (D4). Returns { changed: bool }.
+export async function clearDone(setName, keepKeys) {
+  const want = new Set((keepKeys || []).filter(Boolean));
+  if (!want.size) return { changed: false };
+  return withLock(async () => {
+    const doc = await readDoc();
+    const seq = doc.get(setName);
+    if (!(seq instanceof YAMLSeq)) return { changed: false };
+    let changed = false;
+    for (let i = 0; i < seq.items.length; i += 1) {
+      const cur = seq.items[i].toJSON();
+      if (!cur || typeof cur !== 'object' || Array.isArray(cur)) continue;
+      if (!want.has(entryKey(cur))) continue;
+      if (cur.done == null && cur.done_at == null) continue;
+      const split = splitEntry(cur);
+      delete split.extras.done;
+      delete split.extras.done_at;
+      seq.items[i] = entryNode(doc, split);
+      changed = true;
+    }
+    if (changed) {
+      seq.flow = false;
+      await writeDoc(doc);
+    }
+    return { changed };
   });
 }
 

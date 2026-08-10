@@ -56,6 +56,7 @@ RUN cd server && npm install --omit=dev --no-audit --no-fund
 
 # --- source ---
 COPY queue_builder ./queue_builder
+COPY cast_sidecar ./cast_sidecar
 COPY server ./server
 COPY --from=web-build /web/dist ./web/dist
 COPY entrypoint.sh ./entrypoint.sh
