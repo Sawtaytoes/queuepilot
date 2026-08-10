@@ -38,8 +38,9 @@ Plan: `decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md`.
 Status: `handoff-python-port-status.md` (start there).
 - **D1–D3 done** (routing, selection engine, curated resolve, rotation, **live undici client**,
   `ENGINE=node` preview dual-run + divergence log). Default still `ENGINE=python`.
-- **Next:** calendar soak with `ENGINE=node` → D4 queue write-side → D5 ADB / D6 MQTT / D7
-  playback → D8 delete Python. Shield needed for D5/D7.
+- **D4–D7 code landed** (`PLAYBACK_ENGINE=node` path: mqttd + session + adb + playback + driver +
+  cast_sidecar). **Next:** live soak of node playback on the Shield; full `queue_builder/`
+  deletion (D8 remainder) after that soak.
 - **Phase E** — file-lock swap; rides with D8.
 - **F6** — `app.css` `@layer` reorder: `decisions/2026-08-03-app-css-layer-fix-is-a-separate-screenshot-gated-change.md`.
 - **DB / SQLite cache** — shipped (`cache.js`, derived Plex cache only:

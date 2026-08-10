@@ -212,6 +212,18 @@ The rest of Phase D cannot be completed in a headless dev sandbox. The blockers 
 | D7 | Playback minus cast + the `cast_sidecar/` | Acceptance is **the watch landing on the right profile's history** on the real Shield, outside family hours, ~20 successful family plays before further change. Needs the TV and calendar time. |
 | D8 | Deletions (`queue_builder/`, CI steps, Dockerfile, `requirements.txt`→2 deps) + the storage lock swap | Only safe once D3–D7 have soaked and Python is actually removable. The Phase E lock→optimistic-concurrency change rides here (see the decision doc). |
 
+## D4–D8 — LANDED (code, 2026-08-10)
+
+| Phase | What shipped |
+| --- | --- |
+| **D4** | `queues.markDone` / `clearDone` (+ existing `sweepCompleted`); `e2e/mark-done-parity.mjs` CI gate. `nextQueue` returns `newlyDone` keys the session path persists. |
+| **D5** | `server/src/adb.js` full port of `adb.py`; `e2e/adb-unit-test.mjs` pure helpers. |
+| **D6** | `server/src/mqttd.js` — MQTT session/start, advance, preview, devices, discovery, state when `PLAYBACK_ENGINE=node`. |
+| **D7** | `server/src/session.js` (selection + D4 writes + play), `playback.js` (client mode), `driver.js` (PLAYBACK_FSM). Cast delegated via MQTT to the sidecar. |
+| **D8 (partial)** | `cast_sidecar/` (pychromecast-only process); dual `entrypoint.sh` (`PLAYBACK_ENGINE=node` → web+mqttd+cast_sidecar; `python` → historic full service). **`queue_builder/` retained** for CI parity oracles + `PLAYBACK_ENGINE=python` rollback — full deletion waits on live soak of node playback. |
+
+**Live cutover:** set app env `PLAYBACK_ENGINE=node` (with `ENGINE=node` + `PLAYBACK_FSM=true` already on). Flip back to `python` if a session path regresses.
+
 ## Recommended resume order
 
 1. **Soak (STARTED 2026-08-10):** live app runs `ENGINE=node` + `PLAYBACK_FSM=true` on

@@ -17,6 +17,10 @@ const int = (name, fallback) => {
   const n = parseInt(process.env[name] ?? '', 10);
   return Number.isFinite(n) ? n : fallback;
 };
+const float = (name, fallback) => {
+  const n = parseFloat(process.env[name] ?? '');
+  return Number.isFinite(n) ? n : fallback;
+};
 const bool = (name, fallback) => {
   const v = process.env[name];
   if (v == null || v === '') return fallback;
@@ -133,6 +137,27 @@ export const ADB_PICKER_WAIT_SECONDS = int('ADB_PICKER_WAIT_SECONDS', 45);
 // Plex was playing, which is why it is a knob.
 export const ADB_RESTART_TO_PICKER = bool('ADB_RESTART_TO_PICKER', true);
 export const ADB_TIMEOUT = int('ADB_TIMEOUT', 15);
+// How long to wait for Plex to reach the foreground after we launch it over ADB. Companion
+// playback (:32500) and the picker both need Plex running, so a scan blocks on this.
+export const ADB_PLEX_LAUNCH_WAIT_SECONDS = int('ADB_PLEX_LAUNCH_WAIT_SECONDS', 20);
+
+// --- playback FSM (driver.js; mirrors queue_builder/config.py) ---------------- //
+// When on, session start hands launch + profile gate + play to driver.driveToPlaying,
+// which SAMPLES real state and drives VERIFIED, RETRIED, NON-DESTRUCTIVE transitions
+// (unreachable -> device_on -> plex_foreground -> signed_in(required) -> playing).
+// Flip with PLAYBACK_FSM=true once verified on-Shield. See docs/playback-state-machine-design.md.
+export const PLAYBACK_FSM = bool('PLAYBACK_FSM', false);
+// The Plex Companion TCP port on the client (playMedia lands here). The FSM probes this
+// immediately before firing play so a closed / mid-nav Plex surfaces as "not ready, re-open
+// + retry" instead of an Errno 111 that kills the scan.
+export const COMPANION_PORT = int('COMPANION_PORT', 32500);
+// Bounded retries for the FSM's two fragile transitions. `play` re-opens Plex between
+// connection-refused attempts; `switch` re-summons the picker between failed switches.
+export const PLAYBACK_FSM_PLAY_ATTEMPTS = int('PLAYBACK_FSM_PLAY_ATTEMPTS', 3);
+export const PLAYBACK_FSM_SWITCH_ATTEMPTS = int('PLAYBACK_FSM_SWITCH_ATTEMPTS', 2);
+// Seconds to wait on the Companion TCP connect probe, and the short pause between retries.
+export const PLAYBACK_FSM_COMPANION_TIMEOUT = float('PLAYBACK_FSM_COMPANION_TIMEOUT', 1.5);
+export const PLAYBACK_FSM_RETRY_BACKOFF = float('PLAYBACK_FSM_RETRY_BACKOFF', 1.0);
 
 // --- MQTT (Mosquitto HA add-on) ----------------------------------------------- //
 // MQTT survives the port: HA's automations, the retained device registry and the discovery

@@ -510,5 +510,6 @@ export async function nextQueue(client, setName, cfg, entries, watched, token, r
   const offset = playItems.length ? await headResumeOffset(client, playItems[0], token) : 0;
   return {
     set: setName, play: playItems, last, done: doneFlagged, unresolved, remaining, offset, revived,
+    newlyDone, // D4: keys for queues.markDone (not in the Python JSON oracle shape)
   };
 }
