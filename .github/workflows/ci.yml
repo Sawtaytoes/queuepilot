@@ -50,7 +50,7 @@ jobs:
       # script — it is typechecked and built below instead.
       - name: Node syntax check
         run: |
-          for f in server/src/*.js; do
+          for f in $(find server/src -name '*.js'); do
             echo "--check $f"
             node --check "$f"
           done
@@ -102,6 +102,33 @@ jobs:
           python3 e2e/specials-count-test.py
           python3 e2e/playback-fsm-test.py
           python3 e2e/fsm-wake-and-skip-test.py
+
+      # D2 of the Python→Node port: prove server/src/engine/routing.js decides set:"auto"
+      # routing (channel_for/binding_for/set_sections/rewatch_sections) byte-for-byte like
+      # queue_builder/config.py, by diffing it against `python -m queue_builder.cli route` +
+      # `… sections` over e2e/fixtures/routing.sets.yaml. Needs BOTH node deps (server) and
+      # ruamel (installed above) — the gate shells the Python CLI. Guards the port cutover.
+      - name: D2 routing parity (Node engine ↔ Python)
+        run: node e2e/binding-parity.mjs
+
+      # D3 of the port: prove server/src/engine/select.js computes the unwatched-buckets pool
+      # byte-for-byte like queue_builder/plex.py, by diffing both over a SYNTHETIC corpus
+      # (regenerated hermetically by the harness; no real library data — owner decision
+      # 2026-08-07). Needs node (server) deps + ruamel (installed above); shells the Python CLI.
+      - name: D3 engine parity (Node engine ↔ Python)
+        run: node e2e/engine-parity.mjs
+
+      # D3 follow-on #2: prove server/src/engine/resolve.js resolves a curated QUEUE (next_queue)
+      # and a REEL (build_reel) byte-for-byte like queue_builder/plex.py — the title→ratingKey
+      # resolver, collection expansion, keep_episode/watched filtering, and the done/unresolved
+      # classification — by diffing both over the SAME synthetic corpus. Deterministic (non-anime
+      # queue + file-order reel; next_queue's YAML mark-done is D4 and not compared here).
+      - name: D3 curated parity (Node engine ↔ Python)
+        run: node e2e/curated-parity.mjs
+
+      # D3 follow-on #4: async engine + live-client surface + preview formatter (offline).
+      - name: D3 live-client adapter (offline)
+        run: node e2e/live-client-adapter-test.mjs
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
