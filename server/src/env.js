@@ -12,6 +12,8 @@
 // HISTORY_PATH, which `config.js` already owns and the server has always read from there.
 // This module is the knobs that had NO Node reader before the port.
 
+import { hostval } from './hostConfig.js';
+
 const str = (name, fallback) => process.env[name] ?? fallback;
 const int = (name, fallback) => {
   const n = parseInt(process.env[name] ?? '', 10);
@@ -83,23 +85,23 @@ export const ROTATION_LENGTH = int('ROTATION_LENGTH', 12);
 // Note the port keeps cast in the Python sidecar precisely because "client" mode loses
 // per-profile attribution and is therefore not an acceptable substitute.
 export const PLAYBACK_MODE = str('PLAYBACK_MODE', 'cast');
-export const SHIELD_CAST_NAME = str('SHIELD_CAST_NAME', 'Family Room SHIELD');
+export const SHIELD_CAST_NAME = hostval('SHIELD_CAST_NAME', 'shield_cast_name', 'Family Room SHIELD');
 // Used by "client" mode only.
-export const SHIELD_CLIENT_MACHINE_ID = str('SHIELD_CLIENT_MACHINE_ID', '');
-export const SHIELD_CLIENT_NAME = str('SHIELD_CLIENT_NAME', 'Family Room SHIELD');
+export const SHIELD_CLIENT_MACHINE_ID = hostval('SHIELD_CLIENT_MACHINE_ID', 'shield_client_machine_id', '');
+export const SHIELD_CLIENT_NAME = hostval('SHIELD_CLIENT_NAME', 'shield_client_name', 'Family Room SHIELD');
 // Direct Plex Companion endpoint of the Shield (http://<ip>:32500). Blank = resolve it from
 // plex.tv's device list at runtime, which is the normal path.
-export const SHIELD_CLIENT_URI = str('SHIELD_CLIENT_URI', '');
+export const SHIELD_CLIENT_URI = hostval('SHIELD_CLIENT_URI', 'shield_client_uri', '');
 // LAN address of the Plex server, handed to the client in playMedia so it knows where to
 // stream from. Must be reachable FROM the Shield, not from this container.
-export const PLEX_LOCAL_URL = String(str('PLEX_LOCAL_URL', 'http://192.0.2.10:32400')).replace(/\/+$/, '');
+export const PLEX_LOCAL_URL = String(hostval('PLEX_LOCAL_URL', 'plex_local_url', 'http://192.0.2.10:32400')).replace(/\/+$/, '');
 
 // --- profile-driven set selection (set="auto") -------------------------------- //
 // The signed-in Plex Home profile on the Shield decides the tier; cards carry only the KIND
 // (cartoons/movie). Detection tails the PMS DEBUG log (profiles.py → profiles.js), so the log
 // volume must be mounted read-only at PMS_LOG_PATH's parent.
 export const PMS_LOG_PATH = str('PMS_LOG_PATH', '/pms-logs/Plex Media Server.log');
-export const SHIELD_IP = str('SHIELD_IP', '192.0.2.30');
+export const SHIELD_IP = hostval('SHIELD_IP', 'shield_ip', '192.0.2.30');
 export const PROFILE_WAIT_SECONDS = int('PROFILE_WAIT_SECONDS', 120);
 // Plex Home profile title -> set name. Titles must match plex.tv exactly.
 export const PROFILE_SET_MAP = json('PROFILE_SET_MAP', {
