@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 
 process.env.RESUME_MIN_MS = '30000';
 process.env.RESUME_MAX_FRACTION = '0.95';
+process.env.RESUME_START_WINDOW_MS = '120000';
 const resume = await import('../server/src/resume.js');
 
 let failed = 0;
@@ -54,25 +55,54 @@ check('a 100%-of-duration marker is dropped even when it is not the head', noHea
 resume.arm({ plan, device: null, setName: 'shows' });
 check('arm reports the planned count', resume.armedCount(), 2);
 
-check('advancing to the 3m09s episode returns its marker',
-  resume.onNowPlaying({ ratingKey: '106617', state: 'playing' }), 189_000);
-check('the SAME episode does not fire twice (pause/resume republishes)',
-  resume.onNowPlaying({ ratingKey: '106617', state: 'playing' }), null);
+check('landing on the 3m09s episode near its start returns its marker',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }), 189_000);
+check('the SAME episode is never reconsidered (the poll repeats every few seconds)',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }), null);
 check('an unplanned episode returns nothing',
-  resume.onNowPlaying({ ratingKey: '359877', state: 'playing' }), null);
-check('a non-playing payload is ignored',
-  resume.onNowPlaying({ ratingKey: '269103', state: 'paused' }), null);
-check('…and is still eligible once it actually plays',
-  resume.onNowPlaying({ ratingKey: '269103', state: 'playing' }), 876_000);
-check('an empty/idle payload is safe',
-  resume.onNowPlaying({ state: 'idle', ratingKey: null }), null);
+  resume.considerSession({ ratingKey: '359877', viewOffset: 2_000 }), null);
+check('a null session is safe', resume.considerSession(null), null);
 
-// A re-scan must not inherit the previous lineup's pending seeks.
-resume.arm({ plan: new Map([['106617', 189_000]]), device: null, setName: 'shows' });
-check('re-arming clears the fired set so the new lineup can seek again',
-  resume.onNowPlaying({ ratingKey: '106617', state: 'playing' }), 189_000);
+// The guard the now-playing topic could never have provided: don't yank a viewer backwards.
+resume.arm({ plan, device: null, setName: 'shows' });
+check('an episode already well past its start is left alone',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }), null);
+check('…and is not reconsidered afterwards either',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 1_000 }), null);
+
+// --- the watch loop ----------------------------------------------------------- //
+// Drives the real interval with injected Plex/player stand-ins, so the loop itself is covered.
+resume.arm({ plan, device: null, setName: 'shows' });
+const seeks = [];
+let feed = { ratingKey: '106617', viewOffset: 3_000 };
+resume.startWatch({
+  fetchSession: async () => feed,
+  seek: async (ms) => { seeks.push(ms); return { seeked: true }; },
+  intervalMs: 10,
+  log: () => {},
+});
+await new Promise((r) => setTimeout(r, 60));
+check('the watcher seeks the planned episode it observes', seeks, [189_000]);
+
+feed = { ratingKey: '269103', viewOffset: 1_000 };
+await new Promise((r) => setTimeout(r, 60));
+check('…and the next one as the player advances', seeks, [189_000, 876_000]);
+check('the watcher stops once every planned episode is handled', resume.watching(), false);
+
+// A throwing Plex call must not kill the watcher.
+resume.arm({ plan, device: null, setName: 'shows' });
+let calls = 0;
+resume.startWatch({
+  fetchSession: async () => { calls += 1; if (calls < 3) throw new Error('plex 503'); return { ratingKey: '106617', viewOffset: 1_000 }; },
+  seek: async () => ({ seeked: true }),
+  intervalMs: 10,
+  log: () => {},
+});
+await new Promise((r) => setTimeout(r, 120));
+check('a transient Plex failure does not kill the watcher', calls >= 3, true);
 resume.disarm();
-check('disarm empties the plan', resume.armedCount(), 0);
+check('disarm empties the plan and stops watching',
+  [resume.armedCount(), resume.watching()], [0, false]);
 
 console.log(failed ? `resume-on-advance FAILED (${failed})` : 'resume-on-advance OK');
 process.exit(failed ? 1 : 0);

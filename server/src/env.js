@@ -105,6 +105,12 @@ export const RESUME_ON_ADVANCE = bool('RESUME_ON_ADVANCE', true);
 export const RESUME_MIN_MS = int('RESUME_MIN_MS', 30_000);
 // Past this fraction of the runtime the episode is effectively over; restarting is right.
 export const RESUME_MAX_FRACTION = Number(str('RESUME_MAX_FRACTION', '0.95')) || 0.95;
+// Only seek an episode still near its start; past this we missed the transition (or the viewer
+// scrubbed there deliberately) and yanking them backwards is worse than doing nothing.
+export const RESUME_START_WINDOW_MS = int('RESUME_START_WINDOW_MS', 120_000);
+// How often to ask the SERVER what is playing. /status/sessions is the trigger because the
+// now-playing topic's HA source reports a playing state with a null ratingKey on this setup.
+export const RESUME_POLL_MS = int('RESUME_POLL_MS', 5_000);
 
 // --- profile-driven set selection (set="auto") -------------------------------- //
 // The signed-in Plex Home profile on the Shield decides the tier; cards carry only the KIND
