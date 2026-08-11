@@ -36,8 +36,13 @@ import { commitStart } from "./startCommit"
  * | Show, several seasons          | Season, then Episode          |
  * | Collection                     | Series, then Season/Episode — or nothing more when the member is a movie |
  *
- * Already-watched episodes say so **in words**, because an `<option>` cannot be
- * styled and a ✓ glyph is a tofu box in some fonts.
+ * Already-watched episodes wear a small "Watched" CHIP. They used to say so in a
+ * trailing "— watched", back when these were native `<option>`s that could not be
+ * styled; against 200 identically-styled Dragon Ball Z titles that word was invisible
+ * to a skimming eye. Now that the picker is a `Listbox` (decision
+ * `2026-08-07-plex-channels-pickers-are-listbox-not-native-select`) the row can carry
+ * a real badge. Still a WORD in a chip, not a ✓ glyph — that is a tofu box in some
+ * fonts — and the word also rides in the option's `textValue` for screen readers.
  */
 
 type Option = { value: string; label: string }
@@ -380,16 +385,25 @@ export function StartModal() {
             children.length
               ? children.map((c, i) => ({
                   // A series says how far through it you are; a single item just
-                  // gets a word when seen.
-                  label: `${i + 1}. ${c.title}${
+                  // gets a word when seen. Both ride in the chip, which turns
+                  // success-green only when the member is FULLY seen — that is the
+                  // one state you skim this list for.
+                  badge:
                     c.type === "show"
                       ? c.leafCount
-                        ? `  (${c.viewedLeafCount || 0}/${c.leafCount} watched)`
-                        : ""
+                        ? `${c.viewedLeafCount || 0}/${c.leafCount} watched`
+                        : undefined
                       : c.watched
-                        ? "  — watched"
-                        : ""
-                  }`,
+                        ? "Watched"
+                        : undefined,
+                  badgeIntent:
+                    c.type === "show"
+                      ? (c.viewedLeafCount || 0) >=
+                        (c.leafCount || 0)
+                        ? ("success" as const)
+                        : ("neutral" as const)
+                      : ("success" as const),
+                  label: `${i + 1}. ${c.title}`,
                   value: String(c.ratingKey),
                 }))
               : [{ label: "Loading members…", value: "" }]
@@ -457,7 +471,9 @@ export function StartModal() {
             isLoadingEpisodes || !seasonRow
               ? [{ label: "Loading episodes…", value: "" }]
               : seasonRow.episodes.map((e) => ({
-                  label: `E${e.episode}${e.title ? ` · ${e.title}` : ""}${e.watched ? "  — watched" : ""}`,
+                  badge: e.watched ? "Watched" : undefined,
+                  badgeIntent: "success" as const,
+                  label: `E${e.episode}${e.title ? ` · ${e.title}` : ""}`,
                   value: String(e.episode),
                 }))
           }
