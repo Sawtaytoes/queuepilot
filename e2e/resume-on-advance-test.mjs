@@ -56,19 +56,30 @@ resume.arm({ plan, device: null, setName: 'shows' });
 check('arm reports the planned count', resume.armedCount(), 2);
 
 check('landing on the 3m09s episode near its start returns its marker',
-  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }), 189_000);
+  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }).ms, 189_000);
 check('the SAME episode is never reconsidered (the poll repeats every few seconds)',
-  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }), null);
+  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }).ms, null);
 check('an unplanned episode returns nothing',
-  resume.considerSession({ ratingKey: '359877', viewOffset: 2_000 }), null);
-check('a null session is safe', resume.considerSession(null), null);
+  resume.considerSession({ ratingKey: '359877', viewOffset: 2_000 }).ms, null);
+check('a null session is safe', resume.considerSession(null).ms, null);
 
 // The guard the now-playing topic could never have provided: don't yank a viewer backwards.
 resume.arm({ plan, device: null, setName: 'shows' });
 check('an episode already well past its start is left alone',
-  resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }), null);
+  resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }).ms, null);
 check('…and is not reconsidered afterwards either',
-  resume.considerSession({ ratingKey: '106617', viewOffset: 1_000 }), null);
+  resume.considerSession({ ratingKey: '106617', viewOffset: 1_000 }).ms, null);
+
+// The reason string is what the log prints when nothing happens — assert it exists, since a
+// silent decline is exactly the failure this instrumentation is here to explain.
+resume.arm({ plan, device: null, setName: 'shows' });
+check('an unplanned episode explains itself',
+  resume.considerSession({ ratingKey: '359877', viewOffset: 1_000 }).reason,
+  'not in the plan (no usable marker at scan time)');
+resume.arm({ plan, device: null, setName: 'shows' });
+check('a too-late episode explains itself',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }).reason,
+  'already 600s in, past the 120s window');
 
 // --- the watch loop ----------------------------------------------------------- //
 // Drives the real interval with injected Plex/player stand-ins, so the loop itself is covered.

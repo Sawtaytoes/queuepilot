@@ -274,7 +274,8 @@ export async function startSession(payload = {}, opts = {}) {
     const plan = resume.resumePlan(playItems, { headRatingKey: ratingKeys[0] });
     resume.arm({ plan, device, setName });
     if (plan.size) {
-      console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance`);
+      console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance: `
+        + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
       resume.startWatch({
         fetchSession: () => playback.currentSession({ device, setName }),
         seek: (ms) => playback.seekTo(ms, { device, setName }),
