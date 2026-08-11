@@ -127,6 +127,25 @@ export function loadSets(path = SETS_PATH) {
     cfg.enabled = ent.enabled ?? true; // Python: ent.get("enabled", True)
     cfg.mode = ent.mode ?? null;
     cfg.behavior = ent.behavior ?? null;
+    // --- config.py passthroughs. These are READ by session.js / resolve.js / playback.js,
+    // so a field the builder forgets is not a missing feature, it is a SILENTLY DISABLED
+    // one — `cfg.requires_profile` simply read undefined and every gated set played
+    // ungated. Mirror config.py's truthiness exactly; only set what Python sets.
+    //
+    // A set whose libraries only SOME Plex Home profiles can see. The driver blocks until
+    // the Shield is signed into this profile, so a scan on the wrong one waits for the
+    // switch instead of firing playMedia at a Plex that is sitting on the user picker.
+    if (ent.requires_profile) cfg.requires_profile = String(ent.requires_profile);
+    // §B.3 TTL auto-removal of completed entries; queues.sweepCompleted interprets it.
+    if (ent.remove_completed_after != null) {
+      cfg.remove_completed_after = String(ent.remove_completed_after).trim();
+    }
+    if (ent.include_specials) cfg.include_specials = true;
+    // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
+    if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
+    // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().
+    const maxItems = parseInt(ent.max_items, 10);
+    cfg.max_items = Number.isFinite(maxItems) && maxItems > 0 ? maxItems : null;
     sets[sid] = cfg;
     order.push(sid);
   }
