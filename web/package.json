@@ -22,6 +22,9 @@
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@charcuterie/tsconfig": "^1.0.0",
+    "@charcuterie/vite-config": "^1.0.1",
+    "@charcuterie/vitest-config": "^1.0.1",
     "@tailwindcss/vite": "^4.3.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",

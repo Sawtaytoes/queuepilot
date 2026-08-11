@@ -1,25 +1,20 @@
 {
+  "extends": "@charcuterie/tsconfig/react",
   "compilerOptions": {
-    "allowImportingTsExtensions": true,
-    "esModuleInterop": true,
+    // `/react` already gives: strict, isolatedModules, esModuleInterop,
+    // resolveJsonModule, skipLibCheck, forceConsistentCasingInFileNames,
+    // useDefineForClassFields, jsx: react-jsx, noEmit,
+    // allowImportingTsExtensions, module/moduleResolution ESNext+Bundler,
+    // and lib DOM + DOM.Iterable + ESNext.
+    //
+    // Everything below is this app's own 20%.
     "exactOptionalPropertyTypes": false,
-    "forceConsistentCasingInFileNames": true,
-    "isolatedModules": true,
-    "jsx": "react-jsx",
-    "lib": ["DOM", "DOM.Iterable", "ES2023"],
-    "module": "ESNext",
-    // `bundler` rather than `NodeNext`: Vite is what compiles this
-    // package, so extensionless relative imports are the resolution
-    // the bundler actually performs.
-    "moduleResolution": "bundler",
-    "noEmit": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": false,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "strict": true,
+    // ES2023, not the base's ESNext: this bundle ships to real browsers
+    // through Vite, and the target is what bounds the downlevelling.
     "target": "ES2023",
     // Empty, deliberately — mirrors rip-deck's and gallery-downloader's
     // browser programs. Leaving the Node types out is what makes an
@@ -27,7 +22,6 @@
     // rather than a blank page. `vite/client` arrives through the
     // triple-slash reference in `src/vite-env.d.ts`.
     "types": [],
-    "useDefineForClassFields": true,
     "verbatimModuleSyntax": true
   },
   "include": ["src", "vite", "vite.config.ts", "vitest.config.ts"]

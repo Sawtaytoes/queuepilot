@@ -1,6 +1,7 @@
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { defineConfig, type Plugin } from "vite"
+import { createViteConfig } from "@charcuterie/vite-config"
+import { type Plugin } from "vite"
 
 /**
  * Preload the ONE font subset the first paint actually needs.
@@ -61,9 +62,27 @@ import { firstPaint } from "./vite/firstPaint.ts"
  * `dist/` lands beside this file and `server/src/server.js` points
  * `PUBLIC_DIR` at it, so the server-side change is one constant.
  */
-export default defineConfig({
+export default createViteConfig({
   build: {
     assetsDir: "assets",
+    /**
+     * Restores Vite's DEFAULT build target, which
+     * `@charcuterie/vite-config` overrides by setting
+     * `build.target: "esnext"` — and `build.cssTarget` silently
+     * defaults to `build.target`.
+     *
+     * At `esnext`, lightningcss stops emitting the `-webkit-`
+     * prefixes Safari still needs: `-webkit-user-select` (so
+     * `select-none` does nothing), `-webkit-backdrop-filter` (so
+     * blurred surfaces render flat) and `-webkit-text-decoration`.
+     * This UI is driven from a phone/tablet, so that is a visible
+     * break, not a theoretical one.
+     *
+     * Overriding `target` (not `cssTarget`) because `cssTarget`
+     * takes esbuild-style browser strings and rejects this keyword;
+     * `target` accepts it and `cssTarget` then derives from it.
+     */
+    target: "baseline-widely-available",
     // Empty on every build — a stale hashed bundle would otherwise
     // keep answering from `dist/` after a rename.
     emptyOutDir: true,
@@ -113,6 +132,13 @@ export default defineConfig({
      *
      * The Dockerfile's `web-build` stage then deletes the maps
      * outright, so they never reach the runtime image at all.
+     *
+     * This is also a deliberate OVERRIDE of `@charcuterie/vite-config`,
+     * whose base sets `sourcemap: true` — fine where the app is served
+     * from a dev host, wrong here, where `true` would re-append the
+     * `sourceMappingURL` comment and put the 1.2 MB map back on the
+     * critical path. `createViteConfig` deep-merges, so the value here
+     * wins; do not drop it on the assumption the base is right.
      */
     sourcemap: "hidden",
   },
