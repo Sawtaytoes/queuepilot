@@ -468,13 +468,24 @@ export function QueueView({
                           : "Now playing"}
                       </Badge>
                     ) : null}
-                    {/* Per-show episodes-per-play control. The dropdown speaks
+                    {/* Per-entry items-per-play control. The dropdown speaks
                             for itself ("1 ep"), so it carries no "Play" label —
                             that was pure tile noise (decision
-                            2026-07-31-collection-tiles-are-member-first). */}
+                            2026-07-31-collection-tiles-are-member-first).
+                            A COLLECTION carries the same control on the same terms:
+                            since 2026-08-11-collection-entries-contribute-one-batch
+                            it takes the identical batch cap a show does, so the
+                            override means the same thing and the tile must offer it. */}
                     {item.resolved &&
-                    item.type === "show" ? (
-                      <Tip label="Episodes queued per play">
+                    (item.type === "show" ||
+                      item.type === "collection") ? (
+                      <Tip
+                        label={
+                          item.type === "collection"
+                            ? "Items queued per play from this collection"
+                            : "Episodes queued per play"
+                        }
+                      >
                         <label className="eps">
                           {/* Keyed on the SERVER's value, because that is
                                     who owns it: the pick round-trips through a
@@ -484,7 +495,11 @@ export function QueueView({
                                     hear a change made elsewhere. */}
                           <SelectListbox
                             key={String(item.episodes || 1)}
-                            label="Episodes queued per play"
+                            label={
+                              item.type === "collection"
+                                ? "Items queued per play"
+                                : "Episodes queued per play"
+                            }
                             onChange={(v) =>
                               void setEpisodes(
                                 item,
