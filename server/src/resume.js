@@ -96,16 +96,25 @@ export function considerSession(session, { startWindowMs = RESUME_START_WINDOW_M
   if (!session || session.ratingKey == null) return { ms: null, reason: 'nothing playing' };
   const rk = String(session.ratingKey);
   if (ARMED.seen.has(rk)) return { ms: null, reason: 'already considered', rk };
-  ARMED.seen.add(rk);
   const ms = ARMED.plan.get(rk);
-  if (ms == null) return { ms: null, reason: 'not in the plan (no usable marker at scan time)', rk };
+  if (ms == null) {
+    ARMED.seen.add(rk); // settled: no marker, nothing to reconsider
+    return { ms: null, reason: 'not in the plan (no usable marker at scan time)', rk };
+  }
   const position = Number(session.viewOffset || 0);
   if (position > startWindowMs) {
+    // Do NOT mark it handled. At the moment the player advances, /status/sessions can still
+    // report the PREVIOUS episode's position against the new ratingKey — observed live, where
+    // Alvin Show's first sighting carried DuckTales' 895s. Consuming the episode on that
+    // reading would decline a resume that was actually due. Retry on the next poll: a stale
+    // position settles within a poll or two, while a viewer who genuinely scrubbed forward
+    // keeps reporting a high position and keeps (correctly) being declined.
     return {
-      ms: null, rk,
-      reason: `already ${Math.round(position / 1000)}s in, past the ${Math.round(startWindowMs / 1000)}s window`,
+      ms: null, rk, retry: true,
+      reason: `${Math.round(position / 1000)}s in, past the ${Math.round(startWindowMs / 1000)}s window`,
     };
   }
+  ARMED.seen.add(rk);
   return { ms, reason: 'resume', rk, position };
 }
 
@@ -114,6 +123,7 @@ export function considerSession(session, { startWindowMs = RESUME_START_WINDOW_M
 // plan has unfired entries, so a finished lineup costs nothing.
 
 let TIMER = null;
+const LOGGED = new Set(); // ratingKeys whose retryable decline has been logged once
 
 export function stopWatch() {
   if (TIMER) {
@@ -140,6 +150,7 @@ export function startWatch({
   log = console.log,
 } = {}) {
   stopWatch();
+  LOGGED.clear();
   if (!ARMED.plan.size) return false;
   const startedAt = now();
   TIMER = setInterval(async () => {
@@ -162,7 +173,9 @@ export function startWatch({
     // Log EVERY decision, not just the seeks: when this silently does nothing, the reason it
     // declined is the only thing worth having. One line per episode, not per poll — `seen`
     // guarantees a given ratingKey is considered once.
-    if (decision.reason !== 'already considered' && decision.reason !== 'nothing playing') {
+    const quiet = decision.reason === 'already considered' || decision.reason === 'nothing playing';
+    if (!quiet && !(decision.retry && LOGGED.has(decision.rk))) {
+      if (decision.retry) LOGGED.add(decision.rk);
       log(`[resume] rk=${decision.rk} at ${Math.round(Number(session.viewOffset || 0) / 1000)}s -> ${decision.reason}`);
     }
     const ms = decision.ms;

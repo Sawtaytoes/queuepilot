@@ -67,8 +67,11 @@ check('a null session is safe', resume.considerSession(null).ms, null);
 resume.arm({ plan, device: null, setName: 'shows' });
 check('an episode already well past its start is left alone',
   resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }).ms, null);
-check('…and is not reconsidered afterwards either',
-  resume.considerSession({ ratingKey: '106617', viewOffset: 1_000 }).ms, null);
+// NOT "and never reconsidered": a past-window reading may be a stale transition artifact, so
+// the episode stays eligible until it is either resumed or seen settled past the window. The
+// retry block below pins that.
+check('…but a settled reading on a later poll still resumes it',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 1_000 }).ms, 189_000);
 
 // The reason string is what the log prints when nothing happens — assert it exists, since a
 // silent decline is exactly the failure this instrumentation is here to explain.
@@ -79,7 +82,18 @@ check('an unplanned episode explains itself',
 resume.arm({ plan, device: null, setName: 'shows' });
 check('a too-late episode explains itself',
   resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }).reason,
-  'already 600s in, past the 120s window');
+  '600s in, past the 120s window');
+
+// A stale position at the moment of transition must NOT consume the episode: /status/sessions
+// can report the PREVIOUS episode's position against the new ratingKey (observed live — Alvin
+// Show's first sighting carried DuckTales' 895s). Retry, or a due resume is lost.
+resume.arm({ plan, device: null, setName: 'shows' });
+check('a past-window decline is retryable, not final',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 600_000 }).retry, true);
+check('…so the settled position on the next poll still resumes',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 2_000 }).ms, 189_000);
+check('…and only then is it consumed',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 2_000 }).reason, 'already considered');
 
 // --- the watch loop ----------------------------------------------------------- //
 // Drives the real interval with injected Plex/player stand-ins, so the loop itself is covered.
