@@ -408,6 +408,36 @@ function intOffset(offset) {
 //
 // `offset` (ms) is the resume point for the FIRST queued item — non-zero only for a
 // curated queue whose lead item was started but not finished.
+// Seek the target player to `offsetMs` via Companion. Same transport as playMedia.
+//
+// Why this exists: a Plex playQueue carries NO per-item resume point, and playMedia's `offset`
+// applies only to the item it starts on. So every episode after the first restarts at 0:00 no
+// matter what progress it has — verified on the Shield 2026-08-11 (an episode with a 3m09s
+// marker began at 0:09). Seeking after the advance is the only way to honour the rest.
+export async function seekTo(offsetMs, { device = null, setName = null } = {}) {
+  const ms = intOffset(offsetMs);
+  if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
+  const client = await findClient(device);
+  if (!client) return { seeked: false, error: 'target client not found' };
+  const params = new URLSearchParams({
+    offset: String(ms),
+    type: 'video',
+    machineIdentifier: await machineIdentifier(),
+    'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
+    'X-Plex-Client-Identifier': CLIENT_ID,
+    commandID: '1',
+  });
+  try {
+    // Companion answers 200 with a "Failure: 200 OK" body even on success — status only.
+    await plexReq('GET', `/player/playback/seekTo?${params}`, {
+      token: await playToken(setName), host: client.uri || null,
+    });
+    return { seeked: true, offset: ms };
+  } catch (e) {
+    return { seeked: false, error: e && e.message ? e.message : String(e) };
+  }
+}
+
 export async function playRatingKeys(ratingKeys, {
   setName = null,
   device = null,
