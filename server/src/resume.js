@@ -93,15 +93,20 @@ export const target = () => ({ device: ARMED.device, setName: ARMED.setName });
  * deliberately), and yanking them backwards would be worse than doing nothing.
  */
 export function considerSession(session, { startWindowMs = RESUME_START_WINDOW_MS } = {}) {
-  if (!session || session.ratingKey == null) return null;
+  if (!session || session.ratingKey == null) return { ms: null, reason: 'nothing playing' };
   const rk = String(session.ratingKey);
-  if (ARMED.seen.has(rk)) return null;
+  if (ARMED.seen.has(rk)) return { ms: null, reason: 'already considered', rk };
   ARMED.seen.add(rk);
   const ms = ARMED.plan.get(rk);
-  if (ms == null) return null;
+  if (ms == null) return { ms: null, reason: 'not in the plan (no usable marker at scan time)', rk };
   const position = Number(session.viewOffset || 0);
-  if (position > startWindowMs) return null;
-  return ms;
+  if (position > startWindowMs) {
+    return {
+      ms: null, rk,
+      reason: `already ${Math.round(position / 1000)}s in, past the ${Math.round(startWindowMs / 1000)}s window`,
+    };
+  }
+  return { ms, reason: 'resume', rk, position };
 }
 
 // --- the watcher ------------------------------------------------------------- //
@@ -148,18 +153,25 @@ export function startWatch({
     } catch {
       return; // a transient Plex hiccup must never kill the watcher
     }
-    let ms = null;
+    let decision;
     try {
-      ms = considerSession(session);
+      decision = considerSession(session);
     } catch {
       return;
     }
+    // Log EVERY decision, not just the seeks: when this silently does nothing, the reason it
+    // declined is the only thing worth having. One line per episode, not per poll — `seen`
+    // guarantees a given ratingKey is considered once.
+    if (decision.reason !== 'already considered' && decision.reason !== 'nothing playing') {
+      log(`[resume] rk=${decision.rk} at ${Math.round(Number(session.viewOffset || 0) / 1000)}s -> ${decision.reason}`);
+    }
+    const ms = decision.ms;
     if (ms == null) return;
     try {
       const r = await seek(ms);
       log(r && r.seeked === false
         ? `[resume] seek to ${Math.round(ms / 1000)}s failed: ${r.error}`
-        : `[resume] resumed at ${Math.round(ms / 1000)}s (it restarts at 0 otherwise)`);
+        : `[resume] resumed rk=${decision.rk} at ${Math.round(ms / 1000)}s (it restarts at 0 otherwise)`);
     } catch (e) {
       log(`[resume] seek threw: ${e && e.message ? e.message : e}`);
     }
