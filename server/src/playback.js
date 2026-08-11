@@ -408,6 +408,36 @@ function intOffset(offset) {
 //
 // `offset` (ms) is the resume point for the FIRST queued item — non-zero only for a
 // curated queue whose lead item was started but not finished.
+// What the SERVER says is playing on our target player, as {ratingKey, viewOffset} or null.
+//
+// This is resume.js's trigger. The retained now-playing topic would have been cheaper, but its
+// HA source reports `{"state":"playing", "ratingKey":null}` on this setup — a playing state it
+// cannot name — so it is unusable for deciding WHICH episode to seek. /status/sessions names
+// the episode and gives its position.
+export async function currentSession({ device = null, setName = null } = {}) {
+  let data;
+  try {
+    data = await plexReq('GET', '/status/sessions', { token: await playToken(setName) });
+  } catch {
+    return null;
+  }
+  const md = (data && data.MediaContainer && data.MediaContainer.Metadata) || [];
+  if (!md.length) return null;
+  // Prefer the session on OUR player — the house has other clients, and seeking off the back of
+  // someone else's playback would be a genuinely bad bug.
+  let wanted = null;
+  try { wanted = await findClient(device); } catch { wanted = null; }
+  const mine = md.find((m) => {
+    const p = m.Player || {};
+    if (!wanted) return true;
+    return (wanted.machineIdentifier && p.machineIdentifier === wanted.machineIdentifier)
+      || (wanted.name && p.title === wanted.name);
+  });
+  const m = mine || (wanted ? null : md[0]);
+  if (!m) return null;
+  return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0) };
+}
+
 // Seek the target player to `offsetMs` via Companion. Same transport as playMedia.
 //
 // Why this exists: a Plex playQueue carries NO per-item resume point, and playMedia's `offset`
