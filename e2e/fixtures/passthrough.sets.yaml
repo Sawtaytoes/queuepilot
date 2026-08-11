@@ -1,0 +1,103 @@
+# Parity fixture for e2e/set-passthrough-parity.mjs. Synthetic. Every set here exists to pin
+# ONE of config.py's per-set passthrough fields, including the "absent" and "falsy" spellings,
+# because the bug this gate exists to catch was a field the Node builder simply never copied —
+# which reads as `undefined` at the consumer and silently DISABLES the feature rather than
+# failing. routing.sets.yaml deliberately contains none of these fields, which is why the
+# D2 parity gate stayed green while `requires_profile` was dead in the Node engine.
+sets:
+# requires_profile — the profile gate. Absent on the second set, so "no gate" is pinned too.
+- id: gated
+  label: Gated Queue
+  kind: anime
+  source: queue
+  requires_profile: someuser
+  sections: [11]
+
+- id: ungated
+  label: Ungated Queue
+  kind: anime
+  source: queue
+  sections: [11]
+
+# An empty string is FALSY in both languages — must not become a gate on either side.
+- id: gate_blank
+  label: Blank Gate
+  kind: anime
+  source: queue
+  requires_profile: ""
+  sections: [11]
+
+# remove_completed_after — §B.3 TTL sweep. Python str()+strip()s it, so the padded value and
+# the numeric-looking one both have to come back as trimmed STRINGS, not numbers.
+- id: ttl_set
+  label: TTL Queue
+  kind: cartoons
+  source: queue
+  remove_completed_after: "  7d  "
+  sections: [5]
+
+- id: ttl_zero
+  label: TTL Zero
+  kind: cartoons
+  source: queue
+  remove_completed_after: 0
+  sections: [5]
+
+# max_items — per-scan cap. <=0 and non-numeric both mean "no cap" (null), not 0.
+- id: capped
+  label: Capped Queue
+  kind: movie
+  source: queue
+  max_items: 3
+  sections: [1]
+
+- id: cap_zero
+  label: Zero Cap
+  kind: movie
+  source: queue
+  max_items: 0
+  sections: [1]
+
+- id: cap_junk
+  label: Junk Cap
+  kind: movie
+  source: queue
+  max_items: "not-a-number"
+  sections: [1]
+
+# include_specials — season 0 filtering in resolve.js.
+- id: specials
+  label: With Specials
+  kind: cartoons
+  source: queue
+  include_specials: true
+  sections: [5]
+
+# audio_language — playback stream selection. Padded, to pin the strip(). `null` is the
+# spelling the live sets.yaml actually uses for "no preference".
+- id: jpn
+  label: Japanese Audio
+  kind: anime
+  source: queue
+  audio_language: "  jpn  "
+  sections: [11]
+
+- id: lang_null
+  label: Null Audio
+  kind: anime
+  source: queue
+  audio_language: null
+  sections: [11]
+
+# A rotation set too — the passthroughs are applied after the source branch, so they must
+# land on both shapes, not just queues.
+- id: gated_channel
+  label: Gated Channel
+  kind: cartoons
+  source: rotation
+  behavior: progress
+  requires_profile: someuser
+  max_items: 5
+  sections: [5]
+  profiles:
+  - { plex_user: "Some User", account_id: 11110009, user_uuid: su-uuid }
