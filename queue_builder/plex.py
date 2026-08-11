@@ -1165,7 +1165,8 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=Fa
     THE shared per-type dispatch (v3 PR 3): both a curated set's queues.yaml entries and a
     rotation channel's explicit `members:` list resolve through here, so every member kind
     behaves identically everywhere:
-      * a `Collection: <name>`  -> its unwatched children in collection order,
+      * a `Collection: <name>`  -> its unwatched children in collection order, capped at
+                                   the SAME batch as a show (one member, one batch),
       * a movie / short         -> the item itself, ONE item, dropped once it's in `watched`,
       * a show                  -> its next unwatched playable episodes in order, capped at
                                    the entry's `episodes:` override else `default_batch`
@@ -1189,6 +1190,19 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=Fa
                                  resume=resume)
         if items is None:
             return None
+        # A collection is ONE member, so it contributes ONE batch — the same cap the show
+        # branch applies below, honoring a per-entry `episodes:` override the same way.
+        # Without this a collection dumped its children's ENTIRE unwatched run into a single
+        # scan: the anime channel built 9 consecutive Chaika episodes + 2 Nadesico + 1
+        # Gleipnir and called that a 12-item rotation (2026-08-11). Decision
+        # 2026-07-21-plex-collections-as-ordered-queue-entries is explicit that a collection
+        # gets "the same footing as show entries"; uncapped expansion was never that.
+        # default_batch stays None for the rotation/member-bucket callers, so their
+        # round-robin still gets the full ordered list and advances across rounds as before.
+        batch = desc.get("episodes") or default_batch
+        if batch:
+            batch = max(1, min(int(batch), config.QUEUE_SERIES_LENGTH))
+            items = items[:batch]
         return {"title": f"Collection: {name}", "type": "collection", "items": items}
     rk, typ, title = resolve_queue_entry(desc, cfg, token=token)
     if typ is None:
@@ -1312,7 +1326,8 @@ def next_queue(set_name, rng=None):
     it's in this profile's watched history; a SERIES/COLLECTION is finished once it has no
     unwatched, playable items left. A series contributes its next unwatched episodes in
     order, capped at the entry's `episodes:` batch (default QUEUE_SERIES_DEFAULT, hard cap
-    QUEUE_SERIES_LENGTH); a collection contributes all its unwatched children in order.
+    QUEUE_SERIES_LENGTH); a collection is one member and contributes ONE batch too, taken
+    from its unwatched children in collection order.
 
     What plays depends on the set's kind (decision
     2026-07-21-queues-vs-channels-taxonomy-play-first-ia):
