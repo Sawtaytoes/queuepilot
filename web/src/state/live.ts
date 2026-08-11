@@ -1,5 +1,13 @@
-import { api, apiConditional, NOT_MODIFIED } from "../lib/api"
-import type { NowState, QueuesResponse, SetsResponse } from "../lib/types"
+import {
+  api,
+  apiConditional,
+  NOT_MODIFIED,
+} from "../lib/api"
+import type {
+  NowState,
+  QueuesResponse,
+  SetsResponse,
+} from "../lib/types"
 import { uiBusy } from "./busy"
 import {
   getState,
@@ -60,7 +68,8 @@ export async function liveRefresh() {
     // full refetch that overwrote a just-made rename). Layers 2 (echo the originating
     // client id so a client skips the refetch for its OWN mutation) and 3 (per-set deltas)
     // are deferred refinements — with the 304 path this cheap, their marginal value is low.
-    if (data === NOT_MODIFIED && reg === NOT_MODIFIED) return
+    if (data === NOT_MODIFIED && reg === NOT_MODIFIED)
+      return
 
     const patch: Parameters<typeof setState>[0] = {}
 
@@ -69,8 +78,7 @@ export async function liveRefresh() {
 
     setState(patch)
     void refreshHistoryButtons()
-  }
-  catch {
+  } catch {
     /* the next event retries */
   }
 }
@@ -87,9 +95,10 @@ async function resyncNow() {
   try {
     const n = await api<NowState>("GET", "/api/now")
 
-    setState({ now: { now: n.now || null, set: n.set || null } })
-  }
-  catch {
+    setState({
+      now: { now: n.now || null, set: n.set || null },
+    })
+  } catch {
     /* the next `now` SSE event fills it in */
   }
 }
@@ -117,12 +126,12 @@ export function startLiveUpdates() {
   // Presentation only, so unlike liveRefresh it needs no refetch — but it still
   // re-renders, so a mid-drag repaint would fight the gesture. Defer on busy.
   source.addEventListener("now", (ev) => {
-    let payload: { now?: unknown; set?: string } | null = null
+    let payload: { now?: unknown; set?: string } | null =
+      null
 
     try {
       payload = JSON.parse((ev as MessageEvent).data)
-    }
-    catch {
+    } catch {
       return
     }
 
@@ -150,17 +159,25 @@ export function startLiveUpdates() {
 
     try {
       st = JSON.parse((ev as MessageEvent).data)
-    }
-    catch {
+    } catch {
       return
     }
 
-    if (!st || typeof st !== "object" || !Object.keys(st).length) return
+    if (
+      !st ||
+      typeof st !== "object" ||
+      !Object.keys(st).length
+    )
+      return
 
     const s = st as {
       error?: string
       awaiting?: string
-      playback?: { client?: string; played?: boolean; error?: string }
+      playback?: {
+        client?: string
+        played?: boolean
+        error?: string
+      }
       now?: { title?: string; show?: string }
     }
 
@@ -184,8 +201,7 @@ export function startLiveUpdates() {
           `Playing ${s.now?.title || s.now?.show || ""} on ${dev}`,
           "ok",
         )
-      }
-      else {
+      } else {
         setStatus(
           `Play failed on ${dev}: ${s.playback.error || "unknown"}`,
           "err",
@@ -212,7 +228,10 @@ export function startLiveUpdates() {
 
   return () => {
     clearInterval(timer)
-    document.removeEventListener("visibilitychange", onVisible)
+    document.removeEventListener(
+      "visibilitychange",
+      onVisible,
+    )
     source?.close()
     source = null
   }

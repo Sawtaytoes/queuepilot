@@ -62,6 +62,11 @@ jobs:
       - name: Install web deps
         run: npm ci --prefix web --no-audit --no-fund
 
+      # Biome is formatter + linter for web/. Runs before typecheck so a
+      # formatting/lint failure reads as one, rather than as a build problem.
+      - name: Web lint (Biome)
+        run: npm --prefix web run lint:biome
+
       - name: Web typecheck
         run: npm --prefix web run typecheck
 

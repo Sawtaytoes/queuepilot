@@ -1,6 +1,6 @@
-import { SelectListbox } from "../components/SelectListbox"
 import { useEffect, useState } from "react"
-
+import { SelectListbox } from "../components/SelectListbox"
+import { Tip } from "../components/Tip"
 import { activeBinding } from "../lib/channels"
 import type { RegistrySet } from "../lib/types"
 import {
@@ -14,8 +14,11 @@ import {
   openSetModal,
 } from "../state/overlays"
 import { navigate } from "../state/route"
-import { channelSetIds, rotationChannels, useStore } from "../state/store"
-import { Tip } from "../components/Tip"
+import {
+  channelSetIds,
+  rotationChannels,
+  useStore,
+} from "../state/store"
 import { ChannelFilters } from "./ChannelFilters"
 import { ChannelMembers } from "./ChannelMembers"
 import { ChannelPool } from "./ChannelPool"
@@ -45,10 +48,12 @@ function resolveInitialProfile(
 ): string | null {
   const bindings = channel.profiles || []
   const matches = (name: string | null) =>
-    Boolean(name) && bindings.some((b) => b.plex_user === name)
+    Boolean(name) &&
+    bindings.some((b) => b.plex_user === name)
 
   if (matches(currentProfile)) return currentProfile
-  if (matches(channel.default_profile ?? null)) return channel.default_profile ?? null
+  if (matches(channel.default_profile ?? null))
+    return channel.default_profile ?? null
 
   return activeBinding(channel, null).plex_user || null
 }
@@ -61,8 +66,10 @@ export function ChannelsView({
   routeId: string | null
 }) {
   const { data, reg } = useStore()
-  const { channelId: currentChannel, profile: currentProfile } =
-    useChannelSelection()
+  const {
+    channelId: currentChannel,
+    profile: currentProfile,
+  } = useChannelSelection()
   const [resampleToken, setResampleToken] = useState(0)
   // Distinct from `resampleToken`: a blocklist / exclude write moves the pool but
   // must NOT trigger a `fresh=1` reshuffle — it re-reads the (already
@@ -71,7 +78,11 @@ export function ChannelsView({
   const [reloadToken, setReloadToken] = useState(0)
 
   const all = rotationChannels(reg)
-  const channel = resolveChannel(reg, routeId, currentChannel)
+  const channel = resolveChannel(
+    reg,
+    routeId,
+    currentChannel,
+  )
   const isMovies = channel?.behavior === "rewatch"
 
   useEffect(() => {
@@ -88,7 +99,13 @@ export function ChannelsView({
   }, [channel?.id, isHidden])
 
   if (!channel) {
-    return <main className="view" hidden={isHidden} id="channels" />
+    return (
+      <main
+        className="view"
+        hidden={isHidden}
+        id="channels"
+      />
+    )
   }
 
   const binding = activeBinding(channel, currentProfile)
@@ -130,14 +147,18 @@ export function ChannelsView({
             label="Channel"
             onChange={(v) => {
               // A curated channel configures in the grid editor.
-              if (v.startsWith("q:")) navigate(`#/q/${v.slice(2)}`)
+              if (v.startsWith("q:"))
+                navigate(`#/q/${v.slice(2)}`)
               else navigate(`#/channels/${v}`)
             }}
             // Flat list: `Listbox` has no option groups, so the old "Dynamic Channels" /
             // "Curated Channels" headers are dropped — dynamic channels first, then the
             // curated ones (the `q:` prefix still routes them to the grid editor).
             options={[
-              ...all.map((s) => ({ label: s.label, value: s.id })),
+              ...all.map((s) => ({
+                label: s.label,
+                value: s.id,
+              })),
               ...channelSetIds(data).map((id) => ({
                 label: data!.sets[id]!.label,
                 value: `q:${id}`,
@@ -155,7 +176,11 @@ export function ChannelsView({
             onChange={(v) => {
               const i = v.indexOf("::")
 
-              if (i >= 0) setChannelSelection(v.slice(0, i), v.slice(i + 2) || null)
+              if (i >= 0)
+                setChannelSelection(
+                  v.slice(0, i),
+                  v.slice(i + 2) || null,
+                )
               else setChannelSelection(v, null)
             }}
             options={profileOptions}
@@ -167,11 +192,13 @@ export function ChannelsView({
           id="chplay"
           onClick={(e) =>
             openPlayMenu({
-              anchor: e.currentTarget.getBoundingClientRect(),
+              anchor:
+                e.currentTarget.getBoundingClientRect(),
               kind: isMovies ? "movie" : undefined,
               profile: currentProfile || undefined,
               setId: channel.id,
-            })}
+            })
+          }
           type="button"
         >
           ▶ Play on ▾
@@ -214,7 +241,8 @@ export function ChannelsView({
           ＋ Curated channel
         </button>
         <span className="chnote">
-          A sample of what could play — the real rotation shuffles fresh every scan.
+          A sample of what could play — the real rotation
+          shuffles fresh every scan.
         </span>
       </div>
       <div id="chbody">
@@ -223,18 +251,21 @@ export function ChannelsView({
           currentProfile={currentProfile}
           isShown={!isHidden && !isMovies}
         />
-        {isHidden
-          ? <section className="chpool"><h2 id="chpool-title">Eligible pool</h2><ul className="grid" id="chpool" /></section>
-          : (
-              <ChannelPool
-                channel={channel}
-                currentProfile={currentProfile}
-                key={channel.id}
-                onChanged={() => setReloadToken((n) => n + 1)}
-                reloadToken={reloadToken}
-                resampleToken={resampleToken}
-              />
-            )}
+        {isHidden ? (
+          <section className="chpool">
+            <h2 id="chpool-title">Eligible pool</h2>
+            <ul className="grid" id="chpool" />
+          </section>
+        ) : (
+          <ChannelPool
+            channel={channel}
+            currentProfile={currentProfile}
+            key={channel.id}
+            onChanged={() => setReloadToken((n) => n + 1)}
+            reloadToken={reloadToken}
+            resampleToken={resampleToken}
+          />
+        )}
         <ChannelFilters
           channel={channel}
           currentProfile={currentProfile}

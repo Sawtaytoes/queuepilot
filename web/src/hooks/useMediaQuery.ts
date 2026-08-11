@@ -12,7 +12,8 @@ export function useMediaQuery(query: string): boolean {
 
       mq.addEventListener("change", listener)
 
-      return () => mq.removeEventListener("change", listener)
+      return () =>
+        mq.removeEventListener("change", listener)
     },
     () => window.matchMedia(query).matches,
   )

@@ -130,7 +130,10 @@ export function Header({
     if (!editableSetId || isEditing) return
 
     settledRef.current = false
-    setDraft(getState().data?.sets[editableSetId]?.label ?? heading)
+    setDraft(
+      getState().data?.sets[editableSetId]?.label ??
+        heading,
+    )
     setIsEditing(true)
     busy.headingEdit = true
   }
@@ -147,12 +150,20 @@ export function Header({
       ? getState().data?.sets[editableSetId]?.label
       : undefined
 
-    if (!isSaving || !value || !editableSetId || value === before) return
+    if (
+      !isSaving ||
+      !value ||
+      !editableSetId ||
+      value === before
+    )
+      return
 
     setStatus("Renaming…")
 
     try {
-      await api("PATCH", `/api/sets/${editableSetId}`, { label: value })
+      await api("PATCH", `/api/sets/${editableSetId}`, {
+        label: value,
+      })
 
       const set = getState().data?.sets[editableSetId]
 
@@ -162,9 +173,11 @@ export function Header({
       }
 
       setStatus("Renamed", "ok")
-    }
-    catch (e) {
-      setStatus("Rename failed: " + (e as Error).message, "err")
+    } catch (e) {
+      setStatus(
+        `Rename failed: ${(e as Error).message}`,
+        "err",
+      )
     }
   }
 
@@ -172,10 +185,10 @@ export function Header({
     setStatus(dir === "undo" ? "Undoing…" : "Redoing…")
 
     try {
-      const out = await api<{ ok?: boolean; error?: string }>(
-        "POST",
-        `/api/${dir}`,
-      )
+      const out = await api<{
+        ok?: boolean
+        error?: string
+      }>("POST", `/api/${dir}`)
 
       if (!out.ok) throw new Error(out.error)
 
@@ -183,9 +196,11 @@ export function Header({
       // The file write pings SSE too, but refresh immediately for snappy feedback.
       refreshData()
       void refreshHistoryButtons()
-    }
-    catch (e) {
-      setStatus(`${dir} failed: ${(e as Error).message}`, "err")
+    } catch (e) {
+      setStatus(
+        `${dir} failed: ${(e as Error).message}`,
+        "err",
+      )
     }
   }
 
@@ -201,7 +216,9 @@ export function Header({
           className="ghost menu-toggle"
           hidden={!back && !editableSetId}
           id="menu-nav"
-          onClick={() => setOpenMenu((m) => (m === "nav" ? null : "nav"))}
+          onClick={() =>
+            setOpenMenu((m) => (m === "nav" ? null : "nav"))
+          }
           type="button"
         >
           ☰
@@ -216,29 +233,28 @@ export function Header({
           {back?.label ?? "← All queues"}
         </button>
         <h1 id="heading" onClick={begin}>
-          {isEditing
-            ? (
-                <input
-                  id="headingedit"
-                  maxLength={60}
-                  onBlur={() => void finish(true)}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault()
-                      void finish(true)
-                    }
-                    else if (e.key === "Escape") {
-                      e.preventDefault()
-                      void finish(false)
-                    }
-                  }}
-                  ref={inputRef}
-                  type="text"
-                  value={draft}
-                />
-              )
-            : heading}
+          {isEditing ? (
+            <input
+              id="headingedit"
+              maxLength={60}
+              onBlur={() => void finish(true)}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  void finish(true)
+                } else if (e.key === "Escape") {
+                  e.preventDefault()
+                  void finish(false)
+                }
+              }}
+              ref={inputRef}
+              type="text"
+              value={draft}
+            />
+          ) : (
+            heading
+          )}
         </h1>
         <Tip label="Rename">
           <button
@@ -297,7 +313,11 @@ export function Header({
           aria-label="Actions menu"
           className="ghost menu-toggle"
           id="menu-actions"
-          onClick={() => setOpenMenu((m) => (m === "actions" ? null : "actions"))}
+          onClick={() =>
+            setOpenMenu((m) =>
+              m === "actions" ? null : "actions",
+            )
+          }
           type="button"
         >
           ⋮
@@ -310,36 +330,32 @@ export function Header({
           className={`hmenu hmenu-left${openMenu === "nav" ? " open" : ""}`}
           role="menu"
         >
-          {back
-            ? (
-                <button
-                  className="ghost hmenu-item"
-                  onClick={() => {
-                    setOpenMenu(null)
-                    navigate(back.target)
-                  }}
-                  role="menuitem"
-                  type="button"
-                >
-                  {back.label}
-                </button>
-              )
-            : null}
-          {editableSetId
-            ? (
-                <button
-                  className="ghost hmenu-item"
-                  onClick={() => {
-                    setOpenMenu(null)
-                    begin()
-                  }}
-                  role="menuitem"
-                  type="button"
-                >
-                  ✎ Rename
-                </button>
-              )
-            : null}
+          {back ? (
+            <button
+              className="ghost hmenu-item"
+              onClick={() => {
+                setOpenMenu(null)
+                navigate(back.target)
+              }}
+              role="menuitem"
+              type="button"
+            >
+              {back.label}
+            </button>
+          ) : null}
+          {editableSetId ? (
+            <button
+              className="ghost hmenu-item"
+              onClick={() => {
+                setOpenMenu(null)
+                begin()
+              }}
+              role="menuitem"
+              type="button"
+            >
+              ✎ Rename
+            </button>
+          ) : null}
         </div>
 
         {/* RIGHT popover (actions) — the mobile mirror of `.chrome`. Undo/redo here carry

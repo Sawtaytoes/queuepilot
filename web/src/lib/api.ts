@@ -11,12 +11,16 @@ export async function api<T = unknown>(
 ): Promise<T> {
   const res = await fetch(url, {
     body: body ? JSON.stringify(body) : undefined,
-    headers: body ? { "Content-Type": "application/json" } : undefined,
+    headers: body
+      ? { "Content-Type": "application/json" }
+      : undefined,
     method,
   })
 
   if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    const payload = (await res
+      .json()
+      .catch(() => ({}))) as { error?: string }
 
     throw new Error(payload.error || res.statusText)
   }
@@ -56,7 +60,9 @@ export async function apiConditional<T = unknown>(
   if (res.status === 304) return NOT_MODIFIED
 
   if (!res.ok) {
-    const payload = (await res.json().catch(() => ({}))) as { error?: string }
+    const payload = (await res
+      .json()
+      .catch(() => ({}))) as { error?: string }
 
     throw new Error(payload.error || res.statusText)
   }

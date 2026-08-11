@@ -23,7 +23,8 @@ function commit(next: Map<string, Selected>) {
   for (const l of listeners) l()
 }
 
-export const selKey = (set: string, key: string) => `${set}::${key}`
+export const selKey = (set: string, key: string) =>
+  `${set}::${key}`
 
 export const getSelected = () => selected
 

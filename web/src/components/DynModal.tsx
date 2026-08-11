@@ -1,8 +1,11 @@
 import { Accordion } from "@charcuterie/ui"
-
-import { SelectListbox } from "./SelectListbox"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { api } from "../lib/api"
 import {
   fetchProfiles,
@@ -12,12 +15,20 @@ import {
   profileValue,
   ratingOptions,
 } from "../lib/channels"
-import type { Binding, Profile, RegistrySet } from "../lib/types"
-import { closeDynModal, useOverlays } from "../state/overlays"
+import type {
+  Binding,
+  Profile,
+  RegistrySet,
+} from "../lib/types"
+import {
+  closeDynModal,
+  useOverlays,
+} from "../state/overlays"
 import { navigate } from "../state/route"
 import { load, setStatus, useStore } from "../state/store"
 import { CheckboxGroup } from "./CheckboxGroup"
 import { Modal } from "./Modal"
+import { SelectListbox } from "./SelectListbox"
 
 /**
  * Create / configure a DYNAMIC (rule-based rotation) channel — the "full access"
@@ -54,25 +65,36 @@ type BindingDraft = {
 
 let nextUid = 1
 
-const toDraft = (b: Binding, known: string[]): BindingDraft => ({
-  accountId: b.account_id != null ? String(b.account_id) : "",
+const toDraft = (
+  b: Binding,
+  known: string[],
+): BindingDraft => ({
+  accountId:
+    b.account_id != null ? String(b.account_id) : "",
   isAdvancedOpen: false,
   movieChecked: b.movie_ratings || [],
   movieOptions: ratingOptions(known, b.movie_ratings || []),
   plexUser: b.plex_user || "",
   showChecked: b.allowed_ratings || [],
-  showOptions: ratingOptions(known, b.allowed_ratings || []),
+  showOptions: ratingOptions(
+    known,
+    b.allowed_ratings || [],
+  ),
   uid: nextUid++,
   userUuid: b.user_uuid || "",
 })
 
 const readBinding = (d: BindingDraft): Binding => ({
-  account_id: d.accountId.trim() ? Number(d.accountId.trim()) : null,
+  account_id: d.accountId.trim()
+    ? Number(d.accountId.trim())
+    : null,
   allowed_ratings: d.showChecked,
   movie_ratings: d.movieChecked,
   plex_user: d.plexUser.trim() || null,
   user_uuid: d.userUuid.trim() || null,
-  watch_count_accounts: d.accountId.trim() ? [Number(d.accountId.trim())] : [],
+  watch_count_accounts: d.accountId.trim()
+    ? [Number(d.accountId.trim())]
+    : [],
 })
 
 const hasData = (b: Binding) =>
@@ -90,17 +112,28 @@ export function DynModal() {
 
   const setId = dynModal?.setId ?? null
   const editing = useMemo(
-    () => (setId ? (reg?.sets.find((s) => s.id === setId) ?? null) : null),
+    () =>
+      setId
+        ? (reg?.sets.find((s) => s.id === setId) ?? null)
+        : null,
     [reg, setId],
   )
 
   const [label, setLabel] = useState("")
   const [kind, setKind] = useState("cartoons")
-  const [behavior, setBehavior] = useState<"progress" | "rewatch">("progress")
+  const [behavior, setBehavior] = useState<
+    "progress" | "rewatch"
+  >("progress")
   const [audio, setAudio] = useState("")
-  const [showSections, setShowSections] = useState<number[]>([])
-  const [itemSections, setItemSections] = useState<number[]>([])
-  const [bindings, setBindings] = useState<BindingDraft[]>([])
+  const [showSections, setShowSections] = useState<
+    number[]
+  >([])
+  const [itemSections, setItemSections] = useState<
+    number[]
+  >([])
+  const [bindings, setBindings] = useState<BindingDraft[]>(
+    [],
+  )
   const [profiles, setProfiles] = useState<Profile[]>([])
   // Which binding the Play/Channels dropdowns seed to (a binding's plex_user); "" = none
   // (fall back to the first binding). (decision `2026-08-07-default-profile-per-channel`)
@@ -109,7 +142,10 @@ export function DynModal() {
   const knownRef = useRef<string[]>([])
 
   const showLibs = useMemo(
-    () => (reg?.libraries ?? []).filter((l) => l.video && l.type === "show"),
+    () =>
+      (reg?.libraries ?? []).filter(
+        (l) => l.video && l.type === "show",
+      ),
     [reg],
   )
   // Both groups are Plex movie-type sections feeding the same `item_sections` —
@@ -135,16 +171,23 @@ export function DynModal() {
     let isStale = false
 
     setLabel(editing ? editing.label : "")
-    setKind(editing ? editing.kind || "cartoons" : "cartoons")
+    setKind(
+      editing ? editing.kind || "cartoons" : "cartoons",
+    )
     // `behavior` supersedes the old `mode`; map a legacy set's mode when it has no
     // behavior yet (rewatch → rewatch, everything else → progress).
     setBehavior(
       editing
-        ? editing.behavior || (editing.mode === "rewatch" ? "rewatch" : "progress")
+        ? editing.behavior ||
+            (editing.mode === "rewatch"
+              ? "rewatch"
+              : "progress")
         : "progress",
     )
     setAudio(editing ? editing.audio_language || "" : "")
-    setDefaultProfile(editing ? editing.default_profile || "" : "")
+    setDefaultProfile(
+      editing ? editing.default_profile || "" : "",
+    )
 
     const checked = libSelection(editing)
 
@@ -165,10 +208,9 @@ export function DynModal() {
       // Every rotation set exposes a `profiles` array (PR 2a synthesizes one from
       // legacy fields), so an existing channel fills its cards from it; a brand-new
       // channel starts with one empty card to fill in.
-      const list =
-        editing && editing.profiles && editing.profiles.length
-          ? editing.profiles
-          : [{} as Binding]
+      const list = editing?.profiles?.length
+        ? editing.profiles
+        : [{} as Binding]
 
       setBindings(list.map((b) => toDraft(b, known)))
     }
@@ -183,7 +225,10 @@ export function DynModal() {
   }, [dynModal])
 
   const sectionScope = useCallback(
-    () => [...new Set([...showSections, ...itemSections])].join(","),
+    () =>
+      [...new Set([...showSections, ...itemSections])].join(
+        ",",
+      ),
     [itemSections, showSections],
   )
 
@@ -191,15 +236,24 @@ export function DynModal() {
    * currently-checked libraries, preserving that card's existing selections. */
   const scopeCard = useCallback(
     async (uid: number, uuid: string) => {
-      const ratings = await fetchScopedRatings(uuid, sectionScope())
+      const ratings = await fetchScopedRatings(
+        uuid,
+        sectionScope(),
+      )
 
       setBindings((prev) =>
         prev.map((d) =>
           d.uid === uid
             ? {
                 ...d,
-                movieOptions: ratingOptions(ratings, d.movieChecked),
-                showOptions: ratingOptions(ratings, d.showChecked),
+                movieOptions: ratingOptions(
+                  ratings,
+                  d.movieChecked,
+                ),
+                showOptions: ratingOptions(
+                  ratings,
+                  d.showChecked,
+                ),
               }
             : d,
         ),
@@ -212,13 +266,19 @@ export function DynModal() {
    * EVERY binding — each to its own profile's restricted view. */
   const rescopeAll = useCallback(() => {
     for (const d of bindings) {
-      if (d.userUuid.trim()) void scopeCard(d.uid, d.userUuid.trim())
+      if (d.userUuid.trim())
+        void scopeCard(d.uid, d.userUuid.trim())
     }
   }, [bindings, scopeCard])
 
-  const patchBinding = (uid: number, patch: Partial<BindingDraft>) =>
+  const patchBinding = (
+    uid: number,
+    patch: Partial<BindingDraft>,
+  ) =>
     setBindings((prev) =>
-      prev.map((d) => (d.uid === uid ? { ...d, ...patch } : d)),
+      prev.map((d) =>
+        d.uid === uid ? { ...d, ...patch } : d,
+      ),
     )
 
   const onSubmit = async () => {
@@ -241,7 +301,9 @@ export function DynModal() {
 
     // Collect the bindings; drop empty cards. When ≥1 has data, send `profiles[]`
     // (the canonical shape); Node writes it and drops the legacy top-level fields.
-    const collected = bindings.map(readBinding).filter(hasData)
+    const collected = bindings
+      .map(readBinding)
+      .filter(hasData)
 
     const body: Record<string, unknown> = {
       audio_language: audio.trim(),
@@ -259,31 +321,43 @@ export function DynModal() {
 
     // Only persist a default that still names one of the saved bindings; anything else
     // (blank, or a since-renamed profile) clears it so the dropdowns fall back to the first.
-    const named = collected.map((b) => b.plex_user).filter(Boolean)
+    const named = collected
+      .map((b) => b.plex_user)
+      .filter(Boolean)
 
     body.default_profile =
-      defaultProfile && named.includes(defaultProfile) ? defaultProfile : ""
+      defaultProfile && named.includes(defaultProfile)
+        ? defaultProfile
+        : ""
 
     setStatus("Saving channel…")
 
     try {
-      if (setId) await api("PATCH", `/api/sets/${setId}`, body)
+      if (setId)
+        await api("PATCH", `/api/sets/${setId}`, body)
       else await api("POST", "/api/sets", body)
 
       closeDynModal()
-      setStatus(setId ? "Channel updated" : "Channel created", "ok")
+      setStatus(
+        setId ? "Channel updated" : "Channel created",
+        "ok",
+      )
       await load()
       navigate("#/channels")
-    }
-    catch (err) {
-      setStatus("Save failed: " + (err as Error).message, "err")
+    } catch (err) {
+      setStatus(
+        `Save failed: ${(err as Error).message}`,
+        "err",
+      )
     }
   }
 
   const onDelete = async () => {
     if (!setId) return
 
-    const ch: RegistrySet | undefined = reg?.sets.find((s) => s.id === setId)
+    const ch: RegistrySet | undefined = reg?.sets.find(
+      (s) => s.id === setId,
+    )
     const name = ch ? ch.label : setId
 
     if (
@@ -300,14 +374,19 @@ export function DynModal() {
     setStatus("Deleting channel…")
 
     try {
-      await api("DELETE", `/api/sets/${encodeURIComponent(setId)}`)
+      await api(
+        "DELETE",
+        `/api/sets/${encodeURIComponent(setId)}`,
+      )
       closeDynModal()
       setStatus("Channel deleted", "ok")
       await load()
       navigate("#/channels")
-    }
-    catch (e) {
-      setStatus("Delete failed: " + (e as Error).message, "err")
+    } catch (e) {
+      setStatus(
+        `Delete failed: ${(e as Error).message}`,
+        "err",
+      )
     }
   }
 
@@ -317,7 +396,11 @@ export function DynModal() {
   // The bindings the default-profile picker can point at — a default is only meaningful
   // once a channel binds more than one named profile.
   const namedProfiles = [
-    ...new Set(bindings.map((d) => d.plexUser.trim()).filter(Boolean)),
+    ...new Set(
+      bindings
+        .map((d) => d.plexUser.trim())
+        .filter(Boolean),
+    ),
   ]
 
   return (
@@ -351,7 +434,11 @@ export function DynModal() {
       isOpen={Boolean(dynModal)}
       onClose={closeDynModal}
       onSubmit={() => void onSubmit()}
-      title={editing ? `Configure “${editing.label}”` : "New dynamic channel"}
+      title={
+        editing
+          ? `Configure “${editing.label}”`
+          : "New dynamic channel"
+      }
       titleId="dynmodal-title"
     >
       <label className="field">
@@ -375,14 +462,18 @@ export function DynModal() {
           id="dyn-behavior"
           key={dynModal ? (setId ?? "new") : "closed"}
           label="Behavior"
-          onChange={(v) => setBehavior(v as "progress" | "rewatch")}
+          onChange={(v) =>
+            setBehavior(v as "progress" | "rewatch")
+          }
           options={[
             {
-              label: "Progress — next unwatched (shows & shorts, in order)",
+              label:
+                "Progress — next unwatched (shows & shorts, in order)",
               value: "progress",
             },
             {
-              label: "Rewatch — weighted least-watched replay",
+              label:
+                "Rewatch — weighted least-watched replay",
               value: "rewatch",
             },
           ]}
@@ -409,7 +500,9 @@ export function DynModal() {
             id="dyn-showlibs"
             onToggle={(v, isChecked) => {
               setShowSections((prev) =>
-                isChecked ? [...prev, v] : prev.filter((x) => x !== v),
+                isChecked
+                  ? [...prev, v]
+                  : prev.filter((x) => x !== v),
               )
               rescopeAll()
             }}
@@ -423,21 +516,29 @@ export function DynModal() {
             id="dyn-movielibs"
             onToggle={(v, isChecked) => {
               setItemSections((prev) =>
-                isChecked ? [...prev, v] : prev.filter((x) => x !== v),
+                isChecked
+                  ? [...prev, v]
+                  : prev.filter((x) => x !== v),
               )
               rescopeAll()
             }}
             options={libOptions(movieLibs)}
           />
         </fieldset>
-        <fieldset className="field" hidden={!otherLibs.length} id="dyn-otherbox">
+        <fieldset
+          className="field"
+          hidden={!otherLibs.length}
+          id="dyn-otherbox"
+        >
           <legend>Other videos</legend>
           <CheckboxGroup
             checked={itemSections}
             id="dyn-otherlibs"
             onToggle={(v, isChecked) => {
               setItemSections((prev) =>
-                isChecked ? [...prev, v] : prev.filter((x) => x !== v),
+                isChecked
+                  ? [...prev, v]
+                  : prev.filter((x) => x !== v),
               )
               rescopeAll()
             }}
@@ -449,16 +550,23 @@ export function DynModal() {
       {/* A show library means different things per behavior: episodes to progress
           through, or (on a rewatch channel) its one-episode films. Note it only
           where it applies. */}
-      <p className="subhint" hidden={behavior !== "rewatch"} id="dyn-libnote">
-        A show library contributes its FILMS here — one-episode entries (that is how
-        anime movies are scanned). Multi-episode series never enter a rewatch pool.
+      <p
+        className="subhint"
+        hidden={behavior !== "rewatch"}
+        id="dyn-libnote"
+      >
+        A show library contributes its FILMS here —
+        one-episode entries (that is how anime movies are
+        scanned). Multi-episode series never enter a rewatch
+        pool.
       </p>
 
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>
         <p className="subhint">
-          One or more Plex Home profiles this channel plays under — each with its own
-          rating caps (scoped to what that profile can pick). At play time the
+          One or more Plex Home profiles this channel plays
+          under — each with its own rating caps (scoped to
+          what that profile can pick). At play time the
           signed-in profile decides which applies.
         </p>
         <div id="dyn-bindings">
@@ -479,19 +587,24 @@ export function DynModal() {
                     key={profiles.length}
                     label="Plex profile"
                     onChange={(v) => {
-                      const p = profiles.find((x) => profileValue(x) === v)
+                      const p = profiles.find(
+                        (x) => profileValue(x) === v,
+                      )
 
                       if (!p) return
 
                       patchBinding(d.uid, {
-                        accountId: p.id != null ? String(p.id) : "",
+                        accountId:
+                          p.id != null ? String(p.id) : "",
                         plexUser: p.name || "",
                         userUuid: p.uuid || "",
                       })
                       void scopeCard(d.uid, p.uuid || "")
                     }}
                     options={profiles.map((p) => ({
-                      label: p.admin ? `${p.name} (admin)` : p.name,
+                      label: p.admin
+                        ? `${p.name} (admin)`
+                        : p.name,
                       value: profileValue(p),
                     }))}
                     /* Was a real `<option value="">` the user could re-pick, which
@@ -506,14 +619,19 @@ export function DynModal() {
                     value={
                       profiles.find(
                         (p) =>
-                          (d.userUuid && p.uuid === d.userUuid) ||
-                          (d.accountId && p.id === Number(d.accountId)),
+                          (d.userUuid &&
+                            p.uuid === d.userUuid) ||
+                          (d.accountId &&
+                            p.id === Number(d.accountId)),
                       )
                         ? profileValue(
                             profiles.find(
                               (p) =>
-                                (d.userUuid && p.uuid === d.userUuid) ||
-                                (d.accountId && p.id === Number(d.accountId)),
+                                (d.userUuid &&
+                                  p.uuid === d.userUuid) ||
+                                (d.accountId &&
+                                  p.id ===
+                                    Number(d.accountId)),
                             )!,
                           )
                         : ""
@@ -527,7 +645,10 @@ export function DynModal() {
                      there is more than one card. */
                   hidden={bindings.length <= 1}
                   onClick={() =>
-                    setBindings((prev) => prev.filter((x) => x.uid !== d.uid))}
+                    setBindings((prev) =>
+                      prev.filter((x) => x.uid !== d.uid),
+                    )
+                  }
                   type="button"
                 >
                   Remove
@@ -552,10 +673,16 @@ export function DynModal() {
                   d.isAdvancedOpen ||
                   (!profiles.some(
                     (p) =>
-                      (d.userUuid && p.uuid === d.userUuid) ||
-                      (d.accountId && p.id === Number(d.accountId)),
+                      (d.userUuid &&
+                        p.uuid === d.userUuid) ||
+                      (d.accountId &&
+                        p.id === Number(d.accountId)),
                   ) &&
-                    Boolean(d.plexUser || d.accountId || d.userUuid))
+                    Boolean(
+                      d.plexUser ||
+                        d.accountId ||
+                        d.userUuid,
+                    ))
                     ? ["advanced"]
                     : []
                 }
@@ -569,7 +696,10 @@ export function DynModal() {
                           <input
                             className="b-plexuser"
                             onChange={(e) =>
-                              patchBinding(d.uid, { plexUser: e.target.value })}
+                              patchBinding(d.uid, {
+                                plexUser: e.target.value,
+                              })
+                            }
                             placeholder="e.g. Older Kids"
                             type="text"
                             value={d.plexUser}
@@ -581,7 +711,10 @@ export function DynModal() {
                             className="b-accountid"
                             inputMode="numeric"
                             onChange={(e) =>
-                              patchBinding(d.uid, { accountId: e.target.value })}
+                              patchBinding(d.uid, {
+                                accountId: e.target.value,
+                              })
+                            }
                             placeholder="e.g. 22222222"
                             type="text"
                             value={d.accountId}
@@ -592,7 +725,10 @@ export function DynModal() {
                           <input
                             className="b-useruuid"
                             onChange={(e) =>
-                              patchBinding(d.uid, { userUuid: e.target.value })}
+                              patchBinding(d.uid, {
+                                userUuid: e.target.value,
+                              })
+                            }
                             placeholder="e.g. 2222222222222222"
                             type="text"
                             value={d.userUuid}
@@ -601,14 +737,17 @@ export function DynModal() {
                       </>
                     ),
                     key: "advanced",
-                    label: "Advanced — set the account mapping by hand",
+                    label:
+                      "Advanced — set the account mapping by hand",
                   },
                 ]}
                 key={profiles.length}
                 onChange={(keys) =>
                   patchBinding(d.uid, {
-                    isAdvancedOpen: keys.includes("advanced"),
-                  })}
+                    isAdvancedOpen:
+                      keys.includes("advanced"),
+                  })
+                }
               />
               <fieldset className="field">
                 <legend>Allowed ratings (shows)</legend>
@@ -621,8 +760,11 @@ export function DynModal() {
                           patchBinding(d.uid, {
                             showChecked: e.target.checked
                               ? [...d.showChecked, r]
-                              : d.showChecked.filter((x) => x !== r),
-                          })}
+                              : d.showChecked.filter(
+                                  (x) => x !== r,
+                                ),
+                          })
+                        }
                         type="checkbox"
                         value={r}
                       />
@@ -642,8 +784,11 @@ export function DynModal() {
                           patchBinding(d.uid, {
                             movieChecked: e.target.checked
                               ? [...d.movieChecked, r]
-                              : d.movieChecked.filter((x) => x !== r),
-                          })}
+                              : d.movieChecked.filter(
+                                  (x) => x !== r,
+                                ),
+                          })
+                        }
                         type="checkbox"
                         value={r}
                       />
@@ -662,14 +807,19 @@ export function DynModal() {
             setBindings((prev) => [
               ...prev,
               toDraft({} as Binding, knownRef.current),
-            ])}
+            ])
+          }
           type="button"
         >
           + Add profile
         </button>
         {/* The default only means something with ≥2 bindings — with one profile there is
             nothing to pick between, and Play already lands on it. */}
-        <label className="subfield" hidden={namedProfiles.length < 2} id="dyn-default-wrap">
+        <label
+          className="subfield"
+          hidden={namedProfiles.length < 2}
+          id="dyn-default-wrap"
+        >
           Default profile
           {/* Keyed on modal-open identity like the other seeded selects here: the control
               is uncontrolled (value seeds defaultValue), so it must re-mount to pick up the
@@ -679,12 +829,20 @@ export function DynModal() {
             key={dynModal ? (setId ?? "new") : "closed"}
             label="Default profile"
             onChange={setDefaultProfile}
-            options={namedProfiles.map((p) => ({ label: p, value: p }))}
+            options={namedProfiles.map((p) => ({
+              label: p,
+              value: p,
+            }))}
             placeholder="— first profile —"
-            value={namedProfiles.includes(defaultProfile) ? defaultProfile : ""}
+            value={
+              namedProfiles.includes(defaultProfile)
+                ? defaultProfile
+                : ""
+            }
           />
           <span className="subhint">
-            The tier the Play and Channels dropdowns start on. Leave unset to use the first.
+            The tier the Play and Channels dropdowns start
+            on. Leave unset to use the first.
           </span>
         </label>
       </fieldset>

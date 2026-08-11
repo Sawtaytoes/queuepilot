@@ -1,6 +1,9 @@
 import { startLabel } from "../lib/tileFace"
 import type { StartPoint } from "../lib/types"
-import { closeStartModal, type EntryActions } from "../state/overlays"
+import {
+  closeStartModal,
+  type EntryActions,
+} from "../state/overlays"
 import { setStatus } from "../state/store"
 
 /**
@@ -15,7 +18,9 @@ export async function commitStart(
   if (!entry) return
 
   closeStartModal()
-  setStatus(start ? "Saving start point…" : "Clearing start point…")
+  setStatus(
+    start ? "Saving start point…" : "Clearing start point…",
+  )
 
   try {
     await entry.save(start)
@@ -28,8 +33,7 @@ export async function commitStart(
     )
 
     entry.refresh()
-  }
-  catch (e) {
-    setStatus("Save failed: " + (e as Error).message, "err")
+  } catch (e) {
+    setStatus(`Save failed: ${(e as Error).message}`, "err")
   }
 }

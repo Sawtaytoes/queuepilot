@@ -53,7 +53,11 @@ type Props<T> = {
   listId: string
   placeholder: string
   doSearch: (q: string) => Promise<T[]>
-  rowFor: (hit: T, index: number, close: () => void) => SearchRow
+  rowFor: (
+    hit: T,
+    index: number,
+    close: () => void,
+  ) => SearchRow
   /** Extra controls rendered between the input and the list (e.g. the Add-to
    * position select). */
   children?: ReactNode
@@ -70,13 +74,17 @@ export function SearchDropdown<T>({
   rowFor,
 }: Props<T>) {
   const [hits, setHits] = useState<T[]>([])
-  const [noMatch, setNoMatch] = useState<string | null>(null)
+  const [noMatch, setNoMatch] = useState<string | null>(
+    null,
+  )
   const [activeIndex, setActiveIndex] = useState(-1)
   const [isOpen, setIsOpen] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const timerRef = useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null)
 
   const close = useCallback(() => {
     setIsOpen(false)
@@ -124,9 +132,11 @@ export function SearchDropdown<T>({
         setNoMatch(found.length ? null : q)
         setActiveIndex(-1)
         setIsOpen(true)
-      }
-      catch (e) {
-        setStatus("Search failed: " + (e as Error).message, "err")
+      } catch (e) {
+        setStatus(
+          `Search failed: ${(e as Error).message}`,
+          "err",
+        )
       }
     }, 250)
   }
@@ -149,9 +159,13 @@ export function SearchDropdown<T>({
     return () => el.removeEventListener("input", listener)
   }, [])
 
-  const rows = hits.map((hit, i) => rowFor(hit, i, clearInput))
+  const rows = hits.map((hit, i) =>
+    rowFor(hit, i, clearInput),
+  )
 
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const onKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+  ) => {
     if (e.key === "Escape") {
       close()
 
@@ -175,15 +189,16 @@ export function SearchDropdown<T>({
           ?.querySelectorAll("li")
           [next]?.scrollIntoView({ block: "nearest" })
       })
-    }
-    else if (e.key === "Enter") {
+    } else if (e.key === "Enter") {
       e.preventDefault()
       rows[activeIndex >= 0 ? activeIndex : 0]?.pick()
     }
   }
 
   // Delegated pick — see (2) above.
-  const onListClick = (e: React.MouseEvent<HTMLUListElement>) => {
+  const onListClick = (
+    e: React.MouseEvent<HTMLUListElement>,
+  ) => {
     const li = (e.target as HTMLElement).closest("li")
 
     if (!li || !listRef.current) return
@@ -211,7 +226,12 @@ export function SearchDropdown<T>({
           // NOT an immediate close: a click on a row has to land first, and a
           // nested menu inside a row needs focus time.
           setTimeout(() => {
-            if (!listRef.current?.contains(document.activeElement)) close()
+            if (
+              !listRef.current?.contains(
+                document.activeElement,
+              )
+            )
+              close()
           }, 250)
         }}
         onKeyDown={onKeyDown}
@@ -226,24 +246,29 @@ export function SearchDropdown<T>({
         onClick={onListClick}
         ref={listRef}
       >
-        {noMatch
-          ? <li className="noresults">{`No matches for “${noMatch}”.`}</li>
-          : rows.map((row, i) => (
-              <li
-                className={
-                  [row.className, i === activeIndex ? "active" : null]
-                    .filter(Boolean)
-                    .join(" ") || undefined
-                }
-                // A search result set has no identity beyond its position: rows
-                // never persist across searches, and a ratingKey key would make
-                // React reuse a row for a different hit at the same index.
-                // eslint-disable-next-line react/no-array-index-key
-                key={i}
-              >
-                {row.content}
-              </li>
-            ))}
+        {noMatch ? (
+          <li className="noresults">{`No matches for “${noMatch}”.`}</li>
+        ) : (
+          rows.map((row, i) => (
+            <li
+              className={
+                [
+                  row.className,
+                  i === activeIndex ? "active" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" ") || undefined
+              }
+              // A search result set has no identity beyond its position: rows
+              // never persist across searches, and a ratingKey key would make
+              // React reuse a row for a different hit at the same index.
+              // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the identity here — see above.
+              key={i}
+            >
+              {row.content}
+            </li>
+          ))
+        )}
       </ul>
     </>
   )

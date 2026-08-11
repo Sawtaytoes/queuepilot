@@ -36,25 +36,44 @@ export function useFlipList(
   ) {
     const map = new Map<string, DOMRect>()
 
-    for (const t of ref.current.querySelectorAll<HTMLElement>("li.tile")) {
-      if (t.dataset.key) map.set(t.dataset.key, t.getBoundingClientRect())
+    for (const t of ref.current.querySelectorAll<HTMLElement>(
+      "li.tile",
+    )) {
+      if (t.dataset.key)
+        map.set(t.dataset.key, t.getBoundingClientRect())
     }
 
     before.current = map
   }
 
   useLayoutEffect(() => {
-    const container = ref.current
+    // `containerEl`, not the shorter name, and it must stay that way.
+    // Tailwind v4 scans raw source text for utility candidates, and at
+    // Biome's 60-char line width the guard below wraps so the negated
+    // identifier sits alone at the start of a line — which Tailwind then
+    // matches as an important-`container` utility and emits ~350 bytes of
+    // dead CSS for. Renaming is the whole fix; the guard can stay wrapped.
+    const containerEl = ref.current
     const first = before.current
 
     lastSignature.current = signature
     before.current = null
 
-    if (!container || !first || !animate || prefersReducedMotion()) return
+    if (
+      !containerEl ||
+      !first ||
+      !animate ||
+      prefersReducedMotion()
+    )
+      return
 
-    for (const t of container.querySelectorAll<HTMLElement>("li.tile")) {
+    for (const t of containerEl.querySelectorAll<HTMLElement>(
+      "li.tile",
+    )) {
       const last = t.getBoundingClientRect()
-      const start = t.dataset.key ? first.get(t.dataset.key) : undefined
+      const start = t.dataset.key
+        ? first.get(t.dataset.key)
+        : undefined
 
       if (!start) {
         t.animate(
@@ -73,8 +92,14 @@ export function useFlipList(
 
       if (dx || dy) {
         t.animate(
-          [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
-          { duration: 240, easing: "cubic-bezier(.2,.7,.3,1)" },
+          [
+            { transform: `translate(${dx}px, ${dy}px)` },
+            { transform: "none" },
+          ],
+          {
+            duration: 240,
+            easing: "cubic-bezier(.2,.7,.3,1)",
+          },
         )
       }
     }

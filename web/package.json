@@ -10,6 +10,8 @@
   "scripts": {
     "build": "vite build && node scripts/precompress.mjs",
     "dev": "vite",
+    "lint": "biome check --write",
+    "lint:biome": "biome check",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
@@ -22,6 +24,8 @@
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
+    "@charcuterie/biome-config": "^1.0.0",
     "@charcuterie/tsconfig": "^1.0.0",
     "@charcuterie/vite-config": "^1.0.1",
     "@charcuterie/vitest-config": "^1.0.1",

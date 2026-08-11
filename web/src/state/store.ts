@@ -29,7 +29,10 @@ export type Snapshot = {
   reg: SetsResponse | null
   now: NowState
   status: { msg: string; kind: StatusKind }
-  history: { undo: number | boolean; redo: number | boolean }
+  history: {
+    undo: number | boolean
+    redo: number | boolean
+  }
   /** Bumped whenever `data`/`reg` are replaced in place by a mutation helper, so
    * subscribers re-render even though the object identity game is played by hand. */
   revision: number
@@ -61,7 +64,11 @@ function subscribe(listener: () => void) {
 const getSnapshot = () => snapshot
 
 export function setState(patch: Partial<Snapshot>) {
-  snapshot = { ...snapshot, ...patch, revision: snapshot.revision + 1 }
+  snapshot = {
+    ...snapshot,
+    ...patch,
+    revision: snapshot.revision + 1,
+  }
   emit()
 }
 
@@ -70,7 +77,8 @@ export const bumpRevision = () => setState({})
 
 export const getState = () => snapshot
 
-export const useStore = () => useSyncExternalStore(subscribe, getSnapshot)
+export const useStore = () =>
+  useSyncExternalStore(subscribe, getSnapshot)
 
 // --- status toasts ----------------------------------------------------------- //
 // Toasts auto-dismiss so "Order saved" / "Filters saved" don't linger forever
@@ -78,7 +86,10 @@ export const useStore = () => useSyncExternalStore(subscribe, getSnapshot)
 // ~4s, errors linger ~10s. An empty message clears immediately with no timer.
 let statusTimer: ReturnType<typeof setTimeout> | null = null
 
-export function setStatus(msg: string, kind: StatusKind = "") {
+export function setStatus(
+  msg: string,
+  kind: StatusKind = "",
+) {
   setState({ status: { kind, msg } })
 
   if (statusTimer) {
@@ -91,7 +102,8 @@ export function setStatus(msg: string, kind: StatusKind = "") {
   const ms = kind === "err" ? 10000 : 4000
 
   statusTimer = setTimeout(() => {
-    if (getState().status.msg === msg) setState({ status: { kind: "", msg: "" } })
+    if (getState().status.msg === msg)
+      setState({ status: { kind: "", msg: "" } })
 
     statusTimer = null
   }, ms)
@@ -101,13 +113,23 @@ export function setStatus(msg: string, kind: StatusKind = "") {
 // Curated sets split by semantics: kind 'movies' = ordered QUEUE, 'anime' =
 // random-order CHANNEL with explicit members (the taxonomy decision).
 export const curatedIds = (data: QueuesResponse | null) =>
-  data ? data.order.filter((id) => data.sets[id]?.source === "queue") : []
+  data
+    ? data.order.filter(
+        (id) => data.sets[id]?.source === "queue",
+      )
+    : []
 
 export const queueIds = (data: QueuesResponse | null) =>
-  curatedIds(data).filter((id) => data!.sets[id]!.kind !== "anime")
+  curatedIds(data).filter(
+    (id) => data!.sets[id]!.kind !== "anime",
+  )
 
-export const channelSetIds = (data: QueuesResponse | null) =>
-  curatedIds(data).filter((id) => data!.sets[id]!.kind === "anime")
+export const channelSetIds = (
+  data: QueuesResponse | null,
+) =>
+  curatedIds(data).filter(
+    (id) => data!.sets[id]!.kind === "anime",
+  )
 
 /**
  * PR 4 cutover: a migrated function channel carries `profiles[]` bindings and a
@@ -115,23 +137,33 @@ export const channelSetIds = (data: QueuesResponse | null) =>
  * everywhere. The superseded legacy tiers stay in the registry (soak) but out of
  * every picker.
  */
-export const rotationChannels = (reg: SetsResponse | null) =>
-  reg ? reg.sets.filter((s) => s.source === "rotation" && !s.superseded_by) : []
+export const rotationChannels = (
+  reg: SetsResponse | null,
+) =>
+  reg
+    ? reg.sets.filter(
+        (s) => s.source === "rotation" && !s.superseded_by,
+      )
+    : []
 
 // --- loading ----------------------------------------------------------------- //
 export async function refreshHistoryButtons() {
   try {
-    const h = await api<{ undo: number; redo: number }>("GET", "/api/history")
+    const h = await api<{ undo: number; redo: number }>(
+      "GET",
+      "/api/history",
+    )
 
     setState({ history: h })
-  }
-  catch {
+  } catch {
     /* cosmetic */
   }
 }
 
 /** Re-fetch both files. Used by `load()` and by every mutation that needs a resync. */
-export async function fetchAll(): Promise<[QueuesResponse, SetsResponse]> {
+export async function fetchAll(): Promise<
+  [QueuesResponse, SetsResponse]
+> {
   return Promise.all([
     api<QueuesResponse>("GET", "/api/queues"),
     api<SetsResponse>("GET", "/api/sets"),
@@ -144,7 +176,9 @@ export async function fetchAll(): Promise<[QueuesResponse, SetsResponse]> {
  * endpoint the data came from — the tile checks `pending` and draws a skeleton
  * poster, and `/api/queues` later replaces the object wholesale.
  */
-function shelvesAsQueues(shelves: ShelvesResponse): QueuesResponse {
+function shelvesAsQueues(
+  shelves: ShelvesResponse,
+): QueuesResponse {
   const sets: QueuesResponse["sets"] = {}
 
   for (const id of shelves.order) {
@@ -214,15 +248,17 @@ export async function load() {
 
     setState({ data: shelvesAsQueues(shelves), reg })
     havePhase1 = true
-  }
-  catch {
+  } catch {
     /* skeleton is an optimization — fall through to the full fetch */
   }
 
   try {
     // Phase 1 already has the registry, so don't ask for it twice.
     const [data, reg] = havePhase1
-      ? [await api<QueuesResponse>("GET", "/api/queues"), getState().reg!]
+      ? [
+          await api<QueuesResponse>("GET", "/api/queues"),
+          getState().reg!,
+        ]
       : await fetchAll()
 
     setState({ data, reg })
@@ -232,16 +268,16 @@ export async function load() {
     try {
       const n = await api<NowState>("GET", "/api/now")
 
-      setState({ now: { now: n.now || null, set: n.set || null } })
-    }
-    catch {
+      setState({
+        now: { now: n.now || null, set: n.set || null },
+      })
+    } catch {
       /* cosmetic — the `now` SSE event fills it in */
     }
 
     setStatus("Ready", "ok")
     void refreshHistoryButtons()
-  }
-  catch (e) {
-    setStatus("Failed: " + (e as Error).message, "err")
+  } catch (e) {
+    setStatus(`Failed: ${(e as Error).message}`, "err")
   }
 }

@@ -38,6 +38,8 @@ export function uiBusy(): boolean {
       // An open search dropdown is a pick in progress; re-rendering under it eats
       // the click. Read from the DOM, as the original did, because the three lists
       // are owned by three different components.
-      document.querySelector("#gresults.open, #results.open, #chmresults.open"),
+      document.querySelector(
+        "#gresults.open, #results.open, #chmresults.open",
+      ),
   )
 }

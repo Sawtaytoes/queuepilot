@@ -14,8 +14,15 @@ import type {
   RegistrySet,
   StartPoint,
 } from "../lib/types"
-import { type EntryActions, openStartModal } from "../state/overlays"
-import { fetchAll, setState, setStatus } from "../state/store"
+import {
+  type EntryActions,
+  openStartModal,
+} from "../state/overlays"
+import {
+  fetchAll,
+  setState,
+  setStatus,
+} from "../state/store"
 
 /**
  * The channel's ELIGIBLE POOL — a sample of what could play. The real rotation
@@ -78,7 +85,8 @@ export function ChannelPool({
   /** Notify the parent to bump `reloadToken` after a blocklist / exclude write. */
   onChanged: () => void
 }) {
-  const [preview, setPreview] = useState<PreviewResponse | null>(null)
+  const [preview, setPreview] =
+    useState<PreviewResponse | null>(null)
   const [heading, setHeading] = useState("Eligible pool")
   // The load state drives the indicator. `#chpool-title` text stays STABLE at "Eligible
   // pool" while loading — `live-smoke.mjs` and `verify-shorts-pool.mjs` read its
@@ -115,7 +123,8 @@ export function ChannelPool({
       try {
         const qs = new URLSearchParams()
 
-        const isResample = resampleToken !== prevResampleRef.current
+        const isResample =
+          resampleToken !== prevResampleRef.current
 
         prevResampleRef.current = resampleToken
 
@@ -125,7 +134,8 @@ export function ChannelPool({
         // profile through so the Python side previews that binding (legacy sets
         // omit it → default binding).
         const profile = channel.has_explicit_profiles
-          ? activeBinding(channel, currentProfile).plex_user || ""
+          ? activeBinding(channel, currentProfile)
+              .plex_user || ""
           : ""
 
         if (profile) qs.set("profile", profile)
@@ -157,24 +167,32 @@ export function ChannelPool({
 
         const buckets = data.buckets || []
         const shows = buckets.filter(
-          (b) => !String(b.ratingKey).startsWith("section-"),
+          (b) =>
+            !String(b.ratingKey).startsWith("section-"),
         )
         const itemBuckets = buckets.filter((b) =>
           String(b.ratingKey).startsWith("section-"),
         )
-        const itemCount = itemBuckets.reduce((n, b) => n + b.unwatched, 0)
+        const itemCount = itemBuckets.reduce(
+          (n, b) => n + b.unwatched,
+          0,
+        )
 
         setHeading(
           `Eligible pool — ${shows.length} shows` +
-            (itemBuckets.length ? ` + ${itemCount} shorts` : ""),
+            (itemBuckets.length
+              ? ` + ${itemCount} shorts`
+              : ""),
         )
-      }
-      catch (e) {
+      } catch (e) {
         if (req !== reqRef.current) return // a newer load owns the pool now
 
         setHeading("Eligible pool")
         setIsLoading(false)
-        setStatus("Preview failed: " + (e as Error).message, "err")
+        setStatus(
+          `Preview failed: ${(e as Error).message}`,
+          "err",
+        )
       }
     }
 
@@ -182,18 +200,29 @@ export function ChannelPool({
 
     return () => clearTimeout(slowTimer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.id, currentProfile, resampleToken, reloadToken])
+  }, [
+    channel.id,
+    currentProfile,
+    resampleToken,
+    reloadToken,
+  ])
 
   // The skeleton count: enough to fill the visible pool row so nothing shifts when the real
   // tiles land. A fixed dozen at tile geometry (`--tile` wide, aspect-ratio 2/3 via `.tile`).
   const SKELETON_COUNT = 12
 
-  const excludeFromBlocklist = async (ratingKey: string, label: string) => {
+  const excludeFromBlocklist = async (
+    ratingKey: string,
+    label: string,
+  ) => {
     setStatus(`Blocking ${label}…`)
 
     try {
       await api("PATCH", `/api/sets/${channel.id}`, {
-        blocklist: [...channel.blocklist, String(ratingKey)],
+        blocklist: [
+          ...channel.blocklist,
+          String(ratingKey),
+        ],
       })
 
       const [data, reg] = await fetchAll()
@@ -201,14 +230,21 @@ export function ChannelPool({
       setState({ data, reg })
       setStatus(`${label} excluded`, "ok")
       onChanged()
-    }
-    catch (e) {
-      setStatus("Exclude failed: " + (e as Error).message, "err")
+    } catch (e) {
+      setStatus(
+        `Exclude failed: ${(e as Error).message}`,
+        "err",
+      )
     }
   }
 
-  const excludeFromRewatch = async (ratingKey: string, label: string) => {
-    const current = activeBinding(channel, currentProfile).movie_excludes || []
+  const excludeFromRewatch = async (
+    ratingKey: string,
+    label: string,
+  ) => {
+    const current =
+      activeBinding(channel, currentProfile)
+        .movie_excludes || []
 
     setStatus(`Excluding ${label}…`)
 
@@ -222,22 +258,31 @@ export function ChannelPool({
       setState({ data, reg })
       setStatus(`${label} excluded`, "ok")
       onChanged()
-    }
-    catch (e) {
-      setStatus("Exclude failed: " + (e as Error).message, "err")
+    } catch (e) {
+      setStatus(
+        `Exclude failed: ${(e as Error).message}`,
+        "err",
+      )
     }
   }
 
   // Persist (or clear) a manual start floor for one rule-pool show. Same whole-map
   // replace + registry refresh as the blocklist write above; `PATCH /api/sets/:id` busts
   // the server preview cache, so the following onChanged() re-read shows the new "next".
-  const saveStart = async (ratingKey: string, start: StartPoint | null) => {
-    const next: Record<string, StartPoint> = { ...(channel.starts ?? {}) }
+  const saveStart = async (
+    ratingKey: string,
+    start: StartPoint | null,
+  ) => {
+    const next: Record<string, StartPoint> = {
+      ...(channel.starts ?? {}),
+    }
 
     if (start) next[String(ratingKey)] = start
     else delete next[String(ratingKey)]
 
-    await api("PATCH", `/api/sets/${channel.id}`, { starts: next })
+    await api("PATCH", `/api/sets/${channel.id}`, {
+      starts: next,
+    })
 
     const [data, reg] = await fetchAll()
 
@@ -249,7 +294,8 @@ export function ChannelPool({
   // rule-derived (no stored entry), so `save` writes the set's `starts` map keyed by
   // ratingKey rather than an array slot, and `index` is unused here (-1).
   const poolEntry = (b: PreviewBucket): EntryActions => {
-    const start = (channel.starts ?? {})[String(b.ratingKey)] ?? null
+    const start =
+      channel.starts?.[String(b.ratingKey)] ?? null
     const item: ChannelMember = {
       childCount: null,
       index: -1,
@@ -273,7 +319,8 @@ export function ChannelPool({
       // The active binding's Plex Home uuid scopes the picker's "watched" marks to THIS
       // channel's profile (e.g. Older Kids), matching the engine's per-account pool — the
       // editor otherwise reads the admin account's history.
-      accountUuid: activeBinding(channel, currentProfile).user_uuid,
+      accountUuid: activeBinding(channel, currentProfile)
+        .user_uuid,
       item,
       refresh: () => onChanged(),
       save: (s) => saveStart(b.ratingKey, s),
@@ -285,7 +332,9 @@ export function ChannelPool({
   // ("section-") bucket is not a series, so it carries neither. (The `items` split — one
   // tile per short — is handled by the caller before this runs.)
   const renderShowBucket = (b: PreviewBucket) => {
-    const isSection = String(b.ratingKey).startsWith("section-")
+    const isSection = String(b.ratingKey).startsWith(
+      "section-",
+    )
     const entry = isSection ? null : poolEntry(b)
     const start = entry?.item.start ?? null
 
@@ -301,28 +350,26 @@ export function ChannelPool({
             >
               {`${b.unwatched} unwatched`}
             </Badge>
-            {isSection
-              ? null
-              : (
-                  <ExcludeButton
-                    label="Exclude"
-                    onExclude={() => excludeFromBlocklist(b.ratingKey, b.show)}
-                    title={`Exclude ${b.show} from this channel`}
-                  />
-                )}
-            {start && entry
-              ? (
-                  <Tip label="Manual start point. Click to change it or go back to automatic.">
-                    <button
-                      className="badge startbadge"
-                      onClick={() => openStartModal(entry)}
-                      type="button"
-                    >
-                      {startLabel(start)}
-                    </button>
-                  </Tip>
-                )
-              : null}
+            {isSection ? null : (
+              <ExcludeButton
+                label="Exclude"
+                onExclude={() =>
+                  excludeFromBlocklist(b.ratingKey, b.show)
+                }
+                title={`Exclude ${b.show} from this channel`}
+              />
+            )}
+            {start && entry ? (
+              <Tip label="Manual start point. Click to change it or go back to automatic.">
+                <button
+                  className="badge startbadge"
+                  onClick={() => openStartModal(entry)}
+                  type="button"
+                >
+                  {startLabel(start)}
+                </button>
+              </Tip>
+            ) : null}
           </>
         }
         dataKey={String(b.ratingKey)}
@@ -332,17 +379,24 @@ export function ChannelPool({
             ? {
                 // Clicking opens the same picker the queue tiles use; the label matches
                 // the queue-grid tiles (single-season anime drops the "S1").
-                onStart: entry ? () => openStartModal(entry) : undefined,
+                onStart: entry
+                  ? () => openStartModal(entry)
+                  : undefined,
                 text: `${
                   b.next.multiSeason
                     ? `S${b.next.season ?? "?"} · E${b.next.episode ?? "?"}`
                     : `E${b.next.episode ?? "?"}`
                 } · ${b.next.title}`,
-                tooltip: "Tap to choose where this show starts",
+                tooltip:
+                  "Tap to choose where this show starts",
               }
             : undefined
         }
-        posterRatingKey={isSection ? (b.next?.ratingKey ?? null) : b.ratingKey}
+        posterRatingKey={
+          isSection
+            ? (b.next?.ratingKey ?? null)
+            : b.ratingKey
+        }
         title={b.show}
       />
     )
@@ -354,49 +408,77 @@ export function ChannelPool({
         <h2 id="chpool-title">{heading}</h2>
         {/* The load's ACTUAL announcement — a `role="status"` live region. The heading
             stays stable, so this is what a screen reader hears. */}
-        {isLoading ? <Spinner label="Loading the eligible pool…" size="sm" /> : null}
+        {isLoading ? (
+          <Spinner
+            label="Loading the eligible pool…"
+            size="sm"
+          />
+        ) : null}
       </div>
       {/* Out of the heading (a heading that changes is a CLS + a11y nuisance), and only
           after 3 s, so a fast load never shows it. */}
-      {isLoading && showSlowHint
-        ? <p className="chpool-hint">First load can take a minute.</p>
-        : null}
+      {isLoading && showSlowHint ? (
+        <p className="chpool-hint">
+          First load can take a minute.
+        </p>
+      ) : null}
       {/* `aria-busy` pairs with the `aria-hidden` Skeletons: the container announces the
           load, the placeholders stay invisible to AT (Skeleton's own contract). */}
-      <ul aria-busy={isLoading || undefined} className="grid" id="chpool">
+      <ul
+        aria-busy={isLoading || undefined}
+        className="grid"
+        id="chpool"
+      >
         {isLoading
-          ? Array.from({ length: SKELETON_COUNT }, (_, i) => (
-              // NOT `li.tile`: the e2e suites `waitForSelector('#chpool li.tile')` to detect a
-              // LOADED pool, so a skeleton wearing that class would resolve the wait early on
-              // empty placeholders. `.skeltile` carries the same geometry, different name.
-              <li className="skeltile" key={`skeleton-${i}`}>
-                <div className="thumb">
-                  <Skeleton blockSize="100%" inlineSize="100%" shape="block" />
-                </div>
-              </li>
-            ))
-          : isRewatch
-          ? renderRewatchPool()
-          : (preview?.buckets ?? []).flatMap((b) =>
-              b.items
-                ? b.items.map((it) => (
-                    <PosterTile
-                      badges={
-                        <ExcludeButton
-                          label="Exclude"
-                          onExclude={() =>
-                            excludeFromBlocklist(it.ratingKey, it.title)}
-                          title={`Exclude ${it.title} from this channel`}
-                        />
-                      }
-                      dataKey={String(it.ratingKey)}
-                      key={`${b.ratingKey}:${it.ratingKey}`}
-                      posterRatingKey={it.ratingKey}
-                      title={it.title}
+          ? Array.from(
+              { length: SKELETON_COUNT },
+              (_, i) => (
+                // NOT `li.tile`: the e2e suites `waitForSelector('#chpool li.tile')` to detect a
+                // LOADED pool, so a skeleton wearing that class would resolve the wait early on
+                // empty placeholders. `.skeltile` carries the same geometry, different name.
+                <li
+                  className="skeltile"
+                  // A fixed-length run of identical placeholders: no identity to key
+                  // on, and all of them are replaced at once when the real tiles arrive.
+                  // biome-ignore lint/suspicious/noArrayIndexKey: see above
+                  key={`skeleton-${i}`}
+                >
+                  <div className="thumb">
+                    <Skeleton
+                      blockSize="100%"
+                      inlineSize="100%"
+                      shape="block"
                     />
-                  ))
-                : [renderShowBucket(b)],
-            )}
+                  </div>
+                </li>
+              ),
+            )
+          : isRewatch
+            ? renderRewatchPool()
+            : (preview?.buckets ?? []).flatMap((b) =>
+                b.items
+                  ? b.items.map((it) => (
+                      <PosterTile
+                        badges={
+                          <ExcludeButton
+                            label="Exclude"
+                            onExclude={() =>
+                              excludeFromBlocklist(
+                                it.ratingKey,
+                                it.title,
+                              )
+                            }
+                            title={`Exclude ${it.title} from this channel`}
+                          />
+                        }
+                        dataKey={String(it.ratingKey)}
+                        key={`${b.ratingKey}:${it.ratingKey}`}
+                        posterRatingKey={it.ratingKey}
+                        title={it.title}
+                      />
+                    ))
+                  : [renderShowBucket(b)],
+              )}
       </ul>
     </section>
   )
@@ -408,28 +490,29 @@ export function ChannelPool({
     const sample = preview.movie
 
     return [
-      sample
-        ? (
-            <PosterTile
-              badges={(
-                <Badge
-                  appearance="outline"
-                  className="badge movie"
-                  intent="info"
-                  size="sm"
-                >
-                  Next-pick sample
-                </Badge>
-              )}
-              dataKey={String(sample.ratingKey)}
-              key={`sample:${sample.ratingKey}`}
-              posterRatingKey={sample.ratingKey}
-              title={sample.title}
-            />
-          )
-        : null,
+      sample ? (
+        <PosterTile
+          badges={
+            <Badge
+              appearance="outline"
+              className="badge movie"
+              intent="info"
+              size="sm"
+            >
+              Next-pick sample
+            </Badge>
+          }
+          dataKey={String(sample.ratingKey)}
+          key={`sample:${sample.ratingKey}`}
+          posterRatingKey={sample.ratingKey}
+          title={sample.title}
+        />
+      ) : null,
       ...movies
-        .filter((m) => !sample || m.ratingKey !== sample.ratingKey)
+        .filter(
+          (m) =>
+            !sample || m.ratingKey !== sample.ratingKey,
+        )
         .map((m) => (
           <PosterTile
             badges={
@@ -437,7 +520,9 @@ export function ChannelPool({
                 <WatchesBadge count={m.count} />
                 <ExcludeButton
                   label="Exclude"
-                  onExclude={() => excludeFromRewatch(m.ratingKey, m.title)}
+                  onExclude={() =>
+                    excludeFromRewatch(m.ratingKey, m.title)
+                  }
                   title="Exclude from the rewatch pool"
                 />
               </>
@@ -465,7 +550,10 @@ export function patchActiveBinding(
   channelChanges: Record<string, unknown> = {},
 ) {
   if (!ch.has_explicit_profiles) {
-    return api("PATCH", `/api/sets/${ch.id}`, { ...changes, ...channelChanges })
+    return api("PATCH", `/api/sets/${ch.id}`, {
+      ...changes,
+      ...channelChanges,
+    })
   }
 
   const active = activeBinding(ch, currentProfile)
@@ -473,5 +561,8 @@ export function patchActiveBinding(
     p === active ? { ...p, ...changes } : p,
   )
 
-  return api("PATCH", `/api/sets/${ch.id}`, { profiles, ...channelChanges })
+  return api("PATCH", `/api/sets/${ch.id}`, {
+    profiles,
+    ...channelChanges,
+  })
 }

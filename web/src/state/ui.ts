@@ -13,9 +13,12 @@ const COLLAPSE_KEY = "pc.collapsedQueues"
 
 function readCollapsed(): Set<string> {
   try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSE_KEY) || "[]"))
-  }
-  catch {
+    return new Set(
+      JSON.parse(
+        localStorage.getItem(COLLAPSE_KEY) || "[]",
+      ),
+    )
+  } catch {
     return new Set()
   }
 }
@@ -25,7 +28,10 @@ type UiState = {
   collapsed: Set<string>
 }
 
-let state: UiState = { collapsed: readCollapsed(), filter: "" }
+let state: UiState = {
+  collapsed: readCollapsed(),
+  filter: "",
+}
 
 const listeners = new Set<() => void>()
 
@@ -56,9 +62,11 @@ export function setCollapsed(collapsed: Set<string>) {
   state = { ...state, collapsed }
 
   try {
-    localStorage.setItem(COLLAPSE_KEY, JSON.stringify([...collapsed]))
-  }
-  catch {
+    localStorage.setItem(
+      COLLAPSE_KEY,
+      JSON.stringify([...collapsed]),
+    )
+  } catch {
     /* private mode */
   }
 

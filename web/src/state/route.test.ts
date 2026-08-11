@@ -15,7 +15,9 @@ describe("parseHash", () => {
   })
 
   test("#/queues is the shelf configurator", () => {
-    expect(parseHash("#/queues")).toEqual({ view: "queues" })
+    expect(parseHash("#/queues")).toEqual({
+      view: "queues",
+    })
   })
 
   test("#/q/<id> opens one set, id-decoded", () => {
@@ -23,11 +25,17 @@ describe("parseHash", () => {
       id: "bob_anime",
       view: "queue",
     })
-    expect(parseHash("#/q/a%20b")).toEqual({ id: "a b", view: "queue" })
+    expect(parseHash("#/q/a%20b")).toEqual({
+      id: "a b",
+      view: "queue",
+    })
   })
 
   test("#/channels names a rotation channel, or none", () => {
-    expect(parseHash("#/channels")).toEqual({ id: null, view: "channels" })
+    expect(parseHash("#/channels")).toEqual({
+      id: null,
+      view: "channels",
+    })
     expect(parseHash("#/channels/shows_shorts")).toEqual({
       id: "shows_shorts",
       view: "channels",
@@ -42,7 +50,9 @@ describe("parseHash", () => {
 describe("labelForHash", () => {
   test("names where back actually goes", () => {
     expect(labelForHash("#/queues")).toBe("‹ Queues")
-    expect(labelForHash("#/channels/movies")).toBe("‹ Channels")
+    expect(labelForHash("#/channels/movies")).toBe(
+      "‹ Channels",
+    )
     expect(labelForHash("#/q/bob")).toBe("‹ Back")
     expect(labelForHash("#/")).toBe("‹ Play")
   })

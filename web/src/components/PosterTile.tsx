@@ -35,7 +35,9 @@ type Props = {
   onRemove?: () => void
   removeTitle?: string
   /** Right-click / long-press opens the per-entry menu (editable grids only). */
-  onContextMenu?: (e: React.MouseEvent<HTMLLIElement>) => void
+  onContextMenu?: (
+    e: React.MouseEvent<HTMLLIElement>,
+  ) => void
   /**
    * This entry came from `/api/shelves` and `/api/queues` has not resolved it yet.
    * The tile still occupies its full final geometry (`.thumb` carries
@@ -74,53 +76,56 @@ export function PosterTile({
       <div className="thumb">
         {/* `aria-hidden` on Skeleton is the component's contract — the LOAD is
             announced by the owning region's `aria-busy`, never by the placeholder. */}
-        {isPending
-          ? <Skeleton blockSize="100%" inlineSize="100%" shape="block" />
-          : null}
-        {posterRatingKey
-          ? (
-              <img
-                alt=""
-                className="poster"
-                draggable={false}
-                loading="lazy"
-                src={thumbUrl(posterRatingKey)}
-              />
-            )
-          : null}
-        {onCheck
-          ? (
-              <span
+        {isPending ? (
+          <Skeleton
+            blockSize="100%"
+            inlineSize="100%"
+            shape="block"
+          />
+        ) : null}
+        {posterRatingKey ? (
+          <img
+            alt=""
+            className="poster"
+            draggable={false}
+            loading="lazy"
+            src={thumbUrl(posterRatingKey)}
+          />
+        ) : null}
+        {onCheck ? (
+          <span
+            aria-hidden="true"
+            className="check"
+            onClick={onCheck}
+          >
+            ✓
+          </span>
+        ) : null}
+        {onRemove ? (
+          <Tip label={removeTitle}>
+            <button
+              aria-label={removeTitle}
+              className="remove"
+              onClick={onRemove}
+              type="button"
+            >
+              <svg
                 aria-hidden="true"
-                className="check"
-                onClick={onCheck}
+                height="12"
+                viewBox="0 0 12 12"
+                width="12"
               >
-                ✓
-              </span>
-            )
-          : null}
-        {onRemove
-          ? (
-              <Tip label={removeTitle}>
-                <button
-                  aria-label={removeTitle}
-                  className="remove"
-                  onClick={onRemove}
-                  type="button"
-                >
-                  <svg aria-hidden="true" height="12" viewBox="0 0 12 12" width="12">
-                    <path
-                      d="M1.5 1.5l9 9M10.5 1.5l-9 9"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeLinecap="round"
-                      strokeWidth="2"
-                    />
-                  </svg>
-                </button>
-              </Tip>
-            )
-          : null}
+                <path
+                  d="M1.5 1.5l9 9M10.5 1.5l-9 9"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeWidth="2"
+                />
+              </svg>
+            </button>
+          </Tip>
+        ) : null}
       </div>
       <div className="cap">
         <Tip label={titleTooltip ?? title}>
@@ -137,11 +142,16 @@ export function PosterTile({
         <Tip label={next?.tooltip ?? next?.text}>
           <span
             className={`next${next?.isDone ? " done" : ""}${isStartable ? " startable" : ""}`}
-            onClick={isStartable ? next?.onStart : undefined}
+            onClick={
+              isStartable ? next?.onStart : undefined
+            }
             onKeyDown={
               isStartable
                 ? (e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (
+                      e.key === "Enter" ||
+                      e.key === " "
+                    ) {
                       e.preventDefault()
                       next?.onStart?.()
                     }

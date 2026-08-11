@@ -6,12 +6,16 @@ import { SelectionBar } from "./components/SelectionBar"
 import { Toolbar } from "./components/Toolbar"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { activeSet } from "./lib/nowPlaying"
+import type { RegistrySet } from "./lib/types"
 import {
   resolveChannel,
   useChannelSelection,
 } from "./state/channelSelection"
 import { startLiveUpdates } from "./state/live"
-import { closePlayMenus, useOverlays } from "./state/overlays"
+import {
+  closePlayMenus,
+  useOverlays,
+} from "./state/overlays"
 import {
   getRouteOrigin,
   labelForHash,
@@ -19,8 +23,11 @@ import {
   parseHash,
   useHash,
 } from "./state/route"
-import type { RegistrySet } from "./lib/types"
-import { load, rotationChannels, useStore } from "./state/store"
+import {
+  load,
+  rotationChannels,
+  useStore,
+} from "./state/store"
 import { ChannelsView } from "./views/ChannelsView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
@@ -50,7 +57,8 @@ const SetModal = lazy(async () => ({
   default: (await import("./components/SetModal")).SetModal,
 }))
 const StartModal = lazy(async () => ({
-  default: (await import("./components/StartModal")).StartModal,
+  default: (await import("./components/StartModal"))
+    .StartModal,
 }))
 const TileMenu = lazy(async () => ({
   default: (await import("./components/TileMenu")).TileMenu,
@@ -101,10 +109,14 @@ export function App() {
     if (route.view === "queue") {
       const set = data.sets[route.id]
 
-      if (!set || set.source !== "queue") navigate("#/")
+      if (set?.source !== "queue") navigate("#/")
     }
 
-    if (route.view === "channels" && reg && !rotationChannels(reg).length) {
+    if (
+      route.view === "channels" &&
+      reg &&
+      !rotationChannels(reg).length
+    ) {
       navigate("#/")
     }
   }, [data, reg, route])
@@ -117,7 +129,12 @@ export function App() {
     route.view === "channels" ? route.id : null,
     channelId,
   )
-  const chrome = computeChrome(route, data, now, selectedChannel)
+  const chrome = computeChrome(
+    route,
+    data,
+    now,
+    selectedChannel,
+  )
 
   useEffect(() => {
     document.title = chrome.documentTitle
@@ -134,9 +151,11 @@ export function App() {
 
     for (const c of all) document.body.classList.remove(c)
 
-    for (const c of chrome.bodyClasses) document.body.classList.add(c)
+    for (const c of chrome.bodyClasses)
+      document.body.classList.add(c)
 
-    if (chrome.editableSetId) document.body.classList.add("name-editable")
+    if (chrome.editableSetId)
+      document.body.classList.add("name-editable")
   }, [chrome.bodyClasses, chrome.editableSetId])
 
   // Desktop: the toolbar lives in the sticky header; mobile: at the top of the Home
@@ -171,14 +190,20 @@ export function App() {
       />
       <ChannelsView
         isHidden={route.view !== "channels"}
-        routeId={route.view === "channels" ? route.id : null}
+        routeId={
+          route.view === "channels" ? route.id : null
+        }
       />
       <QueueView
         isHidden={route.view !== "queue"}
         setId={route.view === "queue" ? route.id : null}
       />
 
-      <SelectionBar currentSet={route.view === "queue" ? route.id : null} />
+      <SelectionBar
+        currentSet={
+          route.view === "queue" ? route.id : null
+        }
+      />
 
       {/* A single Suspense with a null fallback: an overlay opens on a user gesture,
           and a spinner for the ~15 ms chunk fetch would flash worse than nothing. */}
@@ -236,7 +261,9 @@ function computeChrome(
     const label = q?.label ?? "Plex Channels"
     const isChannel = q?.kind === "anime"
     const playing = activeSet(now, data)
-    const origin = getRouteOrigin() || (isChannel ? "#/channels" : "#/queues")
+    const origin =
+      getRouteOrigin() ||
+      (isChannel ? "#/channels" : "#/queues")
 
     // This queue is the running session — say what's on screen (the matching tile
     // is highlighted too, but a long queue can scroll it out of view).
@@ -245,8 +272,13 @@ function computeChrome(
       const what = n.title || n.showTitle || ""
 
       return {
-        back: { label: labelForHash(origin), target: origin },
-        bodyClasses: isChannel ? ["queue-view", "channel-mode"] : ["queue-view"],
+        back: {
+          label: labelForHash(origin),
+          target: origin,
+        },
+        bodyClasses: isChannel
+          ? ["queue-view", "channel-mode"]
+          : ["queue-view"],
         documentTitle: `${label} — Plex Channels`,
         editableSetId: route.id,
         heading: label,
@@ -257,7 +289,9 @@ function computeChrome(
 
     return {
       back: { label: labelForHash(origin), target: origin },
-      bodyClasses: isChannel ? ["queue-view", "channel-mode"] : ["queue-view"],
+      bodyClasses: isChannel
+        ? ["queue-view", "channel-mode"]
+        : ["queue-view"],
       documentTitle: `${label} — Plex Channels`,
       editableSetId: route.id,
       heading: label,

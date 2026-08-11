@@ -1,6 +1,6 @@
 import { useVisibility } from "@charcuterie/logic"
-import { Button, Listbox } from "@charcuterie/ui"
 import type { ControlSize } from "@charcuterie/tokens"
+import { Button, Listbox } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 /**
@@ -69,7 +69,9 @@ export function SelectListbox({
 }: SelectListboxProps): ReactNode {
   const { hide, isVisible, toggle } = useVisibility()
 
-  const current = options.find((option) => option.value === value)
+  const current = options.find(
+    (option) => option.value === value,
+  )
   const triggerLabel =
     current?.label ?? placeholder ?? options[0]?.label ?? ""
 
@@ -84,7 +86,11 @@ export function SelectListbox({
       // `selectOption(sel, value)`; now it clicks `[role=option] [data-value=…]`).
       options={options.map((option) => ({
         isDisabled: option.isDisabled,
-        label: <span data-value={option.value}>{option.label}</span>,
+        label: (
+          <span data-value={option.value}>
+            {option.label}
+          </span>
+        ),
         textValue: option.label,
         value: option.value,
       }))}

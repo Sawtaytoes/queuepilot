@@ -1,4 +1,8 @@
-import type { NextEp, ShowEpisodes, StartPoint } from "./types"
+import type {
+  NextEp,
+  ShowEpisodes,
+  StartPoint,
+} from "./types"
 
 /**
  * The default-selection maths behind the "Start from…" modal, split out from the
@@ -38,7 +42,10 @@ export function memberPreset(
 
   if (stored && String(stored.series) === rk) return stored
 
-  if (nextEp && String(nextEp.memberRatingKey ?? "") === rk) {
+  if (
+    nextEp &&
+    String(nextEp.memberRatingKey ?? "") === rk
+  ) {
     return {
       episode: nextEp.episode ?? undefined,
       season: nextEp.season ?? undefined,
@@ -63,12 +70,14 @@ export function defaultStartPoint(
     preset?.season ?? null,
   )
   const row =
-    data.seasons.find((x) => x.season === Number(season)) ?? data.seasons[0]
+    data.seasons.find((x) => x.season === Number(season)) ??
+    data.seasons[0]
   const episode = pickOptionValue(
     (row?.episodes ?? []).map((e) => String(e.episode)),
     // The episode floor only applies when the preset is for THIS season — a preset
     // season that differs means its episode number belongs to another season.
-    preset && Number(preset.season ?? row?.season) === row?.season
+    preset &&
+      Number(preset.season ?? row?.season) === row?.season
       ? preset.episode
       : null,
   )

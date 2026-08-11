@@ -42,7 +42,11 @@ export type NextEp = {
   duration?: number
 }
 
-export type EntryType = "show" | "movie" | "collection" | null
+export type EntryType =
+  | "show"
+  | "movie"
+  | "collection"
+  | null
 
 /** One resolved entry in a curated queue (`GET /api/queues`). */
 export type QueueItem = {
@@ -256,7 +260,10 @@ export type NowState = {
   set: string | null
 }
 
-export type PreviewBucketItem = { ratingKey: string; title: string }
+export type PreviewBucketItem = {
+  ratingKey: string
+  title: string
+}
 
 export type PreviewBucket = {
   ratingKey: string
@@ -277,7 +284,11 @@ export type PreviewBucket = {
 export type PreviewResponse = {
   error?: string
   buckets?: PreviewBucket[]
-  movie_pool?: { ratingKey: string; title: string; count: number }[]
+  movie_pool?: {
+    ratingKey: string
+    title: string
+    count: number
+  }[]
   movie?: { ratingKey: string; title: string }
 }
 
@@ -285,7 +296,11 @@ export type ShowEpisodes = {
   multiSeason: boolean
   seasons: {
     season: number
-    episodes: { episode: number; title?: string; watched?: boolean }[]
+    episodes: {
+      episode: number
+      title?: string
+      watched?: boolean
+    }[]
   }[]
 }
 

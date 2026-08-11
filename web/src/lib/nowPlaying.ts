@@ -1,4 +1,8 @@
-import type { NowState, QueuesResponse, TileEntry } from "./types"
+import type {
+  NowState,
+  QueuesResponse,
+  TileEntry,
+} from "./types"
 
 /**
  * Which queue is genuinely running, and which tile holds what is on screen.
@@ -12,7 +16,11 @@ import type { NowState, QueuesResponse, TileEntry } from "./types"
 
 /** Paused still counts as active — the queue is mid-session, just held. */
 export const isNowLive = (now: NowState) =>
-  Boolean(now.now && (now.now.state === "playing" || now.now.state === "paused"))
+  Boolean(
+    now.now &&
+      (now.now.state === "playing" ||
+        now.now.state === "paused"),
+  )
 
 /**
  * Does this tile hold what's on screen? A movie matches its own key; a SERIES tile
@@ -28,13 +36,22 @@ export function isPlayingItem(
   const n = now.now!
   const ctx = n.context || {}
 
-  if (item.ratingKey && String(item.ratingKey) === String(n.ratingKey)) return true
+  if (
+    item.ratingKey &&
+    String(item.ratingKey) === String(n.ratingKey)
+  )
+    return true
 
   if (item.type === "show" && ctx.showRatingKey) {
-    return String(item.ratingKey) === String(ctx.showRatingKey)
+    return (
+      String(item.ratingKey) === String(ctx.showRatingKey)
+    )
   }
 
-  if (item.type === "collection" && Array.isArray(ctx.collections)) {
+  if (
+    item.type === "collection" &&
+    Array.isArray(ctx.collections)
+  ) {
     return ctx.collections.some((c) => c === item.title)
   }
 
@@ -49,7 +66,9 @@ export function activeSet(
 
   const q = data.sets[now.set]
 
-  if (!q || !q.items) return null
+  if (!q?.items) return null
 
-  return q.items.some((it) => isPlayingItem(now, it)) ? now.set : null
+  return q.items.some((it) => isPlayingItem(now, it))
+    ? now.set
+    : null
 }

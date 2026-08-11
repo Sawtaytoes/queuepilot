@@ -20,11 +20,16 @@ export type Route =
 export function parseHash(hash: string): Route {
   const q = hash.match(/^#\/q\/(.+)$/)
 
-  if (q?.[1]) return { id: decodeURIComponent(q[1]), view: "queue" }
+  if (q?.[1])
+    return { id: decodeURIComponent(q[1]), view: "queue" }
 
   const c = hash.match(/^#\/channels(?:\/(.+))?$/)
 
-  if (c) return { id: c[1] ? decodeURIComponent(c[1]) : null, view: "channels" }
+  if (c)
+    return {
+      id: c[1] ? decodeURIComponent(c[1]) : null,
+      view: "channels",
+    }
 
   if (hash.startsWith("#/queues")) return { view: "queues" }
 

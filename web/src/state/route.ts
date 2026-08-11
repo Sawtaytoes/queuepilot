@@ -43,16 +43,13 @@ export const getHash = () => currentHash
 export const getRouteOrigin = () => routeOrigin
 
 export function useHash(): string {
-  return useSyncExternalStore(
-    (l) => {
-      listeners.add(l)
+  return useSyncExternalStore((l) => {
+    listeners.add(l)
 
-      return () => {
-        listeners.delete(l)
-      }
-    },
-    getHash,
-  )
+    return () => {
+      listeners.delete(l)
+    }
+  }, getHash)
 }
 
 export const navigate = (hash: string) => {

@@ -15,14 +15,22 @@ export function seLabel(ep: NextEp): string {
  * numeric-aware (so "Vol 2" sorts before "Vol 10"): "The Book of Bantorra" files
  * under B, not T.
  */
-export const titleSortKey = (t: string | null | undefined) =>
-  (t || "").replace(/^\s*(a|an|the)\s+/i, "")
+export const titleSortKey = (
+  t: string | null | undefined,
+) => (t || "").replace(/^\s*(a|an|the)\s+/i, "")
 
-export const byTitle = (a: { title: string }, b: { title: string }) =>
-  titleSortKey(a.title).localeCompare(titleSortKey(b.title), undefined, {
-    numeric: true,
-    sensitivity: "base",
-  })
+export const byTitle = (
+  a: { title: string },
+  b: { title: string },
+) =>
+  titleSortKey(a.title).localeCompare(
+    titleSortKey(b.title),
+    undefined,
+    {
+      numeric: true,
+      sensitivity: "base",
+    },
+  )
 
 /**
  * A collection's members are usually named after it ("Chaika: The Coffin Princess -
@@ -49,7 +57,9 @@ export function withoutCollectionPrefix(
     return m
   }
 
-  const rest = m.slice(c.length).replace(/^\s*[-–—:·]?\s*/, "")
+  const rest = m
+    .slice(c.length)
+    .replace(/^\s*[-–—:·]?\s*/, "")
 
   return rest || m
 }
@@ -58,8 +68,13 @@ export function withoutCollectionPrefix(
  * "12:30" from milliseconds — `H:MM:SS` once past an hour, `M:SS` below it. Feeds the
  * "In Progress" badge's hover readout (how far a resume point sits into the episode).
  */
-export function clock(ms: number | null | undefined): string {
-  const total = Math.max(0, Math.round((Number(ms) || 0) / 1000))
+export function clock(
+  ms: number | null | undefined,
+): string {
+  const total = Math.max(
+    0,
+    Math.round((Number(ms) || 0) / 1000),
+  )
   const h = Math.floor(total / 3600)
   const m = Math.floor((total % 3600) / 60)
   const s = total % 60
@@ -82,7 +97,10 @@ export function progressLabel(
 
   if (dur <= 0) return off > 0 ? `${clock(off)} in` : null
 
-  const pct = Math.min(100, Math.max(0, Math.round((off / dur) * 100)))
+  const pct = Math.min(
+    100,
+    Math.max(0, Math.round((off / dur) * 100)),
+  )
 
   return `${clock(off)} of ${clock(dur)} (${pct}%)`
 }
@@ -118,9 +136,10 @@ export function tileFace(item: TileEntry): TileFace {
 
   if (item.type === "show") {
     if (n) {
-      base.next = n.title ? `${seLabel(n)} · ${n.title}` : seLabel(n)
-    }
-    else if (item.resolved) {
+      base.next = n.title
+        ? `${seLabel(n)} · ${n.title}`
+        : seLabel(n)
+    } else if (item.resolved) {
       base.next = "All watched"
       base.nextDone = true
     }
@@ -130,12 +149,14 @@ export function tileFace(item: TileEntry): TileFace {
 
   if (item.type !== "collection") return base
 
-  if (!n || !n.member) {
+  if (!n?.member) {
     // No next-up member (every member watched, or Plex couldn't say): fall back to
     // the collection's own poster/name + its size.
     base.year = null
     base.next =
-      item.childCount != null ? `${item.childCount} in order` : "plays in order"
+      item.childCount != null
+        ? `${item.childCount} in order`
+        : "plays in order"
 
     return base
   }
@@ -165,16 +186,21 @@ export function tileFace(item: TileEntry): TileFace {
  * Can this entry carry a manual start point? Shows and collections can (a movie is
  * one item).
  */
-export const isStartable = (item: TileEntry | null | undefined) =>
+export const isStartable = (
+  item: TileEntry | null | undefined,
+) =>
   Boolean(
-    item && item.resolved && (item.type === "show" || item.type === "collection"),
+    item?.resolved &&
+      (item.type === "show" || item.type === "collection"),
   )
 
 /**
  * The chip on an overridden tile: "Start E20" / "Start S2E3" (the season only when
  * it matters).
  */
-export function startLabel(start: StartPoint | null | undefined): string {
+export function startLabel(
+  start: StartPoint | null | undefined,
+): string {
   if (!start) return ""
   if (start.episode == null) return "Start set"
 

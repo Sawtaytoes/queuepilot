@@ -11,80 +11,95 @@
 // beside it for the rare client that negotiates no `br`.
 //
 // Measured on the 2026-08-03 bundle: 282,615 B of JS → ~72 KB, 93,532 B of CSS → ~13 KB.
-import { constants, brotliCompressSync, gzipSync } from 'node:zlib';
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ASSETS_DIR = path.join(__dirname, '..', 'dist', 'assets');
+import {
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from "node:fs"
+import path from "node:path"
+import { fileURLToPath } from "node:url"
+import {
+  brotliCompressSync,
+  constants,
+  gzipSync,
+} from "node:zlib"
+
+const __dirname = path.dirname(
+  fileURLToPath(import.meta.url),
+)
+const ASSETS_DIR = path.join(
+  __dirname,
+  "..",
+  "dist",
+  "assets",
+)
 
 // Only text-ish assets. Images and fonts (woff2) are already compressed; running brotli over
 // them costs build time and produces a LARGER file, which the middleware would then serve.
-const COMPRESSIBLE = new Set(['.js', '.css', '.svg']);
+const COMPRESSIBLE = new Set([".js", ".css", ".svg"])
 
 // Below this, the ~20-byte encoding overhead plus the extra round trip through zlib is not
 // worth it, and some proxies mangle tiny encoded bodies.
-const MIN_BYTES = 1024;
+const MIN_BYTES = 1024
 
 function walk(dir) {
-  let out = [];
-  let entries;
+  let out = []
+  let entries
   try {
-    entries = readdirSync(dir, { withFileTypes: true });
+    entries = readdirSync(dir, { withFileTypes: true })
   } catch {
-    return out; // no dist/assets (e.g. a build that emitted nothing) — nothing to do
+    return out // no dist/assets (e.g. a build that emitted nothing) — nothing to do
   }
   for (const e of entries) {
-    const full = path.join(dir, e.name);
-    if (e.isDirectory()) out = out.concat(walk(full));
-    else out.push(full);
+    const full = path.join(dir, e.name)
+    if (e.isDirectory()) out = out.concat(walk(full))
+    else out.push(full)
   }
-  return out;
+  return out
 }
 
-const kb = (n) => `${(n / 1024).toFixed(1)} KB`;
+const kb = (n) => `${(n / 1024).toFixed(1)} KB`
 
-let files = 0;
-let raw = 0;
-let br = 0;
-let gz = 0;
+let files = 0
+let raw = 0
+let br = 0
+let gz = 0
 
 for (const file of walk(ASSETS_DIR)) {
-  const ext = path.extname(file);
-  if (!COMPRESSIBLE.has(ext)) continue;
+  const ext = path.extname(file)
+  if (!COMPRESSIBLE.has(ext)) continue
   // Never re-compress our own output on a rebuild into a non-empty dist.
-  if (file.endsWith('.br') || file.endsWith('.gz')) continue;
-  const size = statSync(file).size;
-  if (size < MIN_BYTES) continue;
+  if (file.endsWith(".br") || file.endsWith(".gz")) continue
+  const size = statSync(file).size
+  if (size < MIN_BYTES) continue
 
-  const buf = readFileSync(file);
+  const buf = readFileSync(file)
   const brBuf = brotliCompressSync(buf, {
     params: {
       [constants.BROTLI_PARAM_QUALITY]: 11,
       // Telling brotli the uncompressed size lets it size its window optimally.
       [constants.BROTLI_PARAM_SIZE_HINT]: size,
     },
-  });
-  const gzBuf = gzipSync(buf, { level: 9 });
+  })
+  const gzBuf = gzipSync(buf, { level: 9 })
 
   // A "compressed" file that grew would make the middleware serve MORE bytes than the
   // original. Skip it rather than write it — the middleware falls through when absent.
   if (brBuf.length < size) {
-    writeFileSync(file + '.br', brBuf);
-    br += brBuf.length;
-  }
-  else br += size;
+    writeFileSync(`${file}.br`, brBuf)
+    br += brBuf.length
+  } else br += size
   if (gzBuf.length < size) {
-    writeFileSync(file + '.gz', gzBuf);
-    gz += gzBuf.length;
-  }
-  else gz += size;
+    writeFileSync(`${file}.gz`, gzBuf)
+    gz += gzBuf.length
+  } else gz += size
 
-  files += 1;
-  raw += size;
+  files += 1
+  raw += size
 }
 
 console.log(
   `[precompress] ${files} file(s): ${kb(raw)} raw -> ${kb(br)} br / ${kb(gz)} gzip`,
-);
+)

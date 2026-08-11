@@ -14,5 +14,9 @@ export function Tip({
   children: ReactElement
   label?: string | null
 }): ReactElement {
-  return label ? <Tooltip label={label}>{children}</Tooltip> : children
+  return label ? (
+    <Tooltip label={label}>{children}</Tooltip>
+  ) : (
+    children
+  )
 }

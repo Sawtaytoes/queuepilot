@@ -4,7 +4,12 @@ import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
 import { busy } from "../state/busy"
 import { toggleSelect } from "../state/selection"
-import { bumpRevision, getState, load, setStatus } from "../state/store"
+import {
+  bumpRevision,
+  getState,
+  load,
+  setStatus,
+} from "../state/store"
 
 /**
  * The queue grid's whole-poster gesture: **tap = select, drag = reorder.**
@@ -82,7 +87,10 @@ export function useGridDrag(
 
       if (!press.isDragging) {
         const isFar =
-          Math.hypot(e.clientX - press.x, e.clientY - press.y) > DRAG_THRESHOLD
+          Math.hypot(
+            e.clientX - press.x,
+            e.clientY - press.y,
+          ) > DRAG_THRESHOLD
 
         if (press.type === "touch") {
           // Moved before the long-press armed → it's a scroll, let go.
@@ -91,11 +99,9 @@ export function useGridDrag(
 
             return
           }
-        }
-        else if (isFar) {
+        } else if (isFar) {
           beginDrag()
-        }
-        else {
+        } else {
           return
         }
 
@@ -109,7 +115,9 @@ export function useGridDrag(
       // of the cursor" scan fell through to the end whenever you dropped on the
       // right side of a row, dumping the poster at the bottom.
       const tiles = [
-        ...grid!.querySelectorAll<HTMLElement>("li.tile:not(.dragging)"),
+        ...grid!.querySelectorAll<HTMLElement>(
+          "li.tile:not(.dragging)",
+        ),
       ]
 
       if (!tiles.length) return
@@ -135,15 +143,24 @@ export function useGridDrag(
 
       const ref = isAfter ? best.nextElementSibling : best
 
-      if (ref === press.card || ref === press.card.nextElementSibling) return
+      if (
+        ref === press.card ||
+        ref === press.card.nextElementSibling
+      )
+        return
 
-      flipMove(tiles, () => grid!.insertBefore(press!.card, ref), press.card)
+      flipMove(
+        tiles,
+        () => grid!.insertBefore(press!.card, ref),
+        press.card,
+      )
     }
 
     async function onUp() {
       if (!press) return
 
-      const { card, isDragging, nextSibling, parent } = press
+      const { card, isDragging, nextSibling, parent } =
+        press
 
       endPress()
 
@@ -152,7 +169,11 @@ export function useGridDrag(
         // too. Before that, a poster tap does nothing (the checkbox is the only
         // selector), so a click that doesn't move is never mistaken for a
         // selection instead of a drag.
-        if (busy.selectedCount > 0 && card.dataset.set && card.dataset.key) {
+        if (
+          busy.selectedCount > 0 &&
+          card.dataset.set &&
+          card.dataset.key
+        ) {
           toggleSelect(card.dataset.set, card.dataset.key)
         }
 
@@ -161,9 +182,9 @@ export function useGridDrag(
 
       card.classList.remove("dragging")
 
-      const keys = [...grid!.querySelectorAll<HTMLElement>("li.tile")].map(
-        (li) => li.dataset.key!,
-      )
+      const keys = [
+        ...grid!.querySelectorAll<HTMLElement>("li.tile"),
+      ].map((li) => li.dataset.key!)
 
       // Hand the DOM back to React, then let the optimistic state update repaint
       // it in the new order within the same tick.
@@ -176,20 +197,28 @@ export function useGridDrag(
       const q = getState().data?.sets[set]
 
       if (q) {
-        const byKey = new Map(q.items.map((it) => [it.key, it]))
+        const byKey = new Map(
+          q.items.map((it) => [it.key, it]),
+        )
 
-        q.items = keys.map((k) => byKey.get(k)!).filter(Boolean)
+        q.items = keys
+          .map((k) => byKey.get(k)!)
+          .filter(Boolean)
         bumpRevision()
       }
 
       setStatus("Saving order…")
 
       try {
-        await api("PATCH", `/api/queues/${set}/order`, { keys })
+        await api("PATCH", `/api/queues/${set}/order`, {
+          keys,
+        })
         setStatus("Order saved", "ok")
-      }
-      catch (e) {
-        setStatus("Reorder failed: " + (e as Error).message, "err")
+      } catch (e) {
+        setStatus(
+          `Reorder failed: ${(e as Error).message}`,
+          "err",
+        )
         await load()
       }
     }
@@ -207,7 +236,11 @@ export function useGridDrag(
     const onPointerDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement
 
-      if (target.closest(".remove") || target.closest(".check")) return // their own clicks
+      if (
+        target.closest(".remove") ||
+        target.closest(".check")
+      )
+        return // their own clicks
       if (!target.closest(".thumb")) return // drag/select only from the poster
 
       const card = target.closest<HTMLElement>("li.tile")
@@ -242,7 +275,9 @@ export function useGridDrag(
         }, 200)
       }
 
-      window.addEventListener("pointermove", onMove, { passive: false })
+      window.addEventListener("pointermove", onMove, {
+        passive: false,
+      })
       window.addEventListener("pointerup", onUp)
       window.addEventListener("pointercancel", onUp)
     }
@@ -254,11 +289,14 @@ export function useGridDrag(
     // The long-press that arms a touch drag must not also pop the native context
     // menu over the poster. A right-click elsewhere on the tile opens OUR menu.
     const onContextMenu = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest(".thumb")) e.preventDefault()
+      if ((e.target as HTMLElement).closest(".thumb"))
+        e.preventDefault()
     }
 
     grid.addEventListener("pointerdown", onPointerDown)
-    grid.addEventListener("touchmove", onTouchMove, { passive: false })
+    grid.addEventListener("touchmove", onTouchMove, {
+      passive: false,
+    })
     grid.addEventListener("dragstart", onDragStart)
     grid.addEventListener("contextmenu", onContextMenu)
 
