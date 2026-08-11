@@ -11,9 +11,26 @@ import * as profiles from './profiles.js';
 import * as adb from './adb.js';
 import * as playback from './playback.js';
 import * as driver from './driver.js';
+import * as resume from './resume.js';
+import * as mqttc from './mqttc.js';
 import {
-  PLAYBACK_FSM, ADB_ENABLED, ROTATION_LENGTH, ENGINE,
+  PLAYBACK_FSM, ADB_ENABLED, ROTATION_LENGTH, ENGINE, RESUME_ON_ADVANCE,
 } from './env.js';
+
+// One listener for the process, consulting the CURRENT armed plan — registering per scan would
+// leak a listener per card tap (mqttc.onNowPlaying has no unsubscribe).
+mqttc.onNowPlaying(async (payload) => {
+  if (!RESUME_ON_ADVANCE) return;
+  let ms = null;
+  try { ms = resume.onNowPlaying(payload); } catch { return; }
+  if (ms == null) return;
+  const { device, setName } = resume.target();
+  const label = `${payload.showTitle || payload.title || payload.ratingKey}`;
+  const r = await playback.seekTo(ms, { device, setName });
+  console.log(r.seeked
+    ? `[resume] ${label}: seeked to ${Math.round(ms / 1000)}s (it restarts at 0 otherwise)`
+    : `[resume] ${label}: seek to ${Math.round(ms / 1000)}s failed: ${r.error}`);
+});
 
 // Mutable session (mirrors service.Session) for advance + last-played.
 export const SESSION = {
@@ -266,6 +283,16 @@ export async function startSession(payload = {}, opts = {}) {
 
   const ratingKeys = SESSION.queue.map((q) => q.ratingKey);
   const device = payload.target || null;
+  // Arm resume-on-advance for THIS lineup before playing: playMedia resumes only the head, so
+  // every other episode needs a seek once the player reaches it. Re-arming replaces any plan
+  // left over from the previous scan.
+  if (RESUME_ON_ADVANCE) {
+    const plan = resume.resumePlan(playItems, { headRatingKey: ratingKeys[0] });
+    resume.arm({ plan, device, setName });
+    if (plan.size) console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance`);
+  } else {
+    resume.disarm();
+  }
   const setLabel = cfg.label || setName;
 
   let result;

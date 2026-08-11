@@ -36,6 +36,8 @@ echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > pla
 node e2e/host-config-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
 node e2e/collection-batch-cap-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== resume-on-advance-test ==="   # browserless; every queued episode resumes, not just the head
+node e2e/resume-on-advance-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== headers-test ==="   # browserless; asserts compression + cache headers (Phase A)
 node e2e/headers-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== perf-queues ==="   # browserless; stub Plex + broker, asserts the cache/ETag (Phase B)

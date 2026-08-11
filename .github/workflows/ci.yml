@@ -157,6 +157,7 @@ jobs:
           node e2e/leaves-revalidate-test.mjs
           node e2e/leaves-per-account-test.mjs
           node e2e/collection-batch-cap-test.mjs
+          node e2e/resume-on-advance-test.mjs
 
       # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.
       #
