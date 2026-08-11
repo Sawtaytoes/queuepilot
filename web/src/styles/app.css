@@ -2156,3 +2156,26 @@ header h1 input {
     SFMono-Regular, "SF Mono", Menlo, Consolas,
     "Liberation Mono", monospace;
 }
+
+/* The status chip inside a Listbox row (SelectListbox `badge`) — e.g. "Watched" on an
+   already-seen episode in the Start-from picker. `Badge` supplies the pill and the
+   intent colour; all this adds is the gap from the label it trails, and the promise
+   that a long row truncates the TITLE rather than squeezing the chip. */
+.optionbadge {
+  flex: none;
+  margin-left: 12px;
+  vertical-align: middle;
+}
+/* Right-ALIGNED, not merely trailing: the whole point is skimming a couple of hundred
+   Dragon Ball Z rows, and a chip that sits wherever the title happens to end gives the
+   eye a ragged edge to re-find on every line. Pushed to the row's right edge they form
+   one column you can run a finger down. Scoped to rows that HAVE a chip so every other
+   picker's rows keep their intrinsic layout. */
+[role="option"] > span:has(> .optionbadge) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+[role="option"] > span:has(> .optionbadge) > .optionbadge {
+  margin-left: auto;
+}
