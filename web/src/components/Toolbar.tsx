@@ -1,16 +1,23 @@
 import { Button } from "@charcuterie/ui"
-
-import { SelectListbox } from "./SelectListbox"
 import { useEffect, useState } from "react"
-
 import { api, thumbUrl } from "../lib/api"
 import type { SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
 import { navigate } from "../state/route"
-import { queueIds, setStatus, useStore } from "../state/store"
-import { homeScroll, setCollapsed, setFilter, useUi } from "../state/ui"
+import {
+  queueIds,
+  setStatus,
+  useStore,
+} from "../state/store"
+import {
+  homeScroll,
+  setCollapsed,
+  setFilter,
+  useUi,
+} from "../state/ui"
 import { SearchDropdown } from "./SearchDropdown"
+import { SelectListbox } from "./SelectListbox"
 
 /**
  * The Home toolbar: one search across every library any queue draws from, plus the
@@ -28,7 +35,9 @@ import { SearchDropdown } from "./SearchDropdown"
 export function Toolbar() {
   const { data, reg } = useStore()
   const { collapsed, filter } = useUi()
-  const [openMenu, setOpenMenu] = useState<number | null>(null)
+  const [openMenu, setOpenMenu] = useState<number | null>(
+    null,
+  )
   const [addPosition, setAddPosition] = useState("top")
 
   /**
@@ -54,15 +63,17 @@ export function Toolbar() {
 
     document.addEventListener("keydown", onKey)
 
-    return () => document.removeEventListener("keydown", onKey)
+    return () =>
+      document.removeEventListener("keydown", onKey)
   }, [openMenu])
 
   const ids = queueIds(data)
-  const isAllCollapsed = ids.length > 0 && ids.every((id) => collapsed.has(id))
+  const isAllCollapsed =
+    ids.length > 0 && ids.every((id) => collapsed.has(id))
 
   const libTitle = (sectionId: number) =>
-    (reg?.libraries || []).find((x) => x.id === sectionId)?.title ??
-    `Library ${sectionId}`
+    (reg?.libraries || []).find((x) => x.id === sectionId)
+      ?.title ?? `Library ${sectionId}`
 
   return (
     // F2: `compact` density takes the 44px MIN_TOUCH_TARGET floor down over
@@ -74,7 +85,9 @@ export function Toolbar() {
       <div className="gsearch-wrap">
         <SearchDropdown<SearchHit>
           doSearch={async (q) => {
-            const { results } = await api<{ results: SearchHit[] }>(
+            const { results } = await api<{
+              results: SearchHit[]
+            }>(
               "GET",
               `/api/search?q=${encodeURIComponent(q)}`,
             )
@@ -88,119 +101,143 @@ export function Toolbar() {
           rowFor={(hit, index) => {
             const label = `${hit.title}${hit.year ? ` (${hit.year})` : ""}`
             const compatible = (reg?.sets ?? []).filter(
-              (s) => s.source === "queue" && s.sections.includes(hit.sectionId),
+              (s) =>
+                s.source === "queue" &&
+                s.sections.includes(hit.sectionId),
             )
 
             return {
               content: (
                 <>
-                  <img alt="" src={thumbUrl(hit.ratingKey)} />
+                  <img
+                    alt=""
+                    src={thumbUrl(hit.ratingKey)}
+                  />
                   <span className="ginfo">
-                    {hit.title} <span className="y">{hit.year || ""}</span>
-                    <span className="glib">{libTitle(hit.sectionId)}</span>
+                    {hit.title}{" "}
+                    <span className="y">
+                      {hit.year || ""}
+                    </span>
+                    <span className="glib">
+                      {libTitle(hit.sectionId)}
+                    </span>
                   </span>
                   <button
                     className="addto"
                     onClick={(e) => {
                       e.stopPropagation()
-                      setOpenMenu((cur) => (cur === index ? null : index))
+                      setOpenMenu((cur) =>
+                        cur === index ? null : index,
+                      )
                     }}
                     type="button"
                   >
                     Add to ▾
                   </button>
-                  {openMenu === index
-                    ? (
-                        <div
-                          className="qmenu"
-                          data-density="compact"
-                          onKeyDown={(e) => {
-                            const btns = [
-                              ...e.currentTarget.querySelectorAll("button"),
-                            ]
+                  {openMenu === index ? (
+                    <div
+                      className="qmenu"
+                      data-density="compact"
+                      onKeyDown={(e) => {
+                        const btns = [
+                          ...e.currentTarget.querySelectorAll(
+                            "button",
+                          ),
+                        ]
 
-                            if (!btns.length) return
+                        if (!btns.length) return
 
-                            const i = btns.indexOf(
-                              document.activeElement as HTMLButtonElement,
-                            )
+                        const i = btns.indexOf(
+                          document.activeElement as HTMLButtonElement,
+                        )
 
-                            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-                              e.preventDefault()
-                              btns[
-                                (i + (e.key === "ArrowDown" ? 1 : -1) + btns.length) %
-                                  btns.length
-                              ]?.focus()
-                            }
-                            else if (e.key === "Escape") {
+                        if (
+                          e.key === "ArrowDown" ||
+                          e.key === "ArrowUp"
+                        ) {
+                          e.preventDefault()
+                          btns[
+                            (i +
+                              (e.key === "ArrowDown"
+                                ? 1
+                                : -1) +
+                              btns.length) %
+                              btns.length
+                          ]?.focus()
+                        } else if (e.key === "Escape") {
+                          setOpenMenu(null)
+                        }
+                      }}
+                      ref={(el) => {
+                        el?.querySelector("button")?.focus()
+                      }}
+                    >
+                      {compatible.length === 0 ? (
+                        <p>
+                          {`No queue includes “${libTitle(hit.sectionId)}” — add it to a queue via its ⚙.`}
+                        </p>
+                      ) : (
+                        compatible.map((s) => (
+                          // ghost Button, skin deleted — see PlayMenu. Still a native
+                          // <button> (the qmenu keyboard nav queries `button` and
+                          // focuses via document.activeElement).
+                          <Button
+                            appearance="ghost"
+                            intent="neutral"
+                            isFullWidth
+                            key={s.id}
+                            onClick={async (e) => {
+                              e.stopPropagation()
                               setOpenMenu(null)
-                            }
-                          }}
-                          ref={(el) => {
-                            el?.querySelector("button")?.focus()
-                          }}
-                        >
-                          {compatible.length === 0
-                            ? (
-                                <p>
-                                  {`No queue includes “${libTitle(hit.sectionId)}” — add it to a queue via its ⚙.`}
-                                </p>
+                              setStatus(
+                                `Adding to ${s.label}…`,
                               )
-                            : compatible.map((s) => (
-                                // ghost Button, skin deleted — see PlayMenu. Still a native
-                                // <button> (the qmenu keyboard nav queries `button` and
-                                // focuses via document.activeElement).
-                                <Button
-                                  appearance="ghost"
-                                  intent="neutral"
-                                  isFullWidth
-                                  key={s.id}
-                                  onClick={async (e) => {
-                                    e.stopPropagation()
-                                    setOpenMenu(null)
-                                    setStatus(`Adding to ${s.label}…`)
 
-                                    try {
-                                      await api(
-                                        "POST",
-                                        `/api/queues/${s.id}/items`,
-                                        {
-                                          position: addPosition,
-                                          value: {
-                                            ratingKey: hit.ratingKey,
-                                            title: label,
-                                          },
-                                        },
-                                      )
-                                      setStatus(
-                                        `Added “${hit.title}” to ${s.label}`,
-                                        "ok",
-                                      )
-                                      // Background: update the shelves but keep the
-                                      // results open for the next pick.
-                                      refreshData()
-                                    }
-                                    catch (err) {
-                                      setStatus(
-                                        "Add failed: " + (err as Error).message,
-                                        "err",
-                                      )
-                                    }
-                                  }}
-                                >
-                                  {s.label}
-                                </Button>
-                              ))}
-                        </div>
-                      )
-                    : null}
+                              try {
+                                await api(
+                                  "POST",
+                                  `/api/queues/${s.id}/items`,
+                                  {
+                                    position: addPosition,
+                                    value: {
+                                      ratingKey:
+                                        hit.ratingKey,
+                                      title: label,
+                                    },
+                                  },
+                                )
+                                setStatus(
+                                  `Added “${hit.title}” to ${s.label}`,
+                                  "ok",
+                                )
+                                // Background: update the shelves but keep the
+                                // results open for the next pick.
+                                refreshData()
+                              } catch (err) {
+                                setStatus(
+                                  "Add failed: " +
+                                    (err as Error).message,
+                                  "err",
+                                )
+                              }
+                            }}
+                          >
+                            {s.label}
+                          </Button>
+                        ))
+                      )}
+                    </div>
+                  ) : null}
                 </>
               ),
               // The Add-to button and the menu own their own clicks; a row pick is
               // "open my menu", so it must not fire from inside them.
               ignoreSelector: ".addto, .qmenu",
               // Row pick (click anywhere on it, or Enter) = open its Add-to menu.
-              pick: () => setOpenMenu((cur) => (cur === index ? null : index)),
+              pick: () =>
+                setOpenMenu((cur) =>
+                  cur === index ? null : index,
+                ),
             }
           }}
         >
@@ -235,7 +272,10 @@ export function Toolbar() {
         className="ghost"
         id="collapseall"
         onClick={() =>
-          setCollapsed(isAllCollapsed ? new Set() : new Set(ids))}
+          setCollapsed(
+            isAllCollapsed ? new Set() : new Set(ids),
+          )
+        }
         type="button"
       >
         {isAllCollapsed ? "Expand all" : "Collapse all"}

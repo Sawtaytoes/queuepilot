@@ -1,17 +1,28 @@
 import { Badge, EmptyState } from "@charcuterie/ui"
-import { useCallback, useEffect, useLayoutEffect, useRef } from "react"
-
-import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { progressLabel, tileFace } from "../lib/tileFace"
-import type { NowState, QueueItem } from "../lib/types"
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+} from "react"
 import { TypeBadge } from "../components/badges"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
-import { openPlayMenu, openSetModal } from "../state/overlays"
+import { activeSet, isPlayingItem } from "../lib/nowPlaying"
+import { progressLabel, tileFace } from "../lib/tileFace"
+import type { NowState, QueueItem } from "../lib/types"
+import {
+  openPlayMenu,
+  openSetModal,
+} from "../state/overlays"
 import { navigate } from "../state/route"
 import { queueIds, useStore } from "../state/store"
-import { homeScroll, toggleCollapsed, useUi } from "../state/ui"
+import {
+  homeScroll,
+  toggleCollapsed,
+  useUi,
+} from "../state/ui"
 
 /**
  * QUEUES — the configurator. Every ordered queue is a horizontal poster shelf, so
@@ -32,7 +43,9 @@ function shelfMatches(
 
   if (label.toLowerCase().includes(f)) return true
 
-  return items.some((it) => (it.title || "").toLowerCase().includes(f))
+  return items.some((it) =>
+    (it.title || "").toLowerCase().includes(f),
+  )
 }
 
 function Shelf({
@@ -72,10 +85,13 @@ function Shelf({
 
     const hasMoreLeft = strip.scrollLeft > 2
     const hasMoreRight =
-      strip.scrollLeft < strip.scrollWidth - strip.clientWidth - 2
+      strip.scrollLeft <
+      strip.scrollWidth - strip.clientWidth - 2
 
-    if (leftRef.current) leftRef.current.hidden = !hasMoreLeft
-    if (rightRef.current) rightRef.current.hidden = !hasMoreRight
+    if (leftRef.current)
+      leftRef.current.hidden = !hasMoreLeft
+    if (rightRef.current)
+      rightRef.current.hidden = !hasMoreRight
 
     wrap.classList.toggle("more-left", hasMoreLeft)
     wrap.classList.toggle("more-right", hasMoreRight)
@@ -89,7 +105,8 @@ function Shelf({
     // A viewport resize changes how much of each strip fits.
     window.addEventListener("resize", updateArrows)
 
-    return () => window.removeEventListener("resize", updateArrows)
+    return () =>
+      window.removeEventListener("resize", updateArrows)
   }, [updateArrows])
 
   const isLive = setId === playingSet
@@ -117,14 +134,14 @@ function Shelf({
           }}
           type="button"
         >
-          <span className="lbl">{label}</span>
-          {" "}
-          <span className="sec">{items.length}</span>
-          {" "}
+          <span className="lbl">{label}</span>{" "}
+          <span className="sec">{items.length}</span>{" "}
           <span className="chev">›</span>
         </button>
         <span className="livepill" hidden={!isLive}>
-          {isLive && now.now?.state === "paused" ? "Paused" : "Playing"}
+          {isLive && now.now?.state === "paused"
+            ? "Paused"
+            : "Playing"}
         </span>
         <span className="shelfspacer" />
         <Tip label="Play this queue on a device">
@@ -133,9 +150,11 @@ function Shelf({
             className="shelfplay"
             onClick={(e) =>
               openPlayMenu({
-                anchor: e.currentTarget.getBoundingClientRect(),
+                anchor:
+                  e.currentTarget.getBoundingClientRect(),
                 setId,
-              })}
+              })
+            }
             type="button"
           >
             ▶
@@ -168,117 +187,125 @@ function Shelf({
           onClick={() =>
             stripRef.current?.scrollBy({
               left: -stripRef.current.clientWidth * 0.85,
-            })}
+            })
+          }
           ref={leftRef}
           type="button"
         >
           ‹
         </button>
-        <ul className="strip" onScroll={updateArrows} ref={stripRef}>
-          {items.length === 0
-            ? (
-                <li className="empty">
-                  <EmptyState
-                    description="Open it to add something."
-                    heading="Empty"
-                    headingLevel={3}
-                    size="sm"
-                  />
-                </li>
-              )
-            : items.map((item) => {
-                const face = tileFace(item)
-                const isPlaying = isLive && isPlayingItem(now, item)
+        <ul
+          className="strip"
+          onScroll={updateArrows}
+          ref={stripRef}
+        >
+          {items.length === 0 ? (
+            <li className="empty">
+              <EmptyState
+                description="Open it to add something."
+                heading="Empty"
+                headingLevel={3}
+                size="sm"
+              />
+            </li>
+          ) : (
+            items.map((item) => {
+              const face = tileFace(item)
+              const isPlaying =
+                isLive && isPlayingItem(now, item)
 
-                return (
-                  <PosterTile
-                    badges={
-                      <>
-                        <TypeBadge face={face} item={item} />
-                        {/* "In Progress" wins over "Completed": a mid-episode resume point
+              return (
+                <PosterTile
+                  badges={
+                    <>
+                      <TypeBadge face={face} item={item} />
+                      {/* "In Progress" wins over "Completed": a mid-episode resume point
                             (Plex viewOffset, unwatched) means the item is being watched, not
                             finished — the Prison School OAD case must never read "Completed". */}
-                        {item.partiallyWatched
-                          ? (
-                              <Tip
-                                label={progressLabel(
-                                  item.viewOffset,
-                                  item.duration,
-                                )}
-                              >
-                                <Badge
-                                  appearance="outline"
-                                  className="badge progressbadge"
-                                  intent="accent"
-                                  size="sm"
-                                >
-                                  In Progress
-                                </Badge>
-                              </Tip>
-                            )
-                          : item.done
-                            ? (
-                                <Badge
-                                  appearance="outline"
-                                  className="badge donebadge"
-                                  intent="neutral"
-                                  size="sm"
-                                >
-                                  Completed
-                                </Badge>
-                              )
-                            : null}
-                        {/* Solid, not outline: this one has to win against the
+                      {item.partiallyWatched ? (
+                        <Tip
+                          label={progressLabel(
+                            item.viewOffset,
+                            item.duration,
+                          )}
+                        >
+                          <Badge
+                            appearance="outline"
+                            className="badge progressbadge"
+                            intent="accent"
+                            size="sm"
+                          >
+                            In Progress
+                          </Badge>
+                        </Tip>
+                      ) : item.done ? (
+                        <Badge
+                          appearance="outline"
+                          className="badge donebadge"
+                          intent="neutral"
+                          size="sm"
+                        >
+                          Completed
+                        </Badge>
+                      ) : null}
+                      {/* Solid, not outline: this one has to win against the
                             type and Completed chips beside it. Green rather than
                             amber so it never reads as the selection outline. */}
-                        {isPlaying
-                          ? (
-                              <Badge
-                                appearance="solid"
-                                className="badge playingbadge"
-                                intent="success"
-                                size="sm"
-                              >
-                                {now.now?.state === "paused"
-                                  ? "Paused"
-                                  : "Now playing"}
-                              </Badge>
-                            )
-                          : null}
-                      </>
-                    }
-                    className={[
-                      // `pending` is not `unresolved`: the red border means "this
-                      // entry names something Plex does not have", and a tile that
-                      // simply hasn't been resolved YET has made no such claim.
-                      item.resolved || item.pending ? null : "unresolved",
-                      item.done ? "done" : null,
-                      isPlaying ? "playing" : null,
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    dataKey={item.key}
-                    dataSet={setId}
-                    isPending={item.pending}
-                    key={item.key}
-                    next={{
-                      isDone: face.nextDone,
-                      text: face.next,
-                      tooltip:
-                        face.from && item.childCount != null
-                          ? `${face.next} — ${item.childCount} in order`
-                          : face.next,
-                    }}
-                    posterRatingKey={item.resolved ? face.ratingKey : null}
-                    title={face.title + (face.year ? ` (${face.year})` : "")}
-                    titleTooltip={
-                      face.from
-                        ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-                        : face.title + (face.year ? ` (${face.year})` : "")
-                    }
-                  />
-                )
-              })}
+                      {isPlaying ? (
+                        <Badge
+                          appearance="solid"
+                          className="badge playingbadge"
+                          intent="success"
+                          size="sm"
+                        >
+                          {now.now?.state === "paused"
+                            ? "Paused"
+                            : "Now playing"}
+                        </Badge>
+                      ) : null}
+                    </>
+                  }
+                  className={[
+                    // `pending` is not `unresolved`: the red border means "this
+                    // entry names something Plex does not have", and a tile that
+                    // simply hasn't been resolved YET has made no such claim.
+                    item.resolved || item.pending
+                      ? null
+                      : "unresolved",
+                    item.done ? "done" : null,
+                    isPlaying ? "playing" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  dataKey={item.key}
+                  dataSet={setId}
+                  isPending={item.pending}
+                  key={item.key}
+                  next={{
+                    isDone: face.nextDone,
+                    text: face.next,
+                    tooltip:
+                      face.from && item.childCount != null
+                        ? `${face.next} — ${item.childCount} in order`
+                        : face.next,
+                  }}
+                  posterRatingKey={
+                    item.resolved ? face.ratingKey : null
+                  }
+                  title={
+                    face.title +
+                    (face.year ? ` (${face.year})` : "")
+                  }
+                  titleTooltip={
+                    face.from
+                      ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
+                      : face.title +
+                        (face.year ? ` (${face.year})` : "")
+                  }
+                />
+              )
+            })
+          )}
         </ul>
         <button
           aria-label="scroll right"
@@ -286,7 +313,8 @@ function Shelf({
           onClick={() =>
             stripRef.current?.scrollBy({
               left: stripRef.current.clientWidth * 0.85,
-            })}
+            })
+          }
           ref={rightRef}
           type="button"
         >
@@ -338,7 +366,9 @@ export function QueuesView({
               return (
                 <Shelf
                   isCollapsed={collapsed.has(id)}
-                  isHiddenByFilter={!shelfMatches(filter, q.label, q.items)}
+                  isHiddenByFilter={
+                    !shelfMatches(filter, q.label, q.items)
+                  }
                   items={q.items}
                   key={id}
                   label={q.label}

@@ -31,7 +31,9 @@ export function activeBinding(
   const ps = ch.profiles || []
 
   if (ch.has_explicit_profiles && currentProfile) {
-    const hit = ps.find((p) => p.plex_user === currentProfile)
+    const hit = ps.find(
+      (p) => p.plex_user === currentProfile,
+    )
 
     if (hit) return hit
   }
@@ -61,7 +63,9 @@ export async function fetchRatings(
   if (!ch) return FALLBACK_RATINGS
 
   const b = binding ?? activeBinding(ch, null)
-  const key = ch.has_explicit_profiles ? `${ch.id}::${b.plex_user || ""}` : ch.id
+  const key = ch.has_explicit_profiles
+    ? `${ch.id}::${b.plex_user || ""}`
+    : ch.id
 
   if (ratingsCache.has(key)) return ratingsCache.get(key)!
 
@@ -71,15 +75,17 @@ export async function fetchRatings(
     : `/api/ratings?set=${encodeURIComponent(ch.id)}`
 
   try {
-    const { ratings } = await api<{ ratings: string[] }>("GET", url)
+    const { ratings } = await api<{ ratings: string[] }>(
+      "GET",
+      url,
+    )
 
     if (Array.isArray(ratings) && ratings.length) {
       ratingsCache.set(key, ratings)
 
       return ratings
     }
-  }
-  catch {
+  } catch {
     /* fall through to the fallback list */
   }
 
@@ -100,11 +106,14 @@ export async function fetchScopedRatings(
     if (uuid) qs.set("uuid", uuid)
     if (sections) qs.set("sections", sections)
 
-    const r = await api<{ ratings: string[] }>("GET", `/api/ratings?${qs}`)
+    const r = await api<{ ratings: string[] }>(
+      "GET",
+      `/api/ratings?${qs}`,
+    )
 
-    if (Array.isArray(r.ratings) && r.ratings.length) return r.ratings
-  }
-  catch {
+    if (Array.isArray(r.ratings) && r.ratings.length)
+      return r.ratings
+  } catch {
     /* keep the fallback list */
   }
 
@@ -121,9 +130,10 @@ export async function fetchScopedRatings(
  * and the very next Save writes it away. Order is preserved: known first, then the
  * extras. (decision `2026-07-29-binding-ratings-render-per-profile-not-shared-scope`)
  */
-export const ratingOptions = (known: string[], keep: string[] = []) => [
-  ...new Set([...known, ...keep]),
-]
+export const ratingOptions = (
+  known: string[],
+  keep: string[] = [],
+) => [...new Set([...known, ...keep])]
 
 // Plex Home users for the profile dropdown. Cached; `[]` on failure so the Advanced
 // manual fields stay the fallback.
@@ -133,11 +143,13 @@ export async function fetchProfiles(): Promise<Profile[]> {
   if (PROFILES) return PROFILES
 
   try {
-    const { profiles } = await api<{ profiles: Profile[] }>("GET", "/api/profiles")
+    const { profiles } = await api<{ profiles: Profile[] }>(
+      "GET",
+      "/api/profiles",
+    )
 
     PROFILES = Array.isArray(profiles) ? profiles : []
-  }
-  catch {
+  } catch {
     PROFILES = []
   }
 
@@ -161,11 +173,14 @@ export const profileValue = (p: Profile) =>
  * movie/other libraries in `item_sections`.
  * (decision `2026-07-29-rewatch-pool-follows-the-channels-own-libraries`)
  */
-export function libSelection(ch: RegistrySet | null | undefined) {
+export function libSelection(
+  ch: RegistrySet | null | undefined,
+) {
   const secs = ch?.sections || []
   const items = ch?.item_sections || []
 
-  if ((ch?.behavior || ch?.mode) !== "rewatch") return { item: items, show: secs }
+  if ((ch?.behavior || ch?.mode) !== "rewatch")
+    return { item: items, show: secs }
 
   const both = [...secs, ...items]
 

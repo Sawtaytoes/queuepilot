@@ -24,7 +24,9 @@ export function CheckboxGroup<T extends string | number>({
         <label key={String(o.value)}>
           <input
             checked={checked.includes(o.value)}
-            onChange={(e) => onToggle(o.value, e.target.checked)}
+            onChange={(e) =>
+              onToggle(o.value, e.target.checked)
+            }
             type="checkbox"
             value={String(o.value)}
           />

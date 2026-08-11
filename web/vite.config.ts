@@ -1,7 +1,7 @@
+import { createViteConfig } from "@charcuterie/vite-config"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
-import { createViteConfig } from "@charcuterie/vite-config"
-import { type Plugin } from "vite"
+import type { Plugin } from "vite"
 
 /**
  * Preload the ONE font subset the first paint actually needs.
@@ -27,24 +27,27 @@ const preloadBodyFont = (): Plugin => ({
   name: "plex-channels:preload-body-font",
   transformIndexHtml: {
     handler: (_html, ctx) => {
-      const file = Object.keys(ctx.bundle ?? {})
-        .find((name) => /outfit-1[-.][^/]*\.woff2$/.test(name))
+      const file = Object.keys(ctx.bundle ?? {}).find(
+        (name) => /outfit-1[-.][^/]*\.woff2$/.test(name),
+      )
 
       if (!file) return []
 
-      return [{
-        attrs: {
-          as: "font",
-          // Fonts are always CORS-fetched, even same-origin; without this the
-          // preload is discarded and fetched a SECOND time by the CSS.
-          crossorigin: "anonymous",
-          href: `/${file}`,
-          rel: "preload",
-          type: "font/woff2",
+      return [
+        {
+          attrs: {
+            as: "font",
+            // Fonts are always CORS-fetched, even same-origin; without this the
+            // preload is discarded and fetched a SECOND time by the CSS.
+            crossorigin: "anonymous",
+            href: `/${file}`,
+            rel: "preload",
+            type: "font/woff2",
+          },
+          injectTo: "head-prepend",
+          tag: "link",
         },
-        injectTo: "head-prepend",
-        tag: "link",
-      }]
+      ]
     },
     order: "post",
   },
@@ -111,13 +114,19 @@ export default createViteConfig({
          * into a vendor chunk.
          */
         manualChunks: (id: string) => {
-          if (!id.includes("/node_modules/")) return undefined
+          if (!id.includes("/node_modules/"))
+            return undefined
 
-          if (/\/node_modules\/(react|react-dom|scheduler)\//.test(id)) {
+          if (
+            /\/node_modules\/(react|react-dom|scheduler)\//.test(
+              id,
+            )
+          ) {
             return "vendor-react"
           }
 
-          if (id.includes("/node_modules/@charcuterie/")) return "vendor-ui"
+          if (id.includes("/node_modules/@charcuterie/"))
+            return "vendor-ui"
 
           return undefined
         },

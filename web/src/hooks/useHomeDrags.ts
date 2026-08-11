@@ -4,7 +4,12 @@ import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
 import { busy } from "../state/busy"
 import { refreshData } from "../state/live"
-import { bumpRevision, getState, load, setStatus } from "../state/store"
+import {
+  bumpRevision,
+  getState,
+  load,
+  setStatus,
+} from "../state/store"
 
 /**
  * The two Home gestures, both on the shelves container:
@@ -51,7 +56,9 @@ type HomePress = {
   hiddenEmpty: HTMLElement | null
 }
 
-export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
+export function useHomeDrags(
+  shelvesRef: RefObject<HTMLElement | null>,
+) {
   useEffect(() => {
     const shelvesEl = shelvesRef.current
 
@@ -68,10 +75,13 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       // Dragging near the viewport edge scrolls the page so a shelf can travel
       // further than one screen (collapse-all also makes long hauls easy).
       if (e.clientY < 80) window.scrollBy(0, -24)
-      else if (e.clientY > window.innerHeight - 80) window.scrollBy(0, 24)
+      else if (e.clientY > window.innerHeight - 80)
+        window.scrollBy(0, 24)
 
       const others = [
-        ...shelvesEl!.querySelectorAll<HTMLElement>(".shelf:not(.dragging)"),
+        ...shelvesEl!.querySelectorAll<HTMLElement>(
+          ".shelf:not(.dragging)",
+        ),
       ].filter((s) => !s.hidden)
 
       if (!others.length) return
@@ -105,7 +115,8 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
 
       flipMove(
         others,
-        () => shelvesEl!.insertBefore(shelfDrag!.shelf, ref),
+        () =>
+          shelvesEl!.insertBefore(shelfDrag!.shelf, ref),
         shelfDrag.shelf,
       )
     }
@@ -124,7 +135,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       document.body.classList.remove("sdrag")
 
       const domOrder = [
-        ...shelvesEl!.querySelectorAll<HTMLElement>(".shelf"),
+        ...shelvesEl!.querySelectorAll<HTMLElement>(
+          ".shelf",
+        ),
       ].map((s) => s.dataset.set!)
 
       shelvesEl!.insertBefore(shelf, nextSibling)
@@ -134,7 +147,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       if (!data) return
 
       // Rotation channels are not shelves, so they keep their spot at the end.
-      const rest = data.order.filter((id) => !domOrder.includes(id))
+      const rest = data.order.filter(
+        (id) => !domOrder.includes(id),
+      )
       const next = [...domOrder, ...rest]
 
       data.order = next
@@ -157,15 +172,19 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
         }
 
         setStatus("Queue order saved", "ok")
-      }
-      catch (e) {
-        setStatus("Reorder failed: " + (e as Error).message, "err")
+      } catch (e) {
+        setStatus(
+          `Reorder failed: ${(e as Error).message}`,
+          "err",
+        )
         await load()
       }
     }
 
     const onShelfHandleDown = (e: PointerEvent) => {
-      const handle = (e.target as HTMLElement).closest(".shelfdrag")
+      const handle = (e.target as HTMLElement).closest(
+        ".shelfdrag",
+      )
 
       if (!handle) return
 
@@ -178,7 +197,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       busy.shelfDrag = true
       shelf.classList.add("dragging")
       document.body.classList.add("sdrag") // enables the sibling glide transition
-      window.addEventListener("pointermove", onShelfMove, { passive: false })
+      window.addEventListener("pointermove", onShelfMove, {
+        passive: false,
+      })
       window.addEventListener("pointerup", onShelfUp)
       window.addEventListener("pointercancel", onShelfUp)
     }
@@ -203,7 +224,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
     const clearDropTargets = () => {
       shelvesEl!
         .querySelectorAll(".shelf.drop-target")
-        .forEach((s) => s.classList.remove("drop-target"))
+        .forEach((shelf) => {
+          shelf.classList.remove("drop-target")
+        })
     }
 
     const endHomePress = () => {
@@ -222,7 +245,10 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
 
       if (!hpress.isDragging) {
         const isFar =
-          Math.hypot(e.clientX - hpress.x, e.clientY - hpress.y) > DRAG_THRESHOLD
+          Math.hypot(
+            e.clientX - hpress.x,
+            e.clientY - hpress.y,
+          ) > DRAG_THRESHOLD
 
         if (hpress.type === "touch") {
           if (!hpress.isArmed) {
@@ -231,11 +257,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
 
             return
           }
-        }
-        else if (isFar) {
+        } else if (isFar) {
           beginHomeDrag()
-        }
-        else {
+        } else {
           return
         }
 
@@ -246,16 +270,22 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
 
       // Page auto-scroll for cross-shelf hauls.
       if (e.clientY < 90) window.scrollBy(0, -24)
-      else if (e.clientY > window.innerHeight - 90) window.scrollBy(0, 24)
+      else if (e.clientY > window.innerHeight - 90)
+        window.scrollBy(0, 24)
 
       // Which shelf is the pointer over (a little vertical slack so the gap rows
       // count)?
       let target: HTMLElement | null = null
 
       for (const strip of stripsOnScreen()) {
-        const r = strip.closest(".strip-wrap")!.getBoundingClientRect()
+        const r = strip
+          .closest(".strip-wrap")!
+          .getBoundingClientRect()
 
-        if (e.clientY >= r.top - 14 && e.clientY <= r.bottom + 14) {
+        if (
+          e.clientY >= r.top - 14 &&
+          e.clientY <= r.bottom + 14
+        ) {
           target = strip
 
           break
@@ -269,16 +299,20 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       target.closest(".shelf")!.classList.add("drop-target")
 
       // Strip auto-scroll near its left/right edge.
-      const wr = target.closest(".strip-wrap")!.getBoundingClientRect()
+      const wr = target
+        .closest(".strip-wrap")!
+        .getBoundingClientRect()
 
-      if (e.clientX < wr.left + 70) target.scrollBy({ behavior: "auto", left: -18 })
+      if (e.clientX < wr.left + 70)
+        target.scrollBy({ behavior: "auto", left: -18 })
       else if (e.clientX > wr.right - 70) {
         target.scrollBy({ behavior: "auto", left: 18 })
       }
 
       // Dropping into an empty queue: hide the placeholder rather than removing it
       // (see the header comment).
-      const empty = target.querySelector<HTMLElement>(".empty")
+      const empty =
+        target.querySelector<HTMLElement>(".empty")
 
       if (empty && empty !== hpress.hiddenEmpty) {
         empty.style.display = "none"
@@ -286,7 +320,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       }
 
       const tiles = [
-        ...target.querySelectorAll<HTMLElement>("li.tile:not(.dragging)"),
+        ...target.querySelectorAll<HTMLElement>(
+          "li.tile:not(.dragging)",
+        ),
       ]
 
       if (!tiles.length) {
@@ -324,14 +360,24 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
         return
       }
 
-      flipMove(tiles, () => target!.insertBefore(hpress!.card, ref), hpress.card)
+      flipMove(
+        tiles,
+        () => target!.insertBefore(hpress!.card, ref),
+        hpress.card,
+      )
     }
 
     async function onHomeUp() {
       if (!hpress) return
 
-      const { card, fromSet, hiddenEmpty, isDragging, nextSibling, parent } =
-        hpress
+      const {
+        card,
+        fromSet,
+        hiddenEmpty,
+        isDragging,
+        nextSibling,
+        parent,
+      } = hpress
 
       endHomePress()
       clearDropTargets()
@@ -346,10 +392,11 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
 
       if (!strip) return
 
-      const toSet = strip.closest<HTMLElement>(".shelf")!.dataset.set!
-      const keys = [...strip.querySelectorAll<HTMLElement>("li.tile")].map(
-        (li) => li.dataset.key!,
-      )
+      const toSet =
+        strip.closest<HTMLElement>(".shelf")!.dataset.set!
+      const keys = [
+        ...strip.querySelectorAll<HTMLElement>("li.tile"),
+      ].map((li) => li.dataset.key!)
 
       // Hand the DOM back to React before the optimistic state update.
       parent?.insertBefore(card, nextSibling)
@@ -366,25 +413,41 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       try {
         if (toSet === fromSet) {
           if (to) {
-            const byKey = new Map(to.items.map((it) => [it.key, it]))
+            const byKey = new Map(
+              to.items.map((it) => [it.key, it]),
+            )
 
-            to.items = keys.map((k) => byKey.get(k)!).filter(Boolean)
+            to.items = keys
+              .map((k) => byKey.get(k)!)
+              .filter(Boolean)
             bumpRevision()
           }
 
-          await api("PATCH", `/api/queues/${toSet}/order`, { keys })
+          await api("PATCH", `/api/queues/${toSet}/order`, {
+            keys,
+          })
           setStatus("Order saved", "ok")
-        }
-        else {
+        } else {
           const key = card.dataset.key!
-          const moved = from?.items.find((it) => it.key === key)
+          const moved = from?.items.find(
+            (it) => it.key === key,
+          )
 
           if (from && to && moved) {
-            from.items = from.items.filter((it) => it.key !== key)
+            from.items = from.items.filter(
+              (it) => it.key !== key,
+            )
 
-            const byKey = new Map([...to.items, moved].map((it) => [it.key, it]))
+            const byKey = new Map(
+              [...to.items, moved].map((it) => [
+                it.key,
+                it,
+              ]),
+            )
 
-            to.items = keys.map((k) => byKey.get(k)!).filter(Boolean)
+            to.items = keys
+              .map((k) => byKey.get(k)!)
+              .filter(Boolean)
             bumpRevision()
           }
 
@@ -394,14 +457,19 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
             toKeys: keys,
             toSet,
           })
-          setStatus(`Moved to ${data.sets[toSet]!.label}`, "ok")
+          setStatus(
+            `Moved to ${data.sets[toSet]!.label}`,
+            "ok",
+          )
         }
 
         // Freshen counts/order quietly; keeps the page where it is.
         refreshData()
-      }
-      catch (e) {
-        setStatus("Save failed: " + (e as Error).message, "err")
+      } catch (e) {
+        setStatus(
+          `Save failed: ${(e as Error).message}`,
+          "err",
+        )
         await load()
       }
     }
@@ -414,7 +482,7 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
 
       const card = target.closest<HTMLElement>("li.tile")
 
-      if (!card || !card.closest(".strip")) return
+      if (!card?.closest(".strip")) return
 
       if (e.pointerType !== "touch") e.preventDefault()
 
@@ -441,7 +509,9 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
         }, 200)
       }
 
-      window.addEventListener("pointermove", onHomeMove, { passive: false })
+      window.addEventListener("pointermove", onHomeMove, {
+        passive: false,
+      })
       window.addEventListener("pointerup", onHomeUp)
       window.addEventListener("pointercancel", onHomeUp)
     }
@@ -450,7 +520,8 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
     // A touch long-press arms the drag, but that same press fires the browser's
     // native context menu over a poster and steals the gesture — suppress it there.
     const onContextMenu = (e: MouseEvent) => {
-      if ((e.target as HTMLElement).closest(".thumb")) e.preventDefault()
+      if ((e.target as HTMLElement).closest(".thumb"))
+        e.preventDefault()
     }
     // Once a touch drag is armed, stop the browser's native panning
     // (preventDefault on touchmove is what actually blocks scrolling — pointer
@@ -459,18 +530,38 @@ export function useHomeDrags(shelvesRef: RefObject<HTMLElement | null>) {
       if (hpress?.isDragging) e.preventDefault()
     }
 
-    shelvesEl.addEventListener("pointerdown", onShelfHandleDown)
+    shelvesEl.addEventListener(
+      "pointerdown",
+      onShelfHandleDown,
+    )
     shelvesEl.addEventListener("pointerdown", onPosterDown)
     shelvesEl.addEventListener("dragstart", onDragStart)
     shelvesEl.addEventListener("contextmenu", onContextMenu)
-    shelvesEl.addEventListener("touchmove", onTouchMove, { passive: false })
+    shelvesEl.addEventListener("touchmove", onTouchMove, {
+      passive: false,
+    })
 
     return () => {
-      shelvesEl.removeEventListener("pointerdown", onShelfHandleDown)
-      shelvesEl.removeEventListener("pointerdown", onPosterDown)
-      shelvesEl.removeEventListener("dragstart", onDragStart)
-      shelvesEl.removeEventListener("contextmenu", onContextMenu)
-      shelvesEl.removeEventListener("touchmove", onTouchMove)
+      shelvesEl.removeEventListener(
+        "pointerdown",
+        onShelfHandleDown,
+      )
+      shelvesEl.removeEventListener(
+        "pointerdown",
+        onPosterDown,
+      )
+      shelvesEl.removeEventListener(
+        "dragstart",
+        onDragStart,
+      )
+      shelvesEl.removeEventListener(
+        "contextmenu",
+        onContextMenu,
+      )
+      shelvesEl.removeEventListener(
+        "touchmove",
+        onTouchMove,
+      )
       endHomePress()
     }
   }, [shelvesRef])

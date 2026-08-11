@@ -1,6 +1,9 @@
 import { useSyncExternalStore } from "react"
 
-import type { RegistrySet, SetsResponse } from "../lib/types"
+import type {
+  RegistrySet,
+  SetsResponse,
+} from "../lib/types"
 import { rotationChannels } from "./store"
 
 /**
@@ -11,7 +14,10 @@ import { rotationChannels } from "./store"
  * `currentChannel` / `currentProfile` globals.
  */
 
-let selection: { channelId: string | null; profile: string | null } = {
+let selection: {
+  channelId: string | null
+  profile: string | null
+} = {
   channelId: null,
   profile: null,
 }
@@ -32,8 +38,15 @@ export const useChannelSelection = () =>
     () => selection,
   )
 
-export function setChannelSelection(channelId: string | null, profile: string | null) {
-  if (selection.channelId === channelId && selection.profile === profile) return
+export function setChannelSelection(
+  channelId: string | null,
+  profile: string | null,
+) {
+  if (
+    selection.channelId === channelId &&
+    selection.profile === profile
+  )
+    return
 
   selection = { channelId, profile }
 

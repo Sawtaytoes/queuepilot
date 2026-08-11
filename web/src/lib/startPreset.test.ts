@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest"
 
-import { defaultStartPoint, memberPreset, pickOptionValue } from "./startPreset"
+import {
+  defaultStartPoint,
+  memberPreset,
+  pickOptionValue,
+} from "./startPreset"
 import type { NextEp, ShowEpisodes } from "./types"
 
 /**
@@ -47,14 +51,22 @@ describe("memberPreset", () => {
 
   test("a stored override for this member wins over next-up", () => {
     expect(
-      memberPreset({ episode: 8, season: 1, series: "555" }, nextUp, "555"),
+      memberPreset(
+        { episode: 8, season: 1, series: "555" },
+        nextUp,
+        "555",
+      ),
     ).toEqual({ episode: 8, season: 1, series: "555" })
   })
 
   test("a member that is neither the override target nor next-up has no preset", () => {
     expect(memberPreset(null, nextUp, "999")).toBeNull()
     expect(
-      memberPreset({ episode: 8, series: "111" }, nextUp, "999"),
+      memberPreset(
+        { episode: 8, series: "111" },
+        nextUp,
+        "999",
+      ),
     ).toBeNull()
   })
 
@@ -88,7 +100,10 @@ describe("memberPreset", () => {
 describe("defaultStartPoint", () => {
   test("collection member (no override) defaults to next-unwatched E24, not E1", () => {
     const preset = memberPreset(null, nextUp, "555")
-    const { season, episode } = defaultStartPoint(redPhotonZillion, preset)
+    const { season, episode } = defaultStartPoint(
+      redPhotonZillion,
+      preset,
+    )
 
     expect(episode).toBe("24")
     expect(episode).not.toBe("1")
@@ -96,7 +111,9 @@ describe("defaultStartPoint", () => {
   })
 
   test("no preset at all still falls to the first episode (unchanged behavior)", () => {
-    expect(defaultStartPoint(redPhotonZillion, null)).toEqual({
+    expect(
+      defaultStartPoint(redPhotonZillion, null),
+    ).toEqual({
       episode: "1",
       season: "1",
     })
@@ -106,12 +123,24 @@ describe("defaultStartPoint", () => {
     const data: ShowEpisodes = {
       multiSeason: true,
       seasons: [
-        { episodes: [{ episode: 1 }, { episode: 2 }], season: 1 },
-        { episodes: [{ episode: 1 }, { episode: 2 }, { episode: 3 }], season: 2 },
+        {
+          episodes: [{ episode: 1 }, { episode: 2 }],
+          season: 1,
+        },
+        {
+          episodes: [
+            { episode: 1 },
+            { episode: 2 },
+            { episode: 3 },
+          ],
+          season: 2,
+        },
       ],
     }
 
-    expect(defaultStartPoint(data, { episode: 3, season: 2 })).toEqual({
+    expect(
+      defaultStartPoint(data, { episode: 3, season: 2 }),
+    ).toEqual({
       episode: "3",
       season: "2",
     })

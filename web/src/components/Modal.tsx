@@ -61,7 +61,9 @@ export function Modal({
       busy.openModals = Math.max(0, busy.openModals - 1)
 
       if (busy.openModals === 0) {
-        document.documentElement.classList.remove("modal-open")
+        document.documentElement.classList.remove(
+          "modal-open",
+        )
       }
     }
   }, [isOpen])
@@ -93,7 +95,12 @@ export function Modal({
             onClick={onClose}
             type="button"
           >
-            <svg aria-hidden="true" height="15" viewBox="0 0 14 14" width="15">
+            <svg
+              aria-hidden="true"
+              height="15"
+              viewBox="0 0 14 14"
+              width="15"
+            >
               <path
                 d="M2 2l10 10M12 2L2 12"
                 fill="none"

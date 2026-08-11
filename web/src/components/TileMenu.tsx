@@ -1,4 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react"
 
 import { isStartable } from "../lib/tileFace"
 import {
@@ -20,7 +25,10 @@ import { commitStart } from "./startCommit"
 export function TileMenu() {
   const { tileMenu } = useOverlays()
   const ref = useRef<HTMLDivElement>(null)
-  const [pos, setPos] = useState<{ left: number; top: number } | null>(null)
+  const [pos, setPos] = useState<{
+    left: number
+    top: number
+  } | null>(null)
 
   // Clamp into the viewport (a tile near the right/bottom edge would otherwise push
   // the menu off-screen). Measured after render, because the height depends on how
@@ -35,8 +43,20 @@ export function TileMenu() {
     const r = ref.current.getBoundingClientRect()
 
     setPos({
-      left: Math.max(4, Math.min(tileMenu.x, window.innerWidth - r.width - 4)),
-      top: Math.max(4, Math.min(tileMenu.y, window.innerHeight - r.height - 4)),
+      left: Math.max(
+        4,
+        Math.min(
+          tileMenu.x,
+          window.innerWidth - r.width - 4,
+        ),
+      ),
+      top: Math.max(
+        4,
+        Math.min(
+          tileMenu.y,
+          window.innerHeight - r.height - 4,
+        ),
+      ),
     })
 
     ref.current.querySelector("button")?.focus()
@@ -44,20 +64,33 @@ export function TileMenu() {
 
   useEffect(() => {
     const onPointerDown = (e: PointerEvent) => {
-      if (!(e.target as HTMLElement).closest("#tilemenu")) closeTileMenu()
+      if (!(e.target as HTMLElement).closest("#tilemenu"))
+        closeTileMenu()
     }
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") closeTileMenu()
     }
 
-    document.addEventListener("pointerdown", onPointerDown, true)
+    document.addEventListener(
+      "pointerdown",
+      onPointerDown,
+      true,
+    )
     document.addEventListener("keydown", onKeyDown)
     window.addEventListener("scroll", closeTileMenu, true)
 
     return () => {
-      document.removeEventListener("pointerdown", onPointerDown, true)
+      document.removeEventListener(
+        "pointerdown",
+        onPointerDown,
+        true,
+      )
       document.removeEventListener("keydown", onKeyDown)
-      window.removeEventListener("scroll", closeTileMenu, true)
+      window.removeEventListener(
+        "scroll",
+        closeTileMenu,
+        true,
+      )
     }
   }, [])
 
@@ -70,45 +103,43 @@ export function TileMenu() {
       hidden={!tileMenu}
       id="tilemenu"
       ref={ref}
-      style={pos ? { left: pos.left, top: pos.top } : undefined}
+      style={
+        pos ? { left: pos.left, top: pos.top } : undefined
+      }
     >
-      {entry && item && isStartable(item)
-        ? (
-            <button
-              onClick={() => openStartModal(entry)}
-              type="button"
-            >
-              {item.start ? "Change start episode…" : "Start from an episode…"}
-            </button>
-          )
-        : null}
-      {entry && item && isStartable(item) && item.start
-        ? (
-            <button
-              onClick={() => {
-                closeTileMenu()
-                void commitStart(entry, null)
-              }}
-              type="button"
-            >
-              Start automatically (clear override)
-            </button>
-          )
-        : null}
-      {entry?.remove
-        ? (
-            <button
-              className="danger"
-              onClick={() => {
-                closeTileMenu()
-                entry.remove?.()
-              }}
-              type="button"
-            >
-              {entry.removeLabel || "Remove"}
-            </button>
-          )
-        : null}
+      {entry && item && isStartable(item) ? (
+        <button
+          onClick={() => openStartModal(entry)}
+          type="button"
+        >
+          {item.start
+            ? "Change start episode…"
+            : "Start from an episode…"}
+        </button>
+      ) : null}
+      {entry && item && isStartable(item) && item.start ? (
+        <button
+          onClick={() => {
+            closeTileMenu()
+            void commitStart(entry, null)
+          }}
+          type="button"
+        >
+          Start automatically (clear override)
+        </button>
+      ) : null}
+      {entry?.remove ? (
+        <button
+          className="danger"
+          onClick={() => {
+            closeTileMenu()
+            entry.remove?.()
+          }}
+          type="button"
+        >
+          {entry.removeLabel || "Remove"}
+        </button>
+      ) : null}
     </div>
   )
 }

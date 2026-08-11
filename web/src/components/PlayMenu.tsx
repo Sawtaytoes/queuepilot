@@ -3,7 +3,10 @@ import { useEffect, useState } from "react"
 
 import { api } from "../lib/api"
 import type { Device } from "../lib/types"
-import { closePlayMenus, useOverlays } from "../state/overlays"
+import {
+  closePlayMenus,
+  useOverlays,
+} from "../state/overlays"
 import { setStatus } from "../state/store"
 
 /**
@@ -21,7 +24,9 @@ import { setStatus } from "../state/store"
  */
 export function PlayMenu() {
   const { playMenu } = useOverlays()
-  const [devices, setDevices] = useState<Device[] | null>(null)
+  const [devices, setDevices] = useState<Device[] | null>(
+    null,
+  )
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -63,7 +68,8 @@ export function PlayMenu() {
 
     document.addEventListener("click", onClick)
 
-    return () => document.removeEventListener("click", onClick)
+    return () =>
+      document.removeEventListener("click", onClick)
   }, [])
 
   if (!playMenu) return null
@@ -87,47 +93,49 @@ export function PlayMenu() {
         top: `${anchor.bottom + 6}px`,
       }}
     >
-      {error
-        ? <p>{error}</p>
-        : devices == null
-          ? <p>Loading devices…</p>
-          : devices.length === 0
-            ? (
-                <p>
-                  No devices announced yet (the queue service refreshes the registry
-                  every few minutes).
-                </p>
-              )
-            : devices.map((d) => (
-                // Charcuterie `Button`, `ghost` (nothing until hover) — the app's own row
-                // skin is DELETED per 2026-08-02-adopting-a-component-means-deleting-its-skin;
-                // `.qmenu button` keeps only layout. Still a native <button> with the label,
-                // so `ui-test`/`kbd-undo`'s `.qmenu button` reads are unchanged.
-                <Button
-                  appearance="ghost"
-                  intent="neutral"
-                  isFullWidth
-                  key={d.id}
-                  onClick={async () => {
-                    closePlayMenus()
-                    setStatus(`Starting on ${d.name}…`)
+      {error ? (
+        <p>{error}</p>
+      ) : devices == null ? (
+        <p>Loading devices…</p>
+      ) : devices.length === 0 ? (
+        <p>
+          No devices announced yet (the queue service
+          refreshes the registry every few minutes).
+        </p>
+      ) : (
+        devices.map((d) => (
+          // Charcuterie `Button`, `ghost` (nothing until hover) — the app's own row
+          // skin is DELETED per 2026-08-02-adopting-a-component-means-deleting-its-skin;
+          // `.qmenu button` keeps only layout. Still a native <button> with the label,
+          // so `ui-test`/`kbd-undo`'s `.qmenu button` reads are unchanged.
+          <Button
+            appearance="ghost"
+            intent="neutral"
+            isFullWidth
+            key={d.id}
+            onClick={async () => {
+              closePlayMenus()
+              setStatus(`Starting on ${d.name}…`)
 
-                    try {
-                      await api("POST", "/api/play", {
-                        kind,
-                        profile,
-                        set: setId,
-                        target: d.default ? undefined : d.id,
-                      })
-                    }
-                    catch (e) {
-                      setStatus("Play failed: " + (e as Error).message, "err")
-                    }
-                  }}
-                >
-                  {d.default ? `${d.name} (default)` : d.name}
-                </Button>
-              ))}
+              try {
+                await api("POST", "/api/play", {
+                  kind,
+                  profile,
+                  set: setId,
+                  target: d.default ? undefined : d.id,
+                })
+              } catch (e) {
+                setStatus(
+                  `Play failed: ${(e as Error).message}`,
+                  "err",
+                )
+              }
+            }}
+          >
+            {d.default ? `${d.name} (default)` : d.name}
+          </Button>
+        ))
+      )}
     </div>
   )
 }

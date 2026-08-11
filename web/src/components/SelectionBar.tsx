@@ -1,9 +1,17 @@
-import { SelectListbox } from "./SelectListbox"
 import { useState } from "react"
-
 import { api } from "../lib/api"
-import { clearSelection, useSelected } from "../state/selection"
-import { channelSetIds, load, queueIds, setStatus, useStore } from "../state/store"
+import {
+  clearSelection,
+  useSelected,
+} from "../state/selection"
+import {
+  channelSetIds,
+  load,
+  queueIds,
+  setStatus,
+  useStore,
+} from "../state/store"
+import { SelectListbox } from "./SelectListbox"
 
 /**
  * The selection action bar — "Move to `<queue>`" and Remove, shown once at least
@@ -16,7 +24,11 @@ import { channelSetIds, load, queueIds, setStatus, useStore } from "../state/sto
  * channel's shows to channels. Mixing families would silently change an entry's
  * playback semantics from "top plays next" to "random rotation".
  */
-export function SelectionBar({ currentSet }: { currentSet: string | null }) {
+export function SelectionBar({
+  currentSet,
+}: {
+  currentSet: string | null
+}) {
   const { data } = useStore()
   const selected = useSelected()
   const [target, setTarget] = useState("")
@@ -26,7 +38,9 @@ export function SelectionBar({ currentSet }: { currentSet: string | null }) {
       ? channelSetIds(data)
       : queueIds(data)
   const options = family.filter((id) => id !== currentSet)
-  const value = options.includes(target) ? target : (options[0] ?? "")
+  const value = options.includes(target)
+    ? target
+    : (options[0] ?? "")
 
   return (
     <div hidden={selected.size === 0} id="selbar">
@@ -58,16 +72,21 @@ export function SelectionBar({ currentSet }: { currentSet: string | null }) {
           setStatus("Moving…")
 
           try {
-            await api("POST", "/api/queues/move-bulk", { items, toSet: value })
+            await api("POST", "/api/queues/move-bulk", {
+              items,
+              toSet: value,
+            })
             setStatus(
               `Moved ${items.length} to ${data?.sets[value]?.label ?? value}`,
               "ok",
             )
             clearSelection()
             await load()
-          }
-          catch (e) {
-            setStatus("Move failed: " + (e as Error).message, "err")
+          } catch (e) {
+            setStatus(
+              `Move failed: ${(e as Error).message}`,
+              "err",
+            )
           }
         }}
         type="button"
@@ -83,12 +102,16 @@ export function SelectionBar({ currentSet }: { currentSet: string | null }) {
           setStatus("Removing…")
 
           try {
-            await api("POST", "/api/queues/remove-bulk", { items })
+            await api("POST", "/api/queues/remove-bulk", {
+              items,
+            })
             clearSelection()
             await load()
-          }
-          catch (e) {
-            setStatus("Remove failed: " + (e as Error).message, "err")
+          } catch (e) {
+            setStatus(
+              `Remove failed: ${(e as Error).message}`,
+              "err",
+            )
           }
         }}
         type="button"

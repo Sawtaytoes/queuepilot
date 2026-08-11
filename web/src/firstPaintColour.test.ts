@@ -24,11 +24,15 @@ const script = firstPaintScriptBody()
 test("the anti-flash background is a var() fallback, never a raw pinned colour", () => {
   // The one form that is safe: the literal applies only while
   // `--color-surface-base` is still undefined, then the token takes over.
-  expect(script).toContain("background-color:var(--color-surface-base,")
+  expect(script).toContain(
+    "background-color:var(--color-surface-base,",
+  )
 
   // A bare `background: #hex` / `background-color: #hex` is the exact regression —
   // unlayered, it beats Tailwind's `@layer utilities` token and pins the page.
-  expect(script).not.toMatch(/background(?:-color)?\s*:\s*#/)
+  expect(script).not.toMatch(
+    /background(?:-color)?\s*:\s*#/,
+  )
 })
 
 test("both surface hexes come from the daylight token source", () => {

@@ -1,6 +1,4 @@
-import { SelectListbox } from "./SelectListbox"
 import { useCallback, useEffect, useState } from "react"
-
 import { api } from "../lib/api"
 import {
   defaultStartPoint,
@@ -13,8 +11,12 @@ import type {
   ShowEpisodes,
   StartPoint,
 } from "../lib/types"
-import { closeStartModal, useOverlays } from "../state/overlays"
+import {
+  closeStartModal,
+  useOverlays,
+} from "../state/overlays"
 import { Modal } from "./Modal"
+import { SelectListbox } from "./SelectListbox"
 import { commitStart } from "./startCommit"
 
 /**
@@ -42,7 +44,10 @@ type Option = { value: string; label: string }
 
 /** `fillOptions`' rule: keep `want` if it is one of the options, else fall to the
  * first — delegating to the shared value-picker the default-selection maths uses. */
-const pick = (options: Option[], want: string | number | null | undefined) =>
+const pick = (
+  options: Option[],
+  want: string | number | null | undefined,
+) =>
   pickOptionValue(
     options.map((o) => o.value),
     want,
@@ -54,18 +59,26 @@ export function StartModal() {
   const isCollection = item?.type === "collection"
 
   const [note, setNote] = useState("")
-  const [children, setChildren] = useState<CollectionChild[]>([])
+  const [children, setChildren] = useState<
+    CollectionChild[]
+  >([])
   const [seriesValue, setSeriesValue] = useState("")
-  const [episodeData, setEpisodeData] = useState<ShowEpisodes | null>(null)
+  const [episodeData, setEpisodeData] =
+    useState<ShowEpisodes | null>(null)
   const [seasonValue, setSeasonValue] = useState("")
   const [episodeValue, setEpisodeValue] = useState("")
-  const [isEpisodeShown, setIsEpisodeShown] = useState(false)
-  const [isLoadingEpisodes, setIsLoadingEpisodes] = useState(false)
+  const [isEpisodeShown, setIsEpisodeShown] =
+    useState(false)
+  const [isLoadingEpisodes, setIsLoadingEpisodes] =
+    useState(false)
 
   /** Load one series' seasons/episodes. `preset` is the {season, episode} to
    * preselect (the stored override, else where it would play next anyway). */
   const loadEpisodes = useCallback(
-    async (ratingKey: string, preset: StartPoint | null) => {
+    async (
+      ratingKey: string,
+      preset: StartPoint | null,
+    ) => {
       setIsLoadingEpisodes(true)
       setIsEpisodeShown(true)
 
@@ -74,21 +87,27 @@ export function StartModal() {
       // A per-profile channel passes the binding's `user_uuid` so the "watched" marks
       // reflect THAT profile's history, not the admin account's (queues/admin omit it).
       const uuid = entry?.accountUuid
-      const q = uuid ? `?uuid=${encodeURIComponent(uuid)}` : ""
+      const q = uuid
+        ? `?uuid=${encodeURIComponent(uuid)}`
+        : ""
 
       try {
-        data = await api<ShowEpisodes>("GET", `/api/show/${ratingKey}/episodes${q}`)
-      }
-      catch {
+        data = await api<ShowEpisodes>(
+          "GET",
+          `/api/show/${ratingKey}/episodes${q}`,
+        )
+      } catch {
         /* handled below */
       }
 
       setIsLoadingEpisodes(false)
 
-      if (!data || !data.seasons.length) {
+      if (!data?.seasons.length) {
         setEpisodeData(null)
         setIsEpisodeShown(false)
-        setNote("Could not read this series’ episodes from Plex.")
+        setNote(
+          "Could not read this series’ episodes from Plex.",
+        )
 
         return
       }
@@ -97,7 +116,10 @@ export function StartModal() {
 
       // The Season/Episode defaults come from one shared rule (`defaultStartPoint`),
       // so a collection member seeds exactly like a show entry does.
-      const { season, episode } = defaultStartPoint(data, preset)
+      const { season, episode } = defaultStartPoint(
+        data,
+        preset,
+      )
 
       setSeasonValue(season)
       setEpisodeValue(episode)
@@ -116,9 +138,11 @@ export function StartModal() {
       stored: StartPoint | null,
       nextEp: NextEp | null,
     ) => {
-      const child = kids.find((c) => String(c.ratingKey) === String(rk))
+      const child = kids.find(
+        (c) => String(c.ratingKey) === String(rk),
+      )
 
-      if (!child || child.type !== "show") {
+      if (child?.type !== "show") {
         setIsEpisodeShown(false)
         setEpisodeData(null)
         setNote(
@@ -173,14 +197,17 @@ export function StartModal() {
       let kids: CollectionChild[] = []
 
       try {
-        ;({ children: kids } = await api<{ children: CollectionChild[] }>(
+        ;({ children: kids } = await api<{
+          children: CollectionChild[]
+        }>(
           "GET",
           `/api/collection/${item.ratingKey}/children`,
         ))
-      }
-      catch {
+      } catch {
         if (!isStale) {
-          setNote("Could not read this collection’s members from Plex.")
+          setNote(
+            "Could not read this collection’s members from Plex.",
+          )
         }
 
         return
@@ -196,18 +223,30 @@ export function StartModal() {
           : item.nextEp?.memberRatingKey || null
       // A hand-written YAML entry may name the member by title rather than
       // ratingKey — the engine matches either, so the picker must too.
-      const byRatingKey = kids.some((c) => String(c.ratingKey) === String(want))
+      const byRatingKey = kids.some(
+        (c) => String(c.ratingKey) === String(want),
+      )
         ? want
         : kids.find(
-            (c) => c.title.toLowerCase() === String(want || "").toLowerCase(),
+            (c) =>
+              c.title.toLowerCase() ===
+              String(want || "").toLowerCase(),
           )?.ratingKey
       const chosen = pick(
-        kids.map((c) => ({ label: c.title, value: String(c.ratingKey) })),
+        kids.map((c) => ({
+          label: c.title,
+          value: String(c.ratingKey),
+        })),
         byRatingKey,
       )
 
       setSeriesValue(chosen)
-      await paintMember(chosen, kids, item.start, item.nextEp)
+      await paintMember(
+        chosen,
+        kids,
+        item.start,
+        item.nextEp,
+      )
     }
 
     void run()
@@ -221,19 +260,28 @@ export function StartModal() {
 
   if (!entry || !item) {
     return (
-      <Modal id="startmodal" isOpen={false} onClose={closeStartModal} title="Start from…" titleId="startmodal-title">
+      <Modal
+        id="startmodal"
+        isOpen={false}
+        onClose={closeStartModal}
+        title="Start from…"
+        titleId="startmodal-title"
+      >
         <p className="subhint">
-          Playback begins here and keeps going automatically. Earlier episodes are
-          skipped — nothing is marked watched on Plex.
+          Playback begins here and keeps going
+          automatically. Earlier episodes are skipped —
+          nothing is marked watched on Plex.
         </p>
       </Modal>
     )
   }
 
   const seasonRow =
-    episodeData?.seasons.find((x) => String(x.season) === seasonValue) ??
-    episodeData?.seasons[0]
-  const isSeasonShown = Boolean(episodeData?.multiSeason) && isEpisodeShown
+    episodeData?.seasons.find(
+      (x) => String(x.season) === seasonValue,
+    ) ?? episodeData?.seasons[0]
+  const isSeasonShown =
+    Boolean(episodeData?.multiSeason) && isEpisodeShown
 
   /** Read the pickers back out as the value to persist (null = automatic). */
   const readForm = (): StartPoint | null => {
@@ -256,7 +304,9 @@ export function StartModal() {
       }
     }
 
-    return start.series != null || start.episode != null ? start : null
+    return start.series != null || start.episode != null
+      ? start
+      : null
   }
 
   return (
@@ -294,11 +344,16 @@ export function StartModal() {
       titleId="startmodal-title"
     >
       <p className="subhint">
-        Playback begins here and keeps going automatically. Earlier episodes are
-        skipped — nothing is marked watched on Plex.
+        Playback begins here and keeps going automatically.
+        Earlier episodes are skipped — nothing is marked
+        watched on Plex.
       </p>
 
-      <label className="field" hidden={!isCollection} id="start-seriesbox">
+      <label
+        className="field"
+        hidden={!isCollection}
+        id="start-seriesbox"
+      >
         Series
         {/* The three pickers below are chained, and each key names the writer that
             is NOT the user.
@@ -314,7 +369,12 @@ export function StartModal() {
           label="Series"
           onChange={(v) => {
             setSeriesValue(v)
-            void paintMember(v, children, item.start, item.nextEp)
+            void paintMember(
+              v,
+              children,
+              item.start,
+              item.nextEp,
+            )
           }}
           options={
             children.length
@@ -338,7 +398,11 @@ export function StartModal() {
         />
       </label>
 
-      <label className="field" hidden={!isSeasonShown} id="start-seasonbox">
+      <label
+        className="field"
+        hidden={!isSeasonShown}
+        id="start-seasonbox"
+      >
         Season
         {/* Season: `loadEpisodes` writes the season list and `seasonValue`
             together, and it runs on open AND whenever a different member is picked
@@ -346,26 +410,38 @@ export function StartModal() {
             when that happens, and never when the user picks a season. */}
         <SelectListbox
           id="start-season"
-          key={(episodeData?.seasons ?? []).map((s) => s.season).join(",")}
+          key={(episodeData?.seasons ?? [])
+            .map((s) => s.season)
+            .join(",")}
           label="Season"
           onChange={(v) => {
             setSeasonValue(v)
 
-            const row = episodeData?.seasons.find((x) => String(x.season) === v)
+            const row = episodeData?.seasons.find(
+              (x) => String(x.season) === v,
+            )
 
             setEpisodeValue(
-              row?.episodes[0] ? String(row.episodes[0].episode) : "",
+              row?.episodes[0]
+                ? String(row.episodes[0].episode)
+                : "",
             )
           }}
-          options={(episodeData?.seasons ?? []).map((s) => ({
-            label: `Season ${s.season}`,
-            value: String(s.season),
-          }))}
+          options={(episodeData?.seasons ?? []).map(
+            (s) => ({
+              label: `Season ${s.season}`,
+              value: String(s.season),
+            }),
+          )}
           value={seasonValue}
         />
       </label>
 
-      <label className="field" hidden={!isEpisodeShown} id="start-episodebox">
+      <label
+        className="field"
+        hidden={!isEpisodeShown}
+        id="start-episodebox"
+      >
         Episode
         {/* Episode: two writers other than the user, and both move the SEASON —
             `loadEpisodes` on open, and the season picker's own `onChange`, which

@@ -7,14 +7,27 @@ import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
 import { api, thumbUrl } from "../lib/api"
 import { activeBinding } from "../lib/channels"
-import { byTitle, isStartable, startLabel, tileFace } from "../lib/tileFace"
-import type { ChannelMember, RegistrySet, SearchHit } from "../lib/types"
+import {
+  byTitle,
+  isStartable,
+  startLabel,
+  tileFace,
+} from "../lib/tileFace"
+import type {
+  ChannelMember,
+  RegistrySet,
+  SearchHit,
+} from "../lib/types"
 import {
   type EntryActions,
   openStartModal,
   openTileMenu,
 } from "../state/overlays"
-import { getState, setState, setStatus } from "../state/store"
+import {
+  getState,
+  setState,
+  setStatus,
+} from "../state/store"
 
 /**
  * Explicit CURATED MEMBERS of a rotation channel.
@@ -54,8 +67,13 @@ export function ChannelMembers({
   // The active binding's Plex Home uuid — threaded to the members fetch (so tile next-up is
   // per-account) and onto each entry (so the start picker's watched marks match). Null on a
   // legacy single-binding channel => admin view, unchanged.
-  const accountUuid = activeBinding(channel, currentProfile).user_uuid
-  const [members, setMembers] = useState<ChannelMember[]>([])
+  const accountUuid = activeBinding(
+    channel,
+    currentProfile,
+  ).user_uuid
+  const [members, setMembers] = useState<ChannelMember[]>(
+    [],
+  )
   const gridRef = useRef<HTMLUListElement>(null)
   const reqRef = useRef(0)
   const paintedRef = useRef<string | null>(null)
@@ -69,17 +87,21 @@ export function ChannelMembers({
   )
 
   const rawMembers = () =>
-    (getState().reg?.sets.find((s) => s.id === channel.id)?.members ??
-      []) as unknown[]
+    (getState().reg?.sets.find((s) => s.id === channel.id)
+      ?.members ?? []) as unknown[]
 
   const reload = async (chId: string) => {
     const req = ++reqRef.current
 
     try {
-      const { members: found } = await api<{ members: ChannelMember[] }>(
+      const { members: found } = await api<{
+        members: ChannelMember[]
+      }>(
         "GET",
         `/api/sets/${chId}/members${
-          accountUuid ? `?uuid=${encodeURIComponent(accountUuid)}` : ""
+          accountUuid
+            ? `?uuid=${encodeURIComponent(accountUuid)}`
+            : ""
         }`,
       )
 
@@ -88,11 +110,13 @@ export function ChannelMembers({
       found.sort(byTitle)
       setMembers(found)
       paintedRef.current = chId
-    }
-    catch (e) {
+    } catch (e) {
       if (req === reqRef.current) {
         setMembers([])
-        setStatus("Members failed: " + (e as Error).message, "err")
+        setStatus(
+          `Members failed: ${(e as Error).message}`,
+          "err",
+        )
       }
     }
   }
@@ -119,30 +143,38 @@ export function ChannelMembers({
    * and the very next edit both see it) and PATCH in the background. A failure
    * re-syncs from the server and repaints, so the optimistic tile can't linger.
    */
-  const saveMembersLive = async (chId: string, next: unknown[]) => {
-    const local = getState().reg?.sets.find((x) => x.id === chId)
+  const saveMembersLive = async (
+    chId: string,
+    next: unknown[],
+  ) => {
+    const local = getState().reg?.sets.find(
+      (x) => x.id === chId,
+    )
 
     if (local) local.members = next
 
     try {
-      await api("PATCH", `/api/sets/${chId}`, { members: next })
+      await api("PATCH", `/api/sets/${chId}`, {
+        members: next,
+      })
 
-      const reg = await api<{ sets: RegistrySet[]; libraries: never[] }>(
-        "GET",
-        "/api/sets",
-      )
+      const reg = await api<{
+        sets: RegistrySet[]
+        libraries: never[]
+      }>("GET", "/api/sets")
 
       setState({ reg: reg as never })
-    }
-    catch (e) {
-      setStatus("Save failed: " + (e as Error).message, "err")
+    } catch (e) {
+      setStatus(
+        `Save failed: ${(e as Error).message}`,
+        "err",
+      )
 
       try {
         const reg = await api("GET", "/api/sets")
 
         setState({ reg: reg as never })
-      }
-      catch {
+      } catch {
         /* offline: leave the local view */
       }
 
@@ -193,7 +225,9 @@ export function ChannelMembers({
       else delete base.start
 
       current[m.index] = base
-      await api("PATCH", `/api/sets/${channel.id}`, { members: current })
+      await api("PATCH", `/api/sets/${channel.id}`, {
+        members: current,
+      })
 
       const reg = await api("GET", "/api/sets")
 
@@ -208,7 +242,9 @@ export function ChannelMembers({
       id="chmembers-box"
     >
       <h2 id="chmembers-title">
-        {members.length ? `Members — curated (${members.length})` : "Members"}
+        {members.length
+          ? `Members — curated (${members.length})`
+          : "Members"}
       </h2>
       <div className="add chmadd">
         <SearchDropdown<SearchHit>
@@ -216,7 +252,9 @@ export function ChannelMembers({
             // scope=all: a curated member is a manual include, not bound to the
             // channel's pool libraries — so search every library (e.g. add an Anime
             // show to a Shows-only channel).
-            const { results } = await api<{ results: SearchHit[] }>(
+            const { results } = await api<{
+              results: SearchHit[]
+            }>(
               "GET",
               `/api/search?scope=all&q=${encodeURIComponent(q)}&collections=1`,
             )
@@ -235,21 +273,31 @@ export function ChannelMembers({
             return {
               content: (
                 <>
-                  {!isCollection || hit.hasThumb
-                    ? <img alt="" src={thumbUrl(hit.ratingKey)} />
-                    : <span aria-hidden="true" className="noposter" />}
+                  {!isCollection || hit.hasThumb ? (
+                    <img
+                      alt=""
+                      src={thumbUrl(hit.ratingKey)}
+                    />
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="noposter"
+                    />
+                  )}
                   <span>
-                    {hit.title}
-                    {" "}
-                    {isCollection
-                      ? (
-                          <>
-                            <span className="collbadge">Collection</span>
-                            {" "}
-                            <span className="y">{`${hit.childCount || 0} items`}</span>
-                          </>
-                        )
-                      : <span className="y">{hit.year || ""}</span>}
+                    {hit.title}{" "}
+                    {isCollection ? (
+                      <>
+                        <span className="collbadge">
+                          Collection
+                        </span>{" "}
+                        <span className="y">{`${hit.childCount || 0} items`}</span>
+                      </>
+                    ) : (
+                      <span className="y">
+                        {hit.year || ""}
+                      </span>
+                    )}
                   </span>
                 </>
               ),
@@ -262,47 +310,69 @@ export function ChannelMembers({
                 // add flow.
                 const value = isCollection
                   ? `Collection: ${hit.title}`
-                  : { ratingKey: hit.ratingKey, title: label }
+                  : {
+                      ratingKey: hit.ratingKey,
+                      title: label,
+                    }
                 const isDuplicate = current.some((v) =>
                   isCollection
                     ? String(v).trim().toLowerCase() ===
                       `collection: ${hit.title}`.toLowerCase()
                     : String(
                         v && typeof v === "object"
-                          ? (v as { ratingKey?: string }).ratingKey
+                          ? (v as { ratingKey?: string })
+                              .ratingKey
                           : v,
                       ) === String(hit.ratingKey),
                 )
 
                 if (isDuplicate) {
-                  setStatus(`Already a member — “${hit.title}”`, "ok")
+                  setStatus(
+                    `Already a member — “${hit.title}”`,
+                    "ok",
+                  )
 
                   return
                 }
 
                 const optimistic: ChannelMember = {
-                  childCount: isCollection ? (hit.childCount ?? null) : null,
+                  childCount: isCollection
+                    ? (hit.childCount ?? null)
+                    : null,
                   index: current.length,
                   nextEp: null,
                   ratingKey: hit.ratingKey,
                   resolved: true,
                   start: null,
                   title: hit.title,
-                  type: isCollection ? "collection" : hit.type,
-                  year: isCollection ? null : (hit.year || null),
+                  type: isCollection
+                    ? "collection"
+                    : hit.type,
+                  year: isCollection
+                    ? null
+                    : hit.year || null,
                 }
 
                 setMembers((prev) => {
-                  const at = prev.findIndex((x) => byTitle(x, optimistic) > 0)
+                  const at = prev.findIndex(
+                    (x) => byTitle(x, optimistic) > 0,
+                  )
                   const next = [...prev]
 
-                  next.splice(at < 0 ? next.length : at, 0, optimistic)
+                  next.splice(
+                    at < 0 ? next.length : at,
+                    0,
+                    optimistic,
+                  )
 
                   return next
                 })
                 setStatus(`Added “${hit.title}”`, "ok")
 
-                void saveMembersLive(channel.id, [...current, value]).then(() => {
+                void saveMembersLive(channel.id, [
+                  ...current,
+                  value,
+                ]).then(() => {
                   // Reconcile: fills in what only the server knows (a collection's
                   // next-up member, a show's next episode).
                   void reload(channel.id)
@@ -315,10 +385,11 @@ export function ChannelMembers({
       {/* Shown only when the channel has no curated members: a slim one-liner
           instead of a poster-sized empty tile. */}
       <p className="chmhint muted">
-        Optional manual includes — a show, Plex Collection, movie, or short played ON
-        TOP of the rule pool below (the opposite of Blocked). Members can come from
-        any library, not just this channel&apos;s. Leave empty to play purely by the
-        rule.
+        Optional manual includes — a show, Plex Collection,
+        movie, or short played ON TOP of the rule pool below
+        (the opposite of Blocked). Members can come from any
+        library, not just this channel&apos;s. Leave empty
+        to play purely by the rule.
       </p>
       <ul
         className="grid editable"
@@ -335,33 +406,37 @@ export function ChannelMembers({
               badges={
                 <>
                   <TypeBadge face={face} item={m} />
-                  {m.start
-                    ? (
-                        <Tip
-                          label={`Manual start point${
-                            m.nextEp?.startMember
-                              ? ` — begins at “${m.nextEp.startMember}”`
-                              : ""
-                          }. Click to change it or go back to automatic.`}
-                        >
-                          <button
-                            className="badge startbadge"
-                            onClick={() => openStartModal(entry)}
-                            type="button"
-                          >
-                            {startLabel(m.start)}
-                          </button>
-                        </Tip>
-                      )
-                    : null}
+                  {m.start ? (
+                    <Tip
+                      label={`Manual start point${
+                        m.nextEp?.startMember
+                          ? ` — begins at “${m.nextEp.startMember}”`
+                          : ""
+                      }. Click to change it or go back to automatic.`}
+                    >
+                      <button
+                        className="badge startbadge"
+                        onClick={() =>
+                          openStartModal(entry)
+                        }
+                        type="button"
+                      >
+                        {startLabel(m.start)}
+                      </button>
+                    </Tip>
+                  ) : null}
                 </>
               }
-              className={m.resolved ? undefined : "unresolved"}
+              className={
+                m.resolved ? undefined : "unresolved"
+              }
               dataKey={String(m.ratingKey || m.title)}
               key={String(m.ratingKey || m.title)}
               next={{
                 isDone: face.nextDone,
-                onStart: isStartable(m) ? () => openStartModal(entry) : undefined,
+                onStart: isStartable(m)
+                  ? () => openStartModal(entry)
+                  : undefined,
                 text: face.next,
                 tooltip: `${
                   face.from && m.childCount != null
@@ -370,7 +445,9 @@ export function ChannelMembers({
                 }${
                   isStartable(m)
                     ? `\nTap to choose where this ${
-                        m.type === "collection" ? "collection" : "show"
+                        m.type === "collection"
+                          ? "collection"
+                          : "show"
                       } starts`
                     : ""
                 }`,
@@ -380,12 +457,18 @@ export function ChannelMembers({
                 openTileMenu(e.clientX, e.clientY, entry)
               }}
               onRemove={() => removeMember(m)}
-              posterRatingKey={m.resolved ? face.ratingKey : null}
-              title={face.title + (face.year ? ` (${face.year})` : "")}
+              posterRatingKey={
+                m.resolved ? face.ratingKey : null
+              }
+              title={
+                face.title +
+                (face.year ? ` (${face.year})` : "")
+              }
               titleTooltip={
                 face.from
                   ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-                  : face.title + (face.year ? ` (${face.year})` : "")
+                  : face.title +
+                    (face.year ? ` (${face.year})` : "")
               }
             />
           )

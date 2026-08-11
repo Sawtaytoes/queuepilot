@@ -60,22 +60,22 @@
      light  on-solid #111111 on solid #E5A00D .. 10.4:1
    =================================================================== */
 :root {
-  --color-intent-accent-surface: #FBF0DA;
-  --color-intent-accent-surface-hover: #F6E6C4;
-  --color-intent-accent-border: #C08A2A;
-  --color-intent-accent-content: #7A5300;
-  --color-intent-accent-solid: #E5A00D;
-  --color-intent-accent-solid-hover: #CE8F0B;
+  --color-intent-accent-surface: #fbf0da;
+  --color-intent-accent-surface-hover: #f6e6c4;
+  --color-intent-accent-border: #c08a2a;
+  --color-intent-accent-content: #7a5300;
+  --color-intent-accent-solid: #e5a00d;
+  --color-intent-accent-solid-hover: #ce8f0b;
   --color-intent-accent-on-solid: #111111;
 }
 
 [data-scheme="dark"] {
-  --color-intent-accent-surface: #33260A;
-  --color-intent-accent-surface-hover: #3F2F0C;
-  --color-intent-accent-border: #5C4410;
-  --color-intent-accent-content: #E5A00D;
-  --color-intent-accent-solid: #E5A00D;
-  --color-intent-accent-solid-hover: #F0AF28;
+  --color-intent-accent-surface: #33260a;
+  --color-intent-accent-surface-hover: #3f2f0c;
+  --color-intent-accent-border: #5c4410;
+  --color-intent-accent-content: #e5a00d;
+  --color-intent-accent-solid: #e5a00d;
+  --color-intent-accent-solid-hover: #f0af28;
   --color-intent-accent-on-solid: #111111;
 }
 
@@ -99,12 +99,14 @@ html {
   scroll-padding-top: calc(var(--header-h, 96px) + 12px);
 }
 /* Same offset for any element scrolled to by id. */
-[id] { scroll-margin-top: calc(var(--header-h, 96px) + 12px); }
+[id] {
+  scroll-margin-top: calc(var(--header-h, 96px) + 12px);
+}
 
 body {
   background: var(--color-surface-base);
   color: var(--color-content-primary);
-  font: 1rem/1.5 var(--font-sans);
+  font: 1rem / 1.5 var(--font-sans);
   margin: 0;
   padding-bottom: 80px;
 }
@@ -122,21 +124,56 @@ header {
 }
 /* `.bar` is the popover anchor: the two `.hmenu` panels are absolutely positioned to
    its edges. `position: relative` scopes them here rather than to the sticky header. */
-header .bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; position: relative; }
+header .bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  position: relative;
+}
 /* F4: the chrome cluster (undo/redo/scheme/toolbar) shares the bar row, pushed right.
    When it doesn't fit, `flex-wrap` drops it to a second line and the ResizeObserver
    picks up the taller height. */
-.chrome { display: flex; align-items: center; gap: 14px; margin-left: auto; }
-#gslot-desktop:empty { display: none; }
-header h1 { margin: 0; font-size: 1.5rem; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chrome {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-left: auto;
+}
+#gslot-desktop:empty {
+  display: none;
+}
+header h1 {
+  margin: 0;
+  font-size: 1.5rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* The info line carries the sub help/now-playing text and the status toast, side by
    side on ONE full-width row. Each stays a single ellipsised line, so neither can grow
    the header the way `#status` at `width: 9ch` did (a long "Play failed … Connection
    refused" wrapped into a ~12-line tower). `min-height` reserves the row so toggling
    `#sub`'s `hidden` attribute doesn't shift the grid below. (CLS, 2026-08-03.) */
-.infoline { display: flex; align-items: baseline; gap: 12px; min-height: 1.25rem; margin-top: 4px; }
-header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-content-muted); }
+.infoline {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-height: 1.25rem;
+  margin-top: 4px;
+}
+header .sub {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-content-muted);
+}
 #status {
   flex: 0 1 auto;
   min-width: 0;
@@ -153,8 +190,12 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
 /* The left/right popover menus — mux-magic's PageHeader mechanism. They are the MOBILE
    layout: the toggles and panels are `display:none` on desktop (where `.chrome` sits
    inline). Panels stay mounted in both states so opacity/transform can transition. */
-.menu-toggle { display: none; }
-.hmenu { display: none; }
+.menu-toggle {
+  display: none;
+}
+.hmenu {
+  display: none;
+}
 @media (max-width: 760px) {
   /* Toggles are ≥44px tall (the token minTouchTarget) so they're a comfortable tap. */
   .menu-toggle {
@@ -166,8 +207,14 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
     font-size: 1.25rem;
   }
   /* Everything the popovers absorb comes off the bar on mobile. */
-  header #back, header .namepen, .chrome { display: none; }
-  #menu-actions { margin-left: auto; }
+  header #back,
+  header .namepen,
+  .chrome {
+    display: none;
+  }
+  #menu-actions {
+    margin-left: auto;
+  }
 
   .hmenu {
     display: flex;
@@ -178,7 +225,10 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
     top: calc(100% - 4px);
     min-width: 12rem;
     padding: 8px;
-    background: var(--color-surface-raised, var(--color-surface-base));
+    background: var(
+      --color-surface-raised,
+      var(--color-surface-base)
+    );
     border: 1px solid var(--color-border-default);
     border-radius: 12px;
     box-shadow: 0 12px 28px rgba(0, 0, 0, 0.5);
@@ -188,7 +238,10 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
     pointer-events: none;
     /* The closed offset is VERTICAL, and small, on purpose — see below. */
     transform: translateY(4px);
-    transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0.18s;
+    transition:
+      opacity 0.18s ease-out,
+      transform 0.18s ease-out,
+      visibility 0s linear 0.18s;
   }
   /* These two only ANCHOR the panel; they must not move it sideways.
      The closed state used to be `translateX(-110%)` / `translateX(110%)`, sliding each
@@ -202,14 +255,21 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
 
      Fading up 4px matches this app's existing popover motion (`plex-channels-chmfade`,
      `from { opacity: 0; transform: translateY(4px) }`) and never leaves the page box. */
-  .hmenu-left { inset-inline-start: 0; }
-  .hmenu-right { inset-inline-end: 0; }
+  .hmenu-left {
+    inset-inline-start: 0;
+  }
+  .hmenu-right {
+    inset-inline-end: 0;
+  }
   .hmenu.open {
     opacity: 1;
     visibility: visible;
     pointer-events: auto;
     transform: none;
-    transition: opacity 0.18s ease-out, transform 0.18s ease-out, visibility 0s linear 0s;
+    transition:
+      opacity 0.18s ease-out,
+      transform 0.18s ease-out,
+      visibility 0s linear 0s;
   }
   .hmenu-item {
     justify-content: flex-start;
@@ -218,14 +278,29 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
     text-align: start;
     font-size: 1rem;
   }
-  .hmenu-item:disabled { opacity: 0.4; }
-  .hmenu-scheme { display: flex; justify-content: flex-start; padding-top: 2px; }
+  .hmenu-item:disabled {
+    opacity: 0.4;
+  }
+  .hmenu-scheme {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: 2px;
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   /* Later in source order than the `.hmenu` rule above and the same specificity, so the
      closed panel doesn't move at all — it only fades. */
-  .hmenu { transition: opacity 0.18s ease-out, visibility 0s linear 0.18s; transform: none; }
-  .hmenu.open { transition: opacity 0.18s ease-out, visibility 0s linear 0s; }
+  .hmenu {
+    transition:
+      opacity 0.18s ease-out,
+      visibility 0s linear 0.18s;
+    transform: none;
+  }
+  .hmenu.open {
+    transition:
+      opacity 0.18s ease-out,
+      visibility 0s linear 0s;
+  }
 }
 
 /* ===================================================================
@@ -240,19 +315,38 @@ header .sub { margin: 0; flex: 1 1 auto; min-width: 0; overflow: hidden; text-ov
       own), but a CHECKBOX still paints its native widget and the reset leaves it a
       hollow, cornerless box. The library/ratings pickers are ~40 checkboxes.
    =================================================================== */
-h3 { font-size: 1.15rem; font-weight: 600; }
+h3 {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
 
-input[type='checkbox'], input[type='radio'] {
+input[type="checkbox"],
+input[type="radio"] {
   appearance: auto;
   background-color: revert;
   border: revert;
   border-radius: revert;
 }
 
-button { font: inherit; cursor: pointer; }
-#undo, #redo { padding: 6px 11px; font-size: 1.05rem; line-height: 1; }
-#undo:disabled, #redo:disabled { opacity: 0.35; cursor: default; }
-#undo:disabled:hover, #redo:disabled:hover { border-color: var(--color-border-default); }
+button {
+  font: inherit;
+  cursor: pointer;
+}
+#undo,
+#redo {
+  padding: 6px 11px;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+#undo:disabled,
+#redo:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+#undo:disabled:hover,
+#redo:disabled:hover {
+  border-color: var(--color-border-default);
+}
 button.ghost {
   background: var(--color-surface-overlay);
   border: 1px solid var(--color-border-default);
@@ -260,9 +354,13 @@ button.ghost {
   color: var(--color-content-primary);
   padding: 8px 14px;
 }
-button.ghost:hover { border-color: var(--color-intent-accent-solid); }
+button.ghost:hover {
+  border-color: var(--color-intent-accent-solid);
+}
 
-.view { padding: 20px 24px 40px; }
+.view {
+  padding: 20px 24px 40px;
+}
 
 /* ---- HOME: Plex-style horizontal shelves ---- */
 /* `content-visibility: auto` skips layout and paint for shelves that are off-screen.
@@ -276,44 +374,114 @@ button.ghost:hover { border-color: var(--color-intent-accent-solid); }
   contain-intrinsic-size: auto 320px;
   content-visibility: auto;
 }
-.shelf h2 { margin: 0 0 10px; display: flex; align-items: center; gap: 2px; }
+.shelf h2 {
+  margin: 0 0 10px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
    Tailwind v4 scans source for class tokens it emits that utility the moment the
    word appears, hiding this very button. `-toggle` keeps us off the reserved name. */
 .shelf .collapse-toggle {
-  background: none; border: none; color: var(--color-content-muted); font-size: 0.95rem;
-  padding: 4px 6px; line-height: 1; cursor: pointer; transition: transform 0.15s, color 0.15s;
+  background: none;
+  border: none;
+  color: var(--color-content-muted);
+  font-size: 0.95rem;
+  padding: 4px 6px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    transform 0.15s,
+    color 0.15s;
 }
-.shelf .collapse-toggle:hover { color: var(--color-intent-accent-solid); }
-.shelf.collapsed .collapse-toggle { transform: rotate(-90deg); }   /* ▾ down (open) → ► right (collapsed) */
-.shelf.collapsed { margin-bottom: 12px; }
-.shelf.collapsed .strip-wrap { display: none; }
+.shelf .collapse-toggle:hover {
+  color: var(--color-intent-accent-solid);
+}
+.shelf.collapsed .collapse-toggle {
+  transform: rotate(-90deg);
+} /* ▾ down (open) → ► right (collapsed) */
+.shelf.collapsed {
+  margin-bottom: 12px;
+}
+.shelf.collapsed .strip-wrap {
+  display: none;
+}
 .shelf h2 .open {
-  background: none; border: none; color: var(--color-content-primary);
-  font-size: 1.2rem; font-weight: 600; padding: 4px 2px;
-  display: inline-flex; align-items: baseline; gap: 10px;
+  background: none;
+  border: none;
+  color: var(--color-content-primary);
+  font-size: 1.2rem;
+  font-weight: 600;
+  padding: 4px 2px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
 }
-.shelf h2 .open:hover { color: var(--color-intent-accent-solid); }
-.shelf h2 .sec { color: var(--color-content-muted); font-weight: 400; font-size: 0.85rem; }
-.shelf h2 .chev { color: var(--color-intent-accent-solid); font-size: 1.3rem; }
-.shelf h2 .shelfspacer { flex: 1; }
-.shelf h2 .shelfedit, .shelf h2 .shelfdrag {
-  background: none; border: none; color: var(--color-content-muted); font-size: 1.05rem;
-  padding: 4px 8px; line-height: 1; opacity: 0; transition: opacity 0.15s, color 0.15s;
+.shelf h2 .open:hover {
+  color: var(--color-intent-accent-solid);
 }
-.shelf h2:hover .shelfedit, .shelf h2:hover .shelfdrag,
-.shelf.dragging .shelfdrag { opacity: 1; }
-.shelf h2 .shelfedit:hover { color: var(--color-intent-accent-solid); }
-.shelf h2 .shelfdrag { cursor: grab; touch-action: none; }
-.shelf.dragging { opacity: 0.55; }
-.shelf.dragging .shelfdrag { cursor: grabbing; }
-@media (pointer: coarse) { .shelf h2 .shelfedit, .shelf h2 .shelfdrag { opacity: 0.7; } }
+.shelf h2 .sec {
+  color: var(--color-content-muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+}
+.shelf h2 .chev {
+  color: var(--color-intent-accent-solid);
+  font-size: 1.3rem;
+}
+.shelf h2 .shelfspacer {
+  flex: 1;
+}
+.shelf h2 .shelfedit,
+.shelf h2 .shelfdrag {
+  background: none;
+  border: none;
+  color: var(--color-content-muted);
+  font-size: 1.05rem;
+  padding: 4px 8px;
+  line-height: 1;
+  opacity: 0;
+  transition:
+    opacity 0.15s,
+    color 0.15s;
+}
+.shelf h2:hover .shelfedit,
+.shelf h2:hover .shelfdrag,
+.shelf.dragging .shelfdrag {
+  opacity: 1;
+}
+.shelf h2 .shelfedit:hover {
+  color: var(--color-intent-accent-solid);
+}
+.shelf h2 .shelfdrag {
+  cursor: grab;
+  touch-action: none;
+}
+.shelf.dragging {
+  opacity: 0.55;
+}
+.shelf.dragging .shelfdrag {
+  cursor: grabbing;
+}
+@media (pointer: coarse) {
+  .shelf h2 .shelfedit,
+  .shelf h2 .shelfdrag {
+    opacity: 0.7;
+  }
+}
 
-.strip-wrap { position: relative; }
+.strip-wrap {
+  position: relative;
+}
 ul.strip {
-  list-style: none; margin: 0; padding: 4px 0 6px;
-  display: flex; gap: 14px;
-  overflow-x: auto; overflow-y: hidden;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 6px;
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  overflow-y: hidden;
   scroll-behavior: smooth;
   scroll-snap-type: x proximity;
   /* The scrollbar is ALWAYS there (thin) so its track owns constant space — only the
@@ -327,31 +495,89 @@ ul.strip {
      compounding the drop position way right of the pointer. */
   overflow-anchor: none;
 }
-.strip-wrap:hover ul.strip { scrollbar-color: var(--color-border-default) transparent; }
-/* While a poster drag is live, snap/smooth would also fight the insertions. */
-body.hdrag ul.strip { scroll-snap-type: none; scroll-behavior: auto; }
-/* Edge shadows: the persistent "more items this way" cue (the arrows appear on hover). */
-.strip-wrap::before, .strip-wrap::after {
-  content: ''; position: absolute; top: 0; bottom: 0; width: 26px;
-  pointer-events: none; z-index: 1; opacity: 0; transition: opacity 0.15s;
+.strip-wrap:hover ul.strip {
+  scrollbar-color: var(--color-border-default) transparent;
 }
-.strip-wrap::before { left: 0; background: linear-gradient(90deg, var(--color-scrim), transparent); }
-.strip-wrap::after { right: 0; background: linear-gradient(270deg, var(--color-scrim), transparent); }
-.strip-wrap.more-left::before { opacity: 1; }
-.strip-wrap.more-right::after { opacity: 1; }
-.strip .tile { scroll-snap-align: start; }
+/* While a poster drag is live, snap/smooth would also fight the insertions. */
+body.hdrag ul.strip {
+  scroll-snap-type: none;
+  scroll-behavior: auto;
+}
+/* Edge shadows: the persistent "more items this way" cue (the arrows appear on hover). */
+.strip-wrap::before,
+.strip-wrap::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.strip-wrap::before {
+  left: 0;
+  background: linear-gradient(
+    90deg,
+    var(--color-scrim),
+    transparent
+  );
+}
+.strip-wrap::after {
+  right: 0;
+  background: linear-gradient(
+    270deg,
+    var(--color-scrim),
+    transparent
+  );
+}
+.strip-wrap.more-left::before {
+  opacity: 1;
+}
+.strip-wrap.more-right::after {
+  opacity: 1;
+}
+.strip .tile {
+  scroll-snap-align: start;
+}
 .strip-wrap .scroll {
-  position: absolute; top: 0; bottom: 0; width: 44px;
-  background: linear-gradient(90deg, var(--color-surface-base), transparent);
-  border: none; color: var(--color-content-primary); font-size: 1.8rem; opacity: 0; transition: opacity 0.15s;
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 44px;
+  background: linear-gradient(
+    90deg,
+    var(--color-surface-base),
+    transparent
+  );
+  border: none;
+  color: var(--color-content-primary);
+  font-size: 1.8rem;
+  opacity: 0;
+  transition: opacity 0.15s;
   z-index: 2;
 }
 /* Mirror the fade with the gradient direction, NOT a rotate — rotating the button
    flipped its "›" glyph into a second left arrow. */
-.strip-wrap .scroll.right { right: 0; background: linear-gradient(270deg, var(--color-surface-base), transparent); }
-.strip-wrap:hover .scroll:not([hidden]) { opacity: 0.85; }
-.strip-wrap .scroll:hover { opacity: 1; }
-.empty { color: var(--color-content-muted); padding: 8px 2px; }
+.strip-wrap .scroll.right {
+  right: 0;
+  background: linear-gradient(
+    270deg,
+    var(--color-surface-base),
+    transparent
+  );
+}
+.strip-wrap:hover .scroll:not([hidden]) {
+  opacity: 0.85;
+}
+.strip-wrap .scroll:hover {
+  opacity: 1;
+}
+.empty {
+  color: var(--color-content-muted);
+  padding: 8px 2px;
+}
 
 /* The two POSTER containers' placeholders hold an `EmptyState`, which centres
    itself and so needs a row to centre in. Both are `<li>`s sized like a poster:
@@ -364,8 +590,14 @@ body.hdrag ul.strip { scroll-snap-type: none; scroll-behavior: auto; }
    Deliberately NOT applied to `#ch-block` / `#ch-movieexcludes`. Those are column
    flex containers, where `flex-basis` sizes the MAIN axis — it made a one-line
    note 123px tall — and they kept their plain sentence anyway (see below). */
-.strip .empty { flex: 1 0 100%; padding: 0; }
-ul.grid .empty { grid-column: 1 / -1; padding: 0; }
+.strip .empty {
+  flex: 1 0 100%;
+  padding: 0;
+}
+ul.grid .empty {
+  grid-column: 1 / -1;
+  padding: 0;
+}
 
 /* ---- the one thing this app has to say about `@charcuterie/ui`'s markup ----
 
@@ -401,46 +633,119 @@ ul.grid .empty { grid-column: 1 / -1; padding: 0; }
 }
 
 /* ---- QUEUE view: add bar + wrapped poster grid ---- */
-.add { display: flex; gap: 12px; align-items: center; margin-bottom: 18px; position: relative; flex-wrap: wrap; }
+.add {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 18px;
+  position: relative;
+  flex-wrap: wrap;
+}
 .add input {
-  flex: 1; min-width: 220px;
-  background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 8px;
-  color: var(--color-content-primary); padding: 11px 13px; font-size: 1rem;
+  flex: 1;
+  min-width: 220px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  padding: 11px 13px;
+  font-size: 1rem;
 }
-.addpos { color: var(--color-content-muted); display: flex; align-items: center; gap: 6px; }
+.addpos {
+  color: var(--color-content-muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
 .results {
-  list-style: none; margin: 0; padding: 0; position: absolute; top: 54px; left: 0; right: 0;
-  max-height: 380px; overflow: auto; border: 1px solid var(--color-border-default); border-radius: 8px;
-  background: var(--color-surface-overlay); display: none; z-index: 8;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 54px;
+  left: 0;
+  right: 0;
+  max-height: 380px;
+  overflow: auto;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-surface-overlay);
+  display: none;
+  z-index: 8;
 }
-.results.open { display: block; }
-.results li { display: flex; gap: 12px; align-items: center; padding: 9px 11px; cursor: pointer; }
-.results li:hover, .results li.active { background: var(--color-surface-raised); }
-.results li.active { outline: 1px solid var(--color-intent-accent-solid); outline-offset: -1px; }
-.results img { width: 40px; height: 60px; object-fit: cover; border-radius: 4px; background: var(--color-surface-raised); }
-.results .y { color: var(--color-content-muted); }
+.results.open {
+  display: block;
+}
+.results li {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+.results li:hover,
+.results li.active {
+  background: var(--color-surface-raised);
+}
+.results li.active {
+  outline: 1px solid var(--color-intent-accent-solid);
+  outline-offset: -1px;
+}
+.results img {
+  width: 40px;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 4px;
+  background: var(--color-surface-raised);
+}
+.results .y {
+  color: var(--color-content-muted);
+}
 
 ul.grid {
-  list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(var(--tile), 1fr)); gap: 18px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(var(--tile), 1fr)
+    );
+  gap: 18px;
   overflow-anchor: none; /* drag insertions must not shift the page via scroll anchoring */
 }
 
 /* ---- Poster tile (shared by shelf + grid) ---- */
-.tile { width: 100%; }
-.strip .tile { width: var(--tile); flex: 0 0 var(--tile); }
+.tile {
+  width: 100%;
+}
+.strip .tile {
+  width: var(--tile);
+  flex: 0 0 var(--tile);
+}
 /* The loading placeholders in the eligible pool (F3): the SAME geometry as a real tile so
    nothing shifts when data lands, but a distinct class so `#chpool li.tile` (the e2e "pool
    loaded" wait) never matches a placeholder. */
-.skeltile { width: 100%; list-style: none; }
+.skeltile {
+  width: 100%;
+  list-style: none;
+}
 .skeltile .thumb {
-  position: relative; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+  overflow: hidden;
   background: var(--color-surface-overlay);
 }
 .tile .thumb {
-  position: relative; aspect-ratio: 2 / 3; border-radius: 10px; overflow: hidden;
-  background: var(--color-surface-overlay); border: 2px solid transparent;
-  user-select: none; -webkit-user-select: none;
+  position: relative;
+  aspect-ratio: 2 / 3;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--color-surface-overlay);
+  border: 2px solid transparent;
+  user-select: none;
+  -webkit-user-select: none;
   /* The long-press that arms a touch drag otherwise pops iOS Safari's image callout
      menu, which pre-empts the gesture — suppress it. (Android's context menu is killed
      via a contextmenu preventDefault in useTileGestures.) */
@@ -449,42 +754,128 @@ ul.grid {
 /* Suppress the browser's native image drag/select so the custom pointer-drag owns the gesture
    (a native <img> drag fires pointercancel and kills our reorder). */
 .tile .poster {
-  width: 100%; height: 100%; object-fit: cover; display: block;
-  -webkit-user-drag: none; user-select: none; -webkit-user-select: none;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  -webkit-user-drag: none;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.tile.unresolved .thumb { border-color: var(--color-intent-danger-solid); }
-.tile .cap { padding: 8px 2px 0; }
-.tile .title { display: block; font-size: 0.98rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile .next { display: block; font-size: 0.82rem; color: var(--color-intent-accent-content); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tile .next.done { color: var(--color-content-muted); }
-.tile .next:empty { display: none; }
-.tile .badges { display: flex; gap: 6px; margin-top: 4px; align-items: center; flex-wrap: wrap; }
-.tile .eps { color: var(--color-content-muted); font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px; }
+.tile.unresolved .thumb {
+  border-color: var(--color-intent-danger-solid);
+}
+.tile .cap {
+  padding: 8px 2px 0;
+}
+.tile .title {
+  display: block;
+  font-size: 0.98rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile .next {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--color-intent-accent-content);
+  margin-top: 3px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tile .next.done {
+  color: var(--color-content-muted);
+}
+.tile .next:empty {
+  display: none;
+}
+.tile .badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.tile .eps {
+  color: var(--color-content-muted);
+  font-size: 0.78rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
 /* The manual start point has NO always-on control (it was noise on every tile — decision
    2026-07-31-start-episode-is-picked-in-a-modal). The next-up line itself is the button —
    underlined on hover, outlined on keyboard focus. */
-.tile .next.startable { cursor: pointer; text-decoration: underline dotted transparent; transition: text-decoration-color 120ms ease, color 120ms ease; }
-.tile .next.startable:hover { text-decoration-color: currentColor; filter: brightness(1.2); }
-.tile .next.startable:focus-visible { outline: 2px solid var(--color-intent-accent-solid); outline-offset: 2px; border-radius: 4px; }
+.tile .next.startable {
+  cursor: pointer;
+  text-decoration: underline dotted transparent;
+  transition:
+    text-decoration-color 120ms ease,
+    color 120ms ease;
+}
+.tile .next.startable:hover {
+  text-decoration-color: currentColor;
+  filter: brightness(1.2);
+}
+.tile .next.startable:focus-visible {
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
 /* An entry that HAS an override wears one amber chip (also a button back into the picker). */
-.badge.startbadge { background: none; color: var(--color-intent-accent-content); border-color: var(--color-intent-accent-border); font: inherit; font-size: 0.72rem; cursor: pointer; }
-.badge.startbadge:hover { background: var(--color-intent-accent-surface); }
-.badge.startbadge:focus-visible { outline: 2px solid var(--color-intent-accent-solid); outline-offset: 2px; }
+.badge.startbadge {
+  background: none;
+  color: var(--color-intent-accent-content);
+  border-color: var(--color-intent-accent-border);
+  font: inherit;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+.badge.startbadge:hover {
+  background: var(--color-intent-accent-surface);
+}
+.badge.startbadge:focus-visible {
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 2px;
+}
 
 /* Tile context menu (right-click / long-press): the per-entry actions. */
 .ctxmenu {
-  position: fixed; z-index: 60; min-width: 210px; padding: 4px;
-  background: var(--color-surface-overlay); border: 1px solid var(--color-border-default); border-radius: 10px;
-  box-shadow: var(--shadow-high); display: flex; flex-direction: column;
+  position: fixed;
+  z-index: 60;
+  min-width: 210px;
+  padding: 4px;
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  box-shadow: var(--shadow-high);
+  display: flex;
+  flex-direction: column;
 }
-.ctxmenu[hidden] { display: none; }
+.ctxmenu[hidden] {
+  display: none;
+}
 .ctxmenu button {
-  background: none; border: 0; color: var(--color-content-primary); font: inherit; text-align: left;
-  padding: 7px 10px; border-radius: 7px; cursor: pointer;
+  background: none;
+  border: 0;
+  color: var(--color-content-primary);
+  font: inherit;
+  text-align: left;
+  padding: 7px 10px;
+  border-radius: 7px;
+  cursor: pointer;
 }
-.ctxmenu button:hover { background: var(--color-intent-neutral-surface-hover); }
-.ctxmenu button:focus-visible { outline: 2px solid var(--color-intent-accent-solid); outline-offset: -2px; }
-.ctxmenu button.danger { color: var(--color-intent-danger-content); }
+.ctxmenu button:hover {
+  background: var(--color-intent-neutral-surface-hover);
+}
+.ctxmenu button:focus-visible {
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: -2px;
+}
+.ctxmenu button.danger {
+  color: var(--color-intent-danger-content);
+}
 
 /* The colour half of this block is GONE: `Badge intent=` supplies it now, and a
    hand-rolled `color`/`border-color` here would outrank the component's utilities
@@ -497,203 +888,522 @@ ul.grid {
    below. Both need the pill shape a `Badge` would have given them. */
 .badge.startbadge,
 .badge.collection:has(.badgename) {
-  font-size: 0.72rem; padding: 1px 8px; border-radius: 999px;
-  border: 1px solid var(--color-border-default); color: var(--color-content-muted);
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-content-muted);
 }
-.badge.collection:has(.badgename) { color: var(--color-intent-success-content); border-color: var(--color-intent-success-border); }
+.badge.collection:has(.badgename) {
+  color: var(--color-intent-success-content);
+  border-color: var(--color-intent-success-border);
+}
 /* A collection tile shows the MEMBER that plays next, so the collection itself lives in this
    badge: a dim "Collection" chip fused to the collection's name (truncated, full name on
    hover). That is what tells you the series will roll on into the collection's next entry.
    (decision 2026-07-31-collection-tiles-are-member-first) */
-.badge.collection:has(.badgename) { display: inline-flex; align-items: stretch; gap: 0; padding: 0; max-width: 100%; overflow: hidden; }
-.badge .badgekind { padding: 1px 7px; background: var(--color-intent-success-surface); color: var(--color-intent-success-content); border-right: 1px solid var(--color-intent-success-border); }
-.badge .badgename { padding: 1px 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge.collection:has(.badgename) {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.badge .badgekind {
+  padding: 1px 7px;
+  background: var(--color-intent-success-surface);
+  color: var(--color-intent-success-content);
+  border-right: 1px solid var(--color-intent-success-border);
+}
+.badge .badgename {
+  padding: 1px 8px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
 /* Live playback: the tile on screen right now. Green (not amber) so it never reads as the
    selection outline, and a filled badge so it wins against the type/Completed badges. */
-.badge.playingbadge { font-weight: 600; }   /* colour is `Badge intent="success" appearance="solid"` */
-.tile.playing .thumb { border-color: var(--color-intent-success-solid); box-shadow: 0 0 0 2px var(--color-intent-success-solid), var(--shadow-medium); }
+.badge.playingbadge {
+  font-weight: 600;
+} /* colour is `Badge intent="success" appearance="solid"` */
+.tile.playing .thumb {
+  border-color: var(--color-intent-success-solid);
+  box-shadow:
+    0 0 0 2px var(--color-intent-success-solid),
+    var(--shadow-medium);
+}
 /* A just-added tile pulses (amber, the add/accent colour) so it's findable after the grid
    re-renders — flashTile() adds .justadded, then removes it on animationend. */
 @keyframes plex-channels-tilepop {
-  0%   { box-shadow: 0 0 0 0 var(--color-intent-accent-solid); }
-  25%  { box-shadow: 0 0 0 3px var(--color-intent-accent-solid), var(--shadow-medium); }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0% {
+    box-shadow: 0 0 0 0 var(--color-intent-accent-solid);
+  }
+  25% {
+    box-shadow:
+      0 0 0 3px var(--color-intent-accent-solid),
+      var(--shadow-medium);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
-.tile.justadded .thumb { animation: plex-channels-tilepop 1.5s ease-out; border-color: var(--color-intent-accent-solid); }
+.tile.justadded .thumb {
+  animation: plex-channels-tilepop 1.5s ease-out;
+  border-color: var(--color-intent-accent-solid);
+}
 
 /* A completed entry that is playing again (a rewatch) must not stay greyed out. */
-.tile.playing.done { opacity: 1; }
-.tile.playing.done .thumb { filter: none; }
-.shelf.live h2 .lbl { color: var(--color-intent-success-content); }
+.tile.playing.done {
+  opacity: 1;
+}
+.tile.playing.done .thumb {
+  filter: none;
+}
+.shelf.live h2 .lbl {
+  color: var(--color-intent-success-content);
+}
 .livepill {
-  font-size: 0.72rem; padding: 1px 8px; border-radius: 999px;
-  background: var(--color-intent-success-solid); color: var(--color-intent-success-on-solid);
-  font-weight: 600; white-space: nowrap;
+  font-size: 0.72rem;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: var(--color-intent-success-solid);
+  color: var(--color-intent-success-on-solid);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 /* Home shelves: posters are draggable (within + between queues). */
-#shelves .tile .thumb { cursor: grab; transition: transform 0.12s, box-shadow 0.12s; }
-#shelves .tile .thumb:hover { transform: translateY(-3px); box-shadow: var(--shadow-medium); }
-#shelves .tile.dragging .thumb { cursor: grabbing; }
-.shelf.drop-target .strip-wrap { outline: 2px solid var(--color-intent-accent-solid); outline-offset: 4px; border-radius: 10px; }
+#shelves .tile .thumb {
+  cursor: grab;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+#shelves .tile .thumb:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-medium);
+}
+#shelves .tile.dragging .thumb {
+  cursor: grabbing;
+}
+.shelf.drop-target .strip-wrap {
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
 
 /* tile chrome — only in queue (editable) view */
-.tile .check, .tile .remove { display: none; }
+.tile .check,
+.tile .remove {
+  display: none;
+}
 /* The WHOLE poster is the drag surface (touch: long-press to drag; a tap selects). */
-.editable .tile .thumb { cursor: grab; touch-action: pan-y; transition: transform 0.12s, box-shadow 0.12s; }
-.editable .tile .thumb:hover { transform: translateY(-3px); box-shadow: var(--shadow-medium); }
-.editable .tile.dragging .thumb { cursor: grabbing; }
+.editable .tile .thumb {
+  cursor: grab;
+  touch-action: pan-y;
+  transition:
+    transform 0.12s,
+    box-shadow 0.12s;
+}
+.editable .tile .thumb:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-medium);
+}
+.editable .tile.dragging .thumb {
+  cursor: grabbing;
+}
 .editable .tile .remove {
-  display: flex; align-items: center; justify-content: center;
-  position: absolute; right: 6px; top: 6px;
-  color: var(--color-intent-danger-on-solid); background: var(--color-scrim); border: none; border-radius: 999px;
-  width: 28px; height: 28px; padding: 0; cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  color: var(--color-intent-danger-on-solid);
+  background: var(--color-scrim);
+  border: none;
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
 }
 /* An SVG cross, not a text ×: font glyphs drift off-center at fractional zoom (150%). */
-.editable .tile .remove svg { display: block; }
-.editable .tile .remove:hover { background: var(--color-intent-danger-solid); }
+.editable .tile .remove svg {
+  display: block;
+}
+.editable .tile .remove:hover {
+  background: var(--color-intent-danger-solid);
+}
 .editable .tile .check {
-  display: flex; position: absolute; left: 6px; top: 6px; cursor: pointer;
-  width: 28px; height: 28px; border-radius: 999px; align-items: center; justify-content: center;
-  background: var(--color-scrim); color: transparent; font-weight: 700; font-size: 1rem;
+  display: flex;
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-scrim);
+  color: transparent;
+  font-weight: 700;
+  font-size: 1rem;
   border: 2px solid var(--color-border-strong);
 }
-.editable .tile .check:hover { border-color: var(--color-intent-accent-solid); }
+.editable .tile .check:hover {
+  border-color: var(--color-intent-accent-solid);
+}
 /* In move mode the whole poster is a select target, so show the select cursor, not grab. */
-.editable.move-mode .tile .thumb { cursor: pointer; }
-.editable.move-mode .tile .thumb:hover { transform: none; box-shadow: none; }
-.tile.selected .thumb { border-color: var(--color-intent-accent-solid); }
-.tile.selected .check { background: var(--color-intent-accent-solid); color: var(--color-intent-accent-on-solid); }
+.editable.move-mode .tile .thumb {
+  cursor: pointer;
+}
+.editable.move-mode .tile .thumb:hover {
+  transform: none;
+  box-shadow: none;
+}
+.tile.selected .thumb {
+  border-color: var(--color-intent-accent-solid);
+}
+.tile.selected .check {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+}
 /* Drag feedback: the picked-up tile LIFTS (scale + elevation + accent ring), it doesn't
    just fade — so it's obvious what's moving. Siblings glide out of the way via FLIP
    (transform transition applied inline in lib/flip.ts). Kept transform-only so scroll
    anchoring (overflow-anchor:none on the grid/strips) never reflows the page mid-drag. */
-.tile.dragging { opacity: 0.92; position: relative; z-index: 5; }
+.tile.dragging {
+  opacity: 0.92;
+  position: relative;
+  z-index: 5;
+}
 .editable .tile.dragging .thumb,
 #shelves .tile.dragging .thumb {
   transform: scale(1.06) rotate(-1.5deg);
   box-shadow: var(--shadow-high);
-  outline: 2px solid var(--color-intent-accent-solid); outline-offset: 2px;
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 2px;
   cursor: grabbing;
 }
 /* Siblings slide smoothly when the drag reorders them (FLIP sets the transform; this is the
    settle transition). Only while a drag is live, so normal renders stay instant. */
 body.gdrag #grid li.tile:not(.dragging),
-body.hdrag #shelves .strip li.tile:not(.dragging) { transition: transform 0.18s ease; }
+body.hdrag #shelves .strip li.tile:not(.dragging) {
+  transition: transform 0.18s ease;
+}
 /* Shelf (whole-row) reorder: lift the dragged shelf instead of dimming it flat. */
-.shelf.dragging { opacity: 0.9; }
+.shelf.dragging {
+  opacity: 0.9;
+}
 .shelf.dragging .strip-wrap {
   box-shadow: var(--shadow-high);
-  outline: 2px solid var(--color-intent-accent-solid); outline-offset: 4px; border-radius: 10px;
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 4px;
+  border-radius: 10px;
 }
-body.sdrag .shelf:not(.dragging) { transition: transform 0.18s ease; }
+body.sdrag .shelf:not(.dragging) {
+  transition: transform 0.18s ease;
+}
 
 /* ---- selection action bar ---- */
 #selbar {
-  position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%);
-  gap: 12px; align-items: center; z-index: 20;
-  background: var(--color-surface-overlay); border: 1px solid var(--color-border-default); border-radius: 12px;
-  padding: 10px 14px; box-shadow: var(--shadow-high);
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  gap: 12px;
+  align-items: center;
+  z-index: 20;
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  padding: 10px 14px;
+  box-shadow: var(--shadow-high);
 }
-#selbar:not([hidden]) { display: flex; } /* the [hidden] attr must win when set */
-#selbar label { color: var(--color-content-muted); display: flex; gap: 6px; align-items: center; }
-#selbar button { background: var(--color-intent-accent-solid); color: var(--color-intent-accent-on-solid); border: none; border-radius: 8px; padding: 8px 16px; font-weight: 600; }
-#selbar button.danger { background: var(--color-intent-danger-solid); color: var(--color-intent-danger-on-solid); }
-#selbar button.ghost { background: var(--color-surface-raised); color: var(--color-content-primary); border: 1px solid var(--color-border-default); font-weight: 400; }
+#selbar:not([hidden]) {
+  display: flex;
+} /* the [hidden] attr must win when set */
+#selbar label {
+  color: var(--color-content-muted);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+#selbar button {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+}
+#selbar button.danger {
+  background: var(--color-intent-danger-solid);
+  color: var(--color-intent-danger-on-solid);
+}
+#selbar button.ghost {
+  background: var(--color-surface-raised);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  font-weight: 400;
+}
 
 /* ---- Home toolbar (global add-search + filter + queue management) ---- */
 #tools {
-  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
   margin-top: 10px;
 }
-body.queue-view #tools { display: none; } /* the queue view has its own add box */
-.gsearch-wrap { position: relative; display: flex; gap: 10px; align-items: center; flex: 2 1 320px; }
-.gsearch-wrap input[type='search'] {
-  flex: 1; min-width: 200px;
-  background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 8px;
-  color: var(--color-content-primary); padding: 9px 12px; font-size: 0.95rem;
+body.queue-view #tools {
+  display: none;
+} /* the queue view has its own add box */
+.gsearch-wrap {
+  position: relative;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex: 2 1 320px;
+}
+.gsearch-wrap input[type="search"] {
+  flex: 1;
+  min-width: 200px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  padding: 9px 12px;
+  font-size: 0.95rem;
 }
 #qfilter {
-  flex: 0 1 190px; min-width: 130px;
-  background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 8px;
-  color: var(--color-content-primary); padding: 9px 12px; font-size: 0.95rem;
+  flex: 0 1 190px;
+  min-width: 130px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  padding: 9px 12px;
+  font-size: 0.95rem;
 }
-#tools button.ghost { padding: 8px 12px; font-size: 0.92rem; white-space: nowrap; }
-#tools button.accent { border-color: var(--color-intent-accent-border); color: var(--color-intent-accent-content); }
-#tools button.accent:hover { background: var(--color-intent-accent-solid); color: var(--color-intent-accent-on-solid); }
-.gsearch-wrap .results { top: 46px; }
-.results .ginfo { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.results .glib { color: var(--color-content-muted); font-size: 0.78rem; }
+#tools button.ghost {
+  padding: 8px 12px;
+  font-size: 0.92rem;
+  white-space: nowrap;
+}
+#tools button.accent {
+  border-color: var(--color-intent-accent-border);
+  color: var(--color-intent-accent-content);
+}
+#tools button.accent:hover {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+}
+.gsearch-wrap .results {
+  top: 46px;
+}
+.results .ginfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.results .glib {
+  color: var(--color-content-muted);
+  font-size: 0.78rem;
+}
 .results .addto {
-  background: var(--color-surface-raised); color: var(--color-content-primary); border: 1px solid var(--color-border-default);
-  border-radius: 8px; padding: 6px 10px; font-size: 0.88rem; white-space: nowrap;
+  background: var(--color-surface-raised);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 0.88rem;
+  white-space: nowrap;
 }
-.results .addto:hover { border-color: var(--color-intent-accent-solid); }
-.results li { position: relative; }
+.results .addto:hover {
+  border-color: var(--color-intent-accent-solid);
+}
+.results li {
+  position: relative;
+}
 .qmenu {
-  position: absolute; right: 8px; top: calc(100% - 6px); z-index: 9;
-  background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 10px;
-  box-shadow: var(--shadow-high); min-width: 220px;
+  position: absolute;
+  right: 8px;
+  top: calc(100% - 6px);
+  z-index: 9;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  box-shadow: var(--shadow-high);
+  min-width: 220px;
   /* F1: the rows are 44px each (Button's MIN_TOUCH_TARGET — an accessibility floor, not
      padding to trim), so the height comes off the CONTAINER instead. padding 4px, gap 0, and
      a hairline between rows rather than a gap. `data-density="compact"` on the root (set in
      PlayMenu/Toolbar) brings the 44px floor itself down over --control-height. */
-  padding: 4px; display: flex; flex-direction: column; gap: 0;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 /* Skin DELETED (2026-08-02-adopting-a-component-means-deleting-its-skin): background, border,
    color, padding, font-size and border-radius now come from `Button`'s ghost intent. Only
    layout stays — left-align the label, full width. */
-.qmenu button { justify-content: flex-start; width: 100%; text-align: left; }
+.qmenu button {
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+}
 /* Hairline dividers between rows in place of the old gap. */
-.qmenu button + button { border-top: 1px solid var(--color-border-subtle); }
-.qmenu p { margin: 4px 6px; color: var(--color-content-muted); font-size: 0.85rem; max-width: 260px; }
+.qmenu button + button {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.qmenu p {
+  margin: 4px 6px;
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+  max-width: 260px;
+}
 
 /* ---- Play on ▾ ---- */
 .playbtn {
-  background: var(--color-intent-accent-solid); color: var(--color-intent-accent-on-solid); border: none; border-radius: 8px;
-  padding: 8px 14px; font: inherit; font-weight: 600; white-space: nowrap;
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font: inherit;
+  font-weight: 600;
+  white-space: nowrap;
 }
-.playbtn:hover { filter: brightness(1.1); }
+.playbtn:hover {
+  filter: brightness(1.1);
+}
 .shelf h2 .shelfplay {
-  background: none; border: none; color: var(--color-intent-accent-content); font-size: 0.95rem;
-  padding: 4px 8px; line-height: 1; opacity: 0; transition: opacity 0.15s;
+  background: none;
+  border: none;
+  color: var(--color-intent-accent-content);
+  font-size: 0.95rem;
+  padding: 4px 8px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s;
 }
-.shelf h2:hover .shelfplay { opacity: 1; }
-@media (pointer: coarse) { .shelf h2 .shelfplay { opacity: 0.8; } }
+.shelf h2:hover .shelfplay {
+  opacity: 1;
+}
+@media (pointer: coarse) {
+  .shelf h2 .shelfplay {
+    opacity: 0.8;
+  }
+}
 
 /* ---- Channels view ---- */
-.chhead { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
-.chhead label { color: var(--color-content-muted); display: flex; gap: 8px; align-items: center; }
-.chnote { color: var(--color-content-muted); font-size: 0.85rem; }
-#chbody { display: grid; grid-template-columns: 1fr 300px; gap: 26px; align-items: start; }
-#chbody h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.chhead {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+.chhead label {
+  color: var(--color-content-muted);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.chnote {
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+}
+#chbody {
+  display: grid;
+  grid-template-columns: 1fr 300px;
+  gap: 26px;
+  align-items: start;
+}
+#chbody h2 {
+  margin: 0 0 12px;
+  font-size: 1.1rem;
+}
 /* The pool heading + its loading spinner sit on one row so the Spinner reads as attached to
    the heading, not floating in the grid. The h2 keeps its own bottom margin via the row. */
-.chpool-head { display: flex; align-items: center; gap: 10px; }
-.chpool-head h2 { margin: 0 0 12px; }
+.chpool-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.chpool-head h2 {
+  margin: 0 0 12px;
+}
 /* The delayed "first load can take a minute" hint (F3): muted, slim, appears after 3 s so a
    fast load never shows it. */
-.chpool-hint { margin: -6px 0 12px; color: var(--color-content-muted); font-size: 0.85rem; }
+.chpool-hint {
+  margin: -6px 0 12px;
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+}
 /* Members + pool stack in the LEFT column; the filters aside keeps the right one (the
    members section is a grid child, so it must be pinned or it would steal the 300px col). */
-.chmembers, #chbody .chpool { grid-column: 1; }
-.chmembers .add { margin-bottom: 12px; }
-.chmembers .grid { animation: plex-channels-chmfade 0.25s ease; }
+.chmembers,
+#chbody .chpool {
+  grid-column: 1;
+}
+.chmembers .add {
+  margin-bottom: 12px;
+}
+.chmembers .grid {
+  animation: plex-channels-chmfade 0.25s ease;
+}
 /* Empty channel (no curated members): the hint is a slim one-liner, shown only then, and
    the member grid is hidden so nothing renders a poster-sized empty tile. */
-.chmembers .chmhint { display: none; margin: 0; font-size: 0.9rem; line-height: 1.4; }
-.chmembers.no-members .chmhint { display: block; }
-.chmembers.no-members { margin-bottom: 4px; }
-.muted { color: var(--color-content-muted); }
+.chmembers .chmhint {
+  display: none;
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.chmembers.no-members .chmhint {
+  display: block;
+}
+.chmembers.no-members {
+  margin-bottom: 4px;
+}
+.muted {
+  color: var(--color-content-muted);
+}
 /* A search that matched nothing shows a muted, non-interactive hint instead of silently
    staying closed (which read as "search is broken"). */
-.results li.noresults { color: var(--color-content-muted); cursor: default; padding: 8px 10px; }
-.results li.noresults:hover { background: none; }
-@keyframes plex-channels-chmfade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+.results li.noresults {
+  color: var(--color-content-muted);
+  cursor: default;
+  padding: 8px 10px;
+}
+.results li.noresults:hover {
+  background: none;
+}
+@keyframes plex-channels-chmfade {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .chmembers .grid { animation: none; }
-  .tile.justadded .thumb { animation: none; }
+  .chmembers .grid {
+    animation: none;
+  }
+  .tile.justadded .thumb {
+    animation: none;
+  }
 }
 /* F5: the aside stacks 7 fieldsets / ~40 checkboxes, so it is taller than the viewport and a
    plain `position: sticky` never engaged — `#ch-save`, its last child, sat permanently below
@@ -703,11 +1413,16 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
    and the scroller never engages. `100dvh` (not `vh`) so mobile browser chrome doesn't hide
    the button. `top`/`max-height` use F4's measured --header-h (96px fallback). */
 #chfilters {
-  background: var(--color-surface-raised); border: 1px solid var(--color-border-default); border-radius: 12px;
-  padding: 14px 16px; position: sticky;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  padding: 14px 16px;
+  position: sticky;
   top: calc(var(--header-h, 96px) + 12px);
-  grid-column: 2; grid-row: 1 / span 2;
-  display: flex; flex-direction: column;
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  display: flex;
+  flex-direction: column;
   /* The aside sits in `#chbody`, which is itself below `.chhead` + the sub line, so its
      flow-top is ~header + ~130px. Subtract that whole run (not just the header) so `#ch-save`
      clears the fold even UNSCROLLED; once the user scrolls, `position: sticky` pins the aside
@@ -715,53 +1430,151 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
      eating the footer. */
   max-height: calc(100dvh - var(--header-h, 96px) - 140px);
 }
-#chfilters .chfilters-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
-#ch-save { flex: 0 0 auto; margin-top: 12px; }
-#chfilters fieldset { border: 1px solid var(--color-border-default); border-radius: 10px; margin-bottom: 12px; padding: 8px 10px; }
-#chfilters legend { color: var(--color-content-muted); font-size: 0.85rem; padding: 0 6px; }
-#chfilters .libs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 10px; }
-#chfilters .libs label { display: flex; gap: 6px; align-items: baseline; font-size: 0.88rem; }
-#ch-block { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-#ch-block li { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 0.9rem; }
-#ch-block button {
-  background: var(--color-surface-overlay); color: var(--color-content-primary); border: 1px solid var(--color-border-default);
-  border-radius: 6px; padding: 3px 8px; font-size: 0.8rem;
+#chfilters .chfilters-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
 }
-#ch-block button:hover { border-color: var(--color-intent-accent-solid); }
 #ch-save {
-  width: 100%; background: var(--color-intent-accent-solid); color: var(--color-intent-accent-on-solid); border: none; border-radius: 8px;
-  padding: 9px 14px; font: inherit; font-weight: 600;
+  flex: 0 0 auto;
+  margin-top: 12px;
+}
+#chfilters fieldset {
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  margin-bottom: 12px;
+  padding: 8px 10px;
+}
+#chfilters legend {
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+  padding: 0 6px;
+}
+#chfilters .libs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+#chfilters .libs label {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.88rem;
+}
+#ch-block {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#ch-block li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+#ch-block button {
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.8rem;
+}
+#ch-block button:hover {
+  border-color: var(--color-intent-accent-solid);
+}
+#ch-save {
+  width: 100%;
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+  border: none;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font: inherit;
+  font-weight: 600;
 }
 .tile .exclude {
-  background: none; border: 1px solid var(--color-border-default); color: var(--color-content-muted);
-  border-radius: 999px; padding: 1px 8px; font-size: 0.72rem;
+  background: none;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-content-muted);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.72rem;
 }
-.tile .exclude:hover { border-color: var(--color-intent-danger-solid); color: var(--color-intent-danger-content); }
+.tile .exclude:hover {
+  border-color: var(--color-intent-danger-solid);
+  color: var(--color-intent-danger-content);
+}
 @media (max-width: 900px) {
-  #chbody { grid-template-columns: 1fr; }
-  #chfilters { position: static; grid-column: auto; grid-row: auto; }
-  .chmembers, #chbody .chpool { grid-column: auto; }
+  #chbody {
+    grid-template-columns: 1fr;
+  }
+  #chfilters {
+    position: static;
+    grid-column: auto;
+    grid-row: auto;
+  }
+  .chmembers,
+  #chbody .chpool {
+    grid-column: auto;
+  }
 }
 
 /* ---- Modal chrome, shared by the three dialogs ---- */
-#startmodal, #setmodal, #dynmodal {
-  background: var(--color-surface-raised); color: var(--color-content-primary);
+#startmodal,
+#setmodal,
+#dynmodal {
+  background: var(--color-surface-raised);
+  color: var(--color-content-primary);
   border: 1px solid var(--color-border-default);
-  border-radius: 14px; padding: 20px 22px;
-  max-height: 90vh; overflow: auto; overscroll-behavior: contain;
+  border-radius: 14px;
+  padding: 20px 22px;
+  max-height: 90vh;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
-#startmodal { width: min(460px, 92vw); }
-#setmodal { width: min(440px, 92vw); }
-#dynmodal { width: min(520px, 94vw); }
+#startmodal {
+  width: min(460px, 92vw);
+}
+#setmodal {
+  width: min(440px, 92vw);
+}
+#dynmodal {
+  width: min(520px, 94vw);
+}
 /* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
    native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
-#startmodal form, #setmodal form, #dynmodal form { position: relative; }
-#startmodal h3, #setmodal h3, #dynmodal h3 { margin: 0 0 14px; padding-right: 28px; }
-#startmodal h3 { margin-bottom: 10px; }
-#startmodal .subhint { color: var(--color-content-muted); font-size: 0.86rem; margin: 0 0 16px; }
+#startmodal form,
+#setmodal form,
+#dynmodal form {
+  position: relative;
+}
+#startmodal h3,
+#setmodal h3,
+#dynmodal h3 {
+  margin: 0 0 14px;
+  padding-right: 28px;
+}
+#startmodal h3 {
+  margin-bottom: 10px;
+}
+#startmodal .subhint {
+  color: var(--color-content-muted);
+  font-size: 0.86rem;
+  margin: 0 0 16px;
+}
 /* Profile-gate hint under the "Plays under profile" select — its own block line, below the
    inline label+control, so it never wraps around the listbox. */
-#setmodal .subhint { display: block; color: var(--color-content-muted); font-size: 0.8rem; margin: 4px 0 14px; }
+#setmodal .subhint {
+  display: block;
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+  margin: 4px 0 14px;
+}
 /* Playback & completion flag group: stack Charcuterie Checkboxes with their subhints. */
 #setmodal .flags {
   display: flex;
@@ -769,68 +1582,182 @@ body.queue-view #tools { display: none; } /* the queue view has its own add box 
   gap: 2px;
   margin-bottom: 14px;
 }
-#setmodal .flags > .subhint { margin: 0 0 10px; }
-#setmodal .flags > .field { margin-bottom: 4px; }
+#setmodal .flags > .subhint {
+  margin: 0 0 10px;
+}
+#setmodal .flags > .field {
+  margin-bottom: 4px;
+}
 /* Breathing room between an inline field label ("Type", "Plays under profile") and its
    listbox trigger, which otherwise butts right against the text. */
-#setmodal .fieldselect { margin-left: 10px; }
-#startmodal .field, #setmodal .field, #dynmodal .field {
-  display: block; margin-bottom: 14px; color: var(--color-content-muted); font-size: 0.92rem;
+#setmodal .fieldselect {
+  margin-left: 10px;
 }
-#setmodal .field input[type='text'],
-#dynmodal .field > input[type='text'] {
-  display: block; width: 100%; margin-top: 5px;
-  background: var(--color-surface-overlay); color: var(--color-content-primary); border: 1px solid var(--color-border-default);
-  border-radius: 8px; padding: 9px 11px; font: inherit;
+#startmodal .field,
+#setmodal .field,
+#dynmodal .field {
+  display: block;
+  margin-bottom: 14px;
+  color: var(--color-content-muted);
+  font-size: 0.92rem;
 }
-#setmodal fieldset, #dynmodal fieldset { border: 1px solid var(--color-border-default); border-radius: 10px; padding: 10px 12px; }
-#setmodal legend, #dynmodal legend { padding: 0 6px; }
-#setmodal .libs, #dynmodal .libs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
-#setmodal .libs label { display: flex; align-items: baseline; gap: 7px; color: var(--color-content-primary); font-size: 0.92rem; }
-#dynmodal .libs label { display: flex; align-items: baseline; gap: 7px; color: var(--color-content-primary); font-size: 0.9rem; }
-#startmodal .idnote, #setmodal .idnote, #dynmodal .idnote { color: var(--color-content-muted); font-size: 0.82rem; margin: 10px 0 14px; }
-#startmodal .idnote:empty { display: none; }
-#startmodal .modalbtns, #setmodal .modalbtns, #dynmodal .modalbtns { display: flex; gap: 10px; align-items: center; }
-#startmodal .modalbtns { flex-wrap: wrap; }
-#startmodal .modalbtns .spacer, #setmodal .modalbtns .spacer, #dynmodal .modalbtns .spacer { flex: 1; }
-#startmodal .modalbtns button, #setmodal .modalbtns button, #dynmodal .modalbtns button { border-radius: 8px; padding: 8px 16px; font: inherit; }
-#startmodal .modalbtns button[type='submit'],
-#setmodal .modalbtns button[type='submit'],
-#dynmodal .modalbtns button[type='submit'] { background: var(--color-intent-accent-solid); color: var(--color-intent-accent-on-solid); border: none; font-weight: 600; }
-#setmodal .modalbtns .danger { background: var(--color-intent-danger-solid); color: var(--color-intent-danger-on-solid); border: none; }
-#dynmodal .modalbtns .danger { background: var(--color-intent-danger-solid); color: var(--color-intent-danger-on-solid); border: none; }
+#setmodal .field input[type="text"],
+#dynmodal .field > input[type="text"] {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font: inherit;
+}
+#setmodal fieldset,
+#dynmodal fieldset {
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+#setmodal legend,
+#dynmodal legend {
+  padding: 0 6px;
+}
+#setmodal .libs,
+#dynmodal .libs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+}
+#setmodal .libs label {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--color-content-primary);
+  font-size: 0.92rem;
+}
+#dynmodal .libs label {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  color: var(--color-content-primary);
+  font-size: 0.9rem;
+}
+#startmodal .idnote,
+#setmodal .idnote,
+#dynmodal .idnote {
+  color: var(--color-content-muted);
+  font-size: 0.82rem;
+  margin: 10px 0 14px;
+}
+#startmodal .idnote:empty {
+  display: none;
+}
+#startmodal .modalbtns,
+#setmodal .modalbtns,
+#dynmodal .modalbtns {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+#startmodal .modalbtns {
+  flex-wrap: wrap;
+}
+#startmodal .modalbtns .spacer,
+#setmodal .modalbtns .spacer,
+#dynmodal .modalbtns .spacer {
+  flex: 1;
+}
+#startmodal .modalbtns button,
+#setmodal .modalbtns button,
+#dynmodal .modalbtns button {
+  border-radius: 8px;
+  padding: 8px 16px;
+  font: inherit;
+}
+#startmodal .modalbtns button[type="submit"],
+#setmodal .modalbtns button[type="submit"],
+#dynmodal .modalbtns button[type="submit"] {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+  border: none;
+  font-weight: 600;
+}
+#setmodal .modalbtns .danger {
+  background: var(--color-intent-danger-solid);
+  color: var(--color-intent-danger-on-solid);
+  border: none;
+}
+#dynmodal .modalbtns .danger {
+  background: var(--color-intent-danger-solid);
+  color: var(--color-intent-danger-on-solid);
+  border: none;
+}
 
 /* While a modal is open, freeze the page so touch-scrolling stays inside the
    dialog instead of falling through to the background (native <dialog> doesn't
    lock scroll on its own). overscroll-behavior on the dialogs stops the scroll
    from chaining to <html> at the modal's top/bottom edge. */
-html.modal-open { overflow: hidden; }
+html.modal-open {
+  overflow: hidden;
+}
 /* Close affordance shared by every modal (✕ top-right; backdrop-click + Esc wired in JS).
    Mirror the tile remove-button: a dark circle with a bright SVG cross (a text × renders
    faint/off-center in this font — the tile × is an SVG for the same reason). */
 .modalx {
-  position: absolute; top: 8px; right: 8px; z-index: 2;
-  width: 34px; height: 34px; display: grid; place-items: center; padding: 0;
-  background: var(--color-scrim); border: 1px solid var(--color-border-default); color: var(--color-content-primary);
-  line-height: 1; cursor: pointer; border-radius: 999px;
-  transition: background 0.12s, border-color 0.12s, transform 0.12s;
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  background: var(--color-scrim);
+  border: 1px solid var(--color-border-default);
+  color: var(--color-content-primary);
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 999px;
+  transition:
+    background 0.12s,
+    border-color 0.12s,
+    transform 0.12s;
 }
-.modalx svg { display: block; }
-.modalx:hover { background: var(--color-intent-danger-solid); border-color: var(--color-intent-danger-solid); color: var(--color-intent-danger-on-solid); transform: scale(1.06); }
+.modalx svg {
+  display: block;
+}
+.modalx:hover {
+  background: var(--color-intent-danger-solid);
+  border-color: var(--color-intent-danger-solid);
+  color: var(--color-intent-danger-on-solid);
+  transform: scale(1.06);
+}
 
 /* PLAY landing: plain rows, no posters — the "pick and play" surface. On a wide viewport
    the groups (Dynamic / Curated / Queues) sit side by side as columns; one column on
    mobile. The id rule must beat the [hidden] attribute (like #selbar). */
 #play:not([hidden]) {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(320px, 1fr)
+    );
   gap: 26px;
   align-items: start;
   max-width: 1400px;
   margin: 0 auto;
 }
-#home:not([hidden]), #queue:not([hidden]), #channels:not([hidden]) { display: block; }
-.playgroup { min-width: 0; margin: 0 0 10px; }
+#home:not([hidden]),
+#queue:not([hidden]),
+#channels:not([hidden]) {
+  display: block;
+}
+.playgroup {
+  min-width: 0;
+  margin: 0 0 10px;
+}
 .playgroup h2 {
   display: flex;
   align-items: center;
@@ -838,11 +1765,20 @@ html.modal-open { overflow: hidden; }
   margin: 0 0 10px;
   font-size: 1.15rem;
 }
-.playgroup h2 button { margin-left: auto; }
-.playlist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.playgroup h2 button {
+  margin-left: auto;
+}
+.playlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
 .playrow {
   display: flex;
-  flex-wrap: wrap;            /* controls drop to a second line before they crowd the name */
+  flex-wrap: wrap; /* controls drop to a second line before they crowd the name */
   align-items: center;
   gap: 8px 12px;
   background: var(--color-surface-raised);
@@ -879,117 +1815,299 @@ html.modal-open { overflow: hidden; }
   cursor: pointer;
   padding: 4px 0;
 }
-.playrow .rowname:hover { color: var(--color-intent-accent-content); }
-.playrow .rowmeta { color: var(--color-content-muted); font-size: 0.83rem; }
-.playrow .playbtn { flex-shrink: 0; }
+.playrow .rowname:hover {
+  color: var(--color-intent-accent-content);
+}
+.playrow .rowmeta {
+  color: var(--color-content-muted);
+  font-size: 0.83rem;
+}
+.playrow .playbtn {
+  flex-shrink: 0;
+}
 
 /* A channel's member order is irrelevant — no top/bottom picker in its grid editor. */
-body.channel-mode #queue .addpos { display: none; }
+body.channel-mode #queue .addpos {
+  display: none;
+}
 /* Libraries + ratings + audio apply to either behavior; only the blocklist (shows) and the
    rewatch excludes (movies) are behavior-specific. */
-body.movies-channel #chfilters .showsonly { display: none; }
-body:not(.movies-channel) #chfilters .moviesonly { display: none; }
-#chfilters .hint { color: var(--color-content-muted); font-size: 0.8rem; line-height: 1.35; margin: 6px 0 0; }
-#ch-movieexcludes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
-#ch-movieexcludes li { display: flex; align-items: center; gap: 8px; justify-content: space-between; font-size: 0.9rem; }
-#ch-movieexcludes button {
-  background: var(--color-surface-overlay); color: var(--color-content-primary); border: 1px solid var(--color-border-default);
-  border-radius: 6px; padding: 3px 8px; font-size: 0.8rem;
+body.movies-channel #chfilters .showsonly {
+  display: none;
 }
-#ch-movieexcludes button:hover { border-color: var(--color-intent-accent-solid); }
+body:not(.movies-channel) #chfilters .moviesonly {
+  display: none;
+}
+#chfilters .hint {
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+  line-height: 1.35;
+  margin: 6px 0 0;
+}
+#ch-movieexcludes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#ch-movieexcludes li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+#ch-movieexcludes button {
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 0.8rem;
+}
+#ch-movieexcludes button:hover {
+  border-color: var(--color-intent-accent-solid);
+}
 #ch-audio {
-  width: 100%; background: var(--color-surface-overlay); color: var(--color-content-primary); border: 1px solid var(--color-border-default);
-  border-radius: 8px; padding: 7px 10px; font: inherit;
+  width: 100%;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
 }
 
 /* ---- inline pen-rename of the heading ---- */
-.namepen { padding: 6px 10px; font-size: 1rem; line-height: 1; transition: color 0.12s, border-color 0.12s; }
+.namepen {
+  padding: 6px 10px;
+  font-size: 1rem;
+  line-height: 1;
+  transition:
+    color 0.12s,
+    border-color 0.12s;
+}
 /* Obvious hover affordance that the title is editable (pen-rename) — decision
    2026-07-21-ui-interaction-states-standard. */
-body.name-editable #heading { cursor: pointer; transition: color 0.12s; }
-body.name-editable #heading:hover { color: var(--color-intent-accent-content); }
-body.name-editable .bar:hover .namepen, body.name-editable #heading:hover ~ .namepen { color: var(--color-intent-accent-content); border-color: var(--color-intent-accent-solid); }
-body.name-editable header h1 { cursor: text; }
+body.name-editable #heading {
+  cursor: pointer;
+  transition: color 0.12s;
+}
+body.name-editable #heading:hover {
+  color: var(--color-intent-accent-content);
+}
+body.name-editable .bar:hover .namepen,
+body.name-editable #heading:hover ~ .namepen {
+  color: var(--color-intent-accent-content);
+  border-color: var(--color-intent-accent-solid);
+}
+body.name-editable header h1 {
+  cursor: text;
+}
 header h1 input {
-  width: 100%; font: inherit; font-size: 1.4rem; font-weight: 600;
-  background: var(--color-surface-overlay); color: var(--color-content-primary); border: 1px solid var(--color-intent-accent-solid);
-  border-radius: 8px; padding: 3px 8px;
+  width: 100%;
+  font: inherit;
+  font-size: 1.4rem;
+  font-weight: 600;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-intent-accent-solid);
+  border-radius: 8px;
+  padding: 3px 8px;
 }
 
 /* ---- finished (done) tiles — kept, greyed, not draggable ---- */
-.tile.done .thumb { filter: grayscale(1) brightness(0.6); }
-.tile.done { opacity: 0.7; }
-.editable .tile.done .thumb { cursor: default; }
+.tile.done .thumb {
+  filter: grayscale(1) brightness(0.6);
+}
+.tile.done {
+  opacity: 0.7;
+}
+.editable .tile.done .thumb {
+  cursor: default;
+}
 
 /* ---- "watches" eye badge (replaces the delete-looking Seen N×) ---- */
-.badge.watches svg { display: block; opacity: 0.85; }   /* the rest is `Badge intent="neutral"` + its `icon` slot */
+.badge.watches svg {
+  display: block;
+  opacity: 0.85;
+} /* the rest is `Badge intent="neutral"` + its `icon` slot */
 
 /* ---- Collection search results ---- */
 .results .collbadge {
-  display: inline-block; font-size: 0.7rem; padding: 0 7px; border-radius: 999px;
-  border: 1px solid var(--color-intent-accent-border); color: var(--color-intent-accent-content); margin-right: 4px;
+  display: inline-block;
+  font-size: 0.7rem;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--color-intent-accent-border);
+  color: var(--color-intent-accent-content);
+  margin-right: 4px;
 }
 .results .noposter {
-  width: 40px; height: 60px; border-radius: 4px; background: var(--color-surface-raised);
-  border: 1px dashed var(--color-border-default); flex: 0 0 auto;
+  width: 40px;
+  height: 60px;
+  border-radius: 4px;
+  background: var(--color-surface-raised);
+  border: 1px dashed var(--color-border-default);
+  flex: 0 0 auto;
 }
 
 /* ---- the dynamic-channel modal's binding sub-editor ---- */
-#dynmodal .subfield { display: block; margin-bottom: 8px; color: var(--color-content-muted); font-size: 0.86rem; }
-#dynmodal .subfield input {
-  display: block; width: 100%; margin-top: 4px;
-  background: var(--color-surface-overlay); color: var(--color-content-primary); border: 1px solid var(--color-border-default);
-  border-radius: 8px; padding: 7px 10px; font: inherit; transition: border-color 0.15s;
+#dynmodal .subfield {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--color-content-muted);
+  font-size: 0.86rem;
 }
-#dynmodal .subfield input:hover { border-color: var(--color-intent-accent-solid); }
+#dynmodal .subfield input {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  padding: 7px 10px;
+  font: inherit;
+  transition: border-color 0.15s;
+}
+#dynmodal .subfield input:hover {
+  border-color: var(--color-intent-accent-solid);
+}
 /* Interaction-states standard (2026-07-21): every control gets a visible keyboard focus ring. */
 #dynmodal .subfield input:focus-visible {
-  outline: 2px solid var(--color-intent-accent-solid); outline-offset: 1px; border-color: var(--color-intent-accent-solid);
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 1px;
+  border-color: var(--color-intent-accent-solid);
 }
-#dynmodal .subhint { color: var(--color-content-muted); font-size: 0.8rem; margin: 2px 0 10px; }
+#dynmodal .subhint {
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+  margin: 2px 0 10px;
+}
 /* Advanced (manual account mapping) — an `Accordion` since M6d phase 2. The
    `<summary>` rules that used to live here are gone with the `<details>`, including
    the `list-style: revert` that put back the disclosure triangle Tailwind's preflight
    removes — an accordion trigger is a real button with its own chevron. */
-#dynmodal .advanced { margin-top: 4px; }
-#dynmodal #dyn-bindings { display: flex; flex-direction: column; gap: 12px; }
+#dynmodal .advanced {
+  margin-top: 4px;
+}
+#dynmodal #dyn-bindings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 #dynmodal .binding {
-  border: 1px solid var(--color-border-default); border-radius: 10px; padding: 10px 12px;
-  background: color-mix(in srgb, var(--color-surface-raised) 55%, transparent);
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: color-mix(
+    in srgb,
+    var(--color-surface-raised) 55%,
+    transparent
+  );
   transition: border-color 0.15s;
 }
-#dynmodal .binding:hover { border-color: color-mix(in srgb, var(--color-intent-accent-solid) 40%, var(--color-border-default)); }
-#dynmodal .binding fieldset { margin-top: 10px; }
-#dynmodal .binding-head { display: flex; align-items: flex-end; gap: 10px; }
-#dynmodal .binding-head .bprof { flex: 1; margin-bottom: 0; }
-#dynmodal .binding .b-remove {
-  flex: none; padding: 6px 12px; font-size: 0.82rem; border-radius: 8px;
-  align-self: flex-end; transition: border-color 0.15s, color 0.15s;
+#dynmodal .binding:hover {
+  border-color: color-mix(
+    in srgb,
+    var(--color-intent-accent-solid) 40%,
+    var(--color-border-default)
+  );
 }
-#dynmodal .binding .b-remove:hover { border-color: var(--color-intent-danger-solid); color: var(--color-intent-danger-content); }
+#dynmodal .binding fieldset {
+  margin-top: 10px;
+}
+#dynmodal .binding-head {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+#dynmodal .binding-head .bprof {
+  flex: 1;
+  margin-bottom: 0;
+}
+#dynmodal .binding .b-remove {
+  flex: none;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  border-radius: 8px;
+  align-self: flex-end;
+  transition:
+    border-color 0.15s,
+    color 0.15s;
+}
+#dynmodal .binding .b-remove:hover {
+  border-color: var(--color-intent-danger-solid);
+  color: var(--color-intent-danger-content);
+}
 #dynmodal .binding .b-remove:focus-visible,
 #dynmodal .addbinding:focus-visible {
-  outline: 2px solid var(--color-intent-accent-solid); outline-offset: 2px;
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 2px;
 }
-#dynmodal .addbinding { margin-top: 12px; padding: 8px 14px; font-size: 0.88rem; border-radius: 8px; }
+#dynmodal .addbinding {
+  margin-top: 12px;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  border-radius: 8px;
+}
 
 @media (max-width: 760px) {
-  :root { --tile: 132px; }
-  header { padding: 10px 14px 8px; }
-  .view { padding: 16px 14px 40px; }
-  header h1 { font-size: 1.2rem; text-align: center; }
+  :root {
+    --tile: 132px;
+  }
+  header {
+    padding: 10px 14px 8px;
+  }
+  .view {
+    padding: 16px 14px 40px;
+  }
+  header h1 {
+    font-size: 1.2rem;
+    text-align: center;
+  }
   /* The info line now costs one truncated row, so it stays on mobile — the now-playing
      state and status toasts are worth the line. Un-stick the Play header still. */
-  body.play-view header { position: static; }
-  .infoline { justify-content: center; }
-  header .sub { flex: 0 1 auto; text-align: center; }
-  #status { max-width: 100%; }
-  #selbar { left: 12px; right: 12px; transform: none; flex-wrap: wrap; justify-content: center; }
-  #gslot-mobile #tools { margin: 0 0 16px; }
-  #setmodal .libs, #dynmodal .libs { grid-template-columns: 1fr; }
-  #play:not([hidden]) { grid-template-columns: 1fr; gap: 18px; } /* one column on mobile */
-  .playrow { flex-wrap: wrap; }
-  .playrow .rowmeta { white-space: normal; }
+  body.play-view header {
+    position: static;
+  }
+  .infoline {
+    justify-content: center;
+  }
+  header .sub {
+    flex: 0 1 auto;
+    text-align: center;
+  }
+  #status {
+    max-width: 100%;
+  }
+  #selbar {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  #gslot-mobile #tools {
+    margin: 0 0 16px;
+  }
+  #setmodal .libs,
+  #dynmodal .libs {
+    grid-template-columns: 1fr;
+  }
+  #play:not([hidden]) {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  } /* one column on mobile */
+  .playrow {
+    flex-wrap: wrap;
+  }
+  .playrow .rowmeta {
+    white-space: normal;
+  }
 }
 
 /* Dank Mono — the owner's preferred mono, over the shipped Victor Mono.
@@ -1003,22 +2121,38 @@ header h1 input {
    docs/decisions/2026-08-05-dank-mono-reaches-the-fleet-by-bind-mount.md */
 @font-face {
   font-family: "Dank Mono";
-  src: local("Dank Mono"), url("/fonts/DankMono-Regular.woff2") format("woff2");
-  font-weight: 400; font-style: normal; font-display: swap;
+  src:
+    local("Dank Mono"),
+    url("/fonts/DankMono-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: "Dank Mono";
-  src: local("Dank Mono Italic"), local("Dank Mono"), url("/fonts/DankMono-Italic.woff2") format("woff2");
-  font-weight: 400; font-style: italic; font-display: swap;
+  src:
+    local("Dank Mono Italic"),
+    local("Dank Mono"),
+    url("/fonts/DankMono-Italic.woff2") format("woff2");
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
 }
 @font-face {
   font-family: "Dank Mono";
-  src: local("Dank Mono"), url("/fonts/DankMono-Bold.woff2") format("woff2");
-  font-weight: 700; font-style: normal; font-display: swap;
+  src:
+    local("Dank Mono"),
+    url("/fonts/DankMono-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 /* Unlayered so it beats @charcuterie/tokens' layered --font-mono with no
    !important; Victor Mono stays the ligature fallback. */
 :root {
-  --font-mono: "Dank Mono", "Victor Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  --font-mono:
+    "Dank Mono", "Victor Mono", ui-monospace,
+    SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
 }

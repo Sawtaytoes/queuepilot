@@ -38,10 +38,17 @@ export type PlayMenuTarget = {
 }
 
 type Overlays = {
-  tileMenu: { x: number; y: number; entry: EntryActions } | null
+  tileMenu: {
+    x: number
+    y: number
+    entry: EntryActions
+  } | null
   startModal: EntryActions | null
   playMenu: PlayMenuTarget | null
-  setModal: { setId: string | null; presetKind?: string } | null
+  setModal: {
+    setId: string | null
+    presetKind?: string
+  } | null
   dynModal: { setId: string | null } | null
 }
 
@@ -75,8 +82,11 @@ export const useOverlays = () =>
     () => overlays,
   )
 
-export const openTileMenu = (x: number, y: number, entry: EntryActions) =>
-  set({ tileMenu: { entry, x, y } })
+export const openTileMenu = (
+  x: number,
+  y: number,
+  entry: EntryActions,
+) => set({ tileMenu: { entry, x, y } })
 
 export const closeTileMenu = () => {
   if (overlays.tileMenu) set({ tileMenu: null })
@@ -85,19 +95,24 @@ export const closeTileMenu = () => {
 export const openStartModal = (entry: EntryActions) =>
   set({ startModal: entry, tileMenu: null })
 
-export const closeStartModal = () => set({ startModal: null })
+export const closeStartModal = () =>
+  set({ startModal: null })
 
-export const openPlayMenu = (target: PlayMenuTarget) => set({ playMenu: target })
+export const openPlayMenu = (target: PlayMenuTarget) =>
+  set({ playMenu: target })
 
 export const closePlayMenus = () => {
   if (overlays.playMenu) set({ playMenu: null })
 }
 
-export const openSetModal = (setId: string | null, presetKind?: string) =>
-  set({ setModal: { presetKind, setId } })
+export const openSetModal = (
+  setId: string | null,
+  presetKind?: string,
+) => set({ setModal: { presetKind, setId } })
 
 export const closeSetModal = () => set({ setModal: null })
 
-export const openDynModal = (setId: string | null) => set({ dynModal: { setId } })
+export const openDynModal = (setId: string | null) =>
+  set({ dynModal: { setId } })
 
 export const closeDynModal = () => set({ dynModal: null })

@@ -5,7 +5,10 @@ import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
 import { byTitle } from "../lib/tileFace"
 import type { Profile } from "../lib/types"
-import { closeSetModal, useOverlays } from "../state/overlays"
+import {
+  closeSetModal,
+  useOverlays,
+} from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
 import { Modal } from "./Modal"
 import { SelectListbox } from "./SelectListbox"
@@ -31,7 +34,10 @@ export function SetModal() {
 
   const setId = setModal?.setId ?? null
   const editing = useMemo(
-    () => (setId ? (reg?.sets.find((s) => s.id === setId) ?? null) : null),
+    () =>
+      setId
+        ? (reg?.sets.find((s) => s.id === setId) ?? null)
+        : null,
     [reg, setId],
   )
 
@@ -39,9 +45,11 @@ export function SetModal() {
   const [kind, setKind] = useState("movies")
   const [sections, setSections] = useState<number[]>([])
   const [requiresProfile, setRequiresProfile] = useState("")
-  const [isKeepCompleted, setIsKeepCompleted] = useState(false)
+  const [isKeepCompleted, setIsKeepCompleted] =
+    useState(false)
   const [isReel, setIsReel] = useState(false)
-  const [removeCompletedAfter, setRemoveCompletedAfter] = useState("")
+  const [removeCompletedAfter, setRemoveCompletedAfter] =
+    useState("")
   const [profiles, setProfiles] = useState<Profile[]>([])
 
   // Identity of the open modal instance — used to remount uncontrolled Charcuterie
@@ -54,19 +62,30 @@ export function SetModal() {
     if (!setModal) return
 
     setLabel(editing ? editing.label : "")
-    const nextKind = editing ? editing.kind : setModal.presetKind || "movies"
+    const nextKind = editing
+      ? editing.kind
+      : setModal.presetKind || "movies"
     setKind(nextKind)
     setSections(editing ? [...editing.sections] : [])
-    setRequiresProfile(editing ? editing.requires_profile || "" : "")
-    setIsKeepCompleted(editing ? Boolean(editing.keep_completed || editing.reel) : false)
+    setRequiresProfile(
+      editing ? editing.requires_profile || "" : "",
+    )
+    setIsKeepCompleted(
+      editing
+        ? Boolean(editing.keep_completed || editing.reel)
+        : false,
+    )
     setIsReel(editing ? Boolean(editing.reel) : false)
     // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
     // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
     if (editing) {
-      setRemoveCompletedAfter(editing.remove_completed_after || "")
-    }
-    else {
-      setRemoveCompletedAfter(nextKind === "anime" ? "" : "24h")
+      setRemoveCompletedAfter(
+        editing.remove_completed_after || "",
+      )
+    } else {
+      setRemoveCompletedAfter(
+        nextKind === "anime" ? "" : "24h",
+      )
     }
     void fetchProfiles().then(setProfiles)
     // Only re-seed when the modal is (re-)opened.
@@ -76,7 +95,10 @@ export function SetModal() {
   // Every video library is opt-in; show them all, alphabetically (there is no
   // global hide list any more).
   const libraries = useMemo(
-    () => (reg?.libraries ?? []).filter((l) => l.video).sort(byTitle),
+    () =>
+      (reg?.libraries ?? [])
+        .filter((l) => l.video)
+        .sort(byTitle),
     [reg],
   )
 
@@ -92,8 +114,14 @@ export function SetModal() {
         value: p.admin ? p.username || p.name : p.name,
       })),
     ]
-    if (requiresProfile && !opts.some((o) => o.value === requiresProfile)) {
-      opts.push({ label: `${requiresProfile} (current)`, value: requiresProfile })
+    if (
+      requiresProfile &&
+      !opts.some((o) => o.value === requiresProfile)
+    ) {
+      opts.push({
+        label: `${requiresProfile} (current)`,
+        value: requiresProfile,
+      })
     }
     return opts
   }, [profiles, requiresProfile])
@@ -129,19 +157,23 @@ export function SetModal() {
     try {
       if (setId) {
         await api("PATCH", `/api/sets/${setId}`, body)
-      }
-      else {
+      } else {
         await api("POST", "/api/sets", body)
       }
 
       const word = kind === "anime" ? "Channel" : "Queue"
 
       closeSetModal()
-      setStatus(setId ? `${word} updated` : `${word} created`, "ok")
+      setStatus(
+        setId ? `${word} updated` : `${word} created`,
+        "ok",
+      )
       await load()
-    }
-    catch (err) {
-      setStatus("Save failed: " + (err as Error).message, "err")
+    } catch (err) {
+      setStatus(
+        `Save failed: ${(err as Error).message}`,
+        "err",
+      )
     }
   }
 
@@ -163,9 +195,11 @@ export function SetModal() {
       closeSetModal()
       setStatus("Queue deleted", "ok")
       await load()
-    }
-    catch (e) {
-      setStatus("Delete failed: " + (e as Error).message, "err")
+    } catch (e) {
+      setStatus(
+        `Delete failed: ${(e as Error).message}`,
+        "err",
+      )
     }
   }
 
@@ -244,9 +278,13 @@ export function SetModal() {
           label="Type"
           onChange={setKind}
           options={[
-            { label: "Queue — ordered, top plays next", value: "movies" },
             {
-              label: "Channel — members play in random order",
+              label: "Queue — ordered, top plays next",
+              value: "movies",
+            },
+            {
+              label:
+                "Channel — members play in random order",
               value: "anime",
             },
           ]}
@@ -268,14 +306,18 @@ export function SetModal() {
         />
       </label>
       <p className="subhint" id="set-profile-hint">
-        Locks this queue to a Plex Home profile — a scan waits (and switches the Shield)
-        until that profile is signed in before it plays. Leave “Any” for no lock. Needed when
-        the queue’s libraries are only shared with one profile (e.g. Demos → Demo).
+        Locks this queue to a Plex Home profile — a scan
+        waits (and switches the Shield) until that profile
+        is signed in before it plays. Leave “Any” for no
+        lock. Needed when the queue’s libraries are only
+        shared with one profile (e.g. Demos → Demo).
       </p>
       {/* Everyday fields first (profile gate, libraries); playlist/reel/TTL sit below as
           advanced options so a normal edit doesn't scroll past them. */}
       <fieldset className="field">
-        <legend>Libraries this queue can search &amp; hold</legend>
+        <legend>
+          Libraries this queue can search &amp; hold
+        </legend>
         <div className="libs" id="set-libs">
           {libraries.map((l) => (
             <label key={l.id}>
@@ -286,7 +328,8 @@ export function SetModal() {
                     e.target.checked
                       ? [...prev, l.id]
                       : prev.filter((x) => x !== l.id),
-                  )}
+                  )
+                }
                 type="checkbox"
                 value={String(l.id)}
               />
@@ -309,8 +352,9 @@ export function SetModal() {
           onChange={setIsKeepCompleted}
         />
         <p className="subhint" id="set-keep-hint">
-          Non-consuming queue: entries stay re-showable forever. Demo Reel and other
-          showcase lineups want this. Forced on when Demo reel is checked.
+          Non-consuming queue: entries stay re-showable
+          forever. Demo Reel and other showcase lineups want
+          this. Forced on when Demo reel is checked.
         </p>
         <Checkbox
           id="set-reel"
@@ -320,23 +364,29 @@ export function SetModal() {
           onChange={onReelChange}
         />
         <p className="subhint" id="set-reel-hint">
-          Ignores watched-state and plays every entry each scan (implies playlist mode).
-          Leave off for a normal ordered queue that advances one item at a time.
+          Ignores watched-state and plays every entry each
+          scan (implies playlist mode). Leave off for a
+          normal ordered queue that advances one item at a
+          time.
         </p>
         <label className="field" htmlFor="set-remove-after">
           Remove finished entries after
           <input
             id="set-remove-after"
-            onChange={(e) => setRemoveCompletedAfter(e.target.value)}
-            placeholder='e.g. 24h — blank = keep forever'
+            onChange={(e) =>
+              setRemoveCompletedAfter(e.target.value)
+            }
+            placeholder="e.g. 24h — blank = keep forever"
             type="text"
             value={removeCompletedAfter}
           />
         </label>
         <p className="subhint" id="set-remove-hint">
-          Opt-in TTL for auto-removing finished entries (`24h`, `7d`, `90m`). Blank or
-          `never` keeps them tagged done until you clear them. Playlist / reel queues never
-          mark done, so this only applies to ordinary consuming queues.
+          Opt-in TTL for auto-removing finished entries
+          (`24h`, `7d`, `90m`). Blank or `never` keeps them
+          tagged done until you clear them. Playlist / reel
+          queues never mark done, so this only applies to
+          ordinary consuming queues.
         </p>
       </fieldset>
       <p className="idnote" id="set-idnote">

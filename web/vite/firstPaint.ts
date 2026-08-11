@@ -1,7 +1,7 @@
 import {
   buildFirstPaintScript,
-  daylight,
   DEFAULT_COLOR_SCHEME_STORAGE_KEY,
+  daylight,
 } from "@charcuterie/tokens"
 import type { Plugin } from "vite"
 

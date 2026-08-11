@@ -1,0 +1,53 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
+  "extends": ["@charcuterie/biome-config"],
+  "vcs": {
+    "root": ".."
+  },
+  "files": {
+    "includes": [
+      "**",
+      "!**/node_modules",
+      "!**/dist",
+      "!**/public",
+      "!index.html"
+    ]
+  },
+  "linter": {
+    "rules": {
+      "correctness": {
+        "useExhaustiveDependencies": "warn"
+      },
+      "style": {
+        "noNonNullAssertion": "off"
+      },
+      "a11y": {
+        "noLabelWithoutControl": {
+          "level": "error",
+          "options": {
+            "inputComponents": [
+              "CheckboxGroup",
+              "SearchDropdown",
+              "SelectListbox"
+            ]
+          }
+        },
+        "noNoninteractiveTabindex": "off",
+        "noStaticElementInteractions": "off",
+        "useKeyWithClickEvents": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      "includes": ["src/styles/app.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
+        }
+      }
+    }
+  ]
+}

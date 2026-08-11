@@ -24,5 +24,10 @@
     "types": [],
     "verbatimModuleSyntax": true
   },
-  "include": ["src", "vite", "vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "src",
+    "vite",
+    "vite.config.ts",
+    "vitest.config.ts"
+  ]
 }

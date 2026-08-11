@@ -34,11 +34,19 @@ const item = (over: Partial<QueueItem>): QueueItem => ({
 
 describe("seLabel", () => {
   test("drops the season for a single-season show — every anime is one", () => {
-    expect(seLabel({ episode: 12, multiSeason: false, season: 1 })).toBe("E12")
+    expect(
+      seLabel({
+        episode: 12,
+        multiSeason: false,
+        season: 1,
+      }),
+    ).toBe("E12")
   })
 
   test("keeps it for a multi-season show", () => {
-    expect(seLabel({ episode: 5, multiSeason: true, season: 3 })).toBe("S3 · E5")
+    expect(
+      seLabel({ episode: 5, multiSeason: true, season: 3 }),
+    ).toBe("S3 · E5")
   })
 })
 
@@ -54,19 +62,24 @@ describe("withoutCollectionPrefix", () => {
   })
 
   test("leaves a member named exactly for its collection whole", () => {
-    expect(withoutCollectionPrefix("Chaika", "Chaika")).toBe("Chaika")
+    expect(
+      withoutCollectionPrefix("Chaika", "Chaika"),
+    ).toBe("Chaika")
   })
 
   test("leaves a member that does not lead with the collection whole", () => {
-    expect(withoutCollectionPrefix("Some Other Show", "Chaika")).toBe(
-      "Some Other Show",
-    )
+    expect(
+      withoutCollectionPrefix("Some Other Show", "Chaika"),
+    ).toBe("Some Other Show")
   })
 
   test("is case-insensitive on the prefix but keeps the member's own casing", () => {
-    expect(withoutCollectionPrefix("CHAIKA — Avenging Battle", "Chaika")).toBe(
-      "Avenging Battle",
-    )
+    expect(
+      withoutCollectionPrefix(
+        "CHAIKA — Avenging Battle",
+        "Chaika",
+      ),
+    ).toBe("Avenging Battle")
   })
 })
 
@@ -74,7 +87,12 @@ describe("tileFace", () => {
   test("a series tile reads episode + episode title", () => {
     const face = tileFace(
       item({
-        nextEp: { episode: 5, multiSeason: true, season: 3, title: "The Duel" },
+        nextEp: {
+          episode: 5,
+          multiSeason: true,
+          season: 3,
+          title: "The Duel",
+        },
         title: "Bantorra",
       }),
     )
@@ -97,7 +115,8 @@ describe("tileFace", () => {
         nextEp: {
           episode: 1,
           kind: "show",
-          member: "Chaika: The Coffin Princess - Avenging Battle",
+          member:
+            "Chaika: The Coffin Princess - Avenging Battle",
           memberRatingKey: "999",
           memberYear: 2014,
           multiSeason: false,
@@ -117,7 +136,9 @@ describe("tileFace", () => {
     expect(face.next).toBe("E1 · For Lost Love")
     // …and the collection moves to the badge.
     expect(face.from).toBe("Chaika: The Coffin Princess")
-    expect(face.fullTitle).toBe("Chaika: The Coffin Princess - Avenging Battle")
+    expect(face.fullTitle).toBe(
+      "Chaika: The Coffin Princess - Avenging Battle",
+    )
   })
 
   test("a collection whose next member is a MOVIE says where it sits", () => {
@@ -141,7 +162,12 @@ describe("tileFace", () => {
 
   test("a collection with no next-up member falls back to its own identity", () => {
     const face = tileFace(
-      item({ childCount: 8, nextEp: null, title: "Ghibli", type: "collection" }),
+      item({
+        childCount: 8,
+        nextEp: null,
+        title: "Ghibli",
+        type: "collection",
+      }),
     )
 
     expect(face.title).toBe("Ghibli")
@@ -152,21 +178,29 @@ describe("tileFace", () => {
 
 describe("byTitle", () => {
   test("files a leading article under its next word", () => {
-    expect(titleSortKey("The Book of Bantorra")).toBe("Book of Bantorra")
+    expect(titleSortKey("The Book of Bantorra")).toBe(
+      "Book of Bantorra",
+    )
   })
 
   test("is numeric-aware, so Vol 2 precedes Vol 10", () => {
-    expect(byTitle({ title: "Vol 2" }, { title: "Vol 10" })).toBeLessThan(0)
+    expect(
+      byTitle({ title: "Vol 2" }, { title: "Vol 10" }),
+    ).toBeLessThan(0)
   })
 })
 
 describe("startLabel", () => {
   test("omits the season when it is the only one", () => {
-    expect(startLabel({ episode: 20, season: 1 })).toBe("Start E20")
+    expect(startLabel({ episode: 20, season: 1 })).toBe(
+      "Start E20",
+    )
   })
 
   test("names the season when it matters", () => {
-    expect(startLabel({ episode: 3, season: 2 })).toBe("Start S2E3")
+    expect(startLabel({ episode: 3, season: 2 })).toBe(
+      "Start S2E3",
+    )
   })
 
   test("is empty with no override, so a plain tile shows no chip", () => {
@@ -177,11 +211,15 @@ describe("startLabel", () => {
 describe("isStartable", () => {
   test("shows and collections can carry a start point; a movie cannot", () => {
     expect(isStartable(item({ type: "show" }))).toBe(true)
-    expect(isStartable(item({ type: "collection" }))).toBe(true)
+    expect(isStartable(item({ type: "collection" }))).toBe(
+      true,
+    )
     expect(isStartable(item({ type: "movie" }))).toBe(false)
   })
 
   test("an unresolved entry cannot — there is nothing to list episodes from", () => {
-    expect(isStartable(item({ resolved: false, type: "show" }))).toBe(false)
+    expect(
+      isStartable(item({ resolved: false, type: "show" })),
+    ).toBe(false)
   })
 })

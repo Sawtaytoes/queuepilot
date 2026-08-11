@@ -17,7 +17,8 @@
  */
 
 export const prefersReducedMotion = () =>
-  window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches ?? false
+  window.matchMedia?.("(prefers-reduced-motion: reduce)")
+    ?.matches ?? false
 
 /**
  * Measure `container`'s tiles, run `build` (the DOM write), then animate each tile
@@ -36,15 +37,22 @@ export function flipPaint(
 
   const before = new Map<string, DOMRect>()
 
-  for (const t of container.querySelectorAll<HTMLElement>("li.tile")) {
-    if (t.dataset.key) before.set(t.dataset.key, t.getBoundingClientRect())
+  for (const t of container.querySelectorAll<HTMLElement>(
+    "li.tile",
+  )) {
+    if (t.dataset.key)
+      before.set(t.dataset.key, t.getBoundingClientRect())
   }
 
   build()
 
-  for (const t of container.querySelectorAll<HTMLElement>("li.tile")) {
+  for (const t of container.querySelectorAll<HTMLElement>(
+    "li.tile",
+  )) {
     const a = t.getBoundingClientRect()
-    const b = t.dataset.key ? before.get(t.dataset.key) : undefined
+    const b = t.dataset.key
+      ? before.get(t.dataset.key)
+      : undefined
 
     if (!b) {
       t.animate(
@@ -67,7 +75,10 @@ export function flipPaint(
           { transform: `translate(${dx}px, ${dy}px)` },
           { transform: "none" },
         ],
-        { duration: 240, easing: "cubic-bezier(.2,.7,.3,1)" },
+        {
+          duration: 240,
+          easing: "cubic-bezier(.2,.7,.3,1)",
+        },
       )
     }
   }
@@ -85,7 +96,8 @@ export function flipMove(
 ): void {
   const first = new Map<HTMLElement, DOMRect>()
 
-  for (const el of items) first.set(el, el.getBoundingClientRect())
+  for (const el of items)
+    first.set(el, el.getBoundingClientRect())
 
   mutate()
 
@@ -119,7 +131,10 @@ export function flipMove(
  * elsewhere), so a mistaken add was impossible to find. No-op if the tile isn't on
  * the current view.
  */
-export function flashTile(set: string, key: string | null | undefined): void {
+export function flashTile(
+  set: string,
+  key: string | null | undefined,
+): void {
   if (!key) return
 
   requestAnimationFrame(() => {
@@ -129,12 +144,19 @@ export function flashTile(set: string, key: string | null | undefined): void {
 
     if (!el) return
 
-    el.scrollIntoView({ behavior: "smooth", block: "center" })
+    el.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    })
     el.classList.remove("justadded")
     void el.offsetWidth // reflow, so re-adding the class restarts the animation
     el.classList.add("justadded")
-    el.addEventListener("animationend", () => el.classList.remove("justadded"), {
-      once: true,
-    })
+    el.addEventListener(
+      "animationend",
+      () => el.classList.remove("justadded"),
+      {
+        once: true,
+      },
+    )
   })
 }

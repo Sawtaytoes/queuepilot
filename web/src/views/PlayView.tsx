@@ -27,12 +27,14 @@ import {
 
 /** A tier-select value → `{set, profile?}` (JSON for a binding option, a bare id
  * otherwise). */
-function parseTierValue(v: string): { set: string; profile?: string } {
-  if (v && v.startsWith("{")) {
+function parseTierValue(v: string): {
+  set: string
+  profile?: string
+} {
+  if (v?.startsWith("{")) {
     try {
       return JSON.parse(v)
-    }
-    catch {
+    } catch {
       /* fall through */
     }
   }
@@ -56,7 +58,11 @@ function PlayRow({
   return (
     <li className="playrow">
       <div className="rowmain">
-        <button className="rowname" onClick={onOpen} type="button">
+        <button
+          className="rowname"
+          onClick={onOpen}
+          type="button"
+        >
           {label}
         </button>
         <span className="rowmeta">{meta}</span>
@@ -64,7 +70,9 @@ function PlayRow({
       {tier}
       <button
         className="playbtn"
-        onClick={(e) => onPlay(e.currentTarget.getBoundingClientRect())}
+        onClick={(e) =>
+          onPlay(e.currentTarget.getBoundingClientRect())
+        }
         type="button"
       >
         ▶ Play on ▾
@@ -80,7 +88,10 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
   const options = channel.has_explicit_profiles
     ? (channel.profiles || []).map((b) => ({
         label: b.plex_user || channel.label,
-        value: JSON.stringify({ profile: b.plex_user, set: channel.id }),
+        value: JSON.stringify({
+          profile: b.plex_user,
+          set: channel.id,
+        }),
       }))
     : [{ label: channel.label, value: channel.id }]
 
@@ -90,8 +101,15 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
   const defaultValue =
     channel.has_explicit_profiles && channel.default_profile
       ? (channel.profiles || [])
-          .filter((b) => b.plex_user === channel.default_profile)
-          .map((b) => JSON.stringify({ profile: b.plex_user, set: channel.id }))[0]
+          .filter(
+            (b) => b.plex_user === channel.default_profile,
+          )
+          .map((b) =>
+            JSON.stringify({
+              profile: b.plex_user,
+              set: channel.id,
+            }),
+          )[0]
       : undefined
 
   const [tierValue, setTierValue] = useState(
@@ -101,8 +119,16 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
   return (
     <PlayRow
       label={channel.label}
-      meta={isRewatch ? "weighted rewatch" : "rotation · ratings-filtered"}
-      onOpen={() => navigate(`#/channels/${encodeURIComponent(channel.id)}`)}
+      meta={
+        isRewatch
+          ? "weighted rewatch"
+          : "rotation · ratings-filtered"
+      }
+      onOpen={() =>
+        navigate(
+          `#/channels/${encodeURIComponent(channel.id)}`,
+        )
+      }
       onPlay={(anchor) => {
         const t = parseTierValue(tierValue)
 
@@ -127,7 +153,11 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
   )
 }
 
-export function PlayView({ isHidden }: { isHidden: boolean }) {
+export function PlayView({
+  isHidden,
+}: {
+  isHidden: boolean
+}) {
   const { data, reg } = useStore()
 
   return (
@@ -177,7 +207,9 @@ export function PlayView({ isHidden }: { isHidden: boolean }) {
                     label={s.label}
                     meta={`${s.items.length} shows · random rotation`}
                     onOpen={() => navigate(`#/q/${id}`)}
-                    onPlay={(anchor) => openPlayMenu({ anchor, setId: id })}
+                    onPlay={(anchor) =>
+                      openPlayMenu({ anchor, setId: id })
+                    }
                   />
                 )
               })}
@@ -208,7 +240,9 @@ export function PlayView({ isHidden }: { isHidden: boolean }) {
                     label={s.label}
                     meta={`${s.items.length} titles · top plays next`}
                     onOpen={() => navigate(`#/q/${id}`)}
-                    onPlay={(anchor) => openPlayMenu({ anchor, setId: id })}
+                    onPlay={(anchor) =>
+                      openPlayMenu({ anchor, setId: id })
+                    }
                   />
                 )
               })}
