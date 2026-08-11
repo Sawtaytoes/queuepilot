@@ -369,8 +369,22 @@ export async function collectionItems(client, cfg, name, watched, token, start =
 export async function resolveMember(client, desc, cfg, watched, token, defaultBatch = null, resume = false) {
   if (desc.collection) {
     const name = desc.collection;
-    const items = await collectionItems(client, cfg, name, watched, token, desc.start, resume);
+    let items = await collectionItems(client, cfg, name, watched, token, desc.start, resume);
     if (items == null) return null;
+    // A collection is ONE member, so it contributes ONE batch — the same cap the show branch
+    // applies below, honoring a per-entry `episodes:` override the same way. Without this a
+    // collection dumped its children's ENTIRE unwatched run into a single scan: the anime
+    // channel built 9 consecutive Chaika episodes + 2 Nadesico + 1 Gleipnir and called that a
+    // 12-item rotation (2026-08-11). Decision
+    // 2026-07-21-plex-collections-as-ordered-queue-entries is explicit that a collection gets
+    // "the same footing as show entries"; uncapped expansion was never that.
+    // defaultBatch stays null for the rotation/member-bucket callers, so their round-robin
+    // still receives the full ordered list and advances a member across rounds as before.
+    let batch = desc.episodes || defaultBatch;
+    if (batch) {
+      batch = Math.max(1, Math.min(parseInt(batch, 10), QUEUE_SERIES_LENGTH));
+      items = items.slice(0, batch);
+    }
     return { title: `Collection: ${name}`, type: 'collection', items };
   }
   const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);

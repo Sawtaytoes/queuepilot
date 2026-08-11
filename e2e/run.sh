@@ -34,6 +34,8 @@ echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile det
 node e2e/profile-gate-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > placeholder
 node e2e/host-config-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
+node e2e/collection-batch-cap-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== headers-test ==="   # browserless; asserts compression + cache headers (Phase A)
 node e2e/headers-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== perf-queues ==="   # browserless; stub Plex + broker, asserts the cache/ETag (Phase B)
