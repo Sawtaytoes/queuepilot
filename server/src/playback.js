@@ -414,10 +414,17 @@ function intOffset(offset) {
 // HA source reports `{"state":"playing", "ratingKey":null}` on this setup — a playing state it
 // cannot name — so it is unusable for deciding WHICH episode to seek. /status/sessions names
 // the episode and gives its position.
-export async function currentSession({ device = null, setName = null } = {}) {
+export async function currentSession({ device = null } = {}) {
   let data;
   try {
-    data = await plexReq('GET', '/status/sessions', { token: await playToken(setName) });
+    // ADMIN token, deliberately — NOT the set's account token. /status/sessions returns an
+    // EMPTY container for a managed user, so querying as the set's profile makes every session
+    // invisible and the resume watcher silently does nothing. Measured on the live deploy while
+    // a kids' episode was playing:
+    //   currentSession({})                -> {"ratingKey":"359877","viewOffset":19485}
+    //   currentSession({setName:'shows'}) -> null
+    // The seek itself still goes out under the play token, matching playMedia.
+    data = await plexReq('GET', '/status/sessions', { token: await playToken(null) });
   } catch {
     return null;
   }

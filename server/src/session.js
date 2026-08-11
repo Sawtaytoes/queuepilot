@@ -277,7 +277,7 @@ export async function startSession(payload = {}, opts = {}) {
       console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance: `
         + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
       resume.startWatch({
-        fetchSession: () => playback.currentSession({ device, setName }),
+        fetchSession: () => playback.currentSession({ device }),
         seek: (ms) => playback.seekTo(ms, { device, setName }),
       });
     }
