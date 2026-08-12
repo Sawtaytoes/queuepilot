@@ -182,7 +182,7 @@ def _describe(entry):
     """Normalize a raw queue entry into a resolution descriptor.
 
     Returns {key, ratingKey|None, title|None, year|None, guid|None, collection|None,
-    episodes|None, done, raw}. `title` is the PARSED bare title (year/guid peeled into
+    episodes|None, batch_stops_at|None, done, raw}. `title` is the PARSED bare title (year/guid peeled into
     their own fields); `collection` is the name from a `Collection: <name>` string or a
     `{collection: <name>}` mapping (plays that whole Plex Collection in order); `done` is
     True for a finished-but-kept entry (marked, not pruned — see mark_done); `raw` is the
@@ -204,6 +204,10 @@ def _describe(entry):
                 "title": title or None, "year": year, "guid": guid,
                 "collection": str(coll).strip() if coll else None,
                 "episodes": entry.get("episodes"),
+                # Per-entry override of the set's `batch_stops_at` ("none"|"member"|"season"):
+                # where this entry's batch may stop. Lets one OVA collection roll straight
+                # through on a channel that otherwise stops at season boundaries.
+                "batch_stops_at": entry.get("batch_stops_at"),
                 # Manual START floor {season, episode}: begin the show here, skipping earlier
                 # episodes WITHOUT marking them watched (resume-from-Crunchyroll / skip-a-saga).
                 "start": entry.get("start"),
@@ -211,13 +215,14 @@ def _describe(entry):
     if _is_rating_key(entry):
         return {"key": entry_key(entry), "ratingKey": str(entry).strip(),
                 "title": None, "year": None, "guid": None, "collection": None,
-                "episodes": None, "done": False, "raw": entry}
+                "episodes": None, "batch_stops_at": None, "done": False, "raw": entry}
     title, year, guid = parse_title_string(entry)
     cm = _COLLECTION_RE.match(title)
     coll = cm.group(1).strip() if cm else None
     return {"key": entry_key(entry), "ratingKey": None,
             "title": title or None, "year": year, "guid": guid,
-            "collection": coll, "episodes": None, "done": False, "raw": entry}
+            "collection": coll, "episodes": None, "batch_stops_at": None,
+            "done": False, "raw": entry}
 
 
 def _ruamel():

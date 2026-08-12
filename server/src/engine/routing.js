@@ -141,6 +141,11 @@ export function loadSets(path = SETS_PATH) {
       cfg.remove_completed_after = String(ent.remove_completed_after).trim();
     }
     if (ent.include_specials) cfg.include_specials = true;
+    // Where a multi-episode batch may stop: "none" | "member" | "season". resolve.js's batchStop
+    // interprets it (entry override > set > env BATCH_STOPS_AT).
+    if (ent.batch_stops_at != null) {
+      cfg.batch_stops_at = String(ent.batch_stops_at).trim().toLowerCase();
+    }
     // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
     if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().

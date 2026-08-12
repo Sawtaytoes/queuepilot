@@ -198,6 +198,43 @@ export function QueueView({
     }
   }
 
+  // The entry's `batch_stops_at` override (where its batch may stop, as opposed to how long
+  // it is). "" clears it back to "follow the set".
+  const setBatchStop = async (
+    item: QueueItem,
+    value: string,
+  ) => {
+    setStatus("Saving…")
+
+    try {
+      await api(
+        "PATCH",
+        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/batch-stop`,
+        { batch_stops_at: value },
+      )
+
+      const set = getState().data?.sets[setId!]
+      const hit = set?.items.find(
+        (it) => it.key === item.key,
+      )
+
+      if (hit) {
+        hit.batch_stops_at =
+          value === "member" || value === "season"
+            ? value
+            : null
+        bumpRevision()
+      }
+
+      setStatus("Saved", "ok")
+    } catch (e) {
+      setStatus(
+        `Save failed: ${(e as Error).message}`,
+        "err",
+      )
+    }
+  }
+
   return (
     <main
       className={`view editable${selected.size ? " move-mode" : ""}`}
@@ -519,6 +556,52 @@ export function QueueView({
                             value={String(
                               item.episodes || 1,
                             )}
+                          />
+                        </label>
+                      </Tip>
+                    ) : null}
+                    {/* Where that batch may STOP — only offered once it is
+                            longer than one item, since a 1-item batch can't
+                            cross a boundary. "Set default" = no override, so the
+                            set's own setting (or none) applies. */}
+                    {item.resolved &&
+                    (item.episodes || 1) > 1 &&
+                    (item.type === "show" ||
+                      item.type === "collection") ? (
+                      <Tip label="Where this batch may stop — keeps a season finale from being followed by the next season (or, in a collection, another show's episode 1).">
+                        <label className="eps">
+                          {/* Keyed on the SERVER's value, same rule as the
+                                    episodes select above it. */}
+                          <SelectListbox
+                            key={String(
+                              item.batch_stops_at || "",
+                            )}
+                            label="Where this batch may stop"
+                            onChange={(v) =>
+                              void setBatchStop(item, v)
+                            }
+                            options={[
+                              {
+                                label: "Follow the set",
+                                value: "",
+                              },
+                              {
+                                label: "End at season",
+                                value: "season",
+                              },
+                              ...(item.type === "collection"
+                                ? [
+                                    {
+                                      label: "End at show",
+                                      value: "member",
+                                    },
+                                  ]
+                                : []),
+                            ]}
+                            size="sm"
+                            value={
+                              item.batch_stops_at || ""
+                            }
                           />
                         </label>
                       </Tip>

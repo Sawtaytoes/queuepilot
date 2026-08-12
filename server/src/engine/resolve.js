@@ -22,7 +22,9 @@ import { setSections } from './routing.js';
 import {
   int0, atOrAfterStart, multiSeason, showEpisodes, findCollection, collectionChildren,
 } from './select.js';
-import { QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH, ROTATION_LENGTH } from '../env.js';
+import {
+  BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH, ROTATION_LENGTH,
+} from '../env.js';
 import { QUEUES_PATH } from '../config.js';
 
 // --------------------------------------------------------------------------- //
@@ -350,13 +352,22 @@ export async function collectionItems(client, cfg, name, watched, token, start =
       const specialsOk = resume && !hasRealSeasons(childEps);
       for (const e of childEps) {
         if ((!watched.has(e.ratingKey) || (resume && inProgress(e.viewOffset, e.viewCount)))
-          && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, epStart)) items.push(e);
+          && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, epStart)) {
+          // Which collection CHILD this leaf came from, so a `batch_stops_at` cut can see the
+          // member boundary (segmentKey). showEpisodes builds fresh objects per call, so
+          // tagging in place is local to this resolve.
+          e.member_key = rk;
+          items.push(e);
+        }
       }
     } else {
       if (watched.has(rk)
         && !(resume && inProgress(...await itemViewState(client, rk, token)))) continue;
       items.push({
         ratingKey: rk, title: ch.title, show: ch.grandparentTitle || name,
+        // Its OWN member_key: `show` is the collection name for a movie member, so keying a
+        // boundary on that would fuse every movie in the collection into one segment.
+        member_key: rk,
         season: ch.parentIndex, episode: ch.index, duration: ch.duration,
       });
     }
@@ -364,8 +375,57 @@ export async function collectionItems(client, cfg, name, watched, token, start =
   return items;
 }
 
+// --------------------------------------------------------------------------- //
+// Batch boundaries (`batch_stops_at`) — port of plex.py's _batch_stop/_apply_batch
+// --------------------------------------------------------------------------- //
+const BATCH_STOPS = ['member', 'season'];
+const BATCH_STOPS_OFF = ['none', '', 'off', 'no', 'false', '0'];
+
+// Where this entry's batch may stop: 'none' | 'member' | 'season'. Precedence: the ENTRY's
+// `batch_stops_at` (queues.yaml) > the SET's (sets.yaml) > env BATCH_STOPS_AT (default 'none' =
+// today's fill-across-anything). An UNRECOGNISED value at one level is ignored rather than read
+// as 'none', so a typo in a hand-edited entry falls back to the set's intent, not off.
+function batchStop(desc, cfg) {
+  for (const raw of [(desc || {}).batch_stops_at, (cfg || {}).batch_stops_at, BATCH_STOPS_AT]) {
+    if (raw == null) continue;
+    const val = String(raw).trim().toLowerCase();
+    if (BATCH_STOPS.includes(val)) return val;
+    if (BATCH_STOPS_OFF.includes(val)) return 'none';
+  }
+  return 'none';
+}
+
+// The segment an item belongs to under `stop` — a batch may not span two segments. `member_key`
+// is the collection CHILD an item came from (tagged by collectionItems); it is absent on a plain
+// show entry's leaves, where every item is the same member anyway, so the fallback to `show`
+// keeps a 'member' stop a correct no-op there. Movies in a collection each carry their OWN
+// member_key, because their `show` is the collection name and would fuse them into one segment.
+function segmentKey(item, stop) {
+  const member = item.member_key || item.show;
+  return stop === 'season' ? `${member} ${item.season}` : String(member);
+}
+
+// Cap `items` to `batch`, then cut at the first segment boundary if `stop` asks. Only ever
+// SHORTENS, and never below one item — an empty list is the FINISHED signal nextQueue marks the
+// entry done on, so a boundary cut that emptied a live batch would silently retire a show
+// mid-run. The boundary applies only when a count cap is in force, so the rotation /
+// member-bucket callers (no batch) keep the full ordered list their round-robin walks.
+function applyBatch(items, batch, stop) {
+  if (!batch) return items;
+  const n = Math.max(1, Math.min(parseInt(batch, 10), QUEUE_SERIES_LENGTH));
+  let out = items.slice(0, n);
+  if (BATCH_STOPS.includes(stop) && out.length > 1) {
+    const head = segmentKey(out[0], stop);
+    let cut = 1;
+    while (cut < out.length && segmentKey(out[cut], stop) === head) cut += 1;
+    out = out.slice(0, cut);
+  }
+  return out;
+}
+
 // Resolve ONE member descriptor into a play batch. Port of resolve_member. Returns null when
 // UNRESOLVED; otherwise {title, type, ratingKey?, items, multi_season?} (empty items = FINISHED).
+// The count cap says how many; batchStop says where the batch may end (see batchStop above).
 export async function resolveMember(client, desc, cfg, watched, token, defaultBatch = null, resume = false) {
   if (desc.collection) {
     const name = desc.collection;
@@ -380,11 +440,9 @@ export async function resolveMember(client, desc, cfg, watched, token, defaultBa
     // "the same footing as show entries"; uncapped expansion was never that.
     // defaultBatch stays null for the rotation/member-bucket callers, so their round-robin
     // still receives the full ordered list and advances a member across rounds as before.
-    let batch = desc.episodes || defaultBatch;
-    if (batch) {
-      batch = Math.max(1, Math.min(parseInt(batch, 10), QUEUE_SERIES_LENGTH));
-      items = items.slice(0, batch);
-    }
+    // `batch_stops_at` additionally forbids the batch from spanning a member (or season)
+    // boundary, so a season finale isn't followed by ep 1 of the next member show.
+    items = applyBatch(items, desc.episodes || defaultBatch, batchStop(desc, cfg));
     return { title: `Collection: ${name}`, type: 'collection', items };
   }
   const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
@@ -402,11 +460,9 @@ export async function resolveMember(client, desc, cfg, watched, token, defaultBa
   let eps = allEps.filter((e) => (!watched.has(e.ratingKey)
     || (resume && inProgress(e.viewOffset, e.viewCount)))
     && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, start));
-  let batch = desc.episodes || defaultBatch;
-  if (batch) {
-    batch = Math.max(1, Math.min(parseInt(batch, 10), QUEUE_SERIES_LENGTH));
-    eps = eps.slice(0, batch);
-  }
+  // A `season` stop also cuts at a season boundary, so `episodes: 2` on a show sitting at its
+  // finale queues S1E12 alone instead of S1E12 + S2E01.
+  eps = applyBatch(eps, desc.episodes || defaultBatch, batchStop(desc, cfg));
   return { title, type: 'show', ratingKey: rk, items: eps, multi_season: multiSeason(allEps) };
 }
 

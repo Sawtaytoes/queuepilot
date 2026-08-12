@@ -242,6 +242,10 @@ app.get('/api/queues', async (req, res) => {
       const start = e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null;
       const core = await tiles.resolveTile(s.sections, e.value, start);
       const episodes = e.value && typeof e.value === 'object' && e.value.episodes ? e.value.episodes : 1;
+      // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may
+      // stop, as opposed to `episodes` = how long it is.
+      const batchStopsAt = e.value && typeof e.value === 'object' && e.value.batch_stops_at
+        ? String(e.value.batch_stops_at).trim().toLowerCase() : null;
       return {
         setId: s.id,
         tile: {
@@ -249,6 +253,7 @@ app.get('/api/queues', async (req, res) => {
           raw: tiles.displayFor(e.value),
           ...core,
           episodes,
+          batch_stops_at: ['member', 'season'].includes(batchStopsAt) ? batchStopsAt : null,
           // The manual start override (null = automatic next-unwatched).
           start,
           // A finished-but-kept entry (Python tagged it done); the grid greys it and the
@@ -599,6 +604,19 @@ app.patch('/api/queues/:set/items/:key/episodes', async (req, res) => {
   const episodes = req.body && req.body.episodes;
   try {
     res.json(await queues.setEpisodes(set, decodeURIComponent(req.params.key), episodes));
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// Set a series/collection entry's `batch_stops_at` override (where its batch may stop, as
+// opposed to how long it is). Body: {batch_stops_at}. "none"/blank clears it = follow the set.
+app.patch('/api/queues/:set/items/:key/batch-stop', async (req, res) => {
+  const set = req.params.set;
+  if (!(await requireQueueSet(res, set))) return;
+  const value = req.body && req.body.batch_stops_at;
+  try {
+    res.json(await queues.setBatchStop(set, decodeURIComponent(req.params.key), value));
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

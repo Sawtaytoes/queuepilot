@@ -98,6 +98,18 @@ await queues.setEpisodes('bob', 'title:Cowboy Bebop', 3);
 assertCommentsSurvive('setEpisodes', QUEUES_PATH);
 ok('setEpisodes: episodes written', /Cowboy Bebop[\s\S]*episodes: 3/.test(read(QUEUES_PATH)));
 
+// The per-entry batch boundary rides in the same `extras` bag as `episodes`, so it must both
+// preserve comments AND coexist with an existing override rather than replacing it.
+seed();
+await queues.setEpisodes('bob', 'title:Cowboy Bebop', 2);
+await queues.setBatchStop('bob', 'title:Cowboy Bebop', 'season');
+assertCommentsSurvive('setBatchStop', QUEUES_PATH);
+ok('setBatchStop: value written', /Cowboy Bebop[\s\S]*batch_stops_at: season/.test(read(QUEUES_PATH)));
+ok('setBatchStop: kept the entry\'s episodes override', /Cowboy Bebop[\s\S]*episodes: 2/.test(read(QUEUES_PATH)));
+await queues.setBatchStop('bob', 'title:Cowboy Bebop', 'none');
+ok('setBatchStop(none): key dropped', !has(QUEUES_PATH, 'batch_stops_at'));
+ok('setBatchStop(none): episodes override survived the clear', has(QUEUES_PATH, 'episodes: 2'));
+
 seed();
 await queues.setStart('bob', 'title:Cowboy Bebop', { season: 1, episode: 3 });
 assertCommentsSurvive('setStart', QUEUES_PATH);
@@ -121,6 +133,15 @@ seed();
 await sets.reorderSets(['fam', 'bob']);
 assertCommentsSurvive('reorderSets', SETS_PATH);
 ok('reorderSets: fam now first', read(SETS_PATH).indexOf('id: fam') < read(SETS_PATH).indexOf('id: bob'));
+
+seed();
+await sets.updateSet('bob', { batch_stops_at: 'season' });
+assertCommentsSurvive('updateSet(batch_stops_at)', SETS_PATH);
+ok('updateSet: batch_stops_at written', /id: bob[\s\S]*batch_stops_at: season/.test(read(SETS_PATH)));
+await sets.updateSet('bob', { batch_stops_at: 'none' });
+ok('updateSet(none): batch_stops_at key dropped', !has(SETS_PATH, 'batch_stops_at'));
+await sets.updateSet('bob', { batch_stops_at: 'seasons' });
+ok('updateSet(typo): nothing written (unrecognised = no boundary)', !has(SETS_PATH, 'batch_stops_at'));
 
 seed();
 await sets.createSet({ label: 'New Queue', kind: 'movies', sections: [1] });

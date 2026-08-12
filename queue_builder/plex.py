@@ -1142,20 +1142,91 @@ def collection_items(cfg, name, watched, token=None, start=None, resume=False):
             ep_start = start if i == floor_at else None
             child_eps = show_episodes(rk, token=token)
             specials_ok = resume and not _has_real_seasons(child_eps)
-            items.extend(
-                e for e in child_eps
-                if (e["ratingKey"] not in watched
-                    or (resume and _in_progress(e.get("viewOffset"), e.get("viewCount"))))
-                and _keep_episode(e, cfg, specials_ok=specials_ok)
-                and _at_or_after_start(e, ep_start))
+            for e in child_eps:
+                if ((e["ratingKey"] not in watched
+                     or (resume and _in_progress(e.get("viewOffset"), e.get("viewCount"))))
+                        and _keep_episode(e, cfg, specials_ok=specials_ok)
+                        and _at_or_after_start(e, ep_start)):
+                    # Which collection CHILD this leaf came from, so a `batch_stops_at` cut can
+                    # see the member boundary (_segment_key). show_episodes builds fresh dicts
+                    # per call, so tagging in place is local to this resolve.
+                    e["member_key"] = rk
+                    items.append(e)
         else:  # movie / episode / clip / standalone item
             # A watched member drops out — unless (resume path) it is actually in-progress.
             if rk in watched and not (resume and _in_progress(*item_view_state(rk, token=token))):
                 continue
             items.append({"ratingKey": rk, "title": ch.get("title"),
                           "show": ch.get("grandparentTitle") or name,
+                          # Its OWN member_key: `show` is the collection name for a movie
+                          # member, so keying a boundary on that would fuse every movie in
+                          # the collection into one segment (_segment_key).
+                          "member_key": rk,
                           "season": ch.get("parentIndex"), "episode": ch.get("index"),
                           "duration": ch.get("duration")})
+    return items
+
+
+_BATCH_STOPS = ("member", "season")
+_BATCH_STOPS_OFF = ("none", "", "off", "no", "false", "0")
+
+
+def _batch_stop(desc, cfg):
+    """Where this entry's batch may stop: "none" | "member" | "season".
+
+    Precedence: the ENTRY's `batch_stops_at` (queues.yaml) > the SET's (sets.yaml) >
+    config.BATCH_STOPS_AT (global, default "none" = today's fill-across-anything behavior).
+    An UNRECOGNISED value at one level is ignored rather than read as "none", so a typo in a
+    hand-edited entry falls back to the set's intent instead of silently switching it off.
+    """
+    for raw in ((desc or {}).get("batch_stops_at"), (cfg or {}).get("batch_stops_at"),
+                config.BATCH_STOPS_AT):
+        if raw is None:
+            continue
+        val = str(raw).strip().lower()
+        if val in _BATCH_STOPS:
+            return val
+        if val in _BATCH_STOPS_OFF:
+            return "none"
+    return "none"
+
+
+def _segment_key(item, stop):
+    """The segment `item` belongs to under `stop` — a batch may not span two segments.
+
+    `member_key` is the collection CHILD an item came from (tagged by collection_items); it is
+    absent on a plain show entry's leaves, where every item is the same member anyway, so the
+    fallback to `show` keeps a "member" stop a correct no-op there. Movies in a collection each
+    carry their OWN member_key, so two of them are never mistaken for one segment (their `show`
+    is the collection name, which is why this cannot key on `show` alone).
+    """
+    member = item.get("member_key") or item.get("show")
+    return (member, item.get("season")) if stop == "season" else member
+
+
+def _apply_batch(items, batch, stop):
+    """Cap `items` to `batch`, then cut it at the first segment boundary if `stop` asks.
+
+    Two independent limits: `batch` is the COUNT (per-entry `episodes:` else the caller's
+    default, clamped to QUEUE_SERIES_LENGTH), `stop` is WHERE it may end (a member / season
+    boundary — see config.BATCH_STOPS_AT). Only ever SHORTENS, and never below one item: an
+    empty `items` is the FINISHED signal next_queue marks the entry done on, so a boundary cut
+    that emptied a live batch would silently retire a show mid-run.
+
+    The boundary applies only when a count cap is in force. The rotation / member-bucket
+    callers pass no batch (they want the full ordered list and advance a show across rounds
+    via their own round-robin), and stay untouched.
+    """
+    if not batch:
+        return items
+    batch = max(1, min(int(batch), config.QUEUE_SERIES_LENGTH))
+    items = items[:batch]
+    if stop in _BATCH_STOPS and len(items) > 1:
+        head = _segment_key(items[0], stop)
+        cut = 1
+        while cut < len(items) and _segment_key(items[cut], stop) == head:
+            cut += 1
+        items = items[:cut]
     return items
 
 
@@ -1174,6 +1245,9 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=Fa
                                    QUEUE_SERIES_DEFAULT (one episode per play); a channel
                                    bucket passes None = uncapped, so the round-robin can
                                    advance a show across rounds like the dynamic rule.
+    The count cap answers "how many"; `batch_stops_at` (entry > set > global — see
+    config.BATCH_STOPS_AT) answers "where may it end", cutting a batch that would otherwise
+    span a collection member or a season boundary. It only ever shortens, never below one item.
     Returns None when the descriptor is UNRESOLVED (dead ratingKey, unmatched title, missing
     collection); otherwise {"title", "type", "ratingKey"?, "items": [...]} — empty `items`
     means FINISHED (everything already watched).
@@ -1199,10 +1273,10 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=Fa
         # gets "the same footing as show entries"; uncapped expansion was never that.
         # default_batch stays None for the rotation/member-bucket callers, so their
         # round-robin still gets the full ordered list and advances across rounds as before.
-        batch = desc.get("episodes") or default_batch
-        if batch:
-            batch = max(1, min(int(batch), config.QUEUE_SERIES_LENGTH))
-            items = items[:batch]
+        # `batch_stops_at` additionally forbids the batch from spanning a member (or season)
+        # boundary, so a season finale isn't followed by ep 1 of the next member show.
+        items = _apply_batch(items, desc.get("episodes") or default_batch,
+                             _batch_stop(desc, cfg))
         return {"title": f"Collection: {name}", "type": "collection", "items": items}
     rk, typ, title = resolve_queue_entry(desc, cfg, token=token)
     if typ is None:
@@ -1232,11 +1306,10 @@ def resolve_member(desc, cfg, watched, token=None, default_batch=None, resume=Fa
            and _at_or_after_start(e, start)]
     # Per-show batch: the entry's `episodes:` override, else the caller's default, clamped
     # to the hard cap so a bad value can't queue the whole series. No batch at all (a
-    # channel member with no override) => the full ordered unwatched list.
-    batch = desc.get("episodes") or default_batch
-    if batch:
-        batch = max(1, min(int(batch), config.QUEUE_SERIES_LENGTH))
-        eps = eps[:batch]
+    # channel member with no override) => the full ordered unwatched list. A `season` stop
+    # also cuts the batch at a season boundary, so `episodes: 2` on a show sitting at its
+    # finale queues S1E12 alone instead of S1E12 + S2E01.
+    eps = _apply_batch(eps, desc.get("episodes") or default_batch, _batch_stop(desc, cfg))
     return {"title": title, "type": "show", "ratingKey": rk, "items": eps,
             "multi_season": _multi_season(all_eps)}
 

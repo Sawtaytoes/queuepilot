@@ -60,6 +60,12 @@ export type QueueItem = {
   childCount: number | null
   nextEp: NextEp | null
   episodes: number
+  /**
+   * Per-entry override of the set's `batch_stops_at`: WHERE this entry's batch may stop
+   * ("season" = never cross a season finale, "member" = never leave the current show inside
+   * a collection). null = follow the set. Only meaningful when `episodes` > 1.
+   */
+  batch_stops_at?: BatchStop
   start: StartPoint | null
   done: boolean
   /**
@@ -196,6 +202,11 @@ export type RegistrySet = {
    * `"24h"`; anime channels stay keep-forever by design.
    */
   remove_completed_after?: string | null
+  /**
+   * Curated sets only. The set-wide default for WHERE a multi-episode batch may stop; an
+   * entry can override it. null/absent = no boundary (fill the batch across anything).
+   */
+  batch_stops_at?: BatchStop
   audio_language?: string
   superseded_by?: string | null
   // The ultra-legacy single-binding mirror, still read by `activeBinding`.
@@ -291,6 +302,12 @@ export type PreviewResponse = {
   }[]
   movie?: { ratingKey: string; title: string }
 }
+
+/**
+ * Where a multi-episode batch may stop. "season" also implies the member boundary; null is
+ * "no boundary" at the set level and "follow the set" on an entry.
+ */
+export type BatchStop = "member" | "season" | null
 
 export type ShowEpisodes = {
   multiSeason: boolean

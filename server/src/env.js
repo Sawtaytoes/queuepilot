@@ -70,6 +70,12 @@ export const WATCH_COUNT_ACCOUNTS = String(str('WATCH_COUNT_ACCOUNTS', '1,111111
 // QUEUE_SERIES_LENGTH is the hard safety cap so a bad override can't queue a whole series.
 export const QUEUE_SERIES_DEFAULT = int('QUEUE_SERIES_DEFAULT', 1);
 export const QUEUE_SERIES_LENGTH = int('QUEUE_SERIES_LENGTH', 40);
+// WHERE a multi-episode batch may stop — the count cap above says how many, this says where it
+// may end. "none" (default) fills across anything; "member" forbids spanning two collection
+// members; "season" also forbids spanning a season boundary, including inside one show (so
+// `episodes: 2` at a finale queues the finale alone, not finale + next premiere). Set per-set
+// in sets.yaml, overridable per entry in queues.yaml. Mirrors config.BATCH_STOPS_AT.
+export const BATCH_STOPS_AT = str('BATCH_STOPS_AT', 'none');
 
 // Rotation queue length (episodes queued per cartoons session).
 export const ROTATION_LENGTH = int('ROTATION_LENGTH', 12);
