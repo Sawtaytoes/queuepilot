@@ -16,12 +16,6 @@ export QUEUES_PATH=/tmp/queues-ui.yaml SETS_PATH=/tmp/sets-ui.yaml WEB_PORT=1876
        NODE_TLS_REJECT_UNAUTHORIZED=0 PLAYWRIGHT_BROWSERS_PATH=${PLAYWRIGHT_BROWSERS_PATH:-/opt/pw-browsers}
 rm -f /tmp/cache-e2e.sqlite /tmp/cache-e2e.sqlite-wal /tmp/cache-e2e.sqlite-shm
 TOTAL=0
-echo "=== collection-start-test (python, offline) ==="   # engine floor for collection starts
-python3 e2e/collection-start-test.py || TOTAL=$((TOTAL+1))
-echo "=== resume-in-queue-test (python, offline) ==="   # resume a started-but-unfinished queued item
-python3 e2e/resume-in-queue-test.py || TOTAL=$((TOTAL+1))
-echo "=== resume-in-progress-done-test (python, offline) ==="   # in-progress OAD never reads finished/done
-python3 e2e/resume-in-progress-done-test.py || TOTAL=$((TOTAL+1))
 echo "=== history-persist-test ==="   # manages its own server (port 18770) + files
 node e2e/history-persist-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== api-v2-test ==="   # browserless; manages its own server + temp files (v2 endpoints)
@@ -34,8 +28,6 @@ echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile det
 node e2e/profile-gate-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > placeholder
 node e2e/host-config-test.mjs || TOTAL=$((TOTAL+1))
-echo "=== batch-stops-at-test (python, offline) ==="   # WHERE a batch may stop (member/season)
-python3 e2e/batch-stops-at-test.py || TOTAL=$((TOTAL+1))
 echo "=== batch-stops-at-test (node) ==="   # the same table in the Node port
 node e2e/batch-stops-at-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch

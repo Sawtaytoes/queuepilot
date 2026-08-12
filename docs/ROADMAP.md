@@ -33,15 +33,20 @@ Detail: `queue-and-playback-roadmap.md` + `playback-state-machine-design.md`.
    new `/api/events` connection; client refetches `/api/now` on `visibilitychange`/reopen. Fixes
    the phone showing a stale tile after the tab sleeps.
 
-## C. Node port / Python removal — D3 through live adapter landed
+## C. Node port / Python removal — DONE (2026-08-12)
 Plan: `decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md`.
-Status: `handoff-python-port-status.md` (start there).
-- **D1–D3 done** (routing, selection engine, curated resolve, rotation, **live undici client**,
-  `ENGINE=node` preview dual-run + divergence log). Default still `ENGINE=python`.
-- **D4–D7 code landed** (`PLAYBACK_ENGINE=node` path: mqttd + session + adb + playback + driver +
-  cast_sidecar). **Next:** live soak of node playback on the Shield; full `queue_builder/`
-  deletion (D8 remainder) after that soak.
-- **Phase E** — file-lock swap; rides with D8.
+Completion: `decisions/2026-08-12-python-is-gone-except-the-cast-sidecar.md`.
+- **D1–D7 landed** (routing, selection engine, curated resolve, rotation, live undici client,
+  mqttd, session, adb, playback, driver, cast_sidecar) and soaked live with `ENGINE=node` +
+  `PLAYBACK_ENGINE=node` on the deployed app.
+- **D8 done** — `queue_builder/`, the Python tests, the corpus generator and the live-corpus
+  recorder are deleted; the engine switches (`ENGINE` / `PLAYBACK_ENGINE`) are gone with the
+  branch they chose; the image keeps python3 for `cast_sidecar/` only. The parity gates now diff
+  Node against the deleted engine's RECORDED answers (`e2e/fixtures/golden/`), and the
+  Python-only engine tests were ported to Node 1:1.
+- **Casualty:** the soundtrack resolver (MA → YouTube-Music → Ollama) was Python-only and was
+  never wired to a live automation; `cmd/soundtrack/resolve` now answers with a clear error.
+- **Phase E** — file-lock swap; still open, no longer blocked on the port.
 - **F6** — `app.css` `@layer` reorder: `decisions/2026-08-03-app-css-layer-fix-is-a-separate-screenshot-gated-change.md`.
 - **DB / SQLite cache** — shipped (`cache.js`, derived Plex cache only:
   `decisions/2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store.md`). Deletable:
@@ -53,10 +58,9 @@ Set-editor flags (#36), FSM driver (#15 + #20). **`PLAYBACK_FSM` still defaults 
 and soak on the real Shield to finish that track.
 
 ### Scan-regression suspects (for whoever debugs a scan issue)
-Per the port handoff: the Python scan path (`queue_builder/`) was **not** touched by the port
-commit, so a scan regression more likely came from Node 24→26 (#4), the `@charcuterie/ui` 2.x
-cross, or config — or (web-UI symptoms like wrong next-up/stale tiles) the live `cache.js` +
-undici rewrite. The reliability set in §A is the confirmed 2026-08-06/07 fix for the
+Everything is Node now, so a scan regression lives in `session.js` / `engine/` / `playback.js`,
+in Node 24→26 (#4), in the `@charcuterie/ui` 2.x cross, in config — or (web-UI symptoms like
+wrong next-up/stale tiles) in the live `cache.js` + undici rewrite. The reliability set in §A is the confirmed 2026-08-06/07 fix for the
 "nothing plays" symptom specifically.
 
 ## Shared spec for the parallel §B PRs (so agents stay consistent)

@@ -1,0 +1,1 @@
+{"kind": "get", "path": "/library/sections/1/all?title=Movie%20C&includeGuids=1&X-Plex-Container-Size=50", "alias": "admin", "data": {"MediaContainer": {"Metadata": [{"ratingKey": "2003", "type": "movie", "title": "Movie C", "year": 2003}]}}}

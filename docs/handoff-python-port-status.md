@@ -1,5 +1,16 @@
 # Handoff — Python → Node port (Phase D) status
 
+> **CLOSED 2026-08-12. The port is finished and `queue_builder/` is deleted** — see
+> [docs/decisions/2026-08-12-python-is-gone-except-the-cast-sidecar.md](decisions/2026-08-12-python-is-gone-except-the-cast-sidecar.md).
+> Node is the only implementation; `cast_sidecar/` is the only Python left. The `ENGINE` and
+> `PLAYBACK_ENGINE` switches no longer exist. The parity gates live on against the deleted
+> engine's recorded answers in `e2e/fixtures/golden/` (see `e2e/fixtures/README.md`), and the
+> Python-only engine tests were ported to `.mjs` 1:1.
+>
+> Everything below is kept as the HISTORY of how the port ran — phase order, blockers, and the
+> acceptance bars each phase had to clear. It is no longer a to-do list, and any instruction in
+> it to run `python -m queue_builder.…` is now unrunnable.
+
 **As of 2026-08-03.** Companion to
 [docs/decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md](decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md),
 which is the plan. This file records what is DONE and what each remaining phase is blocked on,

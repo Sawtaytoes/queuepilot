@@ -36,24 +36,31 @@ tier, detected from the PMS debug log):
 
 | File | Role |
 | --- | --- |
-| `queue_builder/config.py` | env + the extensible `SETS` dict (younger/older, ratings, accounts) |
+| `server/src/server.js` | the HTTP API + static web server (the process that runs) |
+| `server/src/mqttd.js` | MQTT service: session start/advance/preview/devices/discovery/state |
+| `server/src/session.js` | a scan end to end: select → persist the queue write-side → play |
+| `server/src/engine/` | selection: `routing.js` (set:"auto"), `select.js` (pools), `rotation.js`, `resolve.js` (curated queues + reels), `preview.js` |
+| `server/src/plex.js` / `cache.js` | read-only Plex queries + the derived SQLite cache |
+| `server/src/playback.js` | drive the Shield's Plex app via its Companion endpoint (`client` mode, resolved from plex.tv) |
+| `server/src/driver.js` | the playback state machine (`PLAYBACK_FSM`): verified, retried transitions to playing |
+| `server/src/adb.js` | the Shield's Plex profile picker over ADB (profile-gated cards) |
+| `server/src/profiles.js` | detect the Shield's signed-in profile from the PMS debug log (`set=auto`) |
+| `server/src/queues.js` / `sets.js` | the YAML stores: curated queues + channel definitions (comment-preserving writers) |
+| `cast_sidecar/` | the ONLY Python left: a pychromecast bridge for `PLAYBACK_MODE=cast` |
 | `web/` | React + TypeScript + Vite web editor for the curated movie/anime queues (Tailwind on `@charcuterie/ui`) |
 | `docs/why-queues-not-plex-playlists.md` | 💬 RATIONALE: why "queues" are a watched-state-aware recipe, not native Plex Playlists |
-| `queue_builder/plex.py` | read-only Plex queries + selection (rotation, rewatch movie) |
-| `queue_builder/playback.py` | drive the Shield's Plex app directly via its Companion endpoint (`client` mode, resolved from plex.tv); retired `cast` path kept but undeployed |
-| `queue_builder/profiles.py` | detect the Shield's signed-in profile from the PMS debug log (`set=auto`) |
-| `queue_builder/soundtrack.py` | MA → YouTube-Music → Ollama soundtrack resolver (Living-Room card) |
-| `queue_builder/service.py` | MQTT entrypoint (the runtime) |
-| `queue_builder/cli.py` | **dry-run** CLI for offline verification (no playback, no MQTT) |
 
-## Dry-run (Phase 1, read-only)
+The service was Python until 2026-08-12; `queue_builder/` and its dry-run CLI are gone, and
+with them the soundtrack resolver (MA → YouTube-Music → Ollama), which was never wired to a
+live automation. See
+[the decision](docs/decisions/2026-08-12-python-is-gone-except-the-cast-sidecar.md).
+
+## Running it
 
 ```sh
-export PLEX_API_SERVER_URL=https://plex.example.com PLEX_TOKEN=<token>
-python3 -m queue_builder.cli rotation younger     # the interleaved queue
-python3 -m queue_builder.cli movie                # a rewatch-movie pick (set arg optional)
-python3 -m queue_builder.cli shows younger        # buckets + unwatched counts
-python3 -m queue_builder.cli watched-count        # movie combined-view histogram
+npm ci --prefix server && node server/src/server.js     # API + UI + MQTT service
+npm --prefix web run dev                                 # the web editor, against that API
+node e2e/engine-parity.mjs                               # the offline engine gates (see e2e/)
 ```
 
 Deploy this as a container (see `Dockerfile` / `build.sh`) with the env from

@@ -1,6 +1,6 @@
-// D6/D7: in-process session start (port of queue_builder/service._do_start) used when
-// PLAYBACK_ENGINE=node. Selection uses the Node engine (D3); queue write-side is D4
-// markDone/clearDone/sweepCompleted; device drive is driver.driveToPlaying / playback.
+// In-process session start: the sole implementation since Python was removed (2026-08-12).
+// Selection uses the engine under ./engine, the queue write-side is queues.js
+// markDone/clearDone/sweepCompleted, and the device drive is driver.driveToPlaying / playback.
 import * as routing from './engine/routing.js';
 import * as resolve from './engine/resolve.js';
 import * as rotation from './engine/rotation.js';
@@ -13,7 +13,7 @@ import * as playback from './playback.js';
 import * as driver from './driver.js';
 import * as resume from './resume.js';
 import {
-  PLAYBACK_FSM, ADB_ENABLED, ROTATION_LENGTH, ENGINE, RESUME_ON_ADVANCE,
+  PLAYBACK_FSM, ADB_ENABLED, ROTATION_LENGTH, RESUME_ON_ADVANCE,
 } from './env.js';
 
 // Mutable session (mirrors service.Session) for advance + last-played.
@@ -333,6 +333,3 @@ export async function advanceSession() {
   _publishState({ playback: result, ...SESSION.asDict() });
   return result;
 }
-
-// Silence unused ENGINE import warning paths — ENGINE gates preview only; selection always Node here.
-void ENGINE;

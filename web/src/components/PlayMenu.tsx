@@ -10,7 +10,7 @@ import {
 import { setStatus } from "../state/store"
 
 /**
- * "Play on ▾" — the device menu. Devices come from the Python service's retained
+ * "Play on ▾" — the device menu. Devices come from the MQTT service's retained
  * MQTT registry; picking one publishes the same start command an NFC scan does,
  * plus a target. The result lands back via the SSE `state` event as a status toast.
  *

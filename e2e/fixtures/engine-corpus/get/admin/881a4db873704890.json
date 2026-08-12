@@ -1,0 +1,1 @@
+{"kind": "get", "path": "/library/metadata/2001", "alias": "admin", "data": {"MediaContainer": {"Metadata": [{"ratingKey": "2001", "type": "movie", "title": "Movie A", "viewCount": 0, "viewOffset": 0}]}}}

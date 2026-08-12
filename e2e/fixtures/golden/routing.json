@@ -1,0 +1,110 @@
+{
+  "routes": {
+    "cartoons|Younger Kids": "route[cartoons × 'Younger Kids'] -> set 'shows' (via channel_for), binding plex_user='Younger Kids' account_id=11110001",
+    "cartoons|Older Kids": "route[cartoons × 'Older Kids'] -> set 'shows_shorts' (via channel_for), binding plex_user='Older Kids' account_id=11110002",
+    "cartoons|Legacy Kid": "route[cartoons × 'Legacy Kid'] -> set 'younger' (via PROFILE_SET_MAP), binding plex_user='Younger Legacy' account_id=11119001",
+    "cartoons|Guest": "route[cartoons × 'Guest'] -> NO MAPPING (would error, as today)",
+    "cartoons|Nobody At All": "route[cartoons × 'Nobody At All'] -> NO MAPPING (would error, as today)",
+    "movie|Younger Kids": "route[movie × 'Younger Kids'] -> set 'movies' (via channel_for), binding plex_user='Younger Kids' account_id=11110001",
+    "movie|Older Kids": "route[movie × 'Older Kids'] -> set 'movies' (via channel_for), binding plex_user='Older Kids' account_id=11110002",
+    "movie|Legacy Kid": "route[movie × 'Legacy Kid'] -> set 'younger' (via PROFILE_SET_MAP), binding plex_user='Younger Legacy' account_id=11119001",
+    "movie|Guest": "route[movie × 'Guest'] -> NO MAPPING (would error, as today)"
+  },
+  "sections": {
+    "disabled_ch": {
+      "set_sections": [
+        5
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "old_shows": {
+      "set_sections": [
+        5
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "shows": {
+      "set_sections": [
+        5,
+        15
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "shows_shorts": {
+      "set_sections": [
+        5,
+        15
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "movies": {
+      "set_sections": [
+        1,
+        14
+      ],
+      "rewatch_sections": [
+        1,
+        14
+      ]
+    },
+    "shorts_only": {
+      "set_sections": [
+        15
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "unmigrated": {
+      "set_sections": [
+        5
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "younger": {
+      "set_sections": [
+        5,
+        15
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "older": {
+      "set_sections": [
+        5,
+        15
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "bob": {
+      "set_sections": [
+        1
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    },
+    "demo_reel": {
+      "set_sections": [
+        2,
+        7
+      ],
+      "rewatch_sections": [
+        1
+      ]
+    }
+  }
+}

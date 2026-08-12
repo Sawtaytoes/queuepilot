@@ -1,6 +1,6 @@
-// D6: Node MQTT service — handles session start/advance/preview/devices/discovery/state
-// when PLAYBACK_ENGINE=node (replaces queue_builder.service for everything except cast).
-// HA and the web UI keep talking MQTT; only the process that answers changes.
+// The MQTT service — session start/advance/preview/devices/discovery/state. Sole owner of
+// these topics since the Python service was deleted (2026-08-12); cast play is delegated to
+// cast_sidecar. HA and the web UI talk MQTT exactly as before.
 import { connect } from 'mqtt';
 import { randomUUID } from 'node:crypto';
 import * as session from './session.js';
@@ -13,7 +13,6 @@ import {
   T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_STATE,
   T_DEVICES_BASE, T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS, SHIELD_CLIENT_NAME, PLAYBACK_MODE,
-  ENGINE,
 } from './env.js';
 
 let client = null;
@@ -66,8 +65,6 @@ async function handlePreview(payload) {
     return;
   }
   try {
-    // Prefer live Node engine for preview when ENGINE=node (already dual-run on HTTP);
-    // here we always serve Node since this process is the Node playback engine.
     const data = await enginePreview.previewRotation(setName, profile);
     try { data.routing = engineRouting.forSet(setName, profile); } catch { /* ignore */ }
     pub(reply, data);
@@ -78,12 +75,13 @@ async function handlePreview(payload) {
 }
 
 function handleSoundtrack(payload) {
-  // Soundtrack is a nice-to-have; publish a clear "not yet" so HA doesn't hang.
+  // The soundtrack resolver (MA → YouTube-Music → Ollama) was Python-only and went with it on
+  // 2026-08-12; no live automation published to this topic. Answer clearly so HA never hangs.
   pub(T_RESP_SOUNDTRACK, {
     command_string: null,
     tier: null,
     query: payload?.title || null,
-    error: 'soundtrack resolver not yet ported to Node',
+    error: 'soundtrack resolver is retired (it was Python-only, and unused)',
   });
 }
 
@@ -140,7 +138,7 @@ export function start() {
     clientId: `plex-channels-node-${randomUUID().slice(0, 8)}`,
   });
   client.on('connect', () => {
-    console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT} (PLAYBACK_ENGINE=node)`);
+    console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
     client.subscribe([T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW]);
     announceDevices();
     publishDiscovery();
@@ -178,5 +176,4 @@ export function stop() {
   client = null;
 }
 
-void ENGINE;
 void adb; // reserved for future device-health sampling on announce

@@ -1,8 +1,10 @@
 # One image, two processes (decision 2026-07-20-queue-web-ui-monorepo-single-container.md):
-#   * plex-channels-queue  — the Python MQTT/playback service (queue_builder.service)
-#   * plex-channels-web     — the Node.js API + static server (server/src/server.js)
+#   * plex-channels-web  — the Node.js app: API, web UI, selection engine, MQTT service and
+#                          playback (server/src/server.js). This is the whole application.
+#   * cast_sidecar       — a ~100-line Python process for PLAYBACK_MODE=cast (pychromecast),
+#                          the one thing Node cannot do (decision 2026-08-12).
 # The mux-magic / gallery-downloader pattern: server + web UI ship in ONE app container.
-# Base is the Node 24 image (Debian trixie); Python 3 is added for the queue service.
+# Base is the Node 26 image (Debian trixie); Python 3 is added ONLY for the cast sidecar.
 
 # --- stage 1: build the React frontend --------------------------------------- #
 # `web/` is a Vite project since M6d, so the runtime image needs its `dist/`, not
@@ -31,8 +33,8 @@ ENV PYTHONUNBUFFERED=1 \
     # ssl.CERT_NONE. Scoped to this container, which only talks to the LAN Plex server.
     NODE_TLS_REJECT_UNAUTHORIZED=0
 
-# Python 3 runtime for the queue service (venv keeps pip off the system interpreter).
-# `adb` drives the Shield's Plex profile picker (queue_builder/adb.py) so a profile-gated
+# Python 3 runtime for the cast sidecar (venv keeps pip off the system interpreter).
+# `adb` drives the Shield's Plex profile picker (server/src/adb.js) so a profile-gated
 # card can switch the profile itself instead of waiting for someone to walk to the TV.
 # It stays inert unless ADB_ENABLED is set. The client key is NOT baked in — the Shield
 # only trusts keys accepted once via an on-TV prompt, so mount the authorized private key
@@ -44,7 +46,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-venv ca-certificates adb \
     && rm -rf /var/lib/apt/lists/*
 
-# --- Python deps (own layer, keyed on requirements.txt) ---
+# --- cast-sidecar Python deps (own layer, keyed on requirements.txt) ---
 COPY requirements.txt ./
 RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
@@ -55,7 +57,6 @@ COPY server/package.json server/package-lock.json* ./server/
 RUN cd server && npm install --omit=dev --no-audit --no-fund
 
 # --- source ---
-COPY queue_builder ./queue_builder
 COPY cast_sidecar ./cast_sidecar
 COPY server ./server
 COPY --from=web-build /web/dist ./web/dist

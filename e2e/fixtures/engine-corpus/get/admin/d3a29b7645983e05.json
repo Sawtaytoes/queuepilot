@@ -1,0 +1,1 @@
+{"kind": "get", "path": "/status/sessions/history/all?accountID=1&X-Plex-Container-Start=0&X-Plex-Container-Size=500&sort=viewedAt%3Adesc&librarySectionID=1", "alias": "admin", "data": {"MediaContainer": {"Metadata": [{"ratingKey": "2003"}], "totalSize": 1, "size": 1}}}

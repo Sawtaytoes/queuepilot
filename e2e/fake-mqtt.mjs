@@ -1,11 +1,11 @@
-// Fake MQTT for the local dev harness — stands in for the real Mosquitto broker + the
-// Python queue_builder service, which are NOT reachable from the sandbox. It lets the
+// Fake MQTT for the local dev harness — stands in for the real Mosquitto broker + the app's
+// own MQTT service (mqttd), which are NOT reachable from the sandbox. It lets the
 // offline web UI render everything that needs MQTT: the #/channels preview pools, the
 // "Play on ▾" device menu, and play-result toasts.
 //
 // It is a TINY aedes broker (e2e/broker/node_modules — run `npm install` there once) plus a
-// mock responder client that speaks the EXACT topics/payloads the Python service does
-// (see queue_builder/service.py + server/src/mqttc.js):
+// mock responder client that speaks the EXACT topics/payloads the service does
+// (see server/src/mqttd.js + server/src/mqttc.js):
 //   * announces two RETAINED devices/<id> entries  (plex-channels/devices/#)
 //   * answers cmd/generic/preview on its reply topic with a small canned pool
 //   * acks   cmd/session/start by publishing a retained plex-channels/state
@@ -131,7 +131,7 @@ export function startFakeMqtt({ port = PORT } = {}) {
         if (topic === T_CMD_PREVIEW) {
           received.previews.push(payload);
           const reply = String(payload.reply || '');
-          if (!reply.startsWith(T_RESP_PREVIEW_BASE)) return; // same guard the Python service has
+          if (!reply.startsWith(T_RESP_PREVIEW_BASE)) return; // same guard mqttd has
           const out = { set: String(payload.set || ''), buckets: SHOWS_BUCKETS,
             movie: MOVIE_SAMPLE, movie_pool: MOVIE_POOL };
           if (payload.profile) out.profile = String(payload.profile); // PR 4: echoed like the Python side

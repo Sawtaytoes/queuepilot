@@ -1,0 +1,107 @@
+{
+  "buckets|Younger": [
+    {
+      "show": "Alpha",
+      "ratingKey": "1001",
+      "multi_season": false,
+      "episodes": [
+        "11",
+        "13",
+        "14",
+        "15"
+      ]
+    },
+    {
+      "show": "Delta",
+      "ratingKey": "1004",
+      "multi_season": false,
+      "episodes": [
+        "42",
+        "43"
+      ]
+    },
+    {
+      "show": "Shorts",
+      "ratingKey": "section-15",
+      "multi_season": false,
+      "episodes": [
+        "1501",
+        "1502"
+      ]
+    }
+  ],
+  "rewatch-counts|Younger": [
+    {
+      "ratingKey": "2001",
+      "count": 2,
+      "title": "Movie A"
+    },
+    {
+      "ratingKey": "2003",
+      "count": 1,
+      "title": "Movie C"
+    }
+  ],
+  "buckets|Older": [
+    {
+      "show": "Beta",
+      "ratingKey": "1002",
+      "multi_season": true,
+      "episodes": [
+        "22"
+      ]
+    }
+  ],
+  "rewatch-counts|Older": [
+    {
+      "ratingKey": "2002",
+      "count": 3,
+      "title": "Movie B"
+    }
+  ],
+  "channel-buckets-json|kidsplus|Younger": [
+    {
+      "show": "Alpha",
+      "ratingKey": "1001",
+      "multi_season": false,
+      "episodes": [
+        "11",
+        "13"
+      ]
+    },
+    {
+      "show": "Movie B",
+      "ratingKey": "2002",
+      "multi_season": false,
+      "episodes": [
+        "2002"
+      ]
+    },
+    {
+      "show": "Delta",
+      "ratingKey": "1004",
+      "multi_season": false,
+      "episodes": [
+        "41",
+        "42",
+        "43"
+      ]
+    },
+    {
+      "show": "Epsilon",
+      "ratingKey": "1005",
+      "multi_season": false,
+      "episodes": [
+        "51"
+      ]
+    },
+    {
+      "show": "Zeta",
+      "ratingKey": "1006",
+      "multi_season": false,
+      "episodes": [
+        "61"
+      ]
+    }
+  ]
+}

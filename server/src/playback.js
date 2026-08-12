@@ -1,6 +1,6 @@
 // Playback: build a Plex playQueue and tell the Family Room Shield to play it.
 //
-// Port of queue_builder/playback.py (D7). CLIENT mode is the live Node path
+// CLIENT mode is the live path
 // (PLAYBACK_MODE=client permanent for this process half). CAST mode is delegated to the
 // Python cast_sidecar via MQTT `plex-channels/cmd/cast/play` (decision
 // 2026-08-03-retiring-python-except-the-cast-sidecar) — never reimplemented here.

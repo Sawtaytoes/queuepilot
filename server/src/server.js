@@ -9,7 +9,6 @@ import { existsSync, watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { WEB_PORT, QUEUES_PATH } from './config.js';
-import { ENGINE, PLAYBACK_ENGINE } from './env.js';
 import * as mqttd from './mqttd.js';
 import * as engineRouting from './engine/routing.js';
 import * as enginePreview from './engine/preview.js';
@@ -315,7 +314,6 @@ app.patch('/api/sets-order', async (req, res) => {
 app.patch('/api/sets/:id', async (req, res) => {
   try {
     const out = await sets.updateSet(req.params.id, req.body || {});
-    mqttc.invalidatePreview(req.params.id); // a filter change moves the channel's pool
     // Config mutation → cache invalidation (B3.3), cheapest useful thing: bump the generation
     // so open browsers' /api/queues ETags bust, and if the libraries a set draws from changed,
     // drop those section listings so the next read reflects the new pool.
@@ -738,64 +736,19 @@ app.get('/api/now', async (_req, res) => {
   res.json({ now, set: st.set || null, kind: st.kind || null, mqtt: mqttc.connected() });
 });
 
-// Channels view: a rotation set's eligible pool (request/response to the Python service).
+// Channels view: a rotation set's eligible pool, computed in-process by the engine.
 app.get('/api/generic/:id/preview', async (req, res) => {
   try {
     const s = await sets.getSet(req.params.id);
     if (!s || s.source !== 'rotation') return res.status(400).json({ error: 'not a rotation channel' });
     const profile = req.query.profile ? String(req.query.profile) : '';
-    // PLAYBACK_ENGINE=node: Python service is not running (cast_sidecar only) — Node is sole.
-    // PLAYBACK_ENGINE=python + ENGINE=node: dual-run soak (Python oracle + Node serve).
-    // PLAYBACK_ENGINE=python + ENGINE=python: Python only (historic).
-    if (PLAYBACK_ENGINE === 'node' || ENGINE === 'node') {
-      try {
-        const node = await enginePreview.previewRotation(s.id, profile);
-        try {
-          node.routing = engineRouting.forSet(s.id, profile);
-        } catch (e) {
-          console.log(`[engine] routing preview failed for ${s.id}: ${e.message}`);
-        }
-        if (PLAYBACK_ENGINE === 'python' && mqttc.connected()) {
-          // Dual-run soak while the Python service is still up.
-          try {
-            const py = await mqttc.preview(s.id, { fresh: req.query.fresh === '1', profile });
-            const bDiv = enginePreview.bucketsSignature(py.buckets)
-              !== enginePreview.bucketsSignature(node.buckets);
-            const mDiv = enginePreview.moviePoolSignature(py.movie_pool)
-              !== enginePreview.moviePoolSignature(node.movie_pool);
-            node.divergence = Boolean(bDiv || mDiv);
-            node.python = {
-              buckets: py.buckets, movie: py.movie, movie_pool: py.movie_pool,
-              error: py.error || null,
-            };
-            if (node.divergence) {
-              console.log(
-                `[engine] DIVERGENCE preview set=${s.id} profile=${profile || '∅'} `
-                + `buckets=${bDiv} movie_pool=${mDiv}`,
-              );
-            } else {
-              console.log(
-                `[engine] preview set=${s.id} profile=${profile || '∅'}: node matches python `
-                + `(${(node.buckets || []).length} buckets)`,
-              );
-            }
-          } catch (e) {
-            console.log(`[engine] python dual-run skipped: ${e.message}`);
-            node.divergence = null;
-          }
-        }
-        res.json(node);
-        return;
-      } catch (e) {
-        if (PLAYBACK_ENGINE === 'node') {
-          res.status(503).json({ error: String(e.message || e) });
-          return;
-        }
-        console.log(`[engine] node preview failed for ${s.id}, falling back to python: ${e.message}`);
-      }
+    const node = await enginePreview.previewRotation(s.id, profile);
+    try {
+      node.routing = engineRouting.forSet(s.id, profile);
+    } catch (e) {
+      console.log(`[engine] routing preview failed for ${s.id}: ${e.message}`);
     }
-    const py = await mqttc.preview(s.id, { fresh: req.query.fresh === '1', profile });
-    res.json(py);
+    res.json(node);
   } catch (e) {
     res.status(503).json({ error: String(e.message || e) });
   }
@@ -917,10 +870,6 @@ await cache.init();
 
 app.listen(WEB_PORT, () => {
   console.log(`[plex-channels-web] listening on :${WEB_PORT}`);
-  if (ENGINE === 'node') console.log('[engine] ENGINE=node — preview serves Node pool + dual-run divergence log (D3)');
-  if (PLAYBACK_ENGINE === 'node') {
-    console.log('[engine] PLAYBACK_ENGINE=node — starting in-process mqttd session service');
-    mqttd.start();
-  }
+  mqttd.start();
   warm.start();
 });

@@ -1,0 +1,1 @@
+{"kind": "get", "path": "/library/sections/5/all?type=2&X-Plex-Container-Size=5000", "alias": "acct:ok-uuid", "data": {"MediaContainer": {"Metadata": [{"ratingKey": "1002", "title": "Beta", "contentRating": "TV-PG", "leafCount": 2, "type": "show"}]}}}

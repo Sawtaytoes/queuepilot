@@ -224,14 +224,6 @@ export const MA_TOKEN = str('MA_TOKEN', '');
 export const OLLAMA_URL = str('OLLAMA_URL', '');
 export const OLLAMA_MODEL = str('OLLAMA_MODEL', 'gemma3:4b');
 
-// --- the port's own switches -------------------------------------------------- //
-// Each ported phase ships behind one of these, defaulting to the PYTHON path until its soak
-// passes (decision 2026-08-03-retiring-python-except-the-cast-sidecar).
-//   ENGINE=node|python           — the selection engine (D3)
-//   PLAYBACK_ENGINE=node|python  — session start / PlayQueue building (D7)
-export const ENGINE = str('ENGINE', 'python');
-export const PLAYBACK_ENGINE = str('PLAYBACK_ENGINE', 'python');
-
 // --- the derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache) //
 // Deletable, gitignored, never backed up. `rm` it and the app rebuilds it.
 export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');

@@ -217,8 +217,7 @@ export async function removeCompleted(setName) {
 }
 
 // §B.3 TTL auto-remove: drop the entries this set finished longer ago than its window.
-// Both the Python service (queue_builder.queues.sweep_completed) and the Node playback
-// path (PLAYBACK_ENGINE=node) call this after markDone. A done entry is eligible only once
+// session.js calls this after markDone. A done entry is eligible only once
 // its `done_at` (epoch seconds) is >= ttl old; a `keep_completed`/`reel` set is exempt, as
 // is a hand-marked `done:true` with no timestamp. `removeCompletedAfter` defaults to the
 // global DEFAULT_REMOVE_COMPLETED_AFTER when a set names no override. Returns the count

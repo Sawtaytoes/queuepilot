@@ -1,7 +1,7 @@
+# The cast_sidecar is the ONLY Python left in this image (decision
+# 2026-08-12-python-is-gone-except-the-cast-sidecar): a pychromecast bridge for
+# PLAYBACK_MODE=cast, which Node cannot do. Everything else is Node.
 paho-mqtt>=2.1,<3
-# Playback = Plex Cast to the Shield as the account token (correct-account attribution).
+# Cast playback builds the PlayQueue as the account token (correct-account attribution).
 PlexAPI>=4.15,<5
 PyChromecast>=14,<15
-# Round-trip YAML for the curated-queue store (queues.py) — preserves the wishlist's
-# hand-written comments + ordering when the service prunes finished entries.
-ruamel.yaml>=0.18,<0.19

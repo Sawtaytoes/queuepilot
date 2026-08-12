@@ -1,15 +1,16 @@
 // D2 parity gate: prove server/src/engine/routing.js decides set:"auto" routing BYTE-FOR-BYTE
-// like queue_builder/config.py. The Python side is the oracle — we never hardcode expected
-// answers, we diff Node against what the real Python CLI prints:
+// like the retired queue_builder/config.py did. The expectations are the RECORDED output of
+// that Python oracle, frozen in e2e/fixtures/golden/routing.json when Python was deleted
+// (2026-08-12) — the same two commands it used to shell out to per run:
 //   * `python -m queue_builder.cli route <kind> <title>`  → channel_for + binding_for
 //   * `python -m queue_builder.cli sections`              → set_sections + rewatch_sections
 // over e2e/fixtures/routing.sets.yaml, which covers every branch (disabled/superseded guards,
 // explicit-profiles progress vs rewatch, empty-sections, legacy single-binding + PROFILE_SET_MAP
 // fallback, NO MAPPING, queue/reel section pools). Exit non-zero on any mismatch.
 //
-// Run locally: PYTHONPATH=/tmp/pylibs:. node e2e/binding-parity.mjs   (needs ruamel importable).
-// CI installs ruamel via requirements.txt and runs it from the repo root.
-import { execFileSync } from 'node:child_process';
+// The golden is a CONTRACT, not a snapshot to refresh: if this gate fails, Node changed
+// behaviour — fix Node, don't re-record. Run locally: node e2e/binding-parity.mjs
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -22,7 +23,9 @@ const PROFILE_SET_MAP = JSON.stringify({
   'Older Kids': 'older',
   'Legacy Kid': 'younger',
 });
-const PY_ENV = { ...process.env, SETS_PATH: FIXTURE, PROFILE_SET_MAP };
+const GOLDEN = JSON.parse(
+  readFileSync(path.join(REPO, 'e2e', 'fixtures', 'golden', 'routing.json'), 'utf8'),
+);
 
 // env.js reads process.env at module-eval, so set these BEFORE importing the port (dynamic
 // import evaluates after these assignments; a static import would hoist above them).
@@ -30,12 +33,12 @@ process.env.SETS_PATH = FIXTURE;
 process.env.PROFILE_SET_MAP = PROFILE_SET_MAP;
 const routing = await import('../server/src/engine/routing.js');
 
-const py = (...args) =>
-  execFileSync('python3', ['-m', 'queue_builder.cli', ...args], {
-    cwd: REPO,
-    env: PY_ENV,
-    encoding: 'utf8',
-  }).trim();
+// The recorded oracle line for one route input (keyed `<kind>|<title>`).
+const goldenRoute = (kind, title) => {
+  const line = GOLDEN.routes[`${kind}|${title}`];
+  if (line === undefined) throw new Error(`no golden for route ${kind} × ${title}`);
+  return line;
+};
 
 // Parse the human-readable `route` line into a comparable record.
 //   route[cartoons × 'Younger Kids'] -> set 'shows' (via channel_for), binding plex_user='Younger Kids' account_id=11110001
@@ -83,21 +86,21 @@ const INPUTS = [
   ['movie', 'Guest'],
 ];
 
-console.log('=== route parity (Node engine vs python -m queue_builder.cli route) ===');
+console.log('=== route parity (Node engine vs the recorded queue_builder.cli route oracle) ===');
 for (const [kind, title] of INPUTS) {
-  const want = parseRoute(py('route', kind, title));
+  const want = parseRoute(goldenRoute(kind, title));
   const got = nodeRoute(kind, title);
   const same = JSON.stringify(want) === JSON.stringify(got);
   if (same) {
     console.log(`  ✓ ${kind} × ${title} → ${want.sid ?? 'NO MAPPING'}${want.via ? ` (${want.via})` : ''}`);
   } else {
-    fail(`${kind} × ${title}\n      python: ${JSON.stringify(want)}\n      node:   ${JSON.stringify(got)}`);
+    fail(`${kind} × ${title}\n      golden: ${JSON.stringify(want)}\n      node:   ${JSON.stringify(got)}`);
   }
 }
 
 // --- section pools (set_sections + rewatch_sections) for EVERY set --------------------------
-console.log('=== section parity (Node engine vs python -m queue_builder.cli sections) ===');
-const pySections = JSON.parse(py('sections'));
+console.log('=== section parity (Node engine vs the recorded queue_builder.cli sections oracle) ===');
+const pySections = GOLDEN.sections;
 const reg = routing.loadSets(FIXTURE);
 for (const sid of reg.order) {
   const cfg = reg.sets[sid];
@@ -110,15 +113,15 @@ for (const sid of reg.order) {
   if (okSet && okRe) {
     console.log(`  ✓ ${sid}: set=${JSON.stringify(gotSet)} rewatch=${JSON.stringify(gotRe)}`);
   } else {
-    if (!okSet) fail(`${sid} set_sections — python ${JSON.stringify(wantSet)} vs node ${JSON.stringify(gotSet)}`);
-    if (!okRe) fail(`${sid} rewatch_sections — python ${JSON.stringify(wantRe)} vs node ${JSON.stringify(gotRe)}`);
+    if (!okSet) fail(`${sid} set_sections — golden ${JSON.stringify(wantSet)} vs node ${JSON.stringify(gotSet)}`);
+    if (!okRe) fail(`${sid} rewatch_sections — golden ${JSON.stringify(wantRe)} vs node ${JSON.stringify(gotRe)}`);
   }
 }
 // Guard: the two engines must even see the SAME set of ids (a parse divergence would else hide).
 const pyIds = Object.keys(pySections);
 if (JSON.stringify(pyIds) !== JSON.stringify(reg.order)) {
-  fail(`set id/order mismatch — python ${JSON.stringify(pyIds)} vs node ${JSON.stringify(reg.order)}`);
+  fail(`set id/order mismatch — golden ${JSON.stringify(pyIds)} vs node ${JSON.stringify(reg.order)}`);
 }
 
-console.log(failures ? `\nFAILED: ${failures} mismatch(es)` : '\nOK: Node routing matches the Python oracle');
+console.log(failures ? `\nFAILED: ${failures} mismatch(es)` : '\nOK: Node routing matches the recorded Python oracle');
 process.exit(failures ? 1 : 0);
