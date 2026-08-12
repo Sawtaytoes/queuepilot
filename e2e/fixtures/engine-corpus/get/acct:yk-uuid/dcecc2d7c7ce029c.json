@@ -1,0 +1,1 @@
+{"kind": "get", "path": "/library/sections/1/all?type=1&X-Plex-Container-Size=10000", "alias": "acct:yk-uuid", "data": {"MediaContainer": {"Metadata": [{"ratingKey": "2001", "title": "Movie A", "contentRating": "G", "type": "movie"}, {"ratingKey": "2003", "title": "Movie C", "contentRating": "G", "type": "movie"}]}}}

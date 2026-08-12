@@ -4,7 +4,7 @@
 - **Date:** 2026-08-03
 - **Type:** architecture / scope
 - **Supersedes (in part):** [2026-07-21-defer-python-to-node-port](2026-07-21-defer-python-to-node-port.md)
-- **Superseded by:** —
+- **Superseded by:** — (not superseded; **completed** by [2026-08-12 — Python is deleted, except the cast sidecar](2026-08-12-python-is-gone-except-the-cast-sidecar.md))
 
 ## Decision
 

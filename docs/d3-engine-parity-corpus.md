@@ -1,5 +1,9 @@
 # D3 — the engine-parity corpus (record/replay oracle)
 
+> **Historical (2026-08-12).** The Python engine and its `PLEX_RECORD_DIR` recorder described
+> here are deleted; Node has REPLAY only (`server/src/engine/plex-replay.js`). The synthetic
+> corpus is now committed at `e2e/fixtures/engine-corpus/` — see `e2e/fixtures/README.md`.
+
 **Status: the record/replay oracle is landed; the Node selection-engine port + `engine-parity.mjs`
 gate are the remaining D3 work.** Companion to
 [decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md](decisions/2026-08-03-retiring-python-except-the-cast-sidecar.md)

@@ -1,8 +1,7 @@
-// Offline unit test for D3 follow-on #4: the live-client surface + async engine + preview
-// formatter. Uses the corpus replay client (same surface as live, sync values) so CI needs
-// no Plex. Proves: (1) engine functions accept awaitable clients, (2) formatBuckets matches
-// the Python do_preview shape, (3) signature helpers are stable.
-import { execFileSync } from 'node:child_process';
+// Offline unit test for the live-client surface + async engine + preview formatter. Uses the
+// committed synthetic corpus's replay client (same surface as live, sync values) so CI needs
+// no Plex. Proves: (1) engine functions accept awaitable clients, (2) formatBuckets keeps the
+// preview payload shape the web UI reads, (3) signature helpers are stable.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,7 +10,6 @@ const FIX = path.join(REPO, 'e2e', 'fixtures');
 const CORPUS = path.join(FIX, 'engine-corpus');
 const SETS = path.join(FIX, 'engine.sets.yaml');
 
-execFileSync('python3', ['e2e/gen-synthetic-corpus.py', CORPUS], { cwd: REPO, stdio: 'inherit' });
 process.env.SETS_PATH = SETS;
 
 const routing = await import('../server/src/engine/routing.js');

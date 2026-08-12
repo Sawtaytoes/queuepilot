@@ -1,8 +1,7 @@
 // §B.3 Node mirror test — the completed-entry TTL sweep in server/src/queues.js.
 //
-// The Python service is the authority that runs the sweep on scan; this asserts the Node
-// mirror agrees on the same rule so the two writers never disagree about what a done entry's
-// done_at means: parseDuration matches the Python parser, entryDoneAt reads the stamp, and
+// session.js runs the sweep on every scan; this pins the rule it runs — what a done entry's
+// done_at means: parseDuration parses the window, entryDoneAt reads the stamp, and
 // sweepCompleted removes ONLY past-TTL done entries, honours the never/0 disable, and exempts
 // keep_completed / reel sets. Imports the real module against a temp QUEUES_PATH.
 //

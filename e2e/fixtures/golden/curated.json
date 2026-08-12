@@ -1,0 +1,50 @@
+{
+  "next-queue-json|bobq": {
+    "set": "bobq",
+    "play": [
+      "2001"
+    ],
+    "last": {
+      "title": "Movie A",
+      "type": "movie",
+      "ratingKey": "2001"
+    },
+    "done": [
+      "2002",
+      "Movie C"
+    ],
+    "unresolved": [
+      "No Such Title"
+    ],
+    "remaining": 4,
+    "offset": 0
+  },
+  "reel-json|demo": {
+    "set": "demo",
+    "play": [
+      {
+        "ratingKey": "2001",
+        "title": "Movie A"
+      },
+      {
+        "ratingKey": "41",
+        "title": "Delta S1E1"
+      },
+      {
+        "ratingKey": "2002",
+        "title": "Movie B"
+      },
+      {
+        "ratingKey": "2003",
+        "title": "Movie C"
+      }
+    ],
+    "last": {
+      "title": "Movie A",
+      "type": "movie",
+      "ratingKey": "2001"
+    },
+    "unresolved": [],
+    "remaining": 4
+  }
+}

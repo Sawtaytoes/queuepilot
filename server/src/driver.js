@@ -1,6 +1,6 @@
 // Playback state machine: sample the Shield's real state, then drive it to `playing`.
 //
-// Port of queue_builder/driver.py (D7 / PLAYBACK_FSM). Replaces the fire-and-forget tail
+// Ported from the retired Python driver (PLAYBACK_FSM). Replaces the fire-and-forget tail
 // (ensurePlexOpen -> waitForProfile -> play) with a machine that SAMPLES real state and
 // runs VERIFIED, RETRIED, NON-DESTRUCTIVE transitions toward the target:
 //
@@ -15,7 +15,6 @@
 // Gated behind env.PLAYBACK_FSM (default off). Reuses adb / profiles / playback primitives
 // — it does not re-derive picker or profile logic. See docs/playback-state-machine-design.md.
 //
-// adb.js may land from a sibling agent; we import it anyway (D5).
 
 import {
   ADB_ENABLED,

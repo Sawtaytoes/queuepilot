@@ -1,32 +1,25 @@
 #!/usr/bin/env bash
-# Launch both halves of the plex-channels app and tie their lifetimes together.
-# PLAYBACK_ENGINE=node (D7/D8): Node owns MQTT session/start + selection; a tiny Python
-# cast_sidecar keeps pychromecast available. PLAYBACK_ENGINE=python (default until soak):
-# the historic queue_builder.service path.
+# Launch the app and its cast sidecar in one container and tie their lifetimes together:
+# if EITHER exits, tear the container down so the orchestrator restarts it cleanly.
+#
+#   plex-channels-web  — the Node API, web UI, selection engine, MQTT service (mqttd) and
+#                        playback. This is the whole application.
+#   cast_sidecar       — a ~100-line Python process that answers plex-channels/cmd/cast/play
+#                        with pychromecast, the one thing Node cannot do. Inert unless a
+#                        device is in cast mode (decision 2026-08-12).
 set -euo pipefail
 
-PLAYBACK_ENGINE="${PLAYBACK_ENGINE:-python}"
+echo "[entrypoint] starting plex-channels-web (+ mqttd) + cast_sidecar"
 
-if [ "$PLAYBACK_ENGINE" = "node" ]; then
-  echo "[entrypoint] PLAYBACK_ENGINE=node — plex-channels-web (+ mqttd) + cast_sidecar"
-  /opt/venv/bin/python -m cast_sidecar.service &
-  SIDE_PID=$!
-  node /app/server/src/server.js &
-  WEB_PID=$!
-  wait -n
-  echo "[entrypoint] a child process exited; shutting the container down"
-  kill "$SIDE_PID" "$WEB_PID" 2>/dev/null || true
-  wait 2>/dev/null || true
-  exit 1
-fi
+/opt/venv/bin/python -m cast_sidecar.service &
+SIDE_PID=$!
 
-echo "[entrypoint] PLAYBACK_ENGINE=python — plex-channels-queue + plex-channels-web"
-/opt/venv/bin/python -m queue_builder.service &
-QUEUE_PID=$!
 node /app/server/src/server.js &
 WEB_PID=$!
+
+# Wait for whichever child exits first, then kill the other and exit non-zero.
 wait -n
 echo "[entrypoint] a child process exited; shutting the container down"
-kill "$QUEUE_PID" "$WEB_PID" 2>/dev/null || true
+kill "$SIDE_PID" "$WEB_PID" 2>/dev/null || true
 wait 2>/dev/null || true
 exit 1

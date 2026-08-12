@@ -1,5 +1,6 @@
-// Parity gate: prove server/src/engine/routing.js copies config.py's per-set PASSTHROUGH
-// fields, with Python as the oracle (never hardcoded expectations).
+// Parity gate: prove server/src/engine/routing.js copies the per-set PASSTHROUGH fields the
+// retired config.py exposed. Expectations are that Python oracle's RECORDED answers, frozen in
+// e2e/fixtures/golden/passthrough.json when Python was deleted (2026-08-12).
 //
 // Why this exists: `loadSets()` built each cfg but stopped after label/kind/enabled/mode/
 // behavior. The five fields below are read by session.js (requires_profile,
@@ -13,8 +14,8 @@
 // The D2 gate (binding-parity.mjs) could not catch it: its fixture contains none of these
 // fields, and it only diffs routing DECISIONS, not the cfg the decision is made from.
 //
-// Run locally: PYTHONPATH=/tmp/pylibs:. node e2e/set-passthrough-parity.mjs (needs ruamel).
-import { execFileSync } from 'node:child_process';
+// Run locally: node e2e/set-passthrough-parity.mjs
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -35,21 +36,9 @@ const FIELDS = [
 process.env.SETS_PATH = FIXTURE;
 const routing = await import('../server/src/engine/routing.js');
 
-// Python oracle: dump the same fields straight out of config.SETS as JSON.
-const PY = `
-import json, os
-from queue_builder import config
-out = {}
-for sid, cfg in config.SETS.items():
-    out[sid] = {f: cfg.get(f) for f in ${JSON.stringify(FIELDS)}}
-print(json.dumps(out, sort_keys=True))
-`;
+// Recorded oracle: the same fields as config.SETS exposed them for this fixture.
 const expected = JSON.parse(
-  execFileSync('python3', ['-c', PY], {
-    cwd: REPO,
-    env: { ...process.env, SETS_PATH: FIXTURE },
-    encoding: 'utf8',
-  }),
+  readFileSync(path.join(REPO, 'e2e', 'fixtures', 'golden', 'passthrough.json'), 'utf8'),
 );
 
 const reg = routing.loadSets();
@@ -65,7 +54,7 @@ const norm = (v) => (v === undefined ? null : v);
 let failed = 0;
 const ids = Object.keys(expected).sort();
 if (!ids.length) {
-  console.log('FAIL the Python oracle produced no sets — fixture not loaded?');
+  console.log('FAIL the golden has no sets — e2e/fixtures/golden/passthrough.json is empty?');
   process.exit(1);
 }
 
@@ -82,13 +71,13 @@ for (const sid of ids) {
     if (JSON.stringify(want) === JSON.stringify(have)) {
       console.log(`PASS ${sid}.${f} = ${JSON.stringify(have)}`);
     } else {
-      console.log(`FAIL ${sid}.${f} — node ${JSON.stringify(have)}, python ${JSON.stringify(want)}`);
+      console.log(`FAIL ${sid}.${f} — node ${JSON.stringify(have)}, golden ${JSON.stringify(want)}`);
       failed++;
     }
   }
 }
 
-// Guard the guard: if someone adds a passthrough to config.py and not to FIELDS, this gate
+// Guard the guard: if someone adds a passthrough to the loader and not to FIELDS, this gate
 // would keep passing while the new field goes dark exactly like requires_profile did. The
 // fixture's `gated` set must at minimum prove the gate field is live.
 if (norm(reg.sets.gated?.requires_profile) !== 'someuser') {

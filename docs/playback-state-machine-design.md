@@ -1,5 +1,9 @@
 # Design: playback as a state machine
 
+> **Updated 2026-08-12.** The FSM now lives in `server/src/driver.js` (the Python `driver.py`
+> this doc describes is deleted). The design below still holds; the tests are
+> `e2e/playback-fsm-test.mjs` + `e2e/fsm-wake-and-skip-test.mjs`.
+
 Status: **implemented behind the `PLAYBACK_FSM` flag** (default off) — `queue_builder/driver.py`
 + its wiring in `service._do_start`. The pre-FSM incremental version stays live and unchanged
 until `PLAYBACK_FSM=true` is verified on the real Shield (see "Rollout" at the bottom). The

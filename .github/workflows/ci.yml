@@ -10,7 +10,6 @@
 # pick the latest" rule), same pins the Forgejo file used:
 #   actions/checkout      @v7
 #   actions/setup-node    @v7
-#   actions/setup-python  @v7
 name: CI
 
 on:
@@ -35,10 +34,6 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 26
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: '3.13'
 
       # server deps are needed so the e2e suites can spawn server/src/server.js
       # (node_modules is gitignored; package-lock.json is committed → npm ci).
@@ -76,67 +71,50 @@ jobs:
       - name: Web build
         run: npm --prefix web run build
 
-      - name: Install Python deps
-        run: python -m pip install --upgrade pip && python -m pip install -r requirements.txt
-
-      # Parse smoke (bytecode-compile every module) + import smoke (each submodule
-      # imports cleanly with its deps present). service.py only opens the MQTT
-      # connection inside functions, so import has no network side effects.
-      - name: Python parse + import smoke
+      # Engine unit tests that stub Plex entirely (no token, no network). Node ports of the
+      # Python engine tests that were deleted with queue_builder/ on 2026-08-12 — the collection
+      # START floor (skip earlier members, floor the named one), the non-consuming keep_completed
+      # flag, resume-in-queue (a started-but-unfinished queued item resumes at its viewOffset,
+      # threaded to playMedia), in-progress-not-done (a started OAD/special is never marked done,
+      # and a stale done flag is revived), the playback state machine, and the session profile
+      # gate. The §B.3 TTL sweep + specials/extras filter run in the browserless block below.
+      - name: Engine tests (offline)
         run: |
-          python -m compileall -q queue_builder
-          python - <<'PY'
-          import importlib, pkgutil, queue_builder
-          for m in pkgutil.iter_modules(queue_builder.__path__):
-              importlib.import_module(f"queue_builder.{m.name}")
-              print("imported queue_builder.%s" % m.name)
-          PY
+          node e2e/collection-start-test.mjs
+          node e2e/keep-completed-test.mjs
+          node e2e/resume-in-queue-test.mjs
+          node e2e/resume-in-progress-done-test.mjs
+          node e2e/playback-fsm-test.mjs
+          node e2e/fsm-wake-and-skip-test.mjs
+          node e2e/session-profile-gate-test.mjs
+          node e2e/profile-gate-test.mjs
 
-      # Engine unit tests that stub Plex entirely (no token, no network) — the collection
-      # START floor (skip earlier members, floor the named one), the §B.3 completed-entry TTL
-      # sweep (done_at stamp + auto-remove), resume-in-queue (a started-but-unfinished queued
-      # item resumes at its viewOffset, threaded to playMedia), and in-progress-not-done (a
-      # started OAD/special is never marked/kept done, and a stale done flag is revived).
-      - name: Python engine tests
-        run: |
-          python3 e2e/collection-start-test.py
-          python3 e2e/ttl-remove-completed-test.py
-          python3 e2e/resume-in-queue-test.py
-          python3 e2e/resume-in-progress-done-test.py
-          python3 e2e/keep-completed-test.py
-          python3 e2e/specials-count-test.py
-          python3 e2e/playback-fsm-test.py
-          python3 e2e/fsm-wake-and-skip-test.py
-          python3 e2e/batch-stops-at-test.py
-
-      # D2 of the Python→Node port: prove server/src/engine/routing.js decides set:"auto"
-      # routing (channel_for/binding_for/set_sections/rewatch_sections) byte-for-byte like
-      # queue_builder/config.py, by diffing it against `python -m queue_builder.cli route` +
-      # `… sections` over e2e/fixtures/routing.sets.yaml. Needs BOTH node deps (server) and
-      # ruamel (installed above) — the gate shells the Python CLI. Guards the port cutover.
-      - name: D2 routing parity (Node engine ↔ Python)
+      # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
+      # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against
+      # that engine's RECORDED answers (e2e/fixtures/golden/routing.json) over
+      # e2e/fixtures/routing.sets.yaml. The golden is a contract: a failure means Node moved.
+      - name: Routing parity (Node engine ↔ recorded oracle)
         run: node e2e/binding-parity.mjs
 
       # Companion to D2: that gate diffs routing DECISIONS, this one diffs the per-set cfg
       # the decisions are made from. A passthrough the Node builder forgets doesn't throw and
       # doesn't fail a routing test — it reads `undefined` at the consumer and silently
       # DISABLES the feature (how requires_profile went dead for 12 gated sets, 2026-08-11).
-      - name: Set-passthrough parity (Node engine ↔ Python)
+      - name: Set-passthrough parity (Node engine ↔ recorded oracle)
         run: node e2e/set-passthrough-parity.mjs
 
-      # D3 of the port: prove server/src/engine/select.js computes the unwatched-buckets pool
-      # byte-for-byte like queue_builder/plex.py, by diffing both over a SYNTHETIC corpus
-      # (regenerated hermetically by the harness; no real library data — owner decision
-      # 2026-08-07). Needs node (server) deps + ruamel (installed above); shells the Python CLI.
-      - name: D3 engine parity (Node engine ↔ Python)
+      # Prove server/src/engine/select.js computes the unwatched-buckets pool exactly as the
+      # retired Python engine did, over the committed SYNTHETIC corpus (no real library data —
+      # owner decision 2026-08-07) against e2e/fixtures/golden/engine.json.
+      - name: Engine parity (Node engine ↔ recorded oracle)
         run: node e2e/engine-parity.mjs
 
-      # D3 follow-on #2: prove server/src/engine/resolve.js resolves a curated QUEUE (next_queue)
-      # and a REEL (build_reel) byte-for-byte like queue_builder/plex.py — the title→ratingKey
-      # resolver, collection expansion, keep_episode/watched filtering, and the done/unresolved
-      # classification — by diffing both over the SAME synthetic corpus. Deterministic (non-anime
-      # queue + file-order reel; next_queue's YAML mark-done is D4 and not compared here).
-      - name: D3 curated parity (Node engine ↔ Python)
+      # Prove server/src/engine/resolve.js resolves a curated QUEUE (nextQueue) and a REEL
+      # (buildReel) as the retired Python did — the title→ratingKey resolver, collection
+      # expansion, keepEpisode/watched filtering and the done/unresolved classification — over
+      # the SAME synthetic corpus, against e2e/fixtures/golden/curated.json. The write side is
+      # the mark-done gate below.
+      - name: Curated parity (Node engine ↔ recorded oracle)
         run: node e2e/curated-parity.mjs
 
       # `batch_stops_at` in the Node port: same assertion table as the Python engine test above
@@ -145,15 +123,15 @@ jobs:
       - name: Batch boundaries (Node engine)
         run: node e2e/batch-stops-at-test.mjs
 
-      # D3 follow-on #4: async engine + live-client surface + preview formatter (offline).
-      - name: D3 live-client adapter (offline)
+      # Async engine + live-client surface + preview formatter (offline).
+      - name: Live-client adapter (offline)
         run: node e2e/live-client-adapter-test.mjs
 
-      # D4: Node markDone/clearDone/sweepCompleted write-side
-      - name: D4 queue write-side (markDone/clearDone)
+      # Queue write-side: markDone/clearDone/sweepCompleted round-trip the YAML comments.
+      - name: Queue write-side (markDone/clearDone)
         run: node e2e/mark-done-parity.mjs
 
-      - name: D5 adb pure helpers
+      - name: adb pure helpers
         run: node e2e/adb-unit-test.mjs
 
       # Browserless e2e — self-contained: each spawns its own server on a private

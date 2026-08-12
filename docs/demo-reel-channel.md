@@ -1,5 +1,9 @@
 # Theater DEMO reel channel — go-live + card wiring
 
+> **Historical (2026-08-12).** Written against the Python modules, which are deleted. The reel
+> behaviour it describes lives in `server/src/engine/resolve.js` (`buildReel`) and
+> `server/src/session.js`.
+
 A curated, **ordered** demo reel for showing off the Family Room theater: scan a card (or
 trigger `set: "demo"` from the web UI) and a hand-picked run of Dolby/THX/Trinnov trailers +
 4K Dolby-Vision/Atmos movie showpieces plays **back-to-back, in order, in full, every time**.
