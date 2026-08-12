@@ -107,6 +107,7 @@ jobs:
           python3 e2e/specials-count-test.py
           python3 e2e/playback-fsm-test.py
           python3 e2e/fsm-wake-and-skip-test.py
+          python3 e2e/batch-stops-at-test.py
 
       # D2 of the Python→Node port: prove server/src/engine/routing.js decides set:"auto"
       # routing (channel_for/binding_for/set_sections/rewatch_sections) byte-for-byte like
@@ -137,6 +138,12 @@ jobs:
       # queue + file-order reel; next_queue's YAML mark-done is D4 and not compared here).
       - name: D3 curated parity (Node engine ↔ Python)
         run: node e2e/curated-parity.mjs
+
+      # `batch_stops_at` in the Node port: same assertion table as the Python engine test above
+      # (a parity DIFF can't catch this — the feature lands identically in both engines, so a
+      # diff stays green whether or not either side implements it).
+      - name: Batch boundaries (Node engine)
+        run: node e2e/batch-stops-at-test.mjs
 
       # D3 follow-on #4: async engine + live-client surface + preview formatter (offline).
       - name: D3 live-client adapter (offline)

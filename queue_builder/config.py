@@ -364,6 +364,10 @@ def _load_sets_yaml():
         # to the cfg; queues.sweep_completed interprets them (a `reel` set is exempt too).
         if ent.get("remove_completed_after") is not None:
             cfg["remove_completed_after"] = str(ent.get("remove_completed_after")).strip()
+        # Where a multi-episode batch may stop: "none" | "member" | "season" (see BATCH_STOPS_AT).
+        # Passes straight through; plex._batch_stop interprets it (entry override > set > global).
+        if ent.get("batch_stops_at") is not None:
+            cfg["batch_stops_at"] = str(ent.get("batch_stops_at")).strip().lower()
         if ent.get("keep_completed"):
             cfg["keep_completed"] = True
         # A set whose libraries only SOME Plex Home profiles can see (e.g. the demo reel
@@ -437,6 +441,20 @@ QUEUES_PATH = os.environ.get("QUEUES_PATH", "/config/queues.yaml")
 # safety cap so a bad override can't queue an entire series at once.
 QUEUE_SERIES_DEFAULT = int(os.environ.get("QUEUE_SERIES_DEFAULT", "1"))
 QUEUE_SERIES_LENGTH = int(os.environ.get("QUEUE_SERIES_LENGTH", "40"))
+# --- Batch boundaries (`batch_stops_at`) --------------------------------------- #
+# WHERE a multi-episode batch is allowed to stop. The batch cap above is a plain count, so a
+# `episodes: 2` entry sitting on a season finale queues the finale AND the next season's
+# premiere — or, inside a `Collection:`, the finale AND episode 1 of the NEXT member show.
+# Watchable, but not what you want right after an emotional finale (owner, 2026-08-12).
+#   "none"   (default) - today's behavior: the batch fills across anything.
+#   "member" - a batch never spans two collection members (the finale plays alone; the next
+#              member leads the next play). No-op for a plain show entry (one member).
+#   "season" - also never spans a season boundary, INCLUDING inside a single show — so a
+#              `episodes: 2` show at S1E12 queues the finale alone, not S1E12 + S2E01.
+# Set per-set in sets.yaml, overridable per entry in queues.yaml (an OVA collection you are
+# happy to roll straight through sets `batch_stops_at: none` while its channel says "season").
+# Only ever SHORTENS a batch, and never below one item — an empty batch is the FINISHED signal.
+BATCH_STOPS_AT = os.environ.get("BATCH_STOPS_AT", "none")
 # --- Completed-entry TTL (§B.3) ------------------------------------------------ #
 # Finished queue entries are kept + tagged `done: true`/`done_at:<epoch>` (queues.mark_done)
 # instead of being pruned (decision 2026-07-21-finished-queue-entries-marked-done-not-pruned).

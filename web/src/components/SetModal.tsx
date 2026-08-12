@@ -27,6 +27,9 @@ import { SelectListbox } from "./SelectListbox"
  * Queue consumption flags (`keep_completed`, `reel`, `remove_completed_after`) are
  * editable here via Charcuterie `Checkbox` — previously hand-YAML only.
  * (decision `2026-08-08-set-modal-queue-flags`)
+ *
+ * `batch_stops_at` is the set-wide default for WHERE a multi-episode batch may stop; an
+ * individual entry can override it from the queue view.
  */
 export function SetModal() {
   const { setModal } = useOverlays()
@@ -50,6 +53,7 @@ export function SetModal() {
   const [isReel, setIsReel] = useState(false)
   const [removeCompletedAfter, setRemoveCompletedAfter] =
     useState("")
+  const [batchStopsAt, setBatchStopsAt] = useState("none")
   const [profiles, setProfiles] = useState<Profile[]>([])
 
   // Identity of the open modal instance — used to remount uncontrolled Charcuterie
@@ -76,6 +80,9 @@ export function SetModal() {
         : false,
     )
     setIsReel(editing ? Boolean(editing.reel) : false)
+    setBatchStopsAt(
+      editing ? editing.batch_stops_at || "none" : "none",
+    )
     // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
     // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
     if (editing) {
@@ -152,6 +159,8 @@ export function SetModal() {
       reel: isReel,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
+      // "none" is the engine default, so it is stored as the absence of the key.
+      batch_stops_at: batchStopsAt,
     }
 
     try {
@@ -387,6 +396,44 @@ export function SetModal() {
           tagged done until you clear them. Playlist / reel
           queues never mark done, so this only applies to
           ordinary consuming queues.
+        </p>
+        <label className="field">
+          Stop a multi-episode batch at
+          {/* Keyed on modal-open identity, same reason as the selects above. */}
+          <SelectListbox
+            className="fieldselect"
+            id="set-batch-stops-at"
+            key={modalKey}
+            label="Stop a multi-episode batch at"
+            onChange={setBatchStopsAt}
+            options={[
+              {
+                label:
+                  "Nothing — fill the batch across anything",
+                value: "none",
+              },
+              {
+                label:
+                  "Season boundary — never cross a finale",
+                value: "season",
+              },
+              {
+                label:
+                  "Show boundary — stay inside one show",
+                value: "member",
+              },
+            ]}
+            value={batchStopsAt}
+          />
+        </label>
+        <p className="subhint" id="set-batch-stops-hint">
+          Only matters for entries set to play more than one
+          episode per visit. “Season boundary” ends the
+          batch at a season finale instead of rolling into
+          the next season (or, inside a collection, the next
+          show) — so a finale isn’t followed by someone
+          else’s episode 1. A single entry can override
+          this.
         </p>
       </fieldset>
       <p className="idnote" id="set-idnote">

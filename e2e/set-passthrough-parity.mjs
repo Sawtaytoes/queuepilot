@@ -28,6 +28,7 @@ const FIELDS = [
   'max_items',
   'include_specials',
   'audio_language',
+  'batch_stops_at',
 ];
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.

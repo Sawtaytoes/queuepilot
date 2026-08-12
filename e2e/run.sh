@@ -34,6 +34,10 @@ echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile det
 node e2e/profile-gate-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > placeholder
 node e2e/host-config-test.mjs || TOTAL=$((TOTAL+1))
+echo "=== batch-stops-at-test (python, offline) ==="   # WHERE a batch may stop (member/season)
+python3 e2e/batch-stops-at-test.py || TOTAL=$((TOTAL+1))
+echo "=== batch-stops-at-test (node) ==="   # the same table in the Node port
+node e2e/batch-stops-at-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
 node e2e/collection-batch-cap-test.mjs || TOTAL=$((TOTAL+1))
 echo "=== resume-on-advance-test ==="   # browserless; every queued episode resumes, not just the head

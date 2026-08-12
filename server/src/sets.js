@@ -258,6 +258,16 @@ const toPosIntOrNull = (v) => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+// batch_stops_at: WHERE a multi-episode batch may stop — "member" (never span two collection
+// members) or "season" (also never span a season boundary, including inside one show). Anything
+// else, including the "none" default, is stored as the ABSENCE of the key: the engine reads a
+// missing/unrecognised value as no boundary, so a sparse file and a typo agree.
+const BATCH_STOPS = ['member', 'season'];
+const normalizeBatchStop = (v) => {
+  const s = v == null ? '' : String(v).trim().toLowerCase();
+  return BATCH_STOPS.includes(s) ? s : null;
+};
+
 const MODES = ['rewatch', 'episodic', 'both'];
 // behavior (v3 PR 2) supersedes `mode`: progress = advance through unwatched ("next
 // episode"), rewatch = weighted least-watched replay. Mirrors queue_builder/config.py.
@@ -425,6 +435,12 @@ function normalize(ent) {
             ent.remove_completed_after != null && String(ent.remove_completed_after).trim()
               ? String(ent.remove_completed_after).trim()
               : null,
+          // WHERE a multi-episode batch may stop: "none" | "member" | "season". Only curated
+          // sets carry it — a dynamic channel's round-robin already alternates shows every
+          // item, so it has no multi-episode batch to bound. null = the engine default (none).
+          batch_stops_at: BATCH_STOPS.includes(String(ent.batch_stops_at || '').trim().toLowerCase())
+            ? String(ent.batch_stops_at).trim().toLowerCase()
+            : null,
         }),
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
@@ -577,6 +593,8 @@ export async function createSet(body = {}) {
       if (rca && !['0', 'never', 'off', 'none', 'disabled'].includes(rca.toLowerCase())) {
         curated.remove_completed_after = rca;
       }
+      const bsa = normalizeBatchStop(body.batch_stops_at);
+      if (bsa) curated.batch_stops_at = bsa;
     }
     const node = doc.createNode(isRotation ? rotationCreateObj(id, body) : curated);
     // Curated shelves land after the last curated queue, before the rotation block; new
@@ -605,7 +623,7 @@ export async function updateSet(id, patch) {
     const allow = [
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
-      'keep_completed', 'reel', 'remove_completed_after',
+      'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at',
     ];
     if (isRotation) {
       allow.push(
@@ -648,6 +666,15 @@ export async function updateSet(id, patch) {
           continue;
         }
         setKeepingComment(node, 'remove_completed_after', doc.createNode(s));
+        continue;
+      }
+      if (k === 'batch_stops_at') {
+        // Where a multi-episode batch may stop. "none"/blank/unrecognised drops the key (the
+        // engine default), so the file stays sparse and a typo can never persist.
+        if (isRotation) throw new Error('batch_stops_at is only valid on curated queues');
+        const bsa = normalizeBatchStop(v);
+        if (!bsa) { node.delete('batch_stops_at'); continue; }
+        setKeepingComment(node, 'batch_stops_at', doc.createNode(bsa));
         continue;
       }
       if (k === 'members') {

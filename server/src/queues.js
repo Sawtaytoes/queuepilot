@@ -510,6 +510,20 @@ export async function setEpisodes(setName, key, episodes) {
   return ok ? { ok: true, episodes: n } : { ok: false };
 }
 
+// Set (or clear) a series/collection entry's `batch_stops_at` override — WHERE this entry's
+// batch may stop, independent of how many episodes it plays. "member"/"season" write the key;
+// anything else (including "none") DROPS it, which is how the entry says "follow the set".
+// Entry identity (key) is unchanged, and every other field it carries survives (extras).
+export async function setBatchStop(setName, key, value) {
+  const s = value == null ? '' : String(value).trim().toLowerCase();
+  const stop = ['member', 'season'].includes(s) ? s : null;
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (stop) e.extras.batch_stops_at = stop;
+    else delete e.extras.batch_stops_at;
+  });
+  return ok ? { ok: true, batch_stops_at: stop } : { ok: false };
+}
+
 // Normalize a manual START point off the wire. A SHOW start is {season, episode}; a
 // COLLECTION start also names the member to begin at — `series` is that member's ratingKey
 // (a hand-written YAML entry may name it by title instead), and season/episode are optional

@@ -73,6 +73,23 @@ sets:
   include_specials: true
   sections: [5]
 
+# batch_stops_at — where a multi-episode batch may stop. Both sides str()+strip()+lower() it,
+# so the padded/mixed-case spelling has to come back normalised. Absent everywhere else, which
+# pins the "not set" reading (resolve falls back to the env default).
+- id: stop_season
+  label: Season Stop
+  kind: anime
+  source: queue
+  batch_stops_at: "  Season  "
+  sections: [11]
+
+- id: stop_member
+  label: Member Stop
+  kind: anime
+  source: queue
+  batch_stops_at: member
+  sections: [11]
+
 # audio_language — playback stream selection. Padded, to pin the strip(). `null` is the
 # spelling the live sets.yaml actually uses for "no preference".
 - id: jpn
