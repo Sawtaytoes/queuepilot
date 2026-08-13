@@ -105,6 +105,31 @@ jobs:
       - name: Device registry (offline)
         run: node e2e/device-registry-test.mjs
 
+      # The provider CONFIG + BLOCK STORAGE layer. Guards the two rules that are cheap to
+      # break and expensive to notice:
+      #   * an unset provider token FAILS LOUDLY and by name. Two production outages came
+      #     from a placeholder that looked like config, and both looked identical from the
+      #     couch — the card opened Plex and nothing played. A token must never fall through
+      #     to '' or an unauthenticated request, and must never appear in an API response.
+      #   * provider blocks are a LIST from day one, a pre-blocks set reads as ONE implicit
+      #     Plex block without being migrated on read, and a MIXED set THROWS rather than
+      #     picking a provider — what a mixed queue hands off is an open owner decision, so a
+      #     silent answer here would be the implementation deciding it.
+      # Runs with no token and no network; every path is redirected to a scratch dir.
+      - name: Provider seam (offline)
+        run: node e2e/provider-seam-test.mjs
+
+      # The Kavita provider and the 302 launcher, with HTTP fully stubbed. Pins the details
+      # that are invisible until a real card fails: continue-point returns a NULL seriesId
+      # (so the provider must thread it back in or every deep link points at series `null`),
+      # ReadingList/lists is a POST not a GET, the reader variant follows seriesFormat, and
+      # the deep link carries ?readingListId= — which is what makes next/prev resolve through
+      # the LIST instead of the series, i.e. the cross-series auto-advance the feature is for.
+      # Also pins that handoff() returns a URL and never a device push: Kavita has no cast
+      # and no webhooks, and reading is pull.
+      - name: Kavita provider + launcher (offline)
+        run: node e2e/kavita-provider-test.mjs
+
       # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
       # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against
       # that engine's RECORDED answers (e2e/fixtures/golden/routing.json) over

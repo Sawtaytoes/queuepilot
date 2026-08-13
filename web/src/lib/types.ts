@@ -186,6 +186,13 @@ export type RegistrySet = {
    * Home profile is signed in before playing. null/absent = ungated. */
   requires_profile?: string | null
   /**
+   * The repeating {provider, profile, libraries} source blocks. ALWAYS present and always
+   * a list: a set written before blocks existed reports the single implicit Plex block it
+   * has always meant, built from `sections` / `requires_profile`. So the editor never has
+   * to special-case a legacy set, and reading one never rewrites it.
+   */
+  providers: ProviderBlockValue[]
+  /**
    * Curated queues only. Non-consuming / playlist mode: the engine never marks entries
    * done, so the lineup stays re-showable. `reel: true` implies this (normalize reports
    * both). Absent/false on rotation channels.
@@ -331,3 +338,41 @@ export type CollectionChild = {
 }
 
 export type StatusKind = "" | "ok" | "err"
+
+/**
+ * A connected media app. `configured` is a BOOLEAN and never the token — the API has no
+ * route that returns a credential, not even masked
+ * (decision `2026-08-12-provider-tokens-live-in-a-separate-config-file`).
+ */
+export type ProviderInfo = {
+  id: string
+  kind: string
+  label: string
+  base_url: string
+  supported: boolean
+  configured: boolean
+  /**
+   * How a queue on this provider STARTS. `push` sends a lineup at a device (Plex → the
+   * Shield); `pull` returns a URL you open (Kavita — it has no cast and no webhooks). The
+   * UI reads this rather than branching on `kind`, so a third backend needs no UI change.
+   */
+  delivery: "push" | "pull"
+}
+
+/** A provider's own libraries. Ids are provider-scoped and stay bare strings. */
+export type ProviderLibrary = {
+  id: string
+  title: string
+  type?: number
+}
+
+/**
+ * One repeating source block on a queue. Always a LIST on the wire, never a scalar — a set
+ * written before blocks existed reports the single implicit Plex block it has always meant.
+ */
+export type ProviderBlockValue = {
+  provider: string
+  profile: string
+  libraries: string[]
+  batch?: number
+}

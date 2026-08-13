@@ -16,6 +16,9 @@ import * as cache from './cache.js';
 import * as history from './history.js';
 import * as mqttc from './mqttc.js';
 import * as plex from './plex.js';
+import * as providers from './providers/config.js';
+import { providerFor } from './providers/index.js';
+import { mountLauncher } from './providers/launcher.js';
 import * as queues from './queues.js';
 import * as sets from './sets.js';
 import * as tiles from './tiles.js';
@@ -110,9 +113,17 @@ app.use(
 
 // Every data mutation snapshots the files first → the undo/redo stack. /api/play only
 // publishes MQTT and /api/undo|redo manage the stack themselves.
+//
+// A PROVIDER TOKEN WRITE IS EXCLUDED, and that exclusion is load-bearing rather than an
+// optimisation: history.snapshot() copies the managed config files into the undo stack and
+// its .history.json mirror. A credential that gets copied into an undo stack has escaped
+// its file, which is exactly what decision
+// 2026-08-12-provider-tokens-live-in-a-separate-config-file forbids. The token file is
+// written only by providers/config.js writeSecret(), which is outside this machinery.
 app.use('/api', async (req, _res, next) => {
   const mutating = ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method);
-  const managed = ['/play', '/undo', '/redo'].some((p) => req.path === p || req.path.startsWith(p + '/'));
+  const managed = ['/play', '/undo', '/redo'].some((p) => req.path === p || req.path.startsWith(p + '/'))
+    || /^\/providers\/[^/]+\/token$/.test(req.path);
   if (mutating && !managed) {
     try {
       await history.snapshot();
@@ -711,6 +722,57 @@ app.post('/api/play', async (req, res) => {
   }
 });
 
+// --- App Connectors ----------------------------------------------------------- //
+// The provider surface. Definitions are plaintext and freely readable; TOKENS ARE
+// WRITE-ONLY — there is no route that returns one, and `configured` is a boolean rather
+// than a masked prefix, because a masked token is still a leak when the secret is short.
+
+app.get('/api/providers', (_req, res) => {
+  res.json({ providers: providers.publicList() });
+});
+
+// Set or replace one provider's token. Write-only by design.
+app.post('/api/providers/:id/token', async (req, res) => {
+  const token = (req.body || {}).token;
+  if (typeof token !== 'string' || !token.trim()) {
+    return res.status(400).json({ error: 'a non-empty token is required' });
+  }
+  try {
+    const def = providers.definitionFor(String(req.params.id));
+    if (!def) return res.status(404).json({ error: 'unknown provider' });
+    await providers.writeSecret(def.id, token.trim());
+    // Echo the PUBLIC view only. Never the token, not even the one just supplied.
+    return res.json({ ok: true, provider: providers.publicView(def) });
+  } catch (e) {
+    return res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+app.delete('/api/providers/:id/token', async (req, res) => {
+  try {
+    const def = providers.definitionFor(String(req.params.id));
+    if (!def) return res.status(404).json({ error: 'unknown provider' });
+    await providers.deleteSecret(def.id);
+    return res.json({ ok: true, provider: providers.publicView(def) });
+  } catch (e) {
+    return res.status(500).json({ error: String(e.message || e) });
+  }
+});
+
+// The libraries a provider offers, for the queue editor's provider block. Plex keeps its own
+// long-standing routes; this is the provider-scoped one a non-Plex block needs.
+app.get('/api/providers/:id/libraries', async (req, res) => {
+  try {
+    const p = providerFor(String(req.params.id));
+    if (typeof p.libraries !== 'function') {
+      return res.json({ libraries: [], note: `${p.label} does not enumerate libraries here` });
+    }
+    return res.json({ libraries: await p.libraries() });
+  } catch (e) {
+    return res.status(503).json({ error: String(e.message || e) });
+  }
+});
+
 // Last session state (retained plex-channels/state) — the play-result toast's source.
 app.get('/api/state', (_req, res) => {
   res.json({ state: mqttc.lastState(), mqtt: mqttc.connected() });
@@ -862,6 +924,12 @@ app.get('/api/thumb/:ratingKey', async (req, res) => {
     res.status(502).end();
   }
 });
+
+// The per-queue launcher: GET /go/<setId> rebuilds a pull provider's runtime artifact and
+// 302s into it. Deliberately NOT under /api — it is a URL a person bookmarks or puts on a
+// home screen, so it stays short and stable, and it is exempt from the /api mutation
+// snapshot above (it writes no config).
+mountLauncher(app);
 
 // Open the derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache) before
 // listening. A failure here disables caching but never blocks the server — every reader in

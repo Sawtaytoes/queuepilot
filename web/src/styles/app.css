@@ -1629,6 +1629,70 @@ body.queue-view #tools {
   grid-template-columns: 1fr 1fr;
   gap: 6px 12px;
 }
+/* --- provider source blocks (decision 2026-08-13-provider-block-repeats-and-picks-its-control)
+   One {provider, profile, libraries} block; a queue holds N. The box exists so that with
+   three blocks on screen it is obvious which profile belongs to which library list — an
+   unboxed repetition reads as one long form. */
+#setmodal .pblock {
+  border: 1px solid var(--color-border-default);
+  border-radius: 12px;
+  padding: 12px 13px 4px;
+  margin-bottom: 10px;
+  background: color-mix(
+    in srgb,
+    var(--color-content-primary) 2%,
+    transparent
+  );
+}
+/* A single block is the everyday case and needs no frame — with one source there is
+   nothing to tell apart, and the box would be pure chrome around the whole form. */
+#setmodal #set-blocks:has(.pblock:only-child) .pblock {
+  border: 0;
+  padding: 0;
+  margin-bottom: 0;
+  background: none;
+}
+#setmodal .phead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+#setmodal #set-blocks:has(.pblock:only-child) .phead {
+  display: none;
+}
+#setmodal .pname {
+  font-size: 0.92rem;
+  color: var(--color-content-primary);
+}
+#setmodal .rmblock,
+#setmodal .addblock {
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  color: var(--color-content-muted);
+  border-radius: 7px;
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+#setmodal .addblock {
+  display: block;
+  width: 100%;
+  border-style: dashed;
+  border-radius: 10px;
+  color: var(--color-content-accent, #8ab4f8);
+  font-size: 0.88rem;
+  padding: 9px;
+  margin-bottom: 14px;
+}
+/* The segmented provider picker. Same 10px gutter as .fieldselect so the two controls line
+   up when a modal shows one of each. It only renders at two providers — at three the row
+   overflows a phone (measured: 371px into 315px), and ProviderBlock swaps to the listbox. */
+#setmodal .fieldseg {
+  margin-left: 10px;
+}
 #setmodal .libs label {
   display: flex;
   align-items: baseline;

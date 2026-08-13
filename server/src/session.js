@@ -1,11 +1,16 @@
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
-// Selection uses the engine under ./engine, the queue write-side is queues.js
-// markDone/clearDone/sweepCompleted, and the device drive is driver.driveToPlaying / playback.
+//
+// Selection and delivery both go through a PROVIDER (./providers) rather than a Plex client:
+// buckets() produces the lineup, materialize() builds the runtime artifact, handoff() starts
+// it — pushing a playQueue at the Shield on Plex, or returning a URL to open on a pull
+// provider like Kavita. Nothing in this file may branch on which backend it is talking to.
+//
+// The queue write-side (queues.js markDone/clearDone/sweepCompleted) stays here and stays
+// provider-neutral: it is about entries in the shared queues.yaml recipe store being
+// finished, not about Plex.
 import * as routing from './engine/routing.js';
-import * as resolve from './engine/resolve.js';
-import * as rotation from './engine/rotation.js';
-import * as select from './engine/select.js';
-import { liveClient } from './engine/plex-live.js';
+import { providerFor } from './providers/index.js';
+import { providerIdForSet } from './providers/blocks.js';
 import * as queues from './queues.js';
 import * as profiles from './profiles.js';
 import * as adb from './adb.js';
@@ -13,7 +18,7 @@ import * as playback from './playback.js';
 import * as driver from './driver.js';
 import * as resume from './resume.js';
 import {
-  PLAYBACK_FSM, ADB_ENABLED, ROTATION_LENGTH, RESUME_ON_ADVANCE,
+  PLAYBACK_FSM, ADB_ENABLED, RESUME_ON_ADVANCE,
 } from './env.js';
 
 // Mutable session (mirrors service.Session) for advance + last-played.
@@ -60,31 +65,6 @@ function lastPlayedFromItem(item) {
     type: item.type || (item.season != null ? 'episode' : 'movie'),
     ratingKey: item.ratingKey != null ? String(item.ratingKey) : null,
   };
-}
-
-// 1/n² rewatch pick — mirrors pick_rewatch_movie for memberless channels.
-function pickRewatch(counts, titles, excludes, excludeRk) {
-  const candidates = [];
-  for (const [rk, n] of counts) {
-    if (excludes.has(String(rk))) continue;
-    if (excludeRk && String(rk) === String(excludeRk)) continue;
-    if (n < 1) continue;
-    candidates.push([rk, n]);
-  }
-  if (!candidates.length) return null;
-  const weights = candidates.map(([, n]) => 1 / (n * n));
-  let total = 0;
-  for (const w of weights) total += w;
-  let r = Math.random() * total;
-  for (let i = 0; i < candidates.length; i += 1) {
-    r -= weights[i];
-    if (r <= 0) {
-      const rk = candidates[i][0];
-      return { ratingKey: rk, title: titles.get(rk) || null };
-    }
-  }
-  const [rk] = candidates[candidates.length - 1];
-  return { ratingKey: rk, title: titles.get(rk) || null };
 }
 
 /**
@@ -177,18 +157,23 @@ export async function startSession(payload = {}, opts = {}) {
   let resumeMs = 0;
   let playItems = [];
 
-  const client = liveClient();
-  const tok = await client.accountToken(binding.user_uuid);
+  // The engine no longer holds a Plex client — it holds a PROVIDER (decision
+  // 2026-08-12-backends-are-providers-behind-a-media-neutral-seam). Everything Plex-shaped
+  // (MediaContainer, ratingKeys, managed-user tokens) is now private to providers/plex.js.
+  // Today every set resolves to the Plex provider, so this is a rewrap with no behaviour
+  // change; the gates are what prove that.
+  const provider = providerFor(providerIdForSet(cfg));
+  const tok = await provider.profileToken(binding.user_uuid);
+
+  const res = await provider.buckets({
+    setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk,
+  });
 
   if (cfg.source === 'queue') {
-    const entries = resolve.loadEntries(setName);
-    let res;
-    if (cfg.reel) {
-      res = await resolve.buildReel(client, setName, cfg, entries, tok);
-    } else {
-      const watched = await select.watchedForSet(client, cfg, binding);
-      res = await resolve.nextQueue(client, setName, cfg, entries, watched, tok);
-      // D4 write-side: persist finished + revive stale-done + TTL sweep
+    // D4 write-side: persist finished + revive stale-done + TTL sweep. This stays ABOVE the
+    // seam on purpose — it is about entries in the shared queues.yaml recipe store being
+    // finished, not about Plex, so a second provider reuses it verbatim.
+    if (!cfg.reel) {
       if (Array.isArray(res.revived) && res.revived.length) {
         await queues.clearDone(setName, res.revived);
       }
@@ -214,44 +199,21 @@ export async function startSession(payload = {}, opts = {}) {
     playItems = res.play;
     resumeMs = res.offset || 0;
     if (res.last) _publishLastPlayed(lastPlayedFromItem(res.last));
-  } else {
-    // rotation channel
-    let behavior = cfg.behavior;
-    let mode;
-    if (behavior === 'rewatch') mode = 'rewatch';
-    else if (behavior === 'progress') mode = 'episodic';
-    else mode = cfg.mode || (kind === 'movie' ? 'rewatch' : 'episodic');
-
-    if (mode === 'rewatch') {
-      const { counts, titles } = await select.rewatchCounts(
-        client, routing.rewatchSections(cfg), binding.movie_ratings,
-        binding.watch_count_accounts, tok,
-      );
-      const excludes = new Set((binding.movie_excludes || []).map(String));
-      const pick = pickRewatch(counts, titles, excludes, SESSION.lastMovieRk);
-      if (!pick) {
-        _publishState({ error: 'no rewatch candidate found for this profile', ...SESSION.asDict() });
-        return { error: 'no rewatch' };
-      }
-      SESSION.lastMovieRk = pick.ratingKey;
-      playItems = [{ ratingKey: pick.ratingKey, title: pick.title }];
-      _publishLastPlayed(lastPlayedFromItem(playItems[0]));
-    } else {
-      const queue = await rotation.buildRotation(client, cfg, binding, ROTATION_LENGTH, {
-        shuffle(arr) {
-          for (let i = arr.length - 1; i > 0; i -= 1) {
-            const j = Math.floor(Math.random() * (i + 1));
-            [arr[i], arr[j]] = [arr[j], arr[i]];
-          }
-        },
-      });
-      if (!queue.length) {
-        _publishState({ error: `channel '${setName}' has nothing unwatched to play`, ...SESSION.asDict() });
-        return { error: 'empty rotation' };
-      }
-      playItems = queue;
-      _publishLastPlayed(lastPlayedFromItem(playItems[0]));
+  } else if (res.rewatch) {
+    if (!res.play?.length) {
+      _publishState({ error: 'no rewatch candidate found for this profile', ...SESSION.asDict() });
+      return { error: 'no rewatch' };
     }
+    playItems = res.play;
+    SESSION.lastMovieRk = playItems[0].ratingKey;
+    _publishLastPlayed(lastPlayedFromItem(playItems[0]));
+  } else {
+    if (!res.play?.length) {
+      _publishState({ error: `channel '${setName}' has nothing unwatched to play`, ...SESSION.asDict() });
+      return { error: 'empty rotation' };
+    }
+    playItems = res.play;
+    _publishLastPlayed(lastPlayedFromItem(playItems[0]));
   }
 
   // max_items cap
@@ -286,16 +248,15 @@ export async function startSession(payload = {}, opts = {}) {
   }
   const setLabel = cfg.label || setName;
 
+  // materialize -> handoff. Both return a DESCRIPTOR of how to start this; neither performs
+  // playback itself. On Plex that is a playQueue pushed at the Shield; on a pull provider it
+  // is a URL to open. Collapsing them into one play() would hard-code the push model.
+  const artifact = provider.materialize(playItems, { offset: resumeMs, setName });
+
   let result;
   if (PLAYBACK_FSM) {
-    result = await driver.driveToPlaying(null, {
-      ratingKeys,
-      requiredProfile: required,
-      offset: resumeMs,
-      device,
-      setName,
-      cancel,
-      setLabel,
+    result = await provider.handoff(artifact, {
+      useFsm: true, requiredProfile: required, device, cancel, setLabel,
     });
   } else {
     // Legacy: join ADB switch then play
@@ -305,9 +266,7 @@ export async function startSession(payload = {}, opts = {}) {
       }
     }
     if (cancel.isSet()) return { cancelled: true };
-    result = await playback.playRatingKeys(ratingKeys, {
-      setName, device, offset: resumeMs,
-    });
+    result = await provider.handoff(artifact, { useFsm: false, device });
   }
 
   if (result?.cancelled) return result;

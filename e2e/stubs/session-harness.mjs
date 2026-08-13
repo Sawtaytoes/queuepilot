@@ -88,6 +88,25 @@ const STUB_SRC = {
   `,
 };
 
+// WHERE THE STUBS SPLICE IN, and why it is two places.
+//
+// The hook matches on (parent module, specifier). When the `client` seam widened into a
+// `provider` seam (decision 2026-08-12-backends-are-providers-behind-a-media-neutral-seam),
+// the Plex-shaped imports MOVED OUT of session.js and into providers/plex.js — that is the
+// entire point of the widening: session.js no longer knows what a MediaContainer is.
+//
+// So the replay client, the driver and playback are now stubbed at their new parent, with
+// the `../` specifiers that file uses. session.js keeps only profiles/adb, which are about
+// the Shield's user picker rather than about a backend.
+//
+// This is a change to WHERE the stub is injected, not to what the gates assert: the corpus,
+// the expected outputs and every assertion are untouched. If a parity gate ever fails after
+// a change here, that is the seam having changed behaviour — not a fixture to update.
+const PARENT_STUBS = [
+  ['/server/src/session.js', ['./profiles.js', './adb.js', './playback.js', './driver.js']],
+  ['/server/src/providers/plex.js', ['../engine/plex-live.js', '../playback.js', '../driver.js']],
+];
+
 // Data-URL modules keep the stubs inline: no extra files, and each one closes over the same
 // SESSION_CTL instance (imported by URL, so it resolves to this exact module).
 export function stubSessionDeps() {
@@ -96,11 +115,22 @@ export function stubSessionDeps() {
       spec, `data:text/javascript,${encodeURIComponent(src)}`,
     ]),
   );
+  // A provider-parent specifier resolves to the SAME stub as its session-parent twin, so
+  // both parents share one SESSION_CTL and a test still sees every recorded drive/play.
+  const alias = {
+    '../engine/plex-live.js': './engine/plex-live.js',
+    '../playback.js': './playback.js',
+    '../driver.js': './driver.js',
+  };
+  const allowed = new Map(PARENT_STUBS);
   registerHooks({
     resolve(spec, ctx, next) {
       const parent = ctx && ctx.parentURL ? ctx.parentURL : '';
-      if (parent.endsWith('/server/src/session.js') && urls[spec]) {
-        return { url: urls[spec], shortCircuit: true };
+      for (const [suffix, specs] of allowed) {
+        if (parent.endsWith(suffix) && specs.includes(spec)) {
+          const url = urls[alias[spec] || spec];
+          if (url) return { url, shortCircuit: true };
+        }
       }
       return next(spec, ctx);
     },
