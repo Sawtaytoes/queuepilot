@@ -229,6 +229,22 @@ jobs:
           kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           exit $rc
 
+      # The pick.mjs <-> SelectListbox contract — browser, no Plex, no app
+      # server. Every picker is a Charcuterie `Listbox` behind a button, and
+      # `e2e/pick.mjs` is how all seventeen browser suites drive one; but those
+      # suites are all in the PLEX_TOKEN-gated step below, which is skipped on
+      # every PR. So the contract that replaced `selectOption()` had NO
+      # coverage on a pull request, and the 2026-08-13 Picker migration had to
+      # be verified by hand. This step is that verification made permanent.
+      #
+      # Runs a `vite` dev server on its own port against a dependency-free
+      # harness page (web/e2e-harness/) that mounts the real component. The
+      # page is dev-only: vite.config.ts names one build entry, so it is not
+      # in dist/. Reuses the chromium the narrow-view step above installed —
+      # keep it AFTER that step.
+      - name: pick.mjs picker contract (browser, no Plex needed)
+        run: node e2e/pick-contract-test.mjs
+
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # `require('playwright')` and drive a Chromium browser, and the shared
       # server they hit talks to Plex. We can't call e2e/run.sh directly (it

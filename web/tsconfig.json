@@ -25,6 +25,7 @@
     "verbatimModuleSyntax": true
   },
   "include": [
+    "e2e-harness",
     "src",
     "vite",
     "vite.config.ts",
