@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>QueuePilot — provider block, control options</title>
+<!-- The app stylesheet is intentionally NOT linked in the promoted copy: it is a
+     content-hashed build artifact that changes every release. The inline styles below
+     reproduce the modal's visual language well enough to read the layout decision. -->
+<style>
+  /* Mockup chrome only — nothing here is proposed styling. Everything inside a .modalish
+     block is the app's REAL stylesheet (web/dist/assets/index-*.css), reusing the real
+     class names, so this comparison is about layout and not about palette. */
+  body { margin: 0; padding: 28px; background: var(--color-surface-base, #0f1115);
+         color: var(--color-content-primary, #e8eaed);
+         font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; letter-spacing: .01em; }
+  .lede { color: var(--color-content-muted, #9aa0a6); font-size: .88rem; margin: 0 0 26px; max-width: 78ch; line-height: 1.5; }
+  .cols { display: flex; gap: 22px; align-items: flex-start; flex-wrap: wrap; }
+  .col { flex: 0 0 auto; }
+  .caption { font-size: .82rem; color: var(--color-content-muted, #9aa0a6); margin: 0 0 8px; max-width: 44ch; line-height: 1.45; }
+  .caption b { color: var(--color-content-primary, #e8eaed); font-weight: 600; }
+  .tag { display: inline-block; font-size: .7rem; letter-spacing: .06em; text-transform: uppercase;
+         padding: 2px 7px; border-radius: 999px; margin-bottom: 7px;
+         background: var(--color-surface-overlay, #22262e); color: var(--color-content-muted, #9aa0a6);
+         border: 1px solid var(--color-border-default, #333941); }
+  .tag.opt { background: #1d2b3a; color: #8ab4f8; border-color: #2c4055; }
+  .tag.cur { background: #2a2320; color: #e0a878; border-color: #46372c; }
+  /* Stand-in for the real #setmodal box. */
+  .modalish { background: var(--color-surface-raised, #171a20); color: var(--color-content-primary, #e8eaed);
+              border: 1px solid var(--color-border-default, #333941); border-radius: 14px;
+              padding: 20px 22px; width: 440px; }
+  .modalish h3 { margin: 0 0 14px; font-size: 1.05rem; }
+  .field { display: block; margin-bottom: 14px; color: var(--color-content-muted, #9aa0a6); font-size: .92rem; }
+  .subhint { display: block; color: var(--color-content-muted, #9aa0a6); font-size: .8rem; margin: 4px 0 14px; line-height: 1.45; }
+  fieldset { border: 1px solid var(--color-border-default, #333941); border-radius: 10px; padding: 10px 12px; margin: 0; }
+  legend { padding: 0 6px; font-size: .92rem; color: var(--color-content-muted, #9aa0a6); }
+  .libs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 12px; }
+  .libs label { display: flex; align-items: baseline; gap: 7px; color: var(--color-content-primary, #e8eaed); font-size: .92rem; }
+  /* The Charcuterie listbox trigger, approximated for the mock. */
+  .lb { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px;
+        background: var(--color-surface-overlay, #22262e); color: var(--color-content-primary, #e8eaed);
+        border: 1px solid var(--color-border-default, #333941); border-radius: 8px;
+        padding: 8px 11px; font-size: .92rem; margin-left: 10px; min-width: 190px; }
+  .lb::after { content: "▾"; color: var(--color-content-muted, #9aa0a6); font-size: .8rem; }
+  .lb.wide { display: flex; width: 100%; margin: 5px 0 0; }
+  /* The repeating provider block. */
+  .pblock { border: 1px solid var(--color-border-default, #333941); border-radius: 12px;
+            padding: 12px 13px 4px; margin-bottom: 10px; background: rgba(255,255,255,.016); position: relative; }
+  .pblock > .phead { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .pname { display: flex; align-items: center; gap: 8px; font-size: .92rem; color: var(--color-content-primary, #e8eaed); }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; }
+  .dot.plex { background: #e5a00d; } .dot.kavita { background: #4ac694; }
+  .rm { background: transparent; border: 1px solid var(--color-border-default, #333941); color: var(--color-content-muted, #9aa0a6);
+        border-radius: 7px; font-size: .78rem; padding: 3px 9px; cursor: pointer; }
+  .addblk { display: block; width: 100%; background: transparent; color: #8ab4f8;
+            border: 1px dashed var(--color-border-default, #444b55); border-radius: 10px;
+            padding: 9px; font-size: .88rem; cursor: pointer; margin-top: 2px; }
+  /* Segmented control candidate. */
+  .seg { display: inline-flex; background: var(--color-surface-overlay, #22262e); border: 1px solid var(--color-border-default, #333941);
+         border-radius: 9px; padding: 3px; gap: 3px; margin-left: 10px; }
+  .seg span { padding: 5px 13px; border-radius: 6px; font-size: .88rem; color: var(--color-content-muted, #9aa0a6); display: flex; align-items: center; gap: 6px; }
+  .seg span.on { background: var(--color-surface-raised, #2f3540); color: var(--color-content-primary, #e8eaed); }
+  /* Combobox candidate. */
+  .cbox { display: flex; align-items: center; gap: 8px; background: var(--color-surface-overlay, #22262e);
+          border: 1px solid var(--color-border-default, #333941); border-radius: 8px; padding: 8px 11px; margin-left: 10px; min-width: 190px; }
+  .cbox input { background: transparent; border: 0; color: var(--color-content-primary, #e8eaed); font: inherit; font-size: .92rem; width: 100%; outline: none; }
+  .cbox .mag { color: var(--color-content-muted, #9aa0a6); font-size: .85rem; }
+  .single { font-size: .92rem; color: var(--color-content-primary, #e8eaed); display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; }
+  .single .why { color: var(--color-content-muted, #9aa0a6); font-size: .8rem; }
+  .note { font-size: .78rem; color: #e0a878; margin: 8px 0 0; line-height: 1.45; }
+  .rowlbl { display: flex; align-items: center; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<h1>The provider block — three candidate controls</h1>
+<p class="lede">
+  The unit that repeats is the <b>whole block</b>: “Plays under profile” + “Libraries this queue can
+  search &amp; hold”. A queue holds N of them, each one homogeneous, so mixing falls out of composition
+  rather than out of a multi-select. What is <b>not</b> settled is the provider control itself — that is
+  the choice below. The screenshot beside this file was rendered against the app’s real stylesheet; this standalone copy inlines equivalent styles so it keeps working after the next build changes the content-hashed CSS filename.
+</p>
+
+<div class="cols">
+
+  <!-- ================= CURRENT ================= -->
+  <div class="col">
+    <span class="tag cur">Today</span>
+    <p class="caption">What ships now. There is no provider concept at all — the list is Plex’s because
+    Plex is the only thing any code asks, and the help text says so out loud.</p>
+    <div class="modalish">
+      <h3>Edit “Bob — Movies”</h3>
+      <label class="field rowlbl">Plays under profile
+        <span class="lb">Any — no profile lock</span>
+      </label>
+      <span class="subhint">Locks this queue to a Plex Home profile — a scan waits (and switches the
+        Shield) until that profile is signed in before it plays. Leave “Any” for no lock.</span>
+      <fieldset>
+        <legend>Libraries this queue can search &amp; hold</legend>
+        <div class="libs">
+          <label><input type="checkbox"> Anime</label>
+          <label><input type="checkbox"> Demos</label>
+          <label><input type="checkbox" checked> Documentaries</label>
+          <label><input type="checkbox"> Bob's Video Projects</label>
+          <label><input type="checkbox"> Movie Clips</label>
+          <label><input type="checkbox" checked> Movies</label>
+          <label><input type="checkbox"> Shorts</label>
+          <label><input type="checkbox"> Shows</label>
+        </div>
+      </fieldset>
+      <p class="note">⚠ This copy is Plex-only. For Kavita there is no Shield and no scan to wait on —
+      the real concept is which Kavita user owns the reading list.</p>
+    </div>
+  </div>
+
+  <!-- ================= OPTION A: LISTBOX ================= -->
+  <div class="col">
+    <span class="tag opt">Option A — Listbox</span>
+    <p class="caption">Provider is a <b>Listbox</b>, matching “Plays under profile” and “Type” exactly.
+    Nothing new to learn; the block just gains one more row of the same control.</p>
+    <div class="modalish">
+      <h3>Edit “Bob — Movies”</h3>
+      <div class="pblock">
+        <div class="phead">
+          <span class="pname"><span class="dot plex"></span> Source 1</span>
+          <button class="rm">Remove</button>
+        </div>
+        <label class="field rowlbl">Provider <span class="lb">Plex</span></label>
+        <label class="field rowlbl">Plays under profile <span class="lb">Younger Kids</span></label>
+        <span class="subhint">Locks this source to a Plex Home profile — a scan waits (and switches the
+          Shield) until that profile is signed in.</span>
+        <fieldset>
+          <legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Movies</label>
+            <label><input type="checkbox"> Shows</label>
+            <label><input type="checkbox"> Anime</label>
+            <label><input type="checkbox"> Shorts</label>
+          </div>
+        </fieldset>
+      </div>
+      <button class="addblk">+ Add another source</button>
+    </div>
+  </div>
+
+  <!-- ================= OPTION B: SEGMENTED ================= -->
+  <div class="col">
+    <span class="tag opt">Option B — Segmented</span>
+    <p class="caption">Provider is a <b>segmented toggle</b>. Every option is visible without opening
+    anything, which reads well at two or three providers and badly at ten.</p>
+    <div class="modalish">
+      <h3>Edit “Bob — Movies”</h3>
+      <div class="pblock">
+        <div class="phead">
+          <span class="pname"><span class="dot plex"></span> Source 1</span>
+          <button class="rm">Remove</button>
+        </div>
+        <label class="field rowlbl">Provider
+          <span class="seg"><span class="on"><span class="dot plex"></span>Plex</span><span><span class="dot kavita"></span>Kavita</span></span>
+        </label>
+        <label class="field rowlbl">Plays under profile <span class="lb">Younger Kids</span></label>
+        <span class="subhint">Locks this source to a Plex Home profile — a scan waits (and switches the
+          Shield) until that profile is signed in.</span>
+        <fieldset>
+          <legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Movies</label>
+            <label><input type="checkbox"> Shows</label>
+            <label><input type="checkbox"> Anime</label>
+            <label><input type="checkbox"> Shorts</label>
+          </div>
+        </fieldset>
+      </div>
+      <button class="addblk">+ Add another source</button>
+    </div>
+  </div>
+
+  <!-- ================= OPTION C: COMBOBOX ================= -->
+  <div class="col">
+    <span class="tag opt">Option C — Combobox</span>
+    <p class="caption">Provider is a <b>type-to-filter Combobox</b>. Overkill at two providers, but it is
+    the only one that still works when Jellyfin, Emby and Kodi land too.</p>
+    <div class="modalish">
+      <h3>Edit “Bob — Movies”</h3>
+      <div class="pblock">
+        <div class="phead">
+          <span class="pname"><span class="dot plex"></span> Source 1</span>
+          <button class="rm">Remove</button>
+        </div>
+        <label class="field rowlbl">Provider
+          <span class="cbox"><span class="mag">⌕</span><input value="Plex" readonly></span>
+        </label>
+        <label class="field rowlbl">Plays under profile <span class="lb">Younger Kids</span></label>
+        <span class="subhint">Locks this source to a Plex Home profile — a scan waits (and switches the
+          Shield) until that profile is signed in.</span>
+        <fieldset>
+          <legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Movies</label>
+            <label><input type="checkbox"> Shows</label>
+            <label><input type="checkbox"> Anime</label>
+            <label><input type="checkbox"> Shorts</label>
+          </div>
+        </fieldset>
+      </div>
+      <button class="addblk">+ Add another source</button>
+    </div>
+  </div>
+
+</div>
+
+<h1 style="margin-top:34px">Three blocks, and the one-provider case</h1>
+<p class="lede">
+  The two states the single-block view cannot show: what a queue looks like once it repeats, and what the
+  provider control should do when Kavita is not connected yet — which is how the app will look on the day
+  this ships.
+</p>
+
+<div class="cols">
+
+  <div class="col">
+    <span class="tag opt">Three blocks (Option A)</span>
+    <p class="caption">Each block carries its <b>own</b> profile, and the profile label and help text come
+    from the provider — note block 2 says nothing about the Shield.</p>
+    <div class="modalish">
+      <h3>Edit “Bedtime”</h3>
+
+      <div class="pblock">
+        <div class="phead"><span class="pname"><span class="dot plex"></span> Source 1 — Plex</span>
+          <button class="rm">Remove</button></div>
+        <label class="field rowlbl">Provider <span class="lb">Plex</span></label>
+        <label class="field rowlbl">Plays under profile <span class="lb">Younger Kids</span></label>
+        <span class="subhint">Locks this source to a Plex Home profile — a scan waits (and switches the
+          Shield) until that profile is signed in.</span>
+        <fieldset><legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Shows</label>
+            <label><input type="checkbox"> Movies</label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="pblock">
+        <div class="phead"><span class="pname"><span class="dot kavita"></span> Source 2 — Kavita</span>
+          <button class="rm">Remove</button></div>
+        <label class="field rowlbl">Provider <span class="lb">Kavita</span></label>
+        <label class="field rowlbl">Reads as user <span class="lb">Sawtaytoes</span></label>
+        <span class="subhint">Which Kavita account owns the reading list. A list built as a different
+          account is invisible to the reader that is meant to open it.</span>
+        <fieldset><legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Webtoons</label>
+            <label><input type="checkbox" checked> Manga</label>
+            <label><input type="checkbox"> Comics</label>
+            <label><input type="checkbox"> Books</label>
+          </div>
+        </fieldset>
+      </div>
+
+      <div class="pblock">
+        <div class="phead"><span class="pname"><span class="dot plex"></span> Source 3 — Plex</span>
+          <button class="rm">Remove</button></div>
+        <label class="field rowlbl">Provider <span class="lb">Plex</span></label>
+        <label class="field rowlbl">Plays under profile <span class="lb">Older Kids</span></label>
+        <span class="subhint">Locks this source to a Plex Home profile — a scan waits (and switches the
+          Shield) until that profile is signed in.</span>
+        <fieldset><legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Anime</label>
+            <label><input type="checkbox"> Shorts</label>
+          </div>
+        </fieldset>
+      </div>
+
+      <button class="addblk">+ Add another source</button>
+      <p class="note">⚠ A queue mixing Plex and Kavita is a push target <em>and</em> a pull URL at once.
+      The UI stores it; what it hands off is still an open question.</p>
+    </div>
+  </div>
+
+  <div class="col">
+    <span class="tag opt">Only one provider installed</span>
+    <p class="caption">Day one: Kavita is not connected. <b>C1</b> hides the control entirely, <b>C2</b>
+    shows it disabled with a reason. C1 means today’s users see no change at all.</p>
+
+    <div class="modalish" style="margin-bottom:16px">
+      <h3>C1 — hide it</h3>
+      <div class="pblock">
+        <div class="phead"><span class="pname"><span class="dot plex"></span> Source 1</span></div>
+        <label class="field rowlbl">Plays under profile <span class="lb">Younger Kids</span></label>
+        <span class="subhint">Locks this source to a Plex Home profile — a scan waits (and switches the
+          Shield) until that profile is signed in.</span>
+        <fieldset><legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Movies</label>
+            <label><input type="checkbox"> Shows</label>
+          </div>
+        </fieldset>
+      </div>
+      <button class="addblk">+ Add another source</button>
+    </div>
+
+    <div class="modalish">
+      <h3>C2 — show it, disabled</h3>
+      <div class="pblock">
+        <div class="phead"><span class="pname"><span class="dot plex"></span> Source 1</span></div>
+        <label class="field rowlbl">Provider
+          <span class="lb" style="opacity:.55">Plex</span>
+        </label>
+        <span class="subhint">Plex is the only connected app. Add another under
+          <b>Settings → App&nbsp;Connectors</b> to draw from more than one.</span>
+        <label class="field rowlbl">Plays under profile <span class="lb">Younger Kids</span></label>
+        <fieldset><legend>Libraries this queue can search &amp; hold</legend>
+          <div class="libs">
+            <label><input type="checkbox" checked> Movies</label>
+            <label><input type="checkbox"> Shows</label>
+          </div>
+        </fieldset>
+      </div>
+      <button class="addblk">+ Add another source</button>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

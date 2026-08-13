@@ -278,3 +278,24 @@ export const OLLAMA_MODEL = str('OLLAMA_MODEL', 'gemma3:4b');
 // --- the derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache) //
 // Deletable, gitignored, never backed up. `rm` it and the app rebuilds it.
 export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
+
+// --- providers (decision 2026-08-12-backends-are-providers-behind-a-media-neutral-seam) //
+// Definitions are plaintext and live beside sets.yaml / queues.yaml. TOKENS DO NOT: they get
+// their own 0600 file, holding nothing but id -> token, excluded from the YAML-editing,
+// undo-history and .bak machinery (decision
+// 2026-08-12-provider-tokens-live-in-a-separate-config-file). Read providers/config.js
+// before touching either path.
+export const PROVIDERS_PATH = str('PROVIDERS_PATH', '/config/providers.yaml');
+export const PROVIDERS_SECRETS_PATH = str('PROVIDERS_SECRETS_PATH', '/config/providers.secrets.yaml');
+
+// Kavita's deploy-time base URL. Named to match the root .env the rest of the fleet already
+// uses (KAVITA_API_SERVER_URL / KAVITA_API_KEY) so one variable feeds every consumer. The
+// KEY is deliberately absent from this module — secrets resolve through providers/config.js,
+// which is the only place allowed to read a token.
+export const KAVITA_URL = str('KAVITA_API_SERVER_URL', '').replace(/\/+$/, '');
+// How long a Plugin/authenticate JWT is reused before re-minting. Kavita's tokens are
+// long-lived; this is a refresh floor, not the token's real lifetime.
+export const KAVITA_JWT_TTL_SECONDS = int('KAVITA_JWT_TTL_SECONDS', 3600);
+// Chapters queued per series per rotation round on the reading side — the "read at least X
+// chapters before switching series" knob from the feasibility record's opening ask.
+export const KAVITA_BATCH_DEFAULT = int('KAVITA_BATCH_DEFAULT', 1);

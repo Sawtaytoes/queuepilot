@@ -3,14 +3,18 @@ import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
-import { byTitle } from "../lib/tileFace"
-import type { Profile } from "../lib/types"
+import type {
+  Profile,
+  ProviderBlockValue,
+  ProviderInfo,
+} from "../lib/types"
 import {
   closeSetModal,
   useOverlays,
 } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
 import { Modal } from "./Modal"
+import { ProviderBlock } from "./ProviderBlock"
 import { SelectListbox } from "./SelectListbox"
 
 /**
@@ -31,6 +35,16 @@ import { SelectListbox } from "./SelectListbox"
  * `batch_stops_at` is the set-wide default for WHERE a multi-episode batch may stop; an
  * individual entry can override it from the queue view.
  */
+/** A block plus a stable client-only identity; `uid` never reaches the server. */
+type EditableBlock = ProviderBlockValue & { uid: string }
+
+let uidSeq = 0
+const newUid = () => {
+  uidSeq += 1
+
+  return `blk-${uidSeq}`
+}
+
 export function SetModal() {
   const { setModal } = useOverlays()
   const { data, reg } = useStore()
@@ -46,7 +60,6 @@ export function SetModal() {
 
   const [label, setLabel] = useState("")
   const [kind, setKind] = useState("movies")
-  const [sections, setSections] = useState<number[]>([])
   const [requiresProfile, setRequiresProfile] = useState("")
   const [isKeepCompleted, setIsKeepCompleted] =
     useState(false)
@@ -55,6 +68,18 @@ export function SetModal() {
     useState("")
   const [batchStopsAt, setBatchStopsAt] = useState("none")
   const [profiles, setProfiles] = useState<Profile[]>([])
+  // The repeating {provider, profile, libraries} blocks. Always a list — a set written
+  // before blocks existed arrives as the single implicit Plex block it has always meant, so
+  // there is no legacy shape to special-case here.
+  //
+  // `uid` is client-only and never persisted. It exists because the array index is NOT a
+  // usable React key here: removing a middle block shifts every index after it, so React
+  // would reuse the wrong component instance and each surviving block would show the
+  // library list it had already fetched for a different provider.
+  const [blocks, setBlocks] = useState<EditableBlock[]>([])
+  const [providers, setProviders] = useState<
+    ProviderInfo[]
+  >([])
 
   // Identity of the open modal instance — used to remount uncontrolled Charcuterie
   // controls (Checkbox/SelectListbox seed only on mount). Keyed on openness, never on
@@ -70,7 +95,6 @@ export function SetModal() {
       ? editing.kind
       : setModal.presetKind || "movies"
     setKind(nextKind)
-    setSections(editing ? [...editing.sections] : [])
     setRequiresProfile(
       editing ? editing.requires_profile || "" : "",
     )
@@ -94,20 +118,50 @@ export function SetModal() {
         nextKind === "anime" ? "" : "24h",
       )
     }
+    // Seed the blocks. An existing set always reports at least one (the implicit Plex block
+    // for a pre-blocks set); a NEW set starts with one block on the first configured
+    // provider, so creating a queue is exactly as many clicks as it was before.
+    setBlocks(
+      editing?.providers?.length
+        ? editing.providers.map((b) => ({
+            libraries: [...b.libraries],
+            profile: b.profile ?? "",
+            provider: b.provider,
+            uid: newUid(),
+          }))
+        : [
+            {
+              libraries: [],
+              profile: "",
+              provider: "",
+              uid: newUid(),
+            },
+          ],
+    )
     void fetchProfiles().then(setProfiles)
+    void api<{ providers: ProviderInfo[] }>(
+      "GET",
+      "/api/providers",
+    )
+      .then((r) => {
+        const list = (r.providers ?? []).filter(
+          (p) => p.supported && p.configured,
+        )
+        setProviders(list)
+        // A new set has no provider yet; default it to the first configured one rather
+        // than leaving an empty block that cannot fetch libraries.
+        setBlocks((prev) =>
+          prev.map((b) =>
+            b.provider
+              ? b
+              : { ...b, provider: list[0]?.id ?? "plex" },
+          ),
+        )
+      })
+      .catch(() => setProviders([]))
     // Only re-seed when the modal is (re-)opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setModal])
-
-  // Every video library is opt-in; show them all, alphabetically (there is no
-  // global hide list any more).
-  const libraries = useMemo(
-    () =>
-      (reg?.libraries ?? [])
-        .filter((l) => l.video)
-        .sort(byTitle),
-    [reg],
-  )
 
   // Profile-gate options. The play gate matches the PMS-log stamp: managed users stamp
   // their title, the owner stamps the plex.tv username. Blank = ungated. A current hand-set
@@ -133,6 +187,29 @@ export function SetModal() {
     return opts
   }, [profiles, requiresProfile])
 
+  /**
+   * The profile options for one block, scoped to ITS provider.
+   *
+   * Plex's are the Plex Home profiles the registry already knows. A pull provider's
+   * "profile" is whoever owns the configured API key, so there is exactly one and it is not
+   * a choice — offering a picker there would imply a freedom that does not exist. Both are
+   * driven off `delivery`, never off the provider's name.
+   */
+  const profileOptionsFor = (providerId: string) => {
+    const p = providers.find((x) => x.id === providerId)
+
+    if (p && p.delivery === "pull") {
+      return [
+        {
+          label: `The ${p.label} account this app is connected as`,
+          value: "",
+        },
+      ]
+    }
+
+    return profileOptions
+  }
+
   const onSubmit = async () => {
     const name = label.trim()
 
@@ -142,25 +219,63 @@ export function SetModal() {
       return
     }
 
-    if (!sections.length) {
-      setStatus("Pick at least one library", "err")
+    const emptyBlock = blocks.findIndex(
+      (b) => !b.libraries.length,
+    )
+
+    if (emptyBlock >= 0) {
+      setStatus(
+        blocks.length > 1
+          ? `Source ${emptyBlock + 1}: pick at least one library`
+          : "Pick at least one library",
+        "err",
+      )
 
       return
     }
 
     // reel implies keep_completed at the engine; always send the effective pair so a
     // re-opened edit prefill matches what was saved.
+    // A SINGLE Plex block is written back through the legacy `sections` /
+    // `requires_profile` fields rather than as a `providers:` list. That keeps every
+    // existing set byte-identical on disk after an unrelated edit — the block shape only
+    // appears once it is actually needed, which is what makes this additive rather than a
+    // migration that rewrites everyone's config the first time they rename a queue.
+    const isLegacyShape =
+      blocks.length === 1 && blocks[0].provider === "plex"
+
     const body = {
       kind,
       label: name,
-      sections,
-      requires_profile: requiresProfile,
+      // `sections` stays in sync with the PLEX blocks' libraries even when blocks are
+      // written, because the engine's curated/rotation readers still resolve Plex through
+      // `queue_sections` / `episodic_sections`, which derive from this field. Letting the
+      // two disagree would leave a set whose editor says one thing and whose playback does
+      // another — the exact silent-divergence class that `requires_profile` already taught
+      // this codebase to avoid.
+      sections: isLegacyShape
+        ? blocks[0].libraries.map(Number)
+        : [
+            ...new Set(
+              blocks
+                .filter((b) => b.provider === "plex")
+                .flatMap((b) => b.libraries.map(Number)),
+            ),
+          ],
+      requires_profile: isLegacyShape
+        ? blocks[0].profile
+        : requiresProfile,
       keep_completed: isKeepCompleted || isReel,
       reel: isReel,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
       // "none" is the engine default, so it is stored as the absence of the key.
       batch_stops_at: batchStopsAt,
+      // An empty list drops the key server-side, which is how the single-Plex-block case
+      // stays on the legacy shape above.
+      providers: isLegacyShape
+        ? []
+        : blocks.map(({ uid: _uid, ...b }) => b),
     }
 
     try {
@@ -300,53 +415,59 @@ export function SetModal() {
           value={kind}
         />
       </label>
-      <label className="field">
-        Plays under profile
-        {/* Keyed on modal-open identity, same reason as the Type select above: the control
-            re-seeds from `value` only on remount, and this modal never unmounts. */}
-        <SelectListbox
-          className="fieldselect"
-          id="set-profile"
-          key={modalKey}
-          label="Plays under profile"
-          onChange={setRequiresProfile}
-          options={profileOptions}
-          value={requiresProfile}
-        />
-      </label>
-      <p className="subhint" id="set-profile-hint">
-        Locks this queue to a Plex Home profile — a scan
-        waits (and switches the Shield) until that profile
-        is signed in before it plays. Leave “Any” for no
-        lock. Needed when the queue’s libraries are only
-        shared with one profile (e.g. Demos → Demo).
-      </p>
-      {/* Everyday fields first (profile gate, libraries); playlist/reel/TTL sit below as
-          advanced options so a normal edit doesn't scroll past them. */}
-      <fieldset className="field">
-        <legend>
-          Libraries this queue can search &amp; hold
-        </legend>
-        <div className="libs" id="set-libs">
-          {libraries.map((l) => (
-            <label key={l.id}>
-              <input
-                checked={sections.includes(l.id)}
-                onChange={(e) =>
-                  setSections((prev) =>
-                    e.target.checked
-                      ? [...prev, l.id]
-                      : prev.filter((x) => x !== l.id),
-                  )
-                }
-                type="checkbox"
-                value={String(l.id)}
-              />
-              {` ${l.title}`}
-            </label>
-          ))}
-        </div>
-      </fieldset>
+      {/* The repeating source blocks. Everyday fields first (source, profile, libraries);
+          playlist/reel/TTL sit below as advanced options so a normal edit doesn't scroll
+          past them. (decision `2026-08-13-provider-block-repeats-and-picks-its-control`) */}
+      <div id="set-blocks">
+        {blocks.map((b, i) => (
+          <ProviderBlock
+            block={b}
+            canRemove={blocks.length > 1}
+            index={i}
+            key={b.uid}
+            onChange={(next) =>
+              setBlocks((prev) =>
+                prev.map((x, j) =>
+                  // Carry the uid across: ProviderBlock speaks the WIRE shape and knows
+                  // nothing about this component's identity bookkeeping.
+                  j === i ? { ...next, uid: x.uid } : x,
+                ),
+              )
+            }
+            onRemove={() =>
+              setBlocks((prev) =>
+                prev.filter((_, j) => j !== i),
+              )
+            }
+            profileOptionsFor={profileOptionsFor}
+            providers={providers}
+          />
+        ))}
+      </div>
+      {/* Adding a source is only offered once there is a second provider to add — with one
+          connected app there is nothing a second block could draw from that the first
+          cannot. */}
+      {providers.length > 1 ? (
+        <button
+          className="addblock"
+          id="set-add-block"
+          onClick={() =>
+            setBlocks((prev) => [
+              ...prev,
+              {
+                libraries: [],
+                profile: "",
+                provider:
+                  providers[0]?.id ?? prev[0].provider,
+                uid: newUid(),
+              },
+            ])
+          }
+          type="button"
+        >
+          + Add another source
+        </button>
+      ) : null}
       <fieldset className="field flags" id="set-flags">
         <legend>Playback &amp; completion</legend>
         {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once). Remount on modal

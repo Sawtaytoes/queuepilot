@@ -151,6 +151,12 @@ export function loadSets(path = SETS_PATH) {
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().
     const maxItems = parseInt(ent.max_items, 10);
     cfg.max_items = Number.isFinite(maxItems) && maxItems > 0 ? maxItems : null;
+    // Provider blocks — the repeating {provider, profile, libraries} unit. Carried through
+    // VERBATIM and left uninterpreted here: providers/blocks.js owns normalization, and this
+    // loader must not acquire an opinion about a second backend. Absent is the normal case
+    // and is NOT defaulted to a Plex block here — blocksForSet() interprets absence, so a
+    // legacy set is never rewritten on disk just because it was read.
+    if (Array.isArray(ent.providers) && ent.providers.length) cfg.providers = ent.providers;
     sets[sid] = cfg;
     order.push(sid);
   }

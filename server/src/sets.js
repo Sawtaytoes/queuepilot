@@ -13,6 +13,7 @@
 //     There is no global hide list — every video library shows in every picker.
 import { promises as fs } from 'node:fs';
 import { parseDocument, YAMLSeq } from 'yaml';
+import { validateBlocks, blocksForSet } from './providers/blocks.js';
 
 export const SETS_PATH = process.env.SETS_PATH || '/config/sets.yaml';
 
@@ -421,6 +422,11 @@ function normalize(ent) {
     // profiles. Rotation channels are ungated by design, so this is only meaningful/editable
     // on queue sets. null = ungated. (decision `2026-08-07-choose-profile-for-queues`)
     requires_profile: ent.requires_profile != null ? String(ent.requires_profile) : null,
+    // The repeating {provider, profile, libraries} block. ALWAYS a list, never null: a set
+    // written before blocks existed reports the one implicit Plex block it has always meant,
+    // built from `sections` / `requires_profile`. The editor therefore never has to special-
+    // case a legacy set, and reading one does not rewrite it (see providers/blocks.js).
+    providers: blocksForSet(ent),
     // Queue-only playback/consumption knobs (rotation channels ignore them). Exposed in the
     // Set editor so they are not hand-YAML only. (decision `2026-08-08-set-modal-queue-flags`)
     // keep_completed: never mark entries done. reel: play the whole lineup every scan AND
@@ -624,6 +630,9 @@ export async function updateSet(id, patch) {
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
       'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at',
+      // The repeating {provider, profile, libraries} block. Valid on BOTH sources, unlike
+      // most knobs here — a reading queue and a reading channel are both plausible.
+      'providers',
     ];
     if (isRotation) {
       allow.push(
@@ -675,6 +684,25 @@ export async function updateSet(id, patch) {
         const bsa = normalizeBatchStop(v);
         if (!bsa) { node.delete('batch_stops_at'); continue; }
         setKeepingComment(node, 'batch_stops_at', doc.createNode(bsa));
+        continue;
+      }
+      if (k === 'providers') {
+        // Whole-array replace, like members/profiles: the editor sends the full desired
+        // block list. An empty list drops the key entirely, which is NOT the same as
+        // "no providers" — it means "fall back to the implicit single Plex block", so a
+        // set that never had blocks is byte-identical after an unrelated edit.
+        const { ok, errors, blocks } = validateBlocks(v);
+        if (!ok) throw new Error(errors.join('; '));
+        if (!blocks.length) { node.delete('providers'); continue; }
+        // Store only the keys the user actually set — `implicit` is a read-time marker and
+        // must never reach disk, or a re-read would treat a real block as synthesized.
+        const clean = blocks.map((b) => ({
+          provider: b.provider,
+          ...(b.profile ? { profile: b.profile } : {}),
+          ...(b.libraries.length ? { libraries: b.libraries } : {}),
+          ...(b.batch != null ? { batch: b.batch } : {}),
+        }));
+        node.set('providers', doc.createNode(clean));
         continue;
       }
       if (k === 'members') {
