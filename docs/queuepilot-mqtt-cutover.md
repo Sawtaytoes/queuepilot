@@ -46,22 +46,38 @@ else** — it is the only step that can break the cards, and it is the only one 
 The defaults already are the bridge-on state, so no app-env change is needed. After the
 redeploy, the app is on `queuepilot/…` and the old topics are mirrored.
 
-Confirm the bridge announced itself:
+Confirm the bridge announced itself (`$APP` is the container — still
+`ix-plex-channels-plex-channels-1` until the TrueNAS app itself is renamed):
 
 ```sh
-ssh root@nas.example.com 'docker logs --since 5m ix-queuepilot-queuepilot-1 2>&1 | grep -i "rename bridge\|mqttd\] connected"'
+ssh root@nas.example.com 'docker logs --since 5m $(docker ps -q --filter name=plex-channels) 2>&1 \
+  | grep -i "rename bridge\|mqttd\] connected"'
 ```
 
 Expect `[mqttd] rename bridge ON — also on plex-channels/…`.
 
-Then confirm **both** prefixes carry retained state (`-C 1` exits after one message; if it hangs,
-the topic is empty and something is wrong):
+Then confirm **both** prefixes carry retained state. Note there is **no `mosquitto_sub` on the
+TrueNAS host and no `node` there either** — the broker is also TLS on 8883, not plain 1883. The
+route that works is to run inside the app container, which already has the `mqtt` module and the
+credentials in its environment; it must run with `-w /app/server` or the module doesn't resolve:
 
 ```sh
-set -a; source /mnt/TrueNAS-Apps/Repos/agentic/.env; set +a
-mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t 'queuepilot/state'     -C 1 -W 10
-mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t 'plex-channels/state' -C 1 -W 10
+ssh root@nas.example.com 'docker exec -i -w /app/server $(docker ps -q --filter name=plex-channels) node -e "
+const mqtt = require(\"mqtt\");
+const c = mqtt.connect({host:process.env.MQTT_HOST, port:Number(process.env.MQTT_PORT),
+  protocol: Number(process.env.MQTT_PORT)===8883?\"mqtts\":\"mqtt\",
+  username:process.env.MQTT_USER, password:process.env.MQTT_PASS, reconnectPeriod:0});
+const seen=new Map();
+c.on(\"connect\",()=>c.subscribe([\"queuepilot/#\",\"plex-channels/#\"]));
+c.on(\"message\",(t,b)=>{ if(!seen.has(t)) seen.set(t,b.length); });
+setTimeout(()=>{ [...seen.keys()].sort().forEach(t=>console.log(t,seen.get(t)+\"B\")); process.exit(0); },7000);
+"'
 ```
+
+`queuepilot/state` and `plex-channels/state` should both appear with the **same byte count** —
+that is the bridge mirroring one payload onto both prefixes. Cross-check from the HA side:
+`sensor.queuepilot_status` and `sensor.plex_channels_status` should both exist and update within
+a few hundred milliseconds of each other.
 
 **Test a real NFC card here, before touching Home Assistant.** Nothing in HA has changed yet, so
 a card that fails at this point means the bridge is wrong — roll back (below) rather than
@@ -94,9 +110,16 @@ own retained discovery config, which is what lets both work at once.
 Once every automation references the new entity, delete the old one by clearing its retained
 discovery config (an empty payload is how MQTT discovery says "remove this"):
 
+Same container route as above — an empty **retained** publish:
+
 ```sh
-mosquitto_pub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" \
-  -t 'homeassistant/sensor/plex_channels_status/config' -r -n
+ssh root@nas.example.com 'docker exec -i -w /app/server $(docker ps -q --filter name=plex-channels) node -e "
+const mqtt = require(\"mqtt\");
+const c = mqtt.connect({host:process.env.MQTT_HOST, port:Number(process.env.MQTT_PORT),
+  protocol:\"mqtts\", username:process.env.MQTT_USER, password:process.env.MQTT_PASS, reconnectPeriod:0});
+c.on(\"connect\",()=>c.publish(\"homeassistant/sensor/plex_channels_status/config\",\"\",
+  {retain:true,qos:1},()=>{ console.log(\"cleared\"); process.exit(0); }));
+"'
 ```
 
 `sensor.plex_channels_status` should disappear from HA within seconds. The name is recorded as
@@ -109,21 +132,53 @@ The old topics stop being published and stop being listened to.
 
 Then confirm the old prefix has genuinely gone quiet — this should time out and print nothing:
 
+Re-run the listing command from step 1. **Every** surviving `plex-channels/…` topic is either an
+unmigrated publisher or a stale retained message — and the two look identical in a listing, so
+distinguish them: clear the topic, wait, and see whether it comes back. If it does, something is
+still publishing to it.
+
+Retained messages on the old topics survive the bridge going off, so clear the leftovers or a
+future reader is misled by state nothing is maintaining:
+
 ```sh
-mosquitto_sub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t 'plex-channels/#' -W 30
+ssh root@nas.example.com 'docker exec -i -w /app/server $(docker ps -q --filter name=queuepilot) node -e "
+const mqtt = require(\"mqtt\");
+const c = mqtt.connect({host:process.env.MQTT_HOST, port:Number(process.env.MQTT_PORT),
+  protocol:\"mqtts\", username:process.env.MQTT_USER, password:process.env.MQTT_PASS, reconnectPeriod:0});
+const dead = [];
+c.on(\"connect\",()=>c.subscribe(\"plex-channels/#\"));
+c.on(\"message\",(t,b)=>{ if(b.length) dead.push(t); });
+setTimeout(()=>{ let n=dead.length; if(!n) { console.log(\"nothing to clear\"); process.exit(0); }
+  dead.forEach(t=>c.publish(t,\"\",{retain:true,qos:1},()=>{ console.log(\"cleared\",t); if(!--n) process.exit(0); })); },7000);
+"'
 ```
 
-Anything still arriving is an unmigrated publisher. Note that **retained** messages on the old
-topics survive the bridge going off; clear the leftovers so a future reader isn't misled by
-stale state:
+This clears **whatever is actually there**, which matters because the device registry is a
+`devices/<id>` base rather than one topic — enumerating it by hand misses entries.
 
-```sh
-for t in state now-playing resp/last-played; do
-  mosquitto_pub -h mqtt.example.com -u "$MQTT_USER" -P "$MQTT_PASS" -t "plex-channels/$t" -r -n
-done
-```
+**Expect stale device ghosts here.** At the time of the rename `plex-channels/devices/` still
+held two retained announcements, `Plex Dash` and `Pollycracker`, left by the Python service that
+was deleted in #60. They are Python-shaped (`seen` field, spaced JSON) and nothing has refreshed
+them since. They are not bridge artefacts and clearing them is correct — but see
+[the device-registry gap](#the-device-registry-gap) first, because the *reason* they went stale
+is a real unfixed hole.
 
-Retained device announcements need the same treatment per id (`plex-channels/devices/shield`).
+## The device-registry gap
+
+Moving prefix surfaced a pre-existing bug that is **not** caused by the rename and is not fixed
+by it.
+
+`mqttd.announceDevices()` announces **only the Shield**. The plex.tv sweep that announced every
+device advertising as a player lived in the Python service deleted in #60, and the Node port
+never re-implemented it. Because the old announcements were *retained*, the web UI's
+"Play on <device>" dropdown kept listing `Plex Dash` and `Pollycracker` afterwards — reading
+ghosts off the broker, with nothing refreshing them or noticing if those devices went away.
+
+Moving to a fresh prefix left those ghosts behind, so the dropdown now correctly shows one
+device. That is the honest state, not a regression: **if casting to a non-Shield player is
+wanted, the plex.tv device sweep has to be ported.** Do not "fix" the dropdown by republishing
+the two old payloads under the new prefix — that restores the appearance of working while
+pointing at a registry nothing maintains.
 
 ## Rolling back
 
