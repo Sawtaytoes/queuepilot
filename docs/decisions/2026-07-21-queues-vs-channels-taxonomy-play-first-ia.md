@@ -1,10 +1,13 @@
 # Queues vs channels taxonomy + play-first entry IA
 
-- **Status:** Accepted
+- **Status:** Superseded in part
 - **Date:** 2026-07-21
 - **Type:** Product/UX + playback semantics
 - **Supersedes:** — (refines `2026-07-21-sets-registry-immutable-ids.md`'s presentation; playback
   change to the anime sets from `2026-07-16-anime-queues-retire-ondeck-set.md`)
+- **Superseded by:** [2026-08-12-queues-have-orthogonal-mode-knobs-not-named-types.md](2026-08-12-queues-have-orthogonal-mode-knobs-not-named-types.md)
+  — **point 1 only** (the queue-vs-channel taxonomy). Points 2 and 3 stand: anime sets still play
+  as a rotation with a per-show batch, and the play-first entry IA is still the front door.
 
 ## Decision
 
