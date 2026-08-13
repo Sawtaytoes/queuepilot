@@ -1,95 +1,56 @@
-import { useVisibility } from "@charcuterie/logic"
 import type { ControlSize } from "@charcuterie/tokens"
-import { Badge, Button, Listbox } from "@charcuterie/ui"
+import { Picker } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 /**
- * The app's single-select picker. A drop-in for what used to be `@charcuterie/ui`'s
- * native `Select` here — same `{ id, label, value, onChange, options }` shape — but it
- * renders a themed `Listbox`, never an OS `<select>`.
+ * The app's single-select picker — now a thin adapter over
+ * `@charcuterie/ui`'s `Picker` rather than its own assembly of
+ * `useVisibility` + `Button` + `Listbox` + a hand-rolled chevron.
  *
- * Why: the owner only ever accepted the native `Select` as a stopgap for the absence of a
- * `Listbox`/`Combobox`; both now exist in `@charcuterie/ui@2.x`, so every picker uses one —
- * including the ones inside modals, now that `Modal` is a Charcuterie body-portalled overlay
- * (not a top-layer `<dialog>`) and the dropdown can stack above it.
- * (decision `2026-08-07-plex-channels-pickers-are-listbox-not-native-select`)
+ * `Picker` exists because this file was one of **four** independent
+ * versions of those thirty lines across the fleet (board-games'
+ * `SelectMenu`, mux-magic's `ListboxPicker`, and twice inside
+ * `@charcuterie/ui` itself). See charcuterie's
+ * `2026-08-13-picker-is-the-assembled-listbox-and-listbox-stays-trigger-agnostic`.
  *
- * DOM contract kept: the `id` and any `className` land on the TRIGGER button, so e2e that
- * targeted `#chchannel` / `#addpos` still finds the control — it just clicks to open and
- * clicks a `[role="option"]` instead of `selectOption`.
+ * Kept as a named component rather than deleted in favour of importing
+ * `Picker` at all nine call sites, because two things here are this
+ * app's and not the library's:
+ *
+ *  - **`data-value` inside every option label.** The e2e suite picks by
+ *    VALUE (`[role="option"] [data-value="…"]` — see `e2e/pick.mjs`),
+ *    which is what replaced `selectOption(sel, value)` when the native
+ *    `<select>` went away. `textValue` keeps the plain string as the
+ *    type-ahead target and the trigger's text.
+ *  - **The `id` → `data-testid` swap.** The overlay clones the trigger
+ *    and overwrites its `id`, so an `id` never survives; the suite's
+ *    stable handle is `data-testid`. `Picker` now documents this, but
+ *    the mapping from this component's `id` prop still lives here.
+ *
+ * One behaviour changes, deliberately: the trigger's accessible name is
+ * now `"<label>: <value>"` rather than a bare `label`. The button's
+ * visible text is the value, and WCAG 2.5.3 wants the visible text
+ * contained in the accessible name — so the old name failed it. No test
+ * targeted the old name, so nothing needed rewriting.
  */
 export type SelectListboxOption = {
-  /**
-   * A short status chip rendered AFTER the label, in the row and on the trigger —
-   * a mark a skimming eye catches, which a run of identically-styled words is not.
-   * The chip is `aria-hidden`; the word is folded into the option's `textValue`
-   * instead, so the type-ahead string and the accessible name still SAY it and the
-   * meaning never lives in colour alone.
-   */
-  badge?: string
-  badgeIntent?: BadgeIntent
   isDisabled?: boolean
   label: string
   value: string
-}
-
-type BadgeIntent =
-  | "accent"
-  | "neutral"
-  | "success"
-  | "warning"
-
-/** The chip itself — one place, so every picker's marks look alike. */
-function OptionBadge({
-  intent,
-  text,
-}: {
-  intent: BadgeIntent
-  text: string
-}): ReactNode {
-  return (
-    <Badge
-      appearance="outline"
-      aria-hidden="true"
-      className="optionbadge"
-      intent={intent}
-      size="sm"
-    >
-      {text}
-    </Badge>
-  )
 }
 
 export type SelectListboxProps = {
   className?: string
   id?: string
   isDisabled?: boolean
-  /** The accessible name of the trigger — the old `Select`'s `label`. */
+  /** What the control is FOR — the old `Select`'s `label`. */
   label: string
   onChange: (value: string) => void
   options: readonly SelectListboxOption[]
-  /** When the current `value` matches nothing (e.g. an empty seed), the trigger reads this. */
+  /** When the current `value` matches nothing, the trigger reads this. */
   placeholder?: string
   size?: ControlSize
   value?: string
-}
-
-function ChevronDown(): ReactNode {
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-4"
-      fill="none"
-      focusable={false}
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth={1.75}
-      viewBox="0 0 24 24"
-    >
-      <path d="m6 9 6 6 6-6" />
-    </svg>
-  )
 }
 
 export function SelectListbox({
@@ -103,75 +64,35 @@ export function SelectListbox({
   size = "md",
   value,
 }: SelectListboxProps): ReactNode {
-  const { hide, isVisible, toggle } = useVisibility()
-
-  const current = options.find(
-    (option) => option.value === value,
-  )
-  const triggerLabel =
-    current?.label ?? placeholder ?? options[0]?.label ?? ""
-
   return (
-    <Listbox
-      isVisible={isVisible}
-      onDismiss={hide}
-      onSelect={onChange}
-      // Each option's rendered label carries `data-value`, and `textValue` keeps the
-      // plain string as the type-ahead + accessible name. The `data-value` is the DOM
-      // handle e2e uses to pick by value (the native `<select>` it replaced was driven by
-      // `selectOption(sel, value)`; now it clicks `[role=option] [data-value=…]`).
+    <Picker
+      className={className}
+      data-testid={id}
+      isDisabled={isDisabled}
+      label={label}
+      onChange={onChange}
+      // Stop the click reaching a parent row/tile handler, exactly as
+      // the native `<select>` sites did. `Picker` runs this before it
+      // toggles the panel.
+      onClick={(clickEvent) => {
+        clickEvent.stopPropagation()
+      }}
       options={options.map((option) => ({
         isDisabled: option.isDisabled,
         label: (
           <span data-value={option.value}>
             {option.label}
-            {option.badge ? (
-              <OptionBadge
-                intent={option.badgeIntent ?? "neutral"}
-                text={option.badge}
-              />
-            ) : null}
           </span>
         ),
-        // The chip is decorative, so its word rides here — screen readers and the
-        // type-ahead both read `textValue`, not the rendered node.
-        textValue: option.badge
-          ? `${option.label} — ${option.badge}`
-          : option.label,
+        textValue: option.label,
         value: option.value,
       }))}
-      selectedValue={value}
-      trigger={
-        <Button
-          appearance="outline"
-          aria-label={label}
-          className={className}
-          // `data-testid`, not `id`: the overlay CLONES the trigger and overwrites its
-          // `id` with a generated one (to point the listbox's `aria-labelledby` at it), so
-          // an `id` here never survives. `data-testid` is not a value the clone injects, so
-          // it does — it is the stable e2e handle that replaces the old `<select id>`.
-          data-testid={id}
-          iconEnd={<ChevronDown />}
-          intent="neutral"
-          isDisabled={isDisabled}
-          // Stop the click from reaching a parent row/tile handler, exactly as the
-          // native `<select>` sites did; `toggle` opens/closes the portalled list.
-          onClick={(event) => {
-            event.stopPropagation()
-            toggle()
-          }}
-          size={size}
-          type="button"
-        >
-          {triggerLabel}
-          {current?.badge ? (
-            <OptionBadge
-              intent={current.badgeIntent ?? "neutral"}
-              text={current.badge}
-            />
-          ) : null}
-        </Button>
-      }
+      // The old fallback chain, preserved: current → placeholder → the
+      // first option's label. `Picker` only falls back to `placeholder`,
+      // so the rest of the chain is folded into what it is handed.
+      placeholder={placeholder ?? options[0]?.label ?? ""}
+      size={size}
+      value={value}
     />
   )
 }
