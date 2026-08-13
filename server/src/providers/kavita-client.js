@@ -128,6 +128,39 @@ export function kavitaClient({ baseUrl, apiKey, pluginName = 'queuepilot', fetch
      */
     seriesDetail: (seriesId) => req('GET', `/api/Series/series-detail?seriesId=${encodeURIComponent(seriesId)}`),
 
+    /**
+     * Free-text search across series. Returns more than series (bookmarks, files, people);
+     * only `series` is of interest here, and `includeChapterAndFiles=false` keeps the
+     * response from carrying file paths we have no use for.
+     */
+    search: (q) => req(
+      'GET',
+      `/api/Search/search?queryString=${encodeURIComponent(q)}&includeChapterAndFiles=false`,
+    ),
+
+    /** One series' metadata, for resolving a stored member id back to a name. */
+    series: (seriesId) => req('GET', `/api/Series/${encodeURIComponent(seriesId)}`),
+
+    /**
+     * The cover image bytes for a series.
+     *
+     * The endpoint requires the API key as a QUERY PARAMETER, which is exactly the hazard
+     * docs/kavita-feasibility.md flags about `/api/opds/<apiKey>`: a live credential in a
+     * URL. So this returns BYTES for the app to re-serve, and the browser is never handed a
+     * Kavita image URL — the key stays server-side, out of the page source, out of the
+     * network tab, and out of any screenshot. Mirrors what /api/thumb already does for Plex.
+     */
+    async cover(seriesId) {
+      const url = `${base}/api/Image/series-cover`
+        + `?seriesId=${encodeURIComponent(seriesId)}&apiKey=${encodeURIComponent(apiKey)}`;
+      const res = await doFetch(url);
+      if (!res.ok) throw new Error(`kavita cover ${seriesId} -> HTTP ${res.status}`);
+      return {
+        buffer: Buffer.from(await res.arrayBuffer()),
+        contentType: res.headers.get('content-type') || 'image/png',
+      };
+    },
+
     /** Series in a library, newest-progress-first is NOT guaranteed — caller orders. */
     seriesForLibrary: (libraryId, { pageSize = 500 } = {}) => req(
       'POST',

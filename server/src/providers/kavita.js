@@ -22,6 +22,29 @@ import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 // a CDN — a 100-wide burst is a denial-of-service impression.
 const PROBE_CONCURRENCY = 8;
 
+// The pool view pays one call per series and is an explicit "show me everything" action, so
+// it runs wider than a launch does. Still bounded — this is a self-hosted Kavita, not a CDN.
+const POOL_CONCURRENCY = 16;
+
+/**
+ * Is this chapter actually unread?
+ *
+ * ⚠️ `Reader/continue-point` is "where would you resume", NOT "the next unread chapter".
+ * On a FULLY READ series it WRAPS and hands back chapter 1, already read — verified live on
+ * six Webtoons series (e.g. "Ultimate Shut-in", continue-point chapter 1 at 183/183 pages
+ * with `unreadCount: 0`). Taking it at face value re-queues finished series forever, which
+ * is the opposite of the read-state-is-the-done-store property the design relies on.
+ *
+ * So every continue-point answer is checked against its own page counters before it is
+ * allowed into a lineup.
+ */
+function isUnread(ch) {
+  if (!ch || ch.id == null) return false;
+  const pages = ch.pages ?? 0;
+  if (pages <= 0) return true; // unknown length — do not silently drop it
+  return (ch.pagesRead ?? 0) < pages;
+}
+
 /** One lineup item from a Kavita ChapterDto. `seriesId` is threaded in — Kavita leaves it null. */
 function chapterItem(ch, seriesId) {
   return {
@@ -103,6 +126,135 @@ export function kavitaProvider({ def, apiKey, client = null } = {}) {
      */
     profileToken: async () => c.whoami(),
 
+    /**
+     * Free-text series search, scoped to the libraries this queue draws from.
+     *
+     * Scoped rather than server-wide because an unscoped search offers series the queue
+     * could never play — picking "Dungeon Busters" out of Board Game Rulebooks for a
+     * Webtoons queue would add an entry that silently never appears in a lineup.
+     * `libraries: []` means "no scope given", and searches everything.
+     */
+    async search(q, { libraries = [] } = {}) {
+      const query = String(q || '').trim();
+      if (!query) return [];
+      const scope = new Set(libraries.map(String));
+      const res = await c.search(query);
+      return (res?.series || [])
+        .filter((s) => !scope.size || scope.has(String(s.libraryId)))
+        .map((s) => ({
+          id: String(s.seriesId),
+          title: s.name,
+          libraryId: String(s.libraryId),
+          libraryTitle: s.libraryName || null,
+          format: s.format ?? null,
+          type: 'series',
+        }));
+    },
+
+    /**
+     * Resolve stored member ids back to displayable rows. A member that has vanished from
+     * Kavita resolves to null rather than throwing, so one deleted series cannot make a
+     * whole channel un-renderable.
+     */
+    async resolveMembers(ids) {
+      const rows = await mapLimit([...ids], PROBE_CONCURRENCY, async (id) => {
+        try {
+          const s = await c.series(id);
+          if (!s) return null;
+          return {
+            id: String(s.id ?? id),
+            title: s.name,
+            libraryId: String(s.libraryId ?? ''),
+            format: s.format ?? null,
+            pagesRead: s.pagesRead ?? null,
+            pages: s.pages ?? null,
+            type: 'series',
+          };
+        } catch {
+          return null;
+        }
+      });
+      return rows.filter(Boolean);
+    },
+
+    /**
+     * The channel's eligible POOL — every series with something unread, whether or not it is
+     * an explicit member. This is what the Channels view renders, and it is the reading
+     * analogue of the Plex rule pool.
+     */
+    async pool({ libraries = [], members = [] } = {}) {
+      const explicit = members.map(String);
+      const libIds = (libraries.length ? libraries : []).map(String);
+      if (!libIds.length) return [];
+
+      const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
+      const allSeries = seriesLists.flat().filter(Boolean);
+
+      // The pool pays for `series-detail` per series where a launch pays only for
+      // `continue-point`, because the grid shows a COUNT and the series list has no chapter
+      // count at all — only pages (verified against the live instance: `all-v2` returns
+      // pages/pagesRead and nothing chapter-shaped). Pages remaining would read as a wildly
+      // larger number than "chapters left" and mean something else. This is a deliberate
+      // "show me everything" view, so one extra bounded pass is the right trade; the launch
+      // path is untouched and stays cheap.
+      const probed = await mapLimit(allSeries, POOL_CONCURRENCY, async (s) => {
+        try {
+          const detail = await c.seriesDetail(s.id);
+          const unread = orderedUnread(detail);
+          // Kavita's own `unreadCount` is the inclusion test, NOT the length of the run we
+          // could parse. They disagree for a handful of series (97 vs 103 live, from
+          // chapters reporting 0 pages), and if the pool were the stricter of the two it
+          // would show fewer series than a launch actually draws from — a preview that
+          // quietly understates the channel.
+          const count = detail?.unreadCount ?? unread.length;
+          if (!count && !unread.length) return null;
+          return {
+            seriesId: s.id,
+            title: s.name,
+            libraryId: s.libraryId ?? null,
+            format: s.format ?? null,
+            unreadCount: count || unread.length,
+            // A series whose unread chapters we could not parse still belongs in the pool;
+            // it just has no next-up line to show.
+            items: unread.length ? [chapterItem(unread[0], s.id)] : [],
+          };
+        } catch {
+          // One unreadable series must not blank the whole grid.
+          return null;
+        }
+      });
+      const buckets = probed.filter(Boolean);
+      // Deliberately the PLEX PREVIEW BUCKET SHAPE — `ratingKey` / `show` / `unwatched` /
+      // `next` — rather than a reading-flavoured one. The Channels grid already renders
+      // this, so a reading channel needs no second render path, and `ratingKey` is here an
+      // OPAQUE provider item id (a Kavita seriesId) rather than a Plex ratingKey. That
+      // reading is safe because a queue draws from exactly one provider, so the id is never
+      // ambiguous (decision 2026-08-13-a-queue-draws-from-exactly-one-provider).
+      return buckets.map((b) => ({
+        ratingKey: String(b.seriesId),
+        show: b.title,
+        // Chapters left, not series left — the same "how much is waiting" the Plex tile means.
+        unwatched: b.unreadCount ?? b.items.length,
+        // A pinned series is still part of the pool; the flag is what lets the grid show
+        // which were chosen by hand versus swept in by the rule.
+        isMember: explicit.includes(String(b.seriesId)),
+        libraryId: b.libraryId == null ? '' : String(b.libraryId),
+        next: b.items[0]
+          ? {
+            ratingKey: String(b.items[0].chapterId),
+            title: b.items[0].title,
+            // Chapters have no season; `episode` carries the chapter number so the tile's
+            // existing "next up" line reads correctly without a reading-specific branch.
+            episode: Number(b.items[0].number) || null,
+            season: null,
+          }
+          : null,
+      }));
+    },
+
+    /** Cover bytes, re-served by the app so the API key never reaches the browser. */
+    cover: (seriesId) => c.cover(seriesId),
+
     /** Libraries, for the queue editor's provider block. */
     async libraries() {
       const libs = await c.libraries();
@@ -166,7 +318,7 @@ export function kavitaProvider({ def, apiKey, client = null } = {}) {
         // ONE chapter wanted: continue-point answers it in a single call.
         if (perSeries <= 1) {
           const ch = await c.continuePoint(s.id);
-          if (!ch) return null;
+          if (!isUnread(ch)) return null;
           return { ...bucket, items: [chapterItem(ch, s.id)] };
         }
 

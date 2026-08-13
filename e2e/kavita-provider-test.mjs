@@ -157,6 +157,46 @@ await ok('continue-point returning a NULL seriesId is repaired, not propagated',
   }
 });
 
+await ok('a FULLY READ series never enters a lineup — continue-point WRAPS', async () => {
+  // Reader/continue-point is "where would you resume", not "the next unread chapter". On a
+  // finished series it hands back chapter 1 ALREADY READ — verified live on six Webtoons
+  // series (e.g. "Ultimate Shut-in": chapter 1 at 183/183 pages, unreadCount 0). Trusting it
+  // re-queues finished series forever, which breaks the property the whole design leans on:
+  // that Kavita's read state IS the done store.
+  const c = {
+    ...stubClient(),
+    async seriesForLibrary() {
+      return [
+        { id: 10, name: 'Finished', libraryId: 9, format: 1 },
+        { id: 11, name: 'Has More', libraryId: 9, format: 1 },
+      ];
+    },
+    async continuePoint(id) {
+      return Number(id) === 10
+        // The wrap: chapter 1, fully read.
+        ? { id: 1001, number: '1', pages: 183, pagesRead: 183, seriesId: 10 }
+        : { id: 1101, number: '42', pages: 20, pagesRead: 0, seriesId: 11 };
+    },
+  };
+  const p = kavitaProvider({ def: DEF, client: c });
+  const { play, buckets } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 });
+  assert.deepEqual(buckets.map((b) => b.seriesId), [11], 'a finished series entered the lineup');
+  assert.equal(play.length, 1);
+});
+
+await ok('a chapter of UNKNOWN length is kept, not silently dropped', async () => {
+  // pages: 0 means Kavita does not know the length. Treating that as "read" would make a
+  // whole series vanish from the rotation for a metadata gap.
+  const c = {
+    ...stubClient(),
+    async seriesForLibrary() { return [{ id: 12, name: 'Unknown', libraryId: 9, format: 1 }]; },
+    async continuePoint() { return { id: 1200, number: '1', pages: 0, pagesRead: 0, seriesId: 12 }; },
+  };
+  const p = kavitaProvider({ def: DEF, client: c });
+  const { play } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 });
+  assert.equal(play.length, 1);
+});
+
 await ok('a batch of 1 still caps at what exists (no invented items)', async () => {
   const p = kavitaProvider({ def: DEF, client: stubClient() });
   const { play } = await p.buckets({ libraries: ['5'], batch: 3 });
