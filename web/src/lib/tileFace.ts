@@ -39,8 +39,11 @@ export const byTitle = (
  * truncated away. The badge underneath already names the collection, so strip that
  * shared prefix off the title line.
  *
- * Left whole when the member doesn't lead with the collection name, or is named
- * exactly for it. (decision `2026-07-31-collection-tiles-are-member-first`)
+ * Left whole when the member doesn't lead with the collection name, is named
+ * exactly for it, or the only thing left after the prefix is a bare season/sequel
+ * ordinal — "Trapped in a Dating Sim 2" must not shrink to a naked "2 (2026)"; a
+ * lone number names no show, so keep the whole title.
+ * (decision `2026-07-31-collection-tiles-are-member-first`)
  */
 export function withoutCollectionPrefix(
   member: string | null | undefined,
@@ -60,6 +63,15 @@ export function withoutCollectionPrefix(
   const rest = m
     .slice(c.length)
     .replace(/^\s*[-–—:·]?\s*/, "")
+
+  // A remainder that is only a sequel/season ordinal ("2", "II", "Season 3",
+  // "Part 2") identifies no show on its own — the prefix WAS the show name. Keep
+  // the full member title so the tile still reads as a show, not a number.
+  if (
+    /^(?:season|part|s)?\s*(?:\d+|[ivxlcdm]+)$/i.test(rest)
+  ) {
+    return m
+  }
 
   return rest || m
 }

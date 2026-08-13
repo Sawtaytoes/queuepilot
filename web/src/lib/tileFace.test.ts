@@ -81,6 +81,44 @@ describe("withoutCollectionPrefix", () => {
       ),
     ).toBe("Avenging Battle")
   })
+
+  // Regression: a season/sequel member left only a naked number, which the tile
+  // rendered as "2 (2026)" — meaningless. Keep the whole show name instead.
+  test("keeps the full title when the prefix leaves only a bare season number", () => {
+    expect(
+      withoutCollectionPrefix(
+        "Trapped in a Dating Sim 2",
+        "Trapped in a Dating Sim",
+      ),
+    ).toBe("Trapped in a Dating Sim 2")
+  })
+
+  test("keeps the full title for spelled-out season / part / roman ordinals", () => {
+    expect(
+      withoutCollectionPrefix(
+        "Overlord Season 3",
+        "Overlord",
+      ),
+    ).toBe("Overlord Season 3")
+    expect(
+      withoutCollectionPrefix("Gintama Part 2", "Gintama"),
+    ).toBe("Gintama Part 2")
+    expect(
+      withoutCollectionPrefix(
+        "Fate/stay night II",
+        "Fate/stay night",
+      ),
+    ).toBe("Fate/stay night II")
+  })
+
+  test("still strips a real subtitle that merely starts with a number", () => {
+    expect(
+      withoutCollectionPrefix(
+        "Evangelion 3.0 You Can (Not) Redo",
+        "Evangelion",
+      ),
+    ).toBe("3.0 You Can (Not) Redo")
+  })
 })
 
 describe("tileFace", () => {
