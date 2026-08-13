@@ -125,7 +125,7 @@ function publishDiscovery() {
     icon: 'mdi:plex',
     device: {
       identifiers: ['queuepilot'],
-      name: 'Queuepilot',
+      name: 'QueuePilot',
       manufacturer: 'queuepilot',
       model: 'Kids NFC / UC3 Plex helper',
     },
