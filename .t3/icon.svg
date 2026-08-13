@@ -1,14 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="queuepilot">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#f6c945"/>
-      <stop offset="1" stop-color="#e5a00d"/>
-    </linearGradient>
-  </defs>
-  <rect width="256" height="256" rx="48" fill="#1f2326"/>
-  <!-- play triangle (Plex-ish) -->
-  <path d="M104 78 L104 178 L176 128 Z" fill="url(#g)"/>
-  <!-- little TV antenna dots to read as "kids TV" -->
-  <circle cx="70" cy="70" r="10" fill="#f6c945"/>
-  <circle cx="186" cy="70" r="10" fill="#f6c945"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><rect width="24" height="24" rx="5.5" fill="#D97706"/><g transform="translate(12 12) scale(0.86) translate(-12 -12)" fill="none" stroke="#ffffff" stroke-width="2.0" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.6 10.6 12 4 17.4Z"/><line x1="13.6" y1="7.2" x2="20.6" y2="7.2"/><line x1="13.6" y1="12" x2="20.6" y2="12"/><line x1="13.6" y1="16.8" x2="20.6" y2="16.8"/></g></svg>
