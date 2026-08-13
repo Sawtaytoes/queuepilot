@@ -1,9 +1,9 @@
 {
-  "name": "plex-channels-web",
+  "name": "queuepilot-web",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "React 19 + TypeScript + Vite + Tailwind v4 frontend for plex-channels. Built to web/dist, which server/src/server.js serves as its static root.",
+  "description": "React 19 + TypeScript + Vite + Tailwind v4 frontend for queuepilot. Built to web/dist, which server/src/server.js serves as its static root.",
   "engines": {
     "node": ">=24"
   },

@@ -66,21 +66,40 @@ app deliberately does not do.
 Verified against `main` at `621534d` and the live deployment on 2026-08-12. **Several of these
 are load-bearing for the NFC cards — a missed one silently breaks every card.**
 
+**Execution status (2026-08-12):** everything in code and on GitHub is done. What remains is
+live infrastructure and Home Assistant — the three unchecked boxes below. The MQTT prefix is
+checked off because the *code* has moved, but it moved behind a **reversible bridge** that keeps
+the old topics alive: the app publishes and subscribes on both prefixes until
+`MQTT_LEGACY_PREFIX` is cleared, so nothing outside the container had to change on the same
+deploy. The ordered procedure, the verification command after each step and the rollback are in
+[`docs/queuepilot-mqtt-cutover.md`](../queuepilot-mqtt-cutover.md).
+
+Two traps found during execution that this checklist did not predict:
+
+- **`server/src/mqttc.js` never used `env.js`.** It re-declared four topic knobs from
+  `process.env` with its own copies of the defaults — the exact drift `env.js` exists to
+  prevent. It would have stayed on the old prefix while `mqttd` moved, taking the web UI's
+  device dropdown and state feed quiet with nothing logged. Now imports from `env.js`.
+- **The GHCR package does not follow the repo rename.** Renaming the GitHub repo leaves the
+  `plex-channels` *package* in place, and the first push to `…/queuepilot` creates a **new
+  package that defaults to private** — while the old one is public. The TrueNAS app cannot pull
+  a private package, so the new one must be flipped to public before the app is repointed.
+
 ### Load-bearing at runtime (get these wrong and the cards stop working)
 
-- [ ] **MQTT topic prefix `plex-channels/…`** — the highest-risk item. Ten topics, all
+- [x] **MQTT topic prefix `plex-channels/…`** — the highest-risk item. Ten topics, all
       env-overridable, in `server/src/env.js:195-218`: `T_CMD_START`, `T_CMD_ADVANCE`,
       `T_CMD_SOUNDTRACK`, `T_CMD_PREVIEW`, `T_RESP_PREVIEW_BASE`, `T_RESP_LAST_PLAYED`,
       `T_RESP_SOUNDTRACK`, `T_STATE`, `T_NOW_PLAYING`, `T_DEVICES_BASE`.
       **Requires dual-publish or a coordinated HA change** — the env overrides make a staged
       cutover possible without a code change, which is the safe route.
-- [ ] **⚠️ `T_CMD_CAST_PLAY` is HARDCODED on the publisher side.**
+- [x] **⚠️ `T_CMD_CAST_PLAY` is HARDCODED on the publisher side.**
       `server/src/playback.js:41` declares `'plex-channels/cmd/cast/play'` as a `const`, while
       the subscriber (`cast_sidecar/service.py:18`) reads it from env with the same default.
       So the two halves **can be re-pointed independently and silently diverge** — the sidecar
       would sit on a topic nobody publishes to. Fix the hardcode *before* touching topics.
       Its reply topic `plex-channels/resp/cast` (`cast_sidecar/service.py:19`) is env-driven.
-- [ ] **HA MQTT-discovery entity.** `DISCOVERY_OBJECT_ID` defaults to `plex_channels_status`
+- [x] **HA MQTT-discovery entity.** `DISCOVERY_OBJECT_ID` defaults to `plex_channels_status`
       (`server/src/env.js:212`), which is what creates **`sensor.plex_channels_status`**
       (`server/src/mqttd.js:101-105`). Renaming it **changes the HA entity_id** and breaks every
       automation that references the sensor. The device block also carries
@@ -94,21 +113,21 @@ are load-bearing for the NFC cards — a missed one silently breaks every card.*
       (404) — check those by hand before cutting over, do not assume they are clean.
       Note `server/src/driver.js:33` warns that its strings are **read aloud verbatim** by
       `automation.plex_channels_status_announcements`.
-- [ ] **⚠️ Do NOT rename `PLEX_CLIENT_IDENTIFIER`.** It defaults to `plex-channels-helper`
+- [x] **⚠️ Do NOT rename `PLEX_CLIENT_IDENTIFIER`.** It defaults to `plex-channels-helper`
       (`server/src/config.js:15`, `.env.example:7`) and must stay stable — it is the client id
       the managed-user token exchange against plex.tv is keyed on, and changing it makes that
       exchange non-repeatable. This is a case where the old name is *correct* forever.
-- [ ] **Plex-facing identity strings.** `X-Plex-Device-Name` and `X-Plex-Product` are both
+- [x] **Plex-facing identity strings.** `X-Plex-Device-Name` and `X-Plex-Product` are both
       `'plex-channels'` (`server/src/playback.js:571-572`). These are what appear in Plex's
       device list and activity. Cosmetic, but user-visible inside Plex.
 
 ### Infrastructure
 
-- [ ] **GitHub repo** `Sawtaytoes/plex-channels` → `queuepilot`. GitHub redirects the old path,
+- [x] **GitHub repo** `Sawtaytoes/plex-channels` → `queuepilot`. GitHub redirects the old path,
       so clones and links keep working; the git remote should still be updated deliberately.
-- [ ] **GHCR image** `ghcr.io/sawtaytoes/plex-channels` → `…/queuepilot`
+- [x] **GHCR image** `ghcr.io/sawtaytoes/plex-channels` → `…/queuepilot`
       (`.github/workflows/docker-deploy.yml:71-73`, three tags: sha, branch, `latest`).
-- [ ] **⚠️ The CI workflow must keep the name `"CI"`.** `docker-deploy.yml:21` triggers on
+- [x] **⚠️ The CI workflow must keep the name `"CI"`.** `docker-deploy.yml:21` triggers on
       `workflow_run: workflows: ["CI"]`, matching `ci.yml:14`'s `name: CI`. Renaming the
       workflow silently stops all image builds — CI stays green while nothing deploys.
 - [ ] **TrueNAS app** `plex-channels` (custom app, stable train, currently RUNNING) and its
@@ -120,20 +139,20 @@ are load-bearing for the NFC cards — a missed one silently breaks every card.*
       apps-get-product-name-subdomains decision (`agentic/docs/decisions/2026-07-16-apps-get-product-name-subdomains.md`)
       the subdomain follows the product name, so this one is required, not optional. Keep the
       old host redirecting.
-- [ ] Legacy `.gitea/workflows/ci.yml` still exists alongside the GitHub workflows.
-- [ ] `build.sh:6,11` (image name + the redeploy instruction) and `.env.example:1,30,32`.
+- [x] Legacy `.gitea/workflows/ci.yml` still exists alongside the GitHub workflows.
+- [x] `build.sh:6,11` (image name + the redeploy instruction) and `.env.example:1,30,32`.
 
 ### Code and docs (cosmetic, but do them in one pass)
 
-- [ ] `web/package.json` `name: "plex-channels-web"` + description; `web/vite.config.ts:27` and
+- [x] `web/package.json` `name: "plex-channels-web"` + description; `web/vite.config.ts:27` and
       `web/vite/firstPaint.ts:39` plugin names.
-- [ ] `server/src/server.js:1-2,872` (`[plex-channels-web]` log prefix),
+- [x] `server/src/server.js:1-2,872` (`[plex-channels-web]` log prefix),
       `server/src/mqttd.js:138` (`clientId: plex-channels-node-…`),
       `cast_sidecar/service.py:94` (`client_id="plex-channels-cast-sidecar"`),
       `server/src/adb.js:64` (`/sdcard/plex-channels-ui.xml`).
-- [ ] `Dockerfile:2,55`, `entrypoint.sh:5,7,12`.
-- [ ] `README.md` — done as part of this work; see the "Why *queuepilot*?" section there.
-- [ ] **The private companion `agentic/plex-channels-private/`** — note this is a *tracked
+- [x] `Dockerfile:2,55`, `entrypoint.sh:5,7,12`.
+- [x] `README.md` — done as part of this work; see the "Why *queuepilot*?" section there.
+- [x] **The private companion `agentic/plex-channels-private/`** — note this is a *tracked
       subdirectory of the `agentic` root repo*, not a separate git repo, so renaming it is a
       directory move plus the references in `docs/ROADMAP.md` and the workspace `todo/README.md`.
       Its `publish/sanitize-spec.md` also maps `plex-channels.example.com` and needs updating.

@@ -2,7 +2,7 @@
 //
 // CLIENT mode is the live path
 // (PLAYBACK_MODE=client permanent for this process half). CAST mode is delegated to the
-// Python cast_sidecar via MQTT `plex-channels/cmd/cast/play` (decision
+// Python cast_sidecar via MQTT `queuepilot/cmd/cast/play` (decision
 // 2026-08-03-retiring-python-except-the-cast-sidecar) — never reimplemented here.
 //
 // Playback runs under the set's own managed-user account (Younger Kids / Older Kids) via
@@ -33,12 +33,10 @@ import {
   MQTT_PORT,
   MQTT_USER,
   MQTT_PASS,
+  T_CMD_CAST_PLAY,
 } from './env.js';
 import { accountToken, plexGet } from './plex.js';
 import { getSet } from './sets.js';
-
-// Cast sidecar command topic (decision 2026-08-03). Sidecar replies on plex-channels/resp/cast.
-export const T_CMD_CAST_PLAY = 'plex-channels/cmd/cast/play';
 
 const CLIENT_ID = PLEX_CLIENT_IDENTIFIER;
 
@@ -568,8 +566,8 @@ export async function playRatingKeys(ratingKeys, {
       token: tok,
       host,
       extraHeaders: {
-        'X-Plex-Device-Name': 'plex-channels',
-        'X-Plex-Product': 'plex-channels',
+        'X-Plex-Device-Name': 'queuepilot',
+        'X-Plex-Product': 'queuepilot',
         'X-Plex-Version': '1.0',
       },
       timeoutMs: 30_000,

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local dev harness — boots the whole plex-channels web stack OFFLINE for screenshot-driven
+# Local dev harness — boots the whole queuepilot web stack OFFLINE for screenshot-driven
 # UI iteration: the Node server with the rich YAML fixtures, a FAKE MQTT broker + responder
 # (e2e/fake-mqtt.mjs — real broker is unreachable), and the REAL Plex server (posters,
 # search, ratings, collections all resolve live). Foreground; Ctrl-C stops both processes.
@@ -35,5 +35,5 @@ node server/src/server.js &
 SRV=$!
 
 trap 'kill $BROKER $SRV 2>/dev/null || true' EXIT INT TERM
-echo "[dev] up. Open http://localhost:$PORT  (or devshare $PORT \"plex-channels-dev\")"
+echo "[dev] up. Open http://localhost:$PORT  (or devshare $PORT \"queuepilot-dev\")"
 wait $SRV

@@ -1,4 +1,4 @@
-"""Cast-only MQTT sidecar — subscribes to plex-channels/cmd/cast/play, replies on resp/cast.
+"""Cast-only MQTT sidecar — subscribes to queuepilot/cmd/cast/play, replies on resp/cast.
 
 When PLAYBACK_ENGINE=node the main queue_builder.service is not started; this process keeps
 pychromecast-based cast playback available without carrying the full selection engine.
@@ -15,8 +15,12 @@ import urllib.request
 
 import paho.mqtt.client as mqtt
 
-T_CMD = os.environ.get("T_CMD_CAST_PLAY", "plex-channels/cmd/cast/play")
-T_RESP = os.environ.get("T_RESP_CAST", "plex-channels/resp/cast")
+# These two are deliberately NOT bridged across the plex-channels -> queuepilot rename. The
+# only publisher to T_CMD is server/src/playback.js, in this same container reading this same
+# env, so both halves move prefix on the same deploy; and nothing outside the container
+# subscribes to T_RESP. Keep the defaults identical to server/src/env.js.
+T_CMD = os.environ.get("T_CMD_CAST_PLAY", "queuepilot/cmd/cast/play")
+T_RESP = os.environ.get("T_RESP_CAST", "queuepilot/resp/cast")
 HOST = os.environ.get("MQTT_HOST", "")
 PORT = int(os.environ.get("MQTT_PORT", "1883"))
 USER = os.environ.get("MQTT_USER") or None
@@ -91,7 +95,7 @@ def main():
     if not HOST:
         print("[cast_sidecar] MQTT_HOST unset; exiting", flush=True)
         sys.exit(1)
-    c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="plex-channels-cast-sidecar")
+    c = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id="queuepilot-cast-sidecar")
     if USER:
         c.username_pw_set(USER, PASS)
     if PORT == 8883:

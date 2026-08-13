@@ -61,7 +61,7 @@ const HOME_ACTIVITY = 'HomeActivityTV';
 const MODAL_ACTIVITY = 'ListDualPaneModalActivity';
 const PLEX_PKG = 'com.plexapp.android';
 export const TITLE_ID = `${PLEX_PKG}:id/title_text`;
-const DUMP_PATH = '/sdcard/plex-channels-ui.xml';
+const DUMP_PATH = '/sdcard/queuepilot-ui.xml';
 
 // How many BACK presses to spend getting from a player/detail screen to Home.
 // Mutable so integration/unit tests can zero them (mirrors adb.py module-level knobs).

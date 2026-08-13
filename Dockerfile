@@ -1,5 +1,5 @@
 # One image, two processes (decision 2026-07-20-queue-web-ui-monorepo-single-container.md):
-#   * plex-channels-web  — the Node.js app: API, web UI, selection engine, MQTT service and
+#   * queuepilot-web     — the Node.js app: API, web UI, selection engine, MQTT service and
 #                          playback (server/src/server.js). This is the whole application.
 #   * cast_sidecar       — a ~100-line Python process for PLAYBACK_MODE=cast (pychromecast),
 #                          the one thing Node cannot do (decision 2026-08-12).
@@ -52,7 +52,7 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
-# --- Node deps for plex-channels-web (own layer, keyed on the manifest) ---
+# --- Node deps for queuepilot-web (own layer, keyed on the manifest) ---
 COPY server/package.json server/package-lock.json* ./server/
 RUN cd server && npm install --omit=dev --no-audit --no-fund
 

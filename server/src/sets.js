@@ -70,7 +70,7 @@ async function withLock(fn) {
 // that used to live hardcoded in queue_builder/config.py + web/src/config.js. Seeded to
 // disk on first boot; from then on the FILE is the truth and this constant is only a
 // disaster-recovery template.
-const DEFAULT_YAML = `# plex-channels set registry — the single source of truth for every set (curated queue
+const DEFAULT_YAML = `# queuepilot set registry — the single source of truth for every set (curated queue
 # or dynamic channel). Edited by the web UI at plex-channels.example.com; hand-edits are
 # fine too (the web app and the Python service both re-read it).
 #

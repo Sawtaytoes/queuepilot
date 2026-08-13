@@ -1,8 +1,8 @@
-// plex-channels-web: the browser editor for the curated queues (queues.yaml) and the
-// set registry (sets.yaml). Runs beside the Python plex-channels-queue MQTT service in
-// one container. Read-only against Plex (search + poster proxy); its writes go to
-// queues.yaml (coordinated with the Python prune via the cross-process lock in
-// queues.js) and sets.yaml (which the Python service re-reads before every command).
+// queuepilot-web: the browser editor for the curated queues (queues.yaml) and the
+// set registry (sets.yaml). This is the whole application; the only other process in the
+// container is the Python cast_sidecar. Read-only against Plex (search + poster proxy);
+// its writes go to queues.yaml (still guarded by the cross-process lock in queues.js) and
+// sets.yaml.
 import compression from 'compression';
 import express from 'express';
 import { existsSync, watch } from 'node:fs';
@@ -869,7 +869,7 @@ app.get('/api/thumb/:ratingKey', async (req, res) => {
 await cache.init();
 
 app.listen(WEB_PORT, () => {
-  console.log(`[plex-channels-web] listening on :${WEB_PORT}`);
+  console.log(`[queuepilot-web] listening on :${WEB_PORT}`);
   mqttd.start();
   warm.start();
 });

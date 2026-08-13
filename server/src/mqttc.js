@@ -4,26 +4,22 @@
 // session-start commands ("Play on <device>") back to it. Rotation previews are NOT here:
 // they are computed in-process by the engine (server.js /api/generic/:id/preview).
 import { connect } from 'mqtt';
-
-const HOST = process.env.MQTT_HOST || '';
-const PORT = parseInt(process.env.MQTT_PORT || '1883', 10);
-const USER = process.env.MQTT_USER || undefined;
-const PASS = process.env.MQTT_PASS || undefined;
-
-const T_CMD_START = process.env.T_CMD_START || 'plex-channels/cmd/session/start';
-const T_DEVICES_BASE = process.env.T_DEVICES_BASE || 'plex-channels/devices';
-const T_STATE = process.env.T_STATE || 'plex-channels/state';
-// LIVE playback, bridged onto MQTT by the HA automation "Plex Channels Now Playing" from
-// the Plex integration's media_player (which is already push-fed by the PMS websocket — so
-// nothing here polls). T_STATE only says what a session STARTED with; this says what is on
-// screen NOW, and keeps up as the queue auto-advances.
-const T_NOW_PLAYING = process.env.T_NOW_PLAYING || 'plex-channels/now-playing';
+// These come from env.js rather than process.env: this module used to re-declare the same
+// four knobs with its own copies of the defaults, which is the exact drift env.js exists to
+// prevent — during the queuepilot rename those copies would have kept this half of the
+// process on `plex-channels/…` while mqttd moved, and the web UI's device list and state
+// feed would have gone quiet with nothing logged.
+import {
+  MQTT_HOST as HOST, MQTT_PORT as PORT, MQTT_USER as USER, MQTT_PASS as PASS,
+  T_CMD_START, T_DEVICES_BASE, T_STATE, T_NOW_PLAYING,
+  bothTopics, canonicalTopic,
+} from './env.js';
 
 export const connected = () => Boolean(client && client.connected);
 
 const DEVICES = new Map(); // id -> announcement payload (retained registry)
-let LAST_STATE = null; // last retained plex-channels/state payload
-let LAST_NOW = null; // last retained plex-channels/now-playing payload
+let LAST_STATE = null; // last retained queuepilot/state payload
+let LAST_NOW = null; // last retained queuepilot/now-playing payload
 
 let client = null;
 if (HOST) {
@@ -37,11 +33,27 @@ if (HOST) {
   });
   client.on('connect', () => {
     console.log(`[mqtt] web connected to ${HOST}:${PORT}`);
-    client.subscribe([`${T_DEVICES_BASE}/#`, T_STATE, T_NOW_PLAYING]);
+    // T_NOW_PLAYING is LIVE playback, bridged onto MQTT by the HA automation "Queuepilot Now
+    // Playing" from the Plex integration's media_player (already push-fed by the PMS
+    // websocket, so nothing here polls). T_STATE only says what a session STARTED with; this
+    // says what is on screen NOW, and keeps up as the queue auto-advances.
+    //
+    // Only now-playing needs the legacy twin during the rename. devices and state are
+    // published by mqttd in THIS process, so both halves move prefix on the same deploy —
+    // subscribing to their old twins as well would just deliver every message twice and
+    // double the SSE traffic to the UI. now-playing is different: HA publishes it, so it
+    // arrives on whichever prefix that automation has been migrated to, and listening on
+    // only one prefix would blank the UI's now-playing row until HA caught up.
+    client.subscribe([
+      `${T_DEVICES_BASE}/#`,
+      T_STATE,
+      ...bothTopics(T_NOW_PLAYING),
+    ]);
   });
   client.on('error', (e) => console.log(`[mqtt] ${e.message}`));
-  client.on('message', (topic, buf) => {
+  client.on('message', (rawTopic, buf) => {
     const text = buf.toString();
+    const topic = canonicalTopic(rawTopic);
     if (topic.startsWith(`${T_DEVICES_BASE}/`)) {
       const id = topic.slice(T_DEVICES_BASE.length + 1);
       if (!text) DEVICES.delete(id); // cleared retained topic = de-registered

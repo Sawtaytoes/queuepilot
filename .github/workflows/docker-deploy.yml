@@ -6,7 +6,7 @@
 # React `web/` in its own stage), so unlike mux-magic there are no host-side Node
 # build steps here — just checkout + build-push.
 #
-# Registry: GHCR (`ghcr.io/sawtaytoes/plex-channels`), the fleet's GitHub-Actions
+# Registry: GHCR (`ghcr.io/sawtaytoes/queuepilot`), the fleet's GitHub-Actions
 # build target (same as mux-magic). This SUPERSEDES the old manual path that pushed
 # to the LAN registry `docker-registry.example.com/plex-channels:latest` via build.sh
 # on nas — a GitHub-hosted runner can't reach that private LAN registry.
@@ -68,6 +68,6 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/sawtaytoes/plex-channels:${{ github.event.workflow_run.head_sha || github.sha }}
-            ghcr.io/sawtaytoes/plex-channels:${{ steps.tags.outputs.branch_tag }}
-            ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'ghcr.io/sawtaytoes/plex-channels:latest' || '' }}
+            ghcr.io/sawtaytoes/queuepilot:${{ github.event.workflow_run.head_sha || github.sha }}
+            ghcr.io/sawtaytoes/queuepilot:${{ steps.tags.outputs.branch_tag }}
+            ${{ (github.event.workflow_run.head_branch || github.ref_name) == 'main' && 'ghcr.io/sawtaytoes/queuepilot:latest' || '' }}

@@ -38,7 +38,7 @@
 /* ===================================================================
    Plex amber is this app's brand, so it is the ACCENT INTENT.
 
-   `daylight`'s accent is indigo (`#5A54E8`). plex-channels' entire affordance
+   `daylight`'s accent is indigo (`#5A54E8`). queuepilot's entire affordance
    language — the play button, the drag ring, the focus outline, the next-up
    episode line, the "New queue" pill — is Plex's amber `#E5A00D`, and it reads as
    Plex on purpose. Repainting all of that indigo would be a redesign, which this
@@ -253,7 +253,7 @@ header .sub {
      mid-word, every card's text gone to the left, background ending partway across.
      Reported 2026-08-10; regression-gated by `e2e/narrow-scroll-test.mjs`.
 
-     Fading up 4px matches this app's existing popover motion (`plex-channels-chmfade`,
+     Fading up 4px matches this app's existing popover motion (`queuepilot-chmfade`,
      `from { opacity: 0; transform: translateY(4px) }`) and never leaves the page box. */
   .hmenu-left {
     inset-inline-start: 0;
@@ -937,7 +937,7 @@ ul.grid {
 }
 /* A just-added tile pulses (amber, the add/accent colour) so it's findable after the grid
    re-renders — flashTile() adds .justadded, then removes it on animationend. */
-@keyframes plex-channels-tilepop {
+@keyframes queuepilot-tilepop {
   0% {
     box-shadow: 0 0 0 0 var(--color-intent-accent-solid);
   }
@@ -951,7 +951,7 @@ ul.grid {
   }
 }
 .tile.justadded .thumb {
-  animation: plex-channels-tilepop 1.5s ease-out;
+  animation: queuepilot-tilepop 1.5s ease-out;
   border-color: var(--color-intent-accent-solid);
 }
 
@@ -1358,7 +1358,7 @@ body.queue-view #tools {
   margin-bottom: 12px;
 }
 .chmembers .grid {
-  animation: plex-channels-chmfade 0.25s ease;
+  animation: queuepilot-chmfade 0.25s ease;
 }
 /* Empty channel (no curated members): the hint is a slim one-liner, shown only then, and
    the member grid is hidden so nothing renders a poster-sized empty tile. */
@@ -1387,7 +1387,7 @@ body.queue-view #tools {
 .results li.noresults:hover {
   background: none;
 }
-@keyframes plex-channels-chmfade {
+@keyframes queuepilot-chmfade {
   from {
     opacity: 0;
     transform: translateY(4px);

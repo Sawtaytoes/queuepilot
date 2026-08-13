@@ -6,9 +6,9 @@
 // It is a TINY aedes broker (e2e/broker/node_modules — run `npm install` there once) plus a
 // mock responder client that speaks the EXACT topics/payloads the service does
 // (see server/src/mqttd.js + server/src/mqttc.js):
-//   * announces two RETAINED devices/<id> entries  (plex-channels/devices/#)
+//   * announces two RETAINED devices/<id> entries  (queuepilot/devices/#)
 //   * answers cmd/generic/preview on its reply topic with a small canned pool
-//   * acks   cmd/session/start by publishing a retained plex-channels/state
+//   * acks   cmd/session/start by publishing a retained queuepilot/state
 //
 // The canned pool uses REAL ratingKeys from the live Plex server so posters resolve through
 // the Node /api/thumb proxy. Run standalone or import startFakeMqtt() from a harness script.
@@ -22,14 +22,14 @@ const mqtt = requireClient('mqtt');
 
 const PORT = parseInt(process.env.FAKE_MQTT_PORT || '11883', 10);
 
-const T_CMD_START = 'plex-channels/cmd/session/start';
-const T_CMD_PREVIEW = 'plex-channels/cmd/generic/preview';
-const T_RESP_PREVIEW_BASE = 'plex-channels/resp/preview';
-const T_DEVICES_BASE = 'plex-channels/devices';
-const T_STATE = 'plex-channels/state';
+const T_CMD_START = 'queuepilot/cmd/session/start';
+const T_CMD_PREVIEW = 'queuepilot/cmd/generic/preview';
+const T_RESP_PREVIEW_BASE = 'queuepilot/resp/preview';
+const T_DEVICES_BASE = 'queuepilot/devices';
+const T_STATE = 'queuepilot/state';
 // Stands in for the HA automation "Plex Channels Now Playing", which bridges the Shield's
 // Plex media_player onto this topic (see server/src/mqttc.js).
-const T_NOW_PLAYING = 'plex-channels/now-playing';
+const T_NOW_PLAYING = 'queuepilot/now-playing';
 
 // Two devices, mirroring the Python announcer: the env-default Shield (default:true) plus a
 // second client-mode player, so the "Play on ▾" menu shows a real choice.

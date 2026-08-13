@@ -192,30 +192,81 @@ export const MQTT_PORT = int('MQTT_PORT', 1883);
 export const MQTT_USER = process.env.MQTT_USER || undefined;
 export const MQTT_PASS = process.env.MQTT_PASS || undefined;
 
-export const T_CMD_START = str('T_CMD_START', 'plex-channels/cmd/session/start');
-export const T_CMD_ADVANCE = str('T_CMD_ADVANCE', 'plex-channels/cmd/session/advance');
-export const T_CMD_SOUNDTRACK = str('T_CMD_SOUNDTRACK', 'plex-channels/cmd/soundtrack/resolve');
+// --- the rename cutover (2026-08-12) ------------------------------------------ //
+// `plex-channels` became `queuepilot`, so every topic below moved prefix. The old prefix
+// stays LIVE as an alias while HA is migrated: MQTT_LEGACY_PREFIX is set by default, which
+// makes the broker layer subscribe to AND publish on both prefixes at once. Nothing outside
+// this container has to change on the same deploy as the rename — that is the whole point.
+//
+// To finish the cutover, set MQTT_LEGACY_PREFIX='' in the app env once every HA consumer is
+// on `queuepilot/…`. That is a config change, not a code change, and it is reversible: put
+// the value back and the old topics come alive again. See
+// docs/queuepilot-mqtt-cutover.md for the ordered procedure and the verification commands.
+export const MQTT_PREFIX = str('MQTT_PREFIX', 'queuepilot');
+export const MQTT_LEGACY_PREFIX = str('MQTT_LEGACY_PREFIX', 'plex-channels');
+
+// The old-prefix twin of a topic, or null when there isn't one. Returns null when the legacy
+// bridge is off, and — deliberately — when the topic doesn't sit under MQTT_PREFIX, which is
+// the case for an individually-overridden topic or an already-legacy one. Callers treat null
+// as "publish/subscribe once", so an override silently opts that topic out of the bridge
+// rather than aliasing it somewhere surprising.
+export const legacyTopic = (topic) => {
+  if (!MQTT_LEGACY_PREFIX || !MQTT_PREFIX) return null;
+  if (!topic.startsWith(`${MQTT_PREFIX}/`)) return null;
+  const alias = `${MQTT_LEGACY_PREFIX}/${topic.slice(MQTT_PREFIX.length + 1)}`;
+  return alias === topic ? null : alias;
+};
+
+// Both prefixes' forms of a topic, de-duplicated — what to subscribe to during the cutover.
+export const bothTopics = (topic) => {
+  const alias = legacyTopic(topic);
+  return alias ? [topic, alias] : [topic];
+};
+
+// Map an INBOUND topic back to its canonical (new-prefix) form, so a handler can compare
+// against one constant no matter which prefix the sender used.
+export const canonicalTopic = (topic) => {
+  if (!MQTT_LEGACY_PREFIX || !MQTT_PREFIX) return topic;
+  if (!topic.startsWith(`${MQTT_LEGACY_PREFIX}/`)) return topic;
+  return `${MQTT_PREFIX}/${topic.slice(MQTT_LEGACY_PREFIX.length + 1)}`;
+};
+
+export const T_CMD_START = str('T_CMD_START', 'queuepilot/cmd/session/start');
+export const T_CMD_ADVANCE = str('T_CMD_ADVANCE', 'queuepilot/cmd/session/advance');
+export const T_CMD_SOUNDTRACK = str('T_CMD_SOUNDTRACK', 'queuepilot/cmd/soundtrack/resolve');
+// Cast sidecar command topic (decision 2026-08-03). The sidecar has always read this from
+// env (cast_sidecar/service.py:18); the publisher used to hardcode it in playback.js, so the
+// two halves could be re-pointed independently and silently diverge — the sidecar sitting on
+// a topic nobody publishes to. Both halves now read the SAME env name with the SAME default.
+export const T_CMD_CAST_PLAY = str('T_CMD_CAST_PLAY', 'queuepilot/cmd/cast/play');
 // Rotation-channel preview: the request carries a `reply` topic under T_RESP_PREVIEW_BASE and
 // the computed pool is published there (request/response). Deleted at D6 — the preview
 // endpoint calls the engine in-process — but the topic names stay until then.
-export const T_CMD_PREVIEW = str('T_CMD_PREVIEW', 'plex-channels/cmd/generic/preview');
-export const T_RESP_PREVIEW_BASE = str('T_RESP_PREVIEW_BASE', 'plex-channels/resp/preview');
-export const T_RESP_LAST_PLAYED = str('T_RESP_LAST_PLAYED', 'plex-channels/resp/last-played');
-export const T_RESP_SOUNDTRACK = str('T_RESP_SOUNDTRACK', 'plex-channels/resp/soundtrack');
-export const T_STATE = str('T_STATE', 'plex-channels/state');
+export const T_CMD_PREVIEW = str('T_CMD_PREVIEW', 'queuepilot/cmd/generic/preview');
+export const T_RESP_PREVIEW_BASE = str('T_RESP_PREVIEW_BASE', 'queuepilot/resp/preview');
+export const T_RESP_LAST_PLAYED = str('T_RESP_LAST_PLAYED', 'queuepilot/resp/last-played');
+export const T_RESP_SOUNDTRACK = str('T_RESP_SOUNDTRACK', 'queuepilot/resp/soundtrack');
+export const T_STATE = str('T_STATE', 'queuepilot/state');
 // LIVE playback, bridged onto MQTT by the HA automation "Plex Channels Now Playing" from the
 // Plex integration's media_player (already push-fed by the PMS websocket, so nothing polls).
 // T_STATE only says what a session STARTED with; this says what is on screen NOW.
-export const T_NOW_PLAYING = str('T_NOW_PLAYING', 'plex-channels/now-playing');
-// MQTT discovery: HA creates sensor.plex_channels_status from T_STATE on its own.
+export const T_NOW_PLAYING = str('T_NOW_PLAYING', 'queuepilot/now-playing');
+// MQTT discovery: HA creates sensor.queuepilot_status from T_STATE on its own. This object_id
+// IS the entity_id, so changing it creates a NEW entity rather than renaming the old one. The
+// old `plex_channels_status` config is retained on the broker and keeps its entity alive off
+// the legacy state topic, so both sensors work while HA is migrated; retiring the old one is
+// a separate, explicit step (clear that retained config — see docs/queuepilot-mqtt-cutover.md).
 export const T_DISCOVERY_BASE = str('T_DISCOVERY_BASE', 'homeassistant');
-export const DISCOVERY_OBJECT_ID = str('DISCOVERY_OBJECT_ID', 'plex_channels_status');
+export const DISCOVERY_OBJECT_ID = str('DISCOVERY_OBJECT_ID', 'queuepilot_status');
+// The entity the rename replaces. Set to '' once it is retired; it exists so the cutover doc
+// and the code agree on the name, rather than it living only in a shell command.
+export const DISCOVERY_LEGACY_OBJECT_ID = str('DISCOVERY_LEGACY_OBJECT_ID', 'plex_channels_status');
 
 // --- device registry (the web UI's "Play on <device>" dropdown) --------------- //
-// Castable targets are announced as RETAINED plex-channels/devices/<id> messages: the
+// Castable targets are announced as RETAINED queuepilot/devices/<id> messages: the
 // env-default Shield plus every plex.tv device advertising as a player. A start command may
 // then carry {"target": "<id>"} to override the default Shield.
-export const T_DEVICES_BASE = str('T_DEVICES_BASE', 'plex-channels/devices');
+export const T_DEVICES_BASE = str('T_DEVICES_BASE', 'queuepilot/devices');
 export const DEVICE_ANNOUNCE_SECONDS = int('DEVICE_ANNOUNCE_SECONDS', 300);
 
 // --- soundtrack resolver (Living-Room-reader easter egg) ---------------------- //

@@ -36,7 +36,7 @@ export const firstPaintScriptBody = (): string =>
     .replace(/\r?\n?<\/script>\s*$/, "")
 
 export const firstPaint = (): Plugin => ({
-  name: "plex-channels:first-paint",
+  name: "queuepilot:first-paint",
   transformIndexHtml: {
     handler: () => [
       {

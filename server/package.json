@@ -1,9 +1,9 @@
 {
-  "name": "plex-channels-server",
+  "name": "queuepilot-server",
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "API + static-frontend server for plex-channels (queues.yaml/sets.yaml editing, MQTT bridge). Ships beside the Python plex-channels-queue service; frontend lives in ../web.",
+  "description": "API + static-frontend server for queuepilot (queues.yaml/sets.yaml editing, MQTT bridge). This is the whole application; the frontend lives in ../web.",
   "engines": {
     "node": ">=24"
   },

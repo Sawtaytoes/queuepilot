@@ -148,7 +148,7 @@ try {
   const pub = mqtt.connect(`mqtt://localhost:${MQTT_PORT}`);
   await once(pub, 'connect');
   const beforeInval = { ...calls };
-  pub.publish('plex-channels/now-playing', JSON.stringify({ ratingKey: EPISODE_RK, state: 'playing' }), { qos: 1 });
+  pub.publish('queuepilot/now-playing', JSON.stringify({ ratingKey: EPISODE_RK, state: 'playing' }), { qos: 1 });
   // Let the server resolve the context (one metadata call) and invalidate.
   await new Promise((r) => setTimeout(r, 700));
 
