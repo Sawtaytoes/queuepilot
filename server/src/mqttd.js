@@ -7,12 +7,13 @@ import * as session from './session.js';
 import * as enginePreview from './engine/preview.js';
 import * as engineRouting from './engine/routing.js';
 import * as adb from './adb.js';
+import * as devices from './devices.js';
 import {
   MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
   T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW,
   T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_STATE,
-  T_DEVICES_BASE, T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
-  DEVICE_ANNOUNCE_SECONDS, SHIELD_CLIENT_NAME, PLAYBACK_MODE,
+  T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
+  DEVICE_ANNOUNCE_SECONDS,
   MQTT_LEGACY_PREFIX, legacyTopic, bothTopics, canonicalTopic,
 } from './env.js';
 
@@ -44,6 +45,17 @@ function publishLastPlayed(item) {
 session.setPublishers({ state: publishState, lastPlayed: publishLastPlayed });
 
 async function handleStart(payload) {
+  // `target` comes off the wire as a device-registry ID (the web UI's "Play on ▾" publishes
+  // `d.id`), but session/playback want the announced ENTRY — they read `.uri`, `.mode` and
+  // `.name` off it. Resolve it against the registry we announce, as the deleted Python
+  // service did; an unknown or aged-out id falls back to the env-default Shield rather than
+  // failing the scan. Without this a swept device could be listed and picked but never
+  // played: playback saw a bare string whose `.uri`/`.name` were undefined.
+  if (payload && typeof payload.target === 'string' && payload.target) {
+    const device = devices.known(payload.target);
+    if (!device) console.log(`[mqttd] unknown target '${payload.target}' — using the default device`);
+    payload = { ...payload, target: device };
+  }
   console.log('[mqttd] session/start', JSON.stringify({
     set: payload.set, kind: payload.kind, profile: payload.profile, target: payload.target?.id || payload.target,
   }));
@@ -96,16 +108,12 @@ function handleSoundtrack(payload) {
   });
 }
 
+// The registry round lives in devices.js (Shield + the plex.tv player sweep, with
+// de-registration). It never rejects, but keep the .catch() anyway: an unhandled rejection
+// inside setInterval would take the announcer down silently, and a dead announcer looks
+// exactly like the ghost registry we just fixed.
 function announceDevices() {
-  const shield = {
-    id: 'shield',
-    name: SHIELD_CLIENT_NAME,
-    machineIdentifier: process.env.SHIELD_CLIENT_MACHINE_ID || '',
-    uri: process.env.SHIELD_CLIENT_URI || null,
-    mode: PLAYBACK_MODE || 'client',
-    default: true,
-  };
-  pub(`${T_DEVICES_BASE}/${shield.id}`, shield, { retain: true });
+  devices.announceDevices(pub).catch((e) => console.log(`[devices] ${e && e.message ? e.message : e}`));
 }
 
 function publishDiscovery() {

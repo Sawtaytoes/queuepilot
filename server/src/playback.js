@@ -122,6 +122,32 @@ async function plextv(path, token = PLEX_TOKEN, method = 'GET') {
   return text ? JSON.parse(text) : {};
 }
 
+// Every plex.tv device advertising as a player, as [{name, machineIdentifier, uri}].
+// Port of the retired queue_builder/plex.py `player_devices()` (deleted with the Python
+// service in #60), which the Node port never carried over — that omission is why the MQTT
+// device registry has been Shield-only and the web UI's "Play on ▾" dropdown was reading
+// stale retained ghosts (docs/queuepilot-mqtt-cutover.md, "The device-registry gap").
+//
+// TWO callers, deliberately one implementation: devices.js announces this list, and
+// companionTarget below picks one row out of it. Writing the plex.tv call twice is how the
+// two would drift on a Plex API change.
+//
+// `uri` is null for a player advertising no connection (Plex Dash does this) — such a device
+// is still announceable and still castable by name, so it is NOT filtered out here; the
+// caller decides whether it needs a direct endpoint. Throws on a plex.tv failure so callers
+// can tell "no players" from "could not ask".
+export async function playerDevices() {
+  const devices = await plextv('/api/v2/devices', PLEX_TOKEN);
+  const rows = Array.isArray(devices) ? devices : devices.devices || [];
+  return rows
+    .filter((d) => String(d.provides || '').includes('player'))
+    .map((d) => ({
+      name: d.name || null,
+      machineIdentifier: d.clientIdentifier || null,
+      uri: (d.connections || []).map((c) => c.uri).find(Boolean) || null,
+    }));
+}
+
 // Resolve a player's DIRECT Plex Companion endpoint (http://<ip>:32500) via plex.tv.
 // The local server's /clients only lists GDM-discovered players, which never reaches the
 // Shield here — so ask plex.tv and talk to the player directly. Cached per key.
@@ -129,26 +155,19 @@ export async function companionTarget(name, machineId = '') {
   const key = machineId || name || '';
   if (!key) return null;
   if (_companionTarget.has(key)) return _companionTarget.get(key);
-  let devices;
+  let rows;
   try {
-    devices = await plextv('/api/v2/devices', PLEX_TOKEN);
+    rows = await playerDevices();
   } catch {
     return null; // network/plex.tv hiccup: caller falls back
   }
-  const rows = Array.isArray(devices) ? devices : devices.devices || [];
   for (const d of rows) {
-    if (!String(d.provides || '').includes('player')) continue;
-    if (machineId && d.clientIdentifier !== machineId) continue;
+    if (machineId && d.machineIdentifier !== machineId) continue;
     if (!machineId && d.name !== name) continue;
-    const uri = (d.connections || []).map((c) => c.uri).find(Boolean) || null;
-    if (!uri) continue;
-    const target = {
-      name: d.name,
-      machineIdentifier: d.clientIdentifier,
-      uri,
-    };
-    _companionTarget.set(key, target);
-    return target;
+    // This caller DOES need a direct endpoint — playMedia is sent to `uri`.
+    if (!d.uri) continue;
+    _companionTarget.set(key, d);
+    return d;
   }
   return null;
 }
