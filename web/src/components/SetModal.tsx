@@ -435,13 +435,35 @@ export function SetModal() {
             index={i}
             key={b.uid}
             onChange={(next) =>
-              setBlocks((prev) =>
-                prev.map((x, j) =>
+              setBlocks((prev) => {
+                const changedProvider =
+                  next.provider !== prev[i].provider
+
+                return prev.map((x, j) => {
                   // Carry the uid across: ProviderBlock speaks the WIRE shape and knows
                   // nothing about this component's identity bookkeeping.
-                  j === i ? { ...next, uid: x.uid } : x,
-                ),
-              )
+                  if (j === i)
+                    return { ...next, uid: x.uid }
+
+                  // A QUEUE DRAWS FROM EXACTLY ONE PROVIDER (decision
+                  // 2026-08-13-a-queue-draws-from-exactly-one-provider), so switching the
+                  // provider on one block switches them all. Without this the editor happily
+                  // builds a mixed queue that then behaves as Plex everywhere and silently
+                  // ignores its Kavita libraries — which is exactly how the live
+                  // "Manga & Webtoons" channel ended up half-configured.
+                  //
+                  // The other blocks' libraries and profiles are scoped to the OLD provider,
+                  // so they are cleared rather than reinterpreted against the new one.
+                  if (!changedProvider) return x
+
+                  return {
+                    ...x,
+                    libraries: [],
+                    profile: "",
+                    provider: next.provider,
+                  }
+                })
+              })
             }
             onRemove={() =>
               setBlocks((prev) =>
@@ -466,8 +488,9 @@ export function SetModal() {
               {
                 libraries: [],
                 profile: "",
-                provider:
-                  providers[0]?.id ?? prev[0].provider,
+                // The QUEUE's provider, not the first configured one — a second source is
+                // another profile/library slice of the same app, never a second app.
+                provider: prev[0].provider,
                 uid: newUid(),
               },
             ])

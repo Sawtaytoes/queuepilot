@@ -237,6 +237,27 @@ ok('N blocks on ONE provider is not mixed and resolves fine', () => {
   assert.equal(blocks.providerIdForSet(cfg), 'plex');
 });
 
+ok('validateBlocks REFUSES a mixed queue on the way in', () => {
+  // Not merely unplayable: a stored mixed queue reports delivery `push` and then behaves as
+  // Plex everywhere, silently ignoring the other provider's libraries. The live
+  // "Manga & Webtoons" channel held a Kavita block nothing ever read because of this.
+  const r = blocks.validateBlocks([
+    { provider: 'plex', libraries: ['11'] },
+    { provider: 'kavita', libraries: ['2', '5'] },
+  ]);
+  assert.equal(r.ok, false);
+  assert.match(r.errors.join(' '), /one app/);
+});
+
+ok('N blocks on the SAME provider are still accepted', () => {
+  // Two profiles of one app is not mixing, and is the reason blocks stay a list at all.
+  const r = blocks.validateBlocks([
+    { provider: 'plex', profile: 'A', libraries: ['1'] },
+    { provider: 'plex', profile: 'B', libraries: ['5'] },
+  ]);
+  assert.equal(r.ok, true, r.errors.join('; '));
+});
+
 ok('validateBlocks rejects an unknown provider by name', () => {
   const r = blocks.validateBlocks([{ provider: 'ghost', libraries: [1] }]);
   assert.equal(r.ok, false);
