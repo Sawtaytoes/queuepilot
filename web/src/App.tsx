@@ -228,7 +228,7 @@ function computeChrome(
     return {
       back: { label: "‹ Play", target: "#/" }, // Queues is a top-level configurator
       bodyClasses: [],
-      documentTitle: "Queues — Plex Channels",
+      documentTitle: "Queues — QueuePilot",
       editableSetId: null,
       heading: "Queues",
       isSubHidden: false,
@@ -246,7 +246,7 @@ function computeChrome(
       bodyClasses: isMovies
         ? ["queue-view", "movies-channel"]
         : ["queue-view"], // reuse: hides the queues toolbar
-      documentTitle: "Channels — Plex Channels",
+      documentTitle: "Channels — QueuePilot",
       editableSetId: null,
       heading: "Channels",
       isSubHidden: false,
@@ -258,7 +258,7 @@ function computeChrome(
 
   if (route.view === "queue") {
     const q = data?.sets[route.id]
-    const label = q?.label ?? "Plex Channels"
+    const label = q?.label ?? "QueuePilot"
     const isChannel = q?.kind === "anime"
     const playing = activeSet(now, data)
     const origin =
@@ -279,7 +279,7 @@ function computeChrome(
         bodyClasses: isChannel
           ? ["queue-view", "channel-mode"]
           : ["queue-view"],
-        documentTitle: `${label} — Plex Channels`,
+        documentTitle: `${label} — QueuePilot`,
         editableSetId: route.id,
         heading: label,
         isSubHidden: false,
@@ -292,7 +292,7 @@ function computeChrome(
       bodyClasses: isChannel
         ? ["queue-view", "channel-mode"]
         : ["queue-view"],
-      documentTitle: `${label} — Plex Channels`,
+      documentTitle: `${label} — QueuePilot`,
       editableSetId: route.id,
       heading: label,
       isSubHidden: !isChannel,
@@ -307,9 +307,9 @@ function computeChrome(
   return {
     back: null,
     bodyClasses: ["queue-view", "play-view"], // hides the queues toolbar
-    documentTitle: "Plex Channels",
+    documentTitle: "QueuePilot",
     editableSetId: null,
-    heading: "Plex Channels",
+    heading: "QueuePilot",
     isSubHidden: false,
     sub: "Pick something and play it. Configure ›  opens each group’s editor.",
   }
