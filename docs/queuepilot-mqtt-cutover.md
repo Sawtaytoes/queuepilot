@@ -159,26 +159,37 @@ This clears **whatever is actually there**, which matters because the device reg
 **Expect stale device ghosts here.** At the time of the rename `plex-channels/devices/` still
 held two retained announcements, `Plex Dash` and `Pollycracker`, left by the Python service that
 was deleted in #60. They are Python-shaped (`seen` field, spaced JSON) and nothing has refreshed
-them since. They are not bridge artefacts and clearing them is correct — but see
-[the device-registry gap](#the-device-registry-gap) first, because the *reason* they went stale
-is a real unfixed hole.
+them since. They are not bridge artefacts and clearing them is correct — see
+[the device-registry gap](#the-device-registry-gap) for why they went stale.
 
 ## The device-registry gap
 
-Moving prefix surfaced a pre-existing bug that is **not** caused by the rename and is not fixed
-by it.
+Moving prefix surfaced a pre-existing bug that was **not** caused by the rename and was not
+fixed by it. **Closed on 2026-08-13** by porting the sweep into `server/src/devices.js`; the
+history is kept here because the failure mode is worth remembering.
 
-`mqttd.announceDevices()` announces **only the Shield**. The plex.tv sweep that announced every
+`mqttd.announceDevices()` announced **only the Shield**. The plex.tv sweep that announced every
 device advertising as a player lived in the Python service deleted in #60, and the Node port
 never re-implemented it. Because the old announcements were *retained*, the web UI's
 "Play on <device>" dropdown kept listing `Plex Dash` and `Pollycracker` afterwards — reading
 ghosts off the broker, with nothing refreshing them or noticing if those devices went away.
+Moving to a fresh prefix left those ghosts behind and the dropdown fell to one device, which
+is how the hole was found.
 
-Moving to a fresh prefix left those ghosts behind, so the dropdown now correctly shows one
-device. That is the honest state, not a regression: **if casting to a non-Shield player is
-wanted, the plex.tv device sweep has to be ported.** Do not "fix" the dropdown by republishing
-the two old payloads under the new prefix — that restores the appearance of working while
-pointing at a registry nothing maintains.
+What it looks like now (`server/src/devices.js`, gated by `e2e/device-registry-test.mjs`):
+
+- every `DEVICE_ANNOUNCE_SECONDS` the announcer publishes the env-default Shield **plus** every
+  plex.tv device advertising as a player, each with a `seen` unix epoch;
+- a device that stops appearing in a **successful** sweep has its retained topic **cleared**
+  (empty payload = de-registered, which is how `mqttc.js` already read it) — the fix had to
+  include this, or it would just have minted fresh ghosts;
+- a plex.tv failure announces the Shield alone, logs, and leaves the other entries retained and
+  untouched: an outage is absence of information, not evidence of absence, and their `seen`
+  stops advancing to say so.
+
+The rule that produced this still stands: never "fix" the dropdown by republishing old payloads
+under the new prefix — that restores the appearance of working while pointing at a registry
+nothing maintains.
 
 ## Rolling back
 
