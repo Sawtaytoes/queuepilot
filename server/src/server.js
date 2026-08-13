@@ -18,6 +18,7 @@ import * as mqttc from './mqttc.js';
 import * as plex from './plex.js';
 import * as providers from './providers/config.js';
 import { providerFor } from './providers/index.js';
+import * as providerBlocks from './providers/blocks.js';
 import { mountLauncher } from './providers/launcher.js';
 import * as queues from './queues.js';
 import * as sets from './sets.js';
@@ -408,6 +409,36 @@ app.get('/api/search', async (req, res) => {
   const allLibraries = req.query.scope === 'all';
   if (!q) return res.json({ results: [] });
   try {
+    // A PULL set searches ITS provider, not Plex. Routed here rather than at the four call
+    // sites so every existing caller (queue add, channel members, channel filters) gets
+    // provider-correct results without knowing providers exist — searching Plex for a Kavita
+    // queue is what made "dungeon port" return nothing while the series sat in Webtoons.
+    if (setId) {
+      const s = await sets.getSet(setId);
+      if (!s) return res.status(400).json({ error: 'unknown set' });
+      if (s.delivery === 'pull') {
+        const block = providerBlocks.resolveSingle(s);
+        const p = providerFor(block.provider);
+        if (typeof p.search !== 'function') return res.json({ results: [] });
+        // Scoped to the queue's own libraries unless the caller explicitly asked to see
+        // everything (the members picker's `scope=all`).
+        const libraries = allLibraries ? [] : block.libraries;
+        const found = await p.search(q, { libraries });
+        return res.json({
+          results: found.map((r) => ({
+            // `ratingKey` is the shape every caller already stores and renders; here it
+            // carries the provider's own item id, which is unambiguous because a queue draws
+            // from exactly one provider.
+            ratingKey: r.id,
+            title: r.title,
+            type: 'show',
+            librarySectionTitle: r.libraryTitle,
+            librarySectionID: r.libraryId,
+          })),
+        });
+      }
+    }
+
     let sections;
     let collectionSections;
     if (allLibraries) {
@@ -773,6 +804,43 @@ app.get('/api/providers/:id/libraries', async (req, res) => {
   }
 });
 
+// Provider-scoped series search — the non-Plex half of /api/search. Scoped to the libraries
+// the queue draws from, so it never offers something that queue could not play.
+app.get('/api/providers/:id/search', async (req, res) => {
+  const q = String(req.query.q || '').trim();
+  if (!q) return res.json({ results: [] });
+  try {
+    const p = providerFor(String(req.params.id));
+    if (typeof p.search !== 'function') return res.json({ results: [] });
+    const libraries = String(req.query.libraries || '')
+      .split(',').map((s) => s.trim()).filter(Boolean);
+    return res.json({ results: await p.search(q, { libraries }) });
+  } catch (e) {
+    return res.status(503).json({ error: String(e.message || e) });
+  }
+});
+
+// Cover proxy. The Kavita image endpoint REQUIRES the API key as a query parameter, so the
+// browser must never be handed one of its URLs — that would put a live credential in the
+// page source, the network tab and any screenshot (the hazard docs/kavita-feasibility.md
+// flags about /api/opds/<apiKey>). The key stays here; the browser gets bytes. Same shape as
+// /api/thumb for Plex.
+app.get('/api/providers/:id/cover/:itemId', async (req, res) => {
+  try {
+    const p = providerFor(String(req.params.id));
+    if (typeof p.cover !== 'function') return res.status(404).end();
+    const { buffer, contentType } = await p.cover(String(req.params.itemId));
+    res.setHeader('Content-Type', contentType);
+    // Covers change only when the series art does; a day is the same bet /api/thumb makes.
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    return res.end(buffer);
+  } catch {
+    // A missing cover is normal (a series with no art). 404 rather than 500 so the tile
+    // falls back to its placeholder instead of logging an error per render.
+    return res.status(404).end();
+  }
+});
+
 // Last session state (retained plex-channels/state) — the play-result toast's source.
 app.get('/api/state', (_req, res) => {
   res.json({ state: mqttc.lastState(), mqtt: mqttc.connected() });
@@ -803,6 +871,25 @@ app.get('/api/generic/:id/preview', async (req, res) => {
   try {
     const s = await sets.getSet(req.params.id);
     if (!s || s.source !== 'rotation') return res.status(400).json({ error: 'not a rotation channel' });
+
+    // A PULL channel's pool is its provider's, not the Plex engine's. Without this the
+    // Channels view renders "Empty" for a reading channel that in fact has a full lineup —
+    // previewRotation walks Plex sections, and a Kavita channel has none.
+    if (s.delivery === 'pull') {
+      const block = providerBlocks.resolveSingle(s);
+      const p = providerFor(block.provider);
+      const pool = await p.pool({ libraries: block.libraries, members: (s.members || []).map(String) });
+      // Returned as `buckets`, the SAME key and shape the Plex preview uses, so the Channels
+      // grid renders a reading pool with no second code path. See kavita.js pool().
+      return res.json({
+        id: s.id,
+        label: s.label,
+        provider: block.provider,
+        delivery: 'pull',
+        buckets: pool,
+      });
+    }
+
     const profile = req.query.profile ? String(req.query.profile) : '';
     const node = await enginePreview.previewRotation(s.id, profile);
     try {

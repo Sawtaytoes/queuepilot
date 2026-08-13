@@ -256,7 +256,7 @@ export function ChannelMembers({
               results: SearchHit[]
             }>(
               "GET",
-              `/api/search?scope=all&q=${encodeURIComponent(q)}&collections=1`,
+              `/api/search?scope=all&set=${channel.id}&q=${encodeURIComponent(q)}&collections=1`,
             )
 
             return results
