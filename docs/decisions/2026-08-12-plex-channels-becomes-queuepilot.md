@@ -66,16 +66,35 @@ app deliberately does not do.
 Verified against `main` at `621534d` and the live deployment on 2026-08-12. **Several of these
 are load-bearing for the NFC cards — a missed one silently breaks every card.**
 
-**Execution status (2026-08-12):** everything in code and on GitHub is done. What remains is
-live infrastructure and Home Assistant — the three unchecked boxes below. The MQTT prefix is
+**Execution status: COMPLETE (2026-08-13).** Every box below is checked. The MQTT prefix is
 checked off because the *code* has moved, but it moved behind a **reversible bridge** that keeps
 the old topics alive: the app publishes and subscribes on both prefixes until
 `MQTT_LEGACY_PREFIX` is cleared, so nothing outside the container had to change on the same
 deploy. The ordered procedure, the verification command after each step and the rollback are in
 [`docs/queuepilot-mqtt-cutover.md`](../queuepilot-mqtt-cutover.md).
 
-Two traps found during execution that this checklist did not predict:
+Four traps found during execution that this checklist did not predict:
 
+- **TrueNAS has no `app.rename`.** Confirmed against the live API method list — the operation does
+  not exist. Renaming the app means **deleting and recreating it**, which is a materially bigger
+  decision than "rename" implies and was taken deliberately by the owner. What made it safe: all
+  three mounts are `host_path` and `ix_volumes` is `{}`, so `app.delete` with
+  `remove_ix_volumes: false` cannot touch the data. Procedure that worked — snapshot
+  `TrueNAS-Apps/App-Configs`, `app.stop`, `mv` the config dir, `app.delete` (with
+  `remove_images: false` so the rollback image stays cached), then `app.create` with
+  `app_name: queuepilot`, `catalog_app: ix-app`, `train: stable`, `version: 1.4.4` and the values
+  captured from `app.config` beforehand, with the `/config` `host_path` repointed.
+- **The `/config` "dataset" is not a dataset.** The checklist warned that renaming it is "a data
+  move; plan it with the app stopped". It is a plain directory on the `App-Configs` dataset, so
+  the move is an instant `mv` — 17 entries, 2.0M, ownership preserved.
+
+- **The NPM host needed no certificate or DNS work.** `*.example.com` is a wildcard A record and
+  certificate 16 is a `*.example.com` Let's Encrypt cert, so `queuepilot.example.com` already
+  resolved and was already covered — it only needed the proxy host. The old name is now a
+  **redirection host** (301, `preserve_path`) rather than a second proxy host, so there is one
+  origin: proxy host 71 was deleted and replaced. Verified end-to-end —
+  `https://plex-channels.example.com/api/sets` 301s to `https://queuepilot.example.com/api/sets` and
+  follows through to 200.
 - **`server/src/mqttc.js` never used `env.js`.** It re-declared four topic knobs from
   `process.env` with its own copies of the defaults — the exact drift `env.js` exists to
   prevent. It would have stayed on the old prefix while `mqttd` moved, taking the web UI's
@@ -109,7 +128,7 @@ Two traps found during execution that this checklist did not predict:
       `identifiers: ['plex_channels']` and `manufacturer: 'plex-channels'`
       (`mqttd.js:116,118`). Decide deliberately whether the entity is renamed at all — keeping
       the old `object_id` is a legitimate choice.
-- [ ] **HA consumers.** Confirmed to reference the topics: `script.control_plex`,
+- [x] **HA consumers.** Confirmed to reference the topics: `script.control_plex`,
       `automation.plex_nfc_scanner`, `automation.plex_session_bookkeeping`,
       `automation.plex_channels_status_announcements`, `automation.plex_channels_now_playing`.
       **Two further YAML-defined automations could not be scanned** via the REST config endpoint
@@ -133,11 +152,11 @@ Two traps found during execution that this checklist did not predict:
 - [x] **⚠️ The CI workflow must keep the name `"CI"`.** `docker-deploy.yml:21` triggers on
       `workflow_run: workflows: ["CI"]`, matching `ci.yml:14`'s `name: CI`. Renaming the
       workflow silently stops all image builds — CI stays green while nothing deploys.
-- [ ] **TrueNAS app** `plex-channels` (custom app, stable train, currently RUNNING) and its
+- [x] **TrueNAS app** `plex-channels` (custom app, stable train, currently RUNNING) and its
       **`/config` dataset** `App-Configs/plex-channels` — which holds the live `sets.yaml`,
       `queues.yaml`, `config.yaml`, `cache.sqlite` and eight `.bak-*` files. A dataset rename is
       a data move; plan it with the app stopped.
-- [ ] **NPM proxy host** `plex-channels.example.com` (live, 200) → `queuepilot.example.com`
+- [x] **NPM proxy host** `plex-channels.example.com` (live, 200) → `queuepilot.example.com`
       (does not resolve yet). Per the
       apps-get-product-name-subdomains decision (`agentic/docs/decisions/2026-07-16-apps-get-product-name-subdomains.md`)
       the subdomain follows the product name, so this one is required, not optional. Keep the
@@ -167,6 +186,26 @@ host) → **image + CI** → **TrueNAS app + dataset** → **MQTT topics with du
 consumers** → **cosmetic strings**. The MQTT step is the only one that can break the cards, and
 it is the only one with a safe staged path (env overrides on both halves), so it should not be
 bundled with anything else.
+
+**The order actually used, and why it differed.** The planned sequence puts the TrueNAS app
+before MQTT. In practice the MQTT bridge had to ship *first*, because the bridge is what makes
+every later step safe — until the running container publishes on both prefixes, there is no
+staged path for HA at all. So:
+
+1. Fix the `T_CMD_CAST_PLAY` hardcode (nothing else can stage around it).
+2. Rename the GitHub repo — it redirects, so nothing breaks, and it must precede the image.
+3. Merge the code rename, let CI build `ghcr.io/sawtaytoes/queuepilot:latest`, verify the new
+   package is anonymously pullable.
+4. **Repoint the existing app to the new image, without renaming it.** This is the step that
+   makes the bridge live, and it is trivially reversible — swap the image back. Verify both
+   prefixes carry identical retained state before going further.
+5. Stand up the new NPM proxy host, leaving the old one serving.
+6. Migrate the HA consumers, one at a time, off the now-redundant old prefix.
+7. Only then delete and recreate the TrueNAS app, and convert the old host to a redirect.
+
+Splitting "repoint the image" (step 4) from "rename the app" (step 7) is the change worth
+keeping: it gets the bridge into production behind a one-line rollback, and leaves the
+destructive delete-and-recreate until after HA is already migrated and verified.
 
 ## Evidence
 
