@@ -1,4 +1,4 @@
-# Two decisions this build deliberately did NOT make
+# Decisions this build deliberately did NOT make
 
 **Written 2026-08-13, alongside the Kavita provider.** Everything else in the Kavita brief is
 built and gated. These two are the owner's, and the code is written so that neither can be
@@ -8,7 +8,7 @@ answered by accident.
 
 ## 1. The provider control in the queue editor
 
-**Status: waiting on the owner. Mocked, not built.**
+**Status: CLOSED 2026-08-13 — answered and built.** He picked *"Option B if they fit; otherwise Option A"* + *"C1 is good when only 1 provider"*; "do they fit" was measured and the rule is evaluated at runtime. See [`2026-08-13-provider-block-repeats-and-picks-its-control`](decisions/2026-08-13-provider-block-repeats-and-picks-its-control.md). The rest of this section is kept as the record of the question.
 
 The queue editor's block now has a provider concept, and the control that picks the provider
 is genuinely unresolved. The owner revised the model twice — `Listbox`, then "Combobox with
@@ -69,7 +69,7 @@ Four profile ADRs are load-bearing for the NFC cards and must be read before thi
 
 ## 2. What a MIXED queue hands off
 
-**Status: waiting on the owner. Stored, refused at runtime.**
+**Status: CLOSED 2026-08-13 — scoped away, not answered.** The owner settled it while live-testing: *"I only really care about Plex and Kavita for now, and it's either-or for me."* A queue draws from exactly one provider, so the mixed case does not arise and the runtime's refusal is correct rather than provisional. See [`2026-08-13-a-queue-draws-from-exactly-one-provider`](decisions/2026-08-13-a-queue-draws-from-exactly-one-provider.md). The rest of this section is kept as the record of why it was open.
 
 N blocks means one queue can span Plex *and* Kavita. That is a change to the **seam**, not a UI
 affordance:
