@@ -130,6 +130,15 @@ jobs:
       - name: Kavita provider + launcher (offline)
         run: node e2e/kavita-provider-test.mjs
 
+      # A set whose ONLY source is a non-Plex provider must save. Reported from the live app:
+      # creating a Channel with a single Kavita block failed with "at least one library
+      # section required", because `sections` is PLEX's list and is legitimately empty on a
+      # Kavita-only set — its libraries live in the provider blocks. Two defects, both pinned
+      # here: the validators rejected the save, and createSet never WROTE `providers` at all,
+      # which would have created the set with no source and failed quietly instead of loudly.
+      - name: Kavita-only set saves (offline)
+        run: node e2e/kavita-only-set-test.mjs
+
       # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
       # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against
       # that engine's RECORDED answers (e2e/fixtures/golden/routing.json) over

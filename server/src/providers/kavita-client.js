@@ -117,6 +117,17 @@ export function kavitaClient({ baseUrl, apiKey, pluginName = 'queuepilot', fetch
       return { ...ch, seriesId: ch.seriesId ?? Number(seriesId) };
     },
 
+    /**
+     * Every chapter of a series, with per-chapter read state — the run a multi-chapter batch
+     * needs. `continue-point` answers "what is next" in one call and is cheaper, so this is
+     * only used when a batch of more than one is actually asked for.
+     *
+     * Note `volumes` is often EMPTY for webtoons (verified live: a 269-chapter webtoon
+     * reports 0 volumes), so chapter order — not volume grouping — is the only reliable
+     * spine here.
+     */
+    seriesDetail: (seriesId) => req('GET', `/api/Series/series-detail?seriesId=${encodeURIComponent(seriesId)}`),
+
     /** Series in a library, newest-progress-first is NOT guaranteed — caller orders. */
     seriesForLibrary: (libraryId, { pageSize = 500 } = {}) => req(
       'POST',

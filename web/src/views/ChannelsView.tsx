@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react"
+import {
+  isPullSet,
+  OpenQueueButton,
+} from "../components/OpenQueueButton"
 import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
 import { activeBinding } from "../lib/channels"
@@ -187,22 +191,26 @@ export function ChannelsView({
             value={profileValueNow}
           />
         </label>
-        <button
-          className="playbtn"
-          id="chplay"
-          onClick={(e) =>
-            openPlayMenu({
-              anchor:
-                e.currentTarget.getBoundingClientRect(),
-              kind: isMovies ? "movie" : undefined,
-              profile: currentProfile || undefined,
-              setId: channel.id,
-            })
-          }
-          type="button"
-        >
-          ▶ Play on ▾
-        </button>
+        {isPullSet(channel) ? (
+          <OpenQueueButton set={channel} />
+        ) : (
+          <button
+            className="playbtn"
+            id="chplay"
+            onClick={(e) =>
+              openPlayMenu({
+                anchor:
+                  e.currentTarget.getBoundingClientRect(),
+                kind: isMovies ? "movie" : undefined,
+                profile: currentProfile || undefined,
+                setId: channel.id,
+              })
+            }
+            type="button"
+          >
+            ▶ Play on ▾
+          </button>
+        )}
         <button
           className="ghost"
           id="chresample"

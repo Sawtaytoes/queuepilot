@@ -14,6 +14,7 @@
 import { promises as fs } from 'node:fs';
 import { parseDocument, YAMLSeq } from 'yaml';
 import { validateBlocks, blocksForSet } from './providers/blocks.js';
+import { definitions as providerDefinitions } from './providers/config.js';
 
 export const SETS_PATH = process.env.SETS_PATH || '/config/sets.yaml';
 
@@ -427,6 +428,13 @@ function normalize(ent) {
     // built from `sections` / `requires_profile`. The editor therefore never has to special-
     // case a legacy set, and reading one does not rewrite it (see providers/blocks.js).
     providers: blocksForSet(ent),
+    // How a queue on this set STARTS, derived from its blocks. Queues are single-provider
+    // (owner, 2026-08-13: "it's either-or for me"), so one value per set is the whole truth.
+    //   push -> a lineup is sent at a device (Plex -> the Shield)
+    //   pull -> there is nothing to cast to; the app hands back a URL you open (Kavita)
+    // Exposed so the UI never offers "Play on <device>" for a set that has no device, and
+    // never branches on a provider's NAME.
+    delivery: deliveryForSet(ent),
     // Queue-only playback/consumption knobs (rotation channels ignore them). Exposed in the
     // Set editor so they are not hand-YAML only. (decision `2026-08-08-set-modal-queue-flags`)
     // keep_completed: never mark entries done. reel: play the whole lineup every scan AND
@@ -564,15 +572,53 @@ function rotationCreateObj(id, body) {
 // rotation channels (source:'rotation') accept the full account-binding + filter knob set so
 // a dynamic channel is now fully authorable from the web UI (workstream E) — previously they
 // were hand-YAML only.
+// How many libraries a set's provider BLOCKS contribute.
+//
+// `sections` is Plex's library list, and since the provider seam it is no longer the only
+// way a set can have a source: a Kavita-only queue has an empty `sections` by definition and
+// draws entirely from its blocks. A validator that only counts `sections` therefore rejects
+// a perfectly valid reading queue with "at least one library section required".
+// The on-disk shape of a block. `implicit` is a READ-TIME marker (a legacy set reporting the
+// single Plex block it has always meant) and must never be written, or a re-read would treat
+// a real block as synthesized.
+function writableBlocks(blocks) {
+  return blocks.map((b) => ({
+    provider: b.provider,
+    ...(b.profile ? { profile: b.profile } : {}),
+    ...(b.libraries.length ? { libraries: b.libraries } : {}),
+    ...(b.batch != null ? { batch: b.batch } : {}),
+  }));
+}
+
+// A set's delivery mode, from its blocks. Unknown/absent providers read as `push`, which
+// keeps every pre-provider set behaving exactly as it always has.
+const PULL_KINDS = new Set(['kavita']);
+function deliveryForSet(ent) {
+  const blocks = blocksForSet(ent);
+  const defs = new Map(providerDefinitions().map((d) => [d.id, d.kind]));
+  const anyPush = blocks.some((b) => !PULL_KINDS.has(defs.get(b.provider)));
+  return anyPush ? 'push' : 'pull';
+}
+
+function blockLibraryCount(providers) {
+  if (!Array.isArray(providers)) return 0;
+  return providers.reduce((n, b) => {
+    const libs = b && typeof b === 'object' ? b.libraries : null;
+    return n + (Array.isArray(libs) ? libs.filter((x) => String(x).trim()).length : 0);
+  }, 0);
+}
+
 export async function createSet(body = {}) {
   const { label, kind, sections, source } = body;
   const isRotation = source === 'rotation';
   if (!label || !String(label).trim()) throw new Error('label required');
   const secs = toInts(sections);
   // A rotation channel may carry NO show library: a Shorts-only channel draws entirely from
-  // item_sections. Curated queues always need a real section (that is what title search scopes).
+  // item_sections. A curated queue needs a real source — which is `sections` for Plex, OR a
+  // provider block's libraries for any non-Plex source.
   const itemSecs = toInts(body.item_sections);
-  if (!secs.length && !(isRotation && itemSecs.length)) {
+  const blockLibs = blockLibraryCount(body.providers);
+  if (!secs.length && !blockLibs && !(isRotation && itemSecs.length)) {
     throw new Error('at least one library section required');
   }
   return withLock(async () => {
@@ -602,7 +648,14 @@ export async function createSet(body = {}) {
       const bsa = normalizeBatchStop(body.batch_stops_at);
       if (bsa) curated.batch_stops_at = bsa;
     }
-    const node = doc.createNode(isRotation ? rotationCreateObj(id, body) : curated);
+    const obj = isRotation ? rotationCreateObj(id, body) : curated;
+    // Provider blocks, on BOTH sources — a reading queue and a reading channel are equally
+    // plausible, and a set created with only a non-Plex block would otherwise be written
+    // with no source at all and silently play nothing.
+    const created = validateBlocks(body.providers);
+    if (!created.ok) throw new Error(created.errors.join('; '));
+    if (created.blocks.length) obj.providers = writableBlocks(created.blocks);
+    const node = doc.createNode(obj);
     // Curated shelves land after the last curated queue, before the rotation block; new
     // rotation channels append at the end (they live after the queues on the shelf).
     let at = seq.items.length;
@@ -694,15 +747,7 @@ export async function updateSet(id, patch) {
         const { ok, errors, blocks } = validateBlocks(v);
         if (!ok) throw new Error(errors.join('; '));
         if (!blocks.length) { node.delete('providers'); continue; }
-        // Store only the keys the user actually set — `implicit` is a read-time marker and
-        // must never reach disk, or a re-read would treat a real block as synthesized.
-        const clean = blocks.map((b) => ({
-          provider: b.provider,
-          ...(b.profile ? { profile: b.profile } : {}),
-          ...(b.libraries.length ? { libraries: b.libraries } : {}),
-          ...(b.batch != null ? { batch: b.batch } : {}),
-        }));
-        node.set('providers', doc.createNode(clean));
+        node.set('providers', doc.createNode(writableBlocks(blocks)));
         continue;
       }
       if (k === 'members') {
@@ -766,9 +811,23 @@ export async function updateSet(id, patch) {
           const other = otherKey in patch
             ? toInts(patch[otherKey])
             : toInts(node.get(otherKey)?.toJSON?.());
-          if (!v.length && !other.length) throw new Error('at least one library section required');
+          const rotBlocks = 'providers' in patch
+            ? patch.providers
+            : node.get('providers')?.toJSON?.();
+          if (!v.length && !other.length && !blockLibraryCount(rotBlocks)) {
+            throw new Error('at least one library section required');
+          }
         } else if (k === 'sections' && !v.length) {
-          throw new Error('at least one library section required');
+          // A curated queue needs a source, but `sections` is Plex's and is legitimately
+          // EMPTY on a Kavita-only queue — its libraries live in the provider blocks. Count
+          // those before rejecting, or saving a reading queue fails with a Plex-shaped error
+          // about a field it does not use.
+          const effBlocks = 'providers' in patch
+            ? patch.providers
+            : node.get('providers')?.toJSON?.();
+          if (!blockLibraryCount(effBlocks)) {
+            throw new Error('at least one library section required');
+          }
         }
       }
       if (k === 'blocklist' || k === 'movie_excludes') v = (Array.isArray(v) ? v : []).map(String);
