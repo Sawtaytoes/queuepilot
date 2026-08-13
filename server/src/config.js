@@ -1,4 +1,4 @@
-// Runtime config for the plex-channels-web queue editor. Mirrors the Python
+// Runtime config for the queuepilot-web queue editor. Mirrors the Python
 // queue_builder/config.py env names so ONE TrueNAS app env feeds both processes.
 import path from 'node:path';
 import { hostval } from './hostConfig.js';

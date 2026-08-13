@@ -1,4 +1,4 @@
-# plex-channels curated queues -- Bob's per-audience wishlists (top = plays next).
+# queuepilot curated queues -- Bob's per-audience wishlists (top = plays next).
 #
 # Edit by hand here, over SMB (\\nas.example.com\App-Configs\plex-channels\queues.yaml),
 # or in the web UI (plex-channels.example.com). Order = play order, TOP plays next. A MOVIE

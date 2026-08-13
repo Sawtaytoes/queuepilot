@@ -24,7 +24,7 @@ import type { Plugin } from "vite"
  */
 const preloadBodyFont = (): Plugin => ({
   enforce: "post",
-  name: "plex-channels:preload-body-font",
+  name: "queuepilot:preload-body-font",
   transformIndexHtml: {
     handler: (_html, ctx) => {
       const file = Object.keys(ctx.bundle ?? {}).find(

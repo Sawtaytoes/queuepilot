@@ -1,4 +1,4 @@
-# plex-channels CI — GitHub Actions (github.com), ported 2026-08-02 from the
+# queuepilot CI — GitHub Actions (github.com), ported 2026-08-02 from the
 # retired Forgejo workflow `.gitea/workflows/ci.yml` when the repo moved to public
 # GitHub. Steps are a faithful 1:1 translation; only the runner home changed.
 #
@@ -88,6 +88,12 @@ jobs:
           node e2e/fsm-wake-and-skip-test.mjs
           node e2e/session-profile-gate-test.mjs
           node e2e/profile-gate-test.mjs
+
+      # The plex-channels -> queuepilot topic bridge. Every way this can break is silent —
+      # a card publishes where nothing listens and the broker cheerfully accepts it — so the
+      # prefix mapping is pinned in both directions, bridge on and bridge off.
+      - name: MQTT rename bridge (offline)
+        run: node e2e/mqtt-legacy-bridge-test.mjs
 
       # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
       # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against

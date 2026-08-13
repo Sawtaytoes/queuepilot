@@ -1,4 +1,4 @@
-# plex-channels curated queues — RICH HARNESS FIXTURE (offline screenshot iteration).
+# queuepilot curated queues — RICH HARNESS FIXTURE (offline screenshot iteration).
 #
 # Used by e2e/dev.sh (QUEUES_PATH points at a /tmp copy). Titles/collection names are REAL
 # entries on the live Plex server so they resolve (posters, counts, collection expansion).

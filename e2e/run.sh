@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the plex-channels-web E2E suites against a LOCAL server + temp data copies.
+# Run the queuepilot-web E2E suites against a LOCAL server + temp data copies.
 # Needs: the root agentic .env (PLEX token), mux-magic's node_modules (playwright),
 # and PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers (agent-sandbox-base).
 # live-smoke.mjs is separate: it drives https://plex-channels.example.com read-only.

@@ -143,7 +143,7 @@ if (startFakeMqtt) {
   // pointed at a dead host, so withContext falls back to this raw payload (no resolve needed).
   const RETAINED = { state: 'playing', ratingKey: 424242, title: 'Retained Snapshot Movie', device: 'Family Room SHIELD' };
   await new Promise((resolve) => broker.client.publish(
-    'plex-channels/now-playing', JSON.stringify(RETAINED), { qos: 1, retain: true }, resolve,
+    'queuepilot/now-playing', JSON.stringify(RETAINED), { qos: 1, retain: true }, resolve,
   ));
 
   const env = {

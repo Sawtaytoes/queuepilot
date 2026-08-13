@@ -13,15 +13,22 @@ import {
   T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_STATE,
   T_DEVICES_BASE, T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS, SHIELD_CLIENT_NAME, PLAYBACK_MODE,
+  MQTT_LEGACY_PREFIX, legacyTopic, bothTopics, canonicalTopic,
 } from './env.js';
 
 let client = null;
 let announceTimer = null;
 
+// Publishes to the canonical topic and, while the rename bridge is on, to its old-prefix
+// twin. Retained topics matter here: HA consumers still on `plex-channels/…` read the legacy
+// copy as a real retained message, so they never see a gap during the cutover.
 function pub(topic, payload, opts = {}) {
   if (!client?.connected) return;
   const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  client.publish(topic, body, { qos: opts.qos ?? 1, retain: Boolean(opts.retain) });
+  const settings = { qos: opts.qos ?? 1, retain: Boolean(opts.retain) };
+  client.publish(topic, body, settings);
+  const alias = legacyTopic(topic);
+  if (alias) client.publish(alias, body, settings);
 }
 
 function publishState(extra = {}) {
@@ -60,7 +67,11 @@ async function handlePreview(payload) {
   const setName = String(payload.set || '');
   const reply = String(payload.reply || '');
   const profile = String(payload.profile || '') || '';
-  if (!reply.startsWith(T_RESP_PREVIEW_BASE)) {
+  // The reply topic is attacker-controlled input, so it stays confined to the preview base.
+  // During the rename cutover a requester may legitimately still be on the old prefix, so
+  // both bases are allowed — and the answer goes back on the base the caller actually asked
+  // for, not the canonical one, or a legacy requester would never hear it.
+  if (!bothTopics(T_RESP_PREVIEW_BASE).some((base) => reply.startsWith(base))) {
     console.log(`[mqttd] refused preview reply ${reply}`);
     return;
   }
@@ -113,9 +124,9 @@ function publishDiscovery() {
     json_attributes_topic: T_STATE,
     icon: 'mdi:plex',
     device: {
-      identifiers: ['plex_channels'],
-      name: 'Plex Channels',
-      manufacturer: 'plex-channels',
+      identifiers: ['queuepilot'],
+      name: 'Queuepilot',
+      manufacturer: 'queuepilot',
       model: 'Kids NFC / UC3 Plex helper',
     },
   };
@@ -135,11 +146,15 @@ export function start() {
     username: MQTT_USER,
     password: MQTT_PASS,
     reconnectPeriod: 5000,
-    clientId: `plex-channels-node-${randomUUID().slice(0, 8)}`,
+    clientId: `queuepilot-node-${randomUUID().slice(0, 8)}`,
   });
   client.on('connect', () => {
     console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
-    client.subscribe([T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW]);
+    const commands = [T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW];
+    client.subscribe(commands.flatMap(bothTopics));
+    if (MQTT_LEGACY_PREFIX) {
+      console.log(`[mqttd] rename bridge ON — also on ${MQTT_LEGACY_PREFIX}/… (unset MQTT_LEGACY_PREFIX to finish the cutover)`);
+    }
     announceDevices();
     publishDiscovery();
     publishState({ boot: true });
@@ -147,9 +162,12 @@ export function start() {
     announceTimer = setInterval(announceDevices, Math.max(30, DEVICE_ANNOUNCE_SECONDS) * 1000);
   });
   client.on('error', (e) => console.log(`[mqttd] ${e.message}`));
-  client.on('message', (topic, buf) => {
+  client.on('message', (rawTopic, buf) => {
     let payload = {};
     try { payload = JSON.parse(buf.toString() || '{}'); } catch { payload = {}; }
+    // Fold the old prefix onto the new one so each command is matched once, whichever
+    // prefix the sender used.
+    const topic = canonicalTopic(rawTopic);
     if (topic === T_CMD_START) {
       // fire-and-forget async
       handleStart(payload);

@@ -1,4 +1,4 @@
-# plex-channels set registry — RICH HARNESS FIXTURE (offline screenshot iteration).
+# queuepilot set registry — RICH HARNESS FIXTURE (offline screenshot iteration).
 #
 # Used by e2e/dev.sh (SETS_PATH points at a /tmp copy of this). Real section ids from the
 # live Plex server (so the web UI's library pickers + posters resolve): Movies=1,

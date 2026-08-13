@@ -13,7 +13,7 @@ The profile-gated cards ("open Plex but nothing plays") fix set:
 - Join the ADB profile switch before `playMedia` so **play is the last action** (no more
   "started then backed out").
 - Detail: `playback-state-machine-design.md`; private incident:
-  `agentic/plex-channels-private/docs/2026-08-06-sanitized-placeholder-ips-broke-profile-gated-cards.md`.
+  `agentic/queuepilot-private/docs/2026-08-06-sanitized-placeholder-ips-broke-profile-gated-cards.md`.
 
 ## B. Planned — queue lifecycle + playback FSM (PR #7, `feat/queue-lifecycle-fsm`)
 Detail: `queue-and-playback-roadmap.md` + `playback-state-machine-design.md`.
