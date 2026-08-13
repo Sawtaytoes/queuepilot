@@ -22,6 +22,38 @@ import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 // a CDN — a 100-wide burst is a denial-of-service impression.
 const PROBE_CONCURRENCY = 8;
 
+/** One lineup item from a Kavita ChapterDto. `seriesId` is threaded in — Kavita leaves it null. */
+function chapterItem(ch, seriesId) {
+  return {
+    chapterId: ch.id,
+    seriesId,
+    title: ch.titleName || ch.title || ch.range || String(ch.number),
+    number: ch.number,
+    pages: ch.pages,
+    pagesRead: ch.pagesRead,
+  };
+}
+
+/**
+ * A series' unread chapters, in reading order.
+ *
+ * `series-detail` returns every chapter with its own `pagesRead`/`pages`, so the unread run
+ * is just a filter — and filtering rather than slicing from the continue point is what makes
+ * a gap (an unread chapter behind a read one) lead, exactly as `continue-point` would.
+ *
+ * Sorted by `minNumber` rather than trusted as-returned: the array happened to be ordered on
+ * the instance this was verified against, but nothing documents that guarantee.
+ */
+function orderedUnread(detail) {
+  const all = [
+    ...(detail?.chapters || []),
+    ...(detail?.specials || []),
+  ];
+  return all
+    .filter((ch) => ch && (ch.pages ?? 0) > 0 && (ch.pagesRead ?? 0) < ch.pages)
+    .sort((a, b) => (a.minNumber ?? 0) - (b.minNumber ?? 0));
+}
+
 /** Map with bounded concurrency, preserving input order. */
 async function mapLimit(items, limit, fn) {
   const out = new Array(items.length);
@@ -123,23 +155,28 @@ export function kavitaProvider({ def, apiKey, client = null } = {}) {
       // bucket at all, which is what keeps a finished series out of the rotation without a
       // separate "done" store — the read state in Kavita IS the done state.
       const probed = await mapLimit(allSeries, PROBE_CONCURRENCY, async (s) => {
-        const ch = await c.continuePoint(s.id);
-        if (!ch) return null;
-        return {
+        const bucket = {
           key: `series:${s.id}`,
           title: s.name,
           seriesId: s.id,
           libraryId: s.libraryId ?? null,
           format: s.format ?? null,
-          items: [{
-            chapterId: ch.id,
-            seriesId: s.id,
-            title: ch.titleName || ch.title || ch.range || String(ch.number),
-            number: ch.number,
-            pages: ch.pages,
-            pagesRead: ch.pagesRead,
-          }],
         };
+
+        // ONE chapter wanted: continue-point answers it in a single call.
+        if (perSeries <= 1) {
+          const ch = await c.continuePoint(s.id);
+          if (!ch) return null;
+          return { ...bucket, items: [chapterItem(ch, s.id)] };
+        }
+
+        // MORE than one wanted — "read 3 chapters, then switch series", the opening ask in
+        // the feasibility record. continue-point only ever returns the single next chapter,
+        // so a batch needs the ordered run and its read state.
+        const detail = await c.seriesDetail(s.id);
+        const unread = orderedUnread(detail);
+        if (!unread.length) return null;
+        return { ...bucket, items: unread.slice(0, perSeries).map((ch) => chapterItem(ch, s.id)) };
       });
       const buckets = probed.filter(Boolean);
 

@@ -210,6 +210,15 @@ export function SetModal() {
     return profileOptions
   }
 
+  // Does this queue draw from Plex at all? Drives the Plex-only knobs below. Keyed on
+  // `delivery` rather than the provider id, so a future push backend behaves correctly
+  // without another edit here.
+  const hasPlexSource = blocks.some(
+    (b) =>
+      providers.find((p) => p.id === b.provider)
+        ?.delivery !== "pull",
+  )
+
   const onSubmit = async () => {
     const name = label.trim()
 
@@ -518,44 +527,57 @@ export function SetModal() {
           queues never mark done, so this only applies to
           ordinary consuming queues.
         </p>
-        <label className="field">
-          Stop a multi-episode batch at
-          {/* Keyed on modal-open identity, same reason as the selects above. */}
-          <SelectListbox
-            className="fieldselect"
-            id="set-batch-stops-at"
-            key={modalKey}
-            label="Stop a multi-episode batch at"
-            onChange={setBatchStopsAt}
-            options={[
-              {
-                label:
-                  "Nothing — fill the batch across anything",
-                value: "none",
-              },
-              {
-                label:
-                  "Season boundary — never cross a finale",
-                value: "season",
-              },
-              {
-                label:
-                  "Show boundary — stay inside one show",
-                value: "member",
-              },
-            ]}
-            value={batchStopsAt}
-          />
-        </label>
-        <p className="subhint" id="set-batch-stops-hint">
-          Only matters for entries set to play more than one
-          episode per visit. “Season boundary” ends the
-          batch at a season finale instead of rolling into
-          the next season (or, inside a collection, the next
-          show) — so a finale isn’t followed by someone
-          else’s episode 1. A single entry can override
-          this.
-        </p>
+        {/* `batch_stops_at` is PLEX-ONLY: it is read by the curated resolver
+            (engine/resolve.js) and by nothing else, so on a queue with no Plex source it is
+            a control that does nothing — and its wording ("episode", "season finale",
+            "show") is Plex vocabulary that reads as nonsense next to chapters and series.
+            Hidden rather than reworded, per the owner's call 2026-08-13. Kavita's own
+            chapters-per-series batching lives on the source block as `batch`. */}
+        {hasPlexSource ? (
+          <>
+            <label className="field">
+              Stop a multi-episode batch at
+              {/* Keyed on modal-open identity, same reason as the selects above. */}
+              <SelectListbox
+                className="fieldselect"
+                id="set-batch-stops-at"
+                key={modalKey}
+                label="Stop a multi-episode batch at"
+                onChange={setBatchStopsAt}
+                options={[
+                  {
+                    label:
+                      "Nothing — fill the batch across anything",
+                    value: "none",
+                  },
+                  {
+                    label:
+                      "Season boundary — never cross a finale",
+                    value: "season",
+                  },
+                  {
+                    label:
+                      "Show boundary — stay inside one show",
+                    value: "member",
+                  },
+                ]}
+                value={batchStopsAt}
+              />
+            </label>
+            <p
+              className="subhint"
+              id="set-batch-stops-hint"
+            >
+              Only matters for entries set to play more than
+              one episode per visit. “Season boundary” ends
+              the batch at a season finale instead of
+              rolling into the next season (or, inside a
+              collection, the next show) — so a finale isn’t
+              followed by someone else’s episode 1. A single
+              entry can override this.
+            </p>
+          </>
+        ) : null}
       </fieldset>
       <p className="idnote" id="set-idnote">
         {editing

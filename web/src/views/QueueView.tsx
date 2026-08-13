@@ -1,6 +1,10 @@
 import { Badge, EmptyState } from "@charcuterie/ui"
 import { useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
+import {
+  isPullSet,
+  OpenQueueButton,
+} from "../components/OpenQueueButton"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { SelectListbox } from "../components/SelectListbox"
@@ -87,13 +91,18 @@ export function QueueView({
   isHidden: boolean
   setId: string | null
 }) {
-  const { data, now } = useStore()
+  const { data, now, reg } = useStore()
   const selected = useSelected()
   const gridRef = useRef<HTMLUListElement>(null)
   const lastPaintedSet = useRef<string | null>(null)
   const [addPosition, setAddPosition] = useState("top")
 
   const q = setId ? data?.sets[setId] : undefined
+  // The REGISTRY entry (not the queue contents) — it carries `delivery`, which decides
+  // whether this queue is pushed at a device or opened by a link.
+  const regSet = setId
+    ? reg?.sets.find((x) => x.id === setId)
+    : undefined
   const isChannel = q?.kind === "anime"
 
   useGridDrag(gridRef, setId, Boolean(isChannel))
@@ -420,21 +429,26 @@ export function QueueView({
               ⚙ Configure
             </button>
           </Tip>
-          <button
-            className="playbtn"
-            id="qplay"
-            onClick={(e) =>
-              setId &&
-              openPlayMenu({
-                anchor:
-                  e.currentTarget.getBoundingClientRect(),
-                setId,
-              })
-            }
-            type="button"
-          >
-            ▶ Play on ▾
-          </button>
+          {isPullSet(regSet) ? (
+            // No device to cast to — hand back the launcher URL instead.
+            <OpenQueueButton set={regSet!} />
+          ) : (
+            <button
+              className="playbtn"
+              id="qplay"
+              onClick={(e) =>
+                setId &&
+                openPlayMenu({
+                  anchor:
+                    e.currentTarget.getBoundingClientRect(),
+                  setId,
+                })
+              }
+              type="button"
+            >
+              ▶ Play on ▾
+            </button>
+          )}
         </SearchDropdown>
       </div>
 

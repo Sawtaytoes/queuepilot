@@ -193,6 +193,12 @@ export type RegistrySet = {
    */
   providers: ProviderBlockValue[]
   /**
+   * How a queue on this set STARTS, derived server-side from its blocks. Queues are
+   * single-provider, so one value is the whole truth. `push` = sent at a device (Plex);
+   * `pull` = the app hands back a URL you open (Kavita, which has no cast at all).
+   */
+  delivery: "push" | "pull"
+  /**
    * Curated queues only. Non-consuming / playlist mode: the engine never marks entries
    * done, so the lineup stays re-showable. `reel: true` implies this (normalize reports
    * both). Absent/false on rotation channels.

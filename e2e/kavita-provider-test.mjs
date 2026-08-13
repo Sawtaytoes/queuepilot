@@ -103,6 +103,13 @@ function stubClient({ existingLists = [] } = {}) {
       // Mirror the real client's contract: it threads seriesId back in.
       return { ...ch, seriesId: ch.seriesId ?? Number(seriesId) };
     },
+    // This library has exactly ONE unread chapter per series, so a batch larger than one
+    // must cap here rather than invent items.
+    async seriesDetail(seriesId) {
+      CALLS.push(['seriesDetail', String(seriesId)]);
+      const ch = CONTINUE[seriesId];
+      return { chapters: ch ? [{ ...ch, minNumber: Number(ch.number) || 1 }] : [], specials: [], volumes: [] };
+    },
     async readingLists() { CALLS.push(['readingLists', 'POST']); return lists; },
     async createList(title) {
       CALLS.push(['createList', title]);
@@ -150,12 +157,86 @@ await ok('continue-point returning a NULL seriesId is repaired, not propagated',
   }
 });
 
-await ok('the batch knob queues N chapters per series before switching', async () => {
+await ok('a batch of 1 still caps at what exists (no invented items)', async () => {
   const p = kavitaProvider({ def: DEF, client: stubClient() });
-  // The stub only exposes one unread chapter per series, so a batch of 3 must not invent
-  // items — it caps at what exists.
   const { play } = await p.buckets({ libraries: ['5'], batch: 3 });
+  // This stub exposes ONE unread chapter per series, so 3 must not become 3.
   assert.equal(play.length, 2);
+});
+
+// --------------------------------------------------------------------------- //
+// The batch knob, against a series that actually HAS a run of chapters.
+//
+// The original test for this asserted only the cap-at-what-exists case above, against a stub
+// with one chapter per series — so it passed while `buckets` was structurally incapable of
+// ever returning more than one chapter, and "read 3 chapters, then switch series" (the
+// opening ask in the feasibility record) did not work at all. A knob's test has to give it
+// something to actually do.
+// --------------------------------------------------------------------------- //
+function runStub() {
+  const many = [
+    { id: 1, name: 'Series A', libraryId: 9, format: 1 },
+    { id: 2, name: 'Series B', libraryId: 9, format: 1 },
+  ];
+  const chapters = (sid) => Array.from({ length: 6 }, (_, i) => ({
+    id: sid * 1000 + i, number: String(i + 1), minNumber: i + 1,
+    // First two of each series are fully read, so the unread run starts at chapter 3.
+    pages: 20, pagesRead: i < 2 ? 20 : 0,
+  }));
+  const calls = [];
+  return {
+    ...stubClient(),
+    _calls: calls,
+    async seriesForLibrary() { return many; },
+    async continuePoint(id) {
+      calls.push(['continuePoint', Number(id)]);
+      return { id: Number(id) * 1000 + 2, number: '3', pages: 20, pagesRead: 0, seriesId: Number(id) };
+    },
+    async seriesDetail(id) {
+      calls.push(['seriesDetail', Number(id)]);
+      return { chapters: chapters(Number(id)), specials: [], volumes: [] };
+    },
+  };
+}
+
+await ok('batch: 3 queues THREE chapters of A, then three of B', async () => {
+  const c = runStub();
+  const p = kavitaProvider({ def: DEF, client: c });
+  const { play } = await p.buckets({ libraries: ['9'], batch: 3, limit: 12 });
+  assert.equal(play.length, 6, `got ${play.length} items`);
+  assert.deepEqual(play.map((i) => i.seriesId), [1, 1, 1, 2, 2, 2]);
+  // …and they are consecutive UNREAD chapters, starting after the two already read.
+  assert.deepEqual(play.slice(0, 3).map((i) => i.number), ['3', '4', '5']);
+});
+
+await ok('already-read chapters are skipped, not queued', async () => {
+  const c = runStub();
+  const p = kavitaProvider({ def: DEF, client: c });
+  const { play } = await p.buckets({ libraries: ['9'], batch: 6, limit: 12 });
+  for (const it of play) {
+    assert.notEqual(it.number, '1', 'a fully-read chapter was queued');
+    assert.notEqual(it.number, '2', 'a fully-read chapter was queued');
+  }
+});
+
+await ok('batch: 1 uses continue-point, NOT the heavier series-detail call', async () => {
+  // One chapter is the common case and continue-point answers it in a single call; paying
+  // for the full chapter list per series would be a needless fan-out on every launch.
+  const c = runStub();
+  const p = kavitaProvider({ def: DEF, client: c });
+  await p.buckets({ libraries: ['9'], batch: 1, limit: 12 });
+  assert.ok(c._calls.some((x) => x[0] === 'continuePoint'), 'continue-point was not used');
+  assert.ok(!c._calls.some((x) => x[0] === 'seriesDetail'), 'series-detail was called for a batch of 1');
+});
+
+await ok('a fully-read series yields no bucket even with a batch', async () => {
+  const c = {
+    ...runStub(),
+    async seriesDetail() { return { chapters: [{ id: 1, number: '1', minNumber: 1, pages: 20, pagesRead: 20 }] }; },
+  };
+  const p = kavitaProvider({ def: DEF, client: c });
+  const { play } = await p.buckets({ libraries: ['9'], batch: 3, limit: 12 });
+  assert.equal(play.length, 0);
 });
 
 await ok('no libraries selected yields nothing rather than the whole server', async () => {

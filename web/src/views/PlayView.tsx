@@ -1,4 +1,8 @@
 import { type ReactNode, useState } from "react"
+import {
+  isPullSet,
+  OpenQueueButton,
+} from "../components/OpenQueueButton"
 
 import { SelectListbox } from "../components/SelectListbox"
 import type { RegistrySet } from "../lib/types"
@@ -47,12 +51,15 @@ function PlayRow({
   meta,
   onOpen,
   onPlay,
+  set,
   tier,
 }: {
   label: string
   meta: string
   onOpen: () => void
   onPlay: (anchor: DOMRect) => void
+  /** The registry entry, for `delivery`. Absent = push (every pre-provider caller). */
+  set?: Pick<RegistrySet, "id" | "delivery">
   tier?: ReactNode
 }) {
   return (
@@ -68,15 +75,20 @@ function PlayRow({
         <span className="rowmeta">{meta}</span>
       </div>
       {tier}
-      <button
-        className="playbtn"
-        onClick={(e) =>
-          onPlay(e.currentTarget.getBoundingClientRect())
-        }
-        type="button"
-      >
-        ▶ Play on ▾
-      </button>
+      {isPullSet(set) ? (
+        // Nothing to cast to — the launcher URL is the whole affordance.
+        <OpenQueueButton set={set!} />
+      ) : (
+        <button
+          className="playbtn"
+          onClick={(e) =>
+            onPlay(e.currentTarget.getBoundingClientRect())
+          }
+          type="button"
+        >
+          ▶ Play on ▾
+        </button>
+      )}
     </li>
   )
 }
@@ -119,6 +131,7 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
   return (
     <PlayRow
       label={channel.label}
+      set={channel}
       meta={
         isRewatch
           ? "weighted rewatch"
@@ -205,6 +218,7 @@ export function PlayView({
                   <PlayRow
                     key={id}
                     label={s.label}
+                    set={reg?.sets.find((x) => x.id === id)}
                     meta={`${s.items.length} shows · random rotation`}
                     onOpen={() => navigate(`#/q/${id}`)}
                     onPlay={(anchor) =>

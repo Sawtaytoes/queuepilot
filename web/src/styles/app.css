@@ -1693,6 +1693,17 @@ body.queue-view #tools {
 #setmodal .fieldseg {
   margin-left: 10px;
 }
+/* The pull-queue start affordance. An <a> so it can be middle-clicked, bookmarked or put on
+   a home screen — the launcher is one stable URL per queue and that is the point — but it
+   has to sit in the same row as the .playbtn it replaces, so it borrows those metrics. */
+.openbtn,
+a.playbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  white-space: nowrap;
+}
 #setmodal .libs label {
   display: flex;
   align-items: baseline;
