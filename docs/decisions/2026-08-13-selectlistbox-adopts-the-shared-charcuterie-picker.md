@@ -74,6 +74,7 @@ against the published `2.15.0` and driven through the actual `pick.mjs` helpers 
 re-click `closeVia` path (which must close, not close-then-reopen). All twelve assertions
 passed, plus `data-testid` and the accessible name.
 
-**Open follow-up:** promote that harness into a permanent browser-but-no-Plex CI step,
-beside the narrow-view horizontal-scroll gate — the step that exists for exactly this reason.
-Not done here to keep this PR to the migration.
+**Follow-up — done, same day.** That harness is now permanent: `web/e2e-harness/` plus
+`e2e/pick-contract-test.mjs`, run by the **`pick.mjs` picker contract (browser, no Plex
+needed)** step beside the narrow-view horizontal-scroll gate. Eleven assertions, on every
+PR. (Status update only — the decision above is unchanged.)
