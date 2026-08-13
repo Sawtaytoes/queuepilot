@@ -438,6 +438,61 @@ await ok('progressState reports completion for the whole queue in ONE call', asy
   assert.equal(CALLS.filter((x) => x[0] === 'readingListItems').length, 1);
 });
 
+await ok('the POOL and a LAUNCH agree on which series are eligible', async () => {
+  // These are two different Kavita calls — the pool reads series-detail (it needs a COUNT,
+  // and the series list carries no chapter count at all), a launch reads continue-point
+  // (cheaper, and it only needs the next one). They disagreed live, 97 vs 103, because
+  // continue-point wraps on a finished series. A preview that lists more series than a
+  // launch will draw from is a preview that lies, so this pins them together.
+  const series = [
+    { id: 20, name: 'Finished', libraryId: 9, format: 1 },
+    { id: 21, name: 'Partly read', libraryId: 9, format: 1 },
+    { id: 22, name: 'Untouched', libraryId: 9, format: 1 },
+  ];
+  const detail = {
+    20: { unreadCount: 0, chapters: [{ id: 2001, number: '1', minNumber: 1, pages: 10, pagesRead: 10 }] },
+    21: { unreadCount: 2, chapters: [
+      { id: 2101, number: '1', minNumber: 1, pages: 10, pagesRead: 10 },
+      { id: 2102, number: '2', minNumber: 2, pages: 10, pagesRead: 0 },
+      { id: 2103, number: '3', minNumber: 3, pages: 10, pagesRead: 0 },
+    ] },
+    22: { unreadCount: 1, chapters: [{ id: 2201, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }] },
+  };
+  const c = {
+    ...stubClient(),
+    async seriesForLibrary() { return series; },
+    async seriesDetail(id) { return detail[Number(id)]; },
+    async continuePoint(id) {
+      // The wrap: a finished series still answers, with an already-read chapter.
+      const chs = detail[Number(id)].chapters;
+      const next = chs.find((x) => x.pagesRead < x.pages) || chs[0];
+      return { ...next, seriesId: Number(id) };
+    },
+  };
+  const p = kavitaProvider({ def: DEF, client: c });
+  const { buckets } = await p.buckets({ libraries: ['9'], batch: 1, limit: 99 });
+  const pool = await p.pool({ libraries: ['9'] });
+  assert.deepEqual(
+    buckets.map((b) => b.seriesId).sort(),
+    pool.map((x) => Number(x.ratingKey)).sort(),
+    'the pool and a launch disagree about which series are eligible',
+  );
+  assert.deepEqual(pool.map((x) => x.show).sort(), ['Partly read', 'Untouched']);
+});
+
+await ok('the pool reports CHAPTERS left, not series or pages', async () => {
+  const c = {
+    ...stubClient(),
+    async seriesForLibrary() { return [{ id: 30, name: 'S', libraryId: 9, format: 1 }]; },
+    async seriesDetail() {
+      return { unreadCount: 38, chapters: [{ id: 3001, number: '49', minNumber: 49, pages: 10, pagesRead: 0 }] };
+    },
+  };
+  const p = kavitaProvider({ def: DEF, client: c });
+  const pool = await p.pool({ libraries: ['9'] });
+  assert.equal(pool[0].unwatched, 38);
+});
+
 // --------------------------------------------------------------------------- //
 // The launcher
 // --------------------------------------------------------------------------- //
