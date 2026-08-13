@@ -81,9 +81,12 @@ Two traps found during execution that this checklist did not predict:
   prevent. It would have stayed on the old prefix while `mqttd` moved, taking the web UI's
   device dropdown and state feed quiet with nothing logged. Now imports from `env.js`.
 - **The GHCR package does not follow the repo rename.** Renaming the GitHub repo leaves the
-  `plex-channels` *package* in place, and the first push to `…/queuepilot` creates a **new
-  package that defaults to private** — while the old one is public. The TrueNAS app cannot pull
-  a private package, so the new one must be flipped to public before the app is repointed.
+  `plex-channels` *package* in place; the first push to `…/queuepilot` creates a **separate new
+  package**, and the old one keeps existing with its old tags. Worth knowing, but it did **not**
+  need intervention here: the new package came out publicly pullable, because a package pushed
+  by `GITHUB_TOKEN` from a public repo inherits that repo's visibility. Verified anonymously
+  before repointing the app — `ghcr.io/v2/sawtaytoes/queuepilot/manifests/latest` returned 200
+  with an anonymous registry token. Check this rather than assuming it, in either direction.
 
 ### Load-bearing at runtime (get these wrong and the cards stop working)
 
