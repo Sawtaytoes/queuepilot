@@ -124,5 +124,18 @@ export function validateBlocks(raw) {
       errors.push(`block #${i + 1}: unknown provider '${b.provider}'`);
     }
   });
+  // A queue draws from exactly ONE provider (decision
+  // 2026-08-13-a-queue-draws-from-exactly-one-provider). Rejected on the way IN rather than
+  // only at launch, because a stored mixed queue is not merely unplayable — it reports
+  // `delivery: push` and then behaves as Plex everywhere, silently ignoring the other
+  // provider's libraries. That is how the live "Manga & Webtoons" channel came to hold a
+  // Kavita block that nothing ever read. Failing at save makes it visible immediately.
+  const ids = [...new Set(blocks.map((b) => b.provider))];
+  if (ids.length > 1) {
+    errors.push(
+      `a queue draws from one app, but these sources name ${ids.length} (${ids.join(', ')}) — `
+      + 'split them into one queue per app',
+    );
+  }
   return { ok: errors.length === 0, errors, blocks };
 }
