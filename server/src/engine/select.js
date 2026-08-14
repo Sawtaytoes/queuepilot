@@ -10,6 +10,7 @@
 // work. Pure helpers stay sync.
 //
 import { setSections } from './routing.js';
+import { toWeight } from './weight.js';
 import { WATCH_COUNT_ACCOUNTS } from '../env.js';
 
 // Plex omits viewCount at 0, so a missing/non-numeric value reads as 0 = unwatched (never as
@@ -253,6 +254,9 @@ export async function unwatchedBuckets(client, cfg, binding) {
   const watched = await watchedForSet(client, cfg, binding);
   const blocked = await expandedBlocklist(client, cfg, tok);
   const starts = cfg.starts || {};
+  // Per-show weights for the rule pool, keyed the same way `starts` is (`section-<id>` for a
+  // whole item bucket). Absent = 1 = one slot per round, i.e. today's behaviour.
+  const weights = cfg.weights || {};
 
   const buckets = [];
   for (const show of await episodicShows(client, cfg.episodic_sections, allowed, blocked, tok)) {
@@ -260,14 +264,27 @@ export async function unwatchedBuckets(client, cfg, binding) {
     const start = starts[String(show.ratingKey)];
     const eps = allEps.filter((e) => !watched.has(e.ratingKey) && atOrAfterStart(e, start));
     if (eps.length) {
-      buckets.push({ show: show.title, ratingKey: show.ratingKey, episodes: eps, multi_season: multiSeason(allEps) });
+      buckets.push({
+        show: show.title,
+        ratingKey: show.ratingKey,
+        episodes: eps,
+        multi_season: multiSeason(allEps),
+        weight: toWeight(weights[String(show.ratingKey)]),
+      });
     }
   }
   for (const sec of cfg.item_sections || []) {
     const items = (await sectionItems(client, [sec], allowed, blocked, tok))
       .filter((it) => !watched.has(it.ratingKey))
       .map((it) => ({ ratingKey: it.ratingKey, title: it.title, show: 'Shorts', season: null, episode: null }));
-    if (items.length) buckets.push({ show: 'Shorts', ratingKey: `section-${sec}`, episodes: items });
+    if (items.length) {
+      buckets.push({
+        show: 'Shorts',
+        ratingKey: `section-${sec}`,
+        episodes: items,
+        weight: toWeight(weights[`section-${sec}`]),
+      });
+    }
   }
   return buckets;
 }

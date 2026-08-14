@@ -5,6 +5,7 @@ import { liveClient } from './plex-live.js';
 import * as routing from './routing.js';
 import * as rotation from './rotation.js';
 import * as select from './select.js';
+import { toWeight } from './weight.js';
 
 // Format channel_buckets into the MQTT/API preview bucket shape (service.do_preview).
 export function formatBuckets(buckets) {
@@ -15,6 +16,9 @@ export function formatBuckets(buckets) {
       show: b.show,
       ratingKey: b.ratingKey,
       unwatched: eps.length,
+      // Slots per round when the channel is randomized. Always sent (1 = normal) so the pool
+      // tile can render its control without a second lookup into the set registry.
+      weight: toWeight(b.weight),
       next: eps.length
         ? {
             ratingKey: eps[0].ratingKey,

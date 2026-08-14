@@ -66,6 +66,12 @@ export type QueueItem = {
    * a collection). null = follow the set. Only meaningful when `episodes` > 1.
    */
   batch_stops_at?: BatchStop
+  /**
+   * How OFTEN this entry comes up when the set is randomized: slots per round, not odds.
+   * 1 (the default) is normal and wears no tag; 3 means it takes about three slots for every
+   * one a 1x entry takes, spread through the queue rather than back to back.
+   */
+  weight: number
   start: StartPoint | null
   done: boolean
   /**
@@ -104,6 +110,10 @@ export type ChannelMember = {
   childCount: number | null
   nextEp: NextEp | null
   start: StartPoint | null
+  /** Episodes queued per visit (1 = the channel default). */
+  episodes?: number
+  /** Slots per round when the channel is randomized (1 = normal). */
+  weight?: number
 }
 
 /** Anything the poster tile can render. */
@@ -177,6 +187,10 @@ export type RegistrySet = {
    * The Channels view seeds the "Start from…" picker from this and writes it back with a
    * whole-map `PATCH /api/sets/:id { starts }`. */
   starts?: Record<string, StartPoint>
+  /** Per-show WEIGHTS for the dynamic rule pool, keyed by show ratingKey (or `section-<id>`
+   * for a whole item bucket). Same whole-map `PATCH /api/sets/:id { weights }` shape as
+   * `starts`; a weight of 1 is never stored. */
+  weights?: Record<string, number>
   profiles?: Binding[]
   has_explicit_profiles?: boolean
   /** Which binding the Play/Channels dropdowns seed to (a binding's `plex_user`).
@@ -251,6 +265,13 @@ export type SearchHit = {
   sectionId: number
   childCount?: number | null
   hasThumb?: boolean
+  /** A MOVIE's own watch state (Plex omits `viewCount` at 0, so absent = unwatched). */
+  viewCount?: number
+  viewOffset?: number
+  /** A SHOW's aggregate progress — what makes "unwatched only" / "in progress" answerable
+   * for a series without a second request. */
+  leafCount?: number
+  viewedLeafCount?: number
 }
 
 export type Profile = {
@@ -293,6 +314,9 @@ export type PreviewBucket = {
   ratingKey: string
   show: string
   unwatched: number
+  /** Slots per round when this channel is randomized (1 = normal). Comes from the channel's
+   * `weights` map; the pool tile edits it back through that map. */
+  weight?: number
   next?: {
     ratingKey?: string
     season?: number | null

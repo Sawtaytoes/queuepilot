@@ -50,10 +50,18 @@ type Overlays = {
     presetKind?: string
   } | null
   dynModal: { setId: string | null } | null
+  /**
+   * The per-ENTRY settings panel (episodes / weight / batch stop / start). Holds the set and
+   * the entry KEY rather than the item itself, so the open panel re-reads the live entry out
+   * of the store — an SSE update or another device's edit lands in it instead of leaving a
+   * stale copy on screen.
+   */
+  entryEditor: { setId: string; key: string } | null
 }
 
 let overlays: Overlays = {
   dynModal: null,
+  entryEditor: null,
   playMenu: null,
   setModal: null,
   startModal: null,
@@ -116,3 +124,13 @@ export const openDynModal = (setId: string | null) =>
   set({ dynModal: { setId } })
 
 export const closeDynModal = () => set({ dynModal: null })
+
+// Opening the entry panel closes the tile menu that usually launched it, the same way
+// openStartModal does — two overlays over one tile is never intended.
+export const openEntryEditor = (
+  setId: string,
+  key: string,
+) => set({ entryEditor: { key, setId }, tileMenu: null })
+
+export const closeEntryEditor = () =>
+  set({ entryEditor: null })

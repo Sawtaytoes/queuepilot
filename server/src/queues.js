@@ -6,6 +6,8 @@
 import { promises as fs } from 'node:fs';
 import { parseDocument, YAMLSeq, Scalar } from 'yaml';
 import { QUEUES_PATH } from './config.js';
+import { QUEUE_SERIES_LENGTH } from './env.js';
+import { toWeight } from './engine/weight.js';
 
 const LOCK_DIR = QUEUES_PATH + '.lock';
 const LOCK_STALE_MS = 15000; // a holder older than this is presumed dead; steal the lock
@@ -501,12 +503,27 @@ export async function clearDone(setName, keepKeys) {
 // a mapping carrying its ratingKey/title identity + `episodes` (or drops the field / reverts
 // to a bare scalar when set back to 1). Entry identity (key) is unchanged.
 export async function setEpisodes(setName, key, episodes) {
-  const n = Math.max(1, Math.min(parseInt(episodes, 10) || 1, 20));
+  // Capped at the ENGINE's own hard cap rather than a second, smaller magic number: the editor
+  // offers a free-typed count, and a value this accepted but resolve.js then clamped would have
+  // the file disagreeing with what actually plays.
+  const n = Math.max(1, Math.min(parseInt(episodes, 10) || 1, QUEUE_SERIES_LENGTH));
   const ok = await rewriteEntry(setName, key, (e) => {
     if (n > 1) e.extras.episodes = n;
     else delete e.extras.episodes;
   });
   return ok ? { ok: true, episodes: n } : { ok: false };
+}
+
+// Set a queue entry's WEIGHT — how many slots it takes per round when the set is randomized
+// (see engine/weight.js). 1 is the default and DROPS the key, which is what keeps an untouched
+// queue's YAML free of `weight: 1` noise and lets the entry collapse back to a bare scalar.
+export async function setWeight(setName, key, weight) {
+  const n = toWeight(weight);
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (n > 1) e.extras.weight = n;
+    else delete e.extras.weight;
+  });
+  return ok ? { ok: true, weight: n } : { ok: false };
 }
 
 // Set (or clear) a series/collection entry's `batch_stops_at` override — WHERE this entry's

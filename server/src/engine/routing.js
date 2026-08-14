@@ -79,6 +79,11 @@ export function loadSets(path = SETS_PATH) {
         // start floors { ratingKey: {season, episode} } and the blocklist (ratingKeys or
         // "Collection: <name>" strings).
         starts: ent.starts && typeof ent.starts === 'object' ? ent.starts : {},
+        // Per-show WEIGHT for the dynamic rule pool: { ratingKey: n } (and `section-<id>` for a
+        // whole item bucket). The mirror of a curated entry's embedded `weight`, but for a
+        // rule-derived show that has no stored entry to hang one on — same shape as `starts`.
+        // rotation.js turns it into slots per round; absent/1 = the plain round-robin.
+        weights: ent.weights && typeof ent.weights === 'object' ? ent.weights : {},
         blocklist: (ent.blocklist || []).map(String),
         // Explicit curated members (v3 PR 3): raw queues.yaml-style entries (a bare ratingKey, a
         // "Collection: <name>" string, or a {ratingKey,title,episodes} mapping — describe() parses

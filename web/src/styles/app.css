@@ -1110,25 +1110,38 @@ body.sdrag .shelf:not(.dragging) {
   transition: transform 0.18s ease;
 }
 
+/* The bar is fixed to the bottom edge and overlaps the grid, so the view has to end above
+   it — otherwise the last row of tiles is unreachable while a selection is open. */
+.view.move-mode {
+  padding-bottom: 120px;
+}
+
 /* ---- selection action bar ---- */
+/* Flush to the bottom EDGE, full width, square corners — it grew from two controls to
+   seven (bulk episodes/weight/batch-stop/apply/reset on top of move/remove), which no
+   longer fits a centred pill on a laptop, and a bar that touches the edge has no bottom
+   corners to round. */
 #selbar {
   position: fixed;
-  left: 50%;
-  bottom: 18px;
-  transform: translateX(-50%);
+  left: 0;
+  right: 0;
+  bottom: 0;
   gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
   z-index: 20;
   background: var(--color-surface-overlay);
-  border: 1px solid var(--color-border-default);
-  border-radius: 12px;
-  padding: 10px 14px;
+  border: 0;
+  border-top: 1px solid var(--color-border-strong);
+  border-radius: 0;
+  padding: 10px 16px;
   box-shadow: var(--shadow-high);
 }
 #selbar:not([hidden]) {
   display: flex;
 } /* the [hidden] attr must win when set */
-#selbar label {
+#selbar label,
+#selbar .bulkfield {
   color: var(--color-content-muted);
   display: flex;
   gap: 6px;
@@ -1145,6 +1158,10 @@ body.sdrag .shelf:not(.dragging) {
 #selbar button.danger {
   background: var(--color-intent-danger-solid);
   color: var(--color-intent-danger-on-solid);
+}
+#selbar button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 #selbar button.ghost {
   background: var(--color-surface-raised);
@@ -1527,7 +1544,8 @@ body.queue-view #tools {
 /* ---- Modal chrome, shared by the three dialogs ---- */
 #startmodal,
 #setmodal,
-#dynmodal {
+#dynmodal,
+#entrymodal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
   border: 1px solid var(--color-border-default);
@@ -1546,16 +1564,29 @@ body.queue-view #tools {
 #dynmodal {
   width: min(520px, 94vw);
 }
+#entrymodal {
+  width: min(460px, 92vw);
+}
+/* The panel's own primary button (Done) — the shared rule above only paints
+   `[type="submit"]`, and this form has none: every field writes on change. */
+#entrymodal .modalbtns button.primary {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+  border: none;
+  font-weight: 600;
+}
 /* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
    native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
 #startmodal form,
 #setmodal form,
-#dynmodal form {
+#dynmodal form,
+#entrymodal form {
   position: relative;
 }
 #startmodal h3,
 #setmodal h3,
-#dynmodal h3 {
+#dynmodal h3,
+#entrymodal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
 }
@@ -1730,7 +1761,8 @@ a.playbtn {
 }
 #startmodal .modalbtns,
 #setmodal .modalbtns,
-#dynmodal .modalbtns {
+#dynmodal .modalbtns,
+#entrymodal .modalbtns {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -1745,7 +1777,8 @@ a.playbtn {
 }
 #startmodal .modalbtns button,
 #setmodal .modalbtns button,
-#dynmodal .modalbtns button {
+#dynmodal .modalbtns button,
+#entrymodal .modalbtns button {
   border-radius: 8px;
   padding: 8px 16px;
   font: inherit;
@@ -2253,4 +2286,253 @@ header h1 input {
 }
 [role="option"] > span:has(> .optionbadge) > .optionbadge {
   margin-left: auto;
+}
+
+/* ================================================================================
+   The queue toolbar, the three densities, and the entry-settings tags + panel
+   (2026-08-14). The DOM is the SAME `li.tile` in every density — only this
+   stylesheet reshapes it — so the e2e selectors (`li.tile`, `.thumb`, `.poster`,
+   `.check`, `.remove`, `.cap`, `.title`, `.next`, `.badges`) hold everywhere and a
+   density switch can never be a markup regression.
+   ================================================================================ */
+
+.qtoolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.qtoolbar .qfilter {
+  width: 220px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  padding: 7px 11px;
+  font-size: 0.92rem;
+}
+.qtoolbar :has(> select) {
+  flex: 0 0 auto;
+  width: auto;
+}
+.qtoolbar .qcount {
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+}
+.qtoolbar-right {
+  margin-left: auto;
+}
+.addcheck {
+  gap: 6px;
+}
+
+/* ---- Density: CARDS. Poster left, everything else right, several per row. ---- */
+ul.grid.cards {
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(340px, 1fr)
+    );
+  gap: 12px;
+  align-items: start;
+}
+ul.grid.cards .tile {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  padding: 10px;
+}
+ul.grid.cards .tile .thumb {
+  width: 76px;
+}
+ul.grid.cards .tile .cap {
+  padding: 0;
+}
+/* The whole point of the bigger card: the title and the next episode get to be READ,
+   not truncated to one ellipsised line the way a 150px poster forces. */
+ul.grid.cards .tile .title,
+ul.grid.rows .tile .title {
+  white-space: normal;
+  overflow: visible;
+}
+ul.grid.cards .tile .next {
+  white-space: normal;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* ---- Density: ROWS. One line per entry, for scanning a long queue. ---- */
+ul.grid.rows {
+  grid-template-columns: 1fr;
+  gap: 6px;
+}
+ul.grid.rows .tile {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  padding: 6px 10px;
+}
+ul.grid.rows .tile .thumb {
+  width: 40px;
+}
+ul.grid.rows .tile .cap {
+  padding: 0;
+  min-width: 0;
+}
+ul.grid.rows .tile .title,
+ul.grid.rows .tile .next {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* What makes a row a row: title over next-up on the left, tags pushed to the right edge.
+   `.badges` is a child of `.cap` (not of the tile), so the two-column grid has to live on
+   `.cap` — placing it on the tile silently did nothing, which is how the first cut ended up
+   with centred tags under the title. */
+ul.grid.rows .tile .cap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-rows: auto auto;
+  column-gap: 12px;
+  align-items: center;
+}
+ul.grid.rows .tile .title {
+  grid-column: 1;
+  grid-row: 1;
+}
+ul.grid.rows .tile .next {
+  grid-column: 1;
+  grid-row: 2;
+}
+ul.grid.rows .tile .badges {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin-top: 0;
+  justify-content: flex-end;
+  max-width: 46vw;
+}
+/* The ✕ is sized for a 150px poster; on a 40px thumb it covers the artwork entirely. */
+ul.grid.rows .tile .remove,
+ul.grid.cards .tile .remove {
+  transform: scale(0.75);
+  transform-origin: top right;
+}
+
+/* ---- Density: POSTERS. Today's wall — the tags ride ON the poster so the caption
+   stays two lines whatever an entry is carrying. ---- */
+ul.grid.posters .tile .thumb {
+  position: relative;
+}
+ul.grid.posters .tile .badges .weighttag,
+ul.grid.posters .tile .badges .epstag {
+  background: color-mix(
+    in oklab,
+    var(--color-surface-base) 70%,
+    transparent
+  );
+}
+
+/* ---- The setting tags themselves ---- */
+.badge.tagbtn {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.5;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border-default);
+  background: transparent;
+  color: var(--color-content-secondary);
+}
+.badge.tagbtn:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-content-primary);
+}
+.badge.tagbtn.weighttag {
+  border-color: var(--color-intent-success-border);
+  color: var(--color-intent-success-content);
+}
+.badge.tagbtn.startbadge {
+  border-color: var(--color-intent-warning-border);
+  color: var(--color-intent-warning-content);
+}
+/* The Edit affordance is deliberately the quietest chip on the tile: it is a door, not
+   a state. */
+.badge.tagbtn.editbtn {
+  color: var(--color-content-muted);
+}
+
+/* ---- The 1 / 2 / Custom… count control ---- */
+.countpick {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.countpick .countnum {
+  width: 82px;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  padding: 6px 8px;
+  font-size: 0.95rem;
+}
+.countpick .countback {
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-muted);
+  cursor: pointer;
+  padding: 5px 8px;
+}
+
+/* ---- The per-entry settings panel ---- */
+#entrymodal .entryfields {
+  display: grid;
+  gap: 16px;
+}
+#entrymodal .field {
+  display: grid;
+  gap: 6px;
+}
+#entrymodal .fieldlabel {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-content-muted);
+}
+#entrymodal .fieldhint {
+  font-size: 0.82rem;
+  color: var(--color-content-muted);
+}
+#entrymodal .fieldrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--color-content-primary);
+}
+/* The start-point row's buttons are secondary actions, not text — the shared modal rule
+   only paints `.modalbtns` children, and these live in the body. */
+#entrymodal .fieldrow button {
+  background: var(--color-surface-base);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  cursor: pointer;
+  font: inherit;
+  padding: 6px 12px;
+}
+#entrymodal .fieldrow button:hover {
+  border-color: var(--color-border-strong);
 }

@@ -11,11 +11,18 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
+import { CountPicker } from "./CountPicker"
+import { EPISODES_MAX, WEIGHT_MAX } from "./EntrySettings"
 import { SelectListbox } from "./SelectListbox"
 
 /**
- * The selection action bar — "Move to `<queue>`" and Remove, shown once at least
- * one tile is selected in the queue grid.
+ * The selection action bar — the settings you can apply to MANY entries at once, plus
+ * "Move to `<queue>`" and Remove. Shown once at least one tile is selected.
+ *
+ * Editing in bulk is the point: a channel is dozens of entries, and "make these six 2x" or
+ * "put every one of these back to the defaults" was previously six trips through a per-tile
+ * dropdown. Each field is opt-in — a field left on "keep" is not sent, so applying a weight
+ * never quietly rewrites the episode counts of the same selection.
  *
  * Moving between queues is multi-select, not drag: drag is for reordering WITHIN a
  * queue (decision `2026-07-20-queue-web-ui-ux-and-write-format`).
@@ -24,6 +31,9 @@ import { SelectListbox } from "./SelectListbox"
  * channel's shows to channels. Mixing families would silently change an entry's
  * playback semantics from "top plays next" to "random rotation".
  */
+
+const KEEP = "keep"
+
 export function SelectionBar({
   currentSet,
 }: {
@@ -32,6 +42,12 @@ export function SelectionBar({
   const { data } = useStore()
   const selected = useSelected()
   const [target, setTarget] = useState("")
+  // `null` = "— keep —": the field is not part of this apply.
+  const [episodes, setEpisodes] = useState<number | null>(
+    null,
+  )
+  const [weight, setWeight] = useState<number | null>(null)
+  const [batchStop, setBatchStop] = useState(KEEP)
 
   const family =
     currentSet && data?.sets[currentSet]?.kind === "anime"
@@ -42,9 +58,139 @@ export function SelectionBar({
     ? target
     : (options[0] ?? "")
 
+  const count = selected.size
+  const hasEdit =
+    episodes !== null ||
+    weight !== null ||
+    batchStop !== KEEP
+
+  /** One PATCH for the whole selection — see the route's comment for why not N. */
+  const applyBulk = async (
+    body: Record<string, unknown>,
+    verb: string,
+  ) => {
+    const items = [...selected.values()].map((s) => ({
+      key: s.key,
+      set: s.fromSet,
+    }))
+
+    setStatus(`${verb}…`)
+
+    try {
+      const out = await api<{
+        applied?: number
+        failed?: unknown[]
+      }>("PATCH", "/api/queues/bulk", { items, ...body })
+
+      setStatus(
+        `${verb} ${out.applied ?? 0} ${
+          (out.applied ?? 0) === 1 ? "entry" : "entries"
+        }`,
+        "ok",
+      )
+      setEpisodes(null)
+      setWeight(null)
+      setBatchStop(KEEP)
+      await load()
+    } catch (e) {
+      setStatus(
+        `${verb} failed: ${(e as Error).message}`,
+        "err",
+      )
+    }
+  }
+
   return (
-    <div hidden={selected.size === 0} id="selbar">
-      <span id="selcount">{`${selected.size} selected`}</span>
+    <div hidden={count === 0} id="selbar">
+      <span id="selcount">{`${count} selected`}</span>
+
+      {/* --- the settings, applied together --- */}
+      <div className="bulkfield">
+        <span>Episodes</span>
+        {episodes === null ? (
+          <button
+            className="ghost"
+            onClick={() => setEpisodes(1)}
+            type="button"
+          >
+            — keep —
+          </button>
+        ) : (
+          <CountPicker
+            label="Episodes for the selection"
+            max={EPISODES_MAX}
+            onChange={setEpisodes}
+            value={episodes}
+          />
+        )}
+      </div>
+      <div className="bulkfield">
+        <span>Weight</span>
+        {weight === null ? (
+          <button
+            className="ghost"
+            onClick={() => setWeight(1)}
+            type="button"
+          >
+            — keep —
+          </button>
+        ) : (
+          <CountPicker
+            label="Weight for the selection"
+            max={WEIGHT_MAX}
+            onChange={setWeight}
+            unit="x"
+            value={weight}
+          />
+        )}
+      </div>
+      <div className="bulkfield">
+        <span>Batch stops at</span>
+        <SelectListbox
+          id="bulkstop"
+          label="Batch stops at"
+          onChange={setBatchStop}
+          options={[
+            { label: "— keep —", value: KEEP },
+            { label: "Follow the set", value: "" },
+            { label: "End at season", value: "season" },
+            { label: "End at show", value: "member" },
+          ]}
+          value={batchStop}
+        />
+      </div>
+      <button
+        className="primary"
+        disabled={!hasEdit}
+        id="bulkapply"
+        onClick={() =>
+          void applyBulk(
+            {
+              ...(episodes !== null ? { episodes } : {}),
+              ...(weight !== null ? { weight } : {}),
+              ...(batchStop !== KEEP
+                ? { batch_stops_at: batchStop }
+                : {}),
+            },
+            "Updated",
+          )
+        }
+        type="button"
+      >
+        {`Apply to ${count}`}
+      </button>
+      <button
+        id="bulkreset"
+        onClick={() =>
+          void applyBulk({ reset: true }, "Reset")
+        }
+        title="Back to 1 ep, 1x, follow the set, automatic start"
+        type="button"
+      >
+        Reset to defaults
+      </button>
+
+      {/* --- the existing move/remove actions --- */}
       <label>
         Move to
         {/* Keyed on the set being edited, not on `value`. The second writer here is

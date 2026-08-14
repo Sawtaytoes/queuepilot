@@ -14,6 +14,7 @@
 import { promises as fs } from 'node:fs';
 import { parseDocument, YAMLSeq } from 'yaml';
 import { validateBlocks, blocksForSet } from './providers/blocks.js';
+import { toWeight } from './engine/weight.js';
 import { definitions as providerDefinitions } from './providers/config.js';
 
 export const SETS_PATH = process.env.SETS_PATH || '/config/sets.yaml';
@@ -333,6 +334,10 @@ function memberWriteValue(v) {
     if (v.title != null && String(v.title).trim()) m.title = String(v.title).trim();
     const eps = parseInt(v.episodes, 10);
     if (Number.isFinite(eps) && eps > 0) m.episodes = eps;
+    // How many slots this member takes per round (engine/weight.js). 1 is the default and is
+    // never written, so an unweighted members list keeps its current shape on disk.
+    const w = toWeight(v.weight);
+    if (w > 1) m.weight = w;
     return m.ratingKey || m.collection || m.title ? m : null;
   }
   const s = String(v).trim();
@@ -357,6 +362,21 @@ function toStarts(v) {
     if (Number.isFinite(season)) start.season = season;
     if (Number.isFinite(episode)) start.episode = episode;
     if (start.series != null || start.episode != null) out[String(rk)] = start;
+  }
+  return out;
+}
+
+// A rotation channel's per-show WEIGHT map: ratingKey -> n (and `section-<id>` for a whole
+// item bucket, e.g. Shorts). The mirror of a curated entry's embedded `weight`, but for a
+// rule-derived pool show with no stored entry to hang one on — exactly how `starts` works.
+// A weight of 1 is the default and is DROPPED, so clearing one removes its key rather than
+// leaving `weight: 1` litter behind.
+function toWeights(v) {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out = {};
+  for (const [rk, n] of Object.entries(v)) {
+    const w = toWeight(n);
+    if (w > 1) out[String(rk)] = w;
   }
   return out;
 }
@@ -414,6 +434,9 @@ function normalize(ent) {
           // Per-show manual start overrides for the dynamic rule pool (the Channels view
           // reads channel.starts[ratingKey] to seed the "Start from…" picker + chip).
           starts: toStarts(ent.starts),
+          // Per-show weights for the dynamic rule pool (the Channels view reads
+          // channel.weights[ratingKey] to seed the pool tile's weight control + tag).
+          weights: toWeights(ent.weights),
         }
       : {}),
     audio_language: ent.audio_language != null ? String(ent.audio_language) : null,
@@ -695,8 +718,8 @@ export async function updateSet(id, patch) {
         'audio_language', 'movie_excludes',
         // v3 PR 2: per-profile bindings + behavior. PR 3: explicit members.
         'profiles', 'behavior', 'members',
-        // Per-show start overrides for the dynamic rule pool.
-        'starts',
+        // Per-show start + weight overrides for the dynamic rule pool.
+        'starts', 'weights',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
         'default_profile',
       );
@@ -765,6 +788,15 @@ export async function updateSet(id, patch) {
         const map = toStarts(v);
         if (!Object.keys(map).length) { node.delete('starts'); continue; }
         node.set('starts', doc.createNode(map));
+        continue;
+      }
+      if (k === 'weights') {
+        // Whole-map replace, exactly like `starts`: the Channels view sends the full desired
+        // {ratingKey: n} map. toWeights already drops every 1, so an empty result means "no
+        // show is weighted any more" and the key goes with it.
+        const map = toWeights(v);
+        if (!Object.keys(map).length) { node.delete('weights'); continue; }
+        node.set('weights', doc.createNode(map));
         continue;
       }
       if (k === 'profiles') {

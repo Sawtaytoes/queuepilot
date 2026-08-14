@@ -1,6 +1,14 @@
-import { Badge, EmptyState } from "@charcuterie/ui"
+import {
+  Badge,
+  EmptyState,
+  SegmentedControl,
+} from "@charcuterie/ui"
 import { useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
+import {
+  EntryEditor,
+  SettingTags,
+} from "../components/EntrySettings"
 import {
   isPullSet,
   OpenQueueButton,
@@ -18,18 +26,25 @@ import {
   byTitle,
   isStartable,
   progressLabel,
-  startLabel,
   tileFace,
 } from "../lib/tileFace"
 import type { QueueItem, SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import {
+  closeEntryEditor,
   type EntryActions,
+  openEntryEditor,
   openPlayMenu,
   openSetModal,
   openStartModal,
   openTileMenu,
+  useOverlays,
 } from "../state/overlays"
+import {
+  applyFilters,
+  type Density,
+  useQueueView,
+} from "../state/queueView"
 import {
   deselect,
   toggleSelect,
@@ -61,6 +76,52 @@ import {
  * A failure re-syncs from the server, so an optimistic tile can never linger.
  */
 
+/**
+ * The queue key a search hit WOULD have — the same identity the server stores, so a hit can be
+ * matched against the entries already in the queue. Collections are addressed by title (they
+ * have no stable per-queue ratingKey in the file), everything else by ratingKey.
+ */
+const keyOfHit = (hit: SearchHit) =>
+  hit.type === "collection"
+    ? `title:Collection: ${hit.title}`
+    : `rk:${hit.ratingKey}`
+
+/** Is a hit's release year inside one of the add box's bands? An unknown year matches none. */
+function inYearBand(
+  year: number | null | undefined,
+  band: string,
+) {
+  if (!year) return false
+  if (band === "2020s") return year >= 2020
+  if (band === "2010s") return year >= 2010 && year <= 2019
+  if (band === "2000s") return year >= 2000 && year <= 2009
+  if (band === "older") return year < 2000
+  return true
+}
+
+/**
+ * A hit's watch state, from what the section listing already carries — no extra request. A
+ * MOVIE reports its own `viewCount`/`viewOffset`; a SHOW reports the aggregate
+ * `viewedLeafCount` / `leafCount`. A collection reports neither, so it is always "unknown"
+ * and drops out of a state-filtered search rather than pretending to be unwatched.
+ */
+function watchState(hit: SearchHit): string {
+  if (hit.type === "movie") {
+    if ((hit.viewCount ?? 0) > 0) return "watched"
+    return (hit.viewOffset ?? 0) > 0
+      ? "inprogress"
+      : "unwatched"
+  }
+  if (hit.type === "show") {
+    const seen = hit.viewedLeafCount ?? 0
+    const total = hit.leafCount ?? 0
+    if (!total) return "unknown"
+    if (seen === 0) return "unwatched"
+    return seen >= total ? "watched" : "inprogress"
+  }
+  return "unknown"
+}
+
 /** An instant, un-resolved stand-in for a just-added search hit. */
 function optimisticItem(hit: SearchHit): QueueItem {
   const isCollection = hit.type === "collection"
@@ -71,6 +132,7 @@ function optimisticItem(hit: SearchHit): QueueItem {
       : null,
     done: false,
     episodes: 1,
+    weight: 1,
     key: isCollection
       ? `title:Collection: ${hit.title}`
       : `rk:${hit.ratingKey}`,
@@ -96,6 +158,17 @@ export function QueueView({
   const gridRef = useRef<HTMLUListElement>(null)
   const lastPaintedSet = useRef<string | null>(null)
   const [addPosition, setAddPosition] = useState("top")
+  // Density + filter, remembered per queue (state/queueView.ts).
+  const view = useQueueView(setId)
+  const { entryEditor } = useOverlays()
+  // The add box's own filters. NOT persisted: they belong to the search you are running right
+  // now, and a stale "Movies only" silently hiding shows the next time you open the box is the
+  // exact failure the queue filter's always-visible count exists to prevent.
+  const [searchType, setSearchType] = useState("")
+  const [searchLibrary, setSearchLibrary] = useState("")
+  const [searchYear, setSearchYear] = useState("")
+  const [searchState, setSearchState] = useState("")
+  const [hideQueued, setHideQueued] = useState(false)
 
   const q = setId ? data?.sets[setId] : undefined
   // The REGISTRY entry (not the queue contents) — it carries `delivery`, which decides
@@ -117,11 +190,27 @@ export function QueueView({
   // appeared when the background refetch landed ~400 ms later, which is exactly the
   // freeze the optimistic path exists to remove. Sorting a few dozen entries per
   // render costs nothing; being wrong costs the whole feature.
-  const items = !q
+  const allItems = !q
     ? []
     : isChannel
       ? [...q.items].sort(byTitle)
       : q.items
+
+  // The libraries this queue actually draws from — the only ones its search can return, so
+  // offering the whole server's list would be four dead options out of five.
+  const libraryOptions = (reg?.libraries ?? [])
+    .filter((l) => (regSet?.sections ?? []).includes(l.id))
+    .map((l) => ({ label: l.title, value: String(l.id) }))
+
+  // Entry keys already in this queue, for the add box's "already here" answer. An object rather
+  // than a Set so it can be built inline without a memo; the lists are dozens of entries.
+  const queuedKeys: Record<string, true> = {}
+  for (const it of allItems) queuedKeys[it.key] = true
+
+  // What you SEE: the queue narrowed by this queue's own filter. `allItems` stays the truth for
+  // anything that must not lie about the queue's contents — the duplicate check when adding,
+  // the "Remove all completed" affordance, and the "showing N of M" count.
+  const items = applyFilters(allItems, view.filters)
 
   // FLIP only when re-rendering the SAME queue (add/remove/reconcile/live-update) —
   // opening a different queue is a plain first paint, not a shuffle of the current
@@ -175,75 +264,6 @@ export function QueueView({
       ),
   })
 
-  const setEpisodes = async (
-    item: QueueItem,
-    episodes: number,
-  ) => {
-    setStatus("Saving…")
-
-    try {
-      await api(
-        "PATCH",
-        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/episodes`,
-        { episodes },
-      )
-
-      const set = getState().data?.sets[setId!]
-      const hit = set?.items.find(
-        (it) => it.key === item.key,
-      )
-
-      if (hit) {
-        hit.episodes = episodes
-        bumpRevision()
-      }
-
-      setStatus("Saved", "ok")
-    } catch (e) {
-      setStatus(
-        `Save failed: ${(e as Error).message}`,
-        "err",
-      )
-    }
-  }
-
-  // The entry's `batch_stops_at` override (where its batch may stop, as opposed to how long
-  // it is). "" clears it back to "follow the set".
-  const setBatchStop = async (
-    item: QueueItem,
-    value: string,
-  ) => {
-    setStatus("Saving…")
-
-    try {
-      await api(
-        "PATCH",
-        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/batch-stop`,
-        { batch_stops_at: value },
-      )
-
-      const set = getState().data?.sets[setId!]
-      const hit = set?.items.find(
-        (it) => it.key === item.key,
-      )
-
-      if (hit) {
-        hit.batch_stops_at =
-          value === "member" || value === "season"
-            ? value
-            : null
-        bumpRevision()
-      }
-
-      setStatus("Saved", "ok")
-    } catch (e) {
-      setStatus(
-        `Save failed: ${(e as Error).message}`,
-        "err",
-      )
-    }
-  }
-
   return (
     <main
       className={`view editable${selected.size ? " move-mode" : ""}`}
@@ -262,7 +282,52 @@ export function QueueView({
               `/api/search?set=${setId}&q=${encodeURIComponent(text)}&collections=1`,
             )
 
-            return results
+            // The filters are applied HERE rather than as query parameters because
+            // /api/search has no notion of them; it answers "what matches, in this set's
+            // libraries". Narrowing its answer is the editor's job, and doing it in one place
+            // keeps the row renderer dumb.
+            const filtered = results.filter((hit) => {
+              if (searchType && hit.type !== searchType)
+                return false
+              if (
+                searchLibrary &&
+                String(hit.sectionId) !== searchLibrary
+              ) {
+                return false
+              }
+              if (
+                hideQueued &&
+                keyOfHit(hit) in queuedKeys
+              ) {
+                return false
+              }
+              if (
+                searchYear &&
+                !inYearBand(hit.year, searchYear)
+              ) {
+                return false
+              }
+              if (
+                searchState &&
+                watchState(hit) !== searchState
+              ) {
+                return false
+              }
+              return true
+            })
+
+            // Anything already in this queue sorts FIRST and is never offered as an add: the
+            // question "is this already in here?" is most of why you search a queue you have
+            // been curating for months, and the old box answered it by silently doing nothing
+            // when you picked a duplicate.
+            return [
+              ...filtered.filter(
+                (h) => keyOfHit(h) in queuedKeys,
+              ),
+              ...filtered.filter(
+                (h) => !(keyOfHit(h) in queuedKeys),
+              ),
+            ]
           }}
           inputId="search"
           listId="results"
@@ -277,6 +342,63 @@ export function QueueView({
             const label = isCollection
               ? hit.title
               : `${hit.title}${hit.year ? ` (${hit.year})` : ""}`
+            const queuedKey = keyOfHit(hit)
+            const isQueued = queuedKey in queuedKeys
+
+            // Already here: picking it takes you TO the entry and opens its settings, rather
+            // than adding a duplicate (which the server would refuse) or removing it (which
+            // nobody asked for by typing a title into an "Add" box).
+            if (isQueued) {
+              return {
+                className: "queued",
+                content: (
+                  <>
+                    {!isCollection || hit.hasThumb ? (
+                      <img
+                        alt=""
+                        src={thumbUrl(hit.ratingKey)}
+                      />
+                    ) : (
+                      <span
+                        aria-hidden="true"
+                        className="noposter"
+                      />
+                    )}
+                    <span>
+                      {hit.title}{" "}
+                      <span className="y">
+                        {hit.year || ""}
+                      </span>{" "}
+                      <span className="collbadge">
+                        In this queue
+                      </span>
+                    </span>
+                  </>
+                ),
+                pick: () => {
+                  close()
+                  if (!setId) return
+                  // Clear any filter hiding it, or "jump to" would scroll to nothing.
+                  if (
+                    !items.some(
+                      (it) => it.key === queuedKey,
+                    )
+                  ) {
+                    view.resetFilters()
+                  }
+                  flashTile(setId, queuedKey)
+                  document
+                    .querySelector(
+                      `#grid [data-key="${CSS.escape(queuedKey)}"]`,
+                    )
+                    ?.scrollIntoView({
+                      block: "center",
+                      behavior: "smooth",
+                    })
+                  openEntryEditor(setId, queuedKey)
+                },
+              }
+            }
 
             return {
               content: (
@@ -375,6 +497,81 @@ export function QueueView({
           }}
         >
           <label className="addpos">
+            Type
+            <SelectListbox
+              id="searchtype"
+              label="Result type"
+              onChange={setSearchType}
+              options={[
+                { label: "Anything", value: "" },
+                { label: "Series", value: "show" },
+                { label: "Movies", value: "movie" },
+                {
+                  label: "Collections",
+                  value: "collection",
+                },
+              ]}
+              value={searchType}
+            />
+          </label>
+          <label className="addpos">
+            Library
+            <SelectListbox
+              id="searchlib"
+              label="Library"
+              onChange={setSearchLibrary}
+              options={[
+                { label: "All libraries", value: "" },
+                ...libraryOptions,
+              ]}
+              value={searchLibrary}
+            />
+          </label>
+          <label className="addpos">
+            Year
+            <SelectListbox
+              id="searchyear"
+              label="Release year"
+              onChange={setSearchYear}
+              options={[
+                { label: "Any year", value: "" },
+                { label: "2020 – now", value: "2020s" },
+                { label: "2010 – 2019", value: "2010s" },
+                { label: "2000 – 2009", value: "2000s" },
+                { label: "Before 2000", value: "older" },
+              ]}
+              value={searchYear}
+            />
+          </label>
+          <label className="addpos">
+            State
+            <SelectListbox
+              id="searchstate"
+              label="Watch state"
+              onChange={setSearchState}
+              options={[
+                { label: "Any state", value: "" },
+                { label: "Unwatched", value: "unwatched" },
+                {
+                  label: "In progress",
+                  value: "inprogress",
+                },
+                { label: "Watched", value: "watched" },
+              ]}
+              value={searchState}
+            />
+          </label>
+          <label className="addpos addcheck">
+            <input
+              checked={hideQueued}
+              onChange={(e) =>
+                setHideQueued(e.target.checked)
+              }
+              type="checkbox"
+            />
+            Hide what&rsquo;s already here
+          </label>
+          <label className="addpos">
             Add to
             <SelectListbox
               id="addpos"
@@ -452,7 +649,139 @@ export function QueueView({
         </SearchDropdown>
       </div>
 
-      <ul className="grid" id="grid" ref={gridRef}>
+      {/* The queue's OWN toolbar: how it is displayed, and which of its entries are shown.
+          Deliberately not in the add box above — that box reaches out to Plex, this row only
+          ever narrows what is already here, and conflating the two is what made "filter" and
+          "search" feel like one broken control. */}
+      <div className="qtoolbar" id="qtoolbar">
+        <input
+          aria-label="Filter this queue"
+          className="qfilter"
+          id="qfilter"
+          onChange={(e) =>
+            view.setFilters({ text: e.target.value })
+          }
+          placeholder="Filter this queue…"
+          type="search"
+          value={view.filters.text}
+        />
+        <SelectListbox
+          id="qfiltertype"
+          label="Type"
+          onChange={(v) =>
+            view.setFilters({
+              type: v as typeof view.filters.type,
+            })
+          }
+          options={[
+            { label: "Any type", value: "" },
+            { label: "Series", value: "show" },
+            { label: "Movies", value: "movie" },
+            { label: "Collections", value: "collection" },
+          ]}
+          size="sm"
+          value={view.filters.type}
+        />
+        <SelectListbox
+          id="qfilterstate"
+          label="State"
+          onChange={(v) =>
+            view.setFilters({
+              state: v as typeof view.filters.state,
+            })
+          }
+          options={[
+            { label: "Any state", value: "" },
+            {
+              label: "Completed / fully watched",
+              value: "done",
+            },
+            {
+              label: "Still has something to play",
+              value: "active",
+            },
+            { label: "Has overrides", value: "overrides" },
+            {
+              label: "Weighted above 1x",
+              value: "weighted",
+            },
+            { label: "Has a start point", value: "start" },
+          ]}
+          size="sm"
+          value={view.filters.state}
+        />
+        <SelectListbox
+          id="qsort"
+          label="Sort"
+          onChange={(v) =>
+            view.setFilters({
+              sort: v as typeof view.filters.sort,
+            })
+          }
+          options={[
+            // A CHANNEL has no play order to preserve — its members are shuffled, and the
+            // grid already lists them alphabetically for lookup — so its "stored order"
+            // option IS A→Z, and offering a second A→Z entry would be two options with the
+            // same value.
+            ...(isChannel
+              ? [
+                  {
+                    label: "A → Z (playback is random)",
+                    value: "queue",
+                  },
+                ]
+              : [
+                  { label: "Queue order", value: "queue" },
+                  { label: "A → Z", value: "title" },
+                ]),
+            {
+              label: "Weight, high first",
+              value: "weight",
+            },
+          ]}
+          size="sm"
+          value={view.filters.sort}
+        />
+        {/* Always visible while anything is filtered, and it says how many entries are hidden:
+            a filter you forgot you set is indistinguishable from a queue that lost its
+            contents. */}
+        {view.isFiltered ? (
+          <button
+            className="ghost"
+            id="qfilterclear"
+            onClick={view.resetFilters}
+            type="button"
+          >
+            {`Clear filters — showing ${items.length} of ${allItems.length}`}
+          </button>
+        ) : (
+          <span className="qcount">
+            {`${allItems.length} ${allItems.length === 1 ? "entry" : "entries"}`}
+          </span>
+        )}
+        <span className="qtoolbar-right">
+          {/* A radiogroup names itself through `label`, so the visible text is the options
+              themselves — see ProviderBlock for the same reasoning. */}
+          <SegmentedControl
+            items={[
+              { label: "Posters", value: "posters" },
+              { label: "Cards", value: "cards" },
+              { label: "Rows", value: "rows" },
+            ]}
+            label="View"
+            onChange={(v) =>
+              view.setDensity((v ?? "cards") as Density)
+            }
+            selectedValue={view.density}
+          />
+        </span>
+      </div>
+
+      <ul
+        className={`grid ${view.density}`}
+        id="grid"
+        ref={gridRef}
+      >
         {isHidden || !q ? null : items.length === 0 ? (
           <li className="empty">
             <EmptyState
@@ -519,125 +848,31 @@ export function QueueView({
                           : "Now playing"}
                       </Badge>
                     ) : null}
-                    {/* Per-entry items-per-play control. The dropdown speaks
-                            for itself ("1 ep"), so it carries no "Play" label —
-                            that was pure tile noise (decision
-                            2026-07-31-collection-tiles-are-member-first).
-                            A COLLECTION carries the same control on the same terms:
-                            since 2026-08-11-collection-entries-contribute-one-batch
-                            it takes the identical batch cap a show does, so the
-                            override means the same thing and the tile must offer it. */}
-                    {item.resolved &&
-                    (item.type === "show" ||
-                      item.type === "collection") ? (
-                      <Tip
-                        label={
-                          item.type === "collection"
-                            ? "Items queued per play from this collection"
-                            : "Episodes queued per play"
+                    {/* The per-entry settings are TAGS now, not four controls per tile: a
+                        default entry says nothing, and every tag you do see is a deviation
+                        worth reading. Clicking one (or Edit) opens the panel that changes
+                        them. Same markup in all three densities, which is what lets the
+                        poster wall carry the information at all.
+                        (decision 2026-08-14-entry-settings-are-tags-plus-a-panel) */}
+                    {item.resolved ? (
+                      <SettingTags
+                        item={item}
+                        onEdit={() =>
+                          setId &&
+                          openEntryEditor(setId, item.key)
                         }
-                      >
-                        <label className="eps">
-                          {/* Keyed on the SERVER's value, because that is
-                                    who owns it: the pick round-trips through a
-                                    PATCH and can also arrive from another device
-                                    over SSE. Unkeyed, an uncontrolled select would
-                                    keep a value the PATCH rejected and would never
-                                    hear a change made elsewhere. */}
-                          <SelectListbox
-                            key={String(item.episodes || 1)}
-                            label={
-                              item.type === "collection"
-                                ? "Items queued per play"
-                                : "Episodes queued per play"
-                            }
-                            onChange={(v) =>
-                              void setEpisodes(
-                                item,
-                                Number(v),
-                              )
-                            }
-                            options={[1, 2, 3, 4, 5, 6].map(
-                              (i) => ({
-                                label:
-                                  i === 1
-                                    ? "1 ep"
-                                    : `${i} eps`,
-                                value: String(i),
-                              }),
-                            )}
-                            size="sm"
-                            value={String(
-                              item.episodes || 1,
-                            )}
-                          />
-                        </label>
-                      </Tip>
+                      />
                     ) : null}
-                    {/* Where that batch may STOP — only offered once it is
-                            longer than one item, since a 1-item batch can't
-                            cross a boundary. "Set default" = no override, so the
-                            set's own setting (or none) applies. */}
-                    {item.resolved &&
-                    (item.episodes || 1) > 1 &&
-                    (item.type === "show" ||
-                      item.type === "collection") ? (
-                      <Tip label="Where this batch may stop — keeps a season finale from being followed by the next season (or, in a collection, another show's episode 1).">
-                        <label className="eps">
-                          {/* Keyed on the SERVER's value, same rule as the
-                                    episodes select above it. */}
-                          <SelectListbox
-                            key={String(
-                              item.batch_stops_at || "",
-                            )}
-                            label="Where this batch may stop"
-                            onChange={(v) =>
-                              void setBatchStop(item, v)
-                            }
-                            options={[
-                              {
-                                label: "Follow the set",
-                                value: "",
-                              },
-                              {
-                                label: "End at season",
-                                value: "season",
-                              },
-                              ...(item.type === "collection"
-                                ? [
-                                    {
-                                      label: "End at show",
-                                      value: "member",
-                                    },
-                                  ]
-                                : []),
-                            ]}
-                            size="sm"
-                            value={
-                              item.batch_stops_at || ""
-                            }
-                          />
-                        </label>
-                      </Tip>
-                    ) : null}
-                    {/* An entry that HAS an override wears one amber chip,
-                            which is also a button back into the picker. */}
-                    {item.start ? (
-                      <Tip
-                        label={`Manual start point${
-                          item.nextEp?.startMember
-                            ? ` — begins at “${item.nextEp.startMember}”`
-                            : ""
-                        }. Click to change it or go back to automatic.`}
-                      >
+                    {item.resolved && setId ? (
+                      <Tip label="Episodes per play, weight, where the batch stops, start point">
                         <button
-                          className="badge startbadge"
+                          className="badge tagbtn editbtn"
                           onClick={() =>
-                            openStartModal(entry)
+                            openEntryEditor(setId, item.key)
                           }
                           type="button"
                         >
-                          {startLabel(item.start)}
+                          Edit
                         </button>
                       </Tip>
                     ) : null}
@@ -707,6 +942,18 @@ export function QueueView({
           })
         )}
       </ul>
+
+      {/* One panel for the whole grid, addressed by entry key — see state/overlays.ts for why
+          it holds the key rather than the item. */}
+      <EntryEditor
+        entryFor={entryFor}
+        isOpen={Boolean(
+          entryEditor && entryEditor.setId === setId,
+        )}
+        itemKey={entryEditor?.key ?? null}
+        onClose={closeEntryEditor}
+        setId={setId}
+      />
     </main>
   )
 }

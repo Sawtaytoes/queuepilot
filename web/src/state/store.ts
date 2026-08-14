@@ -191,6 +191,7 @@ function shelvesAsQueues(
         childCount: null,
         done: it.done,
         episodes: 1,
+        weight: 1,
         key: it.key,
         nextEp: null,
         pending: true,
