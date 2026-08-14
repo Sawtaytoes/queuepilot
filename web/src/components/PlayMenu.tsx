@@ -1,5 +1,9 @@
 import { Button } from "@charcuterie/ui"
-import { useEffect, useState } from "react"
+import {
+  useMutation,
+  useQuery,
+} from "@tanstack/react-query"
+import { useEffect } from "react"
 
 import { api } from "../lib/api"
 import type { Device } from "../lib/types"
@@ -24,31 +28,37 @@ import { setStatus } from "../state/store"
  */
 export function PlayMenu() {
   const { playMenu } = useOverlays()
-  const [devices, setDevices] = useState<Device[] | null>(
-    null,
-  )
-  const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!playMenu) return
+  // Request/response GET through the shared TanStack Query client
+  // (`@charcuterie/logic/query`). Only runs while the menu is open. `retry: false`
+  // keeps the existing UX: the device registry is served by the Python side over
+  // MQTT, so with no broker the fetch fails and the menu must show that error
+  // immediately (`channels-test` asserts `.playmenu p` matches /MQTT/i) rather than
+  // spending react-query's default backoff first.
+  const { data: devicesData, error } = useQuery({
+    enabled: Boolean(playMenu),
+    queryFn: () =>
+      api<{ devices: Device[] }>("GET", "/api/devices"),
+    queryKey: ["devices"],
+    retry: false,
+  })
+  const devices = devicesData?.devices ?? null
 
-    let isStale = false
-
-    setDevices(null)
-    setError(null)
-
-    api<{ devices: Device[] }>("GET", "/api/devices")
-      .then(({ devices: d }) => {
-        if (!isStale) setDevices(d)
-      })
-      .catch((e: Error) => {
-        if (!isStale) setError(e.message)
-      })
-
-    return () => {
-      isStale = true
-    }
-  }, [playMenu])
+  // Fire-and-forget POST as a mutation through the same client. react-query does not
+  // retry mutations by default, so a play command is never double-issued. `PlayMenu`
+  // is always mounted (it renders null when closed), so this observer's `onError`
+  // still fires after `closePlayMenus()` hides the menu.
+  const playMutation = useMutation({
+    mutationFn: (body: {
+      kind: "movie" | undefined
+      profile: string | undefined
+      set: string
+      target: string | undefined
+    }) => api("POST", "/api/play", body),
+    onError: (e: Error) => {
+      setStatus(`Play failed: ${e.message}`, "err")
+    },
+  })
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
@@ -94,7 +104,7 @@ export function PlayMenu() {
       }}
     >
       {error ? (
-        <p>{error}</p>
+        <p>{error.message}</p>
       ) : devices == null ? (
         <p>Loading devices…</p>
       ) : devices.length === 0 ? (
@@ -113,23 +123,16 @@ export function PlayMenu() {
             intent="neutral"
             isFullWidth
             key={d.id}
-            onClick={async () => {
+            onClick={() => {
               closePlayMenus()
               setStatus(`Starting on ${d.name}…`)
 
-              try {
-                await api("POST", "/api/play", {
-                  kind,
-                  profile,
-                  set: setId,
-                  target: d.default ? undefined : d.id,
-                })
-              } catch (e) {
-                setStatus(
-                  `Play failed: ${(e as Error).message}`,
-                  "err",
-                )
-              }
+              playMutation.mutate({
+                kind,
+                profile,
+                set: setId,
+                target: d.default ? undefined : d.id,
+              })
             }}
           >
             {d.default ? `${d.name} (default)` : d.name}
