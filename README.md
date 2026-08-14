@@ -1,4 +1,4 @@
-# queuepilot
+# QueuePilot
 
 > **Renamed from `plex-channels` (2026-08-12).** If you arrived from the old GitHub path or an
 > old image tag: the repo moves to `queuepilot` (GitHub redirects the old path), the container
@@ -9,7 +9,7 @@
 > [the rename decision](docs/decisions/2026-08-12-plex-channels-becomes-queuepilot.md) is worked
 > through. That document is the authoritative list of what has to move together.
 
-**queuepilot picks what plays next, so you don't have to.** Point it at a pile of things you
+**QueuePilot picks what plays next, so you don't have to.** Point it at a pile of things you
 already want — shows, movies, manga, webtoons — and it hands you the next one, remembers where
 you left off, and rolls into the next thing after that.
 
@@ -19,7 +19,7 @@ Plex *brains* it can't do in templates — and talks to HA **only over MQTT** (n
 bridges). **Kavita** is the next backend
 ([feasibility](docs/kavita-feasibility.md)), with Jellyfin, Emby and Kodi wanted after it.
 
-## Why *queuepilot*?
+## Why *QueuePilot*?
 
 **The name.** **`queue`** is the direct keyword — and literally the data model; a queue is the
 object the whole app manipulates. **`pilot`** does double duty: *autopilot*, for the hands-off
