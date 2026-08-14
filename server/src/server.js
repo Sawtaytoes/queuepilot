@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { WEB_PORT, QUEUES_PATH } from './config.js';
 import * as mqttd from './mqttd.js';
 import * as engineRouting from './engine/routing.js';
+import { toWeight } from './engine/weight.js';
 import * as enginePreview from './engine/preview.js';
 import * as cache from './cache.js';
 import * as history from './history.js';
@@ -253,6 +254,9 @@ app.get('/api/queues', async (req, res) => {
       const start = e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null;
       const core = await tiles.resolveTile(s.sections, e.value, start);
       const episodes = e.value && typeof e.value === 'object' && e.value.episodes ? e.value.episodes : 1;
+      // How often this entry comes up when the set is randomized (1 = normal; the editor shows
+      // a tag only above 1).
+      const weight = toWeight(e.value && typeof e.value === 'object' ? e.value.weight : null);
       // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may
       // stop, as opposed to `episodes` = how long it is.
       const batchStopsAt = e.value && typeof e.value === 'object' && e.value.batch_stops_at
@@ -264,6 +268,7 @@ app.get('/api/queues', async (req, res) => {
           raw: tiles.displayFor(e.value),
           ...core,
           episodes,
+          weight,
           batch_stops_at: ['member', 'season'].includes(batchStopsAt) ? batchStopsAt : null,
           // The manual start override (null = automatic next-unwatched).
           start,
@@ -383,6 +388,10 @@ app.get('/api/sets/:id/members', async (req, res) => {
         raw: value, // the ORIGINAL value (not the collection-mapped `v`) round-trips for PATCH
         ...core,
         start,
+        // Per-member episodes/weight, read off the stored mapping (a bare ratingKey or a
+        // "Collection: x" string carries neither, hence the defaults).
+        episodes: value && typeof value === 'object' && value.episodes ? value.episodes : 1,
+        weight: toWeight(value && typeof value === 'object' ? value.weight : null),
       };
     });
     res.json({ members });
@@ -657,6 +666,62 @@ app.patch('/api/queues/:set/items/:key/batch-stop', async (req, res) => {
   const value = req.body && req.body.batch_stops_at;
   try {
     res.json(await queues.setBatchStop(set, decodeURIComponent(req.params.key), value));
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// Set an entry's WEIGHT — how many slots it takes per round when the set is randomized.
+// Body: {weight}. 1 (or anything unusable) clears the override.
+app.patch('/api/queues/:set/items/:key/weight', async (req, res) => {
+  const set = req.params.set;
+  if (!(await requireQueueSet(res, set))) return;
+  const weight = req.body && req.body.weight;
+  try {
+    res.json(await queues.setWeight(set, decodeURIComponent(req.params.key), weight));
+  } catch (e) {
+    res.status(500).json({ error: String(e) });
+  }
+});
+
+// BULK-apply settings to many entries at once — the editor's selection bar. Body:
+// {items: [{set, key}], episodes?, weight?, batch_stops_at?, reset?}. Only the named fields
+// are touched, so "set every one of these to 3x" never disturbs their episode counts.
+//
+// One HTTP call rather than N: each queues.* writer takes the cross-process YAML lock and
+// rewrites the file, so a 20-entry selection fired as 20 PATCHes is 20 lock acquisitions and
+// 20 whole-file rewrites — and a half-applied bulk edit if one of them loses the race.
+app.patch('/api/queues/bulk', async (req, res) => {
+  const body = req.body || {};
+  const items = Array.isArray(body.items) ? body.items : [];
+  if (!items.length) return res.status(400).json({ error: 'items[] required' });
+  const wants = (k) => k in body && body[k] != null;
+  const applied = [];
+  const failed = [];
+  try {
+    for (const it of items) {
+      const set = String(it.set || '');
+      const key = String(it.key || '');
+      if (!set || !key || !(await sets.getSet(set))) {
+        failed.push({ set, key, error: 'unknown set' });
+        continue;
+      }
+      // `reset` is "back to the defaults": clear every per-entry override in one pass. It runs
+      // FIRST so an explicit field in the same request still wins (reset + weight: 3 = only the
+      // weight survives), which is what the bar's "Reset to defaults" + a picked value means.
+      if (body.reset) {
+        await queues.setEpisodes(set, key, 1);
+        await queues.setWeight(set, key, 1);
+        await queues.setBatchStop(set, key, null);
+        await queues.setStart(set, key, null);
+      }
+      if (wants('episodes')) await queues.setEpisodes(set, key, body.episodes);
+      if (wants('weight')) await queues.setWeight(set, key, body.weight);
+      if (wants('batch_stops_at')) await queues.setBatchStop(set, key, body.batch_stops_at);
+      applied.push({ set, key });
+    }
+    await cache.bumpGeneration();
+    res.json({ ok: failed.length === 0, applied: applied.length, failed });
   } catch (e) {
     res.status(500).json({ error: String(e) });
   }

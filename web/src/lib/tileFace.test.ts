@@ -22,6 +22,7 @@ const item = (over: Partial<QueueItem>): QueueItem => ({
   done: false,
   episodes: 1,
   key: "rk:1",
+  weight: 1,
   nextEp: null,
   ratingKey: "1",
   resolved: true,

@@ -18,13 +18,14 @@ import * as select from '../engine/select.js';
 import * as routing from '../engine/routing.js';
 import { liveClient } from '../engine/plex-live.js';
 import { sections as plexSections } from '../plex.js';
+import { toWeight } from '../engine/weight.js';
 import * as playback from '../playback.js';
 import * as driver from '../driver.js';
 import { ROTATION_LENGTH } from '../env.js';
 
 // The 1/n² rewatch pick, moved verbatim from session.js. Memberless channels weight by
 // 1/(count²) so a film seen once is far likelier than one seen three times.
-function pickRewatch(counts, titles, excludes, excludeRk) {
+function pickRewatch(counts, titles, excludes, excludeRk, weights = {}) {
   const candidates = [];
   for (const [rk, n] of counts) {
     if (excludes.has(String(rk))) continue;
@@ -33,12 +34,16 @@ function pickRewatch(counts, titles, excludes, excludeRk) {
     candidates.push([rk, n]);
   }
   if (!candidates.length) return null;
-  const weights = candidates.map(([, n]) => 1 / (n * n));
+  // The channel's `weights:` map MULTIPLIES the 1/n² least-watched bias rather than replacing
+  // it: a 3x film is three times as likely as it would otherwise have been, but a film seen
+  // once still beats the same film seen three times. There is no round to take slots in here —
+  // the card plays exactly one movie — so this is the one place a weight is odds, not slots.
+  const odds = candidates.map(([rk, n]) => toWeight(weights[String(rk)]) / (n * n));
   let total = 0;
-  for (const w of weights) total += w;
+  for (const w of odds) total += w;
   let r = Math.random() * total;
   for (let i = 0; i < candidates.length; i += 1) {
-    r -= weights[i];
+    r -= odds[i];
     if (r <= 0) {
       const rk = candidates[i][0];
       return { ratingKey: rk, title: titles.get(rk) || null };
@@ -54,6 +59,10 @@ function defaultShuffle(arr) {
     [arr[i], arr[j]] = [arr[j], arr[i]];
   }
 }
+
+// The production rng. `random` is what the WEIGHTED member shuffle draws from (engine/weight.js);
+// a seeded test injects its own object with both members.
+const defaultRng = { shuffle: defaultShuffle, random: () => Math.random() };
 
 /**
  * @param {{def?: object, client?: object}} opts
@@ -113,7 +122,11 @@ export function plexProvider({ def = null, client = null } = {}) {
         const entries = resolve.loadEntries(setName);
         if (cfg.reel) return resolve.buildReel(c, setName, cfg, entries, token);
         const watched = await select.watchedForSet(c, cfg, binding);
-        return resolve.nextQueue(c, setName, cfg, entries, watched, token);
+        // The rng is REQUIRED, not optional: a channel (kind: anime) plays its members in a
+        // shuffled order, and nextQueue only shuffles when handed one. Python defaulted it to
+        // the `random` module; this call site did not, so every channel quietly played in
+        // queues.yaml file order from the Python retirement until this fix.
+        return resolve.nextQueue(c, setName, cfg, entries, watched, token, defaultRng);
       }
 
       // Rotation channel. `behavior` is the newer knob and wins; `mode` is the legacy one.
@@ -130,14 +143,12 @@ export function plexProvider({ def = null, client = null } = {}) {
         const excludes = new Set((binding.movie_excludes || []).map(String));
         // The exclusion of the previously-played film is SESSION state, threaded in by the
         // caller — a provider is stateless across starts and must not hold it.
-        const pick = pickRewatch(counts, titles, excludes, lastMovieRk);
+        const pick = pickRewatch(counts, titles, excludes, lastMovieRk, cfg.weights || {});
         if (!pick) return { play: [], rewatch: true };
         return { play: [{ ratingKey: pick.ratingKey, title: pick.title }], rewatch: true };
       }
 
-      const queue = await rotation.buildRotation(c, cfg, binding, ROTATION_LENGTH, {
-        shuffle: defaultShuffle,
-      });
+      const queue = await rotation.buildRotation(c, cfg, binding, ROTATION_LENGTH, defaultRng);
       return { play: queue };
     },
 

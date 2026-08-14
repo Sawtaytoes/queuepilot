@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react"
 
 import { TypeBadge } from "../components/badges"
+import { CountPicker } from "../components/CountPicker"
+import { WEIGHT_MAX } from "../components/EntrySettings"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { Tip } from "../components/Tip"
@@ -199,6 +201,37 @@ export function ChannelMembers({
       channel.id,
       rawMembers().filter((_, i) => i !== gone),
     )
+  }
+
+  /**
+   * A member's WEIGHT — how many slots it takes per round when this channel is shuffled.
+   * Written the same way its start point is: the whole members array goes back with this
+   * one entry promoted to a mapping that carries the field. A weight of 1 deletes the key,
+   * so an untouched channel's members list keeps its plain shape on disk.
+   */
+  const saveMemberWeight = async (
+    m: ChannelMember,
+    weight: number,
+  ) => {
+    const current = rawMembers().slice()
+    const value = current[m.index]
+    const base: Record<string, unknown> =
+      value && typeof value === "object"
+        ? { ...(value as Record<string, unknown>) }
+        : /^\d+$/.test(String(value))
+          ? { ratingKey: String(value) }
+          : { title: String(value) }
+
+    if (weight > 1) base.weight = weight
+    else delete base.weight
+
+    current[m.index] = base
+    setMembers((prev) =>
+      prev.map((x) => (x === m ? { ...x, weight } : x)),
+    )
+    setStatus("Saving…")
+    await saveMembersLive(channel.id, current)
+    setStatus("Saved", "ok")
   }
 
   const entryFor = (m: ChannelMember): EntryActions => ({
@@ -406,6 +439,21 @@ export function ChannelMembers({
               badges={
                 <>
                   <TypeBadge face={face} item={m} />
+                  {/* One control, not the queue editor's four: a member has no batch to cap
+                      or stop, so weight is the only per-member number there is. */}
+                  <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the channel is shuffled.">
+                    <span className="eps">
+                      <CountPicker
+                        label={`Weight for ${m.title}`}
+                        max={WEIGHT_MAX}
+                        onChange={(n) =>
+                          void saveMemberWeight(m, n)
+                        }
+                        unit="x"
+                        value={m.weight ?? 1}
+                      />
+                    </span>
+                  </Tip>
                   {m.start ? (
                     <Tip
                       label={`Manual start point${

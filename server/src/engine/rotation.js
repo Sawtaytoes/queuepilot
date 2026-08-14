@@ -10,6 +10,7 @@
 // stays a per-language seeded test, not a cross-language byte-compare.
 import { iterHistory, unwatchedBuckets } from './select.js';
 import { describe, resolveMember } from './resolve.js';
+import { weightedInterleave } from './weight.js';
 import { WATCH_COUNT_ACCOUNTS, ROTATION_LENGTH } from '../env.js';
 
 // Watched ratingKeys across the binding's WHOLE history (no section filter) — members resolve by
@@ -52,6 +53,9 @@ export async function memberBuckets(client, cfg, binding) {
       ratingKey: res.ratingKey || res.title,
       episodes: res.items,
       multi_season: res.multi_season || false,
+      // The member's own `weight:` — how many slots per round it takes in buildRotation. A
+      // rule-pool show gets the same thing from the channel's `weights:` map (select.js).
+      weight: res.weight,
     });
   }
   return buckets;
@@ -78,20 +82,9 @@ export async function buildRotation(client, cfg, binding, length = ROTATION_LENG
   if (!shows.length) return [];
   const order = shows.slice();
   if (rng) rng.shuffle(order);
-  const cursors = new Map(order.map((s) => [s.ratingKey, 0]));
-  const queue = [];
-  while (queue.length < length) {
-    let progressed = false;
-    for (const s of order) {
-      const i = cursors.get(s.ratingKey);
-      if (i < s.episodes.length) {
-        queue.push(s.episodes[i]);
-        cursors.set(s.ratingKey, i + 1);
-        progressed = true;
-        if (queue.length >= length) break;
-      }
-    }
-    if (!progressed) break; // every show exhausted
-  }
-  return queue;
+  // WEIGHTS ride on top of the shuffle, not instead of it: the shuffle still decides who leads
+  // tonight, then the interleave decides how many slots each one takes. weightedInterleave is
+  // the plain round-robin above when every weight is 1 — same walk of `order`, same output —
+  // so an unweighted channel is bit-for-bit unchanged. See engine/weight.js.
+  return weightedInterleave(order, (s) => s.episodes, length);
 }

@@ -2,6 +2,8 @@ import { Badge, Skeleton, Spinner } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import { WatchesBadge } from "../components/badges"
+import { CountPicker } from "../components/CountPicker"
+import { WEIGHT_MAX } from "../components/EntrySettings"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
@@ -289,6 +291,32 @@ export function ChannelPool({
     setState({ data, reg })
   }
 
+  // A rule-pool show's WEIGHT lives in the channel's `weights` map, keyed by ratingKey — the
+  // exact mirror of `starts` above, because a rule-derived show has no stored entry of its own
+  // to carry the field. Same whole-map replace + registry refresh.
+  const saveWeight = async (
+    ratingKey: string,
+    weight: number,
+  ) => {
+    const next: Record<string, number> = {
+      ...(channel.weights ?? {}),
+    }
+
+    if (weight > 1) next[String(ratingKey)] = weight
+    else delete next[String(ratingKey)]
+
+    setStatus("Saving…")
+    await api("PATCH", `/api/sets/${channel.id}`, {
+      weights: next,
+    })
+
+    const [data, reg] = await fetchAll()
+
+    setState({ data, reg })
+    setStatus("Saved", "ok")
+    onChanged()
+  }
+
   // A rule-pool show reuses the queue/member "Start from…" flow: build the same
   // EntryActions the modal reads, with an item shaped like a resolved show. The pool is
   // rule-derived (no stored entry), so `save` writes the set's `starts` map keyed by
@@ -350,6 +378,28 @@ export function ChannelPool({
             >
               {`${b.unwatched} unwatched`}
             </Badge>
+            {/* Weight applies to a Shorts bucket too — "sprinkle twice as many shorts" is
+                the same question as "play this show twice as often", and the bucket is
+                keyed `section-<id>` in the map exactly as the engine keys it. */}
+            <Tip label="How often this comes up — a 3x show takes about three slots for every one a normal show takes in the rotation.">
+              <span className="eps">
+                <CountPicker
+                  label={`Weight for ${b.show}`}
+                  max={WEIGHT_MAX}
+                  onChange={(n) =>
+                    void saveWeight(String(b.ratingKey), n)
+                  }
+                  unit="x"
+                  value={
+                    channel.weights?.[
+                      String(b.ratingKey)
+                    ] ??
+                    b.weight ??
+                    1
+                  }
+                />
+              </span>
+            </Tip>
             {isSection ? null : (
               <ExcludeButton
                 label="Exclude"

@@ -22,6 +22,7 @@ import { setSections } from './routing.js';
 import {
   int0, atOrAfterStart, multiSeason, showEpisodes, findCollection, collectionChildren,
 } from './select.js';
+import { isUnweighted, toWeight, weightedShuffle } from './weight.js';
 import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH, ROTATION_LENGTH,
 } from '../env.js';
@@ -102,6 +103,9 @@ export function describe(entry) {
       collection: coll ? String(coll).trim() : null,
       episodes: entry.episodes ?? null,
       start: entry.start ?? null,
+      // How OFTEN this entry comes up when the set is randomized — slots per round, not a
+      // probability. Absent = 1 (see select.js toWeight); only the shuffled paths read it.
+      weight: toWeight(entry.weight),
       done: Boolean(entry.done),
       raw: entry,
     };
@@ -109,7 +113,7 @@ export function describe(entry) {
   if (isRatingKey(entry)) {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
-      guid: null, collection: null, episodes: null, start: null, done: false, raw: entry,
+      guid: null, collection: null, episodes: null, start: null, weight: 1, done: false, raw: entry,
     };
   }
   const { title, year, guid } = parseTitleString(entry);
@@ -117,7 +121,7 @@ export function describe(entry) {
   const coll = cm ? cm[1].trim() : null;
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
-    collection: coll, episodes: null, start: null, done: false, raw: entry,
+    collection: coll, episodes: null, start: null, weight: 1, done: false, raw: entry,
   };
 }
 
@@ -443,7 +447,7 @@ export async function resolveMember(client, desc, cfg, watched, token, defaultBa
     // `batch_stops_at` additionally forbids the batch from spanning a member (or season)
     // boundary, so a season finale isn't followed by ep 1 of the next member show.
     items = applyBatch(items, desc.episodes || defaultBatch, batchStop(desc, cfg));
-    return { title: `Collection: ${name}`, type: 'collection', items };
+    return { title: `Collection: ${name}`, type: 'collection', items, weight: toWeight(desc.weight) };
   }
   const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
   if (typ == null) return null;
@@ -452,7 +456,7 @@ export async function resolveMember(client, desc, cfg, watched, token, defaultBa
     if (!keepMovie && resume) keepMovie = inProgress(...await itemViewState(client, rk, token));
     const items = keepMovie
       ? [{ title, ratingKey: rk, show: null, season: null, episode: null }] : [];
-    return { title, type: 'movie', ratingKey: rk, items };
+    return { title, type: 'movie', ratingKey: rk, items, weight: toWeight(desc.weight) };
   }
   const allEps = await showEpisodes(client, rk, token);
   const start = desc.start;
@@ -463,7 +467,10 @@ export async function resolveMember(client, desc, cfg, watched, token, defaultBa
   // A `season` stop also cuts at a season boundary, so `episodes: 2` on a show sitting at its
   // finale queues S1E12 alone instead of S1E12 + S2E01.
   eps = applyBatch(eps, desc.episodes || defaultBatch, batchStop(desc, cfg));
-  return { title, type: 'show', ratingKey: rk, items: eps, multi_season: multiSeason(allEps) };
+  return {
+    title, type: 'show', ratingKey: rk, items: eps, multi_season: multiSeason(allEps),
+    weight: toWeight(desc.weight),
+  };
 }
 
 // --------------------------------------------------------------------------- //
@@ -530,7 +537,7 @@ export async function nextQueue(client, setName, cfg, entries, watched, token, r
       if (head && await headResumeOffset(client, head, token) > 0) {
         revived.push(desc.key);
         remaining += 1;
-        batches.push({ title: res.title, type: res.type, items: res.items });
+        batches.push({ title: res.title, type: res.type, items: res.items, weight: res.weight });
       } else {
         doneFlagged.push(desc.title || desc.ratingKey || desc.key);
       }
@@ -548,7 +555,7 @@ export async function nextQueue(client, setName, cfg, entries, watched, token, r
       remaining -= 1;
       continue;
     }
-    batches.push({ title: res.title, type: res.type, items: res.items });
+    batches.push({ title: res.title, type: res.type, items: res.items, weight: res.weight });
   }
 
   const leadsInProgress = (b) => {
@@ -563,7 +570,16 @@ export async function nextQueue(client, setName, cfg, entries, watched, token, r
     // resumes. Hoist in-progress batches (file order among them), shuffle the rest via `rng`.
     const lead = batches.filter(leadsInProgress);
     const rest = batches.filter((b) => !leadsInProgress(b));
-    if (rng) rng.shuffle(rest);
+    // A channel plays each member ONCE per scan and gets cut at ROTATION_LENGTH, so "comes up
+    // more often" here means "lands near the front more often": a weighted shuffle, not the
+    // slots-per-round interleave the rotation channels use (they replay a member across rounds;
+    // this path does not). With nothing weighted, the plain Fisher–Yates shuffle runs unchanged
+    // — same rng, same sequence — so an unweighted channel's seeded order is untouched.
+    if (isUnweighted(rest)) {
+      if (rng) rng.shuffle(rest);
+    } else {
+      weightedShuffle(rest, rng);
+    }
     const ordered = lead.concat(rest);
     playItems = [];
     for (const b of ordered) {

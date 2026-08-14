@@ -54,6 +54,11 @@ sets:
     kind: movies
     source: queue
     sections: [1]
+  - id: kids
+    label: Younger Kids
+    kind: cartoons
+    source: rotation
+    sections: [2]
 # FOOT: order = shelf order.
 `;
 
@@ -114,6 +119,23 @@ seed();
 await queues.setStart('bob', 'title:Cowboy Bebop', { season: 1, episode: 3 });
 assertCommentsSurvive('setStart', QUEUES_PATH);
 
+// WEIGHT rides in the same `extras` bag: it must coexist with the other overrides, and
+// clearing it (1 = the default) must take the KEY away rather than write `weight: 1`, or the
+// file fills with noise nobody typed.
+seed();
+await queues.setWeight('bob', 'title:Cowboy Bebop', 3);
+assertCommentsSurvive('setWeight', QUEUES_PATH);
+ok('setWeight: value written', /Cowboy Bebop[\s\S]*weight: 3/.test(read(QUEUES_PATH)));
+await queues.setEpisodes('bob', 'title:Cowboy Bebop', 2);
+ok('setWeight: survives a later episodes edit', /Cowboy Bebop[\s\S]*weight: 3/.test(read(QUEUES_PATH)));
+await queues.setWeight('bob', 'title:Cowboy Bebop', 1);
+ok('setWeight(1): key dropped', !has(QUEUES_PATH, 'weight:'));
+ok('setWeight(1): episodes override survived the clear', has(QUEUES_PATH, 'episodes: 2'));
+await queues.setWeight('bob', 'title:Cowboy Bebop', 9999);
+ok('setWeight: clamped to the engine cap', /weight: 20\b/.test(read(QUEUES_PATH)));
+await queues.setWeight('bob', 'title:Cowboy Bebop', 'three');
+ok('setWeight(junk): reads as 1 and drops the key', !has(QUEUES_PATH, 'weight:'));
+
 seed();
 await queues.moveItem('bob', 'family', 'title:Duel (1971)', ['title:Up (2009)', 'title:Duel (1971)']);
 ok('moveItem: kept # HEAD:', has(QUEUES_PATH, '# HEAD:'));
@@ -142,6 +164,22 @@ await sets.updateSet('bob', { batch_stops_at: 'none' });
 ok('updateSet(none): batch_stops_at key dropped', !has(SETS_PATH, 'batch_stops_at'));
 await sets.updateSet('bob', { batch_stops_at: 'seasons' });
 ok('updateSet(typo): nothing written (unrecognised = no boundary)', !has(SETS_PATH, 'batch_stops_at'));
+
+// The rule-pool weight map, written exactly like `starts`: whole-map replace, 1s dropped, and
+// an empty map takes the key with it.
+seed();
+await sets.updateSet('kids', { weights: { 12345: 3, 999: 1 } });
+assertCommentsSurvive('updateSet(weights)', SETS_PATH);
+ok('updateSet: weights map written', /id: kids[\s\S]*weights:[\s\S]*"?12345"?: 3/.test(read(SETS_PATH)));
+ok('updateSet: a weight of 1 is not written', !/999: 1/.test(read(SETS_PATH)));
+await sets.updateSet('kids', { weights: {} });
+ok('updateSet({}): weights key dropped', !has(SETS_PATH, 'weights:'));
+
+// A curated queue has no rule pool to weight, so the key is rotation-only — same as `starts`.
+// (Its entries carry their own `weight:` in queues.yaml; that is a different writer.)
+seed();
+await sets.updateSet('bob', { weights: { 12345: 5 } });
+ok('updateSet: weights ignored on a curated queue', !has(SETS_PATH, 'weights:'));
 
 seed();
 await sets.createSet({ label: 'New Queue', kind: 'movies', sections: [1] });
