@@ -19,3 +19,6 @@ __corpus__/
 # NOTE: the SYNTHETIC engine-parity corpus (e2e/fixtures/engine-corpus/ + engine.sets.yaml +
 # engine.queues.yaml) used to be generated per-run by a Python script. It is COMMITTED since
 # 2026-08-12 — see e2e/fixtures/README.md. Only a REAL recorded corpus stays ignored (above).
+
+# playwright-mcp scratch (console logs, page snapshots)
+.playwright-mcp/
