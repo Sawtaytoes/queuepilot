@@ -198,44 +198,18 @@ export const MQTT_PORT = int('MQTT_PORT', 1883);
 export const MQTT_USER = process.env.MQTT_USER || undefined;
 export const MQTT_PASS = process.env.MQTT_PASS || undefined;
 
-// --- the rename cutover (2026-08-12) ------------------------------------------ //
-// `plex-channels` became `queuepilot`, so every topic below moved prefix. The old prefix
-// stays LIVE as an alias while HA is migrated: MQTT_LEGACY_PREFIX is set by default, which
-// makes the broker layer subscribe to AND publish on both prefixes at once. Nothing outside
-// this container has to change on the same deploy as the rename — that is the whole point.
+// --- the rename cutover (2026-08-12 → 2026-08-15, complete) ------------------- //
+// `plex-channels` became `queuepilot`, so every topic below moved prefix. The old prefix was
+// kept live as an alias by MQTT_LEGACY_PREFIX, so nothing outside this container had to change
+// on the deploy that renamed things; HA finished migrating on 2026-08-12, the bridge went off
+// on 2026-08-15, and the alias helpers were deleted afterwards. The record of what was done
+// and what proved it unused is docs/queuepilot-mqtt-cutover.md.
 //
-// To finish the cutover, set MQTT_LEGACY_PREFIX='' in the app env once every HA consumer is
-// on `queuepilot/…`. That is a config change, not a code change, and it is reversible: put
-// the value back and the old topics come alive again. See
-// docs/queuepilot-mqtt-cutover.md for the ordered procedure and the verification commands.
+// MQTT_PREFIX is the canonical prefix. Nothing reads it now that the alias helpers are gone —
+// the T_* defaults below are LITERALS under `queuepilot/` rather than composed from it, so
+// overriding this alone moves nothing. It stays as the declared name of the prefix the topics
+// sit under, which is what the doc and the app env both refer to.
 export const MQTT_PREFIX = str('MQTT_PREFIX', 'queuepilot');
-export const MQTT_LEGACY_PREFIX = str('MQTT_LEGACY_PREFIX', 'plex-channels');
-
-// The old-prefix twin of a topic, or null when there isn't one. Returns null when the legacy
-// bridge is off, and — deliberately — when the topic doesn't sit under MQTT_PREFIX, which is
-// the case for an individually-overridden topic or an already-legacy one. Callers treat null
-// as "publish/subscribe once", so an override silently opts that topic out of the bridge
-// rather than aliasing it somewhere surprising.
-export const legacyTopic = (topic: string): string | null => {
-  if (!MQTT_LEGACY_PREFIX || !MQTT_PREFIX) return null;
-  if (!topic.startsWith(`${MQTT_PREFIX}/`)) return null;
-  const alias = `${MQTT_LEGACY_PREFIX}/${topic.slice(MQTT_PREFIX.length + 1)}`;
-  return alias === topic ? null : alias;
-};
-
-// Both prefixes' forms of a topic, de-duplicated — what to subscribe to during the cutover.
-export const bothTopics = (topic: string): string[] => {
-  const alias = legacyTopic(topic);
-  return alias ? [topic, alias] : [topic];
-};
-
-// Map an INBOUND topic back to its canonical (new-prefix) form, so a handler can compare
-// against one constant no matter which prefix the sender used.
-export const canonicalTopic = (topic: string): string => {
-  if (!MQTT_LEGACY_PREFIX || !MQTT_PREFIX) return topic;
-  if (!topic.startsWith(`${MQTT_LEGACY_PREFIX}/`)) return topic;
-  return `${MQTT_PREFIX}/${topic.slice(MQTT_LEGACY_PREFIX.length + 1)}`;
-};
 
 export const T_CMD_START = str('T_CMD_START', 'queuepilot/cmd/session/start');
 export const T_CMD_ADVANCE = str('T_CMD_ADVANCE', 'queuepilot/cmd/session/advance');
@@ -258,15 +232,12 @@ export const T_STATE = str('T_STATE', 'queuepilot/state');
 // T_STATE only says what a session STARTED with; this says what is on screen NOW.
 export const T_NOW_PLAYING = str('T_NOW_PLAYING', 'queuepilot/now-playing');
 // MQTT discovery: HA creates sensor.queuepilot_status from T_STATE on its own. This object_id
-// IS the entity_id, so changing it creates a NEW entity rather than renaming the old one. The
-// old `plex_channels_status` config is retained on the broker and keeps its entity alive off
-// the legacy state topic, so both sensors work while HA is migrated; retiring the old one is
-// a separate, explicit step (clear that retained config — see docs/queuepilot-mqtt-cutover.md).
+// IS the entity_id, so changing it creates a NEW entity rather than renaming the old one —
+// which is why the rename left `sensor.plex_channels_status` alive alongside it, off its own
+// retained discovery config. That entity was retired on 2026-08-15 by clearing that config
+// (docs/queuepilot-mqtt-cutover.md), so there is only one sensor now.
 export const T_DISCOVERY_BASE = str('T_DISCOVERY_BASE', 'homeassistant');
 export const DISCOVERY_OBJECT_ID = str('DISCOVERY_OBJECT_ID', 'queuepilot_status');
-// The entity the rename replaces. Set to '' once it is retired; it exists so the cutover doc
-// and the code agree on the name, rather than it living only in a shell command.
-export const DISCOVERY_LEGACY_OBJECT_ID = str('DISCOVERY_LEGACY_OBJECT_ID', 'plex_channels_status');
 
 // --- device registry (the web UI's "Play on <device>" dropdown) --------------- //
 // Castable targets are announced as RETAINED queuepilot/devices/<id> messages: the

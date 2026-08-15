@@ -55,9 +55,9 @@ globalThis.fetch = (async (url: unknown) => {
 
 const devices = await import('../server/src/devices.js');
 
-// Collect what would go to the broker. This is mqttd's pub() signature — it is what mirrors
-// onto the legacy `plex-channels/…` prefix, which is why devices.js publishes THROUGH it
-// rather than touching the client itself.
+// Collect what would go to the broker. This is mqttd's pub() signature — the one place
+// anything reaches the client, which is why devices.js publishes THROUGH it rather than
+// touching the client itself.
 /**
  * One recorded publish. `payload` is `any` on purpose: it is EITHER the retained device object
  * or the empty string that ERASES it, and the assertions below probe both — a union would need

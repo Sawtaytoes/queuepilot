@@ -12,7 +12,6 @@ import { connect, type MqttClient } from 'mqtt';
 import {
   MQTT_HOST as HOST, MQTT_PORT as PORT, MQTT_USER as USER, MQTT_PASS as PASS,
   T_CMD_START, T_DEVICES_BASE, T_STATE, T_NOW_PLAYING,
-  bothTopics, canonicalTopic,
 } from './env.js';
 import type { Device, NowPlaying, PublishedSessionState } from './types.js';
 
@@ -77,23 +76,15 @@ if (HOST) {
     // Playing" from the Plex integration's media_player (already push-fed by the PMS
     // websocket, so nothing here polls). T_STATE only says what a session STARTED with; this
     // says what is on screen NOW, and keeps up as the queue auto-advances.
-    //
-    // Only now-playing needs the legacy twin during the rename. devices and state are
-    // published by mqttd in THIS process, so both halves move prefix on the same deploy —
-    // subscribing to their old twins as well would just deliver every message twice and
-    // double the SSE traffic to the UI. now-playing is different: HA publishes it, so it
-    // arrives on whichever prefix that automation has been migrated to, and listening on
-    // only one prefix would blank the UI's now-playing row until HA caught up.
     c.subscribe([
       `${T_DEVICES_BASE}/#`,
       T_STATE,
-      ...bothTopics(T_NOW_PLAYING),
+      T_NOW_PLAYING,
     ]);
   });
   c.on('error', (e) => console.log(`[mqtt] ${e.message}`));
-  c.on('message', (rawTopic, buf) => {
+  c.on('message', (topic, buf) => {
     const text = buf.toString();
-    const topic = canonicalTopic(rawTopic);
     if (topic.startsWith(`${T_DEVICES_BASE}/`)) {
       const id = topic.slice(T_DEVICES_BASE.length + 1);
       if (!text) DEVICES.delete(id); // cleared retained topic = de-registered
