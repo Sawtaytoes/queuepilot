@@ -26,7 +26,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { parse, stringify } from 'yaml';
 
-import type { Delivery, ProviderDefinition } from '../types.js';
+import type { Delivery, ProviderDefinition, ProviderVocabulary } from '../types.js';
 
 import { isNodeError, errMessage } from '../errors.js';
 import { PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL } from '../env.js';
@@ -55,6 +55,7 @@ export interface ProviderPublicView {
   supported: boolean;
   configured: boolean;
   delivery: Delivery;
+  vocabulary: ProviderVocabulary;
 }
 
 /** The result of a secrets-file write. `changed` is deleteSecret()'s only addition. */
@@ -73,6 +74,29 @@ export const KINDS = ['plex', 'kavita'];
 // provider's own `delivery`, kept here too so the API can report it without instantiating
 // (and therefore without needing a token for an unconfigured provider).
 const DELIVERY: Record<string, Delivery | undefined> = { plex: 'push', kavita: 'pull' };
+
+// The WORDS each medium is described in. Kept beside DELIVERY and for the same reason: the
+// API must be able to report it without instantiating a provider, so an UNCONFIGURED backend
+// still labels its own editor correctly.
+//
+// This exists because `delivery` was not enough. It told the UI that a Kavita queue hands
+// back a URL, which fixed the queue-level button — and every tile underneath still said
+// "Play “The Sword-Eating Swordmaster” now" (reported live, 2026-08-15). Delivery is HOW a
+// lineup starts; this is what the medium is CALLED, and they are not the same question.
+const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
+  plex: { verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched' },
+  kavita: { verb: 'Read', unit: 'chapter', units: 'chapters', member: 'series', done: 'read' },
+};
+
+/**
+ * The fallback vocabulary for a definition naming a kind this build does not know.
+ *
+ * Plex's words, because that is what every screen said before this map existed — an unknown
+ * backend renders exactly as it used to rather than rendering blank labels.
+ */
+const DEFAULT_VOCABULARY: ProviderVocabulary = {
+  verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched',
+};
 
 // Built-in deploy-time env names, per kind. These keep working exactly as they did before
 // this file existed, which is what makes the connector surface additive: Plex stays
@@ -254,7 +278,15 @@ export function publicView(def: ProviderDefinition): ProviderPublicView {
     // without branching on `kind` — a UI that says `if (kind === 'kavita')` has to be edited
     // again for every future backend, which is the leak the seam exists to prevent.
     delivery: DELIVERY[def.kind] || 'push',
+    // …and what the medium is CALLED. Same rule, different question: `delivery` fixed the
+    // queue-level button and left every tile saying "Play" on something you read.
+    vocabulary: VOCABULARY[def.kind] || DEFAULT_VOCABULARY,
   };
 }
+
+/** One provider's words, without instantiating it. `sets.ts` labels a queue with this. */
+export const vocabularyForKind = (kind: string | null | undefined): ProviderVocabulary => (
+  VOCABULARY[kind ?? ''] || DEFAULT_VOCABULARY
+);
 
 export const publicList = (): ProviderPublicView[] => definitions().map(publicView);

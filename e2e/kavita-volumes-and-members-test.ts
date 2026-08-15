@@ -1,0 +1,236 @@
+// Offline gate for two live bugs in the Kavita provider, both found on the real
+// "Manga & Webtoons" queue on 2026-08-15. Every HTTP call is stubbed — no token, no network.
+//
+// 1. A VOLUME-BASED series read as fully read.
+//    `series-detail` puts NOTHING in `chapters`/`specials` for a manga; every chapter hangs
+//    off `volumes[].chapters[]`. The reader only looked at the first two, so "Alice in
+//    Borderland" (0 of 328 pages read) rendered "All read" and never entered a lineup. The
+//    stub below reproduces the live shape exactly: chapters 0, specials 0, volumes 9.
+//    A chapter-based WEBTOON returns the same chapters in BOTH places, so the union must
+//    dedupe by chapter id or every webtoon chapter queues twice — also asserted.
+//
+// 2. A CURATED queue played the library shelf.
+//    `buckets()` enumerated `seriesForLibrary` and never read the queue's own entries, so a
+//    93-entry reading queue produced a reading list of 12 series in alphabetical order, ONE
+//    of which the owner had actually added.
+//
+// Run:  server/node_modules/.bin/tsx e2e/kavita-volumes-and-members-test.ts
+import assert from 'node:assert/strict';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import { errMessage } from '../server/src/errors.js';
+import type { BucketsResult, KavitaPlayItem } from '../server/src/types.js';
+import type { KavitaHttpClient } from '../server/src/providers/kavita-client.js';
+
+const SCRATCH = mkdtempSync(path.join(tmpdir(), 'kavita-vol-'));
+process.env.PROVIDERS_PATH = path.join(SCRATCH, 'providers.yaml');
+process.env.PROVIDERS_SECRETS_PATH = path.join(SCRATCH, 'providers.secrets.yaml');
+process.env.SETS_PATH = path.join(SCRATCH, 'sets.yaml');
+process.env.QUEUES_PATH = path.join(SCRATCH, 'queues.yaml');
+process.env.CACHE_PATH = path.join(SCRATCH, 'cache.sqlite');
+process.env.KAVITA_API_SERVER_URL = 'https://kavita.invalid';
+writeFileSync(process.env.SETS_PATH, 'sets: []\n');
+writeFileSync(process.env.QUEUES_PATH, '{}\n');
+
+const FAILS: string[] = [];
+async function ok(name: string, fn: () => Promise<void>) {
+  try {
+    await fn();
+    console.log(`PASS ${name}`);
+  } catch (e) {
+    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+    FAILS.push(name);
+  }
+}
+
+interface KavitaBuckets extends Omit<BucketsResult, 'play' | 'buckets'> {
+  play: KavitaPlayItem[];
+  buckets: { seriesId: number; title: string }[];
+}
+const asClient = (c: unknown): KavitaHttpClient => c as unknown as KavitaHttpClient;
+
+// --------------------------------------------------------------------------- //
+// The stub, shaped from the LIVE instance (kavita.example.com, 2026-08-15).
+// --------------------------------------------------------------------------- //
+
+/** 4672 "Alice in Borderland" — a MANGA. chapters 0 / specials 0 / volumes 9, none read. */
+const ALICE_DETAIL = {
+  chapters: [],
+  specials: [],
+  unreadCount: 9,
+  volumes: Array.from({ length: 9 }, (_, i) => ({
+    id: 7800 + i,
+    name: `Volume ${i + 1}`,
+    number: i + 1,
+    minNumber: i + 1,
+    pages: 300 + i,
+    pagesRead: 0,
+    // Kavita's no-chapter-subdivision sentinel, verbatim off the wire.
+    chapters: [{
+      id: 68270 + i, number: '-100000', minNumber: -100000, title: 'Chapter -100000',
+      titleName: '', range: '-100000', pages: 300 + i, pagesRead: 0,
+    }],
+  })),
+};
+
+/** 4577 "The Sword-Eating Swordmaster" — a WEBTOON. The SAME chapters appear twice: loose
+ *  at the top level AND under volume 1. Live behaviour; the reason dedupe is required. */
+const SWORD_CHAPTERS = Array.from({ length: 4 }, (_, i) => ({
+  id: 67094 + i, number: String(i + 1), minNumber: i + 1, title: `Chapter ${i + 1}`,
+  titleName: '', range: String(i + 1), pages: 150, pagesRead: i === 0 ? 150 : 0,
+}));
+const SWORD_DETAIL = {
+  chapters: SWORD_CHAPTERS,
+  specials: [],
+  unreadCount: 3,
+  volumes: [{
+    id: 7586, name: 'Volume 1', number: 1, minNumber: 1, pages: 600, pagesRead: 150,
+    chapters: SWORD_CHAPTERS,
+  }],
+};
+
+const DETAILS: Record<string, unknown> = { 4672: ALICE_DETAIL, 4577: SWORD_DETAIL };
+const SERIES: Record<string, { id: number; name: string; libraryId: number; format: number }> = {
+  4672: { id: 4672, name: 'Alice in Borderland', libraryId: 2, format: 1 },
+  4577: { id: 4577, name: 'The Sword-Eating Swordmaster', libraryId: 5, format: 1 },
+  99: { id: 99, name: 'Shelf Filler', libraryId: 5, format: 1 },
+};
+
+function stubClient() {
+  const calls: string[][] = [];
+  return {
+    _calls: calls,
+    async whoami() { return 'Sawtaytoes'; },
+    async series(id: number | string) {
+      calls.push(['series', String(id)]);
+      return SERIES[String(id)] ?? null;
+    },
+    async seriesDetail(id: number | string) {
+      calls.push(['seriesDetail', String(id)]);
+      return DETAILS[String(id)] ?? { chapters: [], specials: [], volumes: [] };
+    },
+    async continuePoint(id: number | string) {
+      calls.push(['continuePoint', String(id)]);
+      // What the real endpoint answers: the single next unread chapter, seriesId NULL.
+      if (String(id) === '4672') {
+        return { id: 68270, number: '-100000', minNumber: -100000, pages: 300, pagesRead: 0, seriesId: Number(id) };
+      }
+      if (String(id) === '4577') {
+        return { id: 67095, number: '2', minNumber: 2, pages: 150, pagesRead: 0, seriesId: Number(id) };
+      }
+      return { id: 1, number: '1', minNumber: 1, pages: 10, pagesRead: 0, seriesId: Number(id) };
+    },
+    async seriesForLibrary(libraryId: number | string) {
+      calls.push(['seriesForLibrary', String(libraryId)]);
+      return Object.values(SERIES).filter((s) => String(s.libraryId) === String(libraryId));
+    },
+  };
+}
+
+const { kavitaProvider } = await import('../server/src/providers/kavita.js');
+const DEF = { id: 'kavita', kind: 'kavita', label: 'Kavita', base_url: 'https://kavita.invalid' };
+
+// --------------------------------------------------------------------------- //
+// 1. Volume-based series
+// --------------------------------------------------------------------------- //
+
+await ok('a VOLUME-based manga is not reported as fully read', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const [tile] = await p.tiles!(['4672']);
+  assert.ok(tile, 'Alice in Borderland resolved to no tile at all');
+  // The bug: `next: null` here is what the frontend renders as "All read".
+  assert.ok(tile.next, 'a series with 9 unread volumes reported nothing next — the "All read" bug');
+  assert.equal(tile.unreadCount, 9);
+});
+
+await ok('a whole volume is labelled as a VOLUME, never "Ch -100000"', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const [tile] = await p.tiles!(['4672']);
+  const next = tile!.next!;
+  assert.equal(next.unit, 'volume', 'a whole-volume item must carry unit "volume"');
+  assert.equal(next.number, 1, 'the VOLUME number, not the -100000 chapter sentinel');
+  assert.equal(next.title, 'Volume 1');
+  // The chapter id is still Kavita's real one — that is what the reader opens.
+  assert.equal(next.chapterId, 68270);
+});
+
+await ok('volumes are read in volume order, not wire order', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4672', batch: 3 }], limit: 3,
+  }) as KavitaBuckets;
+  assert.deepEqual(play.map((i) => i.number), [1, 2, 3]);
+  assert.deepEqual(play.map((i) => i.title), ['Volume 1', 'Volume 2', 'Volume 3']);
+});
+
+await ok('a WEBTOON chapter is never queued twice (loose + volume dedupe)', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4577', batch: 10 }], limit: 10,
+  }) as KavitaBuckets;
+  const ids = play.map((i) => i.chapterId);
+  assert.equal(new Set(ids).size, ids.length, `duplicate chapters queued: ${ids.join(', ')}`);
+  // Chapter 1 is fully read; 2/3/4 are not. The read one must not come back.
+  assert.deepEqual(ids, [67095, 67096, 67097]);
+  // A loose chapter keeps chapter wording — the volume path must not relabel a webtoon.
+  assert.equal(play[0]!.unit, 'chapter');
+  assert.equal(play[0]!.number, '2');
+});
+
+// --------------------------------------------------------------------------- //
+// 2. Curated entries vs the library shelf
+// --------------------------------------------------------------------------- //
+
+await ok('curated entries ARE the lineup — the library is not consulted', async () => {
+  const client = stubClient();
+  const p = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4672' }],
+    // A library is offered too. The entries must win, or a curated queue plays the shelf.
+    libraries: ['5'],
+    limit: 5,
+  }) as KavitaBuckets;
+  assert.ok(play.length > 0);
+  assert.ok(
+    play.every((i) => String(i.seriesId) === '4672'),
+    `a curated queue drew from outside its entries: ${play.map((i) => i.seriesId).join(', ')}`,
+  );
+  assert.equal(
+    client._calls.some((c) => c[0] === 'seriesForLibrary'), false,
+    'the library shelf was enumerated even though the queue has entries',
+  );
+});
+
+await ok('a set with NO entries still falls back to its libraries', async () => {
+  const client = stubClient();
+  const p = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await p.buckets({ entries: [], libraries: ['5'], limit: 5 }) as KavitaBuckets;
+  assert.ok(play.length > 0, 'a rule-based reading channel lost its pool');
+  assert.ok(client._calls.some((c) => c[0] === 'seriesForLibrary'));
+});
+
+await ok('a per-entry batch overrides the queue default, per series', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    // Alice takes 3 per round by her own override; the webtoon takes the queue's 1.
+    entries: [{ id: '4672', batch: 3 }, { id: '4577' }],
+    batch: 1,
+    limit: 4,
+  }) as KavitaBuckets;
+  const first = play.slice(0, 3).map((i) => String(i.seriesId));
+  assert.deepEqual(first, ['4672', '4672', '4672'], 'the entry override did not widen its own slice');
+  assert.equal(String(play[3]!.seriesId), '4577', 'the next series did not get its turn after the batch');
+});
+
+await ok('an entry naming a series Kavita no longer has is skipped, not fatal', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '999999' }, { id: '4672' }], limit: 3,
+  }) as KavitaBuckets;
+  assert.ok(play.length > 0, 'one deleted series made the whole queue unlaunchable');
+  assert.ok(play.every((i) => String(i.seriesId) === '4672'));
+});
+
+console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall passed');
+process.exit(FAILS.length ? 1 : 0);

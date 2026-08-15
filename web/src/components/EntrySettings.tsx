@@ -2,7 +2,11 @@ import { Badge } from "@charcuterie/ui"
 
 import { api } from "../lib/api"
 import { startLabel } from "../lib/tileFace"
-import type { BatchStop, QueueItem } from "../lib/types"
+import type {
+  BatchStop,
+  ProviderVocabulary,
+  QueueItem,
+} from "../lib/types"
 import { refreshData } from "../state/live"
 import {
   type EntryActions,
@@ -34,13 +38,35 @@ import { Tip } from "./Tip"
 export const WEIGHT_MAX = 20
 export const EPISODES_MAX = 40
 
+/**
+ * Plex's words, used wherever a caller has no set in hand.
+ *
+ * The fallback rather than a hardcoded string, so a component that forgets to pass the
+ * vocabulary renders exactly what it rendered before providers had one — a visible-but-wrong
+ * noun on a reading tile, never `undefined`.
+ */
+export const PLEX_WORDS: ProviderVocabulary = {
+  done: "watched",
+  member: "show",
+  unit: "episode",
+  units: "episodes",
+  verb: "Play",
+}
+
+/** "3 eps" / "3 ch" — the tag has to fit on a poster tile, so the unit is abbreviated. */
+const shortUnits = (vocab: ProviderVocabulary) =>
+  vocab.unit === "episode" ? "eps" : "ch"
+
 /** The tags for one entry: only what differs from the defaults, in a stable order. */
 export function SettingTags({
   item,
   onEdit,
+  vocab = PLEX_WORDS,
 }: {
   item: QueueItem
   onEdit?: () => void
+  /** The queue's provider vocabulary — a reading tile must not say "3 eps". */
+  vocab?: ProviderVocabulary
 }) {
   const episodes = item.episodes ?? 1
   const weight = item.weight ?? 1
@@ -76,8 +102,8 @@ export function SettingTags({
     <>
       {episodes > 1
         ? tag(
-            `${episodes} eps`,
-            `Queues ${episodes} episodes each time this entry comes up`,
+            `${episodes} ${shortUnits(vocab)}`,
+            `Queues ${episodes} ${vocab.units} each time this entry comes up`,
             "epstag",
             "neutral",
           )
@@ -207,12 +233,17 @@ export function EntryEditor({
 }) {
   // Re-read from the store every render: the panel stays correct while an SSE update, another
   // device, or the bulk bar changes this entry underneath it.
-  const { data } = useStore()
+  const { data, reg } = useStore()
   const item = setId
     ? data?.sets[setId]?.items.find(
         (it) => it.key === itemKey,
       )
     : undefined
+  // The queue's own words, so this panel does not ask a reading queue about episodes.
+  const vocab =
+    (setId
+      ? reg?.sets.find((s) => s.id === setId)?.vocabulary
+      : null) ?? PLEX_WORDS
 
   if (!isOpen || !setId || !item) return null
 
@@ -240,11 +271,13 @@ export function EntryEditor({
       <div className="entryfields">
         {isSeries ? (
           <div className="field">
+            {/* In the QUEUE's words: this panel used to ask a manga entry how many
+                "episodes queued per play" it wanted. */}
             <span className="fieldlabel">
-              Episodes queued per play
+              {`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} queued per turn`}
             </span>
             <CountPicker
-              label="Episodes queued per play"
+              label={`${vocab.units} queued per turn`}
               max={EPISODES_MAX}
               onChange={(n) =>
                 void setEntryEpisodes(setId, item, n)
@@ -252,8 +285,8 @@ export function EntryEditor({
               value={episodes}
             />
             <span className="fieldhint">
-              How long this entry&rsquo;s turn is when the
-              queue reaches it.
+              {`How long this entry’s turn is when the queue reaches it. Overrides
+                the queue’s own default.`}
             </span>
           </div>
         ) : null}

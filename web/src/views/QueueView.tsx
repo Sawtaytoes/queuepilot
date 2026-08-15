@@ -7,6 +7,7 @@ import { useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
 import {
   EntryEditor,
+  PLEX_WORDS,
   SettingTags,
 } from "../components/EntrySettings"
 import {
@@ -178,6 +179,13 @@ export function QueueView({
     ? reg?.sets.find((x) => x.id === setId)
     : undefined
   const isChannel = q?.kind === "anime"
+  // Pushed at a device, or opened by a link. Decides the whole start affordance — the
+  // queue-level button AND every tile's ▶.
+  const isPull = isPullSet(regSet)
+  // The provider's own words. Falls back to Plex's so a registry response that predates
+  // `vocabulary` renders exactly as it used to rather than rendering "undefined".
+  const vocab = regSet?.vocabulary ?? PLEX_WORDS
+  const verb = vocab.verb
 
   useGridDrag(gridRef, setId, Boolean(isChannel))
 
@@ -268,6 +276,11 @@ export function QueueView({
   return (
     <main
       className={`view editable${selected.size ? " move-mode" : ""}`}
+      // The whole queue page wears its provider's accent — every ▶, ring, count and badge
+      // under here is about THIS queue, so all of it is that service's colour. Page chrome
+      // that belongs to no queue stays Charcuterie because it sits outside this element.
+      // (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+      data-provider={regSet?.provider_kind || undefined}
       hidden={isHidden}
       id="queue"
     >
@@ -635,7 +648,7 @@ export function QueueView({
               ⚙ Configure
             </button>
           </Tip>
-          {isPullSet(regSet) ? (
+          {isPull ? (
             // No device to cast to — hand back the launcher URL instead.
             <OpenQueueButton set={regSet!} />
           ) : (
@@ -873,10 +886,13 @@ export function QueueView({
                           setId &&
                           openEntryEditor(setId, item.key)
                         }
+                        vocab={vocab}
                       />
                     ) : null}
                     {item.resolved && setId ? (
-                      <Tip label="Episodes per play, weight, where the batch stops, start point">
+                      <Tip
+                        label={`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per turn, weight, where the batch stops, start point`}
+                      >
                         <button
                           className="badge tagbtn editbtn"
                           onClick={() =>
@@ -938,8 +954,12 @@ export function QueueView({
                 // Only a RESOLVED entry can be played: an unresolved one has no library item
                 // behind it, so the server would reject the start after the device menu had
                 // already asked which TV. No ▶ is a clearer answer than a late error.
+                //
+                // PUSH only. A pull queue has no device to name, so its tile gets a link
+                // (`playHref` below) instead of the device menu — which used to offer the
+                // Shield, Plex Dash and a phone for a manga chapter.
                 onPlay={
-                  setId && item.resolved
+                  setId && item.resolved && !isPull
                     ? (anchor) =>
                         openPlayMenu({
                           anchor,
@@ -951,7 +971,14 @@ export function QueueView({
                     : undefined
                 }
                 onRemove={() => removeTile(item)}
-                playTitle={`Play “${face.title}” now`}
+                // "Read THIS one now": rebuild the reading list around this one entry and
+                // 302 into the reader. The pull counterpart of the play-one-entry key.
+                playHref={
+                  setId && item.resolved && isPull
+                    ? `/go/${encodeURIComponent(setId)}?only=${encodeURIComponent(item.key)}`
+                    : undefined
+                }
+                playTitle={`${verb} “${face.title}” now`}
                 posterCover={item.cover}
                 posterRatingKey={
                   item.resolved ? face.ratingKey : null

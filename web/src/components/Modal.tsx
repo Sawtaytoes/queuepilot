@@ -39,10 +39,18 @@ type Props = {
   onSubmit?: () => void
   children: ReactNode
   footer?: ReactNode
+  /**
+   * Scopes the accent to one provider (`plex` / `kavita`) for everything inside the modal.
+   * Lands on the app-styled `#id` box rather than Charcuterie's outer shell, because that is
+   * the element every `#setmodal` rule already targets. Omit for a modal that belongs to no
+   * queue — it then inherits the app's neutral accent.
+   */
+  dataProvider?: string
 }
 
 export function Modal({
   children,
+  dataProvider,
   footer,
   id,
   isOpen,
@@ -81,7 +89,11 @@ export function Modal({
     >
       {/* `data-open` (not `open`, which React only renders on <dialog>/<details>) keeps the
           e2e "modal is open" contract alive now that this is not a native <dialog>. */}
-      <div data-open="" id={id}>
+      <div
+        data-open=""
+        data-provider={dataProvider}
+        id={id}
+      >
         <form
           id={`${id.replace("modal", "")}form`}
           onSubmit={(e) => {

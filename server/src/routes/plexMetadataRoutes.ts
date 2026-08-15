@@ -3,6 +3,7 @@ import * as plex from '../plex.js';
 import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
+import { parseSearchQuery, rankByYear } from '../searchQuery.js';
 import { binaryResponse } from './binaryResponse.js';
 
 /**
@@ -23,9 +24,14 @@ export function plexMetadataRoutes(): Hono {
   // `?scope=all` searches EVERY video library, ignoring the set's own sections — the member
   // picker uses it because a curated member is a manual INCLUDE, not bound to the channel's
   // pool libraries (e.g. adding an Anime show to a Shows-only channel).
+  //
+  // A trailing `(YYYY)` is split off before matching and used to RANK the hits, never to
+  // filter them — see searchQuery.ts. `Title (Year)` is this app's own entry format, so the
+  // box has to accept the string the tiles print.
   app.get('/search', async (c) => {
     const setId = c.req.query('set') ?? '';
-    const q = (c.req.query('q') ?? '').trim();
+    const raw = (c.req.query('q') ?? '').trim();
+    const { text: q, year } = parseSearchQuery(raw);
     const withCollections = c.req.query('collections') === '1' || c.req.query('collections') === 'true';
     const allLibraries = c.req.query('scope') === 'all';
     if (!q) return c.json({ results: [] });
@@ -95,7 +101,7 @@ export function plexMetadataRoutes(): Hono {
       const results: (
         Awaited<ReturnType<typeof plex.search>>[number]
         | Awaited<ReturnType<typeof plex.collections>>[number]
-      )[] = await plex.search(sections, q);
+      )[] = rankByYear(await plex.search(sections, q), year);
       if (withCollections) {
         try {
           // Collections lead the list: typing a franchise name ("Mobile Suit Gundam") turns up

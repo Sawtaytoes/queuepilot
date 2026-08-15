@@ -460,7 +460,9 @@ interface SplitEntry {
 // addressable, `extras` is every OTHER field the file carries (episodes, start, done, a
 // hand-written `collection:`, …). Rewrites keep the extras, so setting one override never
 // silently drops another writer's field.
-function splitEntry(cur: unknown): SplitEntry {
+// Exported for providers/launcher.ts, which needs an entry's stored id + its `episodes:`
+// override to build a PULL provider's lineup — the same decomposition every writer here uses.
+export function splitEntry(cur: unknown): SplitEntry {
   const m = asMapping(cur);
   if (m) {
     const { ratingKey = null, title = null, ...extras } = m;

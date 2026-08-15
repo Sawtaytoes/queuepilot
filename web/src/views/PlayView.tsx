@@ -66,12 +66,21 @@ function PlayRow({
   label: string
   meta: string
   onPlay: (anchor: DOMRect) => void
-  /** The registry entry, for `delivery`. Absent = push (every pre-provider caller). */
-  set?: Pick<RegistrySet, "id" | "delivery">
+  /** The registry entry, for `delivery` + the accent. Absent = push (pre-provider callers). */
+  set?: Pick<
+    RegistrySet,
+    "id" | "delivery" | "provider_kind"
+  >
   tier?: ReactNode
 }) {
   return (
-    <li className="playrow">
+    // Each row wears its own queue's colour, so the landing page says at a glance which
+    // service each button will talk to — the Kavita row's Open button is Kavita-green beside
+    // the Plex rows' amber. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+    <li
+      className="playrow"
+      data-provider={set?.provider_kind || undefined}
+    >
       <div className="rowmain">
         <a className="rowname" href={href}>
           {label}
@@ -249,6 +258,10 @@ export function PlayView({
                   <PlayRow
                     key={id}
                     label={s.label}
+                    // The registry entry, same as the Curated rows above. Without it a
+                    // Plex QUEUE renders in the neutral accent while a Plex CHANNEL two
+                    // columns over renders amber — one page, two colours, same provider.
+                    set={reg?.sets.find((x) => x.id === id)}
                     meta={`${s.items.length} titles · top plays next`}
                     href={`#/q/${id}`}
                     onPlay={(anchor) =>

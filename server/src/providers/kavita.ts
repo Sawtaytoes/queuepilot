@@ -30,6 +30,7 @@ import type {
   KavitaHttpClient,
   KavitaSeriesDetailDto,
   KavitaSeriesDto,
+  KavitaVolumeDto,
 } from './kavita-client.js';
 
 import { kavitaClient, readerSegment } from './kavita-client.js';
@@ -48,6 +49,8 @@ interface KavitaSeriesBucket {
   seriesId: number | string | undefined;
   libraryId: number | string | null;
   format: number | null;
+  /** How many of this series' items one round of the interleave takes — its own batch. */
+  batch?: number;
   items: KavitaPlayItem[];
 }
 
@@ -108,16 +111,56 @@ function isUnread(ch: KavitaChapterDto | null): ch is KavitaChapterDto {
   return (ch.pagesRead ?? 0) < pages;
 }
 
+/**
+ * Kavita's "this file is not subdivided into chapters" sentinel (`Parser.DefaultChapterNumber`).
+ * Every chapter of a VOLUME-based manga carries it, so a volume of Alice in Borderland arrives
+ * as `number: '-100000'`. Rendering that verbatim gives a tile reading "Ch -100000".
+ */
+const NO_CHAPTER_NUMBER = -100000;
+
+const isWholeVolume = (ch: KavitaChapterDto): boolean => (
+  Number(ch.minNumber ?? ch.number) === NO_CHAPTER_NUMBER
+);
+
+/**
+ * One unread chapter plus the volume it came from (null for a loose chapter).
+ *
+ * The volume is carried rather than discarded because it is the only place the reader's
+ * actual unit of progress is named: for a volume-based series the chapter number is the
+ * sentinel above, and "Volume 3" lives on the volume alone.
+ */
+interface UnreadEntry {
+  chapter: KavitaChapterDto;
+  volume: KavitaVolumeDto | null;
+}
+
 /** One lineup item from a Kavita ChapterDto. `seriesId` is threaded in — Kavita leaves it null. */
-function chapterItem(ch: KavitaChapterDto, seriesId: number | string | undefined): KavitaPlayItem {
+function chapterItem(
+  entry: UnreadEntry | KavitaChapterDto,
+  seriesId: number | string | undefined,
+): KavitaPlayItem {
+  // Accepts a bare chapter too: the `continue-point` path (perSeries <= 1) has no volume to
+  // offer, and inventing one there would be a lie about what Kavita answered.
+  const { chapter: ch, volume } = 'chapter' in entry
+    ? entry as UnreadEntry
+    : { chapter: entry as KavitaChapterDto, volume: null };
+  // A whole-volume chapter is presented AS the volume: that is what the reader opens, what
+  // Kavita's own UI calls it, and the only number that means anything to a person.
+  const asVolume = isWholeVolume(ch) && volume != null;
   return {
     // `id` is optional on the DTO and every caller has already proved it non-null (isUnread /
     // orderedUnread both reject a chapter without one), so this asserts rather than defaults —
     // a `?? 0` here would mint a chapter id that does not exist.
     chapterId: ch.id as number,
     seriesId: seriesId as number | string,
-    title: ch.titleName || ch.title || ch.range || String(ch.number),
-    number: ch.number,
+    title: asVolume
+      ? (volume.name || `Volume ${volume.number ?? volume.minNumber ?? '?'}`)
+      : (ch.titleName || ch.title || ch.range || String(ch.number)),
+    number: asVolume ? (volume.number ?? volume.minNumber) : ch.number,
+    // What this item IS, for the tile's wording. Per ITEM and not per provider: one Kavita
+    // library holds volume-based manga beside chapter-based webtoons, so `provider.unit` is
+    // the default and this is the correction.
+    unit: asVolume ? 'volume' : 'chapter',
     pages: ch.pages,
     pagesRead: ch.pagesRead,
   };
@@ -126,21 +169,55 @@ function chapterItem(ch: KavitaChapterDto, seriesId: number | string | undefined
 /**
  * A series' unread chapters, in reading order.
  *
+ * ## Volumes are not optional to read
+ *
+ * The obvious implementation — `[...detail.chapters, ...detail.specials]` — silently reports
+ * every VOLUME-BASED series as fully read, because Kavita puts nothing in either array for
+ * one. Verified live: "Alice in Borderland" answers `chapters: 0, specials: 0, volumes: 9`,
+ * with all nine chapters hanging off the volumes, 0/328 pages read. The tile said "All read"
+ * on a series the owner had never opened.
+ *
+ * A chapter-based WEBTOON returns the same chapters in BOTH places ("The Sword-Eating
+ * Swordmaster": 21 loose chapters AND 21 under volume 1), so the union has to dedupe by
+ * chapter `id` or every webtoon chapter would queue twice.
+ *
+ * This is also the "97 vs 103" discrepancy `pool()` already documented between Kavita's own
+ * `unreadCount` and the run parsed here: the missing six were volume-based series, not
+ * chapters reporting zero pages.
+ *
  * `series-detail` returns every chapter with its own `pagesRead`/`pages`, so the unread run
  * is just a filter — and filtering rather than slicing from the continue point is what makes
  * a gap (an unread chapter behind a read one) lead, exactly as `continue-point` would.
  *
- * Sorted by `minNumber` rather than trusted as-returned: the array happened to be ordered on
- * the instance this was verified against, but nothing documents that guarantee.
+ * Sorted by (volume, chapter) rather than trusted as-returned: the array happened to be
+ * ordered on the instance this was verified against, but nothing documents that guarantee —
+ * and for a volume-based series the chapter numbers are ALL the sentinel, so a sort on the
+ * chapter number alone would leave the volumes in whatever order the wire chose.
  */
-function orderedUnread(detail: KavitaSeriesDetailDto | null): KavitaChapterDto[] {
-  const all = [
+function orderedUnread(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
+  const loose: UnreadEntry[] = [
     ...(detail?.chapters || []),
     ...(detail?.specials || []),
-  ];
-  return all
-    .filter((ch) => ch && (ch.pages ?? 0) > 0 && (ch.pagesRead ?? 0) < (ch.pages ?? 0))
-    .sort((a, b) => (a.minNumber ?? 0) - (b.minNumber ?? 0));
+  ].map((chapter) => ({ chapter, volume: null }));
+
+  const fromVolumes: UnreadEntry[] = (detail?.volumes || []).flatMap((volume) => (
+    (volume?.chapters || []).map((chapter) => ({ chapter, volume }))
+  ));
+
+  const seen = new Set<number>();
+  return [...loose, ...fromVolumes]
+    .filter(({ chapter: ch }) => {
+      if (!ch || ch.id == null) return false;
+      // Dedupe by chapter id — the loose copy wins, which keeps a webtoon's ordering and
+      // labelling byte-identical to what it was before volumes were read at all.
+      if (seen.has(ch.id)) return false;
+      seen.add(ch.id);
+      return (ch.pages ?? 0) > 0 && (ch.pagesRead ?? 0) < (ch.pages ?? 0);
+    })
+    .sort((a, b) => (
+      (a.volume?.minNumber ?? 0) - (b.volume?.minNumber ?? 0)
+      || (a.chapter.minNumber ?? 0) - (b.chapter.minNumber ?? 0)
+    ));
 }
 
 /** Map with bounded concurrency, preserving input order. */
@@ -284,7 +361,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
             unreadCount: detail?.unreadCount ?? unread.length,
             // `unread.length` is the guard `noUncheckedIndexedAccess` cannot see — the same
             // assertion the pool branch below already writes for the same read.
-            next: unread.length ? chapterItem(unread[0] as KavitaChapterDto, Number(id)) : null,
+            next: unread.length ? chapterItem(unread[0] as UnreadEntry, Number(id)) : null,
           };
         } catch {
           return null;
@@ -333,7 +410,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
             unreadCount: count || unread.length,
             // A series whose unread chapters we could not parse still belongs in the pool;
             // it just has no next-up line to show.
-            items: unread.length ? [chapterItem(unread[0] as KavitaChapterDto, s.id)] : [],
+            items: unread.length ? [chapterItem(unread[0] as UnreadEntry, s.id)] : [],
           };
         } catch {
           // One unreadable series must not blank the whole grid.
@@ -407,26 +484,33 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
     },
 
     /**
-     * The ordered lineup: the next unread chapter(s) of each series in the block's libraries,
+     * The ordered lineup: the next unread chapter(s) of each series this queue draws from,
      * interleaved. `buildRotation` is backend-neutral (it round-robins over bucket objects
      * and never touches Plex), so the shape returned here is deliberately the same bucket
      * shape it already consumes — give it chapter buckets and it interleaves series exactly
      * as it interleaves shows.
+     *
+     * ## `entries` beat `libraries`, and that is the whole distinction
+     *
+     * A CURATED queue (`source: queue`) is its entries. A RULE-based channel has none and
+     * draws from the libraries instead. This method originally knew only the second case, so
+     * a curated reading queue silently played the library shelf: the live "Manga & Webtoons"
+     * reading list came back holding twelve series in alphabetical order, exactly ONE of
+     * which was among the ninety-three the owner had added. The entries were never read.
      */
     async buckets({
-      cfg = {}, libraries = [], batch = null, limit = null,
+      cfg = {}, libraries = [], entries = [], isRandomOrder = false, batch = null, limit = null,
     }: BucketsContext = {}): Promise<BucketsResult> {
-      // `cfg` is the routing set config, read here for the three fallbacks below only. It is
-      // a union in BucketsContext (`RoutingSetCfg | Record<string, unknown>`) and NONE of the
-      // three keys is on RoutingSetCfg — `libraries` and `batch` live on a provider BLOCK,
-      // and only `max_items` is a real set field — so it is read through an index view. That
-      // this compiles at all is the honest report: a Kavita set's per-set batch has never
-      // come from `cfg`, only from the block.
+      // `cfg` is the routing set config, read here for the fallbacks below only. It is a union
+      // in BucketsContext (`RoutingSetCfg | Record<string, unknown>`) and neither `libraries`
+      // nor `batch` is on RoutingSetCfg — both live on a provider BLOCK — so they are read
+      // through an index view. Only `max_items` is a real set field.
       const cfgAny = cfg as Record<string, unknown>;
       const libIds = (libraries.length ? libraries : ((cfgAny.libraries as string[] | undefined) || [])).map(String);
-      if (!libIds.length) return { play: [], buckets: [] };
+      const curated = entries.filter((e) => e && e.id);
+      if (!curated.length && !libIds.length) return { play: [], buckets: [] };
       // "Read at least X chapters before switching series" — the opening ask in the
-      // feasibility record. Per-set override, else the env default.
+      // feasibility record. Per-entry override, else per-queue, else the env default.
       const perSeries = Math.max(1, Number(batch ?? cfgAny.batch ?? KAVITA_BATCH_DEFAULT) || 1);
       // The SAME cap the Plex rotation runs under. Without it a real library queues
       // everything: Webtoons alone measured 103 series with something unread, which would
@@ -434,23 +518,46 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // nobody will reach the end of. A queue is the next while, not the whole backlog.
       const cap = Math.max(1, Number(limit ?? cfgAny.max_items ?? ROTATION_LENGTH) || ROTATION_LENGTH);
 
-      const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
-      const allSeries = seriesLists.flat().filter((s): s is KavitaSeriesDto => s != null);
+      // The series this queue may draw from, each carrying the per-visit batch that applies
+      // to it. A curated entry's own `episodes:` override rides here; a library series has
+      // none and takes the queue default.
+      let sources: { series: KavitaSeriesDto; batch: number }[];
+      if (curated.length) {
+        const rows = await mapLimit(curated, PROBE_CONCURRENCY, async (e) => {
+          try {
+            const s = await c.series(e.id);
+            // A series deleted in Kavita drops out rather than throwing — one stale entry
+            // must not make a ninety-three-entry queue unlaunchable.
+            return s ? { series: s, batch: Math.max(1, Number(e.batch ?? perSeries) || perSeries) } : null;
+          } catch {
+            return null;
+          }
+        });
+        sources = rows.filter((r): r is { series: KavitaSeriesDto; batch: number } => r != null);
+      } else {
+        const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
+        sources = seriesLists.flat()
+          .filter((s): s is KavitaSeriesDto => s != null)
+          .map((series) => ({ series, batch: perSeries }));
+      }
 
       // One continue-point probe per series, bounded. A series with nothing unread yields no
       // bucket at all, which is what keeps a finished series out of the rotation without a
       // separate "done" store — the read state in Kavita IS the done state.
-      const probed = await mapLimit(allSeries, PROBE_CONCURRENCY, async (s): Promise<KavitaSeriesBucket | null> => {
+      const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({ series: s, batch: want }): Promise<KavitaSeriesBucket | null> => {
         const bucket = {
           key: `series:${s.id}`,
           title: s.name,
           seriesId: s.id,
           libraryId: s.libraryId ?? null,
           format: s.format ?? null,
+          // Carried so the interleave below slices THIS series' batch rather than one global
+          // number — a per-entry override is meaningless if the round-robin ignores it.
+          batch: want,
         };
 
         // ONE chapter wanted: continue-point answers it in a single call.
-        if (perSeries <= 1) {
+        if (want <= 1) {
           const ch = await c.continuePoint(s.id as number | string);
           if (!isUnread(ch)) return null;
           return { ...bucket, items: [chapterItem(ch, s.id)] };
@@ -462,19 +569,34 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         const detail = await c.seriesDetail(s.id as number | string);
         const unread = orderedUnread(detail);
         if (!unread.length) return null;
-        return { ...bucket, items: unread.slice(0, perSeries).map((ch) => chapterItem(ch, s.id)) };
+        return { ...bucket, items: unread.slice(0, want).map((e) => chapterItem(e, s.id)) };
       });
       const buckets = probed.filter((b): b is KavitaSeriesBucket => b != null);
 
-      // Round-robin `perSeries` at a time, so a queue reads three chapters of A, then three
-      // of B, rather than one-and-switch. Interleaving across buckets (rather than draining
-      // one) is what buildRotation does on the Plex side, and it is what makes the queue
-      // roll into a different series instead of becoming a single-series binge.
+      // A channel plays in RANDOM order, which is what its editor copy promises and what the
+      // Plex side gets from `buildRotation`'s injected rng. Without this a capped curated
+      // channel serves the same first `cap` entries in stored order on every single launch —
+      // the other eighty-one would never come up.
+      if (isRandomOrder) {
+        for (let i = buckets.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [buckets[i], buckets[j]] = [buckets[j] as KavitaSeriesBucket, buckets[i] as KavitaSeriesBucket];
+        }
+      }
+
+      // Round-robin each bucket's OWN batch at a time, so a queue reads three chapters of A,
+      // then three of B, rather than one-and-switch. Interleaving across buckets (rather than
+      // draining one) is what buildRotation does on the Plex side, and it is what makes the
+      // queue roll into a different series instead of becoming a single-series binge.
+      //
+      // Per bucket rather than one global `perSeries`, because an entry may override it — a
+      // shared slice width would silently apply one entry's "read 5" to every other series.
       const play: KavitaPlayItem[] = [];
       for (let round = 0; play.length < cap; round += 1) {
         let placedThisRound = false;
         for (const b of buckets) {
-          const slice = b.items.slice(round * perSeries, (round + 1) * perSeries);
+          const width = Math.max(1, b.batch ?? perSeries);
+          const slice = b.items.slice(round * width, (round + 1) * width);
           for (const it of slice) {
             if (play.length >= cap) break;
             play.push({ ...it, bucket: b.key, seriesFormat: b.format, libraryId: b.libraryId });

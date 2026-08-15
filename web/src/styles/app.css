@@ -36,30 +36,47 @@
 @source "../../node_modules/@charcuterie/ui/dist";
 
 /* ===================================================================
-   Plex amber is this app's brand, so it is the ACCENT INTENT.
+   THE ACCENT IS THE QUEUE'S PROVIDER, NOT PLEX.
 
-   `daylight`'s accent is indigo (`#5A54E8`). queuepilot's entire affordance
-   language — the play button, the drag ring, the focus outline, the next-up
-   episode line, the "New queue" pill — is Plex's amber `#E5A00D`, and it reads as
-   Plex on purpose. Repainting all of that indigo would be a redesign, which this
-   migration is explicitly not.
+   This block used to hard-override the accent intent family to Plex amber
+   `#E5A00D` for the whole app, on the reasoning that "queuepilot's entire
+   affordance language is Plex's amber, and it reads as Plex on purpose". That
+   stopped being true the moment a second backend existed: a Kavita queue's
+   button came out Plex-coloured, which is a brand claim about a service that has
+   nothing to do with it.
 
-   So rather than leaving a second, parallel `--accent` variable beside the token
-   system (which is what the old stylesheet was), the accent INTENT FAMILY is
-   overridden here, in both schemes. That keeps one vocabulary: every rule below
-   says `intent-accent`, and when `@charcuterie/ui` lands in phase 2 its accent
-   Buttons/Badges come out amber without a single prop.
+   So the app's own base accent is Charcuterie's (`daylight` indigo, inherited —
+   nothing is overridden at :root any more), and a queue paints its own
+   provider's colour over it via `[data-provider]`. Chrome that belongs to no
+   queue — "New queue", the header, global focus — stays Charcuterie.
+   (decision `2026-08-15-a-queue-wears-its-providers-colour`)
 
-   The override is deliberately the full seven-role family, because a partial one
-   silently mixes brands the moment a component reaches for a role nobody rewrote.
+   The override stays the full seven-role family per provider, for the reason
+   the original block gave and which still holds: a PARTIAL override silently
+   mixes brands the moment a component reaches for a role nobody rewrote.
+
+   Colours are each service's own, not invented here:
+     Plex   `#E5A00D`  — as before.
+     Kavita `#4AC694`  — read live off kavita.example.com's stylesheet
+                         (`--primary-color`), with its own darker shades
+                         `#3B9E76` / `#338A67` / `#25624A`.
 
    Contrast, measured against the surface each role sits on:
-     dark   content #E5A00D on base #131822 .... 7.6:1
-     dark   on-solid #111111 on solid #E5A00D .. 10.4:1
-     light  content #7A5300 on base #F5F7FA .... 6.5:1
-     light  on-solid #111111 on solid #E5A00D .. 10.4:1
+     dark   plex   content #E5A00D on base #131822 .... 7.6:1
+     dark   plex   on-solid #111111 on solid #E5A00D .. 10.4:1
+     light  plex   content #7A5300 on base #F5F7FA .... 6.5:1
+     dark   kavita content #4AC694 on base #131822 .... 8.3:1
+     dark   kavita on-solid #111111 on solid #4AC694 .. 8.9:1
+     light  kavita content #25624A on base #F5F7FA .... 6.8:1
+     light  kavita on-solid #111111 on solid #4AC694 .. 8.9:1
+
+   NOTE the on-solid ink: Kavita's own UI puts WHITE on that green, which is
+   2.1:1 and fails outright. Near-black is the same call the Plex amber already
+   makes, so both providers' filled buttons read identically well.
    =================================================================== */
-:root {
+
+/* --- Plex ------------------------------------------------------------------ */
+[data-provider="plex"] {
   --color-intent-accent-surface: #fbf0da;
   --color-intent-accent-surface-hover: #f6e6c4;
   --color-intent-accent-border: #c08a2a;
@@ -69,13 +86,36 @@
   --color-intent-accent-on-solid: #111111;
 }
 
-[data-scheme="dark"] {
+[data-scheme="dark"] [data-provider="plex"],
+[data-scheme="dark"][data-provider="plex"] {
   --color-intent-accent-surface: #33260a;
   --color-intent-accent-surface-hover: #3f2f0c;
   --color-intent-accent-border: #5c4410;
   --color-intent-accent-content: #e5a00d;
   --color-intent-accent-solid: #e5a00d;
   --color-intent-accent-solid-hover: #f0af28;
+  --color-intent-accent-on-solid: #111111;
+}
+
+/* --- Kavita ---------------------------------------------------------------- */
+[data-provider="kavita"] {
+  --color-intent-accent-surface: #e4f5ed;
+  --color-intent-accent-surface-hover: #d6efe2;
+  --color-intent-accent-border: #338a67;
+  --color-intent-accent-content: #25624a;
+  --color-intent-accent-solid: #4ac694;
+  --color-intent-accent-solid-hover: #3b9e76;
+  --color-intent-accent-on-solid: #111111;
+}
+
+[data-scheme="dark"] [data-provider="kavita"],
+[data-scheme="dark"][data-provider="kavita"] {
+  --color-intent-accent-surface: #0f2a20;
+  --color-intent-accent-surface-hover: #143529;
+  --color-intent-accent-border: #2c6b52;
+  --color-intent-accent-content: #4ac694;
+  --color-intent-accent-solid: #4ac694;
+  --color-intent-accent-solid-hover: #5fd3a4;
   --color-intent-accent-on-solid: #111111;
 }
 

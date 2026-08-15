@@ -46,8 +46,22 @@ type Props = {
    * Start THIS entry now — the ▶ over the poster, queue/channel grid only. Takes the
    * button's viewport box because what it opens is the same fixed-position device menu
    * "Play on ▾" opens; nothing here plays without naming a device.
+   *
+   * PUSH queues only. A pull queue passes `playHref` instead — see below.
    */
   onPlay?: (anchor: DOMRect) => void
+  /**
+   * Start THIS entry now on a PULL queue: a URL to open, not a device menu.
+   *
+   * The same split `OpenQueueButton` makes for the queue-level button, applied to the tile.
+   * Kavita has no cast and no webhooks, so the device menu this tile used to open offered a
+   * Shield, a Plex Dash and a phone for something none of them can open — reported live on
+   * 2026-08-15. An anchor rather than a button because it NAVIGATES, so it middle-clicks and
+   * bookmarks like every other link (decision `2026-08-15-navigation-is-an-anchor-not-a-button`).
+   *
+   * Ignored when `onPlay` is also given; a queue is one or the other, never both.
+   */
+  playHref?: string
   playTitle?: string
   /** The × — queue grid and member grid. */
   onRemove?: () => void
@@ -66,6 +80,18 @@ type Props = {
   isPending?: boolean
 }
 
+/** The ▶, shared by the push button and the pull link so the two cannot drift apart. */
+const PlayGlyph = () => (
+  <svg
+    aria-hidden="true"
+    height="14"
+    viewBox="0 0 14 14"
+    width="14"
+  >
+    <path d="M3 1.5l9 5.5-9 5.5z" fill="currentColor" />
+  </svg>
+)
+
 export function PosterTile({
   badges,
   className,
@@ -77,6 +103,7 @@ export function PosterTile({
   onContextMenu,
   onPlay,
   onRemove,
+  playHref,
   playTitle = "Play this now",
   posterCover,
   posterRatingKey,
@@ -122,31 +149,38 @@ export function PosterTile({
             and it is the affordance Plex puts there too, so it is the one place the poster
             is worth covering. Inside `.thumb` so it centres on the poster in every density
             without a second set of per-density rules. */}
-        {onPlay ? (
+        {onPlay || playHref ? (
           <Tip label={playTitle}>
-            <button
-              aria-label={playTitle}
-              className="tileplay"
-              onClick={(e) => {
-                e.stopPropagation()
-                onPlay(
-                  e.currentTarget.getBoundingClientRect(),
-                )
-              }}
-              type="button"
-            >
-              <svg
-                aria-hidden="true"
-                height="14"
-                viewBox="0 0 14 14"
-                width="14"
+            {onPlay ? (
+              <button
+                aria-label={playTitle}
+                className="tileplay"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onPlay(
+                    e.currentTarget.getBoundingClientRect(),
+                  )
+                }}
+                type="button"
               >
-                <path
-                  d="M3 1.5l9 5.5-9 5.5z"
-                  fill="currentColor"
-                />
-              </svg>
-            </button>
+                <PlayGlyph />
+              </button>
+            ) : (
+              <a
+                aria-label={playTitle}
+                className="tileplay"
+                href={playHref}
+                // The click must not also select/open the tile underneath — the same reason
+                // the button above stops propagation.
+                onClick={(e) => e.stopPropagation()}
+                rel="noreferrer"
+                // A new tab, so the queue you launched from is still there when you come
+                // back from the reader — matching OpenQueueButton.
+                target="_blank"
+              >
+                <PlayGlyph />
+              </a>
+            )}
           </Tip>
         ) : null}
       </div>

@@ -49,6 +49,27 @@ describe("seLabel", () => {
       seLabel({ episode: 5, multiSeason: true, season: 3 }),
     ).toBe("S3 · E5")
   })
+
+  test("a reading queue counts chapters", () => {
+    expect(
+      seLabel(
+        { episode: 113, multiSeason: false, season: null },
+        "chapter",
+      ),
+    ).toBe("Ch 113")
+  })
+
+  // A volume-based manga has NO chapter numbering at all — Kavita gives every one of its
+  // chapters the -100000 "no subdivision" sentinel — so the item IS the volume and has to
+  // say so. Labelling it "Ch 1" would name a chapter that does not exist.
+  test("a volume-based manga counts volumes", () => {
+    expect(
+      seLabel(
+        { episode: 1, multiSeason: false, season: null },
+        "volume",
+      ),
+    ).toBe("Vol 1")
+  })
 })
 
 describe("withoutCollectionPrefix", () => {
@@ -207,6 +228,54 @@ describe("tileFace", () => {
   test("a finished reading entry is read, not watched", () => {
     const face = tileFace(
       item({ nextEp: null, unit: "chapter" }),
+    )
+
+    expect(face.next).toBe("All read")
+    expect(face.nextDone).toBe(true)
+  })
+
+  /**
+   * A VOLUME-based manga (Alice in Borderland and friends): Kavita gives every one of its
+   * chapters the `-100000` "no subdivision" sentinel, so the item is the VOLUME. The tile
+   * has to name it as one — "Ch 1" would point at a chapter that does not exist — and
+   * Kavita's own name for it is "Volume 1", which must not then be printed twice.
+   */
+  test("a volume-based entry counts volumes and does not say it twice", () => {
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 1,
+          multiSeason: false,
+          season: null,
+          title: "Volume 1",
+        },
+        title: "Alice in Borderland",
+        unit: "volume",
+      }),
+    )
+
+    expect(face.next).toBe("Vol 1")
+  })
+
+  test("a volume with a REAL name still shows it", () => {
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 3,
+          multiSeason: false,
+          season: null,
+          title: "The Beach",
+        },
+        unit: "volume",
+      }),
+    )
+
+    expect(face.next).toBe("Vol 3 · The Beach")
+  })
+
+  test("a finished volume-based entry is read, not watched", () => {
+    const face = tileFace(
+      item({ nextEp: null, unit: "volume" }),
     )
 
     expect(face.next).toBe("All read")

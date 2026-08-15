@@ -144,7 +144,11 @@ export async function resolveTiles(
       // and the frontend already renders it. A reading-only entry type would need a second
       // render path for no behavioural difference; `unit` carries the wording instead.
       type: 'show',
-      unit: provider.unit || 'episode',
+      // The ITEM's unit wins over the provider's. A Kavita library holds volume-based manga
+      // beside chapter-based webtoons, so "chapter" is the provider's default and a whole
+      // volume corrects it to "Vol 1" — the provider-level value alone would print "Ch 1"
+      // for something that is not a chapter.
+      unit: next?.unit || provider.unit || 'episode',
       title: row.title || displayFor(value),
       year: null,
       childCount: null,
