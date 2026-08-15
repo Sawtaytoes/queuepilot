@@ -10,7 +10,6 @@ type OpenMenu = "nav" | "actions" | null
 import { api } from "../lib/api"
 import { busy } from "../state/busy"
 import { refreshData } from "../state/live"
-import { navigate } from "../state/route"
 import {
   bumpRevision,
   getState,
@@ -223,15 +222,17 @@ export function Header({
         >
           ☰
         </button>
-        <button
+        {/* "‹ Play" goes to a page, so it is a link too — same reasoning as the landing rows.
+            `href` falls back to `#/` only while `hidden`, since an anchor with no href is not
+            focusable and would silently drop out of the tab order the moment `back` is null. */}
+        <a
           className="ghost"
           hidden={!back}
+          href={back?.target ?? "#/"}
           id="back"
-          onClick={() => back && navigate(back.target)}
-          type="button"
         >
           {back?.label ?? "← All queues"}
-        </button>
+        </a>
         <h1 id="heading" onClick={begin}>
           {isEditing ? (
             <input
@@ -331,17 +332,14 @@ export function Header({
           role="menu"
         >
           {back ? (
-            <button
+            <a
               className="ghost hmenu-item"
-              onClick={() => {
-                setOpenMenu(null)
-                navigate(back.target)
-              }}
+              href={back.target}
+              onClick={() => setOpenMenu(null)}
               role="menuitem"
-              type="button"
             >
               {back.label}
-            </button>
+            </a>
           ) : null}
           {editableSetId ? (
             <button
