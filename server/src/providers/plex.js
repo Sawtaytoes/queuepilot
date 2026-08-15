@@ -80,6 +80,9 @@ export function plexProvider({ def = null, client = null } = {}) {
     /** Push, not pull: a card starts the show on a screen that is already on. */
     delivery: 'push',
 
+    /** Episodes — see kavita.js's `unit`. */
+    unit: 'episode',
+
     /**
      * Libraries, for the queue editor's provider block.
      *

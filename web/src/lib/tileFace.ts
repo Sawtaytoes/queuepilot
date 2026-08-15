@@ -1,10 +1,22 @@
-import type { NextEp, StartPoint, TileEntry } from "./types"
+import type {
+  EntryUnit,
+  NextEp,
+  StartPoint,
+  TileEntry,
+} from "./types"
 
 /**
  * "S3 · E5" for a multi-season show, just "E5" for a single-season one (every
- * anime — Japan doesn't do American-style seasons, so the "S1" is noise).
+ * anime — Japan doesn't do American-style seasons, so the "S1" is noise), and
+ * "Ch 113" on a reading queue, where the number is a chapter and there is no
+ * season at all.
  */
-export function seLabel(ep: NextEp): string {
+export function seLabel(
+  ep: NextEp,
+  unit: EntryUnit = "episode",
+): string {
+  if (unit === "chapter") return `Ch ${ep.episode ?? "?"}`
+
   const e = `E${ep.episode ?? "?"}`
 
   return ep.multiSeason ? `S${ep.season ?? "?"} · ${e}` : e
@@ -129,6 +141,29 @@ export type TileFace = {
 }
 
 /**
+ * Does this next-up leaf's "title" just restate its own number?
+ *
+ * Kavita names most chapters after themselves — "35", "Chapter 35", "Ch. 35" — so the
+ * episode line rendered "Ch 35 · Chapter 35". A range ("Chapter 1-19") says something the
+ * number does not, and stays.
+ */
+export function isSelfTitled(ep: NextEp): boolean {
+  const title = String(ep.title ?? "").trim()
+
+  if (!title) return true
+
+  const number = String(ep.episode ?? "")
+
+  return (
+    number !== "" &&
+    new RegExp(
+      `^(?:chapter|chap|ch)?\\.?\\s*${number}$`,
+      "i",
+    ).test(title)
+  )
+}
+
+/**
  * What a tile actually SHOWS — poster, title line, episode line. A collection
  * borrows the identity of the member that plays next (its poster + its name), and
  * names ITSELF only in the badge, so every tile reads the same way: title = what's
@@ -147,12 +182,17 @@ export function tileFace(item: TileEntry): TileFace {
   }
 
   if (item.type === "show") {
+    const unit = item.unit ?? "episode"
+
     if (n) {
-      base.next = n.title
-        ? `${seLabel(n)} · ${n.title}`
-        : seLabel(n)
+      const label = seLabel(n, unit)
+
+      base.next = isSelfTitled(n)
+        ? label
+        : `${label} · ${n.title}`
     } else if (item.resolved) {
-      base.next = "All watched"
+      base.next =
+        unit === "chapter" ? "All read" : "All watched"
       base.nextDone = true
     }
 

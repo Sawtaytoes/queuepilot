@@ -147,6 +147,72 @@ describe("tileFace", () => {
     expect(face.nextDone).toBe(true)
   })
 
+  /**
+   * A reading queue's entries are counted in CHAPTERS, and the tile is the same tile —
+   * so the wording is the only thing that may differ. "E113" on a manga tile is wrong in
+   * the way that reads as a bug in the data rather than in the label.
+   */
+  test("a reading entry counts chapters, not episodes", () => {
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 113,
+          multiSeason: false,
+          season: null,
+          title: "The Tower's Bottom",
+        },
+        title: "Tower Dungeon",
+        unit: "chapter",
+      }),
+    )
+
+    expect(face.next).toBe("Ch 113 · The Tower's Bottom")
+  })
+
+  test("a chapter titled after its own number does not say it twice", () => {
+    // Kavita names most chapters after themselves, which rendered "Ch 113 · Chapter 113".
+    for (const title of ["113", "Chapter 113", "Ch. 113"]) {
+      const face = tileFace(
+        item({
+          nextEp: {
+            episode: 113,
+            multiSeason: false,
+            season: null,
+            title,
+          },
+          unit: "chapter",
+        }),
+      )
+
+      expect(face.next).toBe("Ch 113")
+    }
+  })
+
+  test("…but a chapter RANGE says something the number does not", () => {
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 1,
+          multiSeason: false,
+          season: null,
+          title: "Chapter 1-19",
+        },
+        unit: "chapter",
+      }),
+    )
+
+    expect(face.next).toBe("Ch 1 · Chapter 1-19")
+  })
+
+  test("a finished reading entry is read, not watched", () => {
+    const face = tileFace(
+      item({ nextEp: null, unit: "chapter" }),
+    )
+
+    expect(face.next).toBe("All read")
+    expect(face.nextDone).toBe(true)
+  })
+
   test("a collection borrows the member's poster, name and episode line", () => {
     const face = tileFace(
       item({

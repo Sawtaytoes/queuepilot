@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from "react"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
+import { Poster } from "../components/Poster"
 import { SearchDropdown } from "../components/SearchDropdown"
-import { api, thumbUrl } from "../lib/api"
+import { api } from "../lib/api"
 import {
   activeBinding,
   cachedRatings,
@@ -282,17 +283,21 @@ export function ChannelFilters({
                 return {
                   content: (
                     <>
-                      {!isCollection || hit.hasThumb ? (
-                        <img
-                          alt=""
-                          src={thumbUrl(hit.ratingKey)}
-                        />
-                      ) : (
-                        <span
-                          aria-hidden="true"
-                          className="noposter"
-                        />
-                      )}
+                      <Poster
+                        cover={hit.cover}
+                        fallback={
+                          <span
+                            aria-hidden="true"
+                            className="noposter"
+                          />
+                        }
+                        // A collection with no artwork of its own has nothing to ask for.
+                        ratingKey={
+                          isCollection && !hit.hasThumb
+                            ? null
+                            : hit.ratingKey
+                        }
+                      />
                       <span>
                         {hit.title}{" "}
                         {isCollection ? (

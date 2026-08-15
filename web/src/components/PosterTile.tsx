@@ -1,7 +1,7 @@
 import { Skeleton } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
-import { thumbUrl } from "../lib/api"
+import { Poster } from "./Poster"
 import { Tip } from "./Tip"
 
 /**
@@ -29,6 +29,8 @@ type Props = {
   dataSet?: string
   className?: string
   posterRatingKey?: string | null
+  /** A non-Plex entry's server-sent artwork URL (see `Poster`). */
+  posterCover?: string | null
   title: string
   titleTooltip?: string
   next?: {
@@ -76,6 +78,7 @@ export function PosterTile({
   onPlay,
   onRemove,
   playTitle = "Play this now",
+  posterCover,
   posterRatingKey,
   removeTitle = "Remove",
   title,
@@ -110,15 +113,11 @@ export function PosterTile({
             shape="block"
           />
         ) : null}
-        {posterRatingKey ? (
-          <img
-            alt=""
-            className="poster"
-            draggable={false}
-            loading="lazy"
-            src={thumbUrl(posterRatingKey)}
-          />
-        ) : null}
+        <Poster
+          className="poster"
+          cover={posterCover}
+          ratingKey={posterRatingKey}
+        />
         {/* Centred ON the artwork, unlike ✓/✕ — this one is about the thing in the picture,
             and it is the affordance Plex puts there too, so it is the one place the poster
             is worth covering. Inside `.thumb` so it centres on the poster in every density

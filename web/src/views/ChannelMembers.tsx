@@ -3,11 +3,12 @@ import { useEffect, useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
 import { WEIGHT_MAX } from "../components/EntrySettings"
+import { Poster } from "../components/Poster"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
-import { api, thumbUrl } from "../lib/api"
+import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {
   byTitle,
@@ -306,17 +307,21 @@ export function ChannelMembers({
             return {
               content: (
                 <>
-                  {!isCollection || hit.hasThumb ? (
-                    <img
-                      alt=""
-                      src={thumbUrl(hit.ratingKey)}
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="noposter"
-                    />
-                  )}
+                  <Poster
+                    cover={hit.cover}
+                    fallback={
+                      <span
+                        aria-hidden="true"
+                        className="noposter"
+                      />
+                    }
+                    // A collection with no artwork of its own has nothing to ask for.
+                    ratingKey={
+                      isCollection && !hit.hasThumb
+                        ? null
+                        : hit.ratingKey
+                    }
+                  />
                   <span>
                     {hit.title}{" "}
                     {isCollection ? (
@@ -505,6 +510,7 @@ export function ChannelMembers({
                 openTileMenu(e.clientX, e.clientY, entry)
               }}
               onRemove={() => removeMember(m)}
+              posterCover={m.cover}
               posterRatingKey={
                 m.resolved ? face.ratingKey : null
               }

@@ -293,6 +293,7 @@ function Shelf({
                         ? `${face.next} — ${item.childCount} in order`
                         : face.next,
                   }}
+                  posterCover={item.cover}
                   posterRatingKey={
                     item.resolved ? face.ratingKey : null
                   }

@@ -1,6 +1,6 @@
 import { Button } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
-import { api, thumbUrl } from "../lib/api"
+import { api } from "../lib/api"
 import type { SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
@@ -16,6 +16,7 @@ import {
   setFilter,
   useUi,
 } from "../state/ui"
+import { Poster } from "./Poster"
 import { SearchDropdown } from "./SearchDropdown"
 import { SelectListbox } from "./SelectListbox"
 
@@ -109,9 +110,9 @@ export function Toolbar() {
             return {
               content: (
                 <>
-                  <img
-                    alt=""
-                    src={thumbUrl(hit.ratingKey)}
+                  <Poster
+                    cover={hit.cover}
+                    ratingKey={hit.ratingKey}
                   />
                   <span className="ginfo">
                     {hit.title}{" "}
