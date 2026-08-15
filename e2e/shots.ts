@@ -16,7 +16,7 @@ const FAKE_MQTT_PORT = parseInt(process.env.FAKE_MQTT_PORT || '11883', 10);
 const BASE = `http://localhost:${PORT}`;
 const OUT = '__screenshots__';
 // THIS checkout — the same anchor every sibling harness uses. It was hardcoded to
-// /mnt/TrueNAS-Apps/Repos/plex-channels (the pre-rename clone), which since the TS/Hono
+// this repo's own checkout (formerly named plex-channels on disk), which since the TS/Hono
 // conversion would have shot a DIFFERENT repo's fixtures at this repo's server.
 const ROOT = REPO_ROOT;
 

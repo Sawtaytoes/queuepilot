@@ -100,8 +100,10 @@ if (stubAddress === null || typeof stubAddress === 'string') {
 const PLEX_PORT = stubAddress.port;
 
 // --- a tiny MQTT broker for the now-playing invalidation (c) --------------------------- //
-const requireBroker = createRequire('/mnt/TrueNAS-Apps/Repos/plex-channels/e2e/broker/node_modules/');
-const requireClient = createRequire('/mnt/TrueNAS-Apps/Repos/plex-channels/server/node_modules/');
+// Resolved from `import.meta.url` — see the note in `fake-mqtt.ts`. These named an absolute
+// `/mnt/TrueNAS-Apps/Repos/plex-channels/...` that existed on exactly one machine.
+const requireBroker = createRequire(new URL('./broker/node_modules/', import.meta.url).pathname);
+const requireClient = createRequire(new URL('../server/node_modules/', import.meta.url).pathname);
 const Aedes = requireBroker('aedes');
 const mqtt = requireClient('mqtt');
 const aedes = new Aedes();

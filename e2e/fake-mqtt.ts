@@ -15,14 +15,21 @@
 import { createRequire } from 'node:module';
 import net from 'node:net';
 
-// aedes and mqtt are require()'d out of a SIBLING checkout's node_modules (this repo has no
-// root manifest and e2e/ owns no install), so there is no package for tsc to read types from
-// either. `createRequire()(...)` is `any` by declaration, and these two stay that way
+// aedes and mqtt are require()'d out of node_modules this repo owns but `e2e/` does not: the
+// broker fixture installs its own (`e2e/broker/`) and the mqtt client comes from `server/`,
+// because there is no root manifest to hoist either into. So there is no package for tsc to
+// read types from. `createRequire()(...)` is `any` by declaration, and these two stay that way
 // deliberately: hand-writing an aedes surface to type a fake broker would be more machinery
 // than the fake itself. Everything this module EXPORTS is typed below, which is the part
 // other suites read.
-const requireBroker = createRequire('/mnt/TrueNAS-Apps/Repos/plex-channels/e2e/broker/node_modules/');
-const requireClient = createRequire('/mnt/TrueNAS-Apps/Repos/plex-channels/server/node_modules/');
+//
+// Resolved from `import.meta.url`, NOT from an absolute path. These used to name
+// `/mnt/TrueNAS-Apps/Repos/plex-channels/...` — this repo's own checkout, written out in full
+// and mislabelled as a sibling's. That path only ever existed on one machine, so CI silently
+// skipped the layers that need a broker, and renaming the directory to `queuepilot` broke it
+// locally too. A relative resolve cannot rot that way.
+const requireBroker = createRequire(new URL('./broker/node_modules/', import.meta.url).pathname);
+const requireClient = createRequire(new URL('../server/node_modules/', import.meta.url).pathname);
 const Aedes = requireBroker('aedes') as new () => any;
 const mqtt = requireClient('mqtt') as {
   connect(opts: unknown): FakeMqttClient;
