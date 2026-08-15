@@ -377,7 +377,7 @@ export function ChannelPool({
             <Badge
               appearance="outline"
               className="badge show"
-              intent="accent"
+              intent="neutral"
               size="sm"
             >
               {`${b.unwatched} unwatched`}

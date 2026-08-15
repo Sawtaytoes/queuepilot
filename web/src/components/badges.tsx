@@ -5,10 +5,24 @@ import type { QueueItem, TileEntry } from "../lib/types"
 import { Tip } from "./Tip"
 
 /**
- * The type badge. A collection whose tile shows a MEMBER names the collection here
- * — that is how you see which collection the series comes from (and that playback
- * rolls on into the next series in it). Unborrowed collections keep the plain word.
- * (decision `2026-07-31-collection-tiles-are-member-first`)
+ * The type badge — which now renders NOTHING for a plain show or movie.
+ *
+ * A poster already says "this is a show". A chip repeating it on every single tile was
+ * the noisiest thing in the grid and the least informative, and it was also what forced
+ * the type axis to borrow the intent palette (`accent`/`success`/`info`) that the WATCH
+ * STATE axis needs — which is how green came to mean "collection" on one chip and "now
+ * playing" on the next.
+ *
+ * Two things survive, because neither is type-as-taxonomy:
+ *
+ *  - **Not in library** — availability, not type. The one chip that says the entry will
+ *    not play at all.
+ *  - **The two-part Collection chip** — it carries the collection's NAME, which the tile
+ *    has nowhere else, and it is what tells you playback rolls on into the next series in
+ *    that collection. Behaviour, not taxonomy.
+ *    (decision `2026-07-31-collection-tiles-are-member-first`)
+ *
+ * (decision `2026-08-15-badge-intent-means-one-thing`)
  */
 export function TypeBadge({
   face,
@@ -71,26 +85,10 @@ export function TypeBadge({
     )
   }
 
-  return (
-    <Badge
-      appearance="outline"
-      className={`badge ${item.type}`}
-      intent={
-        item.type === "show"
-          ? "accent"
-          : item.type === "collection"
-            ? "success"
-            : "info"
-      }
-      size="sm"
-    >
-      {item.type === "show"
-        ? "Series"
-        : item.type === "collection"
-          ? "Collection"
-          : "Movie"}
-    </Badge>
-  )
+  // A plain show or movie says nothing here — the poster already did. (A collection
+  // reaching this line has no member to name, which the member-first tile makes
+  // vanishingly rare; it falls through to silence rather than to a lone bare chip.)
+  return null
 }
 
 /**

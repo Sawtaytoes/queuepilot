@@ -246,7 +246,7 @@ function Shelf({
                         <Badge
                           appearance="outline"
                           className="badge donebadge"
-                          intent="neutral"
+                          intent="success"
                           size="sm"
                         >
                           Completed
@@ -259,7 +259,7 @@ function Shelf({
                         <Badge
                           appearance="solid"
                           className="badge playingbadge"
-                          intent="success"
+                          intent="info"
                           size="sm"
                         >
                           {now.now?.state === "paused"
