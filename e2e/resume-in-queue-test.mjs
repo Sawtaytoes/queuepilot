@@ -163,7 +163,9 @@ const UNDICI_STUB = `
   export async function request(url) {
     ${'globalThis'}.__PLEX_CALLS.push(String(url));
     const body = String(url).includes('/playQueues')
-      ? JSON.stringify({ MediaContainer: { playQueueID: 77 } })
+      // size is not decoration: createPlayQueue rejects an EMPTY queue (Plex answers 200 with
+      // size 0 for items the token cannot see), so a stub without it is not a playable queue.
+      ? JSON.stringify({ MediaContainer: { playQueueID: 77, size: 2 } })
       : JSON.stringify({ MediaContainer: { machineIdentifier: 'server-mid' } });
     return { statusCode: 200, body: { text: async () => body } };
   }

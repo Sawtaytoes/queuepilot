@@ -163,13 +163,17 @@ export function plexProvider({ def = null, client = null } = {}) {
      * media-neutral at the interface, which is what Kavita needs; making it literal inside
      * playback.js is follow-up work, not a prerequisite.
      */
-    materialize(items, { offset = 0, setName = null } = {}) {
+    materialize(items, { offset = 0, setName = null, binding = null } = {}) {
       return {
         provider: this.id,
         kind: 'plex',
         ratingKeys: items.map((it) => String(it.ratingKey)),
         offset,
         setName,
+        // The account this lineup was SELECTED as must also be the account it is PLAYED as —
+        // carry the resolved binding's uuid on the artifact rather than letting playback
+        // re-derive it from the set (which only knows the default binding).
+        userUuid: (binding && binding.user_uuid) || null,
       };
     },
 
@@ -186,12 +190,14 @@ export function plexProvider({ def = null, client = null } = {}) {
           setName: artifact.setName,
           cancel,
           setLabel,
+          userUuid: artifact.userUuid,
         });
       }
       return playback.playRatingKeys(artifact.ratingKeys, {
         setName: artifact.setName,
         device,
         offset: artifact.offset,
+        userUuid: artifact.userUuid,
       });
     },
   };

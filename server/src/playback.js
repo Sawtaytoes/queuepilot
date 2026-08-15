@@ -178,9 +178,25 @@ export function _resetCompanionTarget() {
 
 // --- HTTP helpers ------------------------------------------------------------ //
 
-async function playToken(setName = null) {
-  // Token used to build/drive playback: the set's managed-user account token.
-  // Falls back to admin only if the account token can't be minted.
+async function playToken(setName = null, userUuid = null) {
+  // Token used to build/drive playback: the ACTIVE BINDING's managed-user account token.
+  //
+  // `userUuid` is the binding session.js already resolved for this scan
+  // (routing.bindingFor(cfg, profileTitle)) and it MUST win over the set's top-level
+  // user_uuid, which routing.loadSets only mirrors from `profiles[0]` — the DEFAULT
+  // binding. On a multi-profile channel (movies / shows / shorts: Younger Kids, then
+  // Older Kids) reading the mirror built every playQueue as Younger Kids no matter which
+  // profile was picked, and the Younger Kids account cannot see PG titles, so the queue
+  // came back EMPTY. Companion still answers 200, so it reported `played: true` and the
+  // Shield sat there. Only the binding token is correct here.
+  if (userUuid) {
+    try {
+      const tok = await accountToken(userUuid);
+      if (tok) return tok;
+    } catch {
+      /* fall through to the set default, then admin */
+    }
+  }
   if (setName) {
     try {
       const cfg = await getSet(setName);
@@ -293,6 +309,17 @@ export async function createPlayQueue(ratingKeys, { token = null, continuous = t
   });
   const data = await plexReq('POST', `/playQueues?${q}`, { token });
   const mc = (data && data.MediaContainer) || {};
+  // An EMPTY queue is a hard failure, not a playable one. Plex answers 200 for a playQueue
+  // built from ratingKeys this token cannot see (a managed account whose library filter hides
+  // them), and drops them silently — size 0. Pushing that at the Shield "succeeds": Companion
+  // returns 200, `played: true` is published, and nothing plays, with no error anywhere. That
+  // is how the wrong-token bug above stayed invisible. Throw so playRatingKeys reports it.
+  if (!mc.size) {
+    throw new Error(
+      `Plex built an EMPTY playQueue for ${ratingKeys.length} item(s) — this profile's account `
+      + 'cannot see them',
+    );
+  }
   return mc.playQueueID ?? null;
 }
 
@@ -468,7 +495,7 @@ export async function currentSession({ device = null } = {}) {
 // applies only to the item it starts on. So every episode after the first restarts at 0:00 no
 // matter what progress it has — verified on the Shield 2026-08-11 (an episode with a 3m09s
 // marker began at 0:09). Seeking after the advance is the only way to honour the rest.
-export async function seekTo(offsetMs, { device = null, setName = null } = {}) {
+export async function seekTo(offsetMs, { device = null, setName = null, userUuid = null } = {}) {
   const ms = intOffset(offsetMs);
   if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
   const client = await findClient(device);
@@ -484,7 +511,7 @@ export async function seekTo(offsetMs, { device = null, setName = null } = {}) {
   try {
     // Companion answers 200 with a "Failure: 200 OK" body even on success — status only.
     await plexReq('GET', `/player/playback/seekTo?${params}`, {
-      token: await playToken(setName), host: client.uri || null,
+      token: await playToken(setName, userUuid), host: client.uri || null,
     });
     return { seeked: true, offset: ms };
   } catch (e) {
@@ -496,6 +523,7 @@ export async function playRatingKeys(ratingKeys, {
   setName = null,
   device = null,
   offset = 0,
+  userUuid = null,
 } = {}) {
   let cfg = {};
   if (setName) {
@@ -505,7 +533,7 @@ export async function playRatingKeys(ratingKeys, {
   const lang = cfg.audio_language;
   if (lang) {
     try {
-      await applyAudioLanguage(ratingKeys, await playToken(setName), lang);
+      await applyAudioLanguage(ratingKeys, await playToken(setName, userUuid), lang);
     } catch (e) {
       // Never let audio prefs block playback.
       console.log(`[audio] language '${lang}' not applied: ${e && e.message ? e.message : e}`);
@@ -528,7 +556,7 @@ export async function playRatingKeys(ratingKeys, {
     return result;
   }
 
-  const tok = await playToken(setName);
+  const tok = await playToken(setName, userUuid);
   const client = await findClient(device);
   // A per-scan cap (max_items) means "play exactly these and stop": drop continuous so the
   // client doesn't auto-advance into related content once the queue ends.
