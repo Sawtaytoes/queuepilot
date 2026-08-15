@@ -1,7 +1,12 @@
 __pycache__/
 *.pyc
-node_modules/
-web/node_modules/
+# NO trailing slash, deliberately. `node_modules/` matches a DIRECTORY only, so a
+# node_modules SYMLINK — which is how an agent shares one install between worktrees —
+# sails straight past it and `git add -A` commits it as a 120000 blob. That is not
+# hypothetical: it landed in main and broke the Docker build, because `COPY server ./server`
+# cannot replace the image's real node_modules directory with a symlink file.
+node_modules
+web/node_modules
 .env
 .env.local
 *.local
