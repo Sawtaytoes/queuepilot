@@ -1066,6 +1066,20 @@ export interface PublishedSessionState extends SessionState {
 }
 
 /**
+ * The `extra` half of a state publish: everything a caller may merge on top of `asDict()`
+ * before the publisher stamps `engine`. `boot` is mqttd's own connect marker and is the only
+ * key not declared above.
+ *
+ * ONE declaration, shared by every side of the publish seam — the type of `session.js`'s
+ * injected publisher, of `mqttd.js publishState()` that gets injected into it, and of the
+ * copy `session.js` hands on to `driver.js`. It is deliberately not re-spelled per file:
+ * three separate hand-written versions are how the driver came to call this publisher with
+ * an argument list it never had (see the arity fix, 2026-08-15).
+ */
+export type PublishedStateExtra =
+  Partial<Omit<PublishedSessionState, 'engine'>> & { boot?: boolean };
+
+/**
  * The MQTT/API payload that starts a session (`session.js startSession()`).
  *
  * LATENT BUG: `target` is EITHER a device-registry id string OR a resolved `Device`

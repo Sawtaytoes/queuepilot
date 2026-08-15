@@ -12,6 +12,9 @@
 //   (e) cancel mid-flight                         -> aborts cleanly, never plays
 //   (f) a transition's bounded retries exhaust    -> single spoken-sentence error
 //
+// (g) is this port's own: the mid-flight "awaiting" publish, which shipped broken for as long
+// as the FSM has existed and had no behavioural gate at all (see the header of that block).
+//
 // Run:  server/node_modules/.bin/tsx e2e/playback-fsm-test.ts     (from the repo root; exits non-zero on failure)
 
 // env.js reads process.env at module-eval, so these must precede the driver import.
@@ -25,7 +28,7 @@ process.env.PLAYBACK_FSM_SWITCH_ATTEMPTS = '2';
 process.env.PLAYBACK_FSM_RETRY_BACKOFF = '0'; // no real sleeps in tests
 
 import { stubDriverDeps } from './stubs/hooks.mjs';
-import type { CancelFlag, Device } from '../server/src/types.js';
+import type { CancelFlag, Device, PublishedStateExtra } from '../server/src/types.js';
 
 stubDriverDeps();
 const { CTL: RAW_CTL, reset, nCalls, firstIndex } = await import('./stubs/control.mjs');
@@ -73,9 +76,9 @@ function cancelFlag(): CancelFlag & { set: () => void } {
  * one place it is built rather than inventing an id/uri no assertion looks at. */
 const asDevice = (mode: string): Device => ({ mode } as unknown as Device);
 
-type DriveArgs = NonNullable<Parameters<typeof driver.driveToPlaying>[1]>;
+type DriveArgs = NonNullable<Parameters<typeof driver.driveToPlaying>[0]>;
 
-const drive = (kw: Partial<DriveArgs> = {}) => driver.driveToPlaying(null, {
+const drive = (kw: Partial<DriveArgs> = {}) => driver.driveToPlaying({
   ratingKeys: ['100'],
   requiredProfile: null,
   offset: 0,
@@ -185,6 +188,44 @@ ok(
   res.error,
 );
 ok('(f) play-exhausted: tried the bounded number of times (3)', nCalls('play') === 3);
+
+// --------------------------------------------------------------------------- //
+// (g) The profile gate ANNOUNCES the wait -> `awaiting: 'profile:<name>'` is published
+// --------------------------------------------------------------------------- //
+// This is the state HA's `Plex Channels Status Announcements` automation reads off
+// `sensor.queuepilot_status` (`state_attr(..., 'awaiting')`) to say the scan is waiting on a
+// profile switch. Until 2026-08-15 the driver called the injected publisher as
+// `_publishState(client, {awaiting})` — two arguments — while the function session.js installs
+// is mqttd's `publishState(extra)`, which takes one. So `{awaiting}` was dropped on the floor
+// and the announcement never fired on the FSM path. Nothing here failed: the publish still
+// happened, just without the key. Hence a gate on the PAYLOAD, and on the arity that lost it.
+const PUBLISHED: unknown[][] = [];
+// A rest parameter typed as a ONE-tuple: assignable to the publisher's `(extra) => void`, and
+// at runtime it still captures every argument actually passed — which is what makes the arity
+// assertion below real rather than a restatement of the type.
+driver.setPublishState((...args: [PublishedStateExtra]) => { PUBLISHED.push(args); });
+
+reset();
+CTL.lastSeen.title = 'Younger Kids';          // signed in as the WRONG profile
+CTL.same.set('Younger Kids|Demo', false);     // ... so a real switch is needed
+res = await drive({ requiredProfile: 'Demo' });
+ok('(g) profile gate: announces the wait as awaiting=profile:<name>',
+  PUBLISHED.some(([extra]) => (extra as PublishedStateExtra | undefined)?.awaiting === 'profile:Demo'),
+  JSON.stringify(PUBLISHED));
+ok('(g) profile gate: the publisher is called with EXACTLY one argument (the extra)',
+  PUBLISHED.length > 0 && PUBLISHED.every((args) => args.length === 1),
+  JSON.stringify(PUBLISHED.map((a) => a.length)));
+ok('(g) profile gate: still switches and plays', res.played === true);
+
+// The non-destructive fast path stays silent: nothing is waiting, so nothing is announced.
+reset();
+PUBLISHED.length = 0;
+CTL.lastSeen.title = 'Younger Kids';
+res = await drive({ requiredProfile: 'Younger Kids' });
+ok('(g) already-on-profile: publishes no wait at all', PUBLISHED.length === 0,
+  JSON.stringify(PUBLISHED));
+
+driver.setPublishState(null); // leave the module as the later scenarios found it
 
 // --------------------------------------------------------------------------- //
 // Extra: cast mode skips the Companion-refusal loop entirely (it's :32500-specific).

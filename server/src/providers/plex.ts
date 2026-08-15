@@ -274,7 +274,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
       useFsm = false, requiredProfile = null, device = null, cancel = null, setLabel = null,
     }: HandoffOptions = {}): Promise<PushResult> {
       if (useFsm) {
-        return driver.driveToPlaying(null, {
+        return driver.driveToPlaying({
           ratingKeys: artifact.ratingKeys,
           requiredProfile,
           offset: artifact.offset,

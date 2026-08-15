@@ -136,14 +136,14 @@ const switches = () => CTL.calls.filter((c) => c[0] === 'switch_to');
 // (a) LAST_SEEN == required exactly -> no picker walk.
 wireDriver();
 CTL.lastSeen.title = 'sawtaytoes';
-let r = await driveProfile(null, 'sawtaytoes', null);
+let r = await driveProfile('sawtaytoes', null);
 ok('(bug2a) exact LAST_SEEN==required: gate satisfied (null)', r === null);
 ok('(bug2a) exact LAST_SEEN==required: NO switchTo call', switches().length === 0);
 
 // (b) LAST_SEEN is the DISPLAY name, required the USERNAME — the alias must short-circuit.
 wireDriver([['Bob Smith', 'sawtaytoes']]);
 CTL.lastSeen.title = 'Bob Smith';
-r = await driveProfile(null, 'sawtaytoes', null);
+r = await driveProfile('sawtaytoes', null);
 ok('(bug2b) display-name==username alias: gate satisfied (null)', r === null);
 ok('(bug2b) display-name==username alias: NO picker/switch call', switches().length === 0);
 
@@ -151,19 +151,19 @@ ok('(bug2b) display-name==username alias: NO picker/switch call', switches().len
 //     `required`, so an immediate second call short-circuits with no further switch.
 wireDriver([['Bob Smith', 'sawtaytoes']], true);
 CTL.lastSeen.title = null;
-const r1 = await driveProfile(null, 'sawtaytoes', null);
+const r1 = await driveProfile('sawtaytoes', null);
 ok('(bug2c) cold cache: switch runs once', r1 === null && switches().length === 1,
   JSON.stringify(switches()));
 ok('(bug2c) switch records the profile into LAST_SEEN', CTL.lastSeen.title === 'sawtaytoes',
   String(CTL.lastSeen.title));
-const r2 = await driveProfile(null, 'sawtaytoes', null);
+const r2 = await driveProfile('sawtaytoes', null);
 ok('(bug2c) second gated scan short-circuits: still only ONE switch total',
   r2 === null && switches().length === 1, JSON.stringify(switches()));
 
 // (d) Cold cache + a DIFFERENT signed-in profile -> a real switch is still driven.
 wireDriver([['Bob Smith', 'sawtaytoes'], ['Younger Kids']]);
 CTL.lastSeen.title = 'Younger Kids'; // signed in as someone else
-r = await driveProfile(null, 'sawtaytoes', null);
+r = await driveProfile('sawtaytoes', null);
 ok('(bug2d) genuinely-wrong profile: drives the switch once',
   r === null && switches().length === 1, JSON.stringify(switches()));
 

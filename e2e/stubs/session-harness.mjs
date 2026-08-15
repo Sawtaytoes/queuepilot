@@ -49,7 +49,7 @@ const STUB_SRC = {
   './driver.js': `
     import { SESSION_CTL } from '${new URL('./session-harness.mjs', import.meta.url).href}';
     export function setPublishState() {}
-    export async function driveToPlaying(_client, args) {
+    export async function driveToPlaying(args) {
       SESSION_CTL.drives.push(args);
       return SESSION_CTL.playResult;
     }

@@ -17,7 +17,7 @@ import {
 } from './env.js';
 import { errMessage, isNodeError } from './errors.js';
 import type {
-  Device, PublishedSessionState, SessionStartPayload,
+  Device, PublishedSessionState, PublishedStateExtra, SessionStartPayload,
 } from './types.js';
 
 /**
@@ -28,9 +28,11 @@ import type {
 type Publish = (topic: string, payload: unknown, opts?: { qos?: 0 | 1 | 2; retain?: boolean }) => void;
 
 /** The `extra` half of `publishState()` — every key any caller passes, i.e. everything on
- * `PublishedSessionState` that `asDict()` does not already supply. `boot` is this file's
- * own (the connect handler stamps it) and is the only key not declared in types.ts. */
-type StateExtra = Partial<Omit<PublishedSessionState, 'engine'>> & { boot?: boolean };
+ * `PublishedSessionState` that `asDict()` does not already supply, plus this file's own
+ * `boot` (the connect handler stamps it). Aliases the shared `PublishedStateExtra` rather
+ * than re-spelling it: this publisher is injected into session.js and on into driver.js, and
+ * a per-file copy of its parameter type is how those ends drifted apart. */
+type StateExtra = PublishedStateExtra;
 
 /** `queuepilot/cmd/generic/preview` payload. Untrusted: `reply` is attacker-controlled and
  * is validated against the preview base below. */
