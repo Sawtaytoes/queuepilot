@@ -134,6 +134,7 @@ export function App() {
     data,
     now,
     selectedChannel,
+    reg,
   )
 
   useEffect(() => {
@@ -223,6 +224,10 @@ function computeChrome(
   data: ReturnType<typeof useStore>["data"],
   now: ReturnType<typeof useStore>["now"],
   selectedChannel: RegistrySet | null,
+  // The REGISTRY, for the one thing the queue payload does not carry: which provider a set
+  // draws from, and therefore whether its copy says "episodes each show" or "chapters each
+  // series".
+  reg: ReturnType<typeof useStore>["reg"],
 ): Chrome {
   if (route.view === "queues") {
     return {
@@ -260,6 +265,16 @@ function computeChrome(
     const q = data?.sets[route.id]
     const label = q?.label ?? "QueuePilot"
     const isChannel = q?.kind === "anime"
+    // Plex's words unless the registry says otherwise, so a response that predates
+    // `vocabulary` renders exactly as it always did.
+    const vocab = reg?.sets.find((s) => s.id === route.id)
+      ?.vocabulary ?? {
+      done: "watched",
+      member: "show",
+      unit: "episode",
+      units: "episodes",
+      verb: "Play",
+    }
     const playing = activeSet(now, data)
     const origin =
       getRouteOrigin() ||
@@ -296,10 +311,13 @@ function computeChrome(
       editableSetId: route.id,
       heading: label,
       isSubHidden: !isChannel,
-      // A channel's members play in a shuffled order — say so, and drop the
-      // ordering UI.
+      // A channel's members play in a shuffled order — say so, and drop the ordering UI.
+      // In the PROVIDER's nouns: on a reading channel this used to promise "how many
+      // episodes each show plays per visit", which is two wrong words in one sentence.
+      // "contributes" is the neutral verb the type declarations already use for this
+      // number, so the sentence needs no per-provider branch of its own.
       sub: isChannel
-        ? "A channel — members play in random order; pick how many episodes each show plays per visit."
+        ? `A channel — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
         : "",
     }
   }

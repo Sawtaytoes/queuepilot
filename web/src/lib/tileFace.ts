@@ -15,6 +15,7 @@ export function seLabel(
   ep: NextEp,
   unit: EntryUnit = "episode",
 ): string {
+  if (unit === "volume") return `Vol ${ep.episode ?? "?"}`
   if (unit === "chapter") return `Ch ${ep.episode ?? "?"}`
 
   const e = `E${ep.episode ?? "?"}`
@@ -146,6 +147,9 @@ export type TileFace = {
  * Kavita names most chapters after themselves — "35", "Chapter 35", "Ch. 35" — so the
  * episode line rendered "Ch 35 · Chapter 35". A range ("Chapter 1-19") says something the
  * number does not, and stays.
+ *
+ * `volume` / `vol` are in the list for the same reason at the volume level: a manga's items
+ * are named "Volume 1" by Kavita and labelled "Vol 1" here, which rendered "Vol 1 · Volume 1".
  */
 export function isSelfTitled(ep: NextEp): boolean {
   const title = String(ep.title ?? "").trim()
@@ -157,7 +161,7 @@ export function isSelfTitled(ep: NextEp): boolean {
   return (
     number !== "" &&
     new RegExp(
-      `^(?:chapter|chap|ch)?\\.?\\s*${number}$`,
+      `^(?:chapter|chap|ch|volume|vol)?\\.?\\s*${number}$`,
       "i",
     ).test(title)
   )
@@ -165,7 +169,9 @@ export function isSelfTitled(ep: NextEp): boolean {
 
 /** "Nothing left to play" in this entry's own unit — a reading queue is read, not watched. */
 const allWatchedLabel = (unit: EntryUnit) =>
-  unit === "chapter" ? "All read" : "All watched"
+  unit === "chapter" || unit === "volume"
+    ? "All read"
+    : "All watched"
 
 /**
  * What a tile actually SHOWS — poster, title line, episode line. A collection

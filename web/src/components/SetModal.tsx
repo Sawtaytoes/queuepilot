@@ -13,6 +13,8 @@ import {
   useOverlays,
 } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
+import { CountPicker } from "./CountPicker"
+import { EPISODES_MAX } from "./EntrySettings"
 import { Modal } from "./Modal"
 import { ProviderBlock } from "./ProviderBlock"
 import { SelectListbox } from "./SelectListbox"
@@ -67,6 +69,10 @@ export function SetModal() {
   const [removeCompletedAfter, setRemoveCompletedAfter] =
     useState("")
   const [batchStopsAt, setBatchStopsAt] = useState("none")
+  // This queue's default batch. 1 is the engine default everywhere, and the point of the
+  // control is that the right number differs per queue — one episode for TV, three chapters
+  // for a reading queue — not that reading queues get a different global.
+  const [episodes, setEpisodes] = useState(1)
   const [profiles, setProfiles] = useState<Profile[]>([])
   // The repeating {provider, profile, libraries} blocks. Always a list — a set written
   // before blocks existed arrives as the single implicit Plex block it has always meant, so
@@ -107,6 +113,7 @@ export function SetModal() {
     setBatchStopsAt(
       editing ? editing.batch_stops_at || "none" : "none",
     )
+    setEpisodes(editing?.episodes ?? 1)
     // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
     // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
     if (editing) {
@@ -219,6 +226,21 @@ export function SetModal() {
         ?.delivery !== "pull",
   )
 
+  // The words this queue's medium is described in, taken from the block being edited rather
+  // than from the saved set — so switching the source repaints the copy immediately, before
+  // anything is written. Plex's words are the fallback, which is what every queue said before
+  // providers carried a vocabulary at all.
+  const vocab = (blocks[0]
+    ? providers.find((p) => p.id === blocks[0].provider)
+        ?.vocabulary
+    : null) ?? {
+    done: "watched",
+    member: "show",
+    unit: "episode",
+    units: "episodes",
+    verb: "Play",
+  }
+
   const onSubmit = async () => {
     const name = label.trim()
 
@@ -280,6 +302,9 @@ export function SetModal() {
       remove_completed_after: removeCompletedAfter.trim(),
       // "none" is the engine default, so it is stored as the absence of the key.
       batch_stops_at: batchStopsAt,
+      // Likewise 1 — the server drops the key at <= 1, so a queue that never touched this
+      // control stays byte-identical on disk.
+      episodes,
       // An empty list drops the key server-side, which is how the single-Plex-block case
       // stays on the legacy shape above.
       providers: isLegacyShape
@@ -369,6 +394,17 @@ export function SetModal() {
             Save
           </button>
         </>
+      }
+      // The editor wears the source being edited, so the selected "Kavita" chip in the
+      // Source-app control comes out Kavita-green instead of Plex amber — which is the exact
+      // thing that read wrong: a segmented control whose Kavita option was painted in Plex's
+      // brand. Taken from the LIVE block, so it repaints the moment the source is switched.
+      dataProvider={
+        (blocks[0]
+          ? providers.find(
+              (p) => p.id === blocks[0].provider,
+            )?.kind
+          : null) || undefined
       }
       id="setmodal"
       isOpen={Boolean(setModal)}
@@ -475,33 +511,43 @@ export function SetModal() {
           />
         ))}
       </div>
-      {/* Adding a source is only offered once there is a second provider to add — with one
-          connected app there is nothing a second block could draw from that the first
-          cannot. */}
-      {providers.length > 1 ? (
-        <button
-          className="addblock"
-          id="set-add-block"
-          onClick={() =>
-            setBlocks((prev) => [
-              ...prev,
-              {
-                libraries: [],
-                profile: "",
-                // The QUEUE's provider, not the first configured one — a second source is
-                // another profile/library slice of the same app, never a second app.
-                provider: prev[0].provider,
-                uid: newUid(),
-              },
-            ])
-          }
-          type="button"
-        >
-          + Add another source
-        </button>
-      ) : null}
+      {/* "+ Add another source" is GONE (decision
+          `2026-08-15-a-queue-has-one-source-so-the-add-source-button-is-gone`). A second
+          block could never do anything: the engine reads no block's `profile` — only
+          `resolveSingle().provider` and `.libraries` — and a second block's libraries were
+          simply unioned into the same `sections` list, which is what more checkboxes on the
+          first block already do. The two-Plex-profiles case the 2026-08-13 decision kept it
+          for was never implemented.
+
+          Existing multi-block sets still RENDER above, each with its Remove button, so one
+          can be collapsed by hand; and storage stays a list, so nothing migrates. */}
       <fieldset className="field flags" id="set-flags">
         <legend>Playback &amp; completion</legend>
+        {/* The queue's DEFAULT batch. Owner, 2026-08-15: "There's no way to globally set how
+            many chapters to read before going to the next one… For Plex, 1 episode is no big
+            [deal], but for Webtoons and Manga, I'd prefer to default to 3 chapters (by choice
+            for this queue, not by default) and change it per-item if I have to."
+            So: per QUEUE, 1 everywhere until asked otherwise, and an entry still overrides it.
+            Worded from the PROVIDER's vocabulary, so a reading queue does not ask about
+            episodes. */}
+        {/* A <div>+<span>, not a <label>: CountPicker is a group of BUTTONS, not an input,
+            so a <label> would have no control to name. Same shape the per-entry panel uses
+            for the identical control. */}
+        <div className="field">
+          <span className="fieldlbl">
+            {`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per ${vocab.member} each visit`}
+          </span>
+          <CountPicker
+            label={`${vocab.units} per ${vocab.member} each visit`}
+            max={EPISODES_MAX}
+            onChange={setEpisodes}
+            value={episodes}
+          />
+        </div>
+        <p className="subhint" id="set-episodes-hint">
+          {`How many ${vocab.units} one entry contributes before the queue moves to the next
+            ${vocab.member}. A single entry can override this from its own settings.`}
+        </p>
         {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once). Remount on modal
             open AND when reel forces keep_completed on, so the box reflects the implied
             state without becoming a controlled input. */}

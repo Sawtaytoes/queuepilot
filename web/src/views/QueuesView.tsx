@@ -54,6 +54,7 @@ function Shelf({
   label,
   now,
   playingSet,
+  providerKind,
   setId,
 }: {
   setId: string
@@ -63,6 +64,9 @@ function Shelf({
   isHiddenByFilter: boolean
   now: NowState
   playingSet: string | null
+  /** `plex` / `kavita` — this shelf's accent. Empty for a queue whose provider this build
+   *  does not recognise, which falls back to the app's neutral accent. */
+  providerKind: string
 }) {
   const stripRef = useRef<HTMLUListElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -113,6 +117,10 @@ function Shelf({
   return (
     <section
       className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}`}
+      // This shelf's counts, rings and badges are about THIS queue, so they wear its
+      // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
+      // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+      data-provider={providerKind || undefined}
       data-set={setId}
       hidden={isHiddenByFilter}
     >
@@ -338,7 +346,7 @@ export function QueuesView({
   /** The Home toolbar, when the viewport is narrow enough that it mounts here. */
   toolbar: React.ReactNode
 }) {
-  const { data, now } = useStore()
+  const { data, now, reg } = useStore()
   const { collapsed, filter } = useUi()
   const shelvesRef = useRef<HTMLDivElement>(null)
 
@@ -379,6 +387,10 @@ export function QueuesView({
                   label={q.label}
                   now={now}
                   playingSet={playingSet}
+                  providerKind={
+                    reg?.sets.find((s) => s.id === id)
+                      ?.provider_kind ?? ""
+                  }
                   setId={id}
                 />
               )

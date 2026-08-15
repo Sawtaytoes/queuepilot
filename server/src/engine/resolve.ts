@@ -52,6 +52,12 @@ type ResolveCfg = {
   item_sections?: readonly number[] | null;
   include_specials?: unknown;
   batch_stops_at?: unknown;
+  /**
+   * The SET's default batch — how many items one entry contributes per visit when the entry
+   * says nothing. Precedence is entry > set > env `QUEUE_SERIES_DEFAULT`, the same shape
+   * `batchStop()` already uses for WHERE a batch may end.
+   */
+  episodes?: unknown;
   kind?: string | null;
 };
 
@@ -605,6 +611,24 @@ function segmentKey(item: ResolvedItem, stop: string): string {
   return stop === 'season' ? `${member} ${item.season}` : String(member);
 }
 
+/**
+ * The SET's default batch — how many items one entry contributes when the entry itself says
+ * nothing. Precedence: entry `episodes:` > set `episodes:` > env `QUEUE_SERIES_DEFAULT`.
+ *
+ * The same three-level shape `batchStop()` uses, and for the same reason: "one episode is no
+ * big deal, but for Webtoons and Manga I'd prefer to default to 3 chapters — by choice for
+ * this queue, and change it per-item if I have to" (owner, 2026-08-15). A global env knob
+ * could not express that, because it is one number for a TV queue and a reading queue alike.
+ *
+ * An unusable value (0, negative, a typo) falls through to the env default rather than being
+ * read as "no batch" — `applyBatch` treats a falsy batch as UNCAPPED, so a typo would have
+ * dumped a whole series into one scan.
+ */
+function setBatch(cfg: ResolveCfg | null | undefined): number {
+  const n = parseInt(String(cfg?.episodes ?? ''), 10);
+  return Number.isFinite(n) && n > 0 ? Math.min(n, QUEUE_SERIES_LENGTH) : QUEUE_SERIES_DEFAULT;
+}
+
 // Cap `items` to `batch`, then cut at the first segment boundary if `stop` asks. Only ever
 // SHORTENS, and never below one item — an empty list is the FINISHED signal nextQueue marks the
 // entry done on, so a boundary cut that emptied a live batch would silently retire a show
@@ -754,7 +778,7 @@ export async function nextQueue(
   let remaining = 0;
   const batches: Batch[] = [];
   for (const desc of entries) {
-    const res = await resolveMember(client, desc, cfg, watched, token, QUEUE_SERIES_DEFAULT, true);
+    const res = await resolveMember(client, desc, cfg, watched, token, setBatch(cfg), true);
     if (desc.done) {
       // Stale-done recovery. An entry is marked done when its live resolution comes back
       // EMPTY, so anything still playable in it means the flag no longer describes reality —

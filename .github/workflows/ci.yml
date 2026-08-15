@@ -183,6 +183,18 @@ jobs:
       - name: Kavita covers + provider tiles (offline)
         run: $TSX e2e/kavita-covers-test.ts
 
+      # Two bugs found on the live "Manga & Webtoons" queue, both invisible to every gate
+      # above because both stubs happened to be chapter-based and library-driven:
+      #   * a VOLUME-based manga read as fully read. Kavita puts nothing in
+      #     `chapters`/`specials` for one — every chapter hangs off `volumes[].chapters[]` —
+      #     so "Alice in Borderland" (0 of 328 pages read) rendered "All read". A webtoon
+      #     returns the same chapters in BOTH places, so the fix has to dedupe by chapter id.
+      #   * a CURATED queue played the library SHELF. buckets() enumerated seriesForLibrary
+      #     and never read the queue's entries, so a 93-entry reading queue produced a list
+      #     of 12 alphabetical series, exactly one of which had been added on purpose.
+      - name: Kavita volumes + curated entries (offline)
+        run: $TSX e2e/kavita-volumes-and-members-test.ts
+
       # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
       # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against
       # that engine's RECORDED answers (e2e/fixtures/golden/routing.json) over

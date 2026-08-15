@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { errMessage } from '../errors.js';
 import * as providers from '../providers/config.js';
 import { providerFor } from '../providers/index.js';
+import { parseSearchQuery } from '../searchQuery.js';
 import { binaryResponse } from './binaryResponse.js';
 import { readBody } from './readBody.js';
 
@@ -63,8 +64,12 @@ export function providersRoutes(): Hono {
 
   // Provider-scoped series search — the non-Plex half of /api/search. Scoped to the libraries
   // the queue draws from, so it never offers something that queue could not play.
+  //
+  // A trailing `(YYYY)` is split off here too (searchQuery.ts). Kavita's series search carries
+  // no year to rank on, but a query that still contains `(1992)` matches nothing at all — so
+  // the strip is what makes the box behave the same on both providers.
   app.get('/providers/:id/search', async (c) => {
-    const q = (c.req.query('q') ?? '').trim();
+    const { text: q } = parseSearchQuery(c.req.query('q') ?? '');
     if (!q) return c.json({ results: [] });
     try {
       const p = providerFor(c.req.param('id'));

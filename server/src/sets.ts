@@ -16,7 +16,10 @@ import { parseDocument, isMap, isNode, isScalar, isSeq } from 'yaml';
 import type { Document, Node, YAMLMap, YAMLSeq } from 'yaml';
 import { validateBlocks, blocksForSet } from './providers/blocks.js';
 import { toWeight } from './engine/weight.js';
-import { definitions as providerDefinitions } from './providers/config.js';
+import { definitions as providerDefinitions, vocabularyForKind } from './providers/config.js';
+// The same hard cap a per-entry override is clamped to (queues.setEpisodes), applied to the
+// set-wide default so a hand-posted value cannot queue a whole library.
+import { QUEUE_SERIES_LENGTH } from './env.js';
 import { isNodeError } from './errors.js';
 import type {
   BatchStop,
@@ -25,6 +28,7 @@ import type {
   MemberObject,
   MemberValue,
   ProviderBlock,
+  ProviderVocabulary,
   QueueSet,
   SetBehavior,
   SetMode,
@@ -487,7 +491,7 @@ function toWeights(v: unknown): Record<string, number> {
  * `SetRegistryCommon`, which it declares but does not export, so it is reconstructed here
  * from the queue arm rather than duplicated.
  */
-type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel' | 'remove_completed_after' | 'batch_stops_at'>;
+type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel' | 'remove_completed_after' | 'batch_stops_at' | 'episodes'>;
 
 function normalize(ent: RawSet): SetRegistryEntry | null {
   const id = String(ent.id || '').trim();
@@ -540,6 +544,11 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     // Exposed so the UI never offers "Play on <device>" for a set that has no device, and
     // never branches on a provider's NAME.
     delivery: deliveryForSet(ent),
+    // …and the WORDS that go with it, so no screen has to re-join a set to /api/providers to
+    // decide between "Play" and "Read".
+    vocabulary: vocabularyForSet(ent),
+    // …and the KIND, which is what the stylesheet scopes the accent on.
+    provider_kind: providerKindForSet(ent),
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
     enabled: ent.enabled !== false,
@@ -593,6 +602,10 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     // sets carry it — a dynamic channel's round-robin already alternates shows every
     // item, so it has no multi-episode batch to bound. null = the engine default (none).
     batch_stops_at: isBatchStop(bsa) ? bsa : null,
+    // HOW MANY items one entry contributes per visit, when the entry says nothing. null =
+    // the engine default (env QUEUE_SERIES_DEFAULT, which is 1). A per-entry `episodes:`
+    // still wins over this.
+    episodes: toPosIntOrNull(ent.episodes),
   };
 }
 
@@ -740,6 +753,34 @@ function deliveryForSet(ent: RawSet): Delivery {
   return anyPush ? 'push' : 'pull';
 }
 
+/**
+ * The WORDS this set's medium is described in, from its own provider.
+ *
+ * Derived server-side and carried ON the set for the same reason `delivery` is: every screen
+ * that renders a queue already has the set in hand, and making each one re-join a set to
+ * `/api/providers` to find out whether to say "Play" or "Read" is how one of them ends up
+ * not bothering — which is exactly what happened to the tile play button.
+ *
+ * A queue draws from exactly one provider, so one vocabulary per set is the whole truth.
+ */
+function vocabularyForSet(ent: RawSet): ProviderVocabulary {
+  return vocabularyForKind(providerKindForSet(ent));
+}
+
+/**
+ * The KIND of backend this set draws from — `plex` / `kavita`, and `''` for a provider this
+ * build does not recognise.
+ *
+ * The FIRST block's provider. A mixed set is refused at save and at launch, so there is no
+ * second answer to reconcile; if one somehow exists on disk, its first block's kind beats
+ * reporting none.
+ */
+function providerKindForSet(ent: RawSet): string {
+  const blocks: ProviderBlock[] = blocksForSet(ent);
+  const defs = new Map<string, string>(providerDefinitions().map((d: { id: string; kind: string }) => [d.id, d.kind]));
+  return defs.get(blocks[0]?.provider ?? '') ?? '';
+}
+
 function blockLibraryCount(providers: unknown): number {
   if (!Array.isArray(providers)) return 0;
   return providers.reduce<number>((n, b) => {
@@ -789,6 +830,10 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       }
       const bsa = normalizeBatchStop(body.batch_stops_at);
       if (bsa) curated.batch_stops_at = bsa;
+      // The queue's default batch. Same sparse rule as updateSet: 1 is the engine default,
+      // so only a real choice is written.
+      const eps = parseInt(String(body.episodes ?? ''), 10);
+      if (Number.isFinite(eps) && eps > 1) curated.episodes = Math.min(eps, QUEUE_SERIES_LENGTH);
     }
     const obj = isRotation ? rotationCreateObj(id, body) : curated;
     // Provider blocks, on BOTH sources — a reading queue and a reading channel are equally
@@ -826,6 +871,11 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
       'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at',
+      // The queue's default batch — the COUNT to batch_stops_at's WHERE. Valid on both
+      // sources: a rule-based reading channel wants "3 chapters per series" just as much as
+      // a curated one, and unlike the consumption flags it describes the LINEUP, not how
+      // entries are retired.
+      'episodes',
       // The repeating {provider, profile, libraries} block. Valid on BOTH sources, unlike
       // most knobs here — a reading queue and a reading channel are both plausible.
       'providers',
@@ -883,6 +933,18 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const bsa = normalizeBatchStop(v);
         if (!bsa) { node.delete('batch_stops_at'); continue; }
         setKeepingComment(node, 'batch_stops_at', doc.createNode(bsa));
+        continue;
+      }
+      if (k === 'episodes') {
+        // The set's DEFAULT batch — how many items one entry contributes per visit. The COUNT
+        // to batch_stops_at's WHERE, and stored the same sparse way: 1 is the engine default,
+        // so it drops the key rather than writing the value everyone already has.
+        //
+        // Clamped to QUEUE_SERIES_LENGTH, the same hard safety cap a per-entry override gets
+        // (queues.setEpisodes) — a hand-posted 900 must not queue a whole library.
+        const n = parseInt(String(v ?? ''), 10);
+        if (!Number.isFinite(n) || n <= 1) { node.delete('episodes'); continue; }
+        setKeepingComment(node, 'episodes', doc.createNode(Math.min(n, QUEUE_SERIES_LENGTH)));
         continue;
       }
       if (k === 'providers') {

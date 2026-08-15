@@ -51,10 +51,31 @@ export interface KavitaSeriesDto {
 }
 
 /** `Series/series-detail`. `volumes` is often EMPTY for webtoons — see seriesDetail(). */
+/**
+ * One volume of `series-detail`, and the container that makes a MANGA readable at all.
+ *
+ * `chapters` / `specials` at the top level are EMPTY for a volume-based series (verified
+ * live: "Alice in Borderland" reports 0 / 0 / 9 volumes), and every real chapter hangs off a
+ * volume instead. For a chapter-based WEBTOON the same chapters appear in BOTH places, so a
+ * reader that unions the two must dedupe by chapter `id` — see `orderedUnread()`.
+ */
+export interface KavitaVolumeDto {
+  id?: number | null;
+  /** The volume's own number — 1, 2, 3… What the reader should be told it is reading. */
+  number?: number;
+  minNumber?: number;
+  /** "Volume 1". Kavita's own label, preferred over anything synthesized here. */
+  name?: string | null;
+  pages?: number;
+  pagesRead?: number;
+  chapters?: KavitaChapterDto[];
+  [field: string]: unknown;
+}
+
 export interface KavitaSeriesDetailDto {
   chapters?: KavitaChapterDto[];
   specials?: KavitaChapterDto[];
-  volumes?: unknown[];
+  volumes?: KavitaVolumeDto[];
   unreadCount?: number;
   [field: string]: unknown;
 }

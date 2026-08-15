@@ -61,6 +61,7 @@ type RawSetEntry = BindingSource & {
   remove_completed_after?: unknown;
   include_specials?: unknown;
   batch_stops_at?: unknown;
+  episodes?: unknown;
   audio_language?: unknown;
   max_items?: unknown;
   providers?: unknown;
@@ -225,6 +226,10 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
     if (ent.batch_stops_at != null) {
       cfg.batch_stops_at = String(ent.batch_stops_at).trim().toLowerCase();
     }
+    // How many items one entry contributes per visit, when the entry says nothing. The COUNT
+    // to `batch_stops_at`'s WHERE, and the same entry > set > env precedence: resolve.js's
+    // setBatch() interprets it for Plex, providers/launcher.js for a pull provider.
+    if (ent.episodes != null) cfg.episodes = String(ent.episodes).trim();
     // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
     if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().
