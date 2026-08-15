@@ -135,7 +135,7 @@ function publishDiscovery() {
       identifiers: ['queuepilot'],
       name: 'QueuePilot',
       manufacturer: 'queuepilot',
-      model: 'Kids NFC / UC3 Plex helper',
+      model: 'Media queue controller',
     },
   };
   pub(topic, cfg, { retain: true });
