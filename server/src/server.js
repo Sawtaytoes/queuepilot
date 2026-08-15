@@ -18,8 +18,9 @@ import * as history from './history.js';
 import * as mqttc from './mqttc.js';
 import * as plex from './plex.js';
 import * as providers from './providers/config.js';
-import { providerFor } from './providers/index.js';
+import { coverUrl, providerFor } from './providers/index.js';
 import * as providerBlocks from './providers/blocks.js';
+import * as providerTiles from './providers/tiles.js';
 import { mountLauncher } from './providers/launcher.js';
 import * as queues from './queues.js';
 import * as sets from './sets.js';
@@ -215,6 +216,37 @@ function statPair(p) {
   }
 }
 
+/** A queue entry's manual start override ({season,episode}); null = automatic next-unwatched. */
+const startOf = (e) => (
+  e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null
+);
+
+/**
+ * One resolved queue entry, as the grid reads it: the tile CORE (from whichever resolver
+ * answered — Plex's tiles.js or the provider's) plus the per-entry knobs, which are stored on
+ * the entry and so are identical whatever resolved it.
+ */
+function queueTile(e, core) {
+  const v = e.value && typeof e.value === 'object' ? e.value : null;
+  // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may stop,
+  // as opposed to `episodes` = how long it is.
+  const batchStopsAt = v && v.batch_stops_at ? String(v.batch_stops_at).trim().toLowerCase() : null;
+  return {
+    key: e.key,
+    raw: tiles.displayFor(e.value),
+    ...core,
+    episodes: v && v.episodes ? v.episodes : 1,
+    // How often this entry comes up when the set is randomized (1 = normal; the editor shows
+    // a tag only above 1).
+    weight: toWeight(v ? v.weight : null),
+    batch_stops_at: ['member', 'season'].includes(batchStopsAt) ? batchStopsAt : null,
+    start: startOf(e),
+    // A finished-but-kept entry (Python tagged it done); the grid greys it and the
+    // "Remove all completed" button targets these. False for every plain entry.
+    done: Boolean(e.done),
+  };
+}
+
 // Every queue in registry order, each curated entry resolved (poster + type) for
 // rendering. Rotation channels appear with their metadata but no items — their lineup is
 // computed, not stored (the Channels view previews it separately).
@@ -240,10 +272,20 @@ app.get('/api/queues', async (req, res) => {
     const result = {};
     // One flat work list across every set, so the concurrency budget is spent globally.
     const work = [];
+    // A PULL set resolves through ITS provider instead — per set, because the provider seam
+    // takes the whole set (one block, one client, one bounded fan-out) rather than one entry
+    // at a time. Without this every reading entry resolves against Plex, which has never
+    // heard of a Kavita seriesId: no poster, no next-up, just the stored title.
+    const pull = [];
     for (const s of reg.sets) {
       result[s.id] = { label: s.label, kind: s.kind, source: s.source, sections: s.sections, items: [] };
       if (s.source !== 'queue') continue;
-      for (const e of all.get(s.id) || []) work.push({ s, e });
+      const entries = all.get(s.id) || [];
+      if (s.delivery === 'pull') {
+        if (entries.length) pull.push({ s, entries });
+        continue;
+      }
+      for (const e of entries) work.push({ s, e });
     }
     const resolvedItems = await mapLimit(work, 8, async ({ s, e }) => {
       // resolveTile surfaces, for a series, the next unwatched episode (queue plays it
@@ -251,35 +293,17 @@ app.get('/api/queues', async (req, res) => {
       // member ("Next: <member>", not an opaque "N in order"). A manual start override on the
       // entry floors the pick — {season,episode} for a show, {series,season,episode} for a
       // collection (which member to begin at plus the floor inside it).
-      const start = e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null;
-      const core = await tiles.resolveTile(s.sections, e.value, start);
-      const episodes = e.value && typeof e.value === 'object' && e.value.episodes ? e.value.episodes : 1;
-      // How often this entry comes up when the set is randomized (1 = normal; the editor shows
-      // a tag only above 1).
-      const weight = toWeight(e.value && typeof e.value === 'object' ? e.value.weight : null);
-      // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may
-      // stop, as opposed to `episodes` = how long it is.
-      const batchStopsAt = e.value && typeof e.value === 'object' && e.value.batch_stops_at
-        ? String(e.value.batch_stops_at).trim().toLowerCase() : null;
-      return {
-        setId: s.id,
-        tile: {
-          key: e.key,
-          raw: tiles.displayFor(e.value),
-          ...core,
-          episodes,
-          weight,
-          batch_stops_at: ['member', 'season'].includes(batchStopsAt) ? batchStopsAt : null,
-          // The manual start override (null = automatic next-unwatched).
-          start,
-          // A finished-but-kept entry (Python tagged it done); the grid greys it and the
-          // "Remove all completed" button targets these. False for every plain entry.
-          done: Boolean(e.done),
-        },
-      };
+      const core = await tiles.resolveTile(s.sections, e.value, startOf(e), {});
+      return { setId: s.id, tile: queueTile(e, core) };
     });
     // Regroup by set, preserving the flat list's order (set-then-entry order).
     for (const { setId, tile } of resolvedItems) result[setId].items.push(tile);
+
+    // The pull sets, each in one provider round-trip, all of them concurrently.
+    await Promise.all(pull.map(async ({ s, entries }) => {
+      const cores = await providerTiles.resolveTiles(s, entries.map((e) => e.value));
+      result[s.id].items = entries.map((e, i) => queueTile(e, cores[i]));
+    }));
 
     res.json({ sets: result, order: reg.sets.map((s) => s.id) });
   } catch (e) {
@@ -374,6 +398,23 @@ app.get('/api/sets/:id/members', async (req, res) => {
     if (uuidQ) {
       try { scope = { token: await plex.accountToken(uuidQ), account: uuidQ }; } catch { scope = {}; }
     }
+    // A READING channel's members are its provider's, resolved in one bounded round-trip —
+    // the same seam the queue grid uses, and for the same reason: Plex cannot resolve them.
+    // (A pull channel has no Plex Home profile to scope by, so `scope` does not apply.)
+    if (s.delivery === 'pull') {
+      const values = s.members || [];
+      const cores = await providerTiles.resolveTiles(s, values);
+      return res.json({
+        members: values.map((value, index) => ({
+          index,
+          raw: value,
+          ...cores[index],
+          start: value && typeof value === 'object' && value.start ? value.start : null,
+          episodes: value && typeof value === 'object' && value.episodes ? value.episodes : 1,
+          weight: toWeight(value && typeof value === 'object' ? value.weight : null),
+        })),
+      });
+    }
     const members = await mapLimit(s.members || [], 6, async (value, index) => {
       // A hand-written {collection: <name>} mapping resolves like its string spelling.
       const v = value && typeof value === 'object' && value.collection && value.ratingKey == null
@@ -443,6 +484,10 @@ app.get('/api/search', async (req, res) => {
             type: 'show',
             librarySectionTitle: r.libraryTitle,
             librarySectionID: r.libraryId,
+            // The dropdown's artwork. It must be sent, not derived: the frontend's only other
+            // move is /api/thumb/<id>, which is PLEX's proxy and answers 502 for a Kavita
+            // seriesId — the broken-image row the owner hit on 2026-08-15.
+            cover: coverUrl(block.provider, r.id),
           })),
         });
       }
@@ -959,7 +1004,16 @@ app.get('/api/generic/:id/preview', async (req, res) => {
         label: s.label,
         provider: block.provider,
         delivery: 'pull',
-        buckets: pool,
+        // `cover` is the one field the Plex shape has no equivalent of: a Plex bucket's
+        // artwork is /api/thumb/<ratingKey>, which the frontend builds from the id it already
+        // has. A provider id needs its provider's proxy instead, so the URL is sent.
+        // `unit` goes with it: the shape is Plex's, and Plex's next-up line counts EPISODES.
+        // A reading bucket's number is a chapter, so the tile must say "Ch 113", not "E113".
+        buckets: pool.map((b) => ({
+          ...b,
+          cover: coverUrl(block.provider, b.ratingKey),
+          unit: p.unit || 'episode',
+        })),
       });
     }
 

@@ -146,6 +146,16 @@ jobs:
       - name: Kavita-only set saves (offline)
         run: node e2e/kavita-only-set-test.mjs
 
+      # A reading queue's ARTWORK and TILES come from its provider, not from Plex. Reported
+      # from the live app: a search dropdown of broken-image glyphs, because the cover proxy
+      # shipped and nothing ever called it — the frontend's only move was /api/thumb, which is
+      # Plex's, and answers 502 for a Kavita seriesId. The same blindness sat in /api/queues,
+      # where every reading entry was resolved against Plex and came back unresolved: no
+      # poster, no next-up. Runs against a STUB Kavita on 127.0.0.1 with Plex pointed at a dead
+      # port, which is also what proves none of this path touches Plex.
+      - name: Kavita covers + provider tiles (offline)
+        run: node e2e/kavita-covers-test.mjs
+
       # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
       # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against
       # that engine's RECORDED answers (e2e/fixtures/golden/routing.json) over

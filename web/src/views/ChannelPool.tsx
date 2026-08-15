@@ -8,7 +8,11 @@ import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
-import { startLabel } from "../lib/tileFace"
+import {
+  isSelfTitled,
+  seLabel,
+  startLabel,
+} from "../lib/tileFace"
 import type {
   ChannelMember,
   PreviewBucket,
@@ -432,16 +436,24 @@ export function ChannelPool({
                 onStart: entry
                   ? () => openStartModal(entry)
                   : undefined,
-                text: `${
-                  b.next.multiSeason
-                    ? `S${b.next.season ?? "?"} · E${b.next.episode ?? "?"}`
-                    : `E${b.next.episode ?? "?"}`
-                } · ${b.next.title}`,
+                // The SAME label the queue/member tiles wear, from the same helper —
+                // including "Ch 113" on a reading pool, where the number is a chapter.
+                text: [
+                  seLabel(b.next, b.unit),
+                  isSelfTitled(b.next)
+                    ? null
+                    : b.next.title,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
                 tooltip:
                   "Tap to choose where this show starts",
               }
             : undefined
         }
+        // A reading pool's artwork is its provider's, re-served by the app (see `Poster`);
+        // a section bucket borrows the next-up leaf's Plex poster, which has no cover URL.
+        posterCover={isSection ? null : b.cover}
         posterRatingKey={
           isSection
             ? (b.next?.ratingKey ?? null)

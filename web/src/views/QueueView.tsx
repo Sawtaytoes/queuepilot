@@ -13,13 +13,14 @@ import {
   isPullSet,
   OpenQueueButton,
 } from "../components/OpenQueueButton"
+import { Poster } from "../components/Poster"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
 import { useGridDrag } from "../hooks/useGridDrag"
-import { api, thumbUrl } from "../lib/api"
+import { api } from "../lib/api"
 import { flashTile } from "../lib/flip"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import {
@@ -353,17 +354,21 @@ export function QueueView({
                 className: "queued",
                 content: (
                   <>
-                    {!isCollection || hit.hasThumb ? (
-                      <img
-                        alt=""
-                        src={thumbUrl(hit.ratingKey)}
-                      />
-                    ) : (
-                      <span
-                        aria-hidden="true"
-                        className="noposter"
-                      />
-                    )}
+                    <Poster
+                      cover={hit.cover}
+                      fallback={
+                        <span
+                          aria-hidden="true"
+                          className="noposter"
+                        />
+                      }
+                      // A collection with no artwork of its own has nothing to ask for.
+                      ratingKey={
+                        isCollection && !hit.hasThumb
+                          ? null
+                          : hit.ratingKey
+                      }
+                    />
                     <span>
                       {hit.title}{" "}
                       <span className="y">
@@ -403,17 +408,21 @@ export function QueueView({
             return {
               content: (
                 <>
-                  {!isCollection || hit.hasThumb ? (
-                    <img
-                      alt=""
-                      src={thumbUrl(hit.ratingKey)}
-                    />
-                  ) : (
-                    <span
-                      aria-hidden="true"
-                      className="noposter"
-                    />
-                  )}
+                  <Poster
+                    cover={hit.cover}
+                    fallback={
+                      <span
+                        aria-hidden="true"
+                        className="noposter"
+                      />
+                    }
+                    // A collection with no artwork of its own has nothing to ask for.
+                    ratingKey={
+                      isCollection && !hit.hasThumb
+                        ? null
+                        : hit.ratingKey
+                    }
+                  />
                   <span>
                     {hit.title}{" "}
                     {isCollection ? (
@@ -943,6 +952,7 @@ export function QueueView({
                 }
                 onRemove={() => removeTile(item)}
                 playTitle={`Play “${face.title}” now`}
+                posterCover={item.cover}
                 posterRatingKey={
                   item.resolved ? face.ratingKey : null
                 }
