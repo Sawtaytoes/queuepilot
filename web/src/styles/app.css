@@ -915,8 +915,8 @@ ul.grid {
   color: var(--color-content-muted);
 }
 .badge.collection:has(.badgename) {
-  color: var(--color-intent-success-content);
-  border-color: var(--color-intent-success-border);
+  color: var(--color-content-muted);
+  border-color: var(--color-border-default);
 }
 /* A collection tile shows the MEMBER that plays next, so the collection itself lives in this
    badge: a dim "Collection" chip fused to the collection's name (truncated, full name on
@@ -932,9 +932,9 @@ ul.grid {
 }
 .badge .badgekind {
   padding: 1px 7px;
-  background: var(--color-intent-success-surface);
-  color: var(--color-intent-success-content);
-  border-right: 1px solid var(--color-intent-success-border);
+  background: var(--color-surface-overlay);
+  color: var(--color-content-muted);
+  border-right: 1px solid var(--color-border-default);
 }
 .badge .badgename {
   padding: 1px 8px;
@@ -2475,13 +2475,14 @@ ul.grid.cards {
   gap: 12px;
   align-items: start;
 }
-/* Four columns, not two: ✓ | poster | text | ✕. The controls are LAID OUT rather than
-   overlaid, which is the whole fix — a card is wide enough to give them their own gutters,
-   so neither one sits on the artwork. The gutters are reserved even while the controls are
-   transparent, so revealing them on hover shifts nothing. */
+/* Four columns: poster | text | ✓ | ✕. The controls are LAID OUT rather than overlaid, which
+   is the whole point — neither one sits on the artwork — but BOTH ride the trailing edge.
+   An earlier cut put ✓ in a LEADING gutter, which meant every card carried a permanently
+   empty column before the poster and the artwork never touched the card's left edge. The
+   reserved space still exists, it just lives where the card already had slack. */
 ul.grid.cards .tile {
   display: grid;
-  grid-template-columns: auto 76px minmax(0, 1fr) auto;
+  grid-template-columns: 76px minmax(0, 1fr) auto auto;
   gap: 12px;
   align-items: start;
   background: var(--color-surface-raised);
@@ -2517,7 +2518,7 @@ ul.grid.rows {
 }
 ul.grid.rows .tile {
   display: grid;
-  grid-template-columns: auto 40px minmax(0, 1fr) auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   background: var(--color-surface-raised);
@@ -2585,24 +2586,24 @@ ul.grid.cards .tile > *,
 ul.grid.rows .tile > * {
   grid-row: 1;
 }
+/* The poster and the text keep their columns whether or not this grid is editable — a
+   read-only pool tile renders no ✓/✕ at all, and auto-placement would otherwise slide
+   everything around. The two controls sit together at the trailing edge. */
+ul.grid.cards .tile .thumb,
+ul.grid.rows .tile .thumb {
+  grid-column: 1;
+}
+ul.grid.cards .tile .cap,
+ul.grid.rows .tile .cap {
+  grid-column: 2;
+}
 ul.grid.cards .tile .check,
 ul.grid.rows .tile .check {
-  grid-column: 1;
+  grid-column: 3;
 }
 ul.grid.cards .tile .remove,
 ul.grid.rows .tile .remove {
   grid-column: 4;
-}
-/* The poster and the text keep their columns whether or not this grid is editable — a
-   read-only pool tile renders no ✓/✕ at all, and auto-placement would otherwise slide
-   everything one column left. */
-ul.grid.cards .tile .thumb,
-ul.grid.rows .tile .thumb {
-  grid-column: 2;
-}
-ul.grid.cards .tile .cap,
-ul.grid.rows .tile .cap {
-  grid-column: 3;
 }
 /* A card's poster is tall, so its controls read better pinned to the top of the card than
    floating at its vertical centre. A row is one line — centred is the only option there. */
