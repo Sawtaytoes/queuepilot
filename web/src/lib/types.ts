@@ -72,6 +72,11 @@ export type QueueItem = {
   year: number | null
   childCount: number | null
   nextEp: NextEp | null
+  /**
+   * The next-up lookup FAILED (Plex unreachable / errored), as opposed to coming back
+   * empty. Both leave `nextEp` null, but only the empty one means "all watched".
+   */
+  isNextEpFailed?: boolean
   episodes: number
   /**
    * Per-entry override of the set's `batch_stops_at`: WHERE this entry's batch may stop
@@ -126,6 +131,11 @@ export type ChannelMember = {
   year: number | null
   childCount: number | null
   nextEp: NextEp | null
+  /**
+   * The next-up lookup FAILED (Plex unreachable / errored), as opposed to coming back
+   * empty. Both leave `nextEp` null, but only the empty one means "all watched".
+   */
+  isNextEpFailed?: boolean
   start: StartPoint | null
   /** Episodes queued per visit (1 = the channel default). */
   episodes?: number
