@@ -72,6 +72,8 @@ type RawEntryObject = {
   done?: unknown;
   /** Epoch seconds, written by `markDone` beside `done: true`; absent on a hand-marked entry. */
   done_at?: unknown;
+  /** This entry's override of the set's `batch_stops_at` — see `EntryDescriptor`. */
+  batch_stops_at?: unknown;
 };
 
 /** Anything the episode filters below probe. Both spellings of season/episode, because a raw
@@ -86,12 +88,7 @@ type EpisodeLike = {
   duration?: unknown;
 };
 
-/**
- * One entry normalized for resolution — the return of `describe()`.
- *
- * `batch_stops_at` is declared because `batchStop()` reads it off a descriptor, NOT because
- * `describe()` writes it (it does not — see the note on batchStop).
- */
+/** One entry normalized for resolution — the return of `describe()`. */
 export interface EntryDescriptor {
   key: string | null;
   ratingKey: string | null;
@@ -110,7 +107,13 @@ export interface EntryDescriptor {
    */
   doneAt: number | null;
   raw: unknown;
-  batch_stops_at?: unknown;
+  /**
+   * This entry's override of the set's `batch_stops_at` — WHERE its batch may stop. Carried
+   * through RAW, exactly as the Python `_describe` did: `batchStop()` is the single place that
+   * trims/lowercases and decides what is recognised, so a typo here still falls through to the
+   * set's intent instead of being flattened to "off" on the way in.
+   */
+  batch_stops_at: unknown;
 }
 
 /**
@@ -246,6 +249,10 @@ export function describe(entry: unknown): EntryDescriptor {
       guid,
       collection: coll ? String(coll).trim() : null,
       episodes: (entry.episodes ?? null) as number | null,
+      // Per-entry override of the set's `batch_stops_at` ("none"|"member"|"season"): where this
+      // entry's batch may stop. Lets one OVA collection roll straight through on a channel that
+      // otherwise stops at season boundaries. Raw — batchStop() does the normalizing.
+      batch_stops_at: entry.batch_stops_at ?? null,
       start: (entry.start ?? null) as Start | null,
       // How OFTEN this entry comes up when the set is randomized — slots per round, not a
       // probability. Absent = 1 (see select.js toWeight); only the shuffled paths read it.
@@ -262,8 +269,8 @@ export function describe(entry: unknown): EntryDescriptor {
   if (isRatingKey(entry)) {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
-      guid: null, collection: null, episodes: null, start: null, weight: 1, done: false,
-      doneAt: null, raw: entry,
+      guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
+      weight: 1, done: false, doneAt: null, raw: entry,
     };
   }
   const { title, year, guid } = parseTitleString(entry);
@@ -271,7 +278,8 @@ export function describe(entry: unknown): EntryDescriptor {
   const coll = cm ? cm[1]!.trim() : null;
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
-    collection: coll, episodes: null, start: null, weight: 1, done: false, doneAt: null, raw: entry,
+    collection: coll, episodes: null, batch_stops_at: null, start: null, weight: 1, done: false,
+    doneAt: null, raw: entry,
   };
 }
 

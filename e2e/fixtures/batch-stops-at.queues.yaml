@@ -1,0 +1,40 @@
+# Hand-written queues.yaml for e2e/batch-stops-at-test.ts. Every descriptor that test resolves
+# comes out of `loadEntries()` over THIS file, so the test exercises the same describe() path
+# the service runs — the per-entry `batch_stops_at:` override reaches the resolver only if
+# describe() actually carries it.
+#
+# One queue per entry SHAPE, because two entries for the same show would share an entry key and
+# the test could no longer name them apart. Every show entry is ratingKey 600 ("Alpha", two
+# seasons) and every collection entry is "Both Shows"; the fake Plex client in the test resolves
+# both.
+
+# A plain entry, no override: whatever the set (or the env default) says.
+show-plain:
+- 600
+coll-plain:
+- "Collection: Both Shows"
+
+# The overrides, as the web UI writes them (queues.setBatchStop) and as a hand-edit spells them.
+show-none:
+- {ratingKey: 600, batch_stops_at: none}
+show-season:
+- {ratingKey: 600, batch_stops_at: season}
+coll-member:
+- {collection: Both Shows, batch_stops_at: member}
+# The OVA collection from the 2026-08-12 decision: a channel that stops at season boundaries,
+# and the one collection you are happy to roll straight through.
+coll-none:
+- {collection: Both Shows, batch_stops_at: none}
+
+# Sloppy spellings. Whitespace and case are the resolver's to normalize; a TYPO must fall back to
+# the set's intent rather than switching the boundary off; the off-ish spellings mean "none".
+show-messy:
+- {ratingKey: 600, batch_stops_at: "  Season  "}
+show-typo:
+- {ratingKey: 600, batch_stops_at: seasons}
+show-off:
+- {ratingKey: 600, batch_stops_at: "off"}
+
+# A per-entry count override, to prove QUEUE_SERIES_LENGTH still clamps it on the real path.
+show-big-batch:
+- {ratingKey: 600, episodes: 9999}

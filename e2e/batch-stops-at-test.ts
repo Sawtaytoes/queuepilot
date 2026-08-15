@@ -7,17 +7,31 @@
 // finale. "none" (default) fills across anything; "member" never spans two collection members;
 // "season" also never spans a season boundary, including inside one show.
 //
-// Same table as e2e/batch-stops-at-test.py, deliberately: the feature lands in both engines
-// identically, so a Node↔Python DIFF stays green either way and proves nothing — each side has
-// to be pinned by assertion. Hermetic fake client (client.container is the whole surface).
+// Same table as the retired e2e/batch-stops-at-test.py, deliberately: the feature lands in both
+// engines identically, so a Node↔Python DIFF stays green either way and proves nothing — each
+// side has to be pinned by assertion. Hermetic fake client (client.container is the whole
+// surface).
+//
+// Every descriptor here comes from `loadEntries()` over e2e/fixtures/batch-stops-at.queues.yaml
+// — i.e. from `describe()`, the ONLY way a descriptor is built in the service. Until 2026-08-15
+// this file hand-built descriptor literals with `batch_stops_at` already on them, so the whole
+// entry-level half of the table passed against a field `describe()` never wrote: the per-entry
+// override was dead on the real path and the gate said it worked. Resolve from real queue YAML
+// or this test proves nothing about the code that runs.
 //
 // Run: server/node_modules/.bin/tsx e2e/batch-stops-at-test.ts
 import assert from 'node:assert/strict';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { EntryDescriptor } from '../server/src/engine/resolve.js';
 import type { PlexClient, PlexMetadata } from '../server/src/types.js';
 
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+// config.js reads both at module eval → set them before importing the engine. run.sh exports a
+// QUEUES_PATH of its own for the UI suites; this overrides it for this process only.
+process.env.QUEUES_PATH = path.join(REPO, 'e2e', 'fixtures', 'batch-stops-at.queues.yaml');
 process.env.SETS_PATH = '/nonexistent-so-loadSets-is-never-consulted.yaml';
-const { resolveMember } = await import('../server/src/engine/resolve.js');
+const { resolveMember, loadEntries } = await import('../server/src/engine/resolve.js');
 const env = await import('../server/src/env.js');
 
 const SECTION = 11;
@@ -67,10 +81,15 @@ const fakeClient = {
   },
 } as PlexClient;
 
-// The fixtures carry only the identity fields the resolver reads; `describe()` fills the rest
-// off real YAML. Widened once here rather than at each of the twenty call sites below.
-const COLL = { collection: 'Both Shows', key: 'title:Collection: Both Shows' } as EntryDescriptor;
-const SHOW = { ratingKey: '600', key: 'rk:600' } as EntryDescriptor;
+// One queue per entry SHAPE in the fixture, so a case names the shape it wants and gets the
+// descriptor the service would build for it — no literals.
+const entry = (queue: string): EntryDescriptor => {
+  const [desc, ...rest] = loadEntries(queue);
+  if (!desc || rest.length) throw new Error(`fixture queue "${queue}" must hold exactly one entry`);
+  return desc;
+};
+const COLL = entry('coll-plain');
+const SHOW = entry('show-plain');
 
 const titles = async (
   desc: EntryDescriptor,
@@ -97,6 +116,19 @@ const check = async (label: string, actual: unknown, expected: unknown): Promise
     failed += 1;
   }
 };
+
+// 0. The descriptor itself. `describe()` must CARRY the entry's `batch_stops_at` off the YAML,
+//    or every entry-level case below is quietly asserting the SET's value and the per-entry
+//    override does nothing in production (the 2026-08-15 bug). The value is carried RAW —
+//    batchStop() is the single place that trims/lowercases and decides what is recognised, so a
+//    typo can still fall through to the set instead of being flattened to "off" on the way in.
+await check('describe(): a plain entry carries no override', SHOW.batch_stops_at, null);
+await check('describe(): the entry override reaches the descriptor',
+  entry('show-season').batch_stops_at, 'season');
+await check('describe(): a collection entry\'s override reaches it too',
+  entry('coll-member').batch_stops_at, 'member');
+await check('describe(): the value is carried untouched, not normalized on the way in',
+  entry('show-messy').batch_stops_at, '  Season  ');
 
 // 1. Default ("none") — today's behavior, across BOTH boundary kinds.
 await check('default: a 2-batch spans the member boundary',
@@ -139,19 +171,30 @@ for (const stop of ['none', 'member', 'season']) {
 await check('a genuinely finished show is still FINISHED (empty items), stop or no stop',
   titles(SHOW, { batch_stops_at: 'season' }, 2, ['101', '102', '201', '202']), []);
 
-// 6. Precedence: entry override > set > global default.
+// 6. Precedence: entry override > set > global default — resolved from the YAML entry, which is
+//    where an override is actually written (the web UI's per-entry select, or a hand edit).
 await check('entry override wins over the set (entry none on a season set)',
-  titles({ ...SHOW, batch_stops_at: 'none' }, { batch_stops_at: 'season' }, 2, ['101']),
+  titles(entry('show-none'), { batch_stops_at: 'season' }, 2, ['101']),
   ['Alpha S1E2', 'Alpha S2E1']);
 await check('entry override wins over the set (entry season on an unset set)',
-  titles({ ...SHOW, batch_stops_at: 'season' }, {}, 2, ['101']), ['Alpha S1E2']);
+  titles(entry('show-season'), {}, 2, ['101']), ['Alpha S1E2']);
+// The OVA case from the decision record: a channel that stops at member boundaries, and the one
+// collection the owner is happy to roll straight through.
+await check('a collection entry\'s none rolls through a member set',
+  titles(entry('coll-none'), { batch_stops_at: 'member' }, 2, ['101', '102', '201']),
+  ['Alpha S2E2', 'Beta S1E1']);
+await check('a collection entry\'s member stops on a set that says nothing',
+  titles(entry('coll-member'), {}, 2, ['101', '102', '201']), ['Alpha S2E2']);
+// Case and surrounding whitespace are the resolver's to normalize.
+await check('a padded, mixed-case entry value still reads as season',
+  titles(entry('show-messy'), {}, 2, ['101']), ['Alpha S1E2']);
 // An unrecognised value is IGNORED at that level, so a typo falls back to the set's intent
 // instead of silently switching the feature off.
 await check('a typo\'d entry value falls back to the set, not to off',
-  titles({ ...SHOW, batch_stops_at: 'seasons' }, { batch_stops_at: 'season' }, 2, ['101']),
+  titles(entry('show-typo'), { batch_stops_at: 'season' }, 2, ['101']),
   ['Alpha S1E2']);
 await check('off/blank spellings read as none',
-  titles({ ...SHOW, batch_stops_at: 'off' }, { batch_stops_at: 'season' }, 2, ['101']),
+  titles(entry('show-off'), { batch_stops_at: 'season' }, 2, ['101']),
   ['Alpha S1E2', 'Alpha S2E1']);
 // The global default is read from env at module eval, so assert its shape rather than
 // re-importing the module under a mutated process.env.
@@ -170,7 +213,7 @@ await check('rotation path (no default batch) stays uncapped under member',
 await check('a 3-batch under season still stops at the season boundary',
   titles(SHOW, { batch_stops_at: 'season' }, 3), ['Alpha S1E1', 'Alpha S1E2']);
 await check('QUEUE_SERIES_LENGTH still clamps an absurd override',
-  titles({ ...SHOW, episodes: 9999 }, {}, 1).then((t) => t.length), ALPHA.length);
+  titles(entry('show-big-batch'), {}, 1).then((t) => t.length), ALPHA.length);
 
 console.log(failed ? `batch-stops-at FAILED (${failed})` : 'batch-stops-at OK');
 process.exit(failed ? 1 : 0);
