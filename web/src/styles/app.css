@@ -930,6 +930,12 @@ ul.grid {
   max-width: 100%;
   overflow: hidden;
 }
+/* The "Collection" half. Neutral like the name beside it — this chip exists to carry the
+   collection's NAME, not to colour-code a type, and green now means Completed. Note this is
+   the SECOND place the collection's colour was written (the other is
+   `.badge.collection:has(.badgename)` above): a scheme change has to touch both, and missing
+   one leaves a green chip in an otherwise neutral row.
+   (decision `2026-08-15-badge-intent-means-one-thing`) */
 .badge .badgekind {
   padding: 1px 7px;
   background: var(--color-surface-overlay);

@@ -839,7 +839,7 @@ export function QueueView({
                       <Badge
                         appearance="outline"
                         className="badge donebadge"
-                        intent="neutral"
+                        intent="success"
                         size="sm"
                       >
                         Completed
@@ -852,7 +852,7 @@ export function QueueView({
                       <Badge
                         appearance="solid"
                         className="badge playingbadge"
-                        intent="success"
+                        intent="info"
                         size="sm"
                       >
                         {now.now?.state === "paused"
