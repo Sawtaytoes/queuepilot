@@ -51,6 +51,7 @@ export function PlayMenu() {
   const playMutation = useMutation({
     mutationFn: (body: {
       kind: "movie" | undefined
+      only: string | undefined
       profile: string | undefined
       set: string
       target: string | undefined
@@ -84,7 +85,8 @@ export function PlayMenu() {
 
   if (!playMenu) return null
 
-  const { anchor, kind, profile, setId } = playMenu
+  const { anchor, kind, only, onlyLabel, profile, setId } =
+    playMenu
 
   return (
     <div
@@ -125,10 +127,15 @@ export function PlayMenu() {
             key={d.id}
             onClick={() => {
               closePlayMenus()
-              setStatus(`Starting on ${d.name}…`)
+              setStatus(
+                onlyLabel
+                  ? `Starting ${onlyLabel} on ${d.name}…`
+                  : `Starting on ${d.name}…`,
+              )
 
               playMutation.mutate({
                 kind,
+                only,
                 profile,
                 set: setId,
                 target: d.default ? undefined : d.id,

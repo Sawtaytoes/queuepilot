@@ -89,6 +89,11 @@ export async function startSession(payload = {}, opts = {}) {
   const kind = payload.kind || 'cartoons';
   let setName = payload.set || 'auto';
   const cardProfile = payload.profile || null;
+  // "Play THIS entry" — an entry key from the web grid's per-tile ▶, narrowing the lineup to
+  // one member of a curated queue/channel. Everything else about the start is unchanged: the
+  // same profile gate, the same device, the same resume/mark-done bookkeeping. A physical
+  // card never sends it; it only ever arrives from the UI.
+  const only = payload.only ? String(payload.only) : null;
   const isAuto = setName === 'auto' || setName === '' || setName == null;
   let profileTitle = null;
   let detectedProfile = null;
@@ -170,7 +175,7 @@ export async function startSession(payload = {}, opts = {}) {
   const tok = await provider.profileToken(binding.user_uuid);
 
   const res = await provider.buckets({
-    setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk,
+    setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk, only,
   });
 
   if (cfg.source === 'queue') {
@@ -194,11 +199,15 @@ export async function startSession(payload = {}, opts = {}) {
     if (res.done?.length) console.log(`[session] ${setName} finished (kept): ${res.done}`);
     if (res.unresolved?.length) console.log(`[session] ${setName} unresolved: ${res.unresolved}`);
     if (!res.play?.length) {
-      _publishState({
-        error: `queue '${setName}' has nothing to play (empty, or every entry watched - add entries to queues.yaml)`,
-        ...SESSION.asDict(),
-      });
-      return { error: 'empty queue' };
+      // A one-entry start fails for its own reasons, and "add entries to queues.yaml" is the
+      // wrong advice for every one of them — the queue is fine, this entry is not.
+      const why = res.unknownEntry
+        ? `'${setName}' has no entry ${res.unknownEntry} any more — it was removed or renamed. Reload the page.`
+        : only
+          ? `that entry in '${cfg.label || setName}' has nothing left to play — it is fully watched, or it no longer resolves in the library.`
+          : `queue '${setName}' has nothing to play (empty, or every entry watched - add entries to queues.yaml)`;
+      _publishState({ error: why, ...SESSION.asDict() });
+      return { error: only ? 'empty entry' : 'empty queue' };
     }
     playItems = res.play;
     resumeMs = res.offset || 0;

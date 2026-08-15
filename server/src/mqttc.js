@@ -97,11 +97,14 @@ export const lastNowPlaying = () => LAST_NOW;
 // Publish a session start ("Play on <device>"). target omitted -> the default Shield.
 // `profile` (PR 4) names the binding to play under on a profiles[] function channel —
 // mqttd resolves it via routing.bindingFor; omitted = the default binding.
-export function play(setId, kind, target, profile) {
+// `only` is an entry key: play THAT member of a curated set instead of whatever the set
+// would have chosen. Web-only — no physical card sends it.
+export function play(setId, kind, target, profile, only) {
   if (!connected()) throw new Error('MQTT not connected');
   const payload = { set: setId, kind: kind || 'movie' };
   if (target) payload.target = target;
   if (profile) payload.profile = profile;
+  if (only) payload.only = only;
   client.publish(T_CMD_START, JSON.stringify(payload), { qos: 1 });
   return payload;
 }

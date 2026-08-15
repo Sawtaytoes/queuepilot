@@ -117,9 +117,19 @@ export function plexProvider({ def = null, client = null } = {}) {
      * entries in the shared recipe store being finished, not about Plex. Keeping it above
      * this seam is what lets Kavita reuse it verbatim.
      */
-    async buckets({ setName, cfg, binding, token, kind, lastMovieRk = null }) {
+    async buckets({ setName, cfg, binding, token, kind, lastMovieRk = null, only = null }) {
       if (cfg.source === 'queue') {
-        const entries = resolve.loadEntries(setName);
+        let entries = resolve.loadEntries(setName);
+        // "Play THIS one" (the grid's per-tile ▶). Narrowing the ENTRY LIST — rather than
+        // adding a branch inside nextQueue — is what keeps this honest: the one entry still
+        // goes through the same resolve/watched/batch machinery, so it gets the same next
+        // unwatched episode, the same episodes-per-play count and the same resume offset it
+        // would have got when the queue reached it on its own. A one-entry queue IS the
+        // normal path with a shorter list.
+        if (only) {
+          entries = entries.filter((e) => e.key === only);
+          if (!entries.length) return { play: [], unknownEntry: only };
+        }
         if (cfg.reel) return resolve.buildReel(c, setName, cfg, entries, token);
         const watched = await select.watchedForSet(c, cfg, binding);
         // The rng is REQUIRED, not optional: a channel (kind: anime) plays its members in a

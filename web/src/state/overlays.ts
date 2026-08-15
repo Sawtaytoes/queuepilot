@@ -35,6 +35,14 @@ export type PlayMenuTarget = {
   setId: string
   kind?: "movie"
   profile?: string
+  /**
+   * Play ONE entry of a curated set (its entry key) rather than letting the set choose.
+   * The device menu is deliberately the same one: every play in this app names a device,
+   * and "play this entry" is a narrower lineup, not a different kind of action.
+   */
+  only?: string
+  /** What the ▶ is about to start, for the "Starting <title> on <device>…" toast. */
+  onlyLabel?: string
 }
 
 type Overlays = {
