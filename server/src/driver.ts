@@ -30,18 +30,16 @@ import * as adb from './adb.js';
 import * as playback from './playback.js';
 import type { PlaybackResult } from './playback.js';
 import * as profiles from './profiles.js';
-import type { CancelFlag, Device, PublishedSessionState, PushResult } from './types.js';
+import type { CancelFlag, Device, PublishedStateExtra, PushResult } from './types.js';
 import { errMessage, isCancelled } from './errors.js';
 
 /**
- * The mqtt client the driver publishes mid-flight state through. Opaque here on purpose:
- * `publishState` is injected (setPublishState) and the driver never touches the client
- * itself — a null one (unit tests) is a no-op.
+ * What `setPublishState()` accepts: mqttd's `publishState(extra)`, handed down through
+ * `session.setPublishers()`. Spelled as the SHARED `PublishedStateExtra` (types.ts) rather
+ * than a local re-declaration — the local copy this file used to carry took a leading mqtt
+ * `client` argument the real publisher never had, and nothing typechecked the gap.
  */
-type MqttClientLike = unknown;
-
-/** What `setPublishState()` accepts — mqttd's `publishState(client, extra)`. */
-type PublishStateFn = (client: MqttClientLike, extra: Partial<PublishedSessionState>) => void;
+type PublishStateFn = (extra: PublishedStateExtra) => void;
 
 // Read aloud verbatim by automation.plex_channels_status_announcements, so these stay
 // sentences a person would say — no timeout figures, no switcher jargon (the diagnostic
@@ -60,21 +58,17 @@ const sleep = (s: number): Promise<void> => new Promise((r) => {
 // probe this module inlined (see CancelFlag in types.ts). Still re-exported on `_internals`,
 // which is where the FSM tests reach for it.
 
-// Surface a mid-flight transition on plex-channels/state (what HA's status sensor shows).
-// Lazy / soft: mqttd (D6) or service may not be wired yet. A null client (unit tests) is a
-// no-op, so the driver stays testable without MQTT. Optional `publishState` inject for tests.
+// Surface a mid-flight transition on queuepilot/state (what HA's status sensor shows).
+// Lazy / soft: mqttd or the session may not have injected a publisher yet, in which case this
+// is a no-op and the driver stays testable without MQTT.
 let _publishState: PublishStateFn | null = null;
 export function setPublishState(fn: PublishStateFn | null): void {
   _publishState = fn;
 }
 
-function publishAwait(client: MqttClientLike, awaiting: string): void {
-  if (client == null && !_publishState) return;
-  if (_publishState) {
-    try { _publishState(client, { awaiting }); } catch { /* ignore */ }
-    return;
-  }
-  // Soft: when mqttd lands it can assign setPublishState. Until then, no-op.
+function publishAwait(awaiting: string): void {
+  if (!_publishState) return;
+  try { _publishState({ awaiting }); } catch { /* ignore */ }
 }
 
 // Is the Shield's Plex app the foreground activity right now? (ADB read, ~50ms.)
@@ -145,7 +139,6 @@ async function onRequired(required: string): Promise<boolean> {
 // the picker. Only when a real change is needed does it drive adb.switchTo, bounded-retried.
 // A successful switch RECORDS `required` into LAST_SEEN so the next gated scan skips.
 async function driveProfile(
-  client: MqttClientLike,
   required: string,
   cancel: CancelFlag | null,
 ): Promise<PushResult | null> {
@@ -157,7 +150,7 @@ async function driveProfile(
     return null;
   }
 
-  publishAwait(client, `profile:${required}`);
+  publishAwait(`profile:${required}`);
 
   if (!ADB_ENABLED) {
     // Can't drive the picker — wait for a human/HA to sign in, satisfied by the PMS log.
@@ -283,13 +276,14 @@ async function drivePlay(
 // (which items, which profile binding) is done by the caller and unchanged; this owns only
 // the launch + profile gate + verified play.
 //
-// Signature: driveToPlaying(client, { ratingKeys, requiredProfile, offset, device,
-// setName, cancel, setLabel, userUuid }).
+// Signature: driveToPlaying({ ratingKeys, requiredProfile, offset, device, setName, cancel,
+// setLabel, userUuid }). It used to lead with an mqtt `client`, which every caller passed as
+// null and which existed only to be forwarded to the state publisher that does not take one.
 //
 // `userUuid` is the ACTIVE binding's managed-user uuid — the account the playQueue must be
 // built as. It is passed through untouched; playback.playToken explains why the set's
 // top-level user_uuid cannot be trusted for a multi-profile channel.
-export async function driveToPlaying(client: MqttClientLike, {
+export async function driveToPlaying({
   ratingKeys,
   requiredProfile = null,
   offset = 0,
@@ -316,7 +310,7 @@ export async function driveToPlaying(client: MqttClientLike, {
 
   // plex_foreground -> signed_in(required). Only when the set/card demands a profile.
   if (requiredProfile) {
-    const r = await driveProfile(client, requiredProfile, cancel);
+    const r = await driveProfile(requiredProfile, cancel);
     if (r != null) {
       if (r.error === SWITCH_ERROR) {
         const profile = r._profile != null ? r._profile : requiredProfile;

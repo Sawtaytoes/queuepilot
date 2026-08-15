@@ -23,7 +23,7 @@ import {
 import { errMessage, isCancelled } from './errors.js';
 import type {
   CancelFlag, Device, HandoffResult, PlayItem, PlexPlayItem,
-  ProviderArtifact, PublishedSessionState, SessionStartPayload, SessionState,
+  ProviderArtifact, PublishedStateExtra, SessionStartPayload, SessionState,
 } from './types.js';
 
 /**
@@ -66,8 +66,12 @@ export interface LastPlayed {
 }
 
 /** The `extra` half of a state publish: everything a caller may merge on top of `asDict()`.
- * `engine` is stamped by the publisher, and `boot` is mqttd's own connect marker. */
-export type SessionStateExtra = Partial<Omit<PublishedSessionState, 'engine'>> & { boot?: boolean };
+ * `engine` is stamped by the publisher, and `boot` is mqttd's own connect marker.
+ *
+ * An alias of the shared `PublishedStateExtra` (types.ts) — it was an identical hand-written
+ * copy, as were mqttd's and driver's, which is what let the driver's copy grow an argument
+ * the publisher never took. The name stays because the e2e harnesses import it. */
+export type SessionStateExtra = PublishedStateExtra;
 
 export type PublishState = (extra: SessionStateExtra) => void;
 export type PublishLastPlayed = (item: LastPlayed | null) => void;
@@ -108,17 +112,12 @@ export function setPublishers(
 ): void {
   if (state) _publishState = state;
   if (lastPlayed) _publishLastPlayed = lastPlayed;
-  // `?? null` only because driver's setter is typed `PublishStateFn | null`; it stored the
-  // undefined before and guards with a truthiness test either way, so nothing changes.
-  //
-  // NOTE (found, not fixed): driver.js calls this publisher as `_publishState(client, {awaiting})`
-  // — TWO arguments — but the function installed here is mqttd's `publishState(extra)`, which
-  // takes ONE. On the FSM path the driver's "awaiting" state therefore publishes the CLIENT as
-  // the extra and drops `{awaiting}` entirely. Pre-existing, on both sides of a seam neither
-  // this conversion nor this file owns.
-  driver.setPublishState?.(
-    (state ?? null) as unknown as Parameters<typeof driver.setPublishState>[0],
-  );
+  // The SAME publisher the session uses, handed to the driver so the FSM path's mid-flight
+  // "awaiting" reaches the state topic. `?? null` only because driver's setter is typed
+  // `PublishStateFn | null`; it stored the undefined before and guards with a truthiness test
+  // either way, so nothing changes. No cast: both sides are `PublishedStateExtra` now, which
+  // is what makes an arity slip here a compile error rather than a silent dropped payload.
+  driver.setPublishState?.(state ?? null);
 }
 
 function cancelFlag(): Required<CancelFlag> {
