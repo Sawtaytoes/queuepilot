@@ -1,9 +1,16 @@
 .git
+.github/
+.t3/
 __pycache__/
 *.pyc
 **/__pycache__/
-web/node_modules/
+# Installed and built inside the stages that need them — a host copy would both
+# bloat the context and shadow the image's own install (server/node_modules would
+# land on top of the runtime's production-only tree).
+**/node_modules/
+server/dist/
 web/dist/
+e2e/
 __screenshots__/
 .env
 .env.local

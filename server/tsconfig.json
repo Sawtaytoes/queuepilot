@@ -1,0 +1,42 @@
+{
+  // `/node-lib` already gives: strict, isolatedModules, esModuleInterop,
+  // resolveJsonModule, skipLibCheck, forceConsistentCasingInFileNames,
+  // useDefineForClassFields, target ESNext, lib ESNext, types ["node"],
+  // module/moduleResolution NodeNext, declaration, declarationMap, sourceMap,
+  // outDir dist, rootDir src.
+  //
+  // Extended directly rather than through a root `tsconfig.base.json`: that
+  // indirection is a Yarn-workspace idiom (mux-magic, castkit) and this repo
+  // has no root manifest. `web/tsconfig.json` already extends
+  // `@charcuterie/tsconfig/react` the same way — this matches its sibling.
+  //
+  // Everything below is this package's own 20%.
+  "extends": "@charcuterie/tsconfig/node-lib",
+  "compilerOptions": {
+    // The prod artifact is an esbuild bundle (scripts/build-server.mjs), and
+    // dev + every e2e harness run the TS source through tsx. Nothing consumes
+    // a tsc-emitted `dist/`, so tsc's only job here is to be the gate that
+    // `node --check` never was.
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    // The preset's `rootDir` is relative and, inherited, resolves against the
+    // preset's own directory — `node_modules/@charcuterie/tsconfig/src` — which
+    // makes every file in this package TS6059. Re-anchor it here. `.` and not
+    // `src`, because `migrate-tiers.mts` sits beside `src/`, not inside it.
+    "rootDir": ".",
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    // Off, deliberately. The YAML round-trip code reads `doc.get(k)` into
+    // optional fields constantly, and every one of those becomes a cast under
+    // exactOptionalPropertyTypes. `web/tsconfig.json` makes the same call.
+    "exactOptionalPropertyTypes": false,
+    // On: `row.payload` off a sqlite row and `container(json).Metadata` off a
+    // Plex response are the two places a silent undefined has actually cost us
+    // a debugging session, and both are index reads.
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true
+  },
+  "include": ["src/**/*", "migrate-tiers.mts"]
+}

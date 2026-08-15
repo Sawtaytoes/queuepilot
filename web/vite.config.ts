@@ -1,3 +1,4 @@
+import { precompressAssets } from "@charcuterie/server/vite"
 import { createViteConfig } from "@charcuterie/vite-config"
 import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
@@ -59,11 +60,11 @@ import { firstPaint } from "./vite/firstPaint.ts"
  * One entry: the editor is a single-page app routed on
  * `location.hash` (`#/`, `#/queues`, `#/q/<id>`, `#/channels/<id>`).
  * Hash routing is deliberate and predates this migration — it means
- * the Express server needs no SPA fallback at all, because every URL
- * the browser ever requests is `/`.
+ * the server needs no SPA fallback at all, because every URL the
+ * browser ever requests is `/`.
  *
- * `dist/` lands beside this file and `server/src/server.js` points
- * `PUBLIC_DIR` at it, so the server-side change is one constant.
+ * `dist/` lands beside this file and the server points `PUBLIC_DIR`
+ * at it, so the server-side change is one constant.
  */
 export default createViteConfig({
   build: {
@@ -97,7 +98,7 @@ export default createViteConfig({
          * `vendor-react` changes only when React does, so its
          * content hash survives an app deploy and the browser
          * reuses it under the one-year `immutable` header
-         * `server/src/server.js` now sets on `/assets`. Before
+         * the server's static handler sets on `/assets`. Before
          * this the whole app was one bundle whose hash changed on
          * every commit, so every deploy re-downloaded React too.
          */
@@ -159,6 +160,29 @@ export default createViteConfig({
     // injected head-prepend.
     firstPaint(),
     preloadBodyFont(),
+    /**
+     * Emits the `.br`/`.gz` siblings the server's static handler
+     * serves — replacing the hand-rolled `scripts/precompress.mjs`
+     * this repo carried until the Hono migration.
+     *
+     * Build-time, not per-request: the bytes are identical for every
+     * visitor, so brotli quality 11 is affordable exactly once here
+     * and absurd in a `compression` middleware. It also keeps the
+     * rule versioned WITH the app instead of in openresty, which is
+     * not deployed from this repo.
+     *
+     * `enforce: "post"` + `apply: "build"` + a `writeBundle` hook, so
+     * it runs after every other plugin has written its files — which
+     * matters here because `preloadBodyFont` is also `post` and
+     * rewrites `index.html`. Last in the list keeps that obvious.
+     *
+     * Wider reach than the old script, deliberately: that one walked
+     * only `dist/assets` and only `.js`/`.css`/`.svg`, so `index.html`
+     * shipped uncompressed. This covers the whole `dist/` and the
+     * shared extension list. Same 1024-byte floor, same brotli-11 /
+     * gzip-9 settings, same "discard a sibling that came out larger".
+     */
+    precompressAssets(),
   ],
   /**
    * `@charcuterie/ui` is not a dependency yet (M6d phase 2), but the
@@ -172,9 +196,9 @@ export default createViteConfig({
    */
   resolve: { dedupe: ["react", "react-dom"] },
   server: {
-    // Express owns `/api` (including the `/api/events` SSE stream and
-    // the `/api/thumb` poster proxy), so `yarn dev` talks to a real
-    // backend on 8768 instead of needing a mock layer.
+    // The Node server owns `/api` (including the `/api/events` SSE
+    // stream and the `/api/thumb` poster proxy), so `npm run dev`
+    // talks to a real backend on 8768 instead of needing a mock layer.
     port: 5175,
     proxy: {
       "/api": {

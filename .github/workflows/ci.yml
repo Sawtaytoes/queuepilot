@@ -1,6 +1,10 @@
 # queuepilot CI — GitHub Actions (github.com), ported 2026-08-02 from the
 # retired Forgejo workflow `.gitea/workflows/ci.yml` when the repo moved to public
-# GitHub. Steps are a faithful 1:1 translation; only the runner home changed.
+# GitHub. It was a faithful 1:1 translation of that file until the Hono/TypeScript
+# conversion, which changed three things across every step: server/ and e2e/ are
+# TypeScript (so `node` is `$TSX` below, and the old `node --check` loop became two real
+# typechecks), the harnesses are `.ts`, and the prod artifact is an esbuild bundle that
+# now gets built here.
 #
 # The workflow name MUST stay "CI" — `docker-deploy.yml` keys its `workflow_run`
 # trigger on `workflows: ["CI"]`, mirroring the mux-magic ci.yml → docker-deploy.yml
@@ -28,6 +32,12 @@ jobs:
       # step-level `if:` can read `env`). Empty when the secret is unset → the
       # browser suites are skipped and the job still concludes success.
       PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
+      # server/src is TypeScript since the Hono conversion: plain `node` can neither load an
+      # entry point ending .ts nor resolve the `./foo.js` specifiers inside it, so every
+      # harness and every server boot below goes through tsx. It is a server/ devDependency
+      # (this repo has no root manifest), installed by the "Install server deps" step, so it
+      # is addressed by bin path rather than `npx`.
+      TSX: server/node_modules/.bin/tsx
     steps:
       - uses: actions/checkout@v7
 
@@ -35,25 +45,42 @@ jobs:
         with:
           node-version: 26
 
-      # server deps are needed so the e2e suites can spawn server/src/server.js
+      # server deps are needed so the e2e suites can spawn the server AND so `$TSX` exists
       # (node_modules is gitignored; package-lock.json is committed → npm ci).
       - name: Install server deps
         run: npm ci --prefix server
 
-      # `node --check` takes ONE file at a time, so loop the glob rather than
-      # passing them all in one invocation. The frontend is no longer a plain
-      # script — it is typechecked and built below instead.
-      - name: Node syntax check
-        run: |
-          for f in $(find server/src -name '*.js'); do
-            echo "--check $f"
-            node --check "$f"
-          done
+      # The server's real gate. This replaced a `for f in $(find server/src -name '*.js');
+      # do node --check "$f"; done` loop, which after the Hono/TypeScript conversion matched
+      # ZERO files (server/src is all .ts now) and so passed unconditionally — and even
+      # before that it only ever proved each file PARSED. `tsc --noEmit` against
+      # server/tsconfig.json is the gate `node --check` never was.
+      #
+      # No extra install: `npm ci --prefix server` above installs devDependencies, which is
+      # where `typescript` (and `tsx`, and `esbuild`) live.
+      - name: Server typecheck
+        run: npm --prefix server run typecheck
+
+      # The harnesses are TypeScript too, and they are the only consumer of several
+      # server/src exports — a signature change that server/ typechecks against its own
+      # callers still breaks them. `e2e/package.json` exists only to declare
+      # `"type": "module"` and installs nothing, so there is no `npm ci --prefix e2e` here:
+      # e2e/tsconfig.json extends the preset by PATH out of server/node_modules, and tsc is
+      # addressed by bin path for the same reason $TSX is.
+      - name: e2e typecheck
+        run: server/node_modules/.bin/tsc -p e2e/tsconfig.json
+
+      # The prod artifact is an esbuild bundle, not the tsc output — `tsc --noEmit` above
+      # cannot catch a bundling break (an unresolvable import, a native dep that will not
+      # bundle), and the Dockerfile builds it. Gate it here rather than discovering it at
+      # deploy time; mux-magic and castkit both do this.
+      - name: Server build (esbuild bundle)
+        run: npm --prefix server run build
 
       # --- the React frontend (M6d) --------------------------------------------
       # `web/` is React 19 + TypeScript + Vite + Tailwind v4 on @charcuterie/tokens.
       # These three are the frontend's gates and they must run BEFORE the browser
-      # suites, which drive server/src/server.js — and that serves web/dist.
+      # suites, which drive the server — and that serves web/dist.
       - name: Install web deps
         run: npm ci --prefix web --no-audit --no-fund
 
@@ -85,22 +112,22 @@ jobs:
       # The §B.3 TTL sweep + specials/extras filter run in the browserless block below.
       - name: Engine tests (offline)
         run: |
-          node e2e/collection-start-test.mjs
-          node e2e/keep-completed-test.mjs
-          node e2e/resume-in-queue-test.mjs
-          node e2e/resume-in-progress-done-test.mjs
-          node e2e/playback-fsm-test.mjs
-          node e2e/fsm-wake-and-skip-test.mjs
-          node e2e/session-profile-gate-test.mjs
-          node e2e/profile-gate-test.mjs
-          node e2e/binding-token-test.mjs
-          node e2e/play-one-entry-test.mjs
+          "$TSX" e2e/collection-start-test.ts
+          "$TSX" e2e/keep-completed-test.ts
+          "$TSX" e2e/resume-in-queue-test.ts
+          "$TSX" e2e/resume-in-progress-done-test.ts
+          "$TSX" e2e/playback-fsm-test.ts
+          "$TSX" e2e/fsm-wake-and-skip-test.ts
+          "$TSX" e2e/session-profile-gate-test.ts
+          "$TSX" e2e/profile-gate-test.ts
+          "$TSX" e2e/binding-token-test.ts
+          "$TSX" e2e/play-one-entry-test.ts
 
       # The plex-channels -> queuepilot topic bridge. Every way this can break is silent —
       # a card publishes where nothing listens and the broker cheerfully accepts it — so the
       # prefix mapping is pinned in both directions, bridge on and bridge off.
       - name: MQTT rename bridge (offline)
-        run: node e2e/mqtt-legacy-bridge-test.mjs
+        run: $TSX e2e/mqtt-legacy-bridge-test.ts
 
       # The retained device registry — the "Play on ▾" dropdown's source. Its failures are
       # invisible for the same reason the bridge's are: retained topics keep serving the last
@@ -110,7 +137,7 @@ jobs:
       # pinned — the plex.tv player sweep, and the empty-payload de-registration — with
       # plex.tv stubbed, so it runs with no token and no network.
       - name: Device registry (offline)
-        run: node e2e/device-registry-test.mjs
+        run: $TSX e2e/device-registry-test.ts
 
       # The provider CONFIG + BLOCK STORAGE layer. Guards the two rules that are cheap to
       # break and expensive to notice:
@@ -124,7 +151,7 @@ jobs:
       #     silent answer here would be the implementation deciding it.
       # Runs with no token and no network; every path is redirected to a scratch dir.
       - name: Provider seam (offline)
-        run: node e2e/provider-seam-test.mjs
+        run: $TSX e2e/provider-seam-test.ts
 
       # The Kavita provider and the 302 launcher, with HTTP fully stubbed. Pins the details
       # that are invisible until a real card fails: continue-point returns a NULL seriesId
@@ -135,7 +162,7 @@ jobs:
       # Also pins that handoff() returns a URL and never a device push: Kavita has no cast
       # and no webhooks, and reading is pull.
       - name: Kavita provider + launcher (offline)
-        run: node e2e/kavita-provider-test.mjs
+        run: $TSX e2e/kavita-provider-test.ts
 
       # A set whose ONLY source is a non-Plex provider must save. Reported from the live app:
       # creating a Channel with a single Kavita block failed with "at least one library
@@ -144,7 +171,7 @@ jobs:
       # here: the validators rejected the save, and createSet never WROTE `providers` at all,
       # which would have created the set with no source and failed quietly instead of loudly.
       - name: Kavita-only set saves (offline)
-        run: node e2e/kavita-only-set-test.mjs
+        run: $TSX e2e/kavita-only-set-test.ts
 
       # A reading queue's ARTWORK and TILES come from its provider, not from Plex. Reported
       # from the live app: a search dropdown of broken-image glyphs, because the cover proxy
@@ -154,27 +181,27 @@ jobs:
       # poster, no next-up. Runs against a STUB Kavita on 127.0.0.1 with Plex pointed at a dead
       # port, which is also what proves none of this path touches Plex.
       - name: Kavita covers + provider tiles (offline)
-        run: node e2e/kavita-covers-test.mjs
+        run: $TSX e2e/kavita-covers-test.ts
 
       # Prove server/src/engine/routing.js decides set:"auto" routing (channel_for/binding_for/
       # set_sections/rewatch_sections) exactly as the retired Python did, by diffing it against
       # that engine's RECORDED answers (e2e/fixtures/golden/routing.json) over
       # e2e/fixtures/routing.sets.yaml. The golden is a contract: a failure means Node moved.
       - name: Routing parity (Node engine ↔ recorded oracle)
-        run: node e2e/binding-parity.mjs
+        run: $TSX e2e/binding-parity.ts
 
       # Companion to D2: that gate diffs routing DECISIONS, this one diffs the per-set cfg
       # the decisions are made from. A passthrough the Node builder forgets doesn't throw and
       # doesn't fail a routing test — it reads `undefined` at the consumer and silently
       # DISABLES the feature (how requires_profile went dead for 12 gated sets, 2026-08-11).
       - name: Set-passthrough parity (Node engine ↔ recorded oracle)
-        run: node e2e/set-passthrough-parity.mjs
+        run: $TSX e2e/set-passthrough-parity.ts
 
       # Prove server/src/engine/select.js computes the unwatched-buckets pool exactly as the
       # retired Python engine did, over the committed SYNTHETIC corpus (no real library data —
       # owner decision 2026-08-07) against e2e/fixtures/golden/engine.json.
       - name: Engine parity (Node engine ↔ recorded oracle)
-        run: node e2e/engine-parity.mjs
+        run: $TSX e2e/engine-parity.ts
 
       # Prove server/src/engine/resolve.js resolves a curated QUEUE (nextQueue) and a REEL
       # (buildReel) as the retired Python did — the title→ratingKey resolver, collection
@@ -182,39 +209,39 @@ jobs:
       # the SAME synthetic corpus, against e2e/fixtures/golden/curated.json. The write side is
       # the mark-done gate below.
       - name: Curated parity (Node engine ↔ recorded oracle)
-        run: node e2e/curated-parity.mjs
+        run: $TSX e2e/curated-parity.ts
 
       # `batch_stops_at` in the Node port: same assertion table as the Python engine test above
       # (a parity DIFF can't catch this — the feature lands identically in both engines, so a
       # diff stays green whether or not either side implements it).
       - name: Batch boundaries (Node engine)
-        run: node e2e/batch-stops-at-test.mjs
+        run: $TSX e2e/batch-stops-at-test.ts
 
       # Async engine + live-client surface + preview formatter (offline).
       - name: Live-client adapter (offline)
-        run: node e2e/live-client-adapter-test.mjs
+        run: $TSX e2e/live-client-adapter-test.ts
 
       # Queue write-side: markDone/clearDone/sweepCompleted round-trip the YAML comments.
       - name: Queue write-side (markDone/clearDone)
-        run: node e2e/mark-done-parity.mjs
+        run: $TSX e2e/mark-done-parity.ts
 
       - name: adb pure helpers
-        run: node e2e/adb-unit-test.mjs
+        run: $TSX e2e/adb-unit-test.ts
 
       # Browserless e2e — self-contained: each spawns its own server on a private
       # port with private /tmp files and asserts the degraded (no Plex / no MQTT)
       # paths, so they need neither a Plex token nor Playwright. Always run.
       - name: Browserless e2e
         run: |
-          node e2e/history-persist-test.mjs
-          node e2e/api-v2-test.mjs
-          node e2e/sse-resync-test.mjs
-          node e2e/ttl-sweep-test.mjs
-          node e2e/specials-count-test.mjs
-          node e2e/leaves-revalidate-test.mjs
-          node e2e/leaves-per-account-test.mjs
-          node e2e/collection-batch-cap-test.mjs
-          node e2e/resume-on-advance-test.mjs
+          "$TSX" e2e/history-persist-test.ts
+          "$TSX" e2e/api-v2-test.ts
+          "$TSX" e2e/sse-resync-test.ts
+          "$TSX" e2e/ttl-sweep-test.ts
+          "$TSX" e2e/specials-count-test.ts
+          "$TSX" e2e/leaves-revalidate-test.ts
+          "$TSX" e2e/leaves-per-account-test.ts
+          "$TSX" e2e/collection-batch-cap-test.ts
+          "$TSX" e2e/resume-on-advance-test.ts
 
       # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.
       #
@@ -227,7 +254,7 @@ jobs:
       # the secret is unset, so that step is skipped on every PR today.
       #
       # Cost: ~1 min for the chromium download. If that is judged too expensive, move this
-      # step's `node e2e/narrow-scroll-test.mjs` into the gated loop below and accept that
+      # step's `"$TSX" e2e/narrow-scroll-test.ts` into the gated loop below and accept that
       # the gate only fires when the secret is present.
       - name: Narrow-view horizontal-scroll gate (browser, no Plex needed)
         env:
@@ -240,15 +267,15 @@ jobs:
           npx playwright install chromium --with-deps
           unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
           cp e2e/fixtures/queues.fixture.yaml /tmp/queues-narrow.yaml
-          node server/src/server.js >/tmp/narrow-e2e.log 2>&1 &
+          "$TSX" server/src/index.ts >/tmp/narrow-e2e.log 2>&1 &
           SRV=$!; sleep 1.5
-          node e2e/narrow-scroll-test.mjs; rc=$?
+          "$TSX" e2e/narrow-scroll-test.ts; rc=$?
           kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           exit $rc
 
-      # The pick.mjs <-> SelectListbox contract — browser, no Plex, no app
+      # The pick.ts <-> SelectListbox contract — browser, no Plex, no app
       # server. Every picker is a Charcuterie `Listbox` behind a button, and
-      # `e2e/pick.mjs` is how all seventeen browser suites drive one; but those
+      # `e2e/pick.ts` is how all seventeen browser suites drive one; but those
       # suites are all in the PLEX_TOKEN-gated step below, which is skipped on
       # every PR. So the contract that replaced `selectOption()` had NO
       # coverage on a pull request, and the 2026-08-13 Picker migration had to
@@ -259,16 +286,18 @@ jobs:
       # page is dev-only: vite.config.ts names one build entry, so it is not
       # in dist/. Reuses the chromium the narrow-view step above installed —
       # keep it AFTER that step.
-      - name: pick.mjs picker contract (browser, no Plex needed)
-        run: node e2e/pick-contract-test.mjs
+      - name: pick.ts picker contract (browser, no Plex needed)
+        run: $TSX e2e/pick-contract-test.ts
 
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
-      # `require('playwright')` and drive a Chromium browser, and the shared
-      # server they hit talks to Plex. We can't call e2e/run.sh directly (it
-      # `source`s the sandbox-only /mnt/.../agentic/.env), so we replicate its
-      # per-suite loop inline: fresh server + fixture files per suite. Playwright
-      # is installed at the repo root so `require('playwright')` from e2e/
-      # resolves up into ./node_modules.
+      # import chromium from `e2e/playwright.ts` and drive a Chromium browser,
+      # and the shared server they hit talks to Plex. We can't call e2e/run.sh
+      # directly (it `source`s the sandbox-only /mnt/.../agentic/.env), so we
+      # replicate its per-suite loop inline: fresh server + fixture files per
+      # suite. Playwright is installed at the repo ROOT because that is the first
+      # entry in `e2e/playwright.ts`'s lookup list — it resolves the package at
+      # runtime through `createRequire`, so it is never a typecheck dependency
+      # (the `e2e typecheck` step above runs long before this install).
       - name: Browser e2e (Playwright, gated on PLEX_TOKEN secret)
         if: env.PLEX_TOKEN != ''
         env:
@@ -286,9 +315,9 @@ jobs:
             echo "=== $t ==="
             rm -rf /tmp/sets-ui.yaml /tmp/sets-ui.yaml.lock /tmp/queues-ui.yaml.lock /tmp/.history.json
             cp e2e/fixtures/queues.fixture.yaml /tmp/queues-ui.yaml
-            node server/src/server.js >/tmp/web-e2e.log 2>&1 &
+            "$TSX" server/src/index.ts >/tmp/web-e2e.log 2>&1 &
             SRV=$!; sleep 1.5
-            node "e2e/$t.mjs" || fail=$((fail+1))
+            "$TSX" "e2e/$t.ts" || fail=$((fail+1))
             kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           done
           echo "browser suites failed: $fail"; exit $fail

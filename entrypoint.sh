@@ -14,7 +14,7 @@ echo "[entrypoint] starting queuepilot-web (+ mqttd) + cast_sidecar"
 /opt/venv/bin/python -m cast_sidecar.service &
 SIDE_PID=$!
 
-node /app/server/src/server.js &
+node --enable-source-maps /app/server/dist/index.js &
 WEB_PID=$!
 
 # Wait for whichever child exits first, then kill the other and exit non-zero.

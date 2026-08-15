@@ -1,6 +1,7 @@
 # One image, two processes (decision 2026-07-20-queue-web-ui-monorepo-single-container.md):
 #   * queuepilot-web     — the Node.js app: API, web UI, selection engine, MQTT service and
-#                          playback (server/src/server.js). This is the whole application.
+#                          playback (the esbuild bundle at server/dist/index.js). This is the
+#                          whole application.
 #   * cast_sidecar       — a ~100-line Python process for PLAYBACK_MODE=cast (pychromecast),
 #                          the one thing Node cannot do (decision 2026-08-12).
 # The mux-magic / gallery-downloader pattern: server + web UI ship in ONE app container.
@@ -15,13 +16,33 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
-# `npm run build` = vite build + scripts/precompress.mjs (the `.br`/`.gz` siblings the
-# server's staticCompressed middleware serves). vite.config.ts uses `sourcemap: "hidden"`,
-# so the maps are emitted but never referenced by the bundle — delete them here so the
-# runtime image doesn't carry 1.2 MB of unreachable files.
-RUN npm run build && find dist -name '*.map' -delete
+# `npm run build` is plain `vite build`; the `.br`/`.gz` siblings the server's static
+# handler serves are emitted by `precompressAssets()` from `@charcuterie/server/vite`,
+# inside the build (this replaced the hand-rolled web/scripts/precompress.mjs).
+#
+# vite.config.ts uses `sourcemap: "hidden"`, so the maps are emitted but never
+# referenced by the bundle — delete them here so the runtime image doesn't carry
+# ~2 MB of unreachable files. The glob is `*.map*`, not `*.map`: the precompress
+# plugin walks the whole `dist/` and also writes `<chunk>.js.map.br`/`.gz`, which
+# `-name '*.map'` would leave behind as orphans.
+RUN npm run build && find dist -name '*.map*' -delete
 
-# --- stage 2: the runtime image ----------------------------------------------- #
+# --- stage 2: bundle the Node server ------------------------------------------ #
+# esbuild collapses server/src/**.ts into ONE ESM file plus its source map, so the
+# runtime image carries no `.ts`, no tsx, no typescript and no esbuild. Running the
+# server through tsx in production would keep the whole TypeScript compiler resident
+# for the life of the container; `node --enable-source-maps dist/index.js` gets the
+# same readable stack traces from the `.map` alone.
+FROM node:26-trixie-slim AS server-build
+WORKDIR /app/server
+# Manifest first so the (dev-inclusive) install layer is keyed on it and survives
+# source-only edits.
+COPY server/package.json server/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+COPY server/ ./
+RUN npm run build
+
+# --- stage 3: the runtime image ----------------------------------------------- #
 FROM node:26-trixie-slim
 
 WORKDIR /app
@@ -34,7 +55,7 @@ ENV PYTHONUNBUFFERED=1 \
     NODE_TLS_REJECT_UNAUTHORIZED=0
 
 # Python 3 runtime for the cast sidecar (venv keeps pip off the system interpreter).
-# `adb` drives the Shield's Plex profile picker (server/src/adb.js) so a profile-gated
+# `adb` drives the Shield's Plex profile picker (server/src/adb.ts) so a profile-gated
 # card can switch the profile itself instead of waiting for someone to walk to the TV.
 # It stays inert unless ADB_ENABLED is set. The client key is NOT baked in — the Shield
 # only trusts keys accepted once via an on-TV prompt, so mount the authorized private key
@@ -53,12 +74,20 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir -r requirements.txt
 
 # --- Node deps for queuepilot-web (own layer, keyed on the manifest) ---
-COPY server/package.json server/package-lock.json* ./server/
-RUN cd server && npm install --omit=dev --no-audit --no-fund
+# Production deps only: no tsx/typescript/esbuild, which live in devDependencies and
+# were needed only by the server-build stage. The bundle currently externalizes
+# NOTHING (see server/scripts/build-server.mjs), so this layer is a safety net rather
+# than a hard requirement — but it is what makes an added `external:` entry work
+# without a second Dockerfile change, and it keeps `npm ls` answerable inside the
+# container.
+COPY server/package.json server/package-lock.json ./server/
+RUN cd server && npm ci --omit=dev --no-audit --no-fund
 
-# --- source ---
+# --- source + build artifacts ---
+# cast_sidecar is plain Python and ships as source. The Node half ships ONLY as the
+# esbuild bundle + its map: `server/src/*.ts` is deliberately absent from this image.
 COPY cast_sidecar ./cast_sidecar
-COPY server ./server
+COPY --from=server-build /app/server/dist ./server/dist
 COPY --from=web-build /web/dist ./web/dist
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x entrypoint.sh

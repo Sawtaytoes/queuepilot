@@ -1,0 +1,94 @@
+{
+  // `/node-lib` already gives: strict, isolatedModules, esModuleInterop,
+  // resolveJsonModule, skipLibCheck, forceConsistentCasingInFileNames,
+  // useDefineForClassFields, target ESNext, lib ESNext, types ["node"],
+  // module/moduleResolution NodeNext, declaration, declarationMap, sourceMap,
+  // outDir dist, rootDir src.
+  //
+  // `/node-lib` and not `/react`, even though these are browser-driving tests:
+  // the harnesses are Node programs (they spawn servers, read files, exec tsx)
+  // that happen to *remote-control* a browser. Only the `page.evaluate`
+  // callbacks are browser code, and those need the DOM *lib*, not a bundler
+  // module resolution — hence the `lib` delta below and nothing else.
+  //
+  // The path, not the package name. `@charcuterie/tsconfig` is a devDependency
+  // of `server/` and there is no root manifest, so Node resolution from `e2e/`
+  // walks e2e/node_modules -> <repo>/node_modules -> ... -> / and never sees
+  // `server/node_modules`. A bare `"@charcuterie/tsconfig/node-lib"` here fails
+  // with TS5083 both in the sandbox and on a CI checkout. `server/` and `web/`
+  // can use the bare specifier because each owns the install; `e2e/` owns none.
+  "extends": "../server/node_modules/@charcuterie/tsconfig/node-lib.json",
+  "compilerOptions": {
+    // Nothing here is ever emitted: every harness runs through tsx, which
+    // transpiles per-file and type-checks nothing. tsc's whole job in this
+    // directory is to be the gate CI runs.
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    // `..`, i.e. the repo root — not `.`. Two separate problems:
+    //   1. The preset's `rootDir` is relative and, inherited, resolves against
+    //      the preset's own directory (node_modules/@charcuterie/tsconfig/src),
+    //      which makes every file here TS6059. Same trap server/tsconfig.json
+    //      documents; it must be re-anchored.
+    //   2. Re-anchoring to `.` would then reject the harnesses that import
+    //      `../server/src/*.js` directly (the parity/offline suites do) — also
+    //      TS6059. The program legitimately spans e2e/ + server/src, so the
+    //      root that "does not fight the layout" is the repo root.
+    // With `noEmit` this only ever affects that containment check.
+    "rootDir": "..",
+    // The preset's `types: ["node"]` is resolved by walking `node_modules/@types`
+    // up from THIS directory, which — see the `extends` note — never reaches
+    // `server/node_modules`. Point it there explicitly, or `@types/node` is not
+    // found and `process`/`Buffer`/`node:*` go red in every harness.
+    //
+    // Deliberately NOT paired with a `paths: { "*": [...] }` shim for runtime
+    // packages: it was tried, and under NodeNext it does not resolve
+    // `server/node_modules`'s exports maps. It is also not needed — every
+    // non-relative import in e2e/ is a `node:` builtin, and the one third-party
+    // package the harnesses touch (Playwright) is resolved at RUNTIME through
+    // `createRequire` in `playwright.ts`, which is why that module declares its
+    // own types. If a harness ever genuinely needs a bare dependency, the honest
+    // fix is to give `e2e/package.json` real `devDependencies` and an install
+    // step, not a wider shim here.
+    "typeRoots": ["../server/node_modules/@types"],
+    // ESNext + DOM, overriding the preset's ESNext-only. `page.evaluate(...)`
+    // callbacks are serialised and run IN THE BROWSER, so their bodies touch
+    // `document`, `Element`, `getComputedStyle`, `HTMLInputElement` — none of
+    // which exist in a Node-only lib. DOM.Iterable is what makes
+    // `[...document.querySelectorAll(...)]` type as an array of Element rather
+    // than an error.
+    //
+    // The cost of this delta is real and worth stating: it also puts `fetch`,
+    // `window` and friends in scope for the NODE half of these files. It is
+    // accepted because a harness is a script, not shipped code — unlike
+    // `web/tsconfig.json`, which sets `types: []` precisely to keep the two
+    // worlds apart.
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    // The shared harness plumbing under `stubs/` (plus `fake-mqtt`) stays
+    // hand-written `.mjs` — it is loader/`register()` machinery whose whole
+    // point is to run before anything is transpiled. Without `allowJs` every
+    // `import { spawnServer } from './stubs/server-process.mjs'` is TS7016
+    // under `strict`. `checkJs` stays off: those files are read for inference
+    // only, never reported on.
+    "allowJs": true,
+    "checkJs": false,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    // Off, matching server/ and web/. A harness reads optional fields off YAML
+    // and off Plex JSON constantly and every one becomes a cast otherwise.
+    "exactOptionalPropertyTypes": false,
+    // On, matching server/. These suites index into `$$eval` results and
+    // fixture arrays on nearly every line; `rows[0]` being possibly-undefined
+    // is exactly the assertion that should have been written anyway.
+    "noUncheckedIndexedAccess": true,
+    "verbatimModuleSyntax": true
+  },
+  // Only `.ts` roots. The `.mjs` plumbing arrives in the program through the
+  // imports that reach it (TS follows resolved imports regardless of
+  // `include`), which keeps a stray unreferenced `.mjs` from becoming a root
+  // file. `broker/` is excluded because it carries its own node_modules
+  // (aedes) that nothing here type-checks against.
+  "include": ["**/*.ts", "**/*.mts"],
+  "exclude": ["broker", "fixtures", "node_modules"]
+}
