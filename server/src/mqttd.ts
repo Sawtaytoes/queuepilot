@@ -14,7 +14,6 @@ import {
   T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_STATE,
   T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS,
-  MQTT_LEGACY_PREFIX, legacyTopic, bothTopics, canonicalTopic,
 } from './env.js';
 import { errMessage, isNodeError } from './errors.js';
 import type {
@@ -62,17 +61,14 @@ interface SoundtrackPayload {
 let client: MqttClient | null = null;
 let announceTimer: NodeJS.Timeout | null = null;
 
-// Publishes to the canonical topic and, while the rename bridge is on, to its old-prefix
-// twin. Retained topics matter here: HA consumers still on `plex-channels/…` read the legacy
-// copy as a real retained message, so they never see a gap during the cutover.
+// The one place anything in this file reaches the broker: JSON-encodes non-string payloads,
+// defaults to qos 1, and drops the message when the client is not connected.
 const pub: Publish = (topic, payload, opts = {}) => {
   const c = client;
   if (!c?.connected) return;
   const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
   const settings: IClientPublishOptions = { qos: opts.qos ?? 1, retain: Boolean(opts.retain) };
   c.publish(topic, body, settings);
-  const alias = legacyTopic(topic);
-  if (alias) c.publish(alias, body, settings);
 };
 
 function publishState(extra: StateExtra = {}): void {
@@ -131,10 +127,7 @@ async function handlePreview(payload: PreviewPayload): Promise<void> {
   const reply = String(payload.reply || '');
   const profile = String(payload.profile || '') || '';
   // The reply topic is attacker-controlled input, so it stays confined to the preview base.
-  // During the rename cutover a requester may legitimately still be on the old prefix, so
-  // both bases are allowed — and the answer goes back on the base the caller actually asked
-  // for, not the canonical one, or a legacy requester would never hear it.
-  if (!bothTopics(T_RESP_PREVIEW_BASE).some((base) => reply.startsWith(base))) {
+  if (!reply.startsWith(T_RESP_PREVIEW_BASE)) {
     console.log(`[mqttd] refused preview reply ${reply}`);
     return;
   }
@@ -212,11 +205,7 @@ export function start(): MqttClient | null {
   client = c;
   c.on('connect', () => {
     console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
-    const commands = [T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW];
-    c.subscribe(commands.flatMap(bothTopics));
-    if (MQTT_LEGACY_PREFIX) {
-      console.log(`[mqttd] rename bridge ON — also on ${MQTT_LEGACY_PREFIX}/… (unset MQTT_LEGACY_PREFIX to finish the cutover)`);
-    }
+    c.subscribe([T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW]);
     announceDevices();
     publishDiscovery();
     publishState({ boot: true });
@@ -224,7 +213,7 @@ export function start(): MqttClient | null {
     announceTimer = setInterval(announceDevices, Math.max(30, DEVICE_ANNOUNCE_SECONDS) * 1000);
   });
   c.on('error', (e) => console.log(`[mqttd] ${e.message}`));
-  c.on('message', (rawTopic, buf) => {
+  c.on('message', (topic, buf) => {
     // One parse for four command topics, so it stays `unknown` here and each handler declares
     // the shape it reads. A non-object body (or junk) reads as `{}`, exactly as before.
     let payload: Record<string, unknown> = {};
@@ -232,9 +221,6 @@ export function start(): MqttClient | null {
       const parsed: unknown = JSON.parse(buf.toString() || '{}');
       payload = parsed !== null && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
     } catch { payload = {}; }
-    // Fold the old prefix onto the new one so each command is matched once, whichever
-    // prefix the sender used.
-    const topic = canonicalTopic(rawTopic);
     if (topic === T_CMD_START) {
       // fire-and-forget async
       void handleStart(payload as SessionStartPayload);

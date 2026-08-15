@@ -40,7 +40,8 @@ once**:
   publisher to `T_CMD_CAST_PLAY` and `cast_sidecar/service.py` the only subscriber; they live in
   the same container reading the same env, so they move in lockstep.
 
-The mapping is pinned in both directions by `e2e/mqtt-legacy-bridge-test.mjs`, which runs in CI.
+The mapping was pinned in both directions by `e2e/mqtt-legacy-bridge-test.ts`, which ran in CI
+until the bridge code was removed (see [the bridge code is gone](#the-bridge-code-is-gone)).
 
 ## Order of operations
 
@@ -199,6 +200,11 @@ nothing maintains.
 
 ## Rolling back
 
+> **Historical — the env-var route below no longer exists.** The bridge code was deleted on
+> 2026-08-15; setting `MQTT_LEGACY_PREFIX` back now does nothing. Redeploying an earlier image
+> tag is the remaining escape hatch. This is kept because it is the shape a future prefix move
+> should take.
+
 The bridge is reversible at every stage, which is the point of doing it this way.
 
 - **Mid-cutover (steps 1–2):** put `MQTT_LEGACY_PREFIX=plex-channels` back if it was cleared and
@@ -285,9 +291,22 @@ worked since. Turning the bridge off removes only the *alias* subscription, whic
 publisher. That is the whole point of the staged path: by step 4 the old prefix is already dead
 weight, so the step that could break the cards is the one where nothing is left to break.
 
-### Still outstanding
+### The bridge code is gone
 
-`DISCOVERY_LEGACY_OBJECT_ID` and the `legacyTopic`/`bothTopics`/`canonicalTopic` helpers in
-`server/src/env.ts`, plus `e2e/mqtt-legacy-bridge-test.ts`, are now dead code paths kept behind
-an empty prefix. Removing them is a separate change — the bridge should sit provably unused for
-a while before the ability to re-enable it is deleted.
+`MQTT_LEGACY_PREFIX`, `DISCOVERY_LEGACY_OBJECT_ID` and the
+`legacyTopic`/`bothTopics`/`canonicalTopic` helpers in `server/src/env.ts`, the dual-prefix
+subscribe and mirrored publishes in `mqttd.ts`, the `now-playing` legacy subscription in
+`mqttc.ts`, and `e2e/mqtt-legacy-bridge-test.ts` were all removed the same day, once the six
+stale topics had been cleared and confirmed not to come back.
+
+That trades one property away: while the code was there, the bridge could be brought back by
+setting one env var. Now it can only be brought back by reverting that commit. The owner was
+told this and chose it, because the thing being preserved was the ability to re-enable an alias
+that had no publisher and no subscriber left — the cards had been on `queuepilot/cmd/…` since
+2026-08-12 and worked throughout.
+
+`MQTT_LEGACY_PREFIX=""` remains in the TrueNAS app env. It is inert rather than harmful now —
+nothing reads it — and can be dropped from the app config whenever convenient.
+
+The rest of this document stands as written: it is the record of how the move was made, and the
+procedure to follow if a prefix ever has to move again.
