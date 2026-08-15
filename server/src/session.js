@@ -29,6 +29,9 @@ export const SESSION = {
   queue: [],
   cursor: 0,
   lastMovieRk: null,
+  // The active binding's managed-user uuid, so the LATER calls on this session (resume seek,
+  // advance) drive playback as the same account the lineup was selected as.
+  userUuid: null,
   asDict() {
     return {
       kind: this.kind, set: this.set, profile: this.profile,
@@ -154,6 +157,7 @@ export async function startSession(payload = {}, opts = {}) {
   SESSION.set = setName;
   SESSION.profile = profileTitle;
   SESSION.cursor = 0;
+  SESSION.userUuid = binding.user_uuid || null;
   let resumeMs = 0;
   let playItems = [];
 
@@ -240,7 +244,7 @@ export async function startSession(payload = {}, opts = {}) {
         + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
       resume.startWatch({
         fetchSession: () => playback.currentSession({ device }),
-        seek: (ms) => playback.seekTo(ms, { device, setName }),
+        seek: (ms) => playback.seekTo(ms, { device, setName, userUuid: SESSION.userUuid }),
       });
     }
   } else {
@@ -251,7 +255,7 @@ export async function startSession(payload = {}, opts = {}) {
   // materialize -> handoff. Both return a DESCRIPTOR of how to start this; neither performs
   // playback itself. On Plex that is a playQueue pushed at the Shield; on a pull provider it
   // is a URL to open. Collapsing them into one play() would hard-code the push model.
-  const artifact = provider.materialize(playItems, { offset: resumeMs, setName });
+  const artifact = provider.materialize(playItems, { offset: resumeMs, setName, binding });
 
   let result;
   if (PLAYBACK_FSM) {
@@ -287,7 +291,9 @@ export async function advanceSession() {
     return { error: 'end of queue' };
   }
   const ratingKeys = rest.map((q) => q.ratingKey);
-  const result = await playback.playRatingKeys(ratingKeys, { setName: SESSION.set, offset: 0 });
+  const result = await playback.playRatingKeys(ratingKeys, {
+    setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid,
+  });
   _publishLastPlayed(lastPlayedFromItem(rest[0]));
   _publishState({ playback: result, ...SESSION.asDict() });
   return result;

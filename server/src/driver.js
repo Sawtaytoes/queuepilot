@@ -201,10 +201,12 @@ async function driveProfile(client, required, cancel) {
 // Plex when either is false; a play that still comes back ECONNREFUSED re-opens and
 // retries, a bounded few times. Success (or any non-connection failure) returns immediately.
 // Cast mode doesn't use Companion :32500 — play once and return its result.
-async function drivePlay(ratingKeys, setName, device, offset, cancel) {
+async function drivePlay(ratingKeys, setName, device, offset, cancel, userUuid = null) {
   const mode = (device && device.mode) || PLAYBACK_MODE;
   if (mode !== 'client') {
-    return playback.playRatingKeys(ratingKeys, { setName, device, offset });
+    return playback.playRatingKeys(ratingKeys, {
+      setName, device, offset, userUuid,
+    });
   }
 
   const [host, port] = companionAddr(device);
@@ -224,7 +226,9 @@ async function drivePlay(ratingKeys, setName, device, offset, cancel) {
       if (ADB_ENABLED) await ensurePlex();
       await sleep(PLAYBACK_FSM_RETRY_BACKOFF);
     }
-    result = await playback.playRatingKeys(ratingKeys, { setName, device, offset });
+    result = await playback.playRatingKeys(ratingKeys, {
+      setName, device, offset, userUuid,
+    });
     if (result && result.played) return result;
     if (isConnRefused(result)) {
       console.log(
@@ -254,7 +258,11 @@ async function drivePlay(ratingKeys, setName, device, offset, cancel) {
 // the launch + profile gate + verified play.
 //
 // Signature: driveToPlaying(client, { ratingKeys, requiredProfile, offset, device,
-// setName, cancel, setLabel }).
+// setName, cancel, setLabel, userUuid }).
+//
+// `userUuid` is the ACTIVE binding's managed-user uuid — the account the playQueue must be
+// built as. It is passed through untouched; playback.playToken explains why the set's
+// top-level user_uuid cannot be trusted for a multi-profile channel.
 export async function driveToPlaying(client, {
   ratingKeys,
   requiredProfile = null,
@@ -263,6 +271,7 @@ export async function driveToPlaying(client, {
   setName = null,
   cancel = null,
   setLabel = null,
+  userUuid = null,
 } = {}) {
   if (isCancelled(cancel)) return { cancelled: true };
 
@@ -288,7 +297,7 @@ export async function driveToPlaying(client, {
   if (isCancelled(cancel)) return { cancelled: true };
 
   // signed_in(required) -> playing(target). Play is the last action, verified + retried.
-  return drivePlay(ratingKeys, setName, device, offset, cancel);
+  return drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
 }
 
 // Exported for unit tests (parity with e2e/playback-fsm-test.py scenarios).
