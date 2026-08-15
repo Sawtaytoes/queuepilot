@@ -265,7 +265,7 @@ describe("tileFace", () => {
     expect(face.title).toBe("Ponyo")
   })
 
-  test("a collection with no next-up member falls back to its own identity", () => {
+  test("a finished collection reads like a finished show, not as its size", () => {
     const face = tileFace(
       item({
         childCount: 8,
@@ -276,8 +276,67 @@ describe("tileFace", () => {
     )
 
     expect(face.title).toBe("Ghibli")
-    expect(face.next).toBe("8 in order")
+    expect(face.next).toBe("All watched")
+    expect(face.nextDone).toBe(true)
     expect(face.from).toBeNull()
+  })
+
+  test("a finished reading collection is read, not watched", () => {
+    expect(
+      tileFace(
+        item({
+          childCount: 8,
+          nextEp: null,
+          title: "Berserk",
+          type: "collection",
+          unit: "chapter",
+        }),
+      ).next,
+    ).toBe("All read")
+  })
+
+  // "All watched" is a claim about watch state; a failed next-up lookup knows nothing
+  // about it. Only THAT case still falls back to the collection's own identity + size.
+  test("a collection whose next-up lookup failed falls back to its size", () => {
+    const face = tileFace(
+      item({
+        childCount: 8,
+        isNextEpFailed: true,
+        nextEp: null,
+        title: "Ghibli",
+        type: "collection",
+      }),
+    )
+
+    expect(face.title).toBe("Ghibli")
+    expect(face.next).toBe("8 in order")
+    expect(face.nextDone).toBe(false)
+  })
+
+  test("an unresolved collection falls back to its size", () => {
+    expect(
+      tileFace(
+        item({
+          childCount: 8,
+          nextEp: null,
+          resolved: false,
+          title: "Ghibli",
+          type: "collection",
+        }),
+      ).next,
+    ).toBe("8 in order")
+  })
+
+  test("a show whose next-up lookup failed does not claim All watched", () => {
+    expect(
+      tileFace(
+        item({
+          isNextEpFailed: true,
+          nextEp: null,
+          title: "Frieren",
+        }),
+      ).next,
+    ).toBe("")
   })
 })
 

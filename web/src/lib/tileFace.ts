@@ -163,6 +163,10 @@ export function isSelfTitled(ep: NextEp): boolean {
   )
 }
 
+/** "Nothing left to play" in this entry's own unit — a reading queue is read, not watched. */
+const allWatchedLabel = (unit: EntryUnit) =>
+  unit === "chapter" ? "All read" : "All watched"
+
 /**
  * What a tile actually SHOWS — poster, title line, episode line. A collection
  * borrows the identity of the member that plays next (its poster + its name), and
@@ -190,9 +194,8 @@ export function tileFace(item: TileEntry): TileFace {
       base.next = isSelfTitled(n)
         ? label
         : `${label} · ${n.title}`
-    } else if (item.resolved) {
-      base.next =
-        unit === "chapter" ? "All read" : "All watched"
+    } else if (item.resolved && !item.isNextEpFailed) {
+      base.next = allWatchedLabel(unit)
       base.nextDone = true
     }
 
@@ -202,9 +205,20 @@ export function tileFace(item: TileEntry): TileFace {
   if (item.type !== "collection") return base
 
   if (!n?.member) {
-    // No next-up member (every member watched, or Plex couldn't say): fall back to
-    // the collection's own poster/name + its size.
+    // No next-up member: fall back to the collection's own poster/name. A collection
+    // that is simply FINISHED reads exactly like a finished show ("All watched") —
+    // the two say the same thing, so they must not say it two different ways. The
+    // neutral size label is for when we don't actually know: an unresolved entry, or
+    // a next-up lookup that errored rather than came back empty.
     base.year = null
+
+    if (item.resolved && !item.isNextEpFailed) {
+      base.next = allWatchedLabel(item.unit ?? "episode")
+      base.nextDone = true
+
+      return base
+    }
+
     base.next =
       item.childCount != null
         ? `${item.childCount} in order`

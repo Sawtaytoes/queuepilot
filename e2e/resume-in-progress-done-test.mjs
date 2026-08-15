@@ -37,8 +37,20 @@ const LEAVES = {
     { ratingKey: '700002', title: 'e2', show: 'Real Show', season: 1, episode: 2, duration: 1000000, viewCount: 0, viewOffset: 500000 },
     { ratingKey: '700003', title: 'e3', show: 'Real Show', season: 1, episode: 3, duration: 1000000, viewCount: 0, viewOffset: 0 },
   ],
+  // A show that WAS finished and has since aired a new episode: E1/E2 watched outright, E3
+  // fresh — unwatched with NO resume point, so nothing about it is "in progress". The
+  // Trapped-in-a-Dating-Sim case (bob_anime, 2026-08): watched through S2E6, entry marked
+  // done, S2E7 airs.
+  800000: [
+    { ratingKey: '800001', title: 'e1', show: 'Returning Show', season: 1, episode: 1, duration: 1000000, viewCount: 1, viewOffset: 0 },
+    { ratingKey: '800002', title: 'e2', show: 'Returning Show', season: 1, episode: 2, duration: 1000000, viewCount: 1, viewOffset: 0 },
+    { ratingKey: '800003', title: 'e3', show: 'Returning Show', season: 1, episode: 3, duration: 1000000, viewCount: 0, viewOffset: 0 },
+  ],
 };
-const TITLES = { 363480: 'Prison School: Mad Wax', 900000: 'Watched Special', 700000: 'Real Show' };
+const TITLES = {
+  363480: 'Prison School: Mad Wax', 900000: 'Watched Special', 700000: 'Real Show',
+  800000: 'Returning Show',
+};
 
 // The only Plex surface the resolver touches: a show's allLeaves, and an item's own metadata.
 const client = {
@@ -77,9 +89,10 @@ const client = {
 };
 
 const CFG = { source: 'queue', queue_sections: [1] }; // kind != anime -> ordered queue
-const entry = (rk, done = false) => ({
+// `doneAt` set = markDone wrote the flag; null = the owner hand-tagged it (a deliberate skip).
+const entry = (rk, done = false, doneAt = done ? 1786668576 : null) => ({
   key: `rk:${rk}`, ratingKey: String(rk), title: null, year: null, guid: null,
-  collection: null, episodes: null, start: null, done,
+  collection: null, episodes: null, start: null, done, doneAt,
 });
 const keys = (items) => items.map((i) => i.ratingKey);
 
@@ -98,7 +111,9 @@ ok('in-progress leaf survives a watched-history hit',
 
 // 3. nextQueue REVIVES a done-flagged OAD that is actually in-progress: it plays, resumes at the
 //    leaf's viewOffset, is reported for clearing the stale flag, and is not reported finished.
-let res = await resolve.nextQueue(client, 'q', CFG, [entry('363480', true)], new Set(), null);
+// A HAND-marked entry (no done_at) is used here on purpose: in-progress revival must not
+// depend on the timestamp the new-content rule below keys off.
+let res = await resolve.nextQueue(client, 'q', CFG, [entry('363480', true, null)], new Set(), null);
 ok('done OAD is revived as the play head',
   JSON.stringify(keys(res.play)) === JSON.stringify(['363482']), JSON.stringify(keys(res.play)));
 ok('revived OAD resumes at its viewOffset', res.offset === 1060898, String(res.offset));
@@ -110,6 +125,27 @@ ok('revived OAD is not listed finished', res.done.length === 0, JSON.stringify(r
 res = await resolve.nextQueue(client, 'q', CFG, [entry('900000', true)], new Set(['900001']), null);
 ok('watched special stays done (no play)', res.play.length === 0, JSON.stringify(res.play));
 ok('watched special is not revived', res.revived.length === 0, JSON.stringify(res.revived));
+
+// 4b. NEW CONTENT revives a done entry. An entry is marked done when its resolution comes back
+//     EMPTY, so a done entry that now resolves to something playable is stale — even with no
+//     resume point anywhere in it. Nothing else ever clears the flag (the TTL sweep defaults to
+//     `never`), so without this a returning show is skipped forever.
+res = await resolve.nextQueue(client, 'q', CFG, [entry('800000', true)], new Set(['800001', '800002']), null);
+ok('done entry is revived by a newly-aired episode',
+  JSON.stringify(keys(res.play)) === JSON.stringify(['800003']), JSON.stringify(keys(res.play)));
+ok('revived-by-new-content entry clears its stale done flag',
+  JSON.stringify(res.revived) === JSON.stringify(['rk:800000']), JSON.stringify(res.revived));
+ok('revived-by-new-content entry is not listed finished', res.done.length === 0, JSON.stringify(res.done));
+ok('a fresh episode starts at 0, not a resume point', res.offset === 0, String(res.offset));
+
+// 4c. A HAND-marked `done: true` (no done_at — the owner wrote it, markDone did not) is a
+//     deliberate skip, not a stale flag. New unwatched content must NOT resurrect it; only
+//     actually being mid-episode does (case 3 above). Live case: the "Frieren" entry in
+//     bob_anime carries `done: true` with no `done_at`.
+res = await resolve.nextQueue(client, 'q', CFG, [entry('800000', true, null)], new Set(['800001', '800002']), null);
+ok('hand-marked skip is not revived by new content', res.play.length === 0, JSON.stringify(keys(res.play)));
+ok('hand-marked skip stays done', res.revived.length === 0 && res.done.length === 1,
+  JSON.stringify({ revived: res.revived, done: res.done }));
 
 // 5. A normal series leads with its in-progress episode (S1E2), not the watched S1E1. A queue
 //    plays QUEUE_SERIES_DEFAULT (1) episode per scan, so the resumed episode is the play head.

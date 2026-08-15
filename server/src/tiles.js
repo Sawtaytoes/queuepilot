@@ -31,17 +31,21 @@ export async function resolveTile(sections, value, start = null, opts = {}) {
   // `opts` ({token, account}) scopes the next-up "watched" state to a Plex Home profile for a
   // per-profile channel's member tiles; empty for queues/admin (Bob's view), unchanged.
   let nextEp = null;
+  // A null `nextEp` means two different things — "nothing left to play" and "the lookup
+  // failed" — and the tile says something different for each ("All watched" vs the neutral
+  // "N in order"), so the failure is recorded rather than collapsed into the same null.
+  let isNextEpFailed = false;
   if (resolved && resolved.type === 'show') {
     try {
       nextEp = await plex.nextEpisode(resolved.ratingKey, start, opts);
     } catch {
-      /* ignore */
+      isNextEpFailed = true;
     }
   } else if (resolved && resolved.type === 'collection') {
     try {
       nextEp = await plex.collectionNext(resolved.ratingKey, start, opts);
     } catch {
-      /* ignore — the tile falls back to the childCount "N in order" label */
+      isNextEpFailed = true;
     }
   }
 
@@ -73,6 +77,7 @@ export async function resolveTile(sections, value, start = null, opts = {}) {
     year: resolved ? resolved.year : null,
     childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
     nextEp,
+    isNextEpFailed,
     partiallyWatched,
     viewOffset,
     duration,

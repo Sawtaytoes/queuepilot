@@ -107,13 +107,19 @@ export function describe(entry) {
       // probability. Absent = 1 (see select.js toWeight); only the shuffled paths read it.
       weight: toWeight(entry.weight),
       done: Boolean(entry.done),
+      // The epoch-seconds stamp markDone writes beside `done: true`. Its ABSENCE is what
+      // marks an entry the owner tagged done BY HAND (a deliberate skip) — nextQueue's
+      // new-content revival leaves those alone. Same coercion as queues.entryDoneAt.
+      doneAt: entry.done_at != null && Number.isFinite(Number(entry.done_at))
+        ? Number(entry.done_at) : null,
       raw: entry,
     };
   }
   if (isRatingKey(entry)) {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
-      guid: null, collection: null, episodes: null, start: null, weight: 1, done: false, raw: entry,
+      guid: null, collection: null, episodes: null, start: null, weight: 1, done: false,
+      doneAt: null, raw: entry,
     };
   }
   const { title, year, guid } = parseTitleString(entry);
@@ -121,7 +127,7 @@ export function describe(entry) {
   const coll = cm ? cm[1].trim() : null;
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
-    collection: coll, episodes: null, start: null, weight: 1, done: false, raw: entry,
+    collection: coll, episodes: null, start: null, weight: 1, done: false, doneAt: null, raw: entry,
   };
 }
 
@@ -533,8 +539,24 @@ export async function nextQueue(client, setName, cfg, entries, watched, token, r
   for (const desc of entries) {
     const res = await resolveMember(client, desc, cfg, watched, token, QUEUE_SERIES_DEFAULT, true);
     if (desc.done) {
+      // Stale-done recovery. An entry is marked done when its live resolution comes back
+      // EMPTY, so anything still playable in it means the flag no longer describes reality —
+      // revive it and clear the flag (session.js). Two ways that happens:
+      //
+      //   * the head is mid-playback (the Prison School OAD — decision
+      //     2026-08-07-in-progress-queue-items-are-never-finished), or
+      //   * new content landed after the entry finished: the next season/episode of a show,
+      //     a new member in a collection. Without this the entry stays done and skipped
+      //     FOREVER — nothing else ever clears the flag, and the TTL sweep defaults to
+      //     `never` — so a returning show silently never plays again.
+      //
+      // A HAND-marked `done: true` (no `done_at`, so the owner wrote it, not markDone) is a
+      // deliberate skip and is only ever revived by the in-progress case: actually watching
+      // something outranks the skip, merely having an unwatched episode does not.
       const head = res && res.items && res.items.length ? res.items[0] : null;
-      if (head && await headResumeOffset(client, head, token) > 0) {
+      const isRevived = Boolean(head)
+        && (desc.doneAt != null || await headResumeOffset(client, head, token) > 0);
+      if (isRevived) {
         revived.push(desc.key);
         remaining += 1;
         batches.push({ title: res.title, type: res.type, items: res.items, weight: res.weight });
