@@ -7,7 +7,6 @@ import {
 import { SelectListbox } from "../components/SelectListbox"
 import type { RegistrySet } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
-import { navigate } from "../state/route"
 import {
   channelSetIds,
   queueIds,
@@ -47,16 +46,25 @@ function parseTierValue(v: string): {
 }
 
 function PlayRow({
+  href,
   label,
   meta,
-  onOpen,
   onPlay,
   set,
   tier,
 }: {
+  /**
+   * Where this row GOES — a real `href`, not an `onClick` that calls `navigate()`.
+   * Middle-click, ⌘/Ctrl-click, "Open in new tab", "Copy link address" and the status-bar
+   * preview all come from the ELEMENT being an anchor; none of them can be added to a
+   * `<button>` by styling it like a link. Routing is `location.hash`, so a plain click
+   * needs no handler at all — setting the hash is what `navigate()` did anyway, and the
+   * existing `hashchange` listener does the rest.
+   * (decision `2026-08-15-navigation-is-an-anchor-not-a-button`)
+   */
+  href: string
   label: string
   meta: string
-  onOpen: () => void
   onPlay: (anchor: DOMRect) => void
   /** The registry entry, for `delivery`. Absent = push (every pre-provider caller). */
   set?: Pick<RegistrySet, "id" | "delivery">
@@ -65,13 +73,9 @@ function PlayRow({
   return (
     <li className="playrow">
       <div className="rowmain">
-        <button
-          className="rowname"
-          onClick={onOpen}
-          type="button"
-        >
+        <a className="rowname" href={href}>
           {label}
-        </button>
+        </a>
         <span className="rowmeta">{meta}</span>
       </div>
       {tier}
@@ -137,11 +141,7 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
           ? "weighted rewatch"
           : "rotation · ratings-filtered"
       }
-      onOpen={() =>
-        navigate(
-          `#/channels/${encodeURIComponent(channel.id)}`,
-        )
-      }
+      href={`#/channels/${encodeURIComponent(channel.id)}`}
       onPlay={(anchor) => {
         const t = parseTierValue(tierValue)
 
@@ -178,14 +178,13 @@ export function PlayView({
       <section className="playgroup">
         <h2>
           Dynamic Channels
-          <button
+          <a
             className="ghost"
+            href="#/channels"
             id="gochannels"
-            onClick={() => navigate("#/channels")}
-            type="button"
           >
             Configure ›
-          </button>
+          </a>
         </h2>
         <ul className="playlist" id="playdynamic">
           {isHidden
@@ -199,14 +198,13 @@ export function PlayView({
       <section className="playgroup">
         <h2>
           Curated Channels
-          <button
+          <a
             className="ghost"
+            href="#/channels"
             id="gocurated"
-            onClick={() => navigate("#/channels")}
-            type="button"
           >
             Configure ›
-          </button>
+          </a>
         </h2>
         <ul className="playlist" id="playcurated">
           {isHidden
@@ -220,7 +218,7 @@ export function PlayView({
                     label={s.label}
                     set={reg?.sets.find((x) => x.id === id)}
                     meta={`${s.items.length} shows · random rotation`}
-                    onOpen={() => navigate(`#/q/${id}`)}
+                    href={`#/q/${id}`}
                     onPlay={(anchor) =>
                       openPlayMenu({ anchor, setId: id })
                     }
@@ -233,14 +231,13 @@ export function PlayView({
       <section className="playgroup">
         <h2>
           Queues
-          <button
+          <a
             className="ghost"
+            href="#/queues"
             id="goqueues"
-            onClick={() => navigate("#/queues")}
-            type="button"
           >
             Configure ›
-          </button>
+          </a>
         </h2>
         <ul className="playlist" id="playqueues">
           {isHidden
@@ -253,7 +250,7 @@ export function PlayView({
                     key={id}
                     label={s.label}
                     meta={`${s.items.length} titles · top plays next`}
-                    onOpen={() => navigate(`#/q/${id}`)}
+                    href={`#/q/${id}`}
                     onPlay={(anchor) =>
                       openPlayMenu({ anchor, setId: id })
                     }

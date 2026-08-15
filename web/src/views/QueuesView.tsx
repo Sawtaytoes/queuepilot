@@ -16,7 +16,6 @@ import {
   openPlayMenu,
   openSetModal,
 } from "../state/overlays"
-import { navigate } from "../state/route"
 import { queueIds, useStore } from "../state/store"
 import {
   homeScroll,
@@ -126,18 +125,23 @@ function Shelf({
         >
           ▾
         </button>
-        <button
+        {/* An anchor, so the shelf title can be middle-clicked / ⌘-clicked into a new tab
+            like any other link. The handler stays but no longer navigates: it only records
+            where we were, and letting the default run is what performs the navigation.
+            Deliberately NOT preventDefault'd — that would put us back to a button wearing a
+            link's clothes. (A ⌘/Ctrl-click also fires `click`, so it harmlessly stamps the
+            scroll position of a page we are not leaving.) */}
+        <a
           className="open"
+          href={`#/q/${setId}`}
           onClick={() => {
             homeScroll.y = window.scrollY // restore this position when we come back
-            navigate(`#/q/${setId}`)
           }}
-          type="button"
         >
           <span className="lbl">{label}</span>{" "}
           <span className="sec">{items.length}</span>{" "}
           <span className="chev">›</span>
-        </button>
+        </a>
         <span className="livepill" hidden={!isLive}>
           {isLive && now.now?.state === "paused"
             ? "Paused"

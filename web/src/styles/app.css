@@ -347,15 +347,35 @@ button {
 #redo:disabled:hover {
   border-color: var(--color-border-default);
 }
-button.ghost {
+/* `a.ghost` too, not just `button.ghost`: the three "Configure ›" controls are anchors now
+   (they GO somewhere, so they must be middle-clickable), and a tag-qualified selector would
+   have silently dropped every one of them back to unstyled link text. */
+button.ghost,
+a.ghost {
   background: var(--color-surface-overlay);
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
   color: var(--color-content-primary);
   padding: 8px 14px;
 }
-button.ghost:hover {
+button.ghost:hover,
+a.ghost:hover {
   border-color: var(--color-intent-accent-solid);
+}
+
+/* NAVIGATION ANCHORS — the controls that used to be `<button onClick={navigate(…)}>` and are
+   now real `<a href>`, so middle-click / ⌘-click / "open in new tab" work. Each keeps the
+   class it always had, so its skin is unchanged; these are only the two things an <a> brings
+   that a <button> did not (an underline, and a text-only inline box).
+   (decision `2026-08-15-navigation-is-an-anchor-not-a-button`) */
+a.ghost,
+.playrow .rowname,
+.shelf h2 .open {
+  text-decoration: none;
+  cursor: pointer;
+}
+a.ghost {
+  display: inline-block;
 }
 
 .view {
@@ -1831,16 +1851,27 @@ a.playbtn {
   color: var(--color-content-primary);
   font-size: 0.9rem;
 }
+/* No bottom margin any more: that 14px was doing double duty as the gap above the footer,
+   which is now the footer's own `margin-top`. Leaving both would have moved these three
+   modals' buttons for a change that was only meant to fix `#entrymodal`. */
 #startmodal .idnote,
 #setmodal .idnote,
 #dynmodal .idnote {
   color: var(--color-content-muted);
   font-size: 0.82rem;
-  margin: 10px 0 14px;
+  margin: 10px 0 0;
 }
 #startmodal .idnote:empty {
   display: none;
 }
+/* The footer OWNS the space above it. Nothing used to: `margin-top` and `padding-top` were
+   0 on all four modals, and the three that looked right were only borrowing the 14px bottom
+   margin of the `.idnote` line that happens to sit last in their bodies. `#entrymodal` has
+   no `.idnote`, so its body ended flush against the footer — invisible while Done was on the
+   left under a short text line, and an obvious collision the moment Done moved right and
+   landed directly beneath the start-point row's "Choose…" button.
+   14px so the three borrowing modals are pixel-identical to before; `.idnote` gives up its
+   bottom margin below so they do not now get both. */
 #startmodal .modalbtns,
 #setmodal .modalbtns,
 #dynmodal .modalbtns,
@@ -1848,6 +1879,7 @@ a.playbtn {
   display: flex;
   gap: 10px;
   align-items: center;
+  margin-top: 14px;
 }
 /* The other three modals push their buttons right with a `.spacer` flex child, because they
    also have a left-hand action (Delete) to keep pinned. This one is a single Done, so it
