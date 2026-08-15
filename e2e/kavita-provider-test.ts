@@ -136,10 +136,12 @@ function stubClient({ existingLists = [] }: { existingLists?: StubList[] } = {})
   const lists: StubList[] = [...existingLists];
   let nextListId = 500;
   const added: AddedChapter[] = [];
+  const deleted: { readingListId: number | string; readingListItemId: number | string }[] = [];
   return {
     _base: 'https://kavita.invalid',
     _calls: CALLS,
     _added: added,
+    _deleted: deleted,
     _lists: lists,
     async whoami() { CALLS.push(['whoami']); return 'Sawtaytoes'; },
     async libraries() {
@@ -176,12 +178,18 @@ function stubClient({ existingLists = [] }: { existingLists?: StubList[] } = {})
       CALLS.push(['addChapter', readingListId, seriesId, chapterId]);
       added.push({ readingListId, seriesId, chapterId });
     },
+    // `id` is the reading-list ITEM's own id, distinct from `chapterId` — it is what
+    // `delete-item` addresses, and the two are not interchangeable.
     async readingListItems(id: number | string) {
       CALLS.push(['readingListItems', id]);
       return [
-        { chapterId: 86090, seriesId: 747, order: 0, pagesRead: 152, pagesTotal: 152, lastReadingProgressUtc: '2026-08-13T00:00:00Z' },
-        { chapterId: 90001, seriesId: 3882, order: 1, pagesRead: 10, pagesTotal: 100, lastReadingProgressUtc: null },
+        { id: 9001, chapterId: 86090, seriesId: 747, order: 0, pagesRead: 152, pagesTotal: 152, lastReadingProgressUtc: '2026-08-13T00:00:00Z' },
+        { id: 9002, chapterId: 90001, seriesId: 3882, order: 1, pagesRead: 10, pagesTotal: 100, lastReadingProgressUtc: null },
       ];
+    },
+    async deleteItem(readingListId: number | string, readingListItemId: number | string) {
+      CALLS.push(['deleteItem', readingListId, readingListItemId]);
+      deleted.push({ readingListId, readingListItemId });
     },
   };
 }
@@ -404,6 +412,45 @@ await ok('materialize REUSES the set\'s existing list instead of littering new o
   const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
   assert.equal(art.readingListId, 42);
   assert.equal(c._lists.length, 1, 'a duplicate list was created');
+});
+
+/**
+ * The reuse assertion above was TRUE and not enough: it proved the list was not duplicated
+ * and said nothing about its CONTENTS, so it stayed green while every launch appended to the
+ * same list forever. The live list reached 23 series — every lineup ever built for that set,
+ * unioned — and the owner reported it as "stuff I absolutely did NOT add".
+ *
+ * The docstring on materialize() had claimed "rebuilt on launch … rather than accumulated"
+ * since the day it was written. This is that sentence, as a gate.
+ */
+await ok('materialize REBUILDS the list — last launch\'s items are removed first', async () => {
+  CALLS.length = 0;
+  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await p.materialize(play, { setName: 'reading' });
+
+  // Both pre-existing rows are addressed by their ITEM id (9001/9002), never by chapterId.
+  assert.deepEqual(
+    c._deleted.map((d) => d.readingListItemId).sort(),
+    [9001, 9002],
+    'the stale items were not cleared — the list accumulates',
+  );
+  assert.ok(c._deleted.every((d) => d.readingListId === 42), 'cleared the wrong list');
+
+  // ORDER is the invariant, not just the presence of both calls: clearing AFTER adding would
+  // delete this launch's own lineup and hand the reader an empty list.
+  const lastDelete = CALLS.map((x) => x[0]).lastIndexOf('deleteItem');
+  const firstAdd = CALLS.map((x) => x[0]).indexOf('addChapter');
+  assert.ok(lastDelete < firstAdd, 'the clear ran after the rebuild, emptying the new lineup');
+});
+
+await ok('a BRAND-NEW list is not cleared — there is nothing to clear', async () => {
+  const c = stubClient();
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await p.materialize(play, { setName: 'reading' });
+  assert.equal(c._deleted.length, 0, 'a freshly created list was pointlessly enumerated + cleared');
 });
 
 await ok('reading lists are enumerated with a POST, not a GET', async () => {
