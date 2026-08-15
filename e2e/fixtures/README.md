@@ -42,3 +42,8 @@ or change the golden deliberately, in a commit that says why.
 `routing.sets.yaml`, `passthrough.sets.yaml`, `sets.fixture.yaml`, `queues.fixture.yaml`,
 `queues.harness.yaml` — hand-written YAML inputs for the routing, passthrough, API and
 write-side tests.
+
+`batch-stops-at.queues.yaml` — one queue per entry SHAPE for `e2e/batch-stops-at-test.ts`, which
+resolves them through `loadEntries()` so the per-entry `batch_stops_at:` override is read the way
+the service reads it. It used to hand-build descriptor literals instead, and so passed against a
+field `describe()` never wrote.
