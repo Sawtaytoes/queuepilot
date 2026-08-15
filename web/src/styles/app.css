@@ -1000,6 +1000,88 @@ ul.grid {
 .tile .remove {
   display: none;
 }
+/* The tile is the positioning context for the chrome now that `.check`/`.remove` are
+   siblings of `.thumb` rather than children of it (see PosterTile). Only the `posters`
+   density actually overlays them; `cards`/`rows` place them in real grid columns. */
+.editable .tile {
+  position: relative;
+}
+/* QUIET UNTIL ASKED FOR. Two always-on controls per tile turned a wall of posters into a
+   wall of buttons, and neither is something you reach for while browsing. On a mouse they
+   fade in on hover (or keyboard focus anywhere in the tile); on a touch device there is no
+   hover to wait for, so they are simply always on. A SELECTED tile keeps its ✓ visible
+   whatever the pointer is doing — that check is state, not an affordance.
+   (decision `2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster`) */
+.editable .tile .check,
+.editable .tile .remove {
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.editable .tile:hover .check,
+.editable .tile:hover .remove,
+.editable .tile:focus-within .check,
+.editable .tile:focus-within .remove,
+.editable .tile.selected .check {
+  opacity: 1;
+}
+/* `hover: none` is the touch/pen test — `pointer: coarse` alone also catches a games
+   controller, and a hover-capable stylus should still get the quiet treatment. */
+@media (hover: none) {
+  .editable .tile .check,
+  .editable .tile .remove {
+    opacity: 1;
+  }
+}
+
+/* ---- ▶ Start this entry now (queue/channel grid) ----
+   Centred on the poster, hover-gated like the rest of the chrome. Bigger than ✓/✕ and
+   filled rather than outlined, because unlike them it is the one control here that does
+   something to the TV rather than to the list. */
+.tile .tileplay {
+  display: none;
+}
+.editable .tile .tileplay {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-scrim);
+  color: var(--color-content-primary);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    background 0.12s;
+}
+.editable .tile:hover .tileplay,
+.editable .tile:focus-within .tileplay {
+  opacity: 1;
+}
+.editable .tile .tileplay:hover {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+}
+@media (hover: none) {
+  .editable .tile .tileplay {
+    opacity: 1;
+  }
+}
+/* A 40px row thumb cannot host a 38px button. Unlike ✓/✕ this one STAYS on the artwork in
+   every density — it is about the thing in the picture, it is only there while you hover,
+   and covering the poster for that moment is what makes it unmistakable (it is what Plex
+   does with the same control). It just has to fit. */
+ul.grid.rows .tile .tileplay,
+ul.grid.cards .tile .tileplay {
+  width: 26px;
+  height: 26px;
+}
 /* The WHOLE poster is the drag surface (touch: long-press to drag; a tap selects). */
 .editable .tile .thumb {
   cursor: grab;
@@ -1767,6 +1849,13 @@ a.playbtn {
   gap: 10px;
   align-items: center;
 }
+/* The other three modals push their buttons right with a `.spacer` flex child, because they
+   also have a left-hand action (Delete) to keep pinned. This one is a single Done, so it
+   just ends the row — but it ends it on the RIGHT, where every other modal's confirm is. */
+#entrymodal .modalbtns {
+  justify-content: flex-end;
+}
+
 #startmodal .modalbtns {
   flex-wrap: wrap;
 }
@@ -1802,6 +1891,24 @@ a.playbtn {
   border: none;
 }
 
+/* RESERVE THE SCROLLBAR'S WIDTH, ALWAYS — even on a page short enough not to need one.
+   This is not cosmetic. Both this rule below and @charcuterie/ui's `lockScrollBehind`
+   freeze the page by setting `overflow: hidden` on <html>, which on a classic (non-overlay)
+   scrollbar DELETES the scrollbar and hands its ~15px back to the layout viewport. The grid
+   is `repeat(auto-fill, minmax(340px, 1fr))`, so at the wrong window width those 15px are a
+   whole extra column: opening the per-entry panel silently reflowed the queue behind it from
+   two columns to three, and the shorter document clamped the scroll position, so closing the
+   panel left you somewhere else in the list. Reserving the gutter makes the layout width
+   invariant under the lock, which kills both symptoms at once.
+   (decision `2026-08-15-the-scrollbar-gutter-is-reserved`)
+
+   Agents: the sandbox's headless Chromium uses OVERLAY scrollbars, which take no layout
+   width — this bug is invisible there and only reproduces on a real desktop browser. Test
+   it by changing the viewport width by 15px and watching the column count, not by opening
+   a modal in Playwright. */
+html {
+  scrollbar-gutter: stable;
+}
 /* While a modal is open, freeze the page so touch-scrolling stays inside the
    dialog instead of falling through to the background (native <dialog> doesn't
    lock scroll on its own). overscroll-behavior on the dialogs stops the scroll
@@ -2336,9 +2443,13 @@ ul.grid.cards {
   gap: 12px;
   align-items: start;
 }
+/* Four columns, not two: ✓ | poster | text | ✕. The controls are LAID OUT rather than
+   overlaid, which is the whole fix — a card is wide enough to give them their own gutters,
+   so neither one sits on the artwork. The gutters are reserved even while the controls are
+   transparent, so revealing them on hover shifts nothing. */
 ul.grid.cards .tile {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr);
+  grid-template-columns: auto 76px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   background: var(--color-surface-raised);
@@ -2374,7 +2485,7 @@ ul.grid.rows {
 }
 ul.grid.rows .tile {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: auto 40px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   background: var(--color-surface-raised);
@@ -2421,12 +2532,58 @@ ul.grid.rows .tile .badges {
   justify-content: flex-end;
   max-width: 46vw;
 }
-/* The ✕ is sized for a 150px poster; on a 40px thumb it covers the artwork entirely. */
-ul.grid.rows .tile .remove,
-ul.grid.cards .tile .remove {
-  transform: scale(0.75);
-  transform-origin: top right;
+/* CARDS + ROWS: the chrome is IN FLOW, in its own gutter column, so `position: absolute`
+   (which the poster wall still wants) has to be undone here. Without this the controls
+   would keep stacking on the artwork in the two densities this change exists to fix. */
+ul.grid.cards .tile .check,
+ul.grid.cards .tile .remove,
+ul.grid.rows .tile .check,
+ul.grid.rows .tile .remove {
+  position: static;
+  width: 24px;
+  height: 24px;
+  align-self: center;
 }
+/* EVERY child is pinned to row 1 explicitly, and that is load-bearing rather than tidy.
+   The ✕ comes BEFORE `.cap` in the DOM (tab order: select, then the entry, then remove)
+   but sits in a LATER column, and grid auto-placement only ever moves forward — so with
+   the row left implicit, `.cap` could not go back to row 1 and dropped underneath the
+   poster, which is exactly what the first cut of this looked like. */
+ul.grid.cards .tile > *,
+ul.grid.rows .tile > * {
+  grid-row: 1;
+}
+ul.grid.cards .tile .check,
+ul.grid.rows .tile .check {
+  grid-column: 1;
+}
+ul.grid.cards .tile .remove,
+ul.grid.rows .tile .remove {
+  grid-column: 4;
+}
+/* The poster and the text keep their columns whether or not this grid is editable — a
+   read-only pool tile renders no ✓/✕ at all, and auto-placement would otherwise slide
+   everything one column left. */
+ul.grid.cards .tile .thumb,
+ul.grid.rows .tile .thumb {
+  grid-column: 2;
+}
+ul.grid.cards .tile .cap,
+ul.grid.rows .tile .cap {
+  grid-column: 3;
+}
+/* A card's poster is tall, so its controls read better pinned to the top of the card than
+   floating at its vertical centre. A row is one line — centred is the only option there. */
+ul.grid.cards .tile .check,
+ul.grid.cards .tile .remove {
+  align-self: start;
+  margin-top: 2px;
+}
+/* POSTERS (and the member grid, which has no density class) keep the overlay: those tiles
+   carry a full-size poster that can afford it. They need no rule here — the base
+   `.editable .tile .check/.remove` insets still apply, and now resolve against the TILE
+   instead of `.thumb`. `.thumb` is the tile's full-width first row, so the artwork's
+   top corners are the same two points they always were. */
 
 /* ---- Density: POSTERS. Today's wall — the tags ride ON the poster so the caption
    stays two lines whatever an entry is carrying. ---- */

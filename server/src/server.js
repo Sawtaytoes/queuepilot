@@ -798,21 +798,29 @@ app.get('/api/devices', (_req, res) => {
 // Shield's signed-in profile pick the tier, and kind='movie' on a rotation set plays
 // that tier's Movies channel (weighted rewatch) instead of the shows rotation.
 app.post('/api/play', async (req, res) => {
-  const { set: setId, kind: kindReq, target, profile } = req.body || {};
+  const { set: setId, kind: kindReq, target, profile, only } = req.body || {};
   const tgt = target ? String(target) : undefined;
   // PR 4: an explicit profile names the binding on a profiles[] function channel (the
   // Play-landing profile selector); the auto path keeps letting the Shield decide.
   const prof = profile ? String(profile) : undefined;
+  // The grid's per-tile ▶: play ONE entry of a curated set. Only a curated set has entries
+  // to name, so asking for one on a rotation channel is a request error rather than a
+  // silently-ignored field — a rotation's pool is a rule, and nothing in it has a key.
+  const entryKey = only ? String(only) : undefined;
   try {
     if (setId === 'auto') {
+      if (entryKey) return res.status(400).json({ error: 'set "auto" cannot play a single entry' });
       return res.json({ sent: mqttc.play('auto', kindReq === 'movie' ? 'movie' : 'cartoons', tgt) });
     }
     const s = await sets.getSet(String(setId || ''));
     if (!s) return res.status(400).json({ error: 'unknown set' });
+    if (entryKey && s.source !== 'queue') {
+      return res.status(400).json({ error: `'${s.label || s.id}' is a rule-based channel — it has no entries to play one of` });
+    }
     const kind = s.source === 'rotation'
       ? (kindReq === 'movie' ? 'movie' : 'cartoons')
       : s.kind === 'anime' ? 'anime' : 'movie';
-    res.json({ sent: mqttc.play(s.id, kind, tgt, prof) });
+    res.json({ sent: mqttc.play(s.id, kind, tgt, prof, entryKey) });
   } catch (e) {
     res.status(503).json({ error: String(e.message || e) });
   }

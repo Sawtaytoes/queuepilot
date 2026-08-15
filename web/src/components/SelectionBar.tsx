@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { api } from "../lib/api"
+import { openPlayMenu } from "../state/overlays"
 import {
   clearSelection,
   useSelected,
@@ -59,6 +60,21 @@ export function SelectionBar({
     : (options[0] ?? "")
 
   const count = selected.size
+  // The single selected entry, when there is exactly one AND it is playable. Resolved-only
+  // for the same reason the tile's ▶ is: an unresolved entry names nothing in the library,
+  // so the start would fail after the device menu had already asked which TV.
+  const only = (() => {
+    if (count !== 1) return null
+
+    const sel = [...selected.values()][0]!
+    const item = data?.sets[sel.fromSet]?.items.find(
+      (it) => it.key === sel.key,
+    )
+
+    return item?.resolved
+      ? { ...sel, title: item.title }
+      : null
+  })()
   const hasEdit =
     episodes !== null ||
     weight !== null ||
@@ -103,6 +119,33 @@ export function SelectionBar({
   return (
     <div hidden={count === 0} id="selbar">
       <span id="selcount">{`${count} selected`}</span>
+
+      {/* Play, at the head of the bar — Plex puts ▶ first in its own selection bar, and this
+          is the one action here that is about watching rather than editing. ONE entry only:
+          a start is a single lineup on a single device, so "play these six" has no meaning
+          the queue does not already have (that IS the queue). With more than one selected the
+          button says so rather than vanishing, which would read as a missing feature. */}
+      {only ? (
+        <button
+          id="selplay"
+          onClick={(e) =>
+            openPlayMenu({
+              anchor:
+                e.currentTarget.getBoundingClientRect(),
+              only: only.key,
+              onlyLabel: only.title,
+              setId: only.fromSet,
+            })
+          }
+          type="button"
+        >
+          ▶ Play on ▾
+        </button>
+      ) : (
+        <button disabled id="selplay" type="button">
+          ▶ Play — pick one
+        </button>
+      )}
 
       {/* --- the settings, applied together --- */}
       <div className="bulkfield">

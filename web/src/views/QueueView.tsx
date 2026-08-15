@@ -766,7 +766,10 @@ export function QueueView({
             items={[
               { label: "Posters", value: "posters" },
               { label: "Cards", value: "cards" },
-              { label: "Rows", value: "rows" },
+              // "List", not "Rows" — the owner's word for it. The stored value stays
+              // `rows` so every persisted per-queue density (and the `ul.grid.rows`
+              // selectors + e2e reads) keeps working; only the label is the owner's.
+              { label: "List", value: "rows" },
             ]}
             label="View"
             onChange={(v) =>
@@ -923,7 +926,23 @@ export function QueueView({
                   e.preventDefault()
                   openTileMenu(e.clientX, e.clientY, entry)
                 }}
+                // Only a RESOLVED entry can be played: an unresolved one has no library item
+                // behind it, so the server would reject the start after the device menu had
+                // already asked which TV. No ▶ is a clearer answer than a late error.
+                onPlay={
+                  setId && item.resolved
+                    ? (anchor) =>
+                        openPlayMenu({
+                          anchor,
+                          kind: undefined,
+                          only: item.key,
+                          onlyLabel: face.title,
+                          setId,
+                        })
+                    : undefined
+                }
                 onRemove={() => removeTile(item)}
+                playTitle={`Play “${face.title}” now`}
                 posterRatingKey={
                   item.resolved ? face.ratingKey : null
                 }

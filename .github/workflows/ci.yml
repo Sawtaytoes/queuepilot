@@ -78,7 +78,10 @@ jobs:
       # threaded to playMedia), in-progress-not-done (a started OAD/special is never marked done,
       # and a stale done flag is revived), the playback state machine, and the session profile
       # gate, and the binding token (a multi-profile channel plays as the profile that was
-      # PICKED, not as profiles[0] — the live 2026-08-14 silent-no-play bug).
+      # PICKED, not as profiles[0] — the live 2026-08-14 silent-no-play bug), and play-one-entry
+      # (the grid's per-tile ▶ narrows the ENTRY LIST, so the named entry still gets its own next
+      # unwatched episode — and a finished or deleted one plays NOTHING rather than silently
+      # falling back to the queue's head, which would start something nobody clicked).
       # The §B.3 TTL sweep + specials/extras filter run in the browserless block below.
       - name: Engine tests (offline)
         run: |
@@ -91,6 +94,7 @@ jobs:
           node e2e/session-profile-gate-test.mjs
           node e2e/profile-gate-test.mjs
           node e2e/binding-token-test.mjs
+          node e2e/play-one-entry-test.mjs
 
       # The plex-channels -> queuepilot topic bridge. Every way this can break is silent —
       # a card publishes where nothing listens and the broker cheerfully accepts it — so the
