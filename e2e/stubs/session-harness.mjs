@@ -8,6 +8,7 @@
 // The ENGINE, queues.js write-side and the selection engine stay REAL, so a test asserts on
 // what the shipped code actually does, including what it writes back to queues.yaml.
 import { registerHooks } from 'node:module';
+import { isModule, specifierIs, moduleId } from './module-id.mjs';
 import { mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -102,33 +103,34 @@ const STUB_SRC = {
 // This is a change to WHERE the stub is injected, not to what the gates assert: the corpus,
 // the expected outputs and every assertion are untouched. If a parity gate ever fails after
 // a change here, that is the seam having changed behaviour — not a fixture to update.
+//
+// The parent anchors are written WITHOUT an extension and matched through ./module-id.mjs:
+// these files are .ts today and were .js yesterday, and a matcher that misses does not throw,
+// it silently runs the real module against the live Plex server.
 const PARENT_STUBS = [
-  ['/server/src/session.js', ['./profiles.js', './adb.js', './playback.js', './driver.js']],
-  ['/server/src/providers/plex.js', ['../engine/plex-live.js', '../playback.js', '../driver.js']],
+  ['/server/src/session', ['./profiles.js', './adb.js', './playback.js', './driver.js']],
+  ['/server/src/providers/plex', ['../engine/plex-live.js', '../playback.js', '../driver.js']],
 ];
 
 // Data-URL modules keep the stubs inline: no extra files, and each one closes over the same
 // SESSION_CTL instance (imported by URL, so it resolves to this exact module).
 export function stubSessionDeps() {
-  const urls = Object.fromEntries(
+  // Keyed by extension-free module id, so a `./playback.ts` specifier would find the same
+  // stub as today's `./playback.js`. A provider-parent specifier (`../playback.js`) resolves
+  // to the SAME stub as its session-parent twin — both parents share one SESSION_CTL, so a
+  // test still sees every recorded drive/play.
+  const urls = new Map(
     Object.entries(STUB_SRC).map(([spec, src]) => [
-      spec, `data:text/javascript,${encodeURIComponent(src)}`,
+      moduleId(spec).replace(/^\.+/, ''), `data:text/javascript,${encodeURIComponent(src)}`,
     ]),
   );
-  // A provider-parent specifier resolves to the SAME stub as its session-parent twin, so
-  // both parents share one SESSION_CTL and a test still sees every recorded drive/play.
-  const alias = {
-    '../engine/plex-live.js': './engine/plex-live.js',
-    '../playback.js': './playback.js',
-    '../driver.js': './driver.js',
-  };
-  const allowed = new Map(PARENT_STUBS);
+  const stubFor = (spec) => urls.get(moduleId(spec).replace(/^\.+/, ''));
+
   registerHooks({
     resolve(spec, ctx, next) {
-      const parent = ctx && ctx.parentURL ? ctx.parentURL : '';
-      for (const [suffix, specs] of allowed) {
-        if (parent.endsWith(suffix) && specs.includes(spec)) {
-          const url = urls[alias[spec] || spec];
+      for (const [parentPath, specs] of PARENT_STUBS) {
+        if (isModule(ctx?.parentURL, parentPath) && specifierIs(spec, ...specs)) {
+          const url = stubFor(spec);
           if (url) return { url, shortCircuit: true };
         }
       }

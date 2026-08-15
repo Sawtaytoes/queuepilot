@@ -12,6 +12,9 @@ web/node_modules
 *.local
 __screenshots__/
 web/dist/
+# The esbuild bundle (server/scripts/build-server.mjs). Built in the Dockerfile's
+# server-build stage and by CI; never a tracked artifact.
+server/dist/
 # The derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store):
 # regenerable from Plex, never backed up, safe to delete.
 cache.sqlite

@@ -3,12 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "React 19 + TypeScript + Vite + Tailwind v4 frontend for queuepilot. Built to web/dist, which server/src/server.js serves as its static root.",
+  "description": "React 19 + TypeScript + Vite + Tailwind v4 frontend for queuepilot. Built to web/dist, which the Node server serves as its static root.",
   "engines": {
     "node": ">=24"
   },
   "scripts": {
-    "build": "vite build && node scripts/precompress.mjs",
+    "build": "vite build",
     "dev": "vite",
     "lint": "biome check --write",
     "lint:biome": "biome check",
@@ -27,6 +27,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
     "@charcuterie/biome-config": "^1.0.0",
+    "@charcuterie/server": "^0.2.0",
     "@charcuterie/tsconfig": "^1.0.0",
     "@charcuterie/vite-config": "^1.0.2",
     "@charcuterie/vitest-config": "^1.0.1",
