@@ -1,5 +1,11 @@
 # The MQTT cutover: `plex-channels/…` → `queuepilot/…`
 
+> **✅ COMPLETE — 2026-08-15.** All four steps are done. `MQTT_LEGACY_PREFIX` is set to `''` in
+> the TrueNAS app env, the bridge is off, `sensor.plex_channels_status` is retired, and the six
+> stale retained `plex-channels/…` topics were cleared and confirmed not to come back. The
+> procedure below is kept as the record of how it was done and what was observed at each step —
+> see [What actually happened](#what-actually-happened-2026-08-15) at the end.
+
 The ordered procedure for moving the topic prefix without breaking the NFC cards, plus the
 commands that prove each step worked. Companion to the rename decision
 ([`2026-08-12-plex-channels-becomes-queuepilot`](decisions/2026-08-12-plex-channels-becomes-queuepilot.md)).
@@ -216,3 +222,72 @@ ssh root@nas.example.com 'docker inspect ix-queuepilot-queuepilot-1 --format "{{
   name permanently.
 - **The repo directory on disk** (`/mnt/TrueNAS-Apps/Repos/plex-channels`), which several e2e
   harnesses reference by absolute path.
+
+## What actually happened — 2026-08-15
+
+Executed in the documented order, after the Hono/TypeScript server deploy (#92) went live and
+its boot log still showed `[mqttd] rename bridge ON — also on plex-channels/…`.
+
+### Step 2 was already done, but the audit doc overstated it
+
+`home-assistant/docs/2026-08-12-queuepilot-rename-ha-consumer-audit.md` recorded all four
+consumers as migrated on 2026-08-12. The live config was checked rather than trusted, and
+`/config/automations.yaml` still contained **3 `plex-channels/` hits and 2
+`plex_channels_status` hits**.
+
+They turned out to be harmless — every one is prose in a `description:` field, plus the
+automation's own `id: plex_channels_status_announcements` slug. The functional check is the one
+that matters, and it was clean:
+
+```
+grep -E "topic: *[\"']?plex-channels/"  → no matches
+grep -E "sensor\.plex_channels_status"  → only inside a description string
+grep -E "topic: *[\"']?queuepilot/"     → 4 matches (the 4 live consumers)
+```
+
+Worth recording because a raw grep count reads as "migration incomplete" and would have stopped
+the cutover for no reason. Count the *functional* references, not the string.
+
+### Step 3 — retiring `sensor.plex_channels_status`
+
+Both sensors were live and updating **4 ms apart**, which is the bridge mirroring one payload
+onto both prefixes. Clearing the retained discovery config removed the old entity within
+seconds; `sensor.queuepilot_status` was unaffected.
+
+### Step 4 — bridge off
+
+`MQTT_LEGACY_PREFIX=""` appended to the app's 17 existing env vars via `app.update` (the var was
+**not** previously present — the bridge was on by the code's default in `env.ts`, so there was
+nothing to edit, only something to add). After the redeploy the `rename bridge ON` line is gone
+from the boot log.
+
+Six stale retained topics survived on the old prefix, exactly as this document predicted:
+
+```
+plex-channels/state · plex-channels/now-playing · plex-channels/resp/last-played
+plex-channels/devices/shield · plex-channels/devices/0e072bfb-… · plex-channels/devices/606c3173-…
+```
+
+They were confirmed stale before clearing: `plex-channels/now-playing` was **173 B** against
+`queuepilot/now-playing`'s **166 B** — a different, older payload, i.e. no longer being mirrored.
+All six were cleared, and a re-listing 12 s later reported `LEGACY topics still live: NONE`,
+which is the "clear it and see whether it comes back" test this document asks for.
+
+The two `devices/<uuid>` entries are the `Plex Dash` / `Pollycracker` ghosts described under
+[the device-registry gap](#the-device-registry-gap) — they had been mirrored onto the new prefix
+too, so clearing the legacy copies left the `queuepilot/devices/…` ones untouched and the
+dropdown unchanged.
+
+### Why the cards were never at risk
+
+HA has been publishing to `queuepilot/cmd/session/start` since 2026-08-12 and the cards have
+worked since. Turning the bridge off removes only the *alias* subscription, which by then had no
+publisher. That is the whole point of the staged path: by step 4 the old prefix is already dead
+weight, so the step that could break the cards is the one where nothing is left to break.
+
+### Still outstanding
+
+`DISCOVERY_LEGACY_OBJECT_ID` and the `legacyTopic`/`bothTopics`/`canonicalTopic` helpers in
+`server/src/env.ts`, plus `e2e/mqtt-legacy-bridge-test.ts`, are now dead code paths kept behind
+an empty prefix. Removing them is a separate change — the bridge should sit provably unused for
+a while before the ability to re-enable it is deleted.
