@@ -34,6 +34,7 @@ import type {
 } from './kavita-client.js';
 
 import { kavitaClient, readerSegment } from './kavita-client.js';
+import { errMessage } from '../errors.js';
 import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 
 /**
@@ -636,6 +637,34 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         // `create` normally answers with the DTO, but the client falls back to the raw body
         // for a non-JSON response — so a bare id is still accepted here, exactly as before.
         listId = (typeof created === 'object' && created ? created.id : created) ?? null;
+      } else {
+        // CLEAR IT FIRST. This method's own docstring has always said the list is "rebuilt on
+        // launch … rather than accumulated", and the code did the opposite: it found the
+        // existing list and appended to it, forever. The live list reached 23 series — every
+        // lineup ever built for this set, unioned — and the owner reported it as "stuff I
+        // absolutely did NOT add".
+        //
+        // The list is the RUNTIME ARTIFACT, never the store: what belongs in it is exactly
+        // this launch's lineup, so anything already there is last launch's answer to a
+        // question nobody is asking again.
+        //
+        // Items are removed rather than the list being deleted and recreated, because the
+        // list's ID is user-visible — it is the `/lists/153` the owner had open in Kavita —
+        // and a fresh id per launch would break every bookmark and every link Kavita's own UI
+        // renders to it.
+        //
+        // Best-effort per item: one row that refuses to delete must not abort the rebuild and
+        // leave the reader with no lineup at all. A leftover row is visible and self-corrects
+        // on the next launch; a thrown error here is a dead card.
+        const stale = (await c.readingListItems(listId)) || [];
+        for (const row of stale) {
+          if (row?.id == null) continue;
+          try {
+            await c.deleteItem(listId, row.id);
+          } catch (e) {
+            console.log(`[kavita] could not clear list item ${row.id}: ${errMessage(e)}`);
+          }
+        }
       }
       for (const it of items) {
         await c.addChapter(listId as number | string, it.seriesId, it.chapterId);

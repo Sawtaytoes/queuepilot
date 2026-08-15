@@ -111,6 +111,11 @@ export interface KavitaReadingListDto {
 }
 
 export interface KavitaReadingListItemDto {
+  /**
+   * The reading-list ITEM's own id — not the chapter's. `delete-item` addresses this one,
+   * and passing a `chapterId` there silently removes the wrong row (or nothing).
+   */
+  id?: number | string;
   chapterId?: number | string;
   seriesId?: number | string;
   order?: number;
@@ -156,6 +161,8 @@ export interface KavitaHttpClient {
     chapterId: number | string,
   ): Promise<unknown>;
   removeRead(readingListId: number | string): Promise<unknown>;
+  /** Remove ONE item, addressed by the item's own id. Keeps the list (and its id) alive. */
+  deleteItem(readingListId: number | string, readingListItemId: number | string): Promise<unknown>;
   deleteList(readingListId: number | string): Promise<unknown>;
 }
 
@@ -373,6 +380,19 @@ export function kavitaClient({
     ),
 
     removeRead: (readingListId) => req<unknown>('POST', `/api/ReadingList/remove-read?readingListId=${readingListId}`),
+
+    /**
+     * Remove one item. **POST, and the id is the ITEM's** — verified against the live
+     * instance 2026-08-15 on a throwaway list: `POST /api/ReadingList/delete-item` with
+     * `{readingListId, readingListItemId}` answers 200 and drops the row, while the
+     * DELETE-with-query-params spelling is a 404. The list itself survives, which is the
+     * point — its id is what `/lists/153` in the browser refers to.
+     */
+    deleteItem: (readingListId, readingListItemId) => req<unknown>(
+      'POST',
+      '/api/ReadingList/delete-item',
+      { body: { readingListId, readingListItemId } },
+    ),
 
     deleteList: (readingListId) => req<unknown>('DELETE', `/api/ReadingList?readingListId=${readingListId}`),
   };
