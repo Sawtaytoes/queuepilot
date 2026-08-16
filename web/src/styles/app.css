@@ -1764,13 +1764,21 @@ body.queue-view #tools {
 #setmodal .flags > .subhint {
   margin: 0 0 10px;
 }
-#setmodal .flags > .field {
-  margin-bottom: 4px;
-}
-/* Breathing room between an inline field label ("Type", "Plays under profile") and its
-   listbox trigger, which otherwise butts right against the text. */
+/* A Picker / Listbox trigger is flush — no outer margin. Charcuterie's Field
+   stacks label + control with a gap; an INLINE label + trigger has to get
+   that gap from the parent. `.fieldselect` is the one-off that was already
+   here; the flags CountPickers (and any other sibling of a `.fieldlbl`)
+   need the same gutter or they butt against "Chapters per series…". */
 #setmodal .fieldselect {
-  margin-left: 10px;
+  margin-inline-start: 10px;
+}
+#setmodal .flags > .field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  margin-bottom: 4px;
 }
 #startmodal .field,
 #setmodal .field,
@@ -2737,9 +2745,19 @@ ul.grid.posters .tile .badges .epstag {
   display: grid;
   gap: 16px;
 }
-#entrymodal .field {
-  display: grid;
-  gap: 6px;
+/* Label + Picker on one row, hint on the next. A 1-col grid stacked them
+   *when it matched*; a Picker is `inline-flex` and a `span.fieldlabel` is
+   inline, so any `.field` that falls back to `display: block` (or that
+   `#entrymodal` fails to wrap) puts "queued per turn" flush against the
+   trigger. Flex + a column-gap is the parent owning the gutter — do not
+   put margin on the Picker (decision in charcuterie Picker.mdx). */
+#entrymodal .field,
+.entryfields .field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
 }
 #entrymodal .fieldlabel {
   font-size: 0.8rem;
@@ -2747,7 +2765,9 @@ ul.grid.posters .tile .badges .epstag {
   letter-spacing: 0.05em;
   color: var(--color-content-muted);
 }
-#entrymodal .fieldhint {
+#entrymodal .fieldhint,
+.entryfields .fieldhint {
+  flex: 1 0 100%;
   font-size: 0.82rem;
   color: var(--color-content-muted);
 }
