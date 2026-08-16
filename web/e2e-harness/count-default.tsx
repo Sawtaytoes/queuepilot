@@ -25,7 +25,7 @@ const Field = ({
   const [value, setValue] = useState(initial)
 
   return (
-    <section className="field" style={{ maxWidth: 360 }}>
+    <section style={{ maxWidth: 420 }}>
       <h2
         style={{
           fontSize: 14,
@@ -35,19 +35,23 @@ const Field = ({
       >
         {title}
       </h2>
-      <span className="fieldlabel">
-        Chapters queued per turn
-      </span>
-      <span data-testid={id}>
-        <CountPicker
-          defaultValue={defaultValue}
-          label="Chapters queued per turn"
-          max={EPISODES_MAX}
-          onChange={setValue}
-          value={value}
-        />
-      </span>
-      <span className="fieldhint">{hint}</span>
+      <div className="entryfields">
+        <div className="field">
+          <span className="fieldlabel">
+            Chapters queued per turn
+          </span>
+          <span data-testid={id}>
+            <CountPicker
+              defaultValue={defaultValue}
+              label="Chapters queued per turn"
+              max={EPISODES_MAX}
+              onChange={setValue}
+              value={value}
+            />
+          </span>
+          <span className="fieldhint">{hint}</span>
+        </div>
+      </div>
     </section>
   )
 }
