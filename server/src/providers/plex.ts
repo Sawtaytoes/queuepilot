@@ -32,7 +32,7 @@ import * as rotation from '../engine/rotation.js';
 import * as select from '../engine/select.js';
 import * as routing from '../engine/routing.js';
 import { liveClient } from '../engine/plex-live.js';
-import { sections as plexSections, showEpisodes } from '../plex.js';
+import { profileUser, sections as plexSections, showEpisodes } from '../plex.js';
 import { toWeight } from '../engine/weight.js';
 import * as playback from '../playback.js';
 import * as driver from '../driver.js';
@@ -166,6 +166,40 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
      * above this line never sees it — it asks for a profile and gets items back.
      */
     profileToken: (userUuid: string | null) => c.accountToken(userUuid),
+
+    /**
+     * A CURATED QUEUE has no `profiles[]` and no binding fields — only `requires_profile`,
+     * which is a display name. So `bindingFor()` hands back an empty binding, and an empty
+     * binding meant two wrong things at once: `watch_count_accounts: null` fell through to
+     * env `WATCH_COUNT_ACCOUNTS` (a UNION that starts at the admin), and `user_uuid: null`
+     * read every episode's viewCount under the owner's token. A queue gated to "Older Kids"
+     * therefore played from BOB's history — the thing decision 2026-07-16 reverted the
+     * cross-account union for in the first place.
+     *
+     * The profile is joined to its Plex Home row here, on the Plex side of the seam, because
+     * "a name -> an accountID" is a plex.tv fact. The owner resolves to `{id: 1, uuid: null}`,
+     * so every pre-existing `requires_profile: sawtaytoes` queue keeps the admin token and
+     * lands on `[1]` — the same account the env union already collapsed to on this server.
+     *
+     * A binding that already names an account is returned UNTOUCHED: a rotation channel's
+     * profiles[] is explicit and authoritative, and this must never second-guess it.
+     */
+    async profileBinding(binding: EngineBinding, profileTitle: string | null): Promise<EngineBinding> {
+      if (binding.user_uuid || binding.account_id || binding.watch_count_accounts) return binding;
+      const user = await profileUser(profileTitle);
+      // No row (ungated, hand-typed, or plex.tv unreachable) => unchanged, i.e. the admin
+      // fallback this has always had. A gate that names a profile Plex does not know is
+      // already a scan that hangs at the picker, so it is not this function's failure to fix.
+      if (!user) return binding;
+      return {
+        ...binding,
+        plex_user: user.name,
+        account_id: user.id,
+        user_uuid: user.uuid,
+        // `[id]` and never a union: watched state is PER-PROFILE (decision 2026-07-16).
+        watch_count_accounts: user.id != null ? [user.id] : null,
+      };
+    },
 
     /**
      * The "Start from…" picker's list. Same answer `/show/:id/episodes` has always

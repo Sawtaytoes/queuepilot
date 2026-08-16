@@ -3,6 +3,8 @@ import { statSync } from 'node:fs';
 import * as cache from '../cache.js';
 import { QUEUES_PATH } from '../config.js';
 import { toWeight } from '../engine/weight.js';
+import * as plex from '../plex.js';
+import type { AccountScope } from '../plex.js';
 import * as providerTiles from '../providers/tiles.js';
 import type { ProviderTile } from '../providers/tiles.js';
 import * as queues from '../queues.js';
@@ -163,13 +165,29 @@ export function queuesRoutes(): Hono {
         }
         for (const e of entries) work.push({ s, e });
       }
+      // Every next-up below is read as the profile the queue PLAYS UNDER, not as the owner.
+      // This grid used to pass an empty scope unconditionally, which was invisible for as
+      // long as every curated queue was Bob's own: the admin token was the right answer by
+      // accident. The first queue gated to a kid ("Carol 1" -> Older Kids) exposed it — a
+      // Dragon Ball collection tile read "Next: Dragon Ball Z E109", which is where the OWNER
+      // is, 246 episodes past where Carol is.
+      //
+      // Resolved once per distinct profile rather than per tile: the lookup is memoized in
+      // plex.js, but a mint on a cold cache is two plex.tv round-trips and this grid fans out
+      // over every entry in every set.
+      const scopes = new Map<string, AccountScope>();
+      await Promise.all(
+        [...new Set(reg.sets.map((s) => s.requires_profile || ''))].map(async (p) => {
+          scopes.set(p, await plex.profileScope(p));
+        }),
+      );
       const resolvedItems = await mapLimit(work, 8, async ({ s, e }) => {
         // resolveTile surfaces, for a series, the next unwatched episode (queue plays it
         // TV-style until the whole show is watched); for a Collection, its first still-unwatched
         // member ("Next: <member>", not an opaque "N in order"). A manual start override on the
         // entry floors the pick — {season,episode} for a show, {series,season,episode} for a
         // collection (which member to begin at plus the floor inside it).
-        const core = await tiles.resolveTile(s.sections, e.value, startOf(e), {});
+        const core = await tiles.resolveTile(s.sections, e.value, startOf(e), scopes.get(s.requires_profile || '') ?? {});
         return { setId: s.id, tile: queueTile(e, core) };
       });
       // Regroup by set, preserving the flat list's order (set-then-entry order).

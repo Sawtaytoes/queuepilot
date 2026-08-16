@@ -240,15 +240,6 @@ export async function startSession(
     profileTitle = detectedProfile = title;
   }
 
-  const binding = routing.bindingFor(cfg, profileTitle);
-  SESSION.kind = kind;
-  SESSION.set = setName;
-  SESSION.profile = profileTitle;
-  SESSION.cursor = 0;
-  SESSION.userUuid = binding.user_uuid || null;
-  let resumeMs = 0;
-  let playItems: PlayItem[] = [];
-
   // The engine no longer holds a Plex client — it holds a PROVIDER (decision
   // 2026-08-12-backends-are-providers-behind-a-media-neutral-seam). Everything Plex-shaped
   // (MediaContainer, ratingKeys, managed-user tokens) is now private to providers/plex.js.
@@ -258,6 +249,23 @@ export async function startSession(
   // index signature, which an interface never gets implicitly. The cast is that rule, not a
   // shape change.
   const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+  // `bindingFor` can only read what the SET stores, and a curated queue stores no account —
+  // just `requires_profile`, a display name. Left at that, the queue selected its lineup as
+  // the OWNER (env WATCH_COUNT_ACCOUNTS + the admin token) however it was gated. The provider
+  // fills the account in, because a name -> an accountID is a provider fact; a binding that
+  // already names one (every rotation channel) comes back untouched.
+  let binding = routing.bindingFor(cfg, profileTitle);
+  if (typeof provider.profileBinding === 'function') {
+    binding = await provider.profileBinding(binding, profileTitle);
+  }
+  SESSION.kind = kind;
+  SESSION.set = setName;
+  SESSION.profile = profileTitle;
+  SESSION.cursor = 0;
+  SESSION.userUuid = binding.user_uuid || null;
+  let resumeMs = 0;
+  let playItems: PlayItem[] = [];
+
   // UNGUARDED on purpose, and the `!` says so: `profileToken` is OPTIONAL on the `Provider`
   // interface (every other optional member is called behind a `typeof … === 'function'`
   // check), but this call site has never had one. A push provider without it throws right

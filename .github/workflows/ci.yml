@@ -108,7 +108,10 @@ jobs:
       # PICKED, not as profiles[0] — the live 2026-08-14 silent-no-play bug), and play-one-entry
       # (the grid's per-tile ▶ narrows the ENTRY LIST, so the named entry still gets its own next
       # unwatched episode — and a finished or deleted one plays NOTHING rather than silently
-      # falling back to the queue's head, which would start something nobody clicked).
+      # falling back to the queue's head, which would start something nobody clicked), and the
+      # curated-queue profile (a queue gated to a kid selects from THAT kid's history — the
+      # 2026-08-16 "Carol 1" bug, where `requires_profile` was a play gate and never an
+      # account, so the queue picked up where the OWNER left off).
       # The §B.3 TTL sweep + specials/extras filter run in the browserless block below.
       - name: Engine tests (offline)
         run: |
@@ -122,6 +125,7 @@ jobs:
           "$TSX" e2e/profile-gate-test.ts
           "$TSX" e2e/binding-token-test.ts
           "$TSX" e2e/play-one-entry-test.ts
+          "$TSX" e2e/curated-queue-profile-test.ts
 
       # The retained device registry — the "Play on ▾" dropdown's source. Its failures are
       # invisible: retained topics keep serving the last announcement, so a registry that
