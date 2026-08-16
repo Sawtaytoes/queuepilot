@@ -11,6 +11,9 @@ import { SelectListbox } from "./SelectListbox"
  * neither are things like "queue twelve of this before switching" — a number you know and want
  * to type, not hunt for in a list that would have to be forty items long to hold it. So the
  * list carries the two common answers and Custom… hands over a spinner with the real range.
+ * "All" / infinite (the rest of the series this visit) is a parked todo — do not invent
+ * it as Custom 999; the field already clamps to 40. See
+ * `docs/todos/batch-all-or-infinite.md`.
  *
  * `unit` is cosmetic ("x" renders 1x/2x for weights). The value is always a plain integer, and
  * an out-of-range or unparseable entry snaps back to the last good one on blur rather than

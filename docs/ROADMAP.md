@@ -76,6 +76,16 @@ overlapping edits agree:
 - Merge order (couple on `queues.py`): SSE (independent) → TTL → resume → playlist. Rebase later
   ones after each merge; flag conflicts to the orchestrator rather than guessing.
 
+## Parked / someday
+
+Not in flight. An agent must not start these because they are on this list —
+only when the owner asks.
+
+- **Batch size "All"** — the per-entry / per-queue count picker (1 / 2 / Custom…)
+  has no way to say "the rest of this series this visit" without a magic number,
+  and 999 is already rejected (`QUEUE_SERIES_LENGTH` = 40). Parked 2026-08-16:
+  [todos/batch-all-or-infinite.md](todos/batch-all-or-infinite.md).
+
 ## Deploy state
 App image currently `docker-registry.example.com/plex-channels:latest` (locally built, = merged
 §A code). ghcr rebuilt from the #6 merge (`ghcr.io/sawtaytoes/plex-channels:latest`, Docker
