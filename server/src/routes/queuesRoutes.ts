@@ -126,14 +126,19 @@ export function queuesRoutes(): Hono {
     try {
       // ETag (B7): the two config files' stat pairs + the cache generation (bumped on every
       // invalidation, so a watch on the Shield correctly busts a browser's cached copy).
-      // `private` because the response is per-install; must-revalidate so the browser always
-      // sends If-None-Match rather than serving a stale body without asking.
+      //
+      // `no-store` on purpose. This payload also carries PROVIDER progress (Kavita
+      // pagesRead, Plex next-up). The tag above does not change when you mark a chapter
+      // read in Kavita — Kavita has no webhook, and nothing here polls — so
+      // `must-revalidate` made F5 send If-None-Match and get a 304 of the stale tiles.
+      // The JS `apiConditional` path still uses the ETag for SSE storms; a real load
+      // or a forced refresh must hit Kavita.
       //
       // Hand-rolled, and it STAYS hand-rolled: this is app logic over file mtimes and a cache
       // generation, nothing to do with the shared static handler's ETag on `web/dist`.
       const tag = `W/"${statPair(QUEUES_PATH)}-${statPair(sets.SETS_PATH)}-${await cache.generation()}"`;
       c.header('ETag', tag);
-      c.header('Cache-Control', 'private, max-age=0, must-revalidate');
+      c.header('Cache-Control', 'private, no-store');
       if (c.req.header('if-none-match') === tag) return c.body(null, 304);
 
       const reg = await sets.getRegistry();
