@@ -105,7 +105,7 @@ try {
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}`, fullPage: true }); console.log('wrote', name); };
 
-  await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForSelector('#chmembers li.tile', { timeout: 30000 });

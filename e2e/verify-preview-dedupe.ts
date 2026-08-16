@@ -65,7 +65,7 @@ try {
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 
   // Baseline: one load, let it settle.
-  await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 });
   await page.waitForTimeout(500);
   const baseline = (await page.$$('#chpool li.tile')).length;

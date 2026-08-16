@@ -161,7 +161,7 @@ ok('tools hidden in queue view', await page.$eval('#tools', (e) => getComputedSt
 // clicking it turns the heading into an input; Enter saves PATCH /api/sets/:id {label}.
 ok('A: pen icon visible in grid view', await page.$eval('#editname', (e) => !e.hidden));
 ok('A: Configure button in grid header', Boolean(await page.$('#qconfigure')));
-const openSetId = await page.evaluate(() => location.hash.replace('#/q/', ''));
+const openSetId = await page.evaluate(() => location.pathname.replace('/q/', ''));
 const newLabel = 'Renamed By Test';
 await page.click('#editname');
 await page.waitForSelector('#heading input');
@@ -179,7 +179,10 @@ await page.waitForFunction(() => (document.querySelector('#status')?.textContent
 ok('K: toast auto-dismissed', (await page.textContent('#status')) === '');
 
 // F. Play landing groups into Filtered Pools / Curated Pools / Ordered Queues.
-await page.evaluate(() => { location.hash = '#/'; });
+// Routing is real paths now, so an in-page `location.hash = …` is no longer a
+// navigation — `page.goto` is. The reload is harmless here: everything asserted
+// below is re-fetched from the server, and the rename above already persisted.
+await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#playdynamic .playrow', { timeout: 20000 });
 const dyn = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
 const cur = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
@@ -192,7 +195,7 @@ ok('F: group headings named Filtered/Curated Pools + Ordered Queues',
 // The Pools picker lists the same pools — now a flat SelectListbox, NOT a native
 // <select> with optgroups (Listbox has no option groups; filtered pools come first,
 // then curated). 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
-await page.evaluate(() => { location.hash = '#/channels/shows'; });
+await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('[data-testid="chchannel"]', { state: 'attached', timeout: 20000 });
 const chanOpts = await readOptions(page, '[data-testid="chchannel"]');
 ok('F: channel picker lists dynamic-then-curated (flat)',
@@ -202,7 +205,7 @@ const animeId = cur.length ? await page.evaluate((label) =>
   fetch('/api/queues').then((r) => r.json()).then((j: QueuesResponse) => Object.keys(j.sets).find((id) => j.sets[id]?.label === label)),
 cur[0]) : null;
 if (animeId) {
-  await page.evaluate((id) => { location.hash = `#/q/${id}`; }, animeId);
+  await page.goto(`${BASE}/q/${animeId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#queue:not([hidden])', { timeout: 20000 });
   const ph = await page.$eval<string, HTMLInputElement>('#search', (e) => e.placeholder);
   ok('F: curated-channel add box says "channel" not "queue"', /channel/.test(ph) && !/queue/.test(ph));
@@ -213,7 +216,7 @@ if (animeId) {
 // H. The Movies channel pool uses an eye badge, never the old "Seen N×" (× reads as delete).
 // Needs an MQTT broker to populate the pool; guard so a no-broker run doesn't false-fail
 // but still catches a regression if tiles DO render.
-await page.evaluate(() => { location.hash = '#/channels/movies'; });
+await page.goto(`${BASE}/channels/movies`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#channels:not([hidden])', { timeout: 20000 });
 await page.waitForTimeout(1500);
 const pool = await page.evaluate(() => {

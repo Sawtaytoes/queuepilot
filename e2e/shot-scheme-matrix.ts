@@ -96,7 +96,7 @@ try {
     };
 
     // 1. Play landing (desktop).
-    await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.playrow', { timeout: 30000 });
     await page.waitForTimeout(600);
     await shot('01-play');
@@ -112,25 +112,25 @@ try {
     }
 
     // 3. Home / all queues — the shelves grid + the toolbar in the sticky header.
-    await page.goto(`${BASE}/#/queues`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.shelf', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(1000);
     await shot('03-queues');
 
     // 4. A movie queue grid (posters, badges, done tiles).
-    await page.goto(`${BASE}/#/q/bob`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#queue:not([hidden]) li.tile', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(1500);
     await shot('04-queue-bob');
 
     // 5. Channels — Shows & Shorts (filters bar + pool).
-    await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(1500);
     await shot('05-channels-shows');
 
     // 6. The queue Configure modal — the densest text surface in the app.
-    await page.goto(`${BASE}/#/queues`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.shelf', { timeout: 30000 }).catch(() => {});
     await page.hover('.shelf[data-set="bob"] h2').catch(() => {});
     const edit = await page.$('.shelf[data-set="bob"] .shelfedit');
@@ -144,7 +144,7 @@ try {
 
     // 7-8. Phone width: the header's overflow panel is the most reflow-exposed chrome.
     await page.setViewportSize(PHONE);
-    await page.goto(`${BASE}/#/q/bob`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#queue:not([hidden]) li.tile', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(1500);
     await shot('07-phone-queue');
@@ -160,7 +160,7 @@ try {
     await shot('09-phone-nav-menu');
     await page.keyboard.press('Escape').catch(() => {});
 
-    await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.playrow', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(800);
     await shot('10-phone-play');

@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react"
+import { useNavigate } from "react-router"
 
 import { Header } from "./components/Header"
 import { PlayMenu } from "./components/PlayMenu"
@@ -18,10 +19,10 @@ import {
 } from "./state/overlays"
 import {
   getRouteOrigin,
-  labelForHash,
-  navigate,
-  parseHash,
-  useHash,
+  labelForPath,
+  parsePath,
+  trackRouteOrigin,
+  usePath,
 } from "./state/route"
 import {
   load,
@@ -89,8 +90,14 @@ type Chrome = {
 }
 
 export function App() {
-  const hash = useHash()
-  const route = parseHash(hash)
+  const navigate = useNavigate()
+  const path = usePath()
+
+  // Before anything reads `getRouteOrigin()` — see the note in `state/route.ts` on why
+  // this is a render-time call and why calling it twice at the same path is harmless.
+  trackRouteOrigin(path)
+
+  const route = parsePath(path)
   const { data, now, reg } = useStore()
 
   useEffect(() => {
@@ -100,7 +107,7 @@ export function App() {
   }, [])
 
   // A route change closes any floating device menu, as the vanilla `route()` did.
-  useEffect(closePlayMenus, [hash])
+  useEffect(closePlayMenus, [path])
 
   // Redirects the vanilla render functions did with `location.assign`.
   useEffect(() => {
@@ -109,7 +116,7 @@ export function App() {
     if (route.view === "queue") {
       const set = data.sets[route.id]
 
-      if (set?.source !== "queue") navigate("#/")
+      if (set?.source !== "queue") navigate("/")
     }
 
     if (
@@ -117,12 +124,12 @@ export function App() {
       reg &&
       !rotationChannels(reg).length
     ) {
-      navigate("#/")
+      navigate("/")
     }
-  }, [data, reg, route])
+  }, [data, navigate, reg, route])
 
   // The Channels chrome depends on WHICH channel is selected, which is module
-  // state rather than route state (the bare `#/channels` route names none).
+  // state rather than route state (the bare `/channels` route names none).
   const { channelId } = useChannelSelection()
   const selectedChannel = resolveChannel(
     reg,
@@ -220,7 +227,7 @@ export function App() {
 }
 
 function computeChrome(
-  route: ReturnType<typeof parseHash>,
+  route: ReturnType<typeof parsePath>,
   data: ReturnType<typeof useStore>["data"],
   now: ReturnType<typeof useStore>["now"],
   selectedChannel: RegistrySet | null,
@@ -231,7 +238,7 @@ function computeChrome(
 ): Chrome {
   if (route.view === "queues") {
     return {
-      back: { label: "‹ Play", target: "#/" }, // Ordered Queues is a top-level configurator
+      back: { label: "‹ Play", target: "/" }, // Ordered Queues is a top-level configurator
       bodyClasses: [],
       documentTitle: "Ordered Queues — QueuePilot",
       editableSetId: null,
@@ -247,7 +254,7 @@ function computeChrome(
     const isMovies = selectedChannel?.behavior === "rewatch"
 
     return {
-      back: { label: "‹ Play", target: "#/" },
+      back: { label: "‹ Play", target: "/" },
       bodyClasses: isMovies
         ? ["queue-view", "movies-channel"]
         : ["queue-view"], // reuse: hides the queues toolbar
@@ -279,7 +286,7 @@ function computeChrome(
     const playing = activeSet(now, data)
     const origin =
       getRouteOrigin() ||
-      (isChannel ? "#/channels" : "#/queues")
+      (isChannel ? "/channels" : "/queues")
 
     // This queue is the running session — say what's on screen (the matching tile
     // is highlighted too, but a long queue can scroll it out of view).
@@ -289,7 +296,7 @@ function computeChrome(
 
       return {
         back: {
-          label: labelForHash(origin),
+          label: labelForPath(origin),
           target: origin,
         },
         bodyClasses: isChannel
@@ -304,7 +311,7 @@ function computeChrome(
     }
 
     return {
-      back: { label: labelForHash(origin), target: origin },
+      back: { label: labelForPath(origin), target: origin },
       bodyClasses: isChannel
         ? ["queue-view", "channel-mode"]
         : ["queue-view"],

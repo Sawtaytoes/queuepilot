@@ -51,7 +51,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 }, deviceScaleFactor: 2 });
 
   // --- #4: zoom the modal ✕ so the glyph legibility is unambiguous ------------ //
-  await page.goto(`${BASE}/#/queues`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.shelf', { timeout: 30000 });
   await page.hover('.shelf[data-set="bob"] h2');
   await page.click('.shelf[data-set="bob"] .shelfedit');
@@ -71,7 +71,7 @@ try {
   await page.waitForFunction(() => !document.querySelector('#setmodal[data-open]'));
 
   // --- #5: drive a real drag on a queue tile, screenshot MID-gesture --------- //
-  await page.goto(`${BASE}/#/q/bob`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#queue:not([hidden]) li.tile .thumb', { timeout: 30000 });
   await page.waitForTimeout(1000);
   const tiles = await page.$$('#grid li.tile');

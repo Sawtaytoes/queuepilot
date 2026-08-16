@@ -1,4 +1,4 @@
-// Verifier for v3 PR 4: the younger/older → function-channel migration + the #/channels
+// Verifier for v3 PR 4: the younger/older → function-channel migration + the /channels
 // and Play-landing cutover. Runs migrateLegacyTiers against a /tmp COPY of the legacy
 // fixture, then boots the fake broker + THIS checkout's server on the migrated file and
 // drives the per-binding UI end to end. Screenshots land in __screenshots__/.
@@ -100,8 +100,8 @@ try {
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}`, fullPage: true }); console.log('wrote', name); };
 
-  // --- 3. #/channels/shows: binding selector on the ONE function channel ------- //
-  await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+  // --- 3. /channels/shows: binding selector on the ONE function channel ------- //
+  await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])');
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 });
   const profOpts = await readOptionPairs(page, '[data-testid="chprofile"]');
@@ -177,7 +177,7 @@ try {
   await shot('pr4-channels-movies.png');
 
   // --- 7. Play landing: profile options mirror the bindings; play carries profile //
-  await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#play:not([hidden]) .playrow');
   // The tier picker is a themed Listbox now, not a native <select>
   // (2026-08-07-plex-channels-pickers-are-listbox-not-native-select): open it, read the portalled

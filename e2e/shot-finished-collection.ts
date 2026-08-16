@@ -24,7 +24,7 @@ const page = await browser.newPage({
   colorScheme: 'dark',
 });
 
-await page.goto(`http://localhost:${PORT}/#/q/${SET}`, { waitUntil: 'domcontentloaded' });
+await page.goto(`http://localhost:${PORT}/q/${SET}`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#grid .tile .cap', { timeout: 30000 });
 await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'dark'));
 

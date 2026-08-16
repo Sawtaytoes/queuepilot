@@ -70,7 +70,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 
-  await page.goto(`${BASE}/#/channels/younger`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 });
   await page.waitForTimeout(500);
 

@@ -1,61 +1,79 @@
 import { describe, expect, test } from "vitest"
 
-import { labelForHash, parseHash } from "./parseHash"
+import { labelForPath, parsePath } from "./parsePath"
 
 /**
  * The four routes are a settled IA — Play is the landing and the two configurators
  * hang off it (decision `2026-07-21-queues-vs-channels-taxonomy-play-first-ia`) —
- * and the e2e suites navigate by assigning these hashes directly.
+ * and they are real paths as of 2026-08-16, not `#/…`
+ * (decision `2026-08-16-routing-is-paths-not-hashes`). The e2e suites navigate by
+ * `page.goto()`ing these paths, which only works because the server answers them
+ * with index.html.
  */
 
-describe("parseHash", () => {
-  test("the empty hash is PLAY, the landing", () => {
-    expect(parseHash("")).toEqual({ view: "play" })
-    expect(parseHash("#/")).toEqual({ view: "play" })
+describe("parsePath", () => {
+  test("the root path is PLAY, the landing", () => {
+    expect(parsePath("/")).toEqual({ view: "play" })
   })
 
-  test("#/queues is the shelf configurator", () => {
-    expect(parseHash("#/queues")).toEqual({
+  test("/queues is the shelf configurator", () => {
+    expect(parsePath("/queues")).toEqual({
       view: "queues",
     })
   })
 
-  test("#/q/<id> opens one set, id-decoded", () => {
-    expect(parseHash("#/q/bob_anime")).toEqual({
+  test("/q/<id> opens one set, id-decoded", () => {
+    expect(parsePath("/q/bob_anime")).toEqual({
       id: "bob_anime",
       view: "queue",
     })
-    expect(parseHash("#/q/a%20b")).toEqual({
+    expect(parsePath("/q/a%20b")).toEqual({
       id: "a b",
       view: "queue",
     })
   })
 
-  test("#/channels names a rotation channel, or none", () => {
-    expect(parseHash("#/channels")).toEqual({
+  test("/channels names a rotation channel, or none", () => {
+    expect(parsePath("/channels")).toEqual({
       id: null,
       view: "channels",
     })
-    expect(parseHash("#/channels/shows_shorts")).toEqual({
+    expect(parsePath("/channels/shows_shorts")).toEqual({
       id: "shows_shorts",
       view: "channels",
     })
   })
 
-  test("an unknown hash falls back to PLAY rather than a blank page", () => {
-    expect(parseHash("#/nope")).toEqual({ view: "play" })
+  /**
+   * A trailing slash was unreachable under the hash router and is reachable now — a
+   * proxy rewrite, a pasted link or a typed URL all produce one. Without the strip,
+   * `/queues/` fell through to the PLAY fallback and the configurator silently did
+   * not open.
+   */
+  test("a trailing slash is the same route", () => {
+    expect(parsePath("/queues/")).toEqual({
+      view: "queues",
+    })
+    expect(parsePath("/channels/")).toEqual({
+      id: null,
+      view: "channels",
+    })
+    expect(parsePath("/q/bob_anime/")).toEqual({
+      id: "bob_anime",
+      view: "queue",
+    })
+  })
+
+  test("an unknown path falls back to PLAY rather than a blank page", () => {
+    expect(parsePath("/nope")).toEqual({ view: "play" })
   })
 })
 
-describe("labelForHash", () => {
+describe("labelForPath", () => {
   test("names where back actually goes", () => {
-    expect(labelForHash("#/queues")).toBe(
-      "‹ Ordered Queues",
-    )
-    expect(labelForHash("#/channels/movies")).toBe(
-      "‹ Pools",
-    )
-    expect(labelForHash("#/q/bob")).toBe("‹ Back")
-    expect(labelForHash("#/")).toBe("‹ Play")
+    expect(labelForPath("/queues")).toBe("‹ Ordered Queues")
+    expect(labelForPath("/channels/movies")).toBe("‹ Pools")
+    expect(labelForPath("/q/bob")).toBe("‹ Back")
+    expect(labelForPath("/")).toBe("‹ Play")
   })
 })

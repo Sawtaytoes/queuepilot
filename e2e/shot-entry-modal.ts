@@ -9,7 +9,7 @@ mkdirSync('__screenshots__', { recursive: true });
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, colorScheme: 'dark' });
-await page.goto(`http://localhost:${PORT}/#/q/bob_anime`, { waitUntil: 'domcontentloaded' });
+await page.goto(`http://localhost:${PORT}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#grid .tile .cap', { timeout: 30000 });
 await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'dark'));
 

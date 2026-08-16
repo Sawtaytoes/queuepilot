@@ -66,39 +66,39 @@ try {
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}` }); console.log('wrote', `${OUT}/${name}`); };
 
   // 1. Play landing.
-  await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playrow', { timeout: 30000 });
   await page.waitForTimeout(500);
   await shot('harness-play.png');
 
   // 2. A movie queue grid (Collection tile + done tiles present).
-  await page.goto(`${BASE}/#/q/bob`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#queue:not([hidden]) li.tile', { timeout: 30000 });
   await page.waitForTimeout(1200); // let posters/collection resolve
   await shot('harness-queue-bob.png');
 
   // 3. A curated (anime) channel grid.
-  await page.goto(`${BASE}/#/q/bob_anime`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#queue:not([hidden]) li.tile', { timeout: 30000 });
   await page.waitForTimeout(1200);
   await shot('harness-channel-anime.png');
 
   // 4. Channels — Shows & Shorts (populated pool via fake MQTT).
-  await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1200);
   await shot('harness-channels-shows.png');
 
   // 5. Channels — Movies (rewatch pool via fake MQTT).
-  await page.goto(`${BASE}/#/channels/movies`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/movies`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 }).catch(() => {});
   await page.waitForTimeout(1200);
   await shot('harness-channels-movies.png');
 
   // 6. Dynamic-channel create modal (shows the ✕ close button — #4 verification).
-  await page.goto(`${BASE}/#/channels`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#newdyn', { timeout: 30000 }).catch(() => {});
   const nd = await page.$('#newdyn');
   if (nd) {
@@ -108,7 +108,7 @@ try {
   }
 
   // 7. Queue Configure modal (setmodal) — the other ✕ (#4).
-  await page.goto(`${BASE}/#/queues`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.shelf', { timeout: 30000 }).catch(() => {});
   await page.hover('.shelf[data-set="bob"] h2').catch(() => {});
   const edit = await page.$('.shelf[data-set="bob"] .shelfedit');
@@ -119,7 +119,7 @@ try {
   }
 
   // 8. Device menu ("Play on ▾") open on the Play landing (fake MQTT devices — #0 enabler).
-  await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playrow', { timeout: 30000 });
   const playBtn = await page.$('.playrow .playbtn');
   if (playBtn) { await playBtn.click(); await page.waitForTimeout(500); await shot('harness-devicemenu.png'); }

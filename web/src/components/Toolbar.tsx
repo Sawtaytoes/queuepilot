@@ -1,10 +1,10 @@
 import { Button } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router"
 import { api } from "../lib/api"
 import type { SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
-import { navigate } from "../state/route"
 import {
   queueIds,
   setStatus,
@@ -34,6 +34,7 @@ import { SelectListbox } from "./SelectListbox"
  * parent, so this must render inside the slot rather than merely look like it does.
  */
 export function Toolbar() {
+  const navigate = useNavigate()
   const { data, reg } = useStore()
   const { collapsed, filter } = useUi()
   const [openMenu, setOpenMenu] = useState<number | null>(
@@ -294,7 +295,7 @@ export function Toolbar() {
         id="channelslink"
         onClick={() => {
           homeScroll.y = window.scrollY
-          navigate("#/channels")
+          navigate("/channels")
         }}
         type="button"
       >

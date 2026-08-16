@@ -5,6 +5,7 @@ import {
   useLayoutEffect,
   useRef,
 } from "react"
+import { Link } from "react-router"
 import { TypeBadge } from "../components/badges"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
@@ -139,17 +140,17 @@ function Shelf({
             Deliberately NOT preventDefault'd — that would put us back to a button wearing a
             link's clothes. (A ⌘/Ctrl-click also fires `click`, so it harmlessly stamps the
             scroll position of a page we are not leaving.) */}
-        <a
+        <Link
           className="open"
-          href={`#/q/${setId}`}
           onClick={() => {
             homeScroll.y = window.scrollY // restore this position when we come back
           }}
+          to={`/q/${setId}`}
         >
           <span className="lbl">{label}</span>{" "}
           <span className="sec">{items.length}</span>{" "}
           <span className="chev">›</span>
-        </a>
+        </Link>
         <span className="livepill" hidden={!isLive}>
           {isLive && now.now?.state === "paused"
             ? "Paused"
