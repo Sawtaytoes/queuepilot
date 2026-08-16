@@ -31,10 +31,17 @@ let livePending = false
 export function refreshData() {
   livePending = true
 
-  if (!uiBusy()) void liveRefresh()
+  // A click / explicit refresh has to re-read Kavita. The ETag only covers YAML
+  // + cache generation, so a conditional GET would 304 and leave "Ch 35" sitting
+  // after you marked it read in Kavita.
+  if (!uiBusy()) void liveRefresh({ force: true })
 }
 
-export async function liveRefresh() {
+export async function liveRefresh({
+  force = false,
+}: {
+  force?: boolean
+} = {}) {
   if (uiBusy()) {
     livePending = true
 
@@ -44,14 +51,24 @@ export async function liveRefresh() {
   livePending = false
 
   try {
-    // CONDITIONAL fetch (B8). An SSE event fires on any change, but the common one —
-    // a `now-playing` tick — leaves the queues untouched, so `/api/queues` answers
-    // `304` and this returns without touching the store at all: no re-render, no CLS,
-    // no gesture disruption. Only a genuine change (a 200 with a new ETag) commits.
-    const [data, reg] = await Promise.all([
-      apiConditional<QueuesResponse>("/api/queues"),
-      apiConditional<SetsResponse>("/api/sets"),
-    ])
+    // CONDITIONAL fetch (B8) unless `force`. An SSE event fires on any change, but
+    // the common one — a `now-playing` tick — leaves the queues untouched, so
+    // `/api/queues` answers `304` and this returns without touching the store:
+    // no re-render, no CLS, no gesture disruption. Only a genuine YAML/generation
+    // change (a 200 with a new ETag) commits.
+    //
+    // `force` is the other half: Kavita has no webhook, so marking a chapter read
+    // there never bumps the ETag. Tab-focus and an explicit refresh must hit
+    // series-detail again, or the tile stays on the chapter you just finished.
+    const [data, reg] = force
+      ? await Promise.all([
+          api<QueuesResponse>("GET", "/api/queues"),
+          api<SetsResponse>("GET", "/api/sets"),
+        ])
+      : await Promise.all([
+          apiConditional<QueuesResponse>("/api/queues"),
+          apiConditional<SetsResponse>("/api/sets"),
+        ])
 
     // The fetch may take a moment — a gesture may have STARTED meanwhile. Committing
     // now would replace the DOM under the drag. Defer.
@@ -68,7 +85,11 @@ export async function liveRefresh() {
     // full refetch that overwrote a just-made rename). Layers 2 (echo the originating
     // client id so a client skips the refetch for its OWN mutation) and 3 (per-set deltas)
     // are deferred refinements — with the 304 path this cheap, their marginal value is low.
-    if (data === NOT_MODIFIED && reg === NOT_MODIFIED)
+    if (
+      !force &&
+      data === NOT_MODIFIED &&
+      reg === NOT_MODIFIED
+    )
       return
 
     const patch: Parameters<typeof setState>[0] = {}
@@ -117,7 +138,9 @@ export function startLiveUpdates() {
   // `now` snapshot to a freshly-connected client; this covers the client-driven wake.)
   source.addEventListener("open", () => {
     void resyncNow()
-    void liveRefresh()
+    // Reconnect after a sleep has to re-read Kavita; a 304 would keep the
+    // chapter you marked read in the other tab.
+    void liveRefresh({ force: true })
   })
 
   source.addEventListener("data", () => void liveRefresh())
@@ -218,7 +241,7 @@ export function startLiveUpdates() {
     if (document.visibilityState !== "visible") return
 
     void resyncNow()
-    void liveRefresh()
+    void liveRefresh({ force: true })
   }
   document.addEventListener("visibilitychange", onVisible)
 
