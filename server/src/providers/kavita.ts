@@ -272,6 +272,34 @@ const LIST_PREFIX = 'QueuePilot';
 export const listTitleFor = (setName: string): string => `${LIST_PREFIX} — ${setName}`;
 
 /**
+ * The prefix of a lineup that shares the HEAD's Kavita library.
+ *
+ * Kavita reading-list auto-advance stays INSIDE the manga reader (`history.replaceState`
+ * + `init()`, never a remount). Library reading profiles (Webtoon scroll + custom width
+ * vs manga paginated + 100% width) are applied only by the route resolver on first open.
+ * Crossing a library in one list therefore keeps the previous library's reader. Until
+ * Kavita reloads the profile on series change, the list we hand the reader must not
+ * cross that boundary. QueuePilot tiles still show the full rotation; the next launch
+ * opens the next library as a fresh navigation, which does apply its profile.
+ *
+ * Items with no `libraryId` stay in the prefix (we cannot split on a missing key).
+ */
+export function sameLibraryPrefix(items: readonly KavitaPlayItem[]): KavitaPlayItem[] {
+  if (!items.length) return [];
+  const head = items[0]!.libraryId;
+  if (head == null || head === '') return [...items];
+  const headKey = String(head);
+  const out: KavitaPlayItem[] = [];
+  for (const it of items) {
+    if (it.libraryId != null && it.libraryId !== '' && String(it.libraryId) !== headKey) {
+      break;
+    }
+    out.push(it);
+  }
+  return out;
+}
+
+/**
  * `client` is injectable so the offline tests can stub HTTP entirely — they run with no
  * token and no network, in the house style.
  */
@@ -694,6 +722,10 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      * Unlike Plex's playQueue, a Reading List PERSISTS and is visible in Kavita's own UI.
      * That is a UX consequence, not a design one: we reuse one list per set rather than
      * littering the user's list view with a new one per launch.
+     *
+     * Only the first library's run is written (see `sameLibraryPrefix`). Crossing libraries
+     * in one list is a Kavita reader-profile bug: the manga reader does not remount, so a
+     * manga chapter after two webtoon chapters keeps scroll + custom width.
      */
     async materialize(
       items: KavitaPlayItem[],
@@ -742,7 +774,11 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           }
         }
       }
-      for (const it of items) {
+      // The tiles still show the full rotation. The list the reader auto-advances
+      // through stops at the first library change — otherwise Kavita keeps the
+      // previous library's reading profile (webtoon scroll on a paginated manga).
+      const forList = sameLibraryPrefix(items);
+      for (const it of forList) {
         await c.addChapter(listId as number | string, it.seriesId, it.chapterId);
       }
       const head = items[0] || null;
@@ -753,7 +789,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         title,
         setName,
         head,
-        count: items.length,
+        count: forList.length,
       };
     },
 
