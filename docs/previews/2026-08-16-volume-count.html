@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Volume count is not the chapter count</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #1a2230;
+        color: #c5d0dc;
+        font: 16px/1.45 system-ui, sans-serif;
+        padding: 32px 28px;
+      }
+      .field { margin: 0 0 6px; }
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin: 4px 0 10px;
+      }
+      .lbl { color: #d5deea; }
+      .box {
+        width: 64px;
+        height: 38px;
+        border: 1px solid #3a4658;
+        border-radius: 10px;
+        display: grid;
+        place-items: center;
+        color: #e8eef6;
+        font-weight: 650;
+      }
+      .chev {
+        width: 38px;
+        height: 38px;
+        border: 1px solid #3a4658;
+        border-radius: 999px;
+        display: grid;
+        place-items: center;
+        color: #9aa8b8;
+      }
+      .hint { color: #8b98a8; margin: 0 0 22px; max-width: 36rem; }
+    </style>
+  </head>
+  <body>
+    <div class="field">
+      <div class="row">
+        <span class="lbl">Chapters per series each visit</span>
+        <div class="box">3</div>
+        <div class="chev">▾</div>
+      </div>
+      <p class="hint">
+        How many chapters one entry contributes before the queue
+        moves to the next series. A single entry can override this
+        from its own settings.
+      </p>
+    </div>
+    <div class="field">
+      <div class="row">
+        <span class="lbl">Volumes per series each visit</span>
+        <div class="box">1</div>
+        <div class="chev">▾</div>
+      </div>
+      <p class="hint">
+        A volume is a collection of chapters, not a chapter —
+        this count is independent of the chapter count above.
+        Default is 1.
+      </p>
+    </div>
+  </body>
+</html>

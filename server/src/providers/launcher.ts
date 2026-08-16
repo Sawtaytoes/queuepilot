@@ -59,10 +59,12 @@ async function curatedEntries(setId: string, only: string | null = null): Promis
     // so it is skipped rather than guessed at by name.
     if (!ratingKey) continue;
     const batch = Number(extras.episodes);
+    const volumes = Number(extras.volumes);
     const start = extras.start && typeof extras.start === 'object' ? extras.start : null;
     out.push({
       id: String(ratingKey),
       batch: Number.isFinite(batch) && batch > 0 ? batch : null,
+      volumes: Number.isFinite(volumes) && volumes > 0 ? volumes : null,
       start,
     });
   }
@@ -139,6 +141,9 @@ export async function launchDescriptor(
     // and the block's older `batch` is honoured beneath it so a hand-written providers.yaml
     // keeps working.
     batch: toBatch(cfg.episodes) ?? block.batch ?? null,
+    // Volumes are not chapters. A volume-based series reads this, never `batch`.
+    // Absent = 1 inside the provider — never fall through to the chapter count.
+    volumeBatch: toBatch(cfg.volumes) ?? null,
   });
   if (!play.length) {
     return { error: `queue '${setId}' has nothing unread left`, status: 409 };

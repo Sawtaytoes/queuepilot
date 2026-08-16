@@ -158,7 +158,7 @@ await ok('a whole volume is labelled as a VOLUME, never "Ch -100000"', async () 
 await ok('volumes are read in volume order, not wire order', async () => {
   const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
   const { play } = await p.buckets({
-    entries: [{ id: '4672', batch: 3 }], limit: 3,
+    entries: [{ id: '4672', volumes: 3 }], limit: 3,
   }) as KavitaBuckets;
   assert.deepEqual(play.map((i) => i.number), [1, 2, 3]);
   assert.deepEqual(play.map((i) => i.title), ['Volume 1', 'Volume 2', 'Volume 3']);
@@ -213,8 +213,8 @@ await ok('a set with NO entries still falls back to its libraries', async () => 
 await ok('a per-entry batch overrides the queue default, per series', async () => {
   const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
   const { play } = await p.buckets({
-    // Alice takes 3 per round by her own override; the webtoon takes the queue's 1.
-    entries: [{ id: '4672', batch: 3 }, { id: '4577' }],
+    // Alice takes 3 VOLUMES per round by her own override; the webtoon takes the queue's 1 chapter.
+    entries: [{ id: '4672', volumes: 3 }, { id: '4577' }],
     batch: 1,
     limit: 4,
   }) as KavitaBuckets;
@@ -277,10 +277,61 @@ await ok('a start floor skips earlier unread chapters without marking them read'
 await ok('a start floor on a volume-based series starts at that volume', async () => {
   const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
   const { play } = await p.buckets({
-    entries: [{ id: '4672', batch: 3, start: { season: 1, episode: 5 } }],
+    entries: [{ id: '4672', volumes: 3, start: { season: 1, episode: 5 } }],
     limit: 3,
   }) as KavitaBuckets;
   assert.deepEqual(play.map((i) => i.number), [5, 6, 7]);
+});
+
+// --------------------------------------------------------------------------- //
+// 4. A volume is not a chapter — the chapter count must not apply
+// --------------------------------------------------------------------------- //
+
+await ok('a chapter batch of 3 does NOT dump 3 volumes', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4672', batch: 3 }],
+    batch: 3,
+    limit: 5,
+  }) as KavitaBuckets;
+  // Alice is volume-based. The chapter count is 3; the volume count was not set, so
+  // the default of 1 must win. The live bug was "3 chapters" queuing 3 volumes.
+  assert.deepEqual(play.map((i) => i.number), [1]);
+  assert.equal(play[0]!.unit, 'volume');
+});
+
+await ok('a volume-based series uses the volume count, not the chapter count', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4672' }],
+    batch: 3,
+    volumeBatch: 2,
+    limit: 5,
+  }) as KavitaBuckets;
+  assert.deepEqual(play.map((i) => i.number), [1, 2]);
+});
+
+await ok('a chapter-based WEBTOON still uses the chapter count', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4577' }],
+    batch: 2,
+    volumeBatch: 9,
+    limit: 5,
+  }) as KavitaBuckets;
+  // Chapters 2 and 3 (1 is read). The volume count of 9 must not apply.
+  assert.deepEqual(play.map((i) => i.number), ['2', '3']);
+  assert.equal(play[0]!.unit, 'chapter');
+});
+
+await ok('a per-entry volumes override wins over the queue volume default', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4672', volumes: 4 }],
+    volumeBatch: 2,
+    limit: 5,
+  }) as KavitaBuckets;
+  assert.deepEqual(play.map((i) => i.number), [1, 2, 3, 4]);
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall passed');

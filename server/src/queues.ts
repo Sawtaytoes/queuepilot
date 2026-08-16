@@ -611,6 +611,22 @@ export async function setEpisodes(
   return ok ? { ok: true, episodes: n } : { ok: false };
 }
 
+// How many VOLUMES a volume-based series contributes per visit. Independent of
+// `episodes` — a volume is a collection of chapters, so the chapter count must
+// not apply. 1 drops the key, same sparse rule as setEpisodes.
+export async function setVolumes(
+  setName: string,
+  key: string,
+  volumes: unknown,
+): Promise<{ ok: true; volumes: number } | { ok: false }> {
+  const n = Math.max(1, Math.min(parseInt(String(volumes), 10) || 1, QUEUE_SERIES_LENGTH));
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (n > 1) e.extras.volumes = n;
+    else delete e.extras.volumes;
+  });
+  return ok ? { ok: true, volumes: n } : { ok: false };
+}
+
 // Set a queue entry's WEIGHT — how many slots it takes per round when the set is randomized
 // (see engine/weight.js). 1 is the default and DROPS the key, which is what keeps an untouched
 // queue's YAML free of `weight: 1` noise and lets the entry collapse back to a bare scalar.

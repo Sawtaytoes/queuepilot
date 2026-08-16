@@ -548,7 +548,8 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      * which was among the ninety-three the owner had added. The entries were never read.
      */
     async buckets({
-      cfg = {}, libraries = [], entries = [], isRandomOrder = false, batch = null, limit = null,
+      cfg = {}, libraries = [], entries = [], isRandomOrder = false, batch = null,
+      volumeBatch = null, limit = null,
     }: BucketsContext = {}): Promise<BucketsResult> {
       // `cfg` is the routing set config, read here for the fallbacks below only. It is a union
       // in BucketsContext (`RoutingSetCfg | Record<string, unknown>`) and neither `libraries`
@@ -560,7 +561,13 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       if (!curated.length && !libIds.length) return { play: [], buckets: [] };
       // "Read at least X chapters before switching series" — the opening ask in the
       // feasibility record. Per-entry override, else per-queue, else the env default.
+      // THIS is the CHAPTER count. A volume is a collection of chapters, not a chapter,
+      // so it must not inherit this number (a queue at 3 chapters would otherwise dump
+      // three whole manga volumes into one visit).
       const perSeries = Math.max(1, Number(batch ?? cfgAny.batch ?? KAVITA_BATCH_DEFAULT) || 1);
+      // Volume count is its own knob. Default 1, always — never the chapter count,
+      // never KAVITA_BATCH_DEFAULT. Absent / unusable falls to 1, never to "uncapped".
+      const perVolume = Math.max(1, Number(volumeBatch ?? cfgAny.volumes ?? 1) || 1);
       // The SAME cap the Plex rotation runs under. Without it a real library queues
       // everything: Webtoons alone measured 103 series with something unread, which would
       // mean 103 sequential update-by-chapter writes on every launch, for a reading list
@@ -571,7 +578,12 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // to it. A curated entry's own `episodes:` override rides here; a library series has
       // none and takes the queue default. `start` is the same floor Plex already honours:
       // earlier unread chapters are skipped, never marked read.
-      let sources: { series: KavitaSeriesDto; batch: number; start: Start | null }[];
+      let sources: {
+        series: KavitaSeriesDto;
+        chapterBatch: number;
+        volumeBatch: number;
+        start: Start | null;
+      }[];
       if (curated.length) {
         const rows = await mapLimit(curated, PROBE_CONCURRENCY, async (e) => {
           try {
@@ -580,52 +592,61 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
             // must not make a ninety-three-entry queue unlaunchable.
             return s ? {
               series: s,
-              batch: Math.max(1, Number(e.batch ?? perSeries) || perSeries),
+              chapterBatch: Math.max(1, Number(e.batch ?? perSeries) || perSeries),
+              volumeBatch: Math.max(1, Number(e.volumes ?? perVolume) || perVolume),
               start: e.start ?? null,
             } : null;
           } catch {
             return null;
           }
         });
-        sources = rows.filter((r): r is { series: KavitaSeriesDto; batch: number; start: Start | null } => r != null);
+        sources = rows.filter((r): r is {
+          series: KavitaSeriesDto; chapterBatch: number; volumeBatch: number; start: Start | null;
+        } => r != null);
       } else {
         const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
         sources = seriesLists.flat()
           .filter((s): s is KavitaSeriesDto => s != null)
-          .map((series) => ({ series, batch: perSeries, start: null }));
+          .map((series) => ({
+            series, chapterBatch: perSeries, volumeBatch: perVolume, start: null,
+          }));
       }
 
       // One continue-point probe per series, bounded. A series with nothing unread yields no
       // bucket at all, which is what keeps a finished series out of the rotation without a
       // separate "done" store — the read state in Kavita IS the done state.
-      const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({ series: s, batch: want, start }): Promise<KavitaSeriesBucket | null> => {
+      const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({
+        series: s, chapterBatch, volumeBatch: volWant, start,
+      }): Promise<KavitaSeriesBucket | null> => {
         const bucket = {
           key: `series:${s.id}`,
           title: s.name,
           seriesId: s.id,
           libraryId: s.libraryId ?? null,
           format: s.format ?? null,
-          // Carried so the interleave below slices THIS series' batch rather than one global
-          // number — a per-entry override is meaningless if the round-robin ignores it.
-          batch: want,
         };
 
-        // ONE chapter wanted and no floor: continue-point answers it in a single call.
-        // A start floor has to see the ordered run, or a "start at Ch 88" would still
-        // pick whichever chapter continue-point named.
-        if (want <= 1 && !start) {
+        // Cheap path: both counts are 1 and there is no start floor, so continue-point
+        // names the single next item whether it is a chapter or a whole volume.
+        if (chapterBatch <= 1 && volWant <= 1 && !start) {
           const ch = await c.continuePoint(s.id as number | string);
           if (!isUnread(ch)) return null;
-          return { ...bucket, items: [chapterItem(ch, s.id)] };
+          return { ...bucket, batch: 1, items: [chapterItem(ch, s.id)] };
         }
 
-        // MORE than one wanted — "read 3 chapters, then switch series", the opening ask in
-        // the feasibility record. continue-point only ever returns the single next chapter,
-        // so a batch needs the ordered run and its read state. Same path as a start floor.
+        // Need the ordered run to know WHAT the series is (volume vs chapter) and
+        // therefore WHICH count applies. A volume-based manga must not inherit the
+        // chapter count — that is the live "3 chapters" queue dumping 3 volumes.
         const detail = await c.seriesDetail(s.id as number | string);
         const unread = orderedUnread(detail).filter((e) => atOrAfterStart(e, start));
         if (!unread.length) return null;
-        return { ...bucket, items: unread.slice(0, want).map((e) => chapterItem(e, s.id)) };
+        const head = chapterItem(unread[0] as UnreadEntry, s.id);
+        const want = head.unit === 'volume' ? volWant : chapterBatch;
+        return {
+          ...bucket,
+          batch: want,
+          items: unread.slice(0, want).map((e) => chapterItem(e, s.id)),
+        };
       });
       const buckets = probed.filter((b): b is KavitaSeriesBucket => b != null);
 
