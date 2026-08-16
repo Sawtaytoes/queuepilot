@@ -42,8 +42,10 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     key: e.key,
     raw: tiles.displayFor(e.value),
     ...core,
-    episodes: v && v.episodes ? v.episodes : 1,
-    volumes: v && v.volumes ? v.volumes : 1,
+    // null = follow the set. Never coerce a missing key to 1: the set default may
+    // be 2, and a stored 1 is then a real override (queues.storedCount).
+    episodes: queues.storedCount(v ? v.episodes : null),
+    volumes: queues.storedCount(v ? v.volumes : null),
     // How often this entry comes up when the set is randomized (1 = normal; the editor shows
     // a tag only above 1).
     weight: toWeight(v ? v.weight : null),
@@ -306,8 +308,13 @@ export function queuesRoutes(): Hono {
         // FIRST so an explicit field in the same request still wins (reset + weight: 3 = only the
         // weight survives), which is what the bar's "Reset to defaults" + a picked value means.
         if (body.reset) {
-          await queues.setEpisodes(set, key, 1);
-          await queues.setVolumes(set, key, 1);
+          // Follow THIS set's defaults, not the engine floor of 1 — a queue at
+          // episodes: 2 must not grow an `episodes: 1` override on every reset.
+          const s = await sets.getSet(set);
+          const chapterDefault = s && s.source === 'queue' ? (s.episodes ?? 1) : 1;
+          const volumeDefault = s && s.source === 'queue' ? (s.volumes ?? 1) : 1;
+          await queues.setEpisodes(set, key, chapterDefault);
+          await queues.setVolumes(set, key, volumeDefault);
           await queues.setWeight(set, key, 1);
           await queues.setBatchStop(set, key, null);
           await queues.setStart(set, key, null);

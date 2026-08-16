@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 
+import {
+  countPickerPresets,
+  isCountPreset,
+} from "../lib/countPicker"
 import { SelectListbox } from "./SelectListbox"
 
 /**
@@ -18,11 +22,17 @@ import { SelectListbox } from "./SelectListbox"
  * `unit` is cosmetic ("x" renders 1x/2x for weights). The value is always a plain integer, and
  * an out-of-range or unparseable entry snaps back to the last good one on blur rather than
  * writing something the server would clamp behind the user's back.
+ *
+ * `defaultValue` is the number this control follows when the caller has not overridden it
+ * (the queue's own batch, or the engine floor of 1 on the set editor). That option wears a
+ * **Default** chip in the list so you can see which pick is "just use the current default"
+ * rather than guessing from the selected number.
  */
 
 const CUSTOM = "custom"
 
 export function CountPicker({
+  defaultValue,
   label,
   max,
   min = 1,
@@ -31,6 +41,8 @@ export function CountPicker({
   unit = "",
   value,
 }: {
+  /** The option that is "follow the current default" — tagged Default in the list. */
+  defaultValue?: number
   label: string
   max: number
   min?: number
@@ -41,7 +53,8 @@ export function CountPicker({
 }) {
   const preset = (n: number) =>
     unit === "x" ? `${n}x` : String(n)
-  const isPreset = value === 1 || value === 2
+  const presets = countPickerPresets(defaultValue)
+  const isPreset = isCountPreset(value, defaultValue)
   // `isCustom` is UI state, not derived state: picking Custom… must show the field BEFORE a
   // number exists to derive it from, and it must stay open while you type 1 on the way to 12.
   const [isCustom, setIsCustom] = useState(!isPreset)
@@ -52,8 +65,9 @@ export function CountPicker({
   // arrives over SSE. Re-sync when it moves underneath us.
   useEffect(() => {
     setDraft(String(value))
-    if (value !== 1 && value !== 2) setIsCustom(true)
-  }, [value])
+    if (!isCountPreset(value, defaultValue))
+      setIsCustom(true)
+  }, [defaultValue, value])
 
   const commit = (raw: string) => {
     const n = parseInt(raw, 10)
@@ -90,7 +104,9 @@ export function CountPicker({
           className="countback"
           onClick={() => {
             setIsCustom(false)
-            if (value !== 1 && value !== 2) onChange(1)
+            if (!isCountPreset(value, defaultValue)) {
+              onChange(defaultValue ?? 1)
+            }
           }}
           title="Back to the presets"
           type="button"
@@ -131,8 +147,11 @@ export function CountPicker({
         onChange(parseInt(v, 10))
       }}
       options={[
-        { label: preset(1), value: "1" },
-        { label: preset(2), value: "2" },
+        ...presets.map((n) => ({
+          badge: n === defaultValue ? "Default" : undefined,
+          label: preset(n),
+          value: String(n),
+        })),
         { label: "Custom…", value: CUSTOM },
       ]}
       size={size}

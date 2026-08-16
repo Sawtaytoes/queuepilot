@@ -136,6 +136,10 @@ ok('setWeight: clamped to the engine cap', /weight: 20\b/.test(read(QUEUES_PATH)
 await queues.setWeight('bob', 'title:Cowboy Bebop', 'three');
 ok('setWeight(junk): reads as 1 and drops the key', !has(QUEUES_PATH, 'weight:'));
 
+ok('storedCount(missing) is follow-the-set', queues.storedCount(undefined) === null);
+ok('storedCount(1) is a real override', queues.storedCount(1) === 1);
+ok('storedCount(0) is not a count', queues.storedCount(0) === null);
+
 seed();
 await queues.moveItem('bob', 'family', 'title:Duel (1971)', ['title:Up (2009)', 'title:Duel (1971)']);
 ok('moveItem: kept # HEAD:', has(QUEUES_PATH, '# HEAD:'));
@@ -144,6 +148,21 @@ ok('moveItem: Duel moved to family (inline travels)', /family:[\s\S]*Duel \(1971
 
 // --- sets.js mutations -------------------------------------------------------- //
 const sets = await import('../server/src/sets.js');
+
+// Drop the key when the value equals THIS set's default; persist 1 when the default is 2.
+seed();
+await sets.updateSet('bob', { episodes: 2 });
+await queues.setEpisodes('bob', 'title:Cowboy Bebop', 2);
+ok('setEpisodes(set-default): key dropped', !has(QUEUES_PATH, 'episodes:'));
+await queues.setEpisodes('bob', 'title:Cowboy Bebop', 1);
+ok('setEpisodes(1) against default 2: stored', /Cowboy Bebop[\s\S]*episodes: 1/.test(read(QUEUES_PATH)));
+await queues.setEpisodes('bob', 'title:Cowboy Bebop', 2);
+ok('setEpisodes(back to default): key dropped', !has(QUEUES_PATH, 'episodes:'));
+await sets.updateSet('bob', { volumes: 2 });
+await queues.setVolumes('bob', 'title:Cowboy Bebop', 1);
+ok('setVolumes(1) against default 2: stored', /Cowboy Bebop[\s\S]*volumes: 1/.test(read(QUEUES_PATH)));
+await queues.setVolumes('bob', 'title:Cowboy Bebop', 2);
+ok('setVolumes(set-default): key dropped', !has(QUEUES_PATH, 'volumes:'));
 
 seed();
 await sets.updateSet('bob', { label: 'Bob — Films' });

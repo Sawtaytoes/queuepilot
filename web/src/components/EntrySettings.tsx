@@ -1,6 +1,10 @@
 import { Badge } from "@charcuterie/ui"
 
 import { api } from "../lib/api"
+import {
+  effectiveCount,
+  isCountOverride,
+} from "../lib/countPicker"
 import { startLabel } from "../lib/tileFace"
 import type {
   BatchStop,
@@ -57,8 +61,6 @@ export function SettingTags({
   vocab?: ProviderVocabulary
 }) {
   const isVolume = item.unit === "volume"
-  const episodes = item.episodes ?? 1
-  const volumes = item.volumes ?? 1
   const weight = item.weight ?? 1
   const tag = (
     label: string,
@@ -90,17 +92,17 @@ export function SettingTags({
 
   return (
     <>
-      {isVolume && volumes > 1
+      {isVolume && isCountOverride(item.volumes)
         ? tag(
-            `${volumes} vol`,
-            `Queues ${volumes} volumes each time this entry comes up`,
+            `${item.volumes} vol`,
+            `Queues ${item.volumes} volumes each time this entry comes up`,
             "epstag",
             "neutral",
           )
-        : !isVolume && episodes > 1
+        : !isVolume && isCountOverride(item.episodes)
           ? tag(
-              `${episodes} ${shortUnits(vocab)}`,
-              `Queues ${episodes} ${vocab.units} each time this entry comes up`,
+              `${item.episodes} ${shortUnits(vocab)}`,
+              `Queues ${item.episodes} ${vocab.units} each time this entry comes up`,
               "epstag",
               "neutral",
             )
@@ -175,7 +177,10 @@ export const setEntryVolumes = (
   volumes: number,
 ) =>
   patchEntry(setId, item, "volumes", { volumes }, (hit) => {
-    hit.volumes = volumes
+    const setDefault =
+      getState().reg?.sets.find((s) => s.id === setId)
+        ?.volumes ?? 1
+    hit.volumes = volumes === setDefault ? null : volumes
   })
 
 export const setEntryEpisodes = (
@@ -189,7 +194,11 @@ export const setEntryEpisodes = (
     "episodes",
     { episodes },
     (hit) => {
-      hit.episodes = episodes
+      const setDefault =
+        getState().reg?.sets.find((s) => s.id === setId)
+          ?.episodes ?? 1
+      hit.episodes =
+        episodes === setDefault ? null : episodes
     },
   )
 
@@ -249,15 +258,23 @@ export function EntryEditor({
       )
     : undefined
   // The queue's own words, so this panel does not ask a reading queue about episodes.
-  const vocab =
-    (setId
-      ? reg?.sets.find((s) => s.id === setId)?.vocabulary
-      : null) ?? PLEX_WORDS
+  const setInfo = setId
+    ? reg?.sets.find((s) => s.id === setId)
+    : undefined
+  const vocab = setInfo?.vocabulary ?? PLEX_WORDS
 
   if (!isOpen || !setId || !item) return null
 
-  const episodes = item.episodes ?? 1
-  const volumes = item.volumes ?? 1
+  const chapterDefault = setInfo?.episodes ?? 1
+  const volumeDefault = setInfo?.volumes ?? 1
+  const episodes = effectiveCount(
+    item.episodes,
+    chapterDefault,
+  )
+  const volumes = effectiveCount(
+    item.volumes,
+    volumeDefault,
+  )
   const isVolume = item.unit === "volume"
   const isSeries =
     item.type === "show" || item.type === "collection"
@@ -291,6 +308,9 @@ export function EntryEditor({
                 : `${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} queued per turn`}
             </span>
             <CountPicker
+              defaultValue={
+                isVolume ? volumeDefault : chapterDefault
+              }
               label={
                 isVolume
                   ? "Volumes queued per turn"
@@ -318,6 +338,7 @@ export function EntryEditor({
             Weight — how often it comes up
           </span>
           <CountPicker
+            defaultValue={1}
             label="Weight"
             max={WEIGHT_MAX}
             onChange={(n) =>

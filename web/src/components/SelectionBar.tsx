@@ -40,7 +40,7 @@ export function SelectionBar({
 }: {
   currentSet: string | null
 }) {
-  const { data } = useStore()
+  const { data, reg } = useStore()
   const selected = useSelected()
   const [target, setTarget] = useState("")
   // `null` = "— keep —": the field is not part of this apply.
@@ -50,6 +50,10 @@ export function SelectionBar({
   const [weight, setWeight] = useState<number | null>(null)
   const [batchStop, setBatchStop] = useState(KEEP)
 
+  const chapterDefault =
+    (currentSet
+      ? reg?.sets.find((s) => s.id === currentSet)?.episodes
+      : null) ?? 1
   const family =
     currentSet && data?.sets[currentSet]?.kind === "anime"
       ? channelSetIds(data)
@@ -153,13 +157,14 @@ export function SelectionBar({
         {episodes === null ? (
           <button
             className="ghost"
-            onClick={() => setEpisodes(1)}
+            onClick={() => setEpisodes(chapterDefault)}
             type="button"
           >
             — keep —
           </button>
         ) : (
           <CountPicker
+            defaultValue={chapterDefault}
             label="Episodes for the selection"
             max={EPISODES_MAX}
             onChange={setEpisodes}
@@ -179,6 +184,7 @@ export function SelectionBar({
           </button>
         ) : (
           <CountPicker
+            defaultValue={1}
             label="Weight for the selection"
             max={WEIGHT_MAX}
             onChange={setWeight}
@@ -227,7 +233,7 @@ export function SelectionBar({
         onClick={() =>
           void applyBulk({ reset: true }, "Reset")
         }
-        title="Back to 1 ep, 1x, follow the set, automatic start"
+        title="Back to the queue default, 1x, follow the set, automatic start"
         type="button"
       >
         Reset to defaults

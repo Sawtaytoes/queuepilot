@@ -1,5 +1,5 @@
 import type { ControlSize } from "@charcuterie/tokens"
-import { Picker } from "@charcuterie/ui"
+import { Badge, Picker } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 /**
@@ -34,6 +34,18 @@ import type { ReactNode } from "react"
  * targeted the old name, so nothing needed rewriting.
  */
 export type SelectListboxOption = {
+  /**
+   * Trailing chip on the open row — "Default" on the count picker, "Watched" on
+   * a start-from episode. `.optionbadge` right-aligns it. The trigger still
+   * reads `label` (`textValue`); the chip is a list-row hint, not the value.
+   */
+  badge?: string
+  badgeIntent?:
+    | "accent"
+    | "danger"
+    | "neutral"
+    | "success"
+    | "warning"
   isDisabled?: boolean
   label: string
   value: string
@@ -82,9 +94,21 @@ export function SelectListbox({
         label: (
           <span data-value={option.value}>
             {option.label}
+            {option.badge ? (
+              <Badge
+                appearance="outline"
+                className="optionbadge"
+                intent={option.badgeIntent ?? "neutral"}
+                size="sm"
+              >
+                {option.badge}
+              </Badge>
+            ) : null}
           </span>
         ),
-        textValue: option.label,
+        textValue: option.badge
+          ? `${option.label} ${option.badge}`
+          : option.label,
         value: option.value,
       }))}
       // The old fallback chain, preserved: current → placeholder → the

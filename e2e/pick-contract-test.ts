@@ -152,6 +152,19 @@ try {
   await page.click(TRIGGER);
   await page.waitForTimeout(300);
   eq('re-clicking the trigger closes it (closeVia)', await page.locator('[role="listbox"]').count(), 0);
+
+  // The Default / Watched chip rides `badge` on the option. StartModal already
+  // passed one; CountPicker is why it had to actually render.
+  const COUNT = '[data-testid="count"]';
+  await page.click(COUNT);
+  await page.waitForSelector('[role="listbox"] [role="option"]');
+  const defaultChip = page.locator('[role="listbox"] .optionbadge');
+  eq('Default chip is on the default option', await defaultChip.textContent(), 'Default');
+  eq('Default chip sits on value 2',
+    await page.locator('[role="listbox"] [data-value="2"] .optionbadge').count(), 1);
+  eq('1 is not tagged Default',
+    await page.locator('[role="listbox"] [data-value="1"] .optionbadge').count(), 0);
+  await page.click(COUNT);
 } finally {
   await browser.close();
   stopVite();
