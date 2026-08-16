@@ -12,6 +12,7 @@ export const PLEX_WORDS: ProviderVocabulary = {
   member: "show",
   name: "Plex",
   unit: "episode",
+  unitShort: "eps",
   units: "episodes",
   verb: "Play",
 }

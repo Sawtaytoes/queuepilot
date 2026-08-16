@@ -16,7 +16,7 @@ import { parseDocument, isMap, isNode, isScalar, isSeq } from 'yaml';
 import type { Document, Node, YAMLMap, YAMLSeq } from 'yaml';
 import { validateBlocks, blocksForSet } from './providers/blocks.js';
 import { toWeight } from './engine/weight.js';
-import { definitions as providerDefinitions, vocabularyForKind } from './providers/config.js';
+import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind } from './providers/config.js';
 // The same hard cap a per-entry override is clamped to (queues.setEpisodes), applied to the
 // set-wide default so a hand-posted value cannot queue a whole library.
 import { QUEUE_SERIES_LENGTH } from './env.js';
@@ -748,11 +748,15 @@ function writableBlocks(blocks: ProviderBlock[]): WritableProviderBlock[] {
 
 // A set's delivery mode, from its blocks. Unknown/absent providers read as `push`, which
 // keeps every pre-provider set behaving exactly as it always has.
-const PULL_KINDS = new Set(['kavita']);
+//
+// The pull-kind list is the provider registry's (`deliveryForKind`), not a copy kept here:
+// this file used to hold `new Set(['kavita'])`, which silently made a board-game queue a
+// PUSH target — a "Play on <device>" button for a backend with no devices, and no provider
+// tiles, because /api/queues resolves a pull set through its own provider.
 function deliveryForSet(ent: RawSet): Delivery {
   const blocks: ProviderBlock[] = blocksForSet(ent);
   const defs = new Map<string, string>(providerDefinitions().map((d: { id: string; kind: string }) => [d.id, d.kind]));
-  const anyPush = blocks.some((b) => !PULL_KINDS.has(defs.get(b.provider) ?? ''));
+  const anyPush = blocks.some((b) => deliveryForKind(defs.get(b.provider)) !== 'pull');
   return anyPush ? 'push' : 'pull';
 }
 

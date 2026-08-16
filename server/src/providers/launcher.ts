@@ -36,7 +36,11 @@ const toBatch = (raw: unknown): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
-async function curatedEntries(setId: string, only: string | null = null): Promise<CuratedEntryRef[]> {
+async function curatedEntries(
+  setId: string,
+  only: string | null = null,
+  { stampQueued = false }: { stampQueued?: boolean } = {},
+): Promise<CuratedEntryRef[]> {
   let rows;
   try {
     rows = await queues.listSet(setId);
@@ -61,10 +65,20 @@ async function curatedEntries(setId: string, only: string | null = null): Promis
     const batch = Number(extras.episodes);
     const volumes = Number(extras.volumes);
     const start = extras.start && typeof extras.start === 'object' ? extras.start : null;
+    // Only for a provider that ASKED for it (Provider.stampsQueuedAt) — a Plex or Kavita
+    // queue must not grow a key nothing will ever read. An entry added by hand has no
+    // stamp; it gets one now rather than being read as "since the beginning of time",
+    // which on a lifetime play log means "already finished".
+    const stored = Number(extras.queued_at);
+    let queuedAt = Number.isFinite(stored) && stored > 0 ? stored : null;
+    if (stampQueued && queuedAt == null && e.key) {
+      queuedAt = await queues.stampQueuedAt(setId, e.key);
+    }
     out.push({
       id: String(ratingKey),
       batch: Number.isFinite(batch) && batch > 0 ? batch : null,
       volumes: Number.isFinite(volumes) && volumes > 0 ? volumes : null,
+      queuedAt,
       start,
     });
   }
@@ -132,7 +146,7 @@ export async function launchDescriptor(
     libraries: only ? [] : block.libraries,
     // What the owner actually put in this queue. Without it a curated reading queue plays
     // the library shelf instead of its own ninety-three entries.
-    entries: await curatedEntries(setId, only),
+    entries: await curatedEntries(setId, only, { stampQueued: provider.stampsQueuedAt === true }),
     // Same rule playbackRoutes uses to call a curated set random: `kind: anime` is the
     // "members play in random order" channel the editor offers.
     isRandomOrder: cfg.kind === 'anime',

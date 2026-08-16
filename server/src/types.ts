@@ -54,7 +54,7 @@ export type Delivery = 'push' | 'pull';
  * and an individual item corrects it. Without it a whole volume renders as "Ch -100000" —
  * Kavita's no-chapter-subdivision sentinel, printed verbatim.
  */
-export type MediaUnit = 'episode' | 'chapter' | 'volume';
+export type MediaUnit = 'episode' | 'chapter' | 'volume' | 'play';
 
 /**
  * The WORDS a provider's medium is described in — the provider's own fact, exposed so no
@@ -80,6 +80,14 @@ export interface ProviderVocabulary {
   member: string;
   /** The finished state, for "All watched" / "All read". */
   done: string;
+  /**
+   * The unit abbreviated to fit on a poster tile: "eps" / "ch" / "plays".
+   *
+   * Here rather than in the tile component because that component had grown
+   * `unit === 'episode' ? 'eps' : 'ch'` — a binary that silently tags a board game "3 ch".
+   * A third medium is what exposed it; the fourth should not have to find it again.
+   */
+  unitShort: string;
   /**
    * The product name used in authored copy: "Plex" / "Kavita".
    * The replacement engine swaps this for the word "Plex" in leftover sentences.
@@ -468,6 +476,15 @@ export interface EntryExtras {
   /** Epoch SECONDS, stamped alongside `done: true`. A hand-marked done with no timestamp
    * reads as null and is never auto-swept. */
   done_at?: number;
+  /**
+   * Epoch SECONDS this entry joined the queue.
+   *
+   * Load-bearing for any provider whose backend counts LIFETIME progress. A board game
+   * with twenty plays behind it and a batch of three would be finished the moment it was
+   * queued; progress is counted from this stamp instead. Absent on a hand-written entry,
+   * which is stamped on first read rather than treated as "since the beginning of time".
+   */
+  queued_at?: number;
   collection?: string;
   [extra: string]: unknown;
 }
@@ -659,7 +676,7 @@ export interface ProviderTileRow {
   /** Items left to consume — chapters for Kavita, the "how much is waiting" a tile means. */
   unreadCount: number;
   /** The next item to play/read, or null when there is nothing left. */
-  next: KavitaPlayItem | null;
+  next: KavitaPlayItem | BoardGamesPlayItem | null;
 }
 
 /**
@@ -756,7 +773,27 @@ export interface KavitaPlayItem {
  * never runs through `startSession`, but the union is what makes the gap visible instead of
  * letting `any` hide it.
  */
-export type PlayItem = PlexPlayItem | KavitaPlayItem;
+/**
+ * A board-game lineup item: one PLAY of one game.
+ *
+ * There is nothing to build on the picker's side — no reading list, no play queue — so an
+ * item is only ever "this game, play N of M". `slot` is which play of the entry's batch
+ * this is, so a tile can say "Play 2 of 3" without re-counting.
+ */
+export interface BoardGamesPlayItem {
+  gameId: string;
+  title: string;
+  /** Always `'play'`. Present so a mixed lineup can be told apart by unit alone. */
+  unit?: MediaUnit;
+  /** Which play of the entry's batch this is. Named `number` to match what the tile layer
+   * already reads off a next-up item, so a game needs no second mapping path. */
+  number?: number | string;
+  slot?: number;
+  of?: number;
+  bucket?: string;
+}
+
+export type PlayItem = PlexPlayItem | KavitaPlayItem | BoardGamesPlayItem;
 
 /** Plex's runtime artifact: a playQueue descriptor. Fused with the push in `handoff()`. */
 export interface PlexArtifact {
@@ -781,7 +818,27 @@ export interface KavitaArtifact {
   count: number;
 }
 
-export type ProviderArtifact = PlexArtifact | KavitaArtifact;
+/**
+ * Board Game Picker's runtime artifact: a DESCRIPTOR, and deliberately nothing more.
+ *
+ * Plex materializes a playQueue and Kavita rebuilds a Reading List because both of those
+ * backends own a lineup object. The picker does not, and inventing a "tonight's list"
+ * inside it would put a second queue in the app whose whole job is to not be one. So
+ * `materialize()` here just names the head game and how many plays it still owes.
+ */
+export interface BoardGamesArtifact {
+  provider: string;
+  kind: 'board-games';
+  gameId: string;
+  url: string;
+  setName: string;
+  /** Plays still owed on the head entry when the lineup was built. */
+  remaining: number;
+  head: BoardGamesPlayItem | null;
+  count: number;
+}
+
+export type ProviderArtifact = PlexArtifact | KavitaArtifact | BoardGamesArtifact;
 
 /** What a PUSH handoff returns (playback.js playRatingKeys / castPlay, and driver.js
  * driveToPlaying, which returns the same object or its own error/cancel form). */
@@ -819,6 +876,11 @@ export interface CuratedEntryRef {
   /** The provider's own item id (a Kavita seriesId), off the entry's `ratingKey`. */
   id: string;
   batch?: number | null;
+  /**
+   * Epoch seconds this entry was queued — `EntryExtras.queued_at`. Providers that count
+   * lifetime progress on their own side measure from here; the rest ignore it.
+   */
+  queuedAt?: number | null;
   /**
    * Per-visit VOLUME count for a volume-based series. Independent of `batch`
    * (which is chapters). Absent = follow the queue's volume default (1).
@@ -903,6 +965,16 @@ export interface Provider {
    * keeps counting in episodes rather than failing to typecheck.
    */
   unit?: MediaUnit;
+  /**
+   * Does this provider count progress from WHEN AN ENTRY WAS QUEUED rather than from the
+   * backend's lifetime total?
+   *
+   * A capability, not a kind check — the launcher stamps `queued_at` only for a provider
+   * that says it needs one, so no other queue's YAML grows a key it will never read.
+   * Board Game Picker needs it because its play log is the household's book of record and
+   * goes back years.
+   */
+  stampsQueuedAt?: boolean;
 
   // --- required -------------------------------------------------------------- //
   buckets(ctx: BucketsContext): Promise<BucketsResult>;
@@ -922,6 +994,17 @@ export interface Provider {
   libraries?(): Promise<ProviderLibrary[]>;
   search?(q: string, opts?: { libraries?: string[] }): Promise<ProviderSearchHit[]>;
   cover?(itemId: string): Promise<ProviderCover>;
+  /**
+   * Record ONE unit consumed, on the provider's own side.
+   *
+   * Only a provider whose progress is a WRITE is expected to have this. Plex and Kavita
+   * learn what was watched or read from the device that did it; Board Game Picker cannot —
+   * a table has no telemetry — so "we played this" is a button someone presses, and it may
+   * be pressed here rather than only in the picker.
+   *
+   * Guarded at the call site like every optional member; a provider without it answers 404.
+   */
+  logProgress?(itemId: string): Promise<{ ok: boolean; remaining?: number }>;
   pool?(opts: { libraries?: string[]; members?: string[] }): Promise<ProviderPoolBucket[]>;
   /**
    * Resolve stored item ids to poster rows, INDEX-ALIGNED with `ids`. Optional and guarded
@@ -929,7 +1012,7 @@ export interface Provider {
    * whole set to unresolved tiles), because a provider that cannot answer this is a grid
    * of bare titles, not a 500.
    */
-  tiles?(ids: Iterable<string>): Promise<(ProviderTileRow | null)[]>;
+  tiles?(ids: Iterable<string>, entries?: CuratedEntryRef[]): Promise<(ProviderTileRow | null)[]>;
   /**
    * The "Start from…" picker's list of playable units, grouped the way the
    * modal already consumes (`seasons[].episodes[]`). Optional: a provider that
@@ -974,6 +1057,9 @@ export interface NextEp {
   season?: number | null;
   episode?: number | null;
   title?: string | null;
+  /** The total this next-up counts towards: "Play 2 OF 3". Only a provider that counts a
+   * finite per-entry batch sets it; absent everywhere else. */
+  of?: number | null;
   multiSeason?: boolean;
   member?: string;
   memberRatingKey?: string;

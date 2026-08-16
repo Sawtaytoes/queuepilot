@@ -158,6 +158,17 @@ jobs:
       - name: Kavita provider + launcher (offline)
         run: $TSX e2e/kavita-provider-test.ts
 
+      # The THIRD provider kind, and the one that is not a media server: Board Game Picker.
+      # Two things this gate exists for, both of which would be silent failures:
+      #   * PRIVACY. The provider must never call the picker's /api/collection, which carries
+      #     players, groups and who was at the table — this repo is public. The stub records
+      #     every request and the suite asserts that URL is not among them.
+      #   * `queued_at`. Plays are counted from when an entry was QUEUED, never from the
+      #     picker's lifetime play log: a game with twenty plays behind it and a batch of
+      #     three has three plays left the day it is queued, not zero.
+      - name: Board Game Picker provider + launcher (offline)
+        run: $TSX e2e/board-games-provider-test.ts
+
       # A set whose ONLY source is a non-Plex provider must save. Reported from the live app:
       # creating a Channel with a single Kavita block failed with "at least one library
       # section required", because `sections` is PLEX's list and is legitimately empty on a

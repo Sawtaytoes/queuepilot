@@ -7,9 +7,13 @@ import type {
 
 /**
  * "S3 · E5" for a multi-season show, just "E5" for a single-season one (every
- * anime — Japan doesn't do American-style seasons, so the "S1" is noise), and
+ * anime — Japan doesn't do American-style seasons, so the "S1" is noise),
  * "Ch 113" on a reading queue, where the number is a chapter and there is no
- * season at all.
+ * season at all, and "Play 2 of 3" on a board game.
+ *
+ * A game is the only unit with a KNOWN TOTAL — an entry owes exactly N plays and then the
+ * next game becomes the head — so it is the only one that counts towards something. A
+ * queue with no total set says just "Play 2" rather than inventing a denominator.
  */
 export function seLabel(
   ep: NextEp,
@@ -17,6 +21,11 @@ export function seLabel(
 ): string {
   if (unit === "volume") return `Vol ${ep.episode ?? "?"}`
   if (unit === "chapter") return `Ch ${ep.episode ?? "?"}`
+  if (unit === "play") {
+    const n = `Play ${ep.episode ?? "?"}`
+
+    return ep.of ? `${n} of ${ep.of}` : n
+  }
 
   const e = `E${ep.episode ?? "?"}`
 
@@ -167,11 +176,15 @@ export function isSelfTitled(ep: NextEp): boolean {
   )
 }
 
-/** "Nothing left to play" in this entry's own unit — a reading queue is read, not watched. */
-const allWatchedLabel = (unit: EntryUnit) =>
-  unit === "chapter" || unit === "volume"
-    ? "All read"
-    : "All watched"
+/** "Nothing left to play" in this entry's own unit — a reading queue is read, not watched,
+ *  and a board game that has had all its plays is played out. */
+const allWatchedLabel = (unit: EntryUnit) => {
+  if (unit === "chapter" || unit === "volume")
+    return "All read"
+  if (unit === "play") return "All played"
+
+  return "All watched"
+}
 
 /**
  * What a tile actually SHOWS — poster, title line, episode line. A collection

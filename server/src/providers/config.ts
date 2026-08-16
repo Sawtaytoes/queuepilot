@@ -29,7 +29,7 @@ import { parse, stringify } from 'yaml';
 import type { Delivery, ProviderDefinition, ProviderVocabulary } from '../types.js';
 
 import { isNodeError, errMessage } from '../errors.js';
-import { PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL } from '../env.js';
+import { PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL, BOARD_GAME_PICKER_URL } from '../env.js';
 
 /**
  * A resolved token and where it came from. `token` is null when unconfigured, NEVER `''` —
@@ -67,13 +67,13 @@ export interface SecretWriteResult {
 
 // The kinds this build knows how to instantiate. A definition naming anything else is kept
 // (so a newer config on an older image is not silently dropped) but reports unsupported.
-export const KINDS = ['plex', 'kavita'];
+export const KINDS = ['plex', 'kavita', 'board-games'];
 
 // Push a lineup at a device, or return a URL to open. Kavita is `pull` because it has no
 // cast and no webhooks at all — see docs/kavita-feasibility.md §4. This mirrors each
 // provider's own `delivery`, kept here too so the API can report it without instantiating
 // (and therefore without needing a token for an unconfigured provider).
-const DELIVERY: Record<string, Delivery | undefined> = { plex: 'push', kavita: 'pull' };
+const DELIVERY: Record<string, Delivery | undefined> = { plex: 'push', kavita: 'pull', 'board-games': 'pull' };
 
 // The WORDS each medium is described in. Kept beside DELIVERY and for the same reason: the
 // API must be able to report it without instantiating a provider, so an UNCONFIGURED backend
@@ -84,8 +84,12 @@ const DELIVERY: Record<string, Delivery | undefined> = { plex: 'push', kavita: '
 // "Play “The Sword-Eating Swordmaster” now" (reported live, 2026-08-15). Delivery is HOW a
 // lineup starts; this is what the medium is CALLED, and they are not the same question.
 const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
-  plex: { verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex' },
-  kavita: { verb: 'Read', unit: 'chapter', units: 'chapters', member: 'series', done: 'read', name: 'Kavita' },
+  plex: { verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex', unitShort: 'eps' },
+  kavita: { verb: 'Read', unit: 'chapter', units: 'chapters', member: 'series', done: 'read', name: 'Kavita', unitShort: 'ch' },
+  'board-games': {
+    verb: 'Play', unit: 'play', units: 'plays', member: 'game', done: 'played', name: 'Board Game Picker',
+    unitShort: 'plays',
+  },
 };
 
 /**
@@ -95,7 +99,7 @@ const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
  * backend renders exactly as it used to rather than rendering blank labels.
  */
 const DEFAULT_VOCABULARY: ProviderVocabulary = {
-  verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex',
+  verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex', unitShort: 'eps',
 };
 
 // Built-in deploy-time env names, per kind. These keep working exactly as they did before
@@ -104,6 +108,8 @@ const DEFAULT_VOCABULARY: ProviderVocabulary = {
 const ENV_TOKEN_KEYS: Record<string, string[] | undefined> = {
   plex: ['PLEX_TOKEN', 'PLEX_API_KEY'],
   kavita: ['KAVITA_API_KEY'],
+  // Optional on purpose — see KINDS_CONFIGURED_BY_URL below.
+  'board-games': ['BOARD_GAME_PICKER_API_TOKEN'],
 };
 
 // A provider added from the couch has no deploy-time env name, so it gets a generic one.
@@ -159,6 +165,10 @@ function implicitDefinitions(): ProviderDefinition[] {
   // Kavita is implicit only when its deploy-time env is present, so an install that has
   // never heard of Kavita does not grow a permanently-unconfigured provider in its UI.
   if (KAVITA_URL) out.push({ id: 'kavita', kind: 'kavita', label: 'Kavita', base_url: KAVITA_URL });
+  // Same rule for the picker: no URL, no permanently-unconfigured provider in the UI.
+  if (BOARD_GAME_PICKER_URL) {
+    out.push({ id: 'board-games', kind: 'board-games', label: 'Board Game Picker', base_url: BOARD_GAME_PICKER_URL });
+  }
   return out;
 }
 
@@ -224,7 +234,23 @@ export function requireToken(id: string, kind: string | null = null): string {
   return token;
 }
 
-export const isConfigured = (id: string, kind: string | null = null): boolean => tokenFor(id, kind).token != null;
+/**
+ * Kinds whose backend does not require a credential, so "configured" is a base URL rather
+ * than a token.
+ *
+ * This is a NAMED exception, not a softening of the rule. Board Game Picker is a household
+ * app on the LAN with no Authelia in front of it; it only demands
+ * `Authorization: Bearer` when its own `BOARD_GAME_PICKER_API_TOKEN` is set. Plex and
+ * Kavita keep failing loudly on a missing token, which is the behaviour two production
+ * outages bought us — see this file's header.
+ */
+const KINDS_CONFIGURED_BY_URL = new Set(['board-games']);
+
+export const isConfigured = (id: string, kind: string | null = null): boolean => (
+  KINDS_CONFIGURED_BY_URL.has(kind ?? '')
+    ? Boolean(definitionFor(id)?.base_url)
+    : tokenFor(id, kind).token != null
+);
 
 /**
  * Write (or replace) one provider's token. Write-only by design — there is no reader that
@@ -283,6 +309,19 @@ export function publicView(def: ProviderDefinition): ProviderPublicView {
     vocabulary: VOCABULARY[def.kind] || DEFAULT_VOCABULARY,
   };
 }
+
+/**
+ * How a queue on this kind STARTS, without instantiating it. `sets.ts` decides a set's
+ * delivery with this.
+ *
+ * Exported because that file had grown its OWN `PULL_KINDS = new Set(['kavita'])` — a second
+ * hand-maintained answer to a question this map already answers, and one that would have
+ * rendered a board-game queue as a push target with a "Play on <device>" button for a
+ * backend that has no devices.
+ */
+export const deliveryForKind = (kind: string | null | undefined): Delivery => (
+  DELIVERY[kind ?? ''] || 'push'
+);
 
 /** One provider's words, without instantiating it. `sets.ts` labels a queue with this. */
 export const vocabularyForKind = (kind: string | null | undefined): ProviderVocabulary => (

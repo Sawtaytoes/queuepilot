@@ -23,6 +23,9 @@ export type NextEp = {
   season?: number | null
   episode?: number | null
   title?: string | null
+  /** The total this next-up counts towards: "Play 2 OF 3". Set only by a provider that
+   * counts a finite per-entry batch (board games); absent for episodes and chapters. */
+  of?: number | null
   /** False for every anime (Japan doesn't do American-style seasons), so the tile
    * drops the "S1". */
   multiSeason?: boolean
@@ -57,7 +60,11 @@ export type EntryType =
  * item corrects it. Without it a whole volume renders as "Ch -100000" (Kavita's
  * no-chapter-subdivision sentinel).
  */
-export type EntryUnit = "episode" | "chapter" | "volume"
+export type EntryUnit =
+  | "episode"
+  | "chapter"
+  | "volume"
+  | "play"
 
 /** One resolved entry in a curated queue (`GET /api/queues`). */
 export type QueueItem = {
@@ -490,6 +497,12 @@ export type ProviderVocabulary = {
   member: string
   /** "watched" / "read". */
   done: string
+  /**
+   * The unit abbreviated for a poster tile: "eps" / "ch" / "plays". Optional on a stale
+   * registry response that predates the field; `PLEX_WORDS` is the fallback, which is
+   * what every other missing slot does.
+   */
+  unitShort?: string
   /**
    * The product name used in copy: "Plex" / "Kavita". Optional on a stale
    * registry response that predates the field — the replacement engine then

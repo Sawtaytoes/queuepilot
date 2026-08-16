@@ -147,7 +147,9 @@ await ok('a VOLUME-based manga is not reported as fully read', async () => {
 await ok('a whole volume is labelled as a VOLUME, never "Ch -100000"', async () => {
   const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
   const [tile] = await p.tiles!(['4672']);
-  const next = tile!.next!;
+  // `ProviderTileRow.next` is a union since board games joined the seam (a play carries no
+  // chapter id). This is the Kavita gate, so it asserts the Kavita shape by name.
+  const next = tile!.next! as KavitaPlayItem;
   assert.equal(next.unit, 'volume', 'a whole-volume item must carry unit "volume"');
   assert.equal(next.number, 1, 'the VOLUME number, not the -100000 chapter sentinel');
   assert.equal(next.title, 'Volume 1');
