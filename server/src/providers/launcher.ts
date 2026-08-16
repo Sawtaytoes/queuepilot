@@ -59,7 +59,12 @@ async function curatedEntries(setId: string, only: string | null = null): Promis
     // so it is skipped rather than guessed at by name.
     if (!ratingKey) continue;
     const batch = Number(extras.episodes);
-    out.push({ id: String(ratingKey), batch: Number.isFinite(batch) && batch > 0 ? batch : null });
+    const start = extras.start && typeof extras.start === 'object' ? extras.start : null;
+    out.push({
+      id: String(ratingKey),
+      batch: Number.isFinite(batch) && batch > 0 ? batch : null,
+      start,
+    });
   }
   return out;
 }

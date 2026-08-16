@@ -474,6 +474,13 @@ export type ProviderVocabulary = {
   member: string
   /** "watched" / "read". */
   done: string
+  /**
+   * The product name used in copy: "Plex" / "Kavita". Optional on a stale
+   * registry response that predates the field — the replacement engine then
+   * leaves "Plex" in the string, which is the same fallback every other
+   * missing slot uses.
+   */
+  name?: string
 }
 
 /** A provider's own libraries. Ids are provider-scoped and stay bare strings. */

@@ -5,16 +5,21 @@ import {
   memberPreset,
   pickOptionValue,
 } from "../lib/startPreset"
+import { seLabel } from "../lib/tileFace"
 import type {
   CollectionChild,
+  EntryUnit,
   NextEp,
+  ProviderVocabulary,
   ShowEpisodes,
   StartPoint,
 } from "../lib/types"
+import { applyVocab, vocabForSet } from "../lib/vocab"
 import {
   closeStartModal,
   useOverlays,
 } from "../state/overlays"
+import { useStore } from "../state/store"
 import { Modal } from "./Modal"
 import { SelectListbox } from "./SelectListbox"
 import { commitStart } from "./startCommit"
@@ -58,10 +63,30 @@ const pick = (
     want,
   )
 
+const START_HINT =
+  "Playback begins here and keeps going automatically. Earlier episodes are skipped — nothing is marked watched on Plex."
+
+function unitOf(
+  item: { unit?: EntryUnit } | null,
+  vocab: ProviderVocabulary,
+): EntryUnit {
+  return (
+    item?.unit ??
+    (vocab.unit === "chapter" ? "chapter" : "episode")
+  )
+}
+
 export function StartModal() {
   const { startModal: entry } = useOverlays()
+  const { reg } = useStore()
+  const vocab = vocabForSet(reg?.sets, entry?.setId)
+  const t = useCallback(
+    (s: string) => applyVocab(s, vocab),
+    [vocab],
+  )
   const item = entry?.item ?? null
   const isCollection = item?.type === "collection"
+  const unit = unitOf(item, vocab)
 
   const [note, setNote] = useState("")
   const [children, setChildren] = useState<
@@ -92,9 +117,15 @@ export function StartModal() {
       // A per-profile channel passes the binding's `user_uuid` so the "watched" marks
       // reflect THAT profile's history, not the admin account's (queues/admin omit it).
       const uuid = entry?.accountUuid
-      const q = uuid
-        ? `?uuid=${encodeURIComponent(uuid)}`
-        : ""
+      const qs = [
+        entry?.setId
+          ? `set=${encodeURIComponent(entry.setId)}`
+          : "",
+        uuid ? `uuid=${encodeURIComponent(uuid)}` : "",
+      ]
+        .filter(Boolean)
+        .join("&")
+      const q = qs ? `?${qs}` : ""
 
       try {
         data = await api<ShowEpisodes>(
@@ -111,7 +142,9 @@ export function StartModal() {
         setEpisodeData(null)
         setIsEpisodeShown(false)
         setNote(
-          "Could not read this series’ episodes from Plex.",
+          t(
+            "Could not read this series’ episodes from Plex.",
+          ),
         )
 
         return
@@ -131,7 +164,7 @@ export function StartModal() {
     },
     // Re-close over the profile uuid when it changes (once per open) so the fetch scopes
     // its watched marks to the right account.
-    [entry?.accountUuid],
+    [entry?.accountUuid, entry?.setId, t],
   )
 
   /** A collection member: a series opens its pickers, a movie member has nothing
@@ -211,7 +244,9 @@ export function StartModal() {
       } catch {
         if (!isStale) {
           setNote(
-            "Could not read this collection’s members from Plex.",
+            t(
+              "Could not read this collection’s members from Plex.",
+            ),
           )
         }
 
@@ -272,11 +307,7 @@ export function StartModal() {
         title="Start from…"
         titleId="startmodal-title"
       >
-        <p className="subhint">
-          Playback begins here and keeps going
-          automatically. Earlier episodes are skipped —
-          nothing is marked watched on Plex.
-        </p>
+        <p className="subhint">{t(START_HINT)}</p>
       </Modal>
     )
   }
@@ -348,11 +379,7 @@ export function StartModal() {
       title={`Start “${item.title}” from…`}
       titleId="startmodal-title"
     >
-      <p className="subhint">
-        Playback begins here and keeps going automatically.
-        Earlier episodes are skipped — nothing is marked
-        watched on Plex.
-      </p>
+      <p className="subhint">{t(START_HINT)}</p>
 
       <label
         className="field"
@@ -391,10 +418,10 @@ export function StartModal() {
                   badge:
                     c.type === "show"
                       ? c.leafCount
-                        ? `${c.viewedLeafCount || 0}/${c.leafCount} watched`
+                        ? `${c.viewedLeafCount || 0}/${c.leafCount} ${t("watched")}`
                         : undefined
                       : c.watched
-                        ? "Watched"
+                        ? t("Watched")
                         : undefined,
                   badgeIntent:
                     c.type === "show"
@@ -417,7 +444,7 @@ export function StartModal() {
         hidden={!isSeasonShown}
         id="start-seasonbox"
       >
-        Season
+        {t("Season")}
         {/* Season: `loadEpisodes` writes the season list and `seasonValue`
             together, and it runs on open AND whenever a different member is picked
             above. The season numbers themselves are the key — they change exactly
@@ -427,7 +454,7 @@ export function StartModal() {
           key={(episodeData?.seasons ?? [])
             .map((s) => s.season)
             .join(",")}
-          label="Season"
+          label={t("Season")}
           onChange={(v) => {
             setSeasonValue(v)
 
@@ -443,7 +470,7 @@ export function StartModal() {
           }}
           options={(episodeData?.seasons ?? []).map(
             (s) => ({
-              label: `Season ${s.season}`,
+              label: `${t("Season")} ${s.season}`,
               value: String(s.season),
             }),
           )}
@@ -456,7 +483,7 @@ export function StartModal() {
         hidden={!isEpisodeShown}
         id="start-episodebox"
       >
-        Episode
+        {t("Episode")}
         {/* Episode: two writers other than the user, and both move the SEASON —
             `loadEpisodes` on open, and the season picker's own `onChange`, which
             resets this to that season's first episode. So the key is the season
@@ -465,15 +492,22 @@ export function StartModal() {
         <SelectListbox
           id="start-episode"
           key={`${seasonRow?.season ?? ""}:${isLoadingEpisodes ? "loading" : "ready"}`}
-          label="Episode"
+          label={t("Episode")}
           onChange={setEpisodeValue}
           options={
             isLoadingEpisodes || !seasonRow
-              ? [{ label: "Loading episodes…", value: "" }]
+              ? [
+                  {
+                    label: t("Loading episodes…"),
+                    value: "",
+                  },
+                ]
               : seasonRow.episodes.map((e) => ({
-                  badge: e.watched ? "Watched" : undefined,
+                  badge: e.watched
+                    ? t("Watched")
+                    : undefined,
                   badgeIntent: "success" as const,
-                  label: `E${e.episode}${e.title ? ` · ${e.title}` : ""}`,
+                  label: `${seLabel({ episode: e.episode }, unit)}${e.title ? ` · ${e.title}` : ""}`,
                   value: String(e.episode),
                 }))
           }

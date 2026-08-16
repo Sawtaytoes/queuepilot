@@ -356,6 +356,7 @@ export function ChannelPool({
       item,
       refresh: () => onChanged(),
       save: (s) => saveStart(b.ratingKey, s),
+      setId: channel.id,
     }
   }
 

@@ -240,6 +240,7 @@ export function ChannelMembers({
     // next-up above), not the admin account.
     accountUuid,
     item: m,
+    setId: channel.id,
     refresh: () => void reload(channel.id),
     remove: () => removeMember(m),
     removeLabel: "Remove this member",

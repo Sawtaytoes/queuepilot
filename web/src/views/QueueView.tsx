@@ -265,6 +265,7 @@ export function QueueView({
     refresh: () => refreshData(),
     remove: () => removeTile(item),
     removeLabel: "Remove from this queue",
+    setId,
     save: (start) =>
       api(
         "PATCH",
