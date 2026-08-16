@@ -60,6 +60,16 @@
      Kavita `#4AC694`  — read live off kavita.example.com's stylesheet
                          (`--primary-color`), with its own darker shades
                          `#3B9E76` / `#338A67` / `#25624A`.
+     Board  `#FF5100`  — BoardGameGeek's orange. The picker is OURS and had no
+      Games               brand colour to read off, so this one was chosen the
+                          way the rule requires rather than invented: four full
+                          families (BGG orange, a wood amber, a plum, and a
+                          Charcuterie-family purple) were mocked in this very
+                          queue view in both schemes, and the owner picked this
+                          one (2026-08-16). It is now ALSO the picker app's own
+                          accent, so the queue and the app it opens match — do
+                          not change one without the other, and do not swap in a
+                          nearer-to-hand orange without asking him.
 
    Contrast, measured against the surface each role sits on:
      dark   plex   content #E5A00D on base #131822 .... 7.6:1
@@ -69,6 +79,9 @@
      dark   kavita on-solid #111111 on solid #4AC694 .. 8.9:1
      light  kavita content #25624A on base #F5F7FA .... 6.8:1
      light  kavita on-solid #111111 on solid #4AC694 .. 8.9:1
+     light  games  content #8A3105 on base #F5F7FA .... 7.8:1
+     dark   games  content #FF8552 on base #131822 .... 7.4:1
+     both   games  on-solid #111111 on solid #FF5100 .. 5.8:1
 
    NOTE the on-solid ink: Kavita's own UI puts WHITE on that green, which is
    2.1:1 and fails outright. Near-black is the same call the Plex amber already
@@ -116,6 +129,28 @@
   --color-intent-accent-content: #4ac694;
   --color-intent-accent-solid: #4ac694;
   --color-intent-accent-solid-hover: #5fd3a4;
+  --color-intent-accent-on-solid: #111111;
+}
+
+/* --- Board Game Picker ----------------------------------------------------- */
+[data-provider="board-games"] {
+  --color-intent-accent-surface: #ffe8de;
+  --color-intent-accent-surface-hover: #ffd9c8;
+  --color-intent-accent-border: #c2470f;
+  --color-intent-accent-content: #8a3105;
+  --color-intent-accent-solid: #ff5100;
+  --color-intent-accent-solid-hover: #e04600;
+  --color-intent-accent-on-solid: #111111;
+}
+
+[data-scheme="dark"] [data-provider="board-games"],
+[data-scheme="dark"][data-provider="board-games"] {
+  --color-intent-accent-surface: #331409;
+  --color-intent-accent-surface-hover: #40190b;
+  --color-intent-accent-border: #5e2a12;
+  --color-intent-accent-content: #ff8552;
+  --color-intent-accent-solid: #ff5100;
+  --color-intent-accent-solid-hover: #ff6d29;
   --color-intent-accent-on-solid: #111111;
 }
 

@@ -15,9 +15,11 @@
 import type { PlexClient, Provider, ProviderDefinition } from '../types.js';
 import type { KavitaHttpClient } from './kavita-client.js';
 
-import { definitions, definitionFor, requireToken, isConfigured } from './config.js';
+import { definitions, definitionFor, requireToken, tokenFor, isConfigured, KINDS } from './config.js';
 import { plexProvider } from './plex.js';
 import { kavitaProvider } from './kavita.js';
+import { boardGamesProvider } from './board-games.js';
+import type { BoardGamesHttpClient } from './board-games-client.js';
 
 /**
  * The injected client, which is per-KIND: `plex-replay.js` for Plex, a stubbed Kavita HTTP
@@ -25,7 +27,7 @@ import { kavitaProvider } from './kavita.js';
  * lie — so this is the union, and each branch below asserts the half its own provider needs.
  * That assertion is exactly as safe as the switch it sits in: `def.kind` chose the branch.
  */
-export type InjectedProviderClient = PlexClient | KavitaHttpClient;
+export type InjectedProviderClient = PlexClient | KavitaHttpClient | BoardGamesHttpClient;
 
 /**
  * Instantiate a provider by id.
@@ -55,9 +57,18 @@ export function providerFor(
       return kavitaProvider({ def, apiKey, client: client as KavitaHttpClient | null });
     }
 
+    case 'board-games': {
+      // No requireToken(): the picker's token is OPTIONAL, and "configured" for this kind
+      // is a base URL — see KINDS_CONFIGURED_BY_URL in config.js. It is a household LAN app
+      // with no Authelia in front of it, and demanding a credential it does not issue would
+      // make a working provider report NOT CONFIGURED.
+      const token = client ? null : tokenFor(def.id, def.kind).token;
+      return boardGamesProvider({ def, token, client: client as BoardGamesHttpClient | null });
+    }
+
     default:
       throw new Error(
-        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita`,
+        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, board-games`,
       );
   }
 }
@@ -77,9 +88,10 @@ export const coverUrl = (providerId: string, itemId: string | number): string =>
 
 /** Every provider that is both supported and configured, ready to serve a queue. */
 export function availableProviders(): ProviderDefinition[] {
-  return definitions().filter((d) => (
-    (d.kind === 'plex' || d.kind === 'kavita') && isConfigured(d.id, d.kind)
-  ));
+  // KINDS rather than a second hand-maintained list of kinds: this filter and the switch
+  // above had already drifted apart once in review, and a provider that instantiates but is
+  // invisible in the editor is a bug nobody reports as one.
+  return definitions().filter((d) => KINDS.includes(d.kind) && isConfigured(d.id, d.kind));
 }
 
 export { definitions, definitionFor, isConfigured };

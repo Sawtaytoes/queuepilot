@@ -105,5 +105,28 @@ export function providersRoutes(): Hono {
     }
   });
 
+  /**
+   * Record one unit consumed on the provider's side — "we played this" without opening the
+   * picker. POST, because it WRITES.
+   *
+   * 404 for a provider that has no such method, which is every media server: Plex and
+   * Kavita learn what was watched or read from the device that did it. A table has no
+   * telemetry, so a board game's progress is a button someone presses.
+   *
+   * Marking the QUEUE entry done is deliberately not done here. Whether an entry is
+   * finished is `buckets()`'s answer (plays owed vs plays since it was queued), and the
+   * next launch or tile refresh asks it — one source of truth rather than two writers
+   * racing over queues.yaml.
+   */
+  app.post('/providers/:id/progress/:itemId', async (c) => {
+    try {
+      const p = providerFor(c.req.param('id'));
+      if (typeof p.logProgress !== 'function') return c.json({ error: 'not supported' }, 404);
+      return c.json(await p.logProgress(c.req.param('itemId')));
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 503);
+    }
+  });
+
   return app;
 }

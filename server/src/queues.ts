@@ -515,6 +515,38 @@ async function rewriteEntry(setName: string, key: string, mutate: (e: SplitEntry
 }
 
 
+/**
+ * Stamp `queued_at` (epoch seconds) on one entry, unless it already carries one.
+ *
+ * Only providers that count LIFETIME progress on their own side need this — see
+ * `Provider.stampsQueuedAt`. Board Game Picker's play log is the household's book of
+ * record and goes back years; without a stamp, a game with twenty plays behind it and a
+ * batch of three is finished the instant it is queued.
+ *
+ * Never overwrites: the first stamp is the truthful one, and re-stamping on every launch
+ * would reset progress every night.
+ *
+ * Returns the stamp the entry now carries, or null when there is no such entry.
+ */
+export async function stampQueuedAt(
+  setName: string,
+  key: string,
+  nowSec: number | null = null,
+): Promise<number | null> {
+  const now = nowSec == null ? Math.floor(Date.now() / 1000) : Math.floor(nowSec);
+  let stamped: number | null = null;
+  const ok = await rewriteEntry(setName, key, (split) => {
+    const existing = Number(split.extras.queued_at);
+    if (Number.isFinite(existing) && existing > 0) {
+      stamped = existing;
+      return;
+    }
+    split.extras.queued_at = now;
+    stamped = now;
+  });
+  return ok ? stamped : null;
+}
+
 // Tag the given entry keys **done** in place — kept in the file, excluded from play.
 // Port of queue_builder.queues.mark_done (D4). Scalar entries become mappings so they can
 // carry `done` + `done_at` (epoch seconds). Match is by entryKey. Returns { changed: bool }.

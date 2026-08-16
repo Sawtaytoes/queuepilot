@@ -276,3 +276,10 @@ export const KAVITA_JWT_TTL_SECONDS = int('KAVITA_JWT_TTL_SECONDS', 3600);
 // Chapters queued per series per rotation round on the reading side — the "read at least X
 // chapters before switching series" knob from the feasibility record's opening ask.
 export const KAVITA_BATCH_DEFAULT = int('KAVITA_BATCH_DEFAULT', 1);
+
+// Board Game Picker's base URL. Named for the product, matching the live host
+// (board-game-picker.example.com) rather than the repo folder. Its API token is OPTIONAL —
+// the picker only demands one when BOARD_GAME_PICKER_API_TOKEN is set on ITS side — so
+// unlike Kavita, having this URL is what "configured" means. The token, if any, still
+// resolves through providers/config.js like every other secret.
+export const BOARD_GAME_PICKER_URL = str('BOARD_GAME_PICKER_URL', '').replace(/\/+$/, '');
