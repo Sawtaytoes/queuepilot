@@ -59,6 +59,10 @@ tier, detected from the PMS debug log):
   (`/status/sessions/history/all?accountID=`) for the set's own account only — the
   cross-account union was tried and reverted (someone else's viewing drove the kids'
   cards), and `viewCount` on the library reflects only the admin account and is useless.
+  A rotation channel names its account in `profiles[]`; a **curated queue's account is its
+  `requires_profile`**, which is therefore who it plays as and not merely a start gate
+  ([decision](docs/decisions/2026-08-16-a-curated-queue-plays-as-the-profile-it-is-gated-to.md)).
+  An ungated queue reads as the owner.
 - **Kid-appropriateness** comes from each set's **own account view** (the Younger Kids
   token sees the G-tier library; the Older Kids token sees the TV-PG library), with a
   per-set `movie_ratings` cap applied on top (younger = G-tier; older = PG tier only, i.e.
