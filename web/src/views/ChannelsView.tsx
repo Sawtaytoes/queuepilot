@@ -127,7 +127,7 @@ export function ChannelsView({
     <main className="view" hidden={isHidden} id="channels">
       <div className="chhead">
         <label>
-          Channel
+          Pool
           {/* `key={channel.id}` on BOTH pickers, for two different reasons, and
               neither is "the value changed".
 
@@ -148,16 +148,17 @@ export function ChannelsView({
           <SelectListbox
             id="chchannel"
             key={channel.id}
-            label="Channel"
+            label="Pool"
             onChange={(v) => {
-              // A curated channel configures in the grid editor.
+              // A curated pool configures in the grid editor.
               if (v.startsWith("q:"))
                 navigate(`#/q/${v.slice(2)}`)
               else navigate(`#/channels/${v}`)
             }}
-            // Flat list: `Listbox` has no option groups, so the old "Dynamic Channels" /
-            // "Curated Channels" headers are dropped — dynamic channels first, then the
-            // curated ones (the `q:` prefix still routes them to the grid editor).
+            // Flat list: `Listbox` has no option groups, so the Play landing's
+            // "Filtered Pools" / "Curated Pools" headings are dropped — filtered pools
+            // first, then the curated ones (the `q:` prefix still routes them to the
+            // grid editor).
             options={[
               ...all.map((s) => ({
                 label: s.label,
@@ -219,7 +220,7 @@ export function ChannelsView({
         >
           Resample
         </button>
-        <Tip label="Full channel config">
+        <Tip label="Full pool config">
           <button
             className="ghost"
             id="chconfigure"
@@ -235,22 +236,22 @@ export function ChannelsView({
           onClick={() => openDynModal(null)}
           type="button"
         >
-          ＋ Dynamic channel
+          ＋ Filtered pool
         </button>
-        {/* "New channel" splits by category: a Curated channel is a hand-picked
-            member set (the set modal, kind=anime); a Dynamic channel is a
-            rule-based rotation. */}
+        {/* "New pool" splits by how membership is decided: a Curated pool is a
+            hand-picked member set (the set modal, kind=anime); a Filtered pool
+            derives its members from rules. */}
         <button
           className="ghost accent"
           id="newcurated"
           onClick={() => openSetModal(null, "anime")}
           type="button"
         >
-          ＋ Curated channel
+          ＋ Curated pool
         </button>
         <span className="chnote">
           A sample of what could play — the real rotation
-          shuffles fresh every scan.
+          re-draws fresh every scan.
         </span>
       </div>
       <div id="chbody">

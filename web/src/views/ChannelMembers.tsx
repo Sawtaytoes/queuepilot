@@ -298,7 +298,7 @@ export function ChannelMembers({
           }}
           inputId="chmsearch"
           listId="chmresults"
-          placeholder="Add a member — search this channel's libraries…"
+          placeholder="Add a member — search this pool's libraries…"
           rowFor={(hit, _index, close) => {
             const isCollection = hit.type === "collection"
             const label = isCollection
@@ -427,8 +427,8 @@ export function ChannelMembers({
         Optional manual includes — a show, Plex Collection,
         movie, or short played ON TOP of the rule pool below
         (the opposite of Blocked). Members can come from any
-        library, not just this channel&apos;s. Leave empty
-        to play purely by the rule.
+        library, not just this pool&apos;s. Leave empty to
+        play purely by the rule.
       </p>
       <ul
         className="grid editable"
@@ -447,7 +447,7 @@ export function ChannelMembers({
                   <TypeBadge face={face} item={m} />
                   {/* One control, not the queue editor's four: a member has no batch to cap
                       or stop, so weight is the only per-member number there is. */}
-                  <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the channel is shuffled.">
+                  <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the pool is shuffled.">
                     <span className="eps">
                       <CountPicker
                         label={`Weight for ${m.title}`}

@@ -168,7 +168,7 @@ export function ChannelFilters({
 
   return (
     <aside id="chfilters">
-      <h2>Channel filters</h2>
+      <h2>Pool filters</h2>
 
       {/* F5: the 7 fieldsets scroll inside here; `#ch-save` stays OUTSIDE as the aside's
           pinned footer, always on screen. Every fieldset id and `.showsonly` is untouched,

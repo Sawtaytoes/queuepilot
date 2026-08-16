@@ -298,7 +298,7 @@ export function Toolbar() {
         }}
         type="button"
       >
-        Channels ›
+        Pools ›
       </button>
     </div>
   )

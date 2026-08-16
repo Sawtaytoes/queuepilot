@@ -8,7 +8,7 @@ await page.goto('https://plex-channels.example.com', { waitUntil: 'domcontentloa
 
 // Landing = the Play list.
 await page.waitForSelector('.playrow', { timeout: 60000 });
-// Post-v2 IA: channels split into Dynamic (rotation channels) + Curated (anime) + Queues.
+// Post-v2 IA: Filtered Pools (rule-derived) + Curated Pools (anime) + Ordered Queues.
 const dynRows = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
 const curRows = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
 const qRows = await page.$$eval('#playqueues .playrow .rowname', (els) => els.map((e) => e.textContent));

@@ -26,23 +26,24 @@ page.on('request', (r) => { if (r.url().includes('/api/') && r.method() !== 'GET
 
 await page.goto(BASE, { waitUntil: 'domcontentloaded' });
 
-// 0. Landing = the Play list, grouped Dynamic (2 generic) / Curated (3 anime) / Queues (3),
+// 0. Landing = the Play list, grouped Filtered Pools (2 generic) / Curated Pools (3 anime)
+// / Ordered Queues (3),
 // no posters.
 await page.waitForSelector('.playrow', { timeout: 30000 });
 const dynRows = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
 const curRows = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
 const qRows = await page.$$eval('#playqueues .playrow .rowname', (els) => els.map((e) => e.textContent));
-ok('landing: 2 dynamic rows (Shows & Shorts + Movies)',
+ok('landing: 2 filtered-pool rows (Shows & Shorts + Movies)',
   dynRows.length === 2 && dynRows[0] === 'Shows & Shorts' && dynRows[1] === 'Movies');
-ok('landing: 3 curated (anime) channel rows', curRows.length === 3);
+ok('landing: 3 curated-pool (anime) rows', curRows.length === 3);
 ok('landing: 3 queue rows', qRows.length === 3);
 ok('landing: no posters', !(await page.$('#play .tile')));
 
-// 1. Queues configurator: only the ORDERED queues shelve here (channels live elsewhere).
+// 1. Ordered Queues configurator: only the ORDERED queues shelve here (pools live elsewhere).
 await page.click('#goqueues');
 await page.waitForSelector('.shelf', { timeout: 30000 });
 const shelves = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
-ok('three queue shelves (no rotations, no anime channels)',
+ok('three queue shelves (no filtered pools, no anime curated pools)',
   shelves.length === 3 && !shelves.includes('younger') && !shelves.includes('bob_anime'));
 
 // 2. Toolbar mounted in header on desktop.
@@ -177,18 +178,19 @@ ok('K: toast present right after action', (await page.textContent('#status') ?? 
 await page.waitForFunction(() => (document.querySelector('#status')?.textContent || '') === '', undefined, { timeout: 8000 });
 ok('K: toast auto-dismissed', (await page.textContent('#status')) === '');
 
-// F. Play landing groups into Dynamic / Curated / Queues.
+// F. Play landing groups into Filtered Pools / Curated Pools / Ordered Queues.
 await page.evaluate(() => { location.hash = '#/'; });
 await page.waitForSelector('#playdynamic .playrow', { timeout: 20000 });
 const dyn = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
 const cur = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
-ok('F: Dynamic group = Shows & Shorts + Movies', dyn.length === 2 && dyn[0] === 'Shows & Shorts' && dyn[1] === 'Movies');
-ok('F: Curated group holds the anime channels', cur.length >= 1);
+ok('F: Filtered Pools group = Shows & Shorts + Movies', dyn.length === 2 && dyn[0] === 'Shows & Shorts' && dyn[1] === 'Movies');
+ok('F: Curated Pools group holds the anime sets', cur.length >= 1);
 const groupHeads = await page.$$eval('#play .playgroup h2', (els) => els.map((e) => (e.textContent ?? '').replace('Configure ›', '').trim()));
-ok('F: group headings named Dynamic/Curated Channels',
-  groupHeads.includes('Dynamic Channels') && groupHeads.includes('Curated Channels'));
-// The Channels picker lists the same channels — now a flat SelectListbox, NOT a native
-// <select> with optgroups (Listbox has no option groups; dynamic channels come first,
+ok('F: group headings named Filtered/Curated Pools + Ordered Queues',
+  groupHeads.includes('Filtered Pools') && groupHeads.includes('Curated Pools')
+  && groupHeads.includes('Ordered Queues'));
+// The Pools picker lists the same pools — now a flat SelectListbox, NOT a native
+// <select> with optgroups (Listbox has no option groups; filtered pools come first,
 // then curated). 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
 await page.evaluate(() => { location.hash = '#/channels/shows'; });
 await page.waitForSelector('[data-testid="chchannel"]', { state: 'attached', timeout: 20000 });
