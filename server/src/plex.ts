@@ -470,6 +470,55 @@ export async function homeUsers(): Promise<HomeUser[]> {
     .filter((u) => u.name);
 }
 
+// --- a `requires_profile` STRING -> the account behind it ------------------------------ //
+// `requires_profile` was born as a play GATE ("wait until this profile is signed in"), so it
+// stores a NAME and nothing else. Everything downstream that needs the profile's watched
+// state needs its account instead — a uuid to mint a token with, and the numeric accountID
+// the history endpoint filters on. This is that join, and the reason a curated queue no
+// longer reads the owner's history.
+//
+// The stored string is what the PMS log stamps, which is deliberately NOT one field: the
+// OWNER stamps their plex.tv `username` (`sawtaytoes`), a managed user stamps its `title`
+// (`Older Kids`). Both spellings are matched here, exactly as the queue-profile picker
+// writes them (decision 2026-08-07-choose-profile-for-queues).
+const _profileUsers = new Map<string, HomeUser | null>(); // requires_profile string -> row
+
+/**
+ * The Plex Home row a set's `requires_profile` names, or null when nothing matches (an
+ * ungated set, a hand-typed value, or a plex.tv that would not answer). The OWNER's row is
+ * a real hit with `uuid: null` — which every caller already reads as "the admin token",
+ * so a queue that plays as the owner keeps behaving exactly as it did.
+ */
+export async function profileUser(profileTitle: string | null | undefined): Promise<HomeUser | null> {
+  const title = String(profileTitle ?? '').trim();
+  if (!title) return null;
+  const memo = _profileUsers.get(title);
+  if (memo !== undefined) return memo;
+  const users = await homeUsers();
+  // A plex.tv hiccup returns [] — indistinguishable from "no such profile" at this line, so
+  // it is NOT memoized. Caching that empty answer would pin every gated queue to the admin
+  // view until the container restarted, which is the exact failure this function exists to
+  // end. `accountToken`'s null memo is the opposite trade on purpose: a failed MINT is per
+  // uuid and retrying it on every tile would hammer plex.tv.
+  if (!users.length) return null;
+  const row = users.find((u) => u.name === title || u.username === title) ?? null;
+  _profileUsers.set(title, row);
+  return row;
+}
+
+/**
+ * The same lookup as an `AccountScope` — what the read paths (`nextEpisode`,
+ * `collectionNext`, `allLeaves`) take to answer as one profile instead of as the owner.
+ * Empty for an ungated set, for the owner, and for a mint failure: all three mean "read as
+ * admin", which is what those functions have always done.
+ */
+export async function profileScope(profileTitle: string | null | undefined): Promise<AccountScope> {
+  const user = await profileUser(profileTitle);
+  if (!user || !user.uuid) return {};
+  const token = await accountToken(user.uuid);
+  return token ? { token, account: user.uuid } : {};
+}
+
 // --- content-rating facet present in a set's sections, scoped to an account token ------- //
 // Union of the distinct `contentRating` values across `sections`. With a managed-user token
 // the section listing is already that account's restricted view, so the facet reflects only

@@ -1030,6 +1030,19 @@ export interface Provider {
    * it, so this is a latent requirement of the push path rather than of the interface.
    */
   profileToken?(userUuid: string | null): Promise<string | null> | string | null;
+  /**
+   * Fill in a binding that names a profile but carries no ACCOUNT for it — the shape every
+   * curated queue has, since `requires_profile` stores a display name and nothing else.
+   * Returns the binding to use (the same object, or a filled copy); a provider that has no
+   * per-profile identity simply omits this and the binding is used as-is.
+   *
+   * Called on the engine side of the seam, so `profileTitle` is a NAME and the provider owns
+   * every media-specific step of turning it into one (Plex: the plex.tv Home-users join).
+   */
+  profileBinding?(
+    binding: EngineBinding,
+    profileTitle: string | null,
+  ): Promise<EngineBinding> | EngineBinding;
   /** Kavita only, and currently called by nothing — kept declared so a future members
    * endpoint reaches for the existing method instead of inventing a second one. */
   resolveMembers?(ids: Iterable<string>): Promise<unknown[]>;

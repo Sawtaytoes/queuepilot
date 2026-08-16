@@ -526,11 +526,17 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     user_uuid: def ? def.user_uuid : (ent.user_uuid ?? null),
     mode,
     audio_language: ent.audio_language != null ? String(ent.audio_language) : null,
-    // Gate a curated queue to a Plex Home profile (the value is the PMS-log profile title,
-    // e.g. "Demo"). A scan WAITS (and ADB-switches the Shield) until that profile is signed
-    // in before playing — the demo/IVTC-test reels' libraries are invisible to other
-    // profiles. Rotation channels are ungated by design, so this is only meaningful/editable
-    // on queue sets. null = ungated. (decision `2026-08-07-choose-profile-for-queues`)
+    // WHO a curated queue plays as (the value is the PMS-log profile title, e.g. "Demo"). Two
+    // things, not one:
+    //   * the play GATE — a scan WAITS (and ADB-switches the Shield) until that profile is
+    //     signed in before playing; the demo/IVTC-test reels' libraries are invisible to other
+    //     profiles. (decision `2026-08-07-choose-profile-for-queues`)
+    //   * the IDENTITY — the queue's next-up and watched state are read as that profile's
+    //     account, in the grid and at scan time alike. It was the gate alone until 2026-08-16,
+    //     which meant a queue gated to a kid still selected out of the OWNER's history.
+    //     (decision `2026-08-16-a-curated-queue-plays-as-the-profile-it-is-gated-to`)
+    // Rotation channels are ungated by design (their profiles[] names the account explicitly),
+    // so this is only meaningful/editable on queue sets. null = ungated, i.e. the admin view.
     requires_profile: ent.requires_profile != null ? String(ent.requires_profile) : null,
     // The repeating {provider, profile, libraries} block. ALWAYS a list, never null: a set
     // written before blocks existed reports the one implicit Plex block it has always meant,
