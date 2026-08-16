@@ -294,6 +294,32 @@ jobs:
           kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           exit $rc
 
+      # Path routing: the client router and the server's SPA fallback, pinned together.
+      # ALWAYS runs, like the narrow-view gate above and for the same reason — the
+      # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression
+      # would otherwise reach main unchallenged. It needs no token (URLs and header chrome
+      # render on the degraded no-Plex path) and reuses the chromium the step above
+      # installed, so keep it AFTER that step.
+      #
+      # What it exists to catch: `hasSpaFallback` reads like tidiness and was deliberately
+      # `false` for the whole hash-routing era. Flip it back and lint, typecheck, the unit
+      # tests, the build and every other suite stay green — the app just 404s on every
+      # reload of a deep link.
+      - name: Path routing + SPA fallback (browser, no Plex needed)
+        env:
+          QUEUES_PATH: /tmp/queues-routing.yaml
+          SETS_PATH: /tmp/sets-routing.yaml
+          HISTORY_PATH: /tmp/.history-routing.json
+          WEB_PORT: '18770'
+        run: |
+          unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
+          cp e2e/fixtures/queues.fixture.yaml /tmp/queues-routing.yaml
+          "$TSX" server/src/index.ts >/tmp/routing-e2e.log 2>&1 &
+          SRV=$!; sleep 1.5
+          "$TSX" e2e/routing-test.ts; rc=$?
+          kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
+          exit $rc
+
       # The pick.ts <-> SelectListbox contract — browser, no Plex, no app
       # server. Every picker is a Charcuterie `Listbox` behind a button, and
       # `e2e/pick.ts` is how all seventeen browser suites drive one; but those

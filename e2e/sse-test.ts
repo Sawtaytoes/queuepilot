@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}`); if (!isPass) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-await page.goto('http://localhost:18768/#/queues', { waitUntil: 'domcontentloaded' });
+await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf[data-set="bob"]');
 const before = await page.textContent('.shelf[data-set="bob"] .sec');
 // External hand-edit: put a title at the top of the bob queue, like an SMB edit would.

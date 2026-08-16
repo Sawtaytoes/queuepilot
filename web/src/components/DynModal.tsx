@@ -6,6 +6,8 @@ import {
   useRef,
   useState,
 } from "react"
+import { useNavigate } from "react-router"
+
 import { api } from "../lib/api"
 import {
   fetchProfiles,
@@ -24,7 +26,6 @@ import {
   closeDynModal,
   useOverlays,
 } from "../state/overlays"
-import { navigate } from "../state/route"
 import { load, setStatus, useStore } from "../state/store"
 import { CheckboxGroup } from "./CheckboxGroup"
 import { Modal } from "./Modal"
@@ -107,6 +108,7 @@ const hasData = (b: Binding) =>
   )
 
 export function DynModal() {
+  const navigate = useNavigate()
   const { dynModal } = useOverlays()
   const { reg } = useStore()
 
@@ -343,7 +345,7 @@ export function DynModal() {
         "ok",
       )
       await load()
-      navigate("#/channels")
+      navigate("/channels")
     } catch (err) {
       setStatus(
         `Save failed: ${(err as Error).message}`,
@@ -381,7 +383,7 @@ export function DynModal() {
       closeDynModal()
       setStatus("Channel deleted", "ok")
       await load()
-      navigate("#/channels")
+      navigate("/channels")
     } catch (e) {
       setStatus(
         `Delete failed: ${(e as Error).message}`,

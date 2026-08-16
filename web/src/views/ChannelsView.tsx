@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react"
+import { useNavigate } from "react-router"
 import {
   isPullSet,
   OpenQueueButton,
@@ -17,7 +18,6 @@ import {
   openPlayMenu,
   openSetModal,
 } from "../state/overlays"
-import { navigate } from "../state/route"
 import {
   channelSetIds,
   rotationChannels,
@@ -69,6 +69,7 @@ export function ChannelsView({
   isHidden: boolean
   routeId: string | null
 }) {
+  const navigate = useNavigate()
   const { data, reg } = useStore()
   const {
     channelId: currentChannel,
@@ -137,7 +138,7 @@ export function ChannelsView({
 
               - Channel: the second writer is the router. Picking here navigates,
                 and the DOM is already right; but a back button or a typed
-                `#/channels/movies` changes `channel.id` with nobody having touched
+                `/channels/movies` changes `channel.id` with nobody having touched
                 the control, and without the key the picker would keep naming the
                 channel you left.
               - Profile: its OPTIONS belong to the channel, so they must be
@@ -152,8 +153,8 @@ export function ChannelsView({
             onChange={(v) => {
               // A curated pool configures in the grid editor.
               if (v.startsWith("q:"))
-                navigate(`#/q/${v.slice(2)}`)
-              else navigate(`#/channels/${v}`)
+                navigate(`/q/${v.slice(2)}`)
+              else navigate(`/channels/${v}`)
             }}
             // Flat list: `Listbox` has no option groups, so the Play landing's
             // "Filtered Pools" / "Curated Pools" headings are dropped — filtered pools

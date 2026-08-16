@@ -22,7 +22,7 @@ async function boxOf(page: Page, selector: string): Promise<BoundingBox> {
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-await page.goto('http://localhost:18768/#/queues', { waitUntil: 'domcontentloaded' });
+await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf[data-set="bob"] li.tile');
 
 const stripSel = '.shelf[data-set="bob"] .strip';

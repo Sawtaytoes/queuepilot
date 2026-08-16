@@ -1,5 +1,6 @@
 import { ColorSchemeSwitcher } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
+import { Link } from "react-router"
 
 /** Which header popover is open. Only one at a time, mux-magic's `PageHeader` model:
  * a left "nav" menu (back / rename) and a right "actions" menu (undo / redo / scheme).
@@ -223,16 +224,16 @@ export function Header({
           ☰
         </button>
         {/* "‹ Play" goes to a page, so it is a link too — same reasoning as the landing rows.
-            `href` falls back to `#/` only while `hidden`, since an anchor with no href is not
+            `to` falls back to `/` only while `hidden`, since an anchor with no href is not
             focusable and would silently drop out of the tab order the moment `back` is null. */}
-        <a
+        <Link
           className="ghost"
           hidden={!back}
-          href={back?.target ?? "#/"}
           id="back"
+          to={back?.target ?? "/"}
         >
           {back?.label ?? "← All queues"}
-        </a>
+        </Link>
         <h1 id="heading" onClick={begin}>
           {isEditing ? (
             <input

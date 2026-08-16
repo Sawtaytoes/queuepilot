@@ -27,8 +27,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 //
 // `web/` is a Vite project since M6d, so what gets served is its BUILD OUTPUT, not its
 // sources. Run `npm --prefix web run build` before starting this server (the Dockerfile does
-// it in a builder stage; e2e/run.sh and CI do it inline). The app routes on `location.hash`,
-// so every URL the browser requests is `/` — there is no SPA fallback to add.
+// it in a builder stage; e2e/run.sh and CI do it inline). The app routes on real paths, so
+// the browser requests `/queues` and `/q/<id>` directly and `buildServer` answers unmatched
+// extensionless paths with index.html (`hasSpaFallback: true`).
 //
 // The `..`/`..` depth is the same in dev and in prod, which is not a coincidence worth
 // leaving unstated — VERIFIED against both layouts:

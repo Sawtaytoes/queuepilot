@@ -39,7 +39,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
   // 1 + 2 — Play landing: the tier picker open, then the Play menu open.
-  await page.goto(`${BASE}/#/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playdynamic .playrow');
   await page.locator('#playdynamic .playrow').first().locator('.rowtier').click();
   await page.waitForSelector('[role="listbox"] [role="option"]');
@@ -54,7 +54,7 @@ try {
 
   // 3 — Queue Add-to position picker open.
   const qid = await page.evaluate(() => fetch('/api/queues').then((r) => r.json()).then((j) => Object.keys(j.sets)[0]));
-  await page.goto(`${BASE}/#/q/${qid}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/q/${qid}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.add [data-testid="addpos"]', { timeout: 15000 }).catch(() => {});
   const addpos = await page.$('[data-testid="addpos"]');
   if (addpos) {
