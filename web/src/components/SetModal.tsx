@@ -73,6 +73,9 @@ export function SetModal() {
   // control is that the right number differs per queue — one episode for TV, three chapters
   // for a reading queue — not that reading queues get a different global.
   const [episodes, setEpisodes] = useState(1)
+  // Volumes are not chapters. Independent count, default 1 — a queue at 3 chapters
+  // must not dump 3 whole manga volumes into one visit.
+  const [volumes, setVolumes] = useState(1)
   const [profiles, setProfiles] = useState<Profile[]>([])
   // The repeating {provider, profile, libraries} blocks. Always a list — a set written
   // before blocks existed arrives as the single implicit Plex block it has always meant, so
@@ -114,6 +117,7 @@ export function SetModal() {
       editing ? editing.batch_stops_at || "none" : "none",
     )
     setEpisodes(editing?.episodes ?? 1)
+    setVolumes(editing?.volumes ?? 1)
     // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
     // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
     if (editing) {
@@ -306,6 +310,7 @@ export function SetModal() {
       // Likewise 1 — the server drops the key at <= 1, so a queue that never touched this
       // control stays byte-identical on disk.
       episodes,
+      volumes,
       // An empty list drops the key server-side, which is how the single-Plex-block case
       // stays on the legacy shape above.
       providers: isLegacyShape
@@ -549,6 +554,26 @@ export function SetModal() {
           {`How many ${vocab.units} one entry contributes before the queue moves to the next
             ${vocab.member}. A single entry can override this from its own settings.`}
         </p>
+        {vocab.unit === "chapter" ? (
+          <>
+            <div className="field">
+              <span className="fieldlbl">
+                Volumes per series each visit
+              </span>
+              <CountPicker
+                label="Volumes per series each visit"
+                max={EPISODES_MAX}
+                onChange={setVolumes}
+                value={volumes}
+              />
+            </div>
+            <p className="subhint" id="set-volumes-hint">
+              A volume is a collection of chapters, not a
+              chapter — this count is independent of the
+              chapter count above. Default is 1.
+            </p>
+          </>
+        ) : null}
         {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once). Remount on modal
             open AND when reel forces keep_completed on, so the box reflects the implied
             state without becoming a controlled input. */}

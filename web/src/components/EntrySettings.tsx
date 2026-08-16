@@ -56,7 +56,9 @@ export function SettingTags({
   /** The queue's provider vocabulary — a reading tile must not say "3 eps". */
   vocab?: ProviderVocabulary
 }) {
+  const isVolume = item.unit === "volume"
   const episodes = item.episodes ?? 1
+  const volumes = item.volumes ?? 1
   const weight = item.weight ?? 1
   const tag = (
     label: string,
@@ -88,14 +90,21 @@ export function SettingTags({
 
   return (
     <>
-      {episodes > 1
+      {isVolume && volumes > 1
         ? tag(
-            `${episodes} ${shortUnits(vocab)}`,
-            `Queues ${episodes} ${vocab.units} each time this entry comes up`,
+            `${volumes} vol`,
+            `Queues ${volumes} volumes each time this entry comes up`,
             "epstag",
             "neutral",
           )
-        : null}
+        : !isVolume && episodes > 1
+          ? tag(
+              `${episodes} ${shortUnits(vocab)}`,
+              `Queues ${episodes} ${vocab.units} each time this entry comes up`,
+              "epstag",
+              "neutral",
+            )
+          : null}
       {weight > 1
         ? tag(
             `${weight}x as often`,
@@ -118,7 +127,7 @@ export function SettingTags({
         : null}
       {item.start
         ? tag(
-            startLabel(item.start),
+            startLabel(item.start, item.unit),
             applyVocab(
               "Manual start point — playback begins here, and earlier episodes are left unwatched",
               vocab,
@@ -159,6 +168,15 @@ async function patchEntry(
     refreshData()
   }
 }
+
+export const setEntryVolumes = (
+  setId: string,
+  item: QueueItem,
+  volumes: number,
+) =>
+  patchEntry(setId, item, "volumes", { volumes }, (hit) => {
+    hit.volumes = volumes
+  })
 
 export const setEntryEpisodes = (
   setId: string,
@@ -239,6 +257,8 @@ export function EntryEditor({
   if (!isOpen || !setId || !item) return null
 
   const episodes = item.episodes ?? 1
+  const volumes = item.volumes ?? 1
+  const isVolume = item.unit === "volume"
   const isSeries =
     item.type === "show" || item.type === "collection"
 
@@ -262,21 +282,32 @@ export function EntryEditor({
       <div className="entryfields">
         {isSeries ? (
           <div className="field">
-            {/* In the QUEUE's words: this panel used to ask a manga entry how many
-                "episodes queued per play" it wanted. */}
+            {/* A volume is a collection of chapters, not a chapter — the chapter
+                count must not apply. The control (and the field it writes) follow
+                the ITEM's unit. */}
             <span className="fieldlabel">
-              {`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} queued per turn`}
+              {isVolume
+                ? "Volumes queued per turn"
+                : `${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} queued per turn`}
             </span>
             <CountPicker
-              label={`${vocab.units} queued per turn`}
+              label={
+                isVolume
+                  ? "Volumes queued per turn"
+                  : `${vocab.units} queued per turn`
+              }
               max={EPISODES_MAX}
               onChange={(n) =>
-                void setEntryEpisodes(setId, item, n)
+                void (isVolume
+                  ? setEntryVolumes(setId, item, n)
+                  : setEntryEpisodes(setId, item, n))
               }
-              value={episodes}
+              value={isVolume ? volumes : episodes}
             />
             <span className="fieldhint">
-              {`How long this entry’s turn is when the queue reaches it. Overrides
+              {isVolume
+                ? "A volume is a collection of chapters. This is how many volumes this series contributes per visit — independent of the queue’s chapter count."
+                : `How long this entry’s turn is when the queue reaches it. Overrides
                 the queue’s own default.`}
             </span>
           </div>
@@ -303,7 +334,7 @@ export function EntryEditor({
           </span>
         </div>
 
-        {isSeries && episodes > 1 ? (
+        {isSeries && !isVolume && episodes > 1 ? (
           <div className="field">
             <span className="fieldlabel">
               Where the batch may stop

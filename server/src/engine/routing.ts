@@ -62,6 +62,7 @@ type RawSetEntry = BindingSource & {
   include_specials?: unknown;
   batch_stops_at?: unknown;
   episodes?: unknown;
+  volumes?: unknown;
   audio_language?: unknown;
   max_items?: unknown;
   providers?: unknown;
@@ -230,6 +231,8 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
     // to `batch_stops_at`'s WHERE, and the same entry > set > env precedence: resolve.js's
     // setBatch() interprets it for Plex, providers/launcher.js for a pull provider.
     if (ent.episodes != null) cfg.episodes = String(ent.episodes).trim();
+    // Volumes are not chapters. A volume-based series reads this count, never `episodes`.
+    if (ent.volumes != null) cfg.volumes = String(ent.volumes).trim();
     // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
     if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().

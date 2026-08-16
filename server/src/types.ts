@@ -286,6 +286,12 @@ export interface QueueSet extends SetRegistryCommon {
    * wins over it.
    */
   episodes: number | null;
+  /**
+   * How many VOLUMES one volume-based entry contributes per visit. Independent of
+   * `episodes` — a volume is a collection of chapters, so the chapter count must not
+   * apply. null = 1. Sparse on disk the same way `episodes` is.
+   */
+  volumes: number | null;
 }
 
 /** A dynamic channel as the web API reports it (`source: 'rotation'`). */
@@ -390,6 +396,11 @@ interface RoutingSetCfgCommon {
   /** The set's default batch — how many items one entry contributes per visit. See
    *  resolve.ts `setBatch()`; entry `episodes:` overrides it, env is the floor. */
   episodes?: string;
+  /**
+   * How many VOLUMES one volume-based entry contributes per visit. Independent of
+   * `episodes` — a volume is not a chapter. Absent = 1.
+   */
+  volumes?: string;
   audio_language?: string;
   /** Always set (null when uncapped), unlike the passthroughs above it. */
   max_items: number | null;
@@ -441,6 +452,12 @@ export interface RoutingRegistry {
 export interface EntryExtras {
   /** How many episodes this entry contributes per visit. */
   episodes?: number;
+  /**
+   * How many VOLUMES this entry contributes per visit. Independent of `episodes:` —
+   * a volume is a collection of chapters, not a chapter, so the chapter count must
+   * not apply to a volume-based series. Absent / 1 = one volume.
+   */
+  volumes?: number;
   /** Slots per round when the set is randomized. */
   weight?: number;
   start?: Start;
@@ -803,6 +820,11 @@ export interface CuratedEntryRef {
   id: string;
   batch?: number | null;
   /**
+   * Per-visit VOLUME count for a volume-based series. Independent of `batch`
+   * (which is chapters). Absent = follow the queue's volume default (1).
+   */
+  volumes?: number | null;
+  /**
    * The entry's manual START floor, if any. Earlier unread chapters are skipped
    * from the pick and never marked read — the same rule Plex's start floor has
    * always meant. Absent = automatic next-unread.
@@ -834,6 +856,12 @@ export interface BucketsContext {
    */
   isRandomOrder?: boolean;
   batch?: number | null;
+  /**
+   * How many VOLUMES one volume-based series contributes per visit. Separate from
+   * `batch` (chapters). Absent / null = 1. The chapter count must not leak onto
+   * a volume — a volume is a collection of chapters, not a chapter.
+   */
+  volumeBatch?: number | null;
   limit?: number | null;
   /**
    * "Play THIS entry": an ENTRY KEY that narrows a curated set's lineup to one member.

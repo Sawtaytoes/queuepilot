@@ -87,6 +87,11 @@ export type QueueItem = {
   isNextEpFailed?: boolean
   episodes: number
   /**
+   * How many VOLUMES this entry contributes per visit. Independent of `episodes` —
+   * a volume is a collection of chapters. 1 (the default) wears no tag.
+   */
+  volumes?: number
+  /**
    * Per-entry override of the set's `batch_stops_at`: WHERE this entry's batch may stop
    * ("season" = never cross a season finale, "member" = never leave the current show inside
    * a collection). null = follow the set. Only meaningful when `episodes` > 1.
@@ -291,6 +296,12 @@ export type RegistrySet = {
    * 2026-08-15). A per-entry `episodes` still wins over it.
    */
   episodes?: number | null
+  /**
+   * How many VOLUMES one volume-based entry contributes per visit. Independent of
+   * `episodes` — a volume is a collection of chapters, so the chapter count must
+   * not apply. null/absent = 1.
+   */
+  volumes?: number | null
   audio_language?: string
   superseded_by?: string | null
   // The ultra-legacy single-binding mirror, still read by `activeBinding`.

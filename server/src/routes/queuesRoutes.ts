@@ -43,6 +43,7 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     raw: tiles.displayFor(e.value),
     ...core,
     episodes: v && v.episodes ? v.episodes : 1,
+    volumes: v && v.volumes ? v.volumes : 1,
     // How often this entry comes up when the set is randomized (1 = normal; the editor shows
     // a tag only above 1).
     weight: toWeight(v ? v.weight : null),
@@ -301,17 +302,32 @@ export function queuesRoutes(): Hono {
         // weight survives), which is what the bar's "Reset to defaults" + a picked value means.
         if (body.reset) {
           await queues.setEpisodes(set, key, 1);
+          await queues.setVolumes(set, key, 1);
           await queues.setWeight(set, key, 1);
           await queues.setBatchStop(set, key, null);
           await queues.setStart(set, key, null);
         }
         if (wants('episodes')) await queues.setEpisodes(set, key, body.episodes);
+        if (wants('volumes')) await queues.setVolumes(set, key, body.volumes);
         if (wants('weight')) await queues.setWeight(set, key, body.weight);
         if (wants('batch_stops_at')) await queues.setBatchStop(set, key, body.batch_stops_at);
         applied.push({ set, key });
       }
       await cache.bumpGeneration();
       return c.json({ ok: failed.length === 0, applied: applied.length, failed });
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // How many VOLUMES a volume-based series contributes per visit. Body: {volumes}.
+  // Independent of `episodes` — a volume is a collection of chapters.
+  app.patch('/queues/:set/items/:key/volumes', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    const { volumes } = await readBody(c);
+    try {
+      return c.json(await queues.setVolumes(set, decodeURIComponent(c.req.param('key')), volumes));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

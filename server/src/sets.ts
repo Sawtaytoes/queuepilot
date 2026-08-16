@@ -491,7 +491,7 @@ function toWeights(v: unknown): Record<string, number> {
  * `SetRegistryCommon`, which it declares but does not export, so it is reconstructed here
  * from the queue arm rather than duplicated.
  */
-type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel' | 'remove_completed_after' | 'batch_stops_at' | 'episodes'>;
+type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel' | 'remove_completed_after' | 'batch_stops_at' | 'episodes' | 'volumes'>;
 
 function normalize(ent: RawSet): SetRegistryEntry | null {
   const id = String(ent.id || '').trim();
@@ -606,6 +606,9 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     // the engine default (env QUEUE_SERIES_DEFAULT, which is 1). A per-entry `episodes:`
     // still wins over this.
     episodes: toPosIntOrNull(ent.episodes),
+    // Volumes are NOT chapters. The chapter count must not apply to a volume-based
+    // series; this is its own sparse default (null = 1).
+    volumes: toPosIntOrNull(ent.volumes),
   };
 }
 
@@ -834,6 +837,8 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       // so only a real choice is written.
       const eps = parseInt(String(body.episodes ?? ''), 10);
       if (Number.isFinite(eps) && eps > 1) curated.episodes = Math.min(eps, QUEUE_SERIES_LENGTH);
+      const vols = parseInt(String(body.volumes ?? ''), 10);
+      if (Number.isFinite(vols) && vols > 1) curated.volumes = Math.min(vols, QUEUE_SERIES_LENGTH);
     }
     const obj = isRotation ? rotationCreateObj(id, body) : curated;
     // Provider blocks, on BOTH sources — a reading queue and a reading channel are equally
@@ -876,6 +881,9 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // a curated one, and unlike the consumption flags it describes the LINEUP, not how
       // entries are retired.
       'episodes',
+      // How many VOLUMES a volume-based entry contributes. Independent of `episodes` —
+      // a volume is a collection of chapters, not a chapter. Same sparse/clamp rules.
+      'volumes',
       // The repeating {provider, profile, libraries} block. Valid on BOTH sources, unlike
       // most knobs here — a reading queue and a reading channel are both plausible.
       'providers',
@@ -945,6 +953,15 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const n = parseInt(String(v ?? ''), 10);
         if (!Number.isFinite(n) || n <= 1) { node.delete('episodes'); continue; }
         setKeepingComment(node, 'episodes', doc.createNode(Math.min(n, QUEUE_SERIES_LENGTH)));
+        continue;
+      }
+      if (k === 'volumes') {
+        // How many VOLUMES a volume-based series contributes per visit. Independent of
+        // `episodes` — a volume is a collection of chapters, so the chapter count must
+        // not apply. 1 is the default and drops the key.
+        const n = parseInt(String(v ?? ''), 10);
+        if (!Number.isFinite(n) || n <= 1) { node.delete('volumes'); continue; }
+        setKeepingComment(node, 'volumes', doc.createNode(Math.min(n, QUEUE_SERIES_LENGTH)));
         continue;
       }
       if (k === 'providers') {
