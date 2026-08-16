@@ -83,7 +83,7 @@ try {
   const cards = () => page.$$eval('#dyn-bindings .binding', (els) => els.length);
 
   // --- 1. NEW channel modal: behavior select + one empty binding card -------- //
-  await page.goto(`${BASE}/#/channels`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#newdyn', { timeout: 30000 });
   await page.click('#newdyn');
   await page.waitForSelector('#dynmodal[data-open]');
@@ -149,7 +149,7 @@ try {
   ok('created channel persisted profiles[]', Array.isArray(created?.profiles) && created.profiles.length >= 1);
 
   // --- 4. Edit-load a LEGACY single-binding set → one prefilled card ---------- //
-  await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForTimeout(300);
@@ -189,7 +189,7 @@ try {
     const r: SetsResponse = await fetch('/api/sets').then((x) => x.json());
     return r.sets.find((set) => set.label === 'Verify Rewatch')?.id;
   });
-  await page.goto(`${BASE}/#/channels/${newId}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/${newId}`, { waitUntil: 'domcontentloaded' });
   await page.reload({ waitUntil: 'domcontentloaded' }); // REG was loaded before the POST — refetch it
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await page.waitForTimeout(300);

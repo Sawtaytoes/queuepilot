@@ -1,6 +1,6 @@
 // Regression gate: a CURATED QUEUE reads the watched state of the profile it plays under.
 //
-// THE BUG THIS PINS (live, 2026-08-16, reported from queuepilot.example.com/#/q/carol_1). A
+// THE BUG THIS PINS (live, 2026-08-16, reported from queuepilot.example.com/q/carol_1). A
 // curated queue stores `requires_profile` — a display NAME — and nothing else; it has no
 // `profiles[]` and no binding fields, so `routing.bindingFor()` handed back an empty binding.
 // An empty binding was wrong in two directions at once:

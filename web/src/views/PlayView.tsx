@@ -1,4 +1,5 @@
 import { type ReactNode, useState } from "react"
+import { Link } from "react-router"
 import {
   isPullSet,
   OpenQueueButton,
@@ -46,23 +47,27 @@ function parseTierValue(v: string): {
 }
 
 function PlayRow({
-  href,
   label,
   meta,
   onPlay,
   set,
   tier,
+  to,
 }: {
   /**
-   * Where this row GOES — a real `href`, not an `onClick` that calls `navigate()`.
+   * Where this row GOES — a real link target, not an `onClick` that calls `navigate()`.
    * Middle-click, ⌘/Ctrl-click, "Open in new tab", "Copy link address" and the status-bar
    * preview all come from the ELEMENT being an anchor; none of them can be added to a
-   * `<button>` by styling it like a link. Routing is `location.hash`, so a plain click
-   * needs no handler at all — setting the hash is what `navigate()` did anyway, and the
-   * existing `hashchange` listener does the rest.
+   * `<button>` by styling it like a link.
    * (decision `2026-08-15-navigation-is-an-anchor-not-a-button`)
+   *
+   * It is a react-router `<Link>` rather than a bare `<a>` as of 2026-08-16. Under the
+   * hash router a plain `<a href="#/q/1">` needed no handler — setting the hash WAS the
+   * navigation. A path `<a href="/q/1">` is not the same thing: the browser would leave
+   * the page and refetch the whole app. `<Link>` still RENDERS an `<a href>`, so every
+   * affordance above survives; it just intercepts the plain left-click.
    */
-  href: string
+  to: string
   label: string
   meta: string
   onPlay: (anchor: DOMRect) => void
@@ -82,9 +87,9 @@ function PlayRow({
       data-provider={set?.provider_kind || undefined}
     >
       <div className="rowmain">
-        <a className="rowname" href={href}>
+        <Link className="rowname" to={to}>
           {label}
-        </a>
+        </Link>
         <span className="rowmeta">{meta}</span>
       </div>
       {tier}
@@ -150,7 +155,7 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
           ? "weighted rewatch"
           : "rotation · ratings-filtered"
       }
-      href={`#/channels/${encodeURIComponent(channel.id)}`}
+      to={`/channels/${encodeURIComponent(channel.id)}`}
       onPlay={(anchor) => {
         const t = parseTierValue(tierValue)
 
@@ -187,13 +192,13 @@ export function PlayView({
       <section className="playgroup">
         <h2>
           Filtered Pools
-          <a
+          <Link
             className="ghost"
-            href="#/channels"
             id="gochannels"
+            to="/channels"
           >
             Configure ›
-          </a>
+          </Link>
         </h2>
         <ul className="playlist" id="playdynamic">
           {isHidden
@@ -207,13 +212,13 @@ export function PlayView({
       <section className="playgroup">
         <h2>
           Curated Pools
-          <a
+          <Link
             className="ghost"
-            href="#/channels"
             id="gocurated"
+            to="/channels"
           >
             Configure ›
-          </a>
+          </Link>
         </h2>
         <ul className="playlist" id="playcurated">
           {isHidden
@@ -227,7 +232,7 @@ export function PlayView({
                     label={s.label}
                     set={reg?.sets.find((x) => x.id === id)}
                     meta={`${s.items.length} shows · rotation`}
-                    href={`#/q/${id}`}
+                    to={`/q/${id}`}
                     onPlay={(anchor) =>
                       openPlayMenu({ anchor, setId: id })
                     }
@@ -240,13 +245,13 @@ export function PlayView({
       <section className="playgroup">
         <h2>
           Ordered Queues
-          <a
+          <Link
             className="ghost"
-            href="#/queues"
             id="goqueues"
+            to="/queues"
           >
             Configure ›
-          </a>
+          </Link>
         </h2>
         <ul className="playlist" id="playqueues">
           {isHidden
@@ -263,7 +268,7 @@ export function PlayView({
                     // columns over renders amber — one page, two colours, same provider.
                     set={reg?.sets.find((x) => x.id === id)}
                     meta={`${s.items.length} titles · top plays next`}
-                    href={`#/q/${id}`}
+                    to={`/q/${id}`}
                     onPlay={(anchor) =>
                       openPlayMenu({ anchor, setId: id })
                     }

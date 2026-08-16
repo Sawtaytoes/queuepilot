@@ -93,7 +93,7 @@ try {
   page.on('pageerror', (e) => errors.push(String(e)));
   const tiles = () => page.locator('#chmembers li.tile').count();
 
-  await page.goto(`${BASE}/#/channels/shows`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
   await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForSelector('#chmembers li.tile', { timeout: 30000 });

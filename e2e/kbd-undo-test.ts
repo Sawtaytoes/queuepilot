@@ -3,7 +3,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-await page.goto('http://localhost:18768/#/queues', { waitUntil: 'domcontentloaded' });
+await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf');
 
 // Keyboard add in queue view: type → ArrowDown x2 → Enter picks the 2nd result.

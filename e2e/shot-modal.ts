@@ -6,13 +6,13 @@ const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await page.goto(BASE, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.playrow');
 // Grid header: navigate into a queue to see Configure inline with Play/search.
-await page.goto(`${BASE}/#/queues`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf', { timeout: 15000 }).catch(() => {});
 const firstOpen = await page.$('.shelf .open');
 if (firstOpen) { await firstOpen.click(); await page.waitForSelector('#queue:not([hidden])'); }
 await page.screenshot({ path: '__screenshots__/grid-header.png' });
 // Dyn modal: open the create form and screenshot (X + chrome).
-await page.goto(`${BASE}/#/channels`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/channels`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#newdyn', { timeout: 15000 }).catch(() => {});
 const nd = await page.$('#newdyn');
 if (nd) { await nd.click(); await page.waitForSelector('#dynmodal[data-open]'); await page.screenshot({ path: '__screenshots__/dynmodal.png' });

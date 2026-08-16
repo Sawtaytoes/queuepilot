@@ -1,6 +1,6 @@
 // Fake MQTT for the local dev harness — stands in for the real Mosquitto broker + the app's
 // own MQTT service (mqttd), which are NOT reachable from the sandbox. It lets the
-// offline web UI render everything that needs MQTT: the #/channels preview pools, the
+// offline web UI render everything that needs MQTT: the /channels preview pools, the
 // "Play on ▾" device menu, and play-result toasts.
 //
 // It is a TINY aedes broker (e2e/broker/node_modules — run `npm install` there once) plus a

@@ -68,11 +68,17 @@ export function buildServer({ publicDir }: BuildServerOptions): Hono {
   // build time, and the JSON API is small. If one is ever added, `text/event-stream` MUST be
   // excluded or `/api/events` buffers and the stream looks dead.
   //
-  // `hasSpaFallback: false` is load-bearing, not tidiness. The app routes on `location.hash`,
-  // so every URL the browser requests is `/` and there is no SPA fallback today. The option
-  // DEFAULTS to true, which would start answering every unmatched extensionless path with
-  // index.html — turning what is now a 404 into a 200 page.
-  root.use('*', createStaticHandler({ rootDir: publicDir, hasSpaFallback: false }));
+  // `hasSpaFallback: true` is load-bearing, not tidiness — it is the server half of path
+  // routing. The app moved off `location.hash` on 2026-08-16, so the browser now really does
+  // request `/queues` and `/q/<id>`; without the fallback the FIRST request to any of them
+  // (a reload, a bookmark, a pasted link) 404s instead of booting the app. Every unmatched
+  // extensionless path answers with index.html, and the client router decides from there —
+  // `parsePath` falls back to PLAY, so a typo'd URL lands on the landing, not a blank shell.
+  //
+  // This is safe for the API because `root.route(API_PREFIX, api)` is mounted ABOVE, so
+  // `/api/*` never reaches here; and asset 404s still 404 because the fallback only applies
+  // to extensionless paths.
+  root.use('*', createStaticHandler({ rootDir: publicDir, hasSpaFallback: true }));
 
   return root;
 }

@@ -57,11 +57,11 @@ const preloadBodyFont = (): Plugin => ({
 import { firstPaint } from "./vite/firstPaint.ts"
 
 /**
- * One entry: the editor is a single-page app routed on
- * `location.hash` (`#/`, `#/queues`, `#/q/<id>`, `#/channels/<id>`).
- * Hash routing is deliberate and predates this migration — it means
- * the server needs no SPA fallback at all, because every URL the
- * browser ever requests is `/`.
+ * One entry: the editor is a single-page app routed on real paths
+ * (`/`, `/queues`, `/q/<id>`, `/channels/<id>`) via react-router.
+ * These were `#/…` until 2026-08-16; because the browser now requests
+ * those paths for real, the server MUST answer them with index.html
+ * (`hasSpaFallback: true` in `server/src/buildServer.ts`).
  *
  * `dist/` lands beside this file and the server points `PUBLIC_DIR`
  * at it, so the server-side change is one constant.

@@ -26,7 +26,7 @@ page.on('pageerror', (e) => errors.push(String(e)));
 
 const tileByTitle = (title: string) => page.locator('#grid li.tile', { hasText: title }).first();
 
-await page.goto(`http://localhost:${PORT}/#/q/bob_anime`, { waitUntil: 'domcontentloaded' });
+await page.goto(`http://localhost:${PORT}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#grid li.tile');
 await page.waitForTimeout(2000);
 

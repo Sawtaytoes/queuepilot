@@ -21,7 +21,7 @@ const page = await browser.newPage({
   colorScheme: 'dark',
 });
 
-await page.goto(`http://localhost:${PORT}/#/q/${SET}`, { waitUntil: 'domcontentloaded' });
+await page.goto(`http://localhost:${PORT}/q/${SET}`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#grid .tile .cap', { timeout: 30000 });
 // The owner's UI is dark; the scheme toggle persists to localStorage, so set it directly.
 await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'dark'));

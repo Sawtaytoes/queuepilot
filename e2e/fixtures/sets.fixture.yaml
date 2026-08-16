@@ -6,7 +6,7 @@
 #   * curated MOVIE queues (source: queue, kind: movies)  -> bob, bob_alice
 #   * a curated ANIME channel (source: queue, kind: anime) -> bob_anime
 #   * rule-based ROTATION channels WITH an account binding (source: rotation) -> younger, older
-# The rotation channels drive the #/channels Dynamic group + the Play-landing tier dropdown;
+# The rotation channels drive the /channels Dynamic group + the Play-landing tier dropdown;
 # their preview pools + the "Play on" device menu come from the fake MQTT responder
 # (e2e/fake-mqtt.mjs), since the real broker is unreachable from the harness.
 global:

@@ -194,11 +194,19 @@ export interface PageEvents {
   response: Response;
   crash: Page;
   close: Page;
+  /** A real document load. `routing-test` counts these to prove a click routed
+   *  CLIENT-side — a link that navigates the document still lands on the right
+   *  URL, so the URL alone cannot tell the two apart. */
+  load: Page;
 }
 
 export interface Page {
   goto(url: string, options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
   reload(options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
+  /** The browser's own Back. Only meaningful since routing moved to real paths
+   *  (2026-08-16) — under the hash router there was no history stack to walk. */
+  goBack(options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
+  goForward(options?: TimeoutOptions & { waitUntil?: string }): Promise<Response | null>;
   close(): Promise<void>;
   content(): Promise<string>;
   title(): Promise<string>;
