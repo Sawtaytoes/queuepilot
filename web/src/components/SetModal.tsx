@@ -544,6 +544,7 @@ export function SetModal() {
             {`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per ${vocab.member} each visit`}
           </span>
           <CountPicker
+            defaultValue={1}
             label={`${vocab.units} per ${vocab.member} each visit`}
             max={EPISODES_MAX}
             onChange={setEpisodes}
@@ -561,6 +562,7 @@ export function SetModal() {
                 Volumes per series each visit
               </span>
               <CountPicker
+                defaultValue={1}
                 label="Volumes per series each visit"
                 max={EPISODES_MAX}
                 onChange={setVolumes}

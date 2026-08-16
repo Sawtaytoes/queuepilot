@@ -118,9 +118,10 @@ export function useQueueView(setId: string | null) {
   }
 }
 
-/** Does this entry carry ANY per-entry override, i.e. is it not just "play the next one"? */
+/** Does this entry carry ANY per-entry override, i.e. is it not just following the set? */
 export const hasOverrides = (it: QueueItem) =>
-  (it.episodes ?? 1) > 1 ||
+  it.episodes != null ||
+  it.volumes != null ||
   (it.weight ?? 1) > 1 ||
   Boolean(it.batch_stops_at) ||
   Boolean(it.start)

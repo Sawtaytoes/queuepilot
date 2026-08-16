@@ -10,6 +10,7 @@ import { QUEUES_PATH } from './config.js';
 import { QUEUE_SERIES_LENGTH } from './env.js';
 import { toWeight } from './engine/weight.js';
 import { isNodeError } from './errors.js';
+import * as sets from './sets.js';
 import type { EntryExtras, EntryValue, QueueEntry, Start } from './types.js';
 
 /**
@@ -592,9 +593,32 @@ export async function clearDone(
   });
 }
 
+/** This set's stored default for `field`, or the engine floor of 1. */
+async function setCountDefault(
+  setName: string,
+  field: 'episodes' | 'volumes',
+): Promise<number> {
+  const s = await sets.getSet(setName);
+  if (!s || s.source !== 'queue') return 1;
+  const n = s[field];
+  return n != null && n >= 1 ? n : 1;
+}
+
+/**
+ * A stored per-entry count, or null when the entry follows the set.
+ *
+ * Absent / unparseable / < 1 is "follow the set" — never coerced to 1. 1 is a real
+ * override when this set's default is not 1.
+ */
+export function storedCount(raw: unknown): number | null {
+  if (raw == null || raw === '') return null;
+  const n = parseInt(String(raw), 10);
+  return Number.isFinite(n) && n >= 1 ? n : null;
+}
+
 // Set a series entry's per-show `episodes` (episodes queued per play). Rewrites the entry as
 // a mapping carrying its ratingKey/title identity + `episodes` (or drops the field / reverts
-// to a bare scalar when set back to 1). Entry identity (key) is unchanged.
+// to a bare scalar when the value equals THIS SET's default). Entry identity (key) is unchanged.
 export async function setEpisodes(
   setName: string,
   key: string,
@@ -604,25 +628,27 @@ export async function setEpisodes(
   // offers a free-typed count, and a value this accepted but resolve.js then clamped would have
   // the file disagreeing with what actually plays.
   const n = Math.max(1, Math.min(parseInt(String(episodes), 10) || 1, QUEUE_SERIES_LENGTH));
+  const setDefault = await setCountDefault(setName, 'episodes');
   const ok = await rewriteEntry(setName, key, (e) => {
-    if (n > 1) e.extras.episodes = n;
-    else delete e.extras.episodes;
+    if (n === setDefault) delete e.extras.episodes;
+    else e.extras.episodes = n;
   });
   return ok ? { ok: true, episodes: n } : { ok: false };
 }
 
 // How many VOLUMES a volume-based series contributes per visit. Independent of
 // `episodes` — a volume is a collection of chapters, so the chapter count must
-// not apply. 1 drops the key, same sparse rule as setEpisodes.
+// not apply. Equals-the-set-default drops the key, same sparse rule as setEpisodes.
 export async function setVolumes(
   setName: string,
   key: string,
   volumes: unknown,
 ): Promise<{ ok: true; volumes: number } | { ok: false }> {
   const n = Math.max(1, Math.min(parseInt(String(volumes), 10) || 1, QUEUE_SERIES_LENGTH));
+  const setDefault = await setCountDefault(setName, 'volumes');
   const ok = await rewriteEntry(setName, key, (e) => {
-    if (n > 1) e.extras.volumes = n;
-    else delete e.extras.volumes;
+    if (n === setDefault) delete e.extras.volumes;
+    else e.extras.volumes = n;
   });
   return ok ? { ok: true, volumes: n } : { ok: false };
 }

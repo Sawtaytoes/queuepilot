@@ -133,7 +133,7 @@ function optimisticItem(hit: SearchHit): QueueItem {
       ? (hit.childCount ?? null)
       : null,
     done: false,
-    episodes: 1,
+    episodes: null,
     weight: 1,
     key: isCollection
       ? `title:Collection: ${hit.title}`

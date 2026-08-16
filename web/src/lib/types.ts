@@ -85,12 +85,17 @@ export type QueueItem = {
    * empty. Both leave `nextEp` null, but only the empty one means "all watched".
    */
   isNextEpFailed?: boolean
-  episodes: number
   /**
-   * How many VOLUMES this entry contributes per visit. Independent of `episodes` —
-   * a volume is a collection of chapters. 1 (the default) wears no tag.
+   * Per-entry override of the set's chapter/episode batch. `null` = follow the
+   * set (the picker then shows the set's number, tagged Default). A stored `1`
+   * is a real override when the set default is not 1.
    */
-  volumes?: number
+  episodes: number | null
+  /**
+   * Per-entry override of the set's volume batch. Independent of `episodes` —
+   * a volume is a collection of chapters. `null`/absent = follow the set.
+   */
+  volumes?: number | null
   /**
    * Per-entry override of the set's `batch_stops_at`: WHERE this entry's batch may stop
    * ("season" = never cross a season finale, "member" = never leave the current show inside

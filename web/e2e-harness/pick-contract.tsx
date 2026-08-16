@@ -55,6 +55,20 @@ const Harness = () => {
 
       {/* The test reads this to prove a pick reached `onChange`. */}
       <p data-testid="chosen">{position}</p>
+
+      {/* A second picker with a trailing chip — CountPicker's Default tag and
+          StartModal's Watched chips both ride `badge` on SelectListbox. */}
+      <SelectListbox
+        id="count"
+        label="Chapters queued per turn"
+        onChange={() => undefined}
+        options={[
+          { label: "1", value: "1" },
+          { badge: "Default", label: "2", value: "2" },
+          { label: "Custom…", value: "custom" },
+        ]}
+        value="2"
+      />
     </main>
   )
 }

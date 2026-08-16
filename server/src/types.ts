@@ -1025,7 +1025,13 @@ export interface QueueTile extends Tile {
   key: string;
   /** `tiles.displayFor(value)` — the raw title string, for the editor. */
   raw: string;
-  episodes: number;
+  /**
+   * Per-entry override of the set's chapter/episode batch. `null` = follow the set.
+   * A stored `1` is a real override when the set default is not 1.
+   */
+  episodes: number | null;
+  /** Per-entry override of the set's volume batch. `null` = follow the set. */
+  volumes: number | null;
   weight: number;
   batch_stops_at: BatchStop;
   start: Start | null;

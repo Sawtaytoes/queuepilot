@@ -190,7 +190,7 @@ function shelvesAsQueues(
       items: s.items.map((it) => ({
         childCount: null,
         done: it.done,
-        episodes: 1,
+        episodes: null,
         weight: 1,
         key: it.key,
         nextEp: null,
