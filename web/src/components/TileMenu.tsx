@@ -6,11 +6,13 @@ import {
 } from "react"
 
 import { isStartable } from "../lib/tileFace"
+import { applyVocab, vocabForSet } from "../lib/vocab"
 import {
   closeTileMenu,
   openStartModal,
   useOverlays,
 } from "../state/overlays"
+import { useStore } from "../state/store"
 import { commitStart } from "./startCommit"
 
 /**
@@ -24,6 +26,12 @@ import { commitStart } from "./startCommit"
  */
 export function TileMenu() {
   const { tileMenu } = useOverlays()
+  const { reg } = useStore()
+  const vocab = vocabForSet(
+    reg?.sets,
+    tileMenu?.entry.setId,
+  )
+  const t = (s: string) => applyVocab(s, vocab)
   const ref = useRef<HTMLDivElement>(null)
   const [pos, setPos] = useState<{
     left: number
@@ -113,8 +121,8 @@ export function TileMenu() {
           type="button"
         >
           {item.start
-            ? "Change start episode…"
-            : "Start from an episode…"}
+            ? t("Change start episode…")
+            : t("Start from an episode…")}
         </button>
       ) : null}
       {entry && item && isStartable(item) && item.start ? (

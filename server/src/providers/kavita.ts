@@ -24,6 +24,8 @@ import type {
   ProviderPoolBucket,
   ProviderSearchHit,
   PullResult,
+  Start,
+  UnitList,
 } from '../types.js';
 import type {
   KavitaChapterDto,
@@ -195,7 +197,7 @@ function chapterItem(
  * and for a volume-based series the chapter numbers are ALL the sentinel, so a sort on the
  * chapter number alone would leave the volumes in whatever order the wire chose.
  */
-function orderedUnread(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
+function orderedAll(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
   const loose: UnreadEntry[] = [
     ...(detail?.chapters || []),
     ...(detail?.specials || []),
@@ -213,12 +215,35 @@ function orderedUnread(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
       // labelling byte-identical to what it was before volumes were read at all.
       if (seen.has(ch.id)) return false;
       seen.add(ch.id);
-      return (ch.pages ?? 0) > 0 && (ch.pagesRead ?? 0) < (ch.pages ?? 0);
+      return true;
     })
     .sort((a, b) => (
       (a.volume?.minNumber ?? 0) - (b.volume?.minNumber ?? 0)
       || (a.chapter.minNumber ?? 0) - (b.chapter.minNumber ?? 0)
     ));
+}
+
+function orderedUnread(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
+  return orderedAll(detail).filter(({ chapter: ch }) => (
+    (ch.pages ?? 0) > 0 && (ch.pagesRead ?? 0) < (ch.pages ?? 0)
+  ));
+}
+
+function isFullyRead(ch: KavitaChapterDto): boolean {
+  const pages = ch.pages ?? 0;
+  return pages > 0 && (ch.pagesRead ?? 0) >= pages;
+}
+
+/**
+ * A start floor {episode} — `episode` is the chapter (or volume) NUMBER, the
+ * same field the tile and the picker persist. Earlier unread items are skipped
+ * from the pick and never marked read. No start => always.
+ */
+function atOrAfterStart(entry: UnreadEntry, start: Start | null | undefined): boolean {
+  if (!start || start.episode == null) return true;
+  const n = Number(chapterItem(entry, 0).number);
+  if (!Number.isFinite(n)) return true;
+  return n >= start.episode;
 }
 
 /** Map with bounded concurrency, preserving input order. */
@@ -368,6 +393,29 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           return null;
         }
       });
+    },
+
+    /**
+     * Every chapter (or volume) of a series, for the "Start from…" picker.
+     *
+     * One season: a webtoon has no seasons and a volume-based manga presents each
+     * volume as a unit, so `multiSeason: false` hides the season row. `watched` is
+     * fully-read, the same badge the Plex picker paints "Watched".
+     */
+    async listUnits(itemId: string): Promise<UnitList | null> {
+      const detail = await c.seriesDetail(itemId);
+      const all = orderedAll(detail);
+      if (!all.length) return null;
+      const episodes = all.map((entry) => {
+        const item = chapterItem(entry, itemId);
+        const n = Number(item.number);
+        return {
+          episode: Number.isFinite(n) ? n : null,
+          title: item.title || '',
+          watched: isFullyRead(entry.chapter),
+        };
+      });
+      return { multiSeason: false, seasons: [{ season: 1, episodes }] };
     },
 
     /**
@@ -521,31 +569,36 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
 
       // The series this queue may draw from, each carrying the per-visit batch that applies
       // to it. A curated entry's own `episodes:` override rides here; a library series has
-      // none and takes the queue default.
-      let sources: { series: KavitaSeriesDto; batch: number }[];
+      // none and takes the queue default. `start` is the same floor Plex already honours:
+      // earlier unread chapters are skipped, never marked read.
+      let sources: { series: KavitaSeriesDto; batch: number; start: Start | null }[];
       if (curated.length) {
         const rows = await mapLimit(curated, PROBE_CONCURRENCY, async (e) => {
           try {
             const s = await c.series(e.id);
             // A series deleted in Kavita drops out rather than throwing — one stale entry
             // must not make a ninety-three-entry queue unlaunchable.
-            return s ? { series: s, batch: Math.max(1, Number(e.batch ?? perSeries) || perSeries) } : null;
+            return s ? {
+              series: s,
+              batch: Math.max(1, Number(e.batch ?? perSeries) || perSeries),
+              start: e.start ?? null,
+            } : null;
           } catch {
             return null;
           }
         });
-        sources = rows.filter((r): r is { series: KavitaSeriesDto; batch: number } => r != null);
+        sources = rows.filter((r): r is { series: KavitaSeriesDto; batch: number; start: Start | null } => r != null);
       } else {
         const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
         sources = seriesLists.flat()
           .filter((s): s is KavitaSeriesDto => s != null)
-          .map((series) => ({ series, batch: perSeries }));
+          .map((series) => ({ series, batch: perSeries, start: null }));
       }
 
       // One continue-point probe per series, bounded. A series with nothing unread yields no
       // bucket at all, which is what keeps a finished series out of the rotation without a
       // separate "done" store — the read state in Kavita IS the done state.
-      const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({ series: s, batch: want }): Promise<KavitaSeriesBucket | null> => {
+      const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({ series: s, batch: want, start }): Promise<KavitaSeriesBucket | null> => {
         const bucket = {
           key: `series:${s.id}`,
           title: s.name,
@@ -557,8 +610,10 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           batch: want,
         };
 
-        // ONE chapter wanted: continue-point answers it in a single call.
-        if (want <= 1) {
+        // ONE chapter wanted and no floor: continue-point answers it in a single call.
+        // A start floor has to see the ordered run, or a "start at Ch 88" would still
+        // pick whichever chapter continue-point named.
+        if (want <= 1 && !start) {
           const ch = await c.continuePoint(s.id as number | string);
           if (!isUnread(ch)) return null;
           return { ...bucket, items: [chapterItem(ch, s.id)] };
@@ -566,9 +621,9 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
 
         // MORE than one wanted — "read 3 chapters, then switch series", the opening ask in
         // the feasibility record. continue-point only ever returns the single next chapter,
-        // so a batch needs the ordered run and its read state.
+        // so a batch needs the ordered run and its read state. Same path as a start floor.
         const detail = await c.seriesDetail(s.id as number | string);
-        const unread = orderedUnread(detail);
+        const unread = orderedUnread(detail).filter((e) => atOrAfterStart(e, start));
         if (!unread.length) return null;
         return { ...bucket, items: unread.slice(0, want).map((e) => chapterItem(e, s.id)) };
       });

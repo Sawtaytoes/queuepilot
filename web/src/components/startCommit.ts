@@ -27,7 +27,7 @@ export async function commitStart(
 
     setStatus(
       start
-        ? `Starts at ${startLabel(start).replace(/^Start /, "")}`
+        ? `Starts at ${startLabel(start, entry.item.unit).replace(/^Start /, "")}`
         : "Start cleared — plays automatically",
       "ok",
     )

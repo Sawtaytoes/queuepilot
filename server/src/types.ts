@@ -80,6 +80,29 @@ export interface ProviderVocabulary {
   member: string;
   /** The finished state, for "All watched" / "All read". */
   done: string;
+  /**
+   * The product name used in authored copy: "Plex" / "Kavita".
+   * The replacement engine swaps this for the word "Plex" in leftover sentences.
+   */
+  name: string;
+}
+
+/**
+ * The "Start from…" picker's list. Same shape the Plex-only `/show/:id/episodes`
+ * route has always returned, so the modal does not grow a second parser: a
+ * reading series reports one season of chapters (or volumes) and
+ * `multiSeason: false` hides the season row.
+ */
+export interface UnitList {
+  multiSeason: boolean;
+  seasons: {
+    season: number;
+    episodes: {
+      episode: number | null;
+      title: string;
+      watched: boolean;
+    }[];
+  }[];
 }
 
 /**
@@ -779,6 +802,12 @@ export interface CuratedEntryRef {
   /** The provider's own item id (a Kavita seriesId), off the entry's `ratingKey`. */
   id: string;
   batch?: number | null;
+  /**
+   * The entry's manual START floor, if any. Earlier unread chapters are skipped
+   * from the pick and never marked read — the same rule Plex's start floor has
+   * always meant. Absent = automatic next-unread.
+   */
+  start?: Start | null;
 }
 
 export interface BucketsContext {
@@ -873,6 +902,17 @@ export interface Provider {
    * of bare titles, not a 500.
    */
   tiles?(ids: Iterable<string>): Promise<(ProviderTileRow | null)[]>;
+  /**
+   * The "Start from…" picker's list of playable units, grouped the way the
+   * modal already consumes (`seasons[].episodes[]`). Optional: a provider that
+   * cannot answer degrades the picker to its "could not read" note rather than
+   * a 500. `uuid` scopes watched/read marks to a profile, the same way the
+   * Plex-only route did.
+   */
+  listUnits?(
+    itemId: string,
+    opts?: { uuid?: string | null },
+  ): Promise<UnitList | null>;
   /**
    * Optional per the guarded-call-site rule, but note session.js:170 calls it UNGUARDED on
    * the push path — a push provider without it throws at start. Both real providers define

@@ -436,6 +436,18 @@ describe("startLabel", () => {
     )
   })
 
+  test("a reading start names a chapter, not an episode", () => {
+    expect(
+      startLabel({ episode: 88, season: 1 }, "chapter"),
+    ).toBe("Start Ch 88")
+  })
+
+  test("a volume start names the volume", () => {
+    expect(
+      startLabel({ episode: 3, season: 1 }, "volume"),
+    ).toBe("Start Vol 3")
+  })
+
   test("is empty with no override, so a plain tile shows no chip", () => {
     expect(startLabel(null)).toBe("")
   })

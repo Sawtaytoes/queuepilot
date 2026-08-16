@@ -7,6 +7,7 @@ import type {
   ProviderVocabulary,
   QueueItem,
 } from "../lib/types"
+import { applyVocab, PLEX_WORDS } from "../lib/vocab"
 import { refreshData } from "../state/live"
 import {
   type EntryActions,
@@ -38,20 +39,7 @@ import { Tip } from "./Tip"
 export const WEIGHT_MAX = 20
 export const EPISODES_MAX = 40
 
-/**
- * Plex's words, used wherever a caller has no set in hand.
- *
- * The fallback rather than a hardcoded string, so a component that forgets to pass the
- * vocabulary renders exactly what it rendered before providers had one — a visible-but-wrong
- * noun on a reading tile, never `undefined`.
- */
-export const PLEX_WORDS: ProviderVocabulary = {
-  done: "watched",
-  member: "show",
-  unit: "episode",
-  units: "episodes",
-  verb: "Play",
-}
+export { PLEX_WORDS } from "../lib/vocab"
 
 /** "3 eps" / "3 ch" — the tag has to fit on a poster tile, so the unit is abbreviated. */
 const shortUnits = (vocab: ProviderVocabulary) =>
@@ -131,7 +119,10 @@ export function SettingTags({
       {item.start
         ? tag(
             startLabel(item.start),
-            "Manual start point — playback begins here, and earlier episodes are left unwatched",
+            applyVocab(
+              "Manual start point — playback begins here, and earlier episodes are left unwatched",
+              vocab,
+            ),
             "startbadge",
             "warning",
           )
@@ -349,8 +340,11 @@ export function EntryEditor({
           <div className="fieldrow">
             <span>
               {item.start
-                ? startLabel(item.start)
-                : "Automatic — the next unwatched"}
+                ? startLabel(item.start, item.unit)
+                : applyVocab(
+                    "Automatic — the next unwatched",
+                    vocab,
+                  )}
             </span>
             <button
               onClick={() => {

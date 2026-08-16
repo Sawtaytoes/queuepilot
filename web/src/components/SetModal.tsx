@@ -236,6 +236,7 @@ export function SetModal() {
     : null) ?? {
     done: "watched",
     member: "show",
+    name: "Plex",
     unit: "episode",
     units: "episodes",
     verb: "Play",

@@ -272,9 +272,13 @@ export const isStartable = (
  */
 export function startLabel(
   start: StartPoint | null | undefined,
+  unit: EntryUnit = "episode",
 ): string {
   if (!start) return ""
   if (start.episode == null) return "Start set"
+
+  if (unit === "volume") return `Start Vol ${start.episode}`
+  if (unit === "chapter") return `Start Ch ${start.episode}`
 
   return (start.season ?? 0) > 1
     ? `Start S${start.season}E${start.episode}`

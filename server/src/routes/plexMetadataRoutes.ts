@@ -192,6 +192,22 @@ export function plexMetadataRoutes(): Hono {
       // a per-profile channel's start editor reflects that profile's history, not the admin's.
       // Absent (queues/members/admin) => admin token, unchanged. A mint failure degrades to admin.
       const uuidQ = (c.req.query('uuid') ?? '').trim();
+      const setId = (c.req.query('set') ?? '').trim();
+      // A named set goes through ITS provider. Without this a Kavita series id is handed
+      // to plex.showEpisodes, which cannot see it, and the picker says it could not
+      // read the series from Plex — the live bug on Multi-mind Mayhem.
+      if (setId) {
+        const s = await sets.getSet(setId);
+        if (s) {
+          const block = providerBlocks.resolveSingle({ ...s });
+          const p = providerFor(block.provider);
+          if (typeof p.listUnits === 'function') {
+            const out = await p.listUnits(c.req.param('ratingKey'), { uuid: uuidQ || null });
+            if (!out) return c.json({ error: 'no episodes' }, 404);
+            return c.json(out);
+          }
+        }
+      }
       let scope = {};
       if (uuidQ) {
         try { scope = { token: await plex.accountToken(uuidQ), account: uuidQ }; } catch { scope = {}; }

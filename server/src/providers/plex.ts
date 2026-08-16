@@ -24,6 +24,7 @@ import type {
   ProviderLibrary,
   PushResult,
   RoutingSetCfg,
+  UnitList,
 } from '../types.js';
 
 import * as resolve from '../engine/resolve.js';
@@ -31,7 +32,7 @@ import * as rotation from '../engine/rotation.js';
 import * as select from '../engine/select.js';
 import * as routing from '../engine/routing.js';
 import { liveClient } from '../engine/plex-live.js';
-import { sections as plexSections } from '../plex.js';
+import { sections as plexSections, showEpisodes } from '../plex.js';
 import { toWeight } from '../engine/weight.js';
 import * as playback from '../playback.js';
 import * as driver from '../driver.js';
@@ -165,6 +166,18 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
      * above this line never sees it — it asks for a profile and gets items back.
      */
     profileToken: (userUuid: string | null) => c.accountToken(userUuid),
+
+    /**
+     * The "Start from…" picker's list. Same answer `/show/:id/episodes` has always
+     * given; living on the provider is what lets that route stop assuming Plex.
+     */
+    async listUnits(itemId: string, { uuid = null }: { uuid?: string | null } = {}): Promise<UnitList | null> {
+      let scope = {};
+      if (uuid) {
+        try { scope = { token: await c.accountToken(uuid), account: uuid }; } catch { scope = {}; }
+      }
+      return showEpisodes(itemId, scope);
+    },
 
     /**
      * Watched state for a set+profile. Only the curated-queue path consumes this directly;

@@ -27,6 +27,12 @@ export type EntryActions = {
    * picker scopes its "watched" marks to THAT profile (not the admin account). Omitted
    * for queues/admin, which read Bob's view. */
   accountUuid?: string | null
+  /**
+   * The set this entry belongs to. The start modal uses it to load units from
+   * THAT set's provider (a Kavita series id is invisible to Plex) and to pick
+   * the vocabulary the copy is rewritten with.
+   */
+  setId?: string | null
 }
 
 export type PlayMenuTarget = {

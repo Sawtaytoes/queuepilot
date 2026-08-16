@@ -232,5 +232,56 @@ await ok('an entry naming a series Kavita no longer has is skipped, not fatal', 
   assert.ok(play.every((i) => String(i.seriesId) === '4672'));
 });
 
+// --------------------------------------------------------------------------- //
+// 3. The "Start from…" picker + the start floor
+// --------------------------------------------------------------------------- //
+
+await ok('listUnits lists a WEBTOON\'s chapters, including already-read ones', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const out = await p.listUnits!('4577');
+  assert.ok(out, 'Swordmaster listed no chapters');
+  assert.equal(out.multiSeason, false, 'a webtoon must not grow a season row');
+  assert.equal(out.seasons.length, 1);
+  const eps = out.seasons[0]!.episodes;
+  assert.equal(eps.length, 4, 'loose+volume chapters must be deduped');
+  assert.deepEqual(eps.map((e) => e.episode), [1, 2, 3, 4]);
+  assert.equal(eps[0]!.watched, true, 'chapter 1 is fully read');
+  assert.equal(eps[1]!.watched, false);
+  assert.equal(eps[0]!.title, 'Chapter 1');
+});
+
+await ok('listUnits lists a VOLUME-based manga as volumes, never Ch -100000', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const out = await p.listUnits!('4672');
+  assert.ok(out, 'Alice listed no units');
+  const eps = out.seasons[0]!.episodes;
+  assert.equal(eps.length, 9);
+  assert.deepEqual(eps.map((e) => e.episode), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(eps.map((e) => e.title), [
+    'Volume 1', 'Volume 2', 'Volume 3', 'Volume 4', 'Volume 5',
+    'Volume 6', 'Volume 7', 'Volume 8', 'Volume 9',
+  ]);
+  assert.ok(eps.every((e) => e.watched === false));
+});
+
+await ok('a start floor skips earlier unread chapters without marking them read', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4577', batch: 10, start: { season: 1, episode: 3 } }],
+    limit: 10,
+  }) as KavitaBuckets;
+  // Chapter 1 is already read; 2 is unread but BEFORE the floor; 3 and 4 remain.
+  assert.deepEqual(play.map((i) => i.number), ['3', '4']);
+});
+
+await ok('a start floor on a volume-based series starts at that volume', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4672', batch: 3, start: { season: 1, episode: 5 } }],
+    limit: 3,
+  }) as KavitaBuckets;
+  assert.deepEqual(play.map((i) => i.number), [5, 6, 7]);
+});
+
 console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall passed');
 process.exit(FAILS.length ? 1 : 0);

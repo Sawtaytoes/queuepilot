@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Start modal — Plex words vs Kavita words</title>
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0;
+        background: #0f1419;
+        color: #e8eef6;
+        font: 16px/1.45 system-ui, sans-serif;
+        padding: 24px;
+      }
+      h1 { font-size: 1.4rem; }
+      .row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      figure { margin: 0; }
+      figcaption {
+        color: #9aa8b8;
+        margin-bottom: 8px;
+        font-weight: 650;
+      }
+      img {
+        width: 100%;
+        border-radius: 12px;
+        border: 1px solid #2a3545;
+      }
+      @media (max-width: 800px) { .row { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <h1>Start from… on a Kavita series</h1>
+    <p>
+      Left is the live bug. Right is the rewritten copy: Plex → Kavita,
+      episode → chapter, watched → read, Playback → Reading. The chapter
+      list now comes from Kavita instead of asking Plex for a series it
+      has never heard of.
+    </p>
+    <div class="row">
+      <figure>
+        <figcaption>Before — Plex words, empty list</figcaption>
+        <img alt="Start modal saying episodes and Plex, with a load error" src="../images/2026-08-16-start-modal-kavita-before.png" />
+      </figure>
+      <figure>
+        <figcaption>After — Kavita words, chapter picker</figcaption>
+        <img alt="Start modal saying chapters and Kavita, with Ch 88 selected" src="../images/2026-08-16-start-modal-kavita-after.png" />
+      </figure>
+    </div>
+  </body>
+</html>
