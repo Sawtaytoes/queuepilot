@@ -346,10 +346,10 @@ export function QueueView({
           }}
           inputId="search"
           listId="results"
-          // The noun matches the family: a curated channel is not a "queue".
+          // The noun matches the family: a curated POOL is not an ordered queue.
           placeholder={
             isChannel
-              ? "Add — search this channel's libraries…"
+              ? "Add — search this pool's libraries…"
               : "Add — search this queue's libraries…"
           }
           rowFor={(hit, _index, close) => {

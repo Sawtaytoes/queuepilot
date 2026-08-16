@@ -4,7 +4,8 @@
 - **Date:** 2026-07-21
 - **Type:** preference / naming / UX
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [filtered-pools-curated-pools-ordered-queues](2026-08-16-filtered-pools-curated-pools-ordered-queues.md)
+  (the category NAMES; the two-category split itself survives)
 - **Builds on:** [queues-vs-channels-taxonomy-play-first-ia](2026-07-21-queues-vs-channels-taxonomy-play-first-ia.md)
 
 ## Decision

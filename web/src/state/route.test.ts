@@ -49,9 +49,11 @@ describe("parseHash", () => {
 
 describe("labelForHash", () => {
   test("names where back actually goes", () => {
-    expect(labelForHash("#/queues")).toBe("‹ Queues")
+    expect(labelForHash("#/queues")).toBe(
+      "‹ Ordered Queues",
+    )
     expect(labelForHash("#/channels/movies")).toBe(
-      "‹ Channels",
+      "‹ Pools",
     )
     expect(labelForHash("#/q/bob")).toBe("‹ Back")
     expect(labelForHash("#/")).toBe("‹ Play")

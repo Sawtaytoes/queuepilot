@@ -186,7 +186,7 @@ export function PlayView({
     <main className="view" hidden={isHidden} id="play">
       <section className="playgroup">
         <h2>
-          Dynamic Channels
+          Filtered Pools
           <a
             className="ghost"
             href="#/channels"
@@ -206,7 +206,7 @@ export function PlayView({
 
       <section className="playgroup">
         <h2>
-          Curated Channels
+          Curated Pools
           <a
             className="ghost"
             href="#/channels"
@@ -226,7 +226,7 @@ export function PlayView({
                     key={id}
                     label={s.label}
                     set={reg?.sets.find((x) => x.id === id)}
-                    meta={`${s.items.length} shows · random rotation`}
+                    meta={`${s.items.length} shows · rotation`}
                     href={`#/q/${id}`}
                     onPlay={(anchor) =>
                       openPlayMenu({ anchor, setId: id })
@@ -239,7 +239,7 @@ export function PlayView({
 
       <section className="playgroup">
         <h2>
-          Queues
+          Ordered Queues
           <a
             className="ghost"
             href="#/queues"

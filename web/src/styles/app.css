@@ -2037,7 +2037,8 @@ html.modal-open {
 }
 
 /* PLAY landing: plain rows, no posters — the "pick and play" surface. On a wide viewport
-   the groups (Dynamic / Curated / Queues) sit side by side as columns; one column on
+   the groups (Filtered Pools / Curated Pools / Ordered Queues) sit side by side as columns;
+   one column on
    mobile. The id rule must beat the [hidden] attribute (like #selbar). */
 #play:not([hidden]) {
   display: grid;

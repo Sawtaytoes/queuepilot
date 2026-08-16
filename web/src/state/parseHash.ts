@@ -39,8 +39,8 @@ export function parseHash(hash: string): Route {
 
 /** What the back button should SAY, given where it goes. */
 export function labelForHash(h: string): string {
-  if (h.startsWith("#/queues")) return "‹ Queues"
-  if (h.startsWith("#/channels")) return "‹ Channels"
+  if (h.startsWith("#/queues")) return "‹ Ordered Queues"
+  if (h.startsWith("#/channels")) return "‹ Pools"
   if (h.startsWith("#/q/")) return "‹ Back"
 
   return "‹ Play"
