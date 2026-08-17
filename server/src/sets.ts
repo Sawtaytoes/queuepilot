@@ -21,7 +21,8 @@ import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind 
 // set-wide default so a hand-posted value cannot queue a whole library.
 // ROTATION_LENGTH is read here as well as by the engine, because "equal to the default" is
 // what makes a lineup length store SPARSELY — see toLineupLength().
-import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
+import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
+import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { isNodeError } from './errors.js';
 import type {
   BatchStop,
@@ -349,6 +350,33 @@ const toPosIntOrNull = (v: unknown): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/** One YAML node field as a plain value, for the sibling reads the writers do. */
+const readNodeValue = (node: YAMLMap, key: string): unknown => {
+  const found = node.get(key);
+  return isNode(found) ? found.toJSON() : found;
+};
+
+/** The subset of `patch` that actually carries a key — a patch's own value wins over the file's. */
+const pickDefined = (patch: Record<string, unknown>, keys: readonly string[]): Record<string, unknown> => {
+  const out: Record<string, unknown> = {};
+  for (const k of keys) if (k in patch) out[k] = patch[k];
+  return out;
+};
+
+/**
+ * A stored `length:` as the registry REPORTS it — a number, the string `'infinite'`, or null
+ * for "never said, follow this kind's default".
+ *
+ * Read TOLERANTLY, unlike the writer: sets.yaml is hand-edited over SMB, and a card that
+ * refuses to load is a dead card on the wall. An unrecognised value reads as null.
+ */
+const readStoredLength = (ent: RawSet): number | typeof INFINITE | null => {
+  if (String(ent.length ?? '').trim().toLowerCase() === INFINITE) return INFINITE;
+  // LEGACY: `refill: true` WAS infinite, back when `length` meant the queue window.
+  if (ent.refill === true) return INFINITE;
+  return toPosIntOrNull(ent.length);
+};
+
 /**
  * A rotation channel's `length:` on the wire → what to STORE, or null for "follow env
  * ROTATION_LENGTH", which is stored by ABSENCE.
@@ -363,11 +391,19 @@ const toPosIntOrNull = (v: unknown): number | null => {
  * of failing the save; ROTATION_LENGTH_MAX exists because every item in a lineup costs a Plex
  * round trip at scan time.
  */
-const toLineupLength = (v: unknown): number | null => {
+const toLineupLength = (v: unknown): number | typeof INFINITE | null => {
+  // The named infinite form. Never `0` and never `999`: a falsy count already reads as
+  // *uncapped* in resolve.ts's applyBatch, so a typo landing on 0 would become a binge rather
+  // than an error (`docs/todos/batch-all-or-infinite.md` settled this for the entry batch).
+  if (String(v ?? '').trim().toLowerCase() === INFINITE) return INFINITE;
+
   const n = toPosIntOrNull(v);
   if (n == null) return null;
   const clamped = Math.min(n, ROTATION_LENGTH_MAX);
-  return clamped === ROTATION_LENGTH ? null : clamped;
+  // Equal-to-the-default still drops the key, but the default is now PER KIND — a rewatch pool
+  // follows 1, a filtered pool 12, an ordered queue 1 — so the comparison cannot be against a
+  // single env constant any more. The caller passes the kind's own default in.
+  return clamped;
 };
 
 /**
@@ -545,6 +581,18 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
   // is non-null exactly when the set is a rotation), and this spelling is the one the
   // compiler can follow.
   const common: SetRegistryCommon = {
+    // Playback length lives on EVERY kind of set now, so it is resolved once here rather than
+    // in each branch below. `length_default` is what `null` means for THIS set — its kind's
+    // own historical behaviour — sent so the editor's Default chip does not have to re-derive
+    // the source × behavior × kind rule in the browser.
+    length: readStoredLength(ent),
+    length_default: defaultFor({
+      behavior: ent.behavior,
+      kind: ent.kind,
+      mode: ent.mode,
+      source: isRotation ? 'rotation' : 'queue',
+    }) ?? 1,
+    power_off_when_done: ent.power_off_when_done === true,
     id,
     label: String(ent.label || id),
     kind: ent.kind || 'movies',
@@ -617,12 +665,8 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       default_profile: ent.default_profile != null ? String(ent.default_profile) : null,
       superseded_by: ent.superseded_by != null ? String(ent.superseded_by) : null,
       behavior: isBehavior(ent.behavior) ? ent.behavior : null,
-      // HOW MANY items the lineup holds — the SIZE to `episodes`'s per-entry share. null =
-      // the engine default (env ROTATION_LENGTH, which is 12). Rotation-only: a curated
-      // queue's length is however many entries it has.
-      length: toPosIntOrNull(ent.length),
-      // Keep the lineup topped up rather than letting it end. When true, `length` above is
-      // the WINDOW (how far ahead to stay), not the whole evening.
+      // DEPRECATED, still reported so nothing that reads it breaks mid-migration. Prefer
+      // `length === 'infinite'`, which is what `common.length` already folds it into.
       refill: ent.refill === true,
       // What a FINISHED series does on this channel. `restart` is the only value that does
       // anything; absent reads as drop, which is what every channel has always done.
@@ -776,16 +820,37 @@ function rotationCreateObj(id: string, body: Record<string, unknown>): Record<st
   if (mex.length) obj.movie_excludes = mex;
   const mi = toPosIntOrNull(body.max_items);
   if (mi) obj.max_items = mi;
-  // The lineup knobs, written by the SAME sparse rules updateSet uses — a length that just
-  // repeats the env default, a `refill: false` and an `on_complete: drop` are all stored by
-  // absence. Without these three lines a pool created from the editor with refill switched on
-  // would come back with it switched off, and the only clue would be the file.
+  // The lineup knobs, written by the SAME sparse rules updateSet uses: a length that just
+  // repeats THIS KIND's default, a `refill: false`, an `on_complete: drop` and a
+  // `power_off_when_done: false` are all stored by absence. Without this a pool created from
+  // the editor with top-up switched on came back with it switched off, and the only clue was
+  // the file.
+  writeLineupKnobs(obj, body, defaultFor(obj));
+  return obj;
+}
+
+/**
+ * The playback-length / completion knobs, applied to a NEW set's on-disk object.
+ *
+ * Shared by both create paths — a rotation channel and a curated queue — because the knobs
+ * are the same on every kind of set now, and two copies of a sparse rule is how one of them
+ * quietly stops matching the writer it is supposed to mirror.
+ */
+function writeLineupKnobs(
+  obj: Record<string, unknown>,
+  body: Record<string, unknown>,
+  kindDefault: number | null,
+): void {
   const len = toLineupLength(body.length);
-  if (len) obj.length = len;
-  if (body.refill === true) obj.refill = true;
+  // `!== kindDefault` and not a truthiness check: 1 is a real length, and on an ordered queue
+  // it is also the default — so the comparison is what decides, not the value's shape.
+  if (len != null && len !== kindDefault) obj.length = len;
+  // DEPRECATED. Only written when a caller explicitly asks AND has not said `infinite`, so a
+  // set created through the editor never gets it.
+  if (body.refill === true && len !== INFINITE) obj.refill = true;
   const oc = toOnComplete(body.on_complete);
   if (oc) obj.on_complete = oc;
-  return obj;
+  if (body.power_off_when_done === true) obj.power_off_when_done = true;
 }
 
 // Create a set. Curated queues (source omitted / 'queue') carry only label/kind/sections;
@@ -907,6 +972,10 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       if (Number.isFinite(eps) && eps > 1) curated.episodes = Math.min(eps, QUEUE_SERIES_LENGTH);
       const vols = parseInt(String(body.volumes ?? ''), 10);
       if (Number.isFinite(vols) && vols > 1) curated.volumes = Math.min(vols, QUEUE_SERIES_LENGTH);
+      // A curated set takes the playback-length knobs too — they are no longer rotation-only.
+      // Its default differs by kind (a curated POOL fills a window, an ordered QUEUE plays one
+      // entry), which is why the default is derived from the object rather than passed in.
+      writeLineupKnobs(curated, body, defaultFor(curated));
     }
     const obj = isRotation ? rotationCreateObj(id, body) : curated;
     // Provider blocks, on BOTH sources — a reading queue and a reading channel are equally
@@ -968,7 +1037,7 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         // however many entries it has, so there is nothing to set there.
         'length',
         // Keep it topped up (`length` becomes the window), and what a finished show does.
-        'refill', 'on_complete',
+        'refill', 'on_complete', 'power_off_when_done',
         // Per-show start + weight overrides for the dynamic rule pool.
         'starts', 'weights',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
@@ -1151,15 +1220,39 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         if (v == null) { node.delete('max_items'); continue; } // cleared => drop the key (no cap)
       }
       if (k === 'length') {
-        // Cleared, or equal to the env default => drop the key and follow ROTATION_LENGTH.
         const n = toLineupLength(v);
-        if (n == null) { node.delete('length'); continue; }
-        v = n;
+
+        // `length: infinite` RETIRES `refill`, which was its 2026-08-17 spelling. Leaving both
+        // would be two keys answering one question, and the older one is the deprecated half —
+        // this is the migration, and it happens the first time the set is saved.
+        if (n === INFINITE) { node.delete('refill'); v = n; }
+        else {
+          // Sparse, against THIS KIND's own default rather than one env constant: a rewatch
+          // pool follows 1, a filtered pool 12, an ordered queue 1. The editor posts the
+          // effective number on every Save, so without this a rename would stamp `length: 1`
+          // onto every movie queue in the file.
+          const kindDefault = defaultFor({
+            source: readNodeValue(node, 'source'),
+            kind: readNodeValue(node, 'kind'),
+            behavior: readNodeValue(node, 'behavior'),
+            mode: readNodeValue(node, 'mode'),
+            ...pickDefined(patch, ['source', 'kind', 'behavior', 'mode']),
+          });
+
+          if (n == null || n === kindDefault) { node.delete('length'); continue; }
+          v = n;
+        }
       }
       if (k === 'refill') {
-        // Sparse: only `true` is written. `refill: false` is the default and storing it would
-        // put a key on every channel that says nothing.
+        // DEPRECATED — `length: infinite` says this now. Still accepted so a hand-written file
+        // or an older caller keeps working, and still written sparsely; the editor never sends
+        // it, so a set saved through the UI sheds it.
         if (v !== true) { node.delete('refill'); continue; }
+      }
+      if (k === 'power_off_when_done') {
+        // Sparse: only `true` is written. Absent means "leave the room alone", which is what
+        // every set has always done.
+        if (v !== true) { node.delete('power_off_when_done'); continue; }
       }
       if (k === 'on_complete') {
         const s = toOnComplete(v);

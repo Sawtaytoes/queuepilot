@@ -324,15 +324,22 @@ export type RegistrySet = {
    */
   volumes?: number | null
   /**
-   * Rotation channels only. How many items the lineup holds — the SIZE, to `episodes`'s
-   * per-entry share. null/absent = follow the app default (`lineup.length` below), which is
-   * how a channel that never touched the knob keeps following it when it moves.
+   * PLAYBACK LENGTH — how many things this set plays in one sitting, or `"infinite"`.
+   * null/absent = it has never said, so it follows `length_default`.
    *
-   * With `refill` on this stops meaning "the whole evening" and becomes the WINDOW: how far
-   * ahead to stay. (decision `2026-08-17-a-lineup-refills-instead-of-ending`)
+   * The unit differs on exactly one path, and deliberately: an ORDERED queue counts ENTRIES
+   * (its head entry's own `episodes:` batch still decides how many episodes that is), while a
+   * rule-based pool has no entries and counts ITEMS.
    */
-  length?: number | null
-  /** Rotation channels only. Keep the lineup topped up instead of letting it end. */
+  length?: number | "infinite" | null
+  /** What `length: null` resolves to for THIS set — its kind's own historical behaviour. */
+  length_default?: number
+  /**
+   * Announce, when this sitting finishes, that the room should be shut down. The app only
+   * publishes it on MQTT; HA owns anything with a power cable.
+   */
+  power_off_when_done?: boolean
+  /** DEPRECATED — the older spelling of `length: "infinite"`. Read `length` instead. */
   refill?: boolean
   /**
    * Rotation channels only. What a FINISHED series does: `"restart"` puts it back at its

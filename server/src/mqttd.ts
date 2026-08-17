@@ -9,10 +9,11 @@ import * as engineRouting from './engine/routing.js';
 import * as adb from './adb.js';
 import * as devices from './devices.js';
 import * as topup from './topup.js';
+import * as finished from './finished.js';
 import {
   MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
   T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
-  T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_RESP_TOPUP, T_STATE,
+  T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_RESP_TOPUP, T_RESP_FINISHED, T_STATE,
   T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS,
 } from './env.js';
@@ -87,6 +88,9 @@ function publishLastPlayed(item: session.LastPlayed | null): void {
 }
 
 session.setPublishers({ state: publishState, lastPlayed: publishLastPlayed });
+  // A sitting ending is an ANNOUNCEMENT, not a command: `power_off` rides on it and HA decides
+  // what to do with the room. Not retained — it describes one moment.
+  finished.setFinishedPublisher((payload) => pub(T_RESP_FINISHED, payload));
 
 async function handleStart(payload: SessionStartPayload): Promise<void> {
   // `target` comes off the wire as a device-registry ID (the web UI's "Play on ▾" publishes

@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
+import { SET_LENGTH_PRESETS } from "../lib/countPicker"
 import type {
   Profile,
   ProviderBlockValue,
@@ -13,7 +14,7 @@ import {
   useOverlays,
 } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
-import { CountPicker } from "./CountPicker"
+import { CountPicker, type INFINITE } from "./CountPicker"
 import { EPISODES_MAX } from "./EntrySettings"
 import { Modal } from "./Modal"
 import { ProviderBlock } from "./ProviderBlock"
@@ -78,6 +79,13 @@ export function SetModal() {
   // Volumes are not chapters. Independent count, default 1 — a queue at 3 chapters
   // must not dump 3 whole manga volumes into one visit.
   const [volumes, setVolumes] = useState(1)
+  // PLAYBACK LENGTH — how many things this queue plays before it stops. On an ORDERED queue
+  // that is counted in ENTRIES: one entry is the film at the top, or a show entry's own
+  // `episodes:` batch, which is why the default of 1 is exactly what this queue does today.
+  const [playbackLength, setPlaybackLength] = useState<
+    number | typeof INFINITE
+  >(1)
+  const [isPoweringOff, setIsPoweringOff] = useState(false)
   const [profiles, setProfiles] = useState<Profile[]>([])
   // The repeating {provider, profile, libraries} blocks. Always a list — a set written
   // before blocks existed arrives as the single implicit Plex block it has always meant, so
@@ -120,6 +128,10 @@ export function SetModal() {
     )
     setEpisodes(editing?.episodes ?? 1)
     setVolumes(editing?.volumes ?? 1)
+    setPlaybackLength(
+      editing?.length ?? editing?.length_default ?? 1,
+    )
+    setIsPoweringOff(Boolean(editing?.power_off_when_done))
     // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
     // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
     if (editing) {
@@ -313,6 +325,10 @@ export function SetModal() {
       // control stays byte-identical on disk.
       episodes,
       volumes,
+      // Stored sparsely against THIS kind's own default, so a queue that never touched the
+      // control gains no key. `power_off_when_done` is likewise absent unless it is on.
+      length: playbackLength,
+      power_off_when_done: isPoweringOff,
       // An empty list drops the key server-side, which is how the single-Plex-block case
       // stays on the legacy shape above.
       providers: isLegacyShape
@@ -535,6 +551,44 @@ export function SetModal() {
           can be collapsed by hand; and storage stays a list, so nothing migrates. */}
       <fieldset className="field flags" id="set-flags">
         <legend>Playback &amp; completion</legend>
+        {/* PLAYBACK LENGTH. Counted in ENTRIES here and not items, which is the one place the
+            unit differs — a rule-based pool has no entries to count. It has to be: a show
+            entry's batch is already the control right below this one, so counting items would
+            make a length of 1 silently truncate a 2-episode entry to a single episode.
+
+            1 is what an ordered queue has always done (it played its head entry and stopped),
+            so the default changes nothing and the knob only ever adds. */}
+        <div className="field">
+          <span className="fieldlbl">Playback length</span>
+          <CountPicker
+            defaultValue={editing?.length_default ?? 1}
+            hasInfinite
+            id="set-length"
+            label="Playback length"
+            max={reg?.lineup?.max ?? 200}
+            onChange={setPlaybackLength}
+            presets={SET_LENGTH_PRESETS}
+            value={playbackLength}
+          />
+        </div>
+        <p className="subhint" id="set-length-hint">
+          {`How many entries play before this ${kind === "anime" ? "pool" : "queue"} stops. One entry is
+            the ${vocab.member} at the top — and if that ${vocab.member} is set to more than one
+            ${vocab.unit} a visit, it still contributes all of them. Infinite plays the whole list.`}
+        </p>
+        <Checkbox
+          id="set-power-off"
+          isChecked={isPoweringOff}
+          key={`${modalKey}-poweroff`}
+          label="Turn everything off when it finishes"
+          onChange={setIsPoweringOff}
+        />
+        <p className="subhint" id="set-power-off-hint">
+          Starting a card wakes the room; this is the other
+          half. QueuePilot announces that the sitting ended
+          and Home Assistant does the turning off. Nothing
+          happens on an Infinite queue — it never finishes.
+        </p>
         {/* The queue's DEFAULT batch. Owner, 2026-08-15: "There's no way to globally set how
             many chapters to read before going to the next one… For Plex, 1 episode is no big
             [deal], but for Webtoons and Manga, I'd prefer to default to 3 chapters (by choice
