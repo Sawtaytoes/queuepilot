@@ -269,20 +269,11 @@ export function SetModal() {
       return
     }
 
-    const emptyBlock = blocks.findIndex(
-      (b) => !b.libraries.length,
-    )
-
-    if (emptyBlock >= 0) {
-      setStatus(
-        blocks.length > 1
-          ? `Source ${emptyBlock + 1}: pick at least one library`
-          : "Pick at least one library",
-        "err",
-      )
-
-      return
-    }
+    // A block with NO library ticked is valid and means every library the source has
+    // (decision `2026-08-17-no-libraries-checked-means-every-library`). This used to be a
+    // save gate, which forced a scope onto queues that wanted the whole shelf — the
+    // Board Game Picker case, where ticking every box narrowed the search to a category
+    // and lost every uncategorised game.
 
     // reel implies keep_completed at the engine; always send the effective pair so a
     // re-opened edit prefill matches what was saved.

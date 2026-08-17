@@ -72,26 +72,37 @@ export function plexMetadataRoutes(): Hono {
         }
       }
 
+      // Every video library (movie + show). The `scope=all` answer, and also what an
+      // UNSCOPED set falls back to below — no boxes checked means all of them
+      // (decision `2026-08-17-no-libraries-checked-means-every-library`).
+      const everyVideoSection = async (): Promise<number[]> => {
+        let libs: Awaited<ReturnType<typeof plex.sections>> = [];
+        try { libs = await plex.sections(); } catch { /* Plex down: empty search */ }
+        return libs.filter((l) => l.video).map((l) => l.id);
+      };
+
       let sections;
       let collectionSections;
       if (allLibraries) {
-        // Every video library (movie + show), regardless of any set's configured sections —
-        // so a manual include can come from a library no channel's rule pool draws from.
-        let libs: Awaited<ReturnType<typeof plex.sections>> = [];
-        try { libs = await plex.sections(); } catch { /* Plex down: empty search */ }
-        sections = libs.filter((l) => l.video).map((l) => l.id);
+        // Regardless of any set's configured sections — so a manual include can come from a
+        // library no channel's rule pool draws from.
+        sections = await everyVideoSection();
         collectionSections = sections;
       } else if (setId) {
         const s = await sets.getSet(setId);
         if (!s) return c.json({ error: 'unknown set' }, 400);
         // Every section the set draws from: a rotation channel's members can be shorts/movies
         // out of its item_sections, not just shows (queue sets have item_sections: [] — no change).
-        sections = [...new Set([...s.sections, ...s.item_sections])];
+        // A set that names NONE searches every video library rather than nothing, which is
+        // what its empty checkbox group told the owner it would do.
+        const named = [...new Set([...s.sections, ...s.item_sections])];
+        sections = named.length ? named : await everyVideoSection();
         // Collections can live in either the show sections OR the item (shorts/movie) sections.
         collectionSections = sections;
       } else {
         const reg = await sets.getRegistry();
-        sections = [...new Set(reg.sets.flatMap((s) => [...s.sections, ...s.item_sections]))];
+        const named = [...new Set(reg.sets.flatMap((s) => [...s.sections, ...s.item_sections]))];
+        sections = named.length ? named : await everyVideoSection();
         collectionSections = sections;
       }
       // Deliberately the UNION of both hit shapes: `plex.search()` returns `PosterFields` and
@@ -168,6 +179,14 @@ export function plexMetadataRoutes(): Hono {
             token = null;
           }
         }
+      }
+      // A set (or a form) that names no library draws from every video library, so the
+      // ratings it can pick are every video library's — not the static fallback list an
+      // empty section array would otherwise fall through to.
+      if (!sections.length) {
+        try {
+          sections = (await plex.sections()).filter((l) => l.video).map((l) => l.id);
+        } catch { /* Plex down: the static fallback below still answers */ }
       }
       let ratings: string[] = [];
       try {

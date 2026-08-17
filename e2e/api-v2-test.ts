@@ -188,9 +188,15 @@ try {
   ok('source stays rotation (immutable)', ns && ns.source === 'rotation');
   ok('id unchanged (immutable)', Boolean(reg.sets.find((s: JsonBody) => s.id === rid)) && !reg.sets.find((s: JsonBody) => s.id === 'hacked'));
 
-  // A rotation create with NO library at all (neither kind) is rejected.
-  const noSecs = await post('/sets', { label: 'Bad Chan', source: 'rotation', sections: [] });
-  ok('rotation createSet requires sections', /library section/.test(String(noSecs.error || '')));
+  // A rotation create with NO library at all is ACCEPTED, and means every video library
+  // (decision 2026-08-17-no-libraries-checked-means-every-library). It used to be rejected
+  // with "at least one library section required", which is what stopped anyone from saying
+  // "search all of it".
+  const noSecs = await post('/sets', { label: 'Every Lib Chan', source: 'rotation', sections: [] });
+  ok('rotation createSet accepts NO library — it means all of them', typeof noSecs.id === 'string' && noSecs.id.length > 0);
+  reg = await api('/sets');
+  ns = reg.sets.find((s: JsonBody) => s.id === noSecs.id);
+  ok('the unscoped channel persists empty sections', ns && Array.isArray(ns.sections) && ns.sections.length === 0);
 
   // --- Shorts-only channels: a rotation channel may have no SHOW library ------ //
   // The Younger Kids Shows/Shorts split (2026-07-27) needs a channel that draws purely
@@ -216,13 +222,17 @@ try {
   ns = reg.sets.find((s: JsonBody) => s.id === rid);
   ok('cleared sections persisted', ns.sections.length === 0 && ns.item_sections.join(',') === '15');
 
-  // ...but emptying BOTH is still rejected — the effective union, not one key alone.
+  // ...and so is emptying BOTH: unchecking the last box is a real edit that means "draw
+  // from every library", not a save error.
   const emptyBoth = await patch(`/sets/${rid}`, { sections: [], item_sections: [] });
-  ok('updateSet rejects emptying every library', /library section/.test(String(emptyBoth.error || '')));
+  ok('updateSet allows emptying every library', !emptyBoth.error);
+  reg = await api('/sets');
+  ns = reg.sets.find((s: JsonBody) => s.id === rid);
+  ok('the emptied scope persisted', ns.sections.length === 0 && ns.item_sections.length === 0);
 
-  // A CURATED queue still requires a real section (that is what title search scopes).
-  const curatedNoSecs = await post('/sets', { label: 'Bad Queue', sections: [], item_sections: [15] });
-  ok('curated createSet still requires sections', /library section/.test(String(curatedNoSecs.error || '')));
+  // A CURATED queue needs no section either — its search widens to every library instead.
+  const curatedNoSecs = await post('/sets', { label: 'Unscoped Queue', sections: [], item_sections: [] });
+  ok('curated createSet accepts NO section', typeof curatedNoSecs.id === 'string' && curatedNoSecs.id.length > 0);
 
   // --- default_profile: the UI-seed hint the Play/Channels dropdowns start on --- //
   // A two-binding rotation channel that names one binding as its default; it must
