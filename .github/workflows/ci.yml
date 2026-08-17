@@ -127,6 +127,17 @@ jobs:
           "$TSX" e2e/play-one-entry-test.ts
           "$TSX" e2e/curated-queue-profile-test.ts
 
+      # "Completed" without waiting for the next card tap. `markDone` used to have ONE caller
+      # — a session START — so a film finished at 22:34 kept a blank tile until the card was
+      # tapped again (live, 2026-08-16: Plex had viewCount 1 and a history row; /api/queues
+      # said `done: false` for all 21 entries). Both new evaluations are pinned: the write
+      # side re-runs when PLAYBACK ENDS without playing anything (and a reel / keep_completed
+      # set is still never marked), and /api/queues reports `isFinished` live — proven against
+      # a deliberately STALE section listing, since a movie tile's cached viewCount can be a
+      # week old and nothing busts it. Spawns its own server against a stub Plex.
+      - name: Finished-entry freshness (offline)
+        run: $TSX e2e/finished-live-test.ts
+
       # The retained device registry — the "Play on ▾" dropdown's source. Its failures are
       # invisible: retained topics keep serving the last announcement, so a registry that
       # stopped sweeping and one that stopped clearing both look like a plausible list of

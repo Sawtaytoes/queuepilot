@@ -11,7 +11,11 @@ import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { progressLabel, tileFace } from "../lib/tileFace"
+import {
+  isCompleted,
+  progressLabel,
+  tileFace,
+} from "../lib/tileFace"
 import type { NowState, QueueItem } from "../lib/types"
 import {
   openPlayMenu,
@@ -251,7 +255,7 @@ function Shelf({
                             In Progress
                           </Badge>
                         </Tip>
-                      ) : item.done ? (
+                      ) : isCompleted(item) ? (
                         <Badge
                           appearance="outline"
                           className="badge donebadge"
@@ -285,7 +289,7 @@ function Shelf({
                     item.resolved || item.pending
                       ? null
                       : "unresolved",
-                    item.done ? "done" : null,
+                    isCompleted(item) ? "done" : null,
                     isPlaying ? "playing" : null,
                   ]
                     .filter(Boolean)
