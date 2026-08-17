@@ -26,6 +26,7 @@ import { flashTile } from "../lib/flip"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import {
   byTitle,
+  isCompleted,
   isStartable,
   progressLabel,
   tileFace,
@@ -610,6 +611,10 @@ export function QueueView({
           {/* Actions live on the right (the search grows to push them there). */}
           <button
             className="ghost"
+            // `done`, NOT `isCompleted`: this removes entries from queues.yaml, and the
+            // endpoint behind it can only remove what the FILE has flagged. A live-finished
+            // entry gets its flag from the next reconcile (finished.js), seconds after
+            // playback ends — offering to remove it before then would do nothing.
             hidden={!items.some((it) => it.done)}
             id="qremovedone"
             onClick={async () => {
@@ -849,7 +854,7 @@ export function QueueView({
                           In Progress
                         </Badge>
                       </Tip>
-                    ) : item.done ? (
+                    ) : isCompleted(item) ? (
                       <Badge
                         appearance="outline"
                         className="badge donebadge"
@@ -912,7 +917,7 @@ export function QueueView({
                   item.resolved || item.pending
                     ? null
                     : "unresolved",
-                  item.done ? "done" : null,
+                  isCompleted(item) ? "done" : null,
                   isPlaying ? "playing" : null,
                   setId &&
                   selected.has(`${setId}::${item.key}`)

@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { buildServer } from './buildServer.js';
 import * as cache from './cache.js';
 import { WEB_PORT } from './config.js';
+import * as finished from './finished.js';
 import * as mqttd from './mqttd.js';
 import { startLiveUpdates } from './sse.js';
 import * as warm from './warm.js';
@@ -50,6 +51,12 @@ await cache.init();
 // The file watcher + the two MQTT subscriptions that push over SSE. Kept out of
 // buildServer() so building the root for a test starts no timers and no watchers.
 startLiveUpdates();
+
+// The third now-playing subscriber, and the only one that WRITES: when an item leaves the
+// screen it re-runs the finished-entry bookkeeping for the set that was playing, so a movie
+// you just finished is marked `done` in seconds instead of waiting for the next card tap.
+// Same reason as above for living here rather than in buildServer().
+finished.watchPlaybackEnd();
 
 const app = buildServer({ publicDir: PUBLIC_DIR });
 
