@@ -4,7 +4,8 @@
 - **Date:** 2026-08-17
 - **Type:** ui / provider seam
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** its TITLE clause only, by [2026-08-17-the-reading-list-is-titled-with-the-set-label](2026-08-17-the-reading-list-is-titled-with-the-set-label.md) — the list is renamed IN PLACE,
+  which keeps the id this clause was protecting. Everything else here stands.
 - **Extends:** [2026-08-15-the-reading-list-is-rebuilt-not-appended](2026-08-15-the-reading-list-is-rebuilt-not-appended.md),
   [2026-08-15-a-queue-wears-its-providers-colour](2026-08-15-a-queue-wears-its-providers-colour.md)
 
@@ -24,6 +25,11 @@ its provider's colour everywhere else in this app; its artifact inside Kavita do
 **The list TITLE is untouched** — it still carries the set id (`QueuePilot — manga_webtoons`),
 because the title is how `materialize()` finds the list again. The label goes on the artwork
 only; renaming the list would strand `/lists/153` and mint a fresh id.
+
+> Superseded the same day by
+> [the label-title record](2026-08-17-the-reading-list-is-titled-with-the-set-label.md): Kavita
+> can rename a list in place, so the id this clause protects survives the rename. What stays
+> true is the reasoning — a rename done by changing the lookup key WOULD have stranded it.
 
 ## Context
 

@@ -114,6 +114,9 @@ export interface KavitaReadingListDto {
    * flag is what tells `materialize()` whether the cover is already ours to leave alone.
    */
   coverImageLocked?: boolean;
+  /** Echoed back on a rename — `update` applies every field it is given. */
+  summary?: string;
+  promoted?: boolean;
   [field: string]: unknown;
 }
 
@@ -170,6 +173,11 @@ export interface KavitaHttpClient {
   removeRead(readingListId: number | string): Promise<unknown>;
   /** Put artwork on a list. `imageBase64` is RAW base64 — see the implementation. */
   uploadListCover(readingListId: number | string, imageBase64: string): Promise<unknown>;
+  /** Rename a list (and echo its other fields back — see the implementation). */
+  updateList(
+    readingListId: number | string,
+    patch: { title: string; summary: string; promoted: boolean; coverImageLocked: boolean },
+  ): Promise<unknown>;
   /** Remove ONE item, addressed by the item's own id. Keeps the list (and its id) alive. */
   deleteItem(readingListId: number | string, readingListItemId: number | string): Promise<unknown>;
   deleteList(readingListId: number | string): Promise<unknown>;
@@ -406,6 +414,23 @@ export function kavitaClient({
       'POST',
       '/api/Upload/reading-list',
       { body: { id: readingListId, url: imageBase64 } },
+    ),
+
+    /**
+     * Rename a list IN PLACE, keeping its id.
+     *
+     * ⚠️ This endpoint takes the WHOLE DTO, and every field it is given is applied — there is
+     * no patch semantics. Probed live on a throwaway list, 2026-08-17: renaming with
+     * `coverImageLocked: false` on a list that HAD an uploaded cover answers 200 and comes
+     * back `coverImageLocked: false, coverImage: ''` — the artwork is gone and Kavita starts
+     * generating one from the items again. Which is why this signature demands the flag rather
+     * than defaulting it: the caller must read the list's current value and echo it, and a
+     * future caller cannot forget a field it was never allowed to omit.
+     */
+    updateList: (readingListId, { title, summary, promoted, coverImageLocked }) => req<unknown>(
+      'POST',
+      '/api/ReadingList/update',
+      { body: { readingListId, title, summary, promoted, coverImageLocked } },
     ),
 
     /**

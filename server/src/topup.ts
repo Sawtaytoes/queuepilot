@@ -135,7 +135,9 @@ export async function topup(
   if (typeof provider.topupList === 'function') {
     let res: Awaited<ReturnType<NonNullable<typeof provider.topupList>>>;
     try {
-      res = await provider.topupList({ setName, window, at: TOPUP_AT, build: buildLineup });
+      res = await provider.topupList({
+        setName, setLabel: cfg.label || setName, window, at: TOPUP_AT, build: buildLineup,
+      });
     } catch (e) {
       return { ok: false, set: setName, error: `list top-up failed: ${errMessage(e)}` };
     }
