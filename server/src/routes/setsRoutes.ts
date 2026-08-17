@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import * as cache from '../cache.js';
+import { ROTATION_LENGTH, ROTATION_LENGTH_MAX, TOPUP_AT } from '../env.js';
 import { toWeight } from '../engine/weight.js';
 import { errMessage } from '../errors.js';
 import * as plex from '../plex.js';
@@ -26,7 +27,13 @@ export function setsRoutes(): Hono {
       } catch {
         /* Plex down: registry still serves */
       }
-      return c.json({ ...reg, libraries });
+      // The lineup DEFAULTS, so the pool editor can chip the right option "Default", clamp to
+      // the same ceiling the writer does, and say in words when a refill actually fires. These
+      // are env, not constants — hardcoding 12/200/3 in the web bundle would let a deployment
+      // that moves ROTATION_LENGTH silently disagree with its own editor, which is the same
+      // class of split-brain the entry-count Default chip exists to close.
+      const lineup = { length: ROTATION_LENGTH, max: ROTATION_LENGTH_MAX, topup_at: TOPUP_AT };
+      return c.json({ ...reg, libraries, lineup });
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

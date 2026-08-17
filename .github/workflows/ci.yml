@@ -193,6 +193,15 @@ jobs:
       - name: Kavita-only set saves (offline)
         run: $TSX e2e/kavita-only-set-test.ts
 
+      # The lineup knobs' WRITE side, now that the pool editor sets them. The editor posts
+      # every knob it renders on every Save, so the thing that has to hold is SPARSE storage:
+      # a `length` equal to the env default, a `refill: false` and an `on_complete: drop` are
+      # stored by absence, or renaming a pool stamps three keys that say nothing onto it and
+      # quietly stops it following ROTATION_LENGTH. Also pins that `createSet` handles all
+      # three at all — it did not, so a pool created with top-up on came back with it off.
+      - name: Lineup knobs write side (offline)
+        run: $TSX e2e/lineup-knobs-test.ts
+
       # A reading queue's ARTWORK and TILES come from its provider, not from Plex. Reported
       # from the live app: a search dropdown of broken-image glyphs, because the cover proxy
       # shipped and nothing ever called it — the frontend's only move was /api/thumb, which is

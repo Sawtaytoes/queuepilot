@@ -95,8 +95,10 @@ only when the owner asks.
   over `queuepilot/cmd/session/topup` (HA publishes; the app decides). Plex's
   playQueue is extended in place; Kavita's reading list is a sliding window.
   ⚠️ Plex has **no append-at-end** — `PUT /playQueues/{id}?uri=…` inserts after
-  the selected item, which is why `TOPUP_AT` is small. Remaining work (no UI
-  control, the rewatch branch, per-entry `on_complete`) is listed under
+  the selected item, which is why `TOPUP_AT` is small. All three knobs are
+  editable from the pool editor's **Lineup** box since 2026-08-17
+  ([decision](decisions/2026-08-17-the-lineup-knobs-live-in-the-pool-editor.md)).
+  Remaining work (the rewatch branch, per-entry `on_complete`) is listed under
   "Still open" in [todos/lineup-length-and-top-up.md](todos/lineup-length-and-top-up.md).
 
 ## Deploy state

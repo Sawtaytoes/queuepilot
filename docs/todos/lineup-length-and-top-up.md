@@ -1,6 +1,7 @@
 # Lineup length, infinite, and top-up
 
-- **Status:** Phases 1-3 SHIPPED 2026-08-17. What is left is in `## Still open` at the bottom.
+- **Status:** Phases 1-3 SHIPPED 2026-08-17, and the UI controls with them. What is
+  left is in `## Still open` at the bottom.
 - **Date:** 2026-08-17
 - **Asked from:** the Younger Kids Shorts card running dry mid-evening
 - **Decision:** [a channel sets its own lineup length](../decisions/2026-08-17-a-channel-sets-its-own-lineup-length.md)
@@ -121,13 +122,34 @@ owner has bookmarked.
   (same id, longer), or it proves nothing about the hiccup.
 - Any infinite test needs a bounded fixture, or it does not terminate.
 
+## Phase 4 — the UI controls (SHIPPED)
+
+All three get a **Lineup** box in the pool editor (⚙ Configure on a
+filtered pool). Decision:
+[the lineup knobs live in the pool editor](../decisions/2026-08-17-the-lineup-knobs-live-in-the-pool-editor.md).
+
+The count picker was the right model, with one change: `CountPicker`
+took a `presets` prop, because a lineup counts whole items in one
+sitting and the entry picker's 1 / 2 are not answers anyone would pick
+there. A lineup offers **12 / 24 / 60 / Custom…**, with env
+`ROTATION_LENGTH` folded in so it wears the **Default** chip.
+
+Two things fell out that were not "add a widget":
+
+- **Equal to the default is stored by ABSENCE.** The editor posts every
+  knob on every Save, so without this, renaming a pool stamps three keys
+  that say nothing onto it — and pins its length instead of leaving it
+  following the env. Server-side, so a hand-`PATCH` agrees.
+- **`createSet` never handled these at all.** A pool created from the
+  editor with `refill` on came back with it off, silently.
+
+A **rewatch** pool does not get the box (see below) — hidden with a note
+in its place, rather than shown a control that does nothing.
+
 ## Still open
 
 Not built, and not blocking anything that shipped:
 
-- **No UI control.** `length`, `refill` and `on_complete` are editable
-  through `PATCH /api/sets/:id` and by hand in `sets.yaml`, but the set
-  editor has no widget for them. The count pickers are the obvious model.
 - **The rewatch branch is untouched.** `behavior: rewatch` (the kids'
   Movies card) still returns exactly one item and honours neither
   `length` nor `refill`. "Movies wrap into rewatch weighting" means

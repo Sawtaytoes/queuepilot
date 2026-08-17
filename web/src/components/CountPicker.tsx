@@ -27,34 +27,52 @@ import { SelectListbox } from "./SelectListbox"
  * (the queue's own batch, or the engine floor of 1 on the set editor). That option wears a
  * **Default** chip in the list so you can see which pick is "just use the current default"
  * rather than guessing from the selected number.
+ *
+ * `presets` swaps the common answers for a caller on a different scale — a channel's LINEUP
+ * length counts whole items in one sitting, where 1 and 2 are not answers anyone would pick.
  */
 
 const CUSTOM = "custom"
 
 export function CountPicker({
   defaultValue,
+  id,
   label,
   max,
   min = 1,
   onChange,
+  presets: common,
   size = "sm",
   unit = "",
   value,
 }: {
   /** The option that is "follow the current default" — tagged Default in the list. */
   defaultValue?: number
+  /**
+   * A stable handle for the suites. Follows the control through its two faces — the listbox
+   * (where `SelectListbox` renders it as `data-testid`, because the overlay overwrites an
+   * `id`) and the number field Custom… swaps in. Without it a page holding two of these can
+   * only be driven by DOM order.
+   */
+  id?: string
   label: string
   max: number
   min?: number
   onChange: (value: number) => void
+  /** The always-present options. Defaults to 1 / 2 — an entry batch's common answers. */
+  presets?: readonly number[]
   size?: "sm" | "md"
   unit?: "" | "x"
   value: number
 }) {
   const preset = (n: number) =>
     unit === "x" ? `${n}x` : String(n)
-  const presets = countPickerPresets(defaultValue)
-  const isPreset = isCountPreset(value, defaultValue)
+  const presets = countPickerPresets(defaultValue, common)
+  const isPreset = isCountPreset(
+    value,
+    defaultValue,
+    common,
+  )
   // `isCustom` is UI state, not derived state: picking Custom… must show the field BEFORE a
   // number exists to derive it from, and it must stay open while you type 1 on the way to 12.
   const [isCustom, setIsCustom] = useState(!isPreset)
@@ -63,11 +81,19 @@ export function CountPicker({
 
   // The server owns the value: a PATCH can reject it, and a change made on another device
   // arrives over SSE. Re-sync when it moves underneath us.
+  //
+  // The preset list is depended on by its CONTENTS, not by its identity: a caller passing an
+  // inline `[12, 24, 60]` hands a fresh array every render, and this effect resets the draft —
+  // it would wipe what you are typing on every keystroke.
+  const commonKey = presets.join()
+
   useEffect(() => {
     setDraft(String(value))
-    if (!isCountPreset(value, defaultValue))
+    if (!isCountPreset(value, defaultValue, common))
       setIsCustom(true)
-  }, [defaultValue, value])
+    // `common` is read through `commonKey`, which is what makes the dep stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [commonKey, defaultValue, value])
 
   const commit = (raw: string) => {
     const n = parseInt(raw, 10)
@@ -85,6 +111,7 @@ export function CountPicker({
         <input
           aria-label={label}
           className="countnum"
+          id={id}
           max={max}
           min={min}
           onBlur={(e) => commit(e.target.value)}
@@ -104,7 +131,9 @@ export function CountPicker({
           className="countback"
           onClick={() => {
             setIsCustom(false)
-            if (!isCountPreset(value, defaultValue)) {
+            if (
+              !isCountPreset(value, defaultValue, common)
+            ) {
               onChange(defaultValue ?? 1)
             }
           }}
@@ -134,6 +163,7 @@ export function CountPicker({
 
   return (
     <SelectListbox
+      id={id}
       label={label}
       onChange={(v) => {
         if (v === CUSTOM) {
