@@ -134,6 +134,9 @@ interface PlaybackMetadata {
 interface PlaybackContainer {
   size?: number;
   playQueueID?: number | string;
+  /** Where the viewer is IN the queue — the index of the selected item. Top-up measures
+   *  what is left from here, never from the queue's length alone. */
+  playQueueSelectedItemOffset?: number;
   Metadata?: PlaybackMetadata[];
   /** `/clients` answers with one or the other depending on server version. */
   Server?: { name?: string; machineIdentifier?: string }[];
@@ -472,6 +475,67 @@ export async function createPlayQueue(
     );
   }
   return mc.playQueueID ?? null;
+}
+
+/**
+ * Read a live playQueue: its ordered ratingKeys and where the viewer is in it.
+ *
+ * The ONLY honest source for "how much is left" — the lineup this service built is what it
+ * SENT, and the viewer has been skipping around in it since. Top-up decides on this, never on
+ * `SESSION.queue`.
+ */
+export async function readPlayQueue(
+  pqId: number | string,
+  { token = null }: { token?: string | null } = {},
+): Promise<{ ratingKeys: string[]; selectedOffset: number; remaining: number } | null> {
+  const q = new URLSearchParams({ 'X-Plex-Client-Identifier': CLIENT_ID });
+  let data: PlexReqJson;
+  try {
+    data = await plexReq('GET', `/playQueues/${pqId}?${q}`, { token });
+  } catch {
+    // A playQueue Plex has forgotten (server restart, expiry) is not an error worth throwing
+    // at a background tick — it means "there is nothing to top up", which is the caller's
+    // normal no-op path.
+    return null;
+  }
+  const mc: PlaybackContainer = (data && data.MediaContainer) || {};
+  const rows = (mc.Metadata || []) as { ratingKey?: string | number }[];
+  const ratingKeys = rows.map((r) => String(r.ratingKey));
+  const selectedOffset = Number(mc.playQueueSelectedItemOffset ?? 0) || 0;
+  return { ratingKeys, selectedOffset, remaining: Math.max(0, ratingKeys.length - selectedOffset - 1) };
+}
+
+/**
+ * Append items to a LIVE playQueue, keeping its id — so a top-up never interrupts playback.
+ *
+ * ⚠️ These are "Play Next" semantics, not "Add to Queue". Verified against this server
+ * (e2e/spike-playqueue-extend.ts, 2026-08-17): `PUT /playQueues/{id}?uri=…` inserts
+ * immediately AFTER the currently-selected item, and `next=0` / `next=1` / omitting `next`
+ * all behave identically — there is no append-at-end spelling. Successive adds DO chain
+ * correctly (Plex tracks `playQueueLastAddedItemID`), so a batch keeps its order.
+ *
+ * That is why top-up waits for TOPUP_AT: at three items left there is almost no tail for the
+ * new items to jump ahead of, and a rotation channel's tail is a shuffle anyway. Do not
+ * "fix" this by rebuilding the queue — a new playQueue restarts playback, which is the exact
+ * hiccup this whole path exists to avoid.
+ */
+export async function extendPlayQueue(
+  pqId: number | string,
+  ratingKeys: (string | number)[] | null | undefined,
+  { token = null }: { token?: string | null } = {},
+): Promise<number | null> {
+  if (!ratingKeys || !ratingKeys.length) return 0;
+  const mid = await machineIdentifier();
+  const q = new URLSearchParams({
+    uri: `server://${mid}/com.plexapp.plugins.library/library/metadata/${ratingKeys.map(String).join(',')}`,
+    'X-Plex-Client-Identifier': CLIENT_ID,
+  });
+  const data = await plexReq('PUT', `/playQueues/${pqId}?${q}`, { token });
+  const mc: PlaybackContainer = (data && data.MediaContainer) || {};
+  // Plex answers 200 with the queue's new size. Reported so the caller can log what actually
+  // landed rather than what it asked for — the create path already learned that Plex silently
+  // drops keys a token cannot see.
+  return mc.size ?? null;
 }
 
 // --- audio language (best-effort, both paths) -------------------------------- //

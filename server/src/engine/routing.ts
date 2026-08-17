@@ -64,6 +64,8 @@ type RawSetEntry = BindingSource & {
   episodes?: unknown;
   volumes?: unknown;
   length?: unknown;
+  refill?: unknown;
+  on_complete?: unknown;
   audio_language?: unknown;
   max_items?: unknown;
   providers?: unknown;
@@ -238,6 +240,11 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
     // providers/plex.ts's rotationLength() interprets it (set > env ROTATION_LENGTH); an
     // absent/invalid value falls back rather than throwing, exactly like max_items.
     if (ent.length != null) cfg.length = String(ent.length).trim();
+    // Keep the lineup topped up rather than letting it end. `true` is the ONLY enabling form,
+    // matching `include_specials` above — a stray `refill: "no"` must not read as truthy.
+    if (ent.refill === true) cfg.refill = true;
+    // What a FINISHED series does on a refilling channel: restart at ep1, or drop out.
+    if (ent.on_complete != null) cfg.on_complete = String(ent.on_complete).trim().toLowerCase();
     // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
     if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().

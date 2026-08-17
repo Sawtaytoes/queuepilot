@@ -1,6 +1,6 @@
 # Lineup length, infinite, and top-up
 
-- **Status:** Phase 1 shipped 2026-08-17; phases 2-3 specified, NOT built
+- **Status:** Phases 1-3 SHIPPED 2026-08-17. What is left is in `## Still open` at the bottom.
 - **Date:** 2026-08-17
 - **Asked from:** the Younger Kids Shorts card running dry mid-evening
 - **Decision:** [a channel sets its own lineup length](../decisions/2026-08-17-a-channel-sets-its-own-lineup-length.md)
@@ -27,11 +27,15 @@ Rotation channels take `length: <int>`, set > env, clamped to
 Kavita were NOT converted** — a rewatch channel still plays exactly one
 movie, which is correct today and becomes phase 2's problem.
 
-## Phase 2 — infinite, and what "finished" means
+## Phase 2 — infinite, and what "finished" means (SHIPPED)
 
-`length: all` (the NAMED sentinel from
-[batch-all-or-infinite.md](batch-all-or-infinite.md) — never `0`, never
-`999`).
+**Spelled `refill: true`, NOT `length: all`.** The sentinel plan assumed
+one infinite lineup; the owner's own description was a WINDOW ("load up X
+number… then add more"), and a single infinite lineup would queue the
+whole eligible pool up front — 442 items on the live Shorts channel. So
+`length` became the window and `refill` the switch.
+[batch-all-or-infinite.md](batch-all-or-infinite.md) stays parked and
+unaffected: it is about a per-ENTRY batch, a different axis.
 
 The owner's semantics, verbatim:
 
@@ -58,7 +62,7 @@ exhaustion (this lineup's slice is full) with a series being *finished*
 (no unwatched episodes remain anywhere) — they are different questions
 and only the second one triggers `on_complete`.
 
-## Phase 3 — top-up
+## Phase 3 — top-up (SHIPPED)
 
 Infinite is meaningless without this: **a Plex playQueue is a fixed list
 once created**, so "infinite" can only mean "kept topped up".
@@ -75,11 +79,13 @@ does the work, and no TrueNAS cron is involved.
 restarts playback; extending is invisible mid-episode. Needs the live
 `pqId` stored on `SESSION` (which already tracks `queue` / `cursor`).
 
-> ⚠️ **SPIKE THIS FIRST.** The extend endpoint has NOT been verified
-> against this Plex server. If it does not behave, the fallback is
-> "build a new playQueue and resume at the current item", which IS
-> visible as a hiccup and changes the UX promise. Do not build phase 3
-> on the assumption it works.
+> ✅ **SPIKED 2026-08-17** (`e2e/spike-playqueue-extend.ts`). It grows the
+> queue in place, keeps the id, and successive adds chain in order — so
+> top-up IS invisible mid-episode. **But there is no append-at-end**: it
+> inserts after the currently selected item, and `next=0` / `next=1` /
+> omitting `next` are identical. Seed `[A,B]` + `C` gives `[A,C,B]`.
+> That is why `TOPUP_AT` is 3. Do NOT rebuild the queue to get tail
+> ordering — rebuilding restarts playback.
 
 **Kavita:** same MQTT command, different handler. There is no playback
 session — the reading list is a persistent artifact the tablet pulls
@@ -114,3 +120,19 @@ owner has bookmarked.
 - A top-up test must prove the playQueue was **extended, not replaced**
   (same id, longer), or it proves nothing about the hiccup.
 - Any infinite test needs a bounded fixture, or it does not terminate.
+
+## Still open
+
+Not built, and not blocking anything that shipped:
+
+- **No UI control.** `length`, `refill` and `on_complete` are editable
+  through `PATCH /api/sets/:id` and by hand in `sets.yaml`, but the set
+  editor has no widget for them. The count pickers are the obvious model.
+- **The rewatch branch is untouched.** `behavior: rewatch` (the kids'
+  Movies card) still returns exactly one item and honours neither
+  `length` nor `refill`. "Movies wrap into rewatch weighting" means
+  calling `pickRewatch` repeatedly, excluding what it already picked —
+  the remaining piece of the owner's semantics.
+- **`on_complete` is set-level only.** The per-entry override described
+  above was not built; every show on a channel currently shares its
+  answer.
