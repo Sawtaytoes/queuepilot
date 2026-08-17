@@ -107,6 +107,13 @@ export interface KavitaReadingListDto {
   id?: number | string;
   title?: string;
   ownerUserName?: string;
+  /**
+   * True once a cover has been UPLOADED for this list. Kavita generates one from the first
+   * item otherwise, and regenerates it whenever the items change — which for a list this app
+   * rebuilds on every launch means the artwork is a different interior page every time. The
+   * flag is what tells `materialize()` whether the cover is already ours to leave alone.
+   */
+  coverImageLocked?: boolean;
   [field: string]: unknown;
 }
 
@@ -161,6 +168,8 @@ export interface KavitaHttpClient {
     chapterId: number | string,
   ): Promise<unknown>;
   removeRead(readingListId: number | string): Promise<unknown>;
+  /** Put artwork on a list. `imageBase64` is RAW base64 — see the implementation. */
+  uploadListCover(readingListId: number | string, imageBase64: string): Promise<unknown>;
   /** Remove ONE item, addressed by the item's own id. Keeps the list (and its id) alive. */
   deleteItem(readingListId: number | string, readingListItemId: number | string): Promise<unknown>;
   deleteList(readingListId: number | string): Promise<unknown>;
@@ -380,6 +389,24 @@ export function kavitaClient({
     ),
 
     removeRead: (readingListId) => req<unknown>('POST', `/api/ReadingList/remove-read?readingListId=${readingListId}`),
+
+    /**
+     * Put artwork on a list, and LOCK it — Kavita sets `coverImageLocked` on any uploaded
+     * cover, which is what stops it regenerating one from the items on the next rebuild.
+     *
+     * `url` is RAW base64 with NO `data:image/...;base64,` prefix. Both spellings were probed
+     * against the live instance on a throwaway list, 2026-08-17: the prefixed one answers
+     * `400 Unable to save cover image to Reading List`, the bare one answers 200 and the list
+     * comes back with `coverImageLocked: true` and Kavita's derived primary/secondary colours.
+     * The field is called `url` because the same DTO also accepts a real URL for Kavita to
+     * fetch; we never use that form (it would need this container to be reachable from that
+     * one). SVG is accepted and rasterized on Kavita's side — see kavita-cover.ts.
+     */
+    uploadListCover: (readingListId, imageBase64) => req<unknown>(
+      'POST',
+      '/api/Upload/reading-list',
+      { body: { id: readingListId, url: imageBase64 } },
+    ),
 
     /**
      * Remove one item. **POST, and the id is the ITEM's** — verified against the live

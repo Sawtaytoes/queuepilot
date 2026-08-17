@@ -1082,7 +1082,14 @@ export interface Provider {
    * shapes are declared and every caller must await. */
   materialize(
     items: PlayItem[],
-    opts?: { offset?: number; setName?: string | null; binding?: EngineBinding | null },
+    opts?: {
+      offset?: number;
+      setName?: string | null;
+      /** The set's HUMAN label. Kavita paints it on the list's cover; the other providers
+       *  have no persistent artifact to name and ignore it. */
+      setLabel?: string | null;
+      binding?: EngineBinding | null;
+    },
   ): ProviderArtifact | Promise<ProviderArtifact>;
   /** ASYNC on Plex (it performs the drive), SYNC on Kavita (it builds a URL). */
   handoff(artifact: ProviderArtifact, opts?: HandoffOptions): HandoffResult | Promise<HandoffResult>;
