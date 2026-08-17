@@ -407,6 +407,14 @@ export type SearchHit = {
   ratingKey: string
   title: string
   year?: number | null
+  /**
+   * Plex's edition label ("3D", "Director's Cut"), when the item has one.
+   *
+   * Two EDITIONS of a film are two separate library items sharing a title and a year, so
+   * without this the two rows are character-for-character identical. Absent on the plain
+   * edition — that is Plex's own shape, not a gap: only the tagged one names itself.
+   */
+  editionTitle?: string | null
   type: "show" | "movie" | "collection"
   sectionId: number
   childCount?: number | null

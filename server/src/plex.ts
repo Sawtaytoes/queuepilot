@@ -92,6 +92,14 @@ export interface PosterFields {
   type: 'movie' | 'show' | undefined;
   title: string | undefined;
   year: number | null;
+  /**
+   * Plex's edition label, when the item has one. Two EDITIONS of a film are two separate
+   * library items with the same title and year — the search rows were literally identical
+   * and there was no way to tell which was which (owner, 2026-08-17: "Big Buck Bunny 2008"
+   * twice, one of them `{edition-3D}`). `null` on the plain edition, which is Plex's own
+   * shape: only the tagged one names itself.
+   */
+  editionTitle: string | null;
   sectionId: number | null;
   hasThumb: boolean;
   viewCount: number;
@@ -593,6 +601,7 @@ function posterFields(md: PlexMetadata): PosterFields {
     type: md.type as PosterFields['type'],
     title: md.title,
     year: md.year ?? null,
+    editionTitle: md.editionTitle ? String(md.editionTitle) : null,
     sectionId: md.librarySectionID != null ? Number(md.librarySectionID) : null,
     hasThumb: Boolean(md.thumb),
     // A MOVIE's own resume state (a show reports per-episode instead — see nextEpisode).

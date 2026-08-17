@@ -666,6 +666,10 @@ export interface PlexMetadata {
   duration?: number;
   extraType?: number;
   contentRating?: string;
+  /** Plex's EDITION label ("3D", "Director's Cut", …) — the `{edition-…}` folder tag. Absent
+   * on the plain edition, which is why two library items can share a title and a year and
+   * only one of them names itself. */
+  editionTitle?: string;
   viewCount?: number;
   viewOffset?: number;
   leafCount?: number;
