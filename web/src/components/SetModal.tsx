@@ -23,8 +23,10 @@ import { SelectListbox } from "./SelectListbox"
  * Create / edit a curated set. Create: empty; edit: prefilled + rename/delete.
  *
  * The two kinds are the taxonomy decision, not a cosmetic label: `movies` is an
- * ordered QUEUE (top plays next), `anime` is a CHANNEL whose members play in random
- * order (decision `2026-07-21-queues-vs-channels-taxonomy-play-first-ia`).
+ * ORDERED QUEUE (top plays next), `anime` is a CURATED POOL whose members play in
+ * random order (decisions `2026-07-21-queues-vs-channels-taxonomy-play-first-ia` and
+ * `2026-08-16-filtered-pools-curated-pools-ordered-queues`). The `kind` VALUES stay
+ * `movies` / `anime` — internal identifiers are out of the rename's scope.
  *
  * The id is immutable and NFC cards / HA reference it, so the note says so on both
  * paths — renaming the label never breaks a card.
@@ -325,7 +327,8 @@ export function SetModal() {
         await api("POST", "/api/sets", body)
       }
 
-      const word = kind === "anime" ? "Channel" : "Queue"
+      const word =
+        kind === "anime" ? "Curated pool" : "Ordered queue"
 
       closeSetModal()
       setStatus(
@@ -420,8 +423,8 @@ export function SetModal() {
         editing
           ? `Edit “${editing.label}”`
           : setModal?.presetKind === "anime"
-            ? "New channel"
-            : "New queue"
+            ? "New curated pool"
+            : "New ordered queue"
       }
       titleId="setmodal-title"
     >
@@ -454,12 +457,15 @@ export function SetModal() {
           onChange={setKind}
           options={[
             {
-              label: "Queue — ordered, top plays next",
+              // Not "Ordered Queue — ordered, …": the group name already carries the word,
+              // so the old suffix said it twice. The clause after the dash is what
+              // DISTINGUISHES the two, and for this one that is which end plays next.
+              label: "Ordered Queue — top plays next",
               value: "movies",
             },
             {
               label:
-                "Channel — members play in random order",
+                "Curated Pool — members play in random order",
               value: "anime",
             },
           ]}

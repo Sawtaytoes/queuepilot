@@ -385,7 +385,7 @@ export function DynModal() {
         ? defaultProfile
         : ""
 
-    setStatus("Saving channel…")
+    setStatus("Saving pool…")
 
     try {
       if (setId)
@@ -394,7 +394,7 @@ export function DynModal() {
 
       closeDynModal()
       setStatus(
-        setId ? "Channel updated" : "Channel created",
+        setId ? "Pool updated" : "Pool created",
         "ok",
       )
       await load()
@@ -417,7 +417,7 @@ export function DynModal() {
 
     if (
       !confirm(
-        `Delete the “${name}” channel?\n\n` +
+        `Delete the “${name}” filtered pool?\n\n` +
           "This removes it permanently. Any NFC card or HA button set to play " +
           `"${setId}" will stop working until you repoint it — this app can't ` +
           "change Home Assistant.",
@@ -426,7 +426,7 @@ export function DynModal() {
       return
     }
 
-    setStatus("Deleting channel…")
+    setStatus("Deleting pool…")
 
     try {
       await api(
@@ -434,7 +434,7 @@ export function DynModal() {
         `/api/sets/${encodeURIComponent(setId)}`,
       )
       closeDynModal()
-      setStatus("Channel deleted", "ok")
+      setStatus("Pool deleted", "ok")
       await load()
       navigate("/channels")
     } catch (e) {
@@ -469,7 +469,7 @@ export function DynModal() {
             onClick={() => void onDelete()}
             type="button"
           >
-            Delete channel
+            Delete pool
           </button>
           <span className="spacer" />
           <button
@@ -492,7 +492,7 @@ export function DynModal() {
       title={
         editing
           ? `Configure “${editing.label}”`
-          : "New dynamic channel"
+          : "New filtered pool"
       }
       titleId="dynmodal-title"
     >
@@ -718,7 +718,7 @@ export function DynModal() {
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>
         <p className="subhint">
-          One or more Plex Home profiles this channel plays
+          One or more Plex Home profiles this pool plays
           under — each with its own rating caps (scoped to
           what that profile can pick). At play time the
           signed-in profile decides which applies.
@@ -1001,8 +1001,8 @@ export function DynModal() {
             }
           />
           <span className="subhint">
-            The tier the Play and Channels dropdowns start
-            on. Leave unset to use the first.
+            The tier the Play and Pools dropdowns start on.
+            Leave unset to use the first.
           </span>
         </label>
       </fieldset>

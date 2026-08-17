@@ -324,13 +324,13 @@ function computeChrome(
       editableSetId: route.id,
       heading: label,
       isSubHidden: !isChannel,
-      // A channel's members play in a shuffled order — say so, and drop the ordering UI.
-      // In the PROVIDER's nouns: on a reading channel this used to promise "how many
+      // A curated pool's members play in a shuffled order — say so, and drop the ordering
+      // UI. In the PROVIDER's nouns: on a reading pool this used to promise "how many
       // episodes each show plays per visit", which is two wrong words in one sentence.
       // "contributes" is the neutral verb the type declarations already use for this
       // number, so the sentence needs no per-provider branch of its own.
       sub: isChannel
-        ? `A channel — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
+        ? `A curated pool — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
         : "",
     }
   }
