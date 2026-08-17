@@ -30,22 +30,20 @@ import { SelectListbox } from "./SelectListbox"
  *
  * `presets` swaps the common answers for a caller on a different scale — a channel's LINEUP
  * length counts whole items in one sitting, where 1 and 2 are not answers anyone would pick.
+ *
+ * `hasInfinite` adds **Infinite** to the list and lets `value` be the string `"infinite"`.
+ * Opt-in, because it is meaningless for most counts: an entry's batch has no infinite form
+ * (`docs/todos/batch-all-or-infinite.md` is still parked on what "all" would even mean there),
+ * while a PLAYBACK LENGTH does — it is the pool that keeps going until someone stops it.
+ * Spelled as its own option and never as a magic number: 0 already reads as *uncapped* deeper
+ * in the engine, so a sentinel would turn a typo into a binge.
  */
 
 const CUSTOM = "custom"
+export const INFINITE = "infinite"
 
-export function CountPicker({
-  defaultValue,
-  id,
-  label,
-  max,
-  min = 1,
-  onChange,
-  presets: common,
-  size = "sm",
-  unit = "",
-  value,
-}: {
+/** What every caller passes, whatever it counts. */
+type CountPickerBase = {
   /** The option that is "follow the current default" — tagged Default in the list. */
   defaultValue?: number
   /**
@@ -58,25 +56,68 @@ export function CountPicker({
   label: string
   max: number
   min?: number
-  onChange: (value: number) => void
   /** The always-present options. Defaults to 1 / 2 — an entry batch's common answers. */
   presets?: readonly number[]
   size?: "sm" | "md"
   unit?: "" | "x"
-  value: number
-}) {
+}
+
+/**
+ * The props split on `hasInfinite` so that opting in is a TYPE-level fact, not a convention.
+ *
+ * Widening `onChange` to `number | "infinite"` for everyone was the first cut, and it broke
+ * all four existing call sites at once: a `(n: number) => void` cannot accept a string, and
+ * the compiler is right to say so — an entry batch has no infinite form to handle. This way a
+ * caller that does not ask for Infinite can never be handed it.
+ */
+type CountPickerProps =
+  | (CountPickerBase & {
+      hasInfinite?: false
+      onChange: (value: number) => void
+      value: number
+    })
+  | (CountPickerBase & {
+      /** Offer **Infinite** as an option, and accept `"infinite"` as the value. */
+      hasInfinite: true
+      onChange: (value: number | typeof INFINITE) => void
+      value: number | typeof INFINITE
+    })
+
+export function CountPicker({
+  defaultValue,
+  hasInfinite = false,
+  id,
+  label,
+  max,
+  min = 1,
+  onChange,
+  presets: common,
+  size = "sm",
+  unit = "",
+  value,
+}: CountPickerProps) {
+  // Inside the body the two halves are one shape; the union is what the CALLERS see, and it
+  // has already done its job by the time control reaches here.
+  const emit = onChange as (
+    v: number | typeof INFINITE,
+  ) => void
   const preset = (n: number) =>
     unit === "x" ? `${n}x` : String(n)
   const presets = countPickerPresets(defaultValue, common)
-  const isPreset = isCountPreset(
-    value,
-    defaultValue,
-    common,
-  )
+  const isInfinite = value === INFINITE
+  // Infinite is a preset in its own right, so it must not fall through to the Custom… field —
+  // there is no number to seed it with, and the spinner cannot express it.
+  const isPreset =
+    isInfinite ||
+    isCountPreset(value as number, defaultValue, common)
   // `isCustom` is UI state, not derived state: picking Custom… must show the field BEFORE a
   // number exists to derive it from, and it must stay open while you type 1 on the way to 12.
   const [isCustom, setIsCustom] = useState(!isPreset)
-  const [draft, setDraft] = useState(String(value))
+  const [draft, setDraft] = useState(
+    isInfinite
+      ? String(defaultValue ?? min)
+      : String(value),
+  )
   const fieldRef = useRef<HTMLInputElement>(null)
 
   // The server owns the value: a PATCH can reject it, and a change made on another device
@@ -88,6 +129,12 @@ export function CountPicker({
   const commonKey = presets.join()
 
   useEffect(() => {
+    if (value === INFINITE) {
+      setIsCustom(false)
+
+      return
+    }
+
     setDraft(String(value))
     if (!isCountPreset(value, defaultValue, common))
       setIsCustom(true)
@@ -102,7 +149,7 @@ export function CountPicker({
       return
     }
     setDraft(String(n))
-    if (n !== value) onChange(n)
+    if (n !== value) emit(n)
   }
 
   if (isCustom) {
@@ -132,9 +179,10 @@ export function CountPicker({
           onClick={() => {
             setIsCustom(false)
             if (
+              value !== INFINITE &&
               !isCountPreset(value, defaultValue, common)
             ) {
-              onChange(defaultValue ?? 1)
+              emit(defaultValue ?? 1)
             }
           }}
           title="Back to the presets"
@@ -166,6 +214,11 @@ export function CountPicker({
       id={id}
       label={label}
       onChange={(v) => {
+        if (v === INFINITE) {
+          emit(INFINITE)
+
+          return
+        }
         if (v === CUSTOM) {
           setIsCustom(true)
           // Focus the field it just became, or picking Custom… means picking up the mouse again.
@@ -174,7 +227,7 @@ export function CountPicker({
           )
           return
         }
-        onChange(parseInt(v, 10))
+        emit(parseInt(v, 10))
       }}
       options={[
         ...presets.map((n) => ({
@@ -182,6 +235,9 @@ export function CountPicker({
           label: preset(n),
           value: String(n),
         })),
+        ...(hasInfinite
+          ? [{ label: "Infinite", value: INFINITE }]
+          : []),
         { label: "Custom…", value: CUSTOM },
       ]}
       size={size}

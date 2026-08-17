@@ -240,6 +240,15 @@ export const T_CMD_TOPUP = str('T_CMD_TOPUP', 'queuepilot/cmd/session/topup');
 // What the tick did, so the automation (and a human reading the broker) can see a no-op as a
 // no-op rather than as silence. Not retained: it describes one tick, not a current state.
 export const T_RESP_TOPUP = str('T_RESP_TOPUP', 'queuepilot/resp/topup');
+// A SITTING finished — the playback length was reached, or the lineup genuinely ran out.
+// Carries `power_off`, which is the set asking the house to shut the room down.
+//
+// The app ANNOUNCES; it does not switch anything off. "The whole system" is a TV, a receiver
+// and a Shield, and HA is what owns things with power cables (workspace rule: services talk
+// over MQTT, HA owns the physical world). A `power_off: true` here is a request an automation
+// may honour, ignore, or gate on who is in the room — none of which this app should decide.
+// Not retained: it describes one moment, not a current state.
+export const T_RESP_FINISHED = str('T_RESP_FINISHED', 'queuepilot/resp/finished');
 // Cast sidecar command topic (decision 2026-08-03). The sidecar has always read this from
 // env (cast_sidecar/service.py:18); the publisher used to hardcode it in playback.js, so the
 // two halves could be re-pointed independently and silently diverge — the sidecar sitting on

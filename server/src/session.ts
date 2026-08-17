@@ -10,6 +10,7 @@
 // lives in finished.js, which runs it from here on a session START and again when PLAYBACK
 // ENDS. This file still owns WHEN a scan happens; it no longer owns the rule.
 import * as routing from './engine/routing.js';
+import { playbackLength } from './engine/playbackLength.js';
 import * as finished from './finished.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
@@ -64,6 +65,21 @@ interface SessionSingleton {
    * first scan.
    */
   playQueueID: number | string | null;
+  /**
+   * How many items this session has handed the viewer in total — the initial lineup plus every
+   * top-up since. The counter a FINITE playback length is measured against.
+   *
+   * Counted rather than read off the live playQueue, because those answer different questions:
+   * the playQueue is what is still THERE, and a viewer who skipped four shorts has been given
+   * four items the queue no longer holds. "Plays 8 and stops" means eight handed over, not
+   * eight surviving.
+   */
+  queuedTotal: number;
+  /**
+   * The playback length this session started under, so the finish event can say whether the
+   * sitting reached its end or merely ran out of material. Null = infinite.
+   */
+  target: number | null;
   asDict(this: SessionSingleton): SessionState;
 }
 
@@ -109,6 +125,8 @@ export const SESSION: SessionSingleton = {
   // advance) drive playback as the same account the lineup was selected as.
   userUuid: null,
   playQueueID: null,
+  queuedTotal: 0,
+  target: null,
   asDict() {
     return {
       kind: this.kind, set: this.set, profile: this.profile,
@@ -351,6 +369,11 @@ export async function startSession(
       episode: it.episode,
     };
   });
+
+  // A scan STARTS a sitting, so the running total restarts with it — a top-up adds to this,
+  // and a finite playback length is met when it reaches the target.
+  SESSION.queuedTotal = SESSION.queue.length;
+  SESSION.target = playbackLength(cfg);
 
   const ratingKeys = SESSION.queue.map((q) => q.ratingKey);
   // LATENT BUG (types.ts `SessionStartPayload.target`): this is EITHER a resolved device (the

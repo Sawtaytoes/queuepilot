@@ -23,8 +23,9 @@ import {
   int0, atOrAfterStart, multiSeason, showEpisodes, findCollection, collectionChildren,
 } from './select.js';
 import { isUnweighted, toWeight, weightedShuffle } from './weight.js';
+import { initialQueueSize, playbackLength } from './playbackLength.js';
 import {
-  BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH, ROTATION_LENGTH,
+  BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
 import { QUEUES_PATH } from '../config.js';
 import { isNodeError } from '../errors.js';
@@ -59,6 +60,13 @@ type ResolveCfg = {
    */
   episodes?: unknown;
   kind?: string | null;
+  /** Playback length: how many ITEMS this set plays in one sitting. See engine/playbackLength. */
+  length?: unknown;
+  /** Legacy spelling of `length: infinite`; read, never written. */
+  refill?: unknown;
+  source?: unknown;
+  behavior?: unknown;
+  mode?: unknown;
 };
 
 /** A raw entry MAPPING off queues.yaml, before `describe()` coerces it. */
@@ -613,10 +621,12 @@ function batchStop(
 // keeps a 'member' stop a correct no-op there. Movies in a collection each carry their OWN
 // member_key, because their `show` is the collection name and would fuse them into one segment.
 function segmentKey(item: ResolvedItem, stop: string): string {
-  // NOTE the separator in the 'season' branch is a literal NUL (U+0000), not a space — a show
-  // title may contain spaces, and this keeps two segments from colliding. Left byte-for-byte.
+  // The separator is a NUL (U+0000), not a space: a show title may contain spaces, and this
+  // keeps two segments from colliding. Written as the ESCAPE `\0` rather than a raw NUL
+  // byte in the source — the string is byte-identical, but a literal NUL made grep and rg
+  // classify this whole file as BINARY and silently return nothing for every search of it.
   const member = item.member_key || item.show;
-  return stop === 'season' ? `${member} ${item.season}` : String(member);
+  return stop === 'season' ? `${member}\0${item.season}` : String(member);
 }
 
 /**
@@ -856,14 +866,28 @@ export async function nextQueue(
       weightedShuffle(rest, rng);
     }
     const ordered = lead.concat(rest);
+    // The SET's own playback length, not a hardcoded env window. A curated pool read
+    // ROTATION_LENGTH directly and so was the one kind of set whose length could never be
+    // configured — invisible, because 12 is also what a filtered pool defaults to.
+    const cap = initialQueueSize(playbackLength(cfg));
     playItems = [];
     for (const b of ordered) {
-      playItems.push(...b.items.slice(0, ROTATION_LENGTH - playItems.length));
-      if (playItems.length >= ROTATION_LENGTH) break;
+      playItems.push(...b.items.slice(0, cap - playItems.length));
+      if (playItems.length >= cap) break;
     }
     leadBatch = ordered.length ? ordered[0]! : null;
   } else {
-    playItems = batches.length ? batches[0]!.items : [];
+    // An ordered queue played `batches[0]` and stopped — its head ENTRY, whole.
+    //
+    // So this is the one path that counts ENTRIES rather than items, and it has to be: a show
+    // entry's batch is already its own knob (`episodes:`), and capping items here at 1 would
+    // silently truncate a 2-episode entry to one episode — which is what the first cut of this
+    // did, and what `resume-in-queue-test` caught. "Playback Length 1" on an ordered queue
+    // means the entry at the top, whole; on a rule-based pool, where there are no entries to
+    // count, it means one item.
+    const cap = initialQueueSize(playbackLength(cfg));
+    playItems = [];
+    for (const b of batches.slice(0, cap)) playItems.push(...b.items);
     leadBatch = batches.length ? batches[0]! : null;
   }
   // A non-empty `playItems` implies a `leadBatch`, as it always did.

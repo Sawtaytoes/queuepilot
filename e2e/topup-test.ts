@@ -107,7 +107,10 @@ live.selectedOffset = 5; // 0 left — as empty as it gets
 // The most important no-op in the file: a channel with a fixed `length:` has CHOSEN to end.
 // Topping it up anyway would silently delete that choice, and the owner would have no way to
 // express "play exactly this much" any more.
-check('a non-refilling channel is allowed to END', (await topup()).reason, 'set does not refill');
+// The REASON changed with playback length (top-up is derived from it, not from a `refill`
+// flag), but the behaviour under test did not: a channel that plays a fixed number is
+// still allowed to end, and a tick against it is still a no-op.
+check('a non-refilling channel is allowed to END', (await topup()).reason, 'plays 6 — nothing to top up');
 
 resetSession('curated');
 check('a curated queue is not a channel', (await topup()).reason, 'not a rotation channel');

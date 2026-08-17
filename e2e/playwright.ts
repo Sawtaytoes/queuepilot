@@ -95,6 +95,13 @@ export interface ElementHandle<T extends Element = Element> extends JSHandle<T> 
   isHidden(): Promise<boolean>;
   isChecked(): Promise<boolean>;
   scrollIntoViewIfNeeded(options?: TimeoutOptions): Promise<void>;
+  /**
+   * Shoot just this element. What a "before/after on the PR" capture wants: the fieldset that
+   * changed, cropped by the DOM, rather than a full page the reader has to hunt through — and
+   * unlike a hand-written `clip`, it does not silently frame the wrong box when the layout
+   * moves. `Page` and `Locator` already declare it; the handle form was simply never used.
+   */
+  screenshot(options?: ScreenshotOptions): Promise<Buffer>;
   $<E extends Element = Element>(selector: string): Promise<ElementHandle<E> | null>;
   $$<E extends Element = Element>(selector: string): Promise<ElementHandle<E>[]>;
   evaluate<R>(fn: (element: T) => R | Promise<R>): Promise<R>;

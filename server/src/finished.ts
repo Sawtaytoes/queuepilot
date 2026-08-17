@@ -32,6 +32,8 @@ import * as mqttc from './mqttc.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as queues from './queues.js';
+import * as sets from './sets.js';
+import { SESSION } from './session.js';
 import type {
   BucketsResult, EngineBinding, NowPlaying, RoutingQueueCfg, RoutingSetCfg,
 } from './types.js';
@@ -177,13 +179,67 @@ function isOnScreen(now: NowPlaying | null): boolean {
  * WHICH set is read off the retained `queuepilot/state` topic rather than the in-process
  * session, so a server restarted mid-movie still reconciles the set that is actually playing.
  */
+
+/**
+ * Announce that a sitting ended, and whether the set wants the room shut down.
+ *
+ * Read off the SESSION rather than the queue: "plays 8 and stops" means eight items HANDED
+ * OVER, and a viewer who skipped four of them still got eight. `isComplete` separates the two
+ * endings an automation might treat differently — the length was reached, or the pool ran out
+ * early — so a lights-out rule need not fire on a channel that simply had nothing left.
+ */
+function announceFinished(): void {
+  const setName = SESSION.set;
+
+  if (!setName) return;
+
+  const target = SESSION.target;
+
+  void (async () => {
+    // Read at announce time, not cached at start: the owner may have toggled it mid-sitting,
+    // and this is one YAML read against a file the registry already caches.
+    const entry = await sets.getSet(setName).catch(() => null);
+    _publishFinished({
+      isComplete: target != null && SESSION.queuedTotal >= target,
+      played: SESSION.queuedTotal,
+      power_off: Boolean(entry && (entry as { power_off_when_done?: boolean }).power_off_when_done),
+      set: setName,
+      target,
+    });
+  })();
+}
+
+/** Set by mqttd, so this module announces without importing the broker. */
+let _publishFinished: (payload: FinishedPayload) => void = () => {};
+
+export function setFinishedPublisher(fn: (payload: FinishedPayload) => void): void {
+  _publishFinished = fn;
+}
+
+/** The `resp/finished` payload — one SITTING ending, not one item. */
+export interface FinishedPayload {
+  set: string | null;
+  /** How many items this sitting handed over in total. */
+  played: number;
+  /** The playback length it was running under; null = infinite. */
+  target: number | null;
+  /** True when a finite target was actually reached, false when the pool simply ran dry. */
+  isComplete: boolean;
+  /** The set asked for the room to be shut down. A REQUEST for HA, never an action here. */
+  power_off: boolean;
+}
+
 export function watchPlaybackEnd(): void {
   let wasOn: string | null = null;
   let timer: NodeJS.Timeout | undefined;
   mqttc.onNowPlaying((now: NowPlaying | null) => {
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
     const ended = wasOn && wasOn !== nowRk;
+    // NOTHING is on screen now, and something was a moment ago — the SITTING ended, as
+    // opposed to one item ending and the next starting (which is `ended` with a new `nowRk`).
+    const isIdle = Boolean(wasOn) && nowRk == null;
     wasOn = nowRk;
+    if (isIdle) announceFinished();
     if (!ended) return;
     const state = mqttc.lastState();
     const setName = state && state.set ? String(state.set) : null;

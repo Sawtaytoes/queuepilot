@@ -38,6 +38,7 @@ import type {
 import { kavitaClient, readerSegment } from './kavita-client.js';
 import { errMessage } from '../errors.js';
 import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
+import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
 
 /**
  * One interleave bucket: a series and the unread chapters this scan may draw from it.
@@ -600,7 +601,15 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // everything: Webtoons alone measured 103 series with something unread, which would
       // mean 103 sequential update-by-chapter writes on every launch, for a reading list
       // nobody will reach the end of. A queue is the next while, not the whole backlog.
-      const cap = Math.max(1, Number(limit ?? cfgAny.max_items ?? ROTATION_LENGTH) || ROTATION_LENGTH);
+      // The SAME playback length every other kind of set now runs under, so a reading queue
+      // that says "8" gets 8. `limit` (an explicit caller override) and the legacy `max_items`
+      // still win where they are set; the fallback is no longer a bare env constant.
+      // A reading list is not a SITTING — it is a persistent artifact the tablet pulls from
+      // over days, and its natural size is a window rather than "how many before you stop".
+      // So a reading queue that states a playback length gets it, and one that says nothing
+      // keeps the window it has always had instead of the ordered-queue default of 1.
+      const fallback = initialQueueSize(playbackLength(cfgAny, ROTATION_LENGTH));
+      const cap = Math.max(1, Number(limit ?? cfgAny.max_items ?? fallback) || fallback);
 
       // The series this queue may draw from, each carrying the per-visit batch that applies
       // to it. A curated entry's own `episodes:` override rides here; a library series has

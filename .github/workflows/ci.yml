@@ -202,6 +202,17 @@ jobs:
       - name: Lineup knobs write side (offline)
         run: $TSX e2e/lineup-knobs-test.ts
 
+      # PLAYBACK LENGTH — how many things a set plays before it stops, for every kind of set.
+      # The claim this exists to hold is not "the number is read" but "no existing set moves on
+      # deploy": three of the four paths hardcoded their length and two hardcoded it
+      # differently, so every default here is the behaviour that kind already had. Also pins
+      # that `infinite` is a NAMED value (never 0, never 999 — a falsy count reads as uncapped
+      # deeper in the engine), that top-up derives from the length rather than a stored flag,
+      # and that a legacy `refill: true` still reads as infinite so the live Shorts card keeps
+      # refilling with its file untouched.
+      - name: Playback length (offline)
+        run: $TSX e2e/playback-length-test.ts
+
       # A reading queue's ARTWORK and TILES come from its provider, not from Plex. Reported
       # from the live app: a search dropdown of broken-image glyphs, because the cover proxy
       # shipped and nothing ever called it — the frontend's only move was /api/thumb, which is

@@ -29,6 +29,7 @@ import type {
 
 import * as resolve from '../engine/resolve.js';
 import * as rotation from '../engine/rotation.js';
+import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
 import * as select from '../engine/select.js';
 import * as routing from '../engine/routing.js';
 import { liveClient } from '../engine/plex-live.js';
@@ -269,19 +270,46 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
           binding.watch_count_accounts, token ?? null,
         );
         const excludes = new Set((binding.movie_excludes || []).map(String));
-        // The exclusion of the previously-played film is SESSION state, threaded in by the
-        // caller — a provider is stateless across starts and must not hold it.
-        const pick = pickRewatch(counts, titles, excludes, lastMovieRk, cfg.weights || {});
-        if (!pick) return { play: [], rewatch: true };
-        // `PlexPlayItem.title` is `string | undefined`, but this branch has ALWAYS emitted an
-        // explicit `title: null` for a pick whose title did not resolve, and that null crosses
-        // to MQTT. Asserted rather than switched to `undefined`, which JSON.stringify would
-        // drop from the payload — a wire change, not a typing one. (Reported.)
-        const item = { ratingKey: pick.ratingKey, title: pick.title } as PlexPlayItem;
-        return { play: [item], rewatch: true };
+        // A rewatch pool used to `return { play: [item] }` — exactly one film, forever, and the
+        // one kind of set whose length was not merely un-configurable but hardcoded. It now
+        // draws its playback length like everything else (owner, 2026-08-17: "Movies are gonna
+        // be 1 based on _my_ configuration today, but we _should_ be able to change that").
+        //
+        // Drawn one at a time rather than by weighting once and taking N: `pickRewatch` is a
+        // weighted RANDOM draw, so a second call could return the film already drawn. Each pick
+        // joins the exclusion set so the sitting never repeats itself — a COPY of it, because
+        // the binding's own `movie_excludes` is the owner's config and not scratch space.
+        const drawn = new Set(excludes);
+        const want = initialQueueSize(playbackLength(cfg));
+        const play: PlexPlayItem[] = [];
+
+        for (let i = 0; i < want; i += 1) {
+          // The exclusion of the previously-played film is SESSION state, threaded in by the
+          // caller — a provider is stateless across starts and must not hold it.
+          const pick = pickRewatch(counts, titles, drawn, lastMovieRk, cfg.weights || {});
+
+          // The pool ran out of films it has not already drawn. A real terminator, not an
+          // error: a sitting can come up shorter than its length asked for.
+          if (!pick) break;
+
+          drawn.add(String(pick.ratingKey));
+          // `PlexPlayItem.title` is `string | undefined`, but this branch has ALWAYS emitted an
+          // explicit `title: null` for a pick whose title did not resolve, and that null crosses
+          // to MQTT. Asserted rather than switched to `undefined`, which JSON.stringify would
+          // drop from the payload — a wire change, not a typing one. (Reported.)
+          play.push({ ratingKey: pick.ratingKey, title: pick.title } as PlexPlayItem);
+        }
+
+        return { play, rewatch: true };
       }
 
-      const queue = await rotation.buildRotation(c, cfg, binding, rotation.rotationLength(cfg), defaultRng);
+      // What goes in the queue UP FRONT — one window at most. An infinite lineup cannot be
+      // queued at all (a playQueue is fixed once created) and a long finite one should not be,
+      // because every item is a Plex round trip on a card someone just tapped. Top-up carries
+      // the rest, and derives itself from this same number.
+      const queue = await rotation.buildRotation(
+        c, cfg, binding, initialQueueSize(playbackLength(cfg)), defaultRng,
+      );
       return { play: queue };
     },
 
