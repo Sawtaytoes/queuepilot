@@ -1,4 +1,4 @@
-import { SegmentedControl } from "@charcuterie/ui"
+import { Checkbox, SegmentedControl } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 
 import { api } from "../lib/api"
@@ -228,18 +228,21 @@ export function ProviderBlock({
           </p>
         ) : (
           <div className="libs">
+            {/* Keyed on the PROVIDER, which is this group's second writer: switching the
+                source clears `block.libraries` without anyone touching a box, and
+                Charcuterie's Checkbox seeds `isChecked` on mount only. Not keyed on the
+                checked set, which the user's own click writes. */}
             {libraries.map((l) => (
-              <label key={l.id}>
-                <input
-                  checked={block.libraries.includes(l.id)}
-                  onChange={(e) =>
-                    setLibrary(l.id, e.target.checked)
-                  }
-                  type="checkbox"
-                  value={l.id}
-                />
-                {` ${l.title}`}
-              </label>
+              <Checkbox
+                isChecked={block.libraries.includes(l.id)}
+                key={`${block.provider}:${l.id}`}
+                label={l.title}
+                onChange={(isChecked) =>
+                  setLibrary(l.id, isChecked)
+                }
+                size="sm"
+                value={l.id}
+              />
             ))}
           </div>
         )}

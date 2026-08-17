@@ -562,6 +562,7 @@ export function DynModal() {
               rescopeAll()
             }}
             options={libOptions(showLibs)}
+            seedKey={modalKey}
           />
         </fieldset>
         <fieldset className="field">
@@ -578,6 +579,7 @@ export function DynModal() {
               rescopeAll()
             }}
             options={libOptions(movieLibs)}
+            seedKey={modalKey}
           />
         </fieldset>
         <fieldset
@@ -598,6 +600,7 @@ export function DynModal() {
               rescopeAll()
             }}
             options={libOptions(otherLibs)}
+            seedKey={modalKey}
           />
         </fieldset>
       </div>
@@ -903,48 +906,54 @@ export function DynModal() {
               <fieldset className="field">
                 <legend>Allowed ratings (shows)</legend>
                 <div className="b-ratings libs">
+                  {/* Keyed on the BINDING, whose ratings are re-scoped from Plex when its
+                      profile or the channel's libraries change — a second writer the user
+                      never touched. Not keyed on the checked set, which their own click
+                      writes. */}
                   {d.showOptions.map((r) => (
-                    <label key={r}>
-                      <input
-                        checked={d.showChecked.includes(r)}
-                        onChange={(e) =>
-                          patchBinding(d.uid, {
-                            showChecked: e.target.checked
-                              ? [...d.showChecked, r]
-                              : d.showChecked.filter(
-                                  (x) => x !== r,
-                                ),
-                          })
-                        }
-                        type="checkbox"
-                        value={r}
-                      />
-                      {` ${r}`}
-                    </label>
+                    <Checkbox
+                      isChecked={d.showChecked.includes(r)}
+                      key={`${d.uid}:${r}`}
+                      label={r}
+                      onChange={(isChecked) =>
+                        patchBinding(d.uid, {
+                          showChecked: isChecked
+                            ? [...d.showChecked, r]
+                            : d.showChecked.filter(
+                                (x) => x !== r,
+                              ),
+                        })
+                      }
+                      size="sm"
+                      value={r}
+                    />
                   ))}
                 </div>
               </fieldset>
               <fieldset className="field">
                 <legend>Movie ratings</legend>
                 <div className="b-mratings libs">
+                  {/* Keyed on the BINDING, whose ratings are re-scoped from Plex when its
+                      profile or the channel's libraries change — a second writer the user
+                      never touched. Not keyed on the checked set, which their own click
+                      writes. */}
                   {d.movieOptions.map((r) => (
-                    <label key={r}>
-                      <input
-                        checked={d.movieChecked.includes(r)}
-                        onChange={(e) =>
-                          patchBinding(d.uid, {
-                            movieChecked: e.target.checked
-                              ? [...d.movieChecked, r]
-                              : d.movieChecked.filter(
-                                  (x) => x !== r,
-                                ),
-                          })
-                        }
-                        type="checkbox"
-                        value={r}
-                      />
-                      {` ${r}`}
-                    </label>
+                    <Checkbox
+                      isChecked={d.movieChecked.includes(r)}
+                      key={`${d.uid}:${r}`}
+                      label={r}
+                      onChange={(isChecked) =>
+                        patchBinding(d.uid, {
+                          movieChecked: isChecked
+                            ? [...d.movieChecked, r]
+                            : d.movieChecked.filter(
+                                (x) => x !== r,
+                              ),
+                        })
+                      }
+                      size="sm"
+                      value={r}
+                    />
                   ))}
                 </div>
               </fieldset>
