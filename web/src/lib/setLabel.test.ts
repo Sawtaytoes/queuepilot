@@ -10,10 +10,7 @@ import { labelInGroup } from "./setLabel"
 describe("labelInGroup", () => {
   test("strips the group's own name and its separator", () => {
     expect(
-      labelInGroup(
-        "Bob & Alice — Anime",
-        "Bob & Alice",
-      ),
+      labelInGroup("Bob & Alice — Anime", "Bob & Alice"),
     ).toBe("Anime")
     expect(labelInGroup("Family — Movies", "Family")).toBe(
       "Movies",
@@ -27,14 +24,14 @@ describe("labelInGroup", () => {
   })
 
   test("leaves a label whose prefix is somebody else", () => {
-    expect(
-      labelInGroup("Bob & Dave — Movies", "Bob"),
-    ).toBe("Bob & Dave — Movies")
+    expect(labelInGroup("Bob & Dave — Movies", "Bob")).toBe(
+      "Bob & Dave — Movies",
+    )
     // The trap this exists for: "Bob" IS a prefix of "Bob & Dave" as a substring,
     // so a startsWith() implementation would strip it to "& Dave — Movies".
-    expect(
-      labelInGroup("Bob & Carol — Anime", "Bob"),
-    ).toBe("Bob & Carol — Anime")
+    expect(labelInGroup("Bob & Carol — Anime", "Bob")).toBe(
+      "Bob & Carol — Anime",
+    )
   })
 
   test("leaves a label with no separator at all", () => {
@@ -47,9 +44,7 @@ describe("labelInGroup", () => {
   })
 
   test("matches case-insensitively, like a person reading it", () => {
-    expect(labelInGroup("BOB — Anime", "Bob")).toBe(
-      "Anime",
-    )
+    expect(labelInGroup("BOB — Anime", "Bob")).toBe("Anime")
   })
 
   test("accepts a hyphen or en dash, not just an em dash", () => {
@@ -62,9 +57,7 @@ describe("labelInGroup", () => {
   })
 
   test("never returns an empty name", () => {
-    expect(labelInGroup("Bob — ", "Bob")).toBe(
-      "Bob — ",
-    )
+    expect(labelInGroup("Bob — ", "Bob")).toBe("Bob — ")
   })
 
   test("does not strip a bare match with no separator", () => {
