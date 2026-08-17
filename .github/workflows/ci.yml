@@ -357,6 +357,15 @@ jobs:
       - name: pick.ts picker contract (browser, no Plex needed)
         run: $TSX e2e/pick-contract-test.ts
 
+      # The pool editor must not blank the lists it renders no control for. It spawns its
+      # own server against an unroutable Plex, and its assertions are all `GET /api/sets`
+      # reads of sets.yaml — so it belongs here in the always-on block rather than in the
+      # PLEX_TOKEN-gated one below, which is skipped on every PR. That placement is the
+      # point: the bug it pins shipped BECAUSE the suites that drive this editor only run
+      # when a secret happens to be present.
+      - name: Pool editor keeps Blocked (browser, no Plex needed)
+        run: $TSX e2e/pool-editor-keeps-blocked-test.ts
+
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # import chromium from `e2e/playwright.ts` and drive a Chromium browser,
       # and the shared server they hit talks to Plex. We can't call e2e/run.sh
