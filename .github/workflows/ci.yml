@@ -184,6 +184,20 @@ jobs:
       - name: Board Game Picker provider + launcher (offline)
         run: $TSX e2e/board-game-picker-provider-test.ts
 
+      # The Steam gates, and why each exists:
+      #   * `queued_at` again, but the trap points the OTHER way from the picker's. Steam
+      #     reports a LIFETIME playtime; the account this was built against has a 508-hour
+      #     game in it. Count that and every game retires itself the instant it is queued.
+      #   * An entry with NO stamp reads as NOT played — the opposite of the picker's
+      #     pre-stamp behaviour, because retiring a game the owner has never played is the
+      #     failure he would actually notice.
+      #   * Privacy: exactly one Valve endpoint (GetOwnedGames) plus the public art CDN, and
+      #     never the profile or friends list — this repo is public.
+      #   * A PRIVATE profile answers 200 with an empty body. Read as "owns nothing", that is
+      #     a queue that silently renders empty; it must fail by name instead.
+      - name: Steam provider (offline)
+        run: $TSX e2e/steam-provider-test.ts
+
       # A set whose ONLY source is a non-Plex provider must save. Reported from the live app:
       # creating a Channel with a single Kavita block failed with "at least one library
       # section required", because `sections` is PLEX's list and is legitimately empty on a

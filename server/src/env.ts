@@ -324,3 +324,16 @@ export const KAVITA_BATCH_DEFAULT = int('KAVITA_BATCH_DEFAULT', 1);
 // unlike Kavita, having this URL is what "configured" means. The token, if any, still
 // resolves through providers/config.js like every other secret.
 export const BOARD_GAME_PICKER_URL = str('BOARD_GAME_PICKER_URL', '').replace(/\/+$/, '');
+
+// The Steam account whose owned library is queued — a 64-bit id, not a vanity name. Having
+// this is what makes Steam appear as a provider at all, the same way KAVITA_API_SERVER_URL
+// works: an install that does not play PC games grows no permanently-unconfigured connector.
+//
+// A vanity name is deliberately NOT accepted. Resolving one costs an extra API call on every
+// boot to answer a question whose answer never changes, and it silently follows the name if
+// it is ever transferred to another account. Resolve it once by hand:
+//   ISteamUser/ResolveVanityURL/v1/?key=<key>&vanityurl=<name>
+//
+// The KEY is absent from this module by the same rule Kavita's is: secrets resolve through
+// providers/config.ts, which is the only place allowed to read a token.
+export const STEAM_ID = str('STEAM_ID', '').trim();
