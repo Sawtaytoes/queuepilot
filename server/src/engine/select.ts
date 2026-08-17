@@ -37,6 +37,9 @@ type SelectCfg = {
   /** `restart` = a FINISHED show goes back to its start floor instead of leaving the pool.
    *  Anything else (including absent) = drop, which is what this has always done. */
   on_complete?: string;
+  /** Per-show overrides of the above, keyed by ratingKey (`section-<id>` for an item bucket).
+   *  Absent, or unrecognised, follows the pool. */
+  on_complete_by_show?: Record<string, string> | null;
 };
 
 /** One library row `episodicShows` / `sectionItems` hand to `unwatchedBuckets`. */
@@ -356,9 +359,23 @@ export async function unwatchedBuckets(
   // Per-show weights for the rule pool, keyed the same way `starts` is (`section-<id>` for a
   // whole item bucket). Absent = 1 = one slot per round, i.e. today's behaviour.
   const weights = cfg.weights || {};
-  // `restart` is the only value that DOES anything; absent/anything else means drop, which is
-  // the behaviour every existing channel already has. Compared once rather than per show.
-  const isRestarting = String(cfg.on_complete || '').toLowerCase() === 'restart';
+  // The POOL's answer for a finished show. `restart` is the only value that does anything;
+  // absent/anything else means drop, which is what every channel already did.
+  const poolRestarts = String(cfg.on_complete || '').toLowerCase() === 'restart';
+  // …and the per-show overrides on top of it, keyed the same way `starts` and `weights` are.
+  // Resolved PER SHOW rather than once, which is the whole feature: a pool that restarts
+  // everything can still let one show finish, and a pool that drops can still revive one.
+  const perShow = cfg.on_complete_by_show || {};
+  const restartsFor = (key: string | number): boolean => {
+    const own = String(perShow[String(key)] ?? '').trim().toLowerCase();
+
+    // Absent, or anything unrecognised, follows the pool. A hand-edited typo must not silently
+    // flip a show to the opposite of what its pool says.
+    if (own === 'restart') return true;
+    if (own === 'drop') return false;
+
+    return poolRestarts;
+  };
 
   const buckets: Bucket[] = [];
   // Cast rather than `|| []`: a cfg with no `episodic_sections` has always thrown here, and a
@@ -375,7 +392,7 @@ export async function unwatchedBuckets(
     // Gated on `unwatched.length === 0`, i.e. the show is genuinely finished — NOT on this
     // window failing to draw from it. Those are different questions, and conflating them
     // would restart a show every top-up and starve everything else.
-    const eps = unwatched.length || !isRestarting
+    const eps = unwatched.length || !restartsFor(show.ratingKey)
       ? unwatched
       : allEps.filter((e) => atOrAfterStart(e, start));
     if (eps.length) {
@@ -397,7 +414,8 @@ export async function unwatchedBuckets(
     // Shorts-only channel is ONE item bucket, so when its last unread short is watched the
     // channel has nothing at all rather than merely one fewer show. Under `restart` the whole
     // section comes back; under the default it drops and the channel is genuinely done.
-    const items = (unwatched.length || !isRestarting ? unwatched : all)
+    // `section-<id>` is the same handle `starts` and `weights` use for a whole item bucket.
+    const items = (unwatched.length || !restartsFor(`section-${sec}`) ? unwatched : all)
       .map((it) => ({ ratingKey: it.ratingKey, title: it.title, show: 'Shorts', season: null, episode: null }));
     if (items.length) {
       buckets.push({

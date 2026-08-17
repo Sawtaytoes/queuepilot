@@ -339,6 +339,14 @@ export type RegistrySet = {
    * publishes it on MQTT; HA owns anything with a power cable.
    */
   power_off_when_done?: boolean
+  /**
+   * Per-show overrides of the pool's `on_complete`, keyed by ratingKey (`section-<id>` for a
+   * whole item bucket) - the same keying `starts` and `weights` use.
+   *
+   * Absent = follow the pool. `"restart"` starts that show over when it finishes, `"drop"`
+   * lets it finish even on a pool that restarts everything else.
+   */
+  on_complete_by_show?: Record<string, "restart" | "drop">
   /** DEPRECATED — the older spelling of `length: "infinite"`. Read `length` instead. */
   refill?: boolean
   /**
