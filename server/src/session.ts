@@ -54,6 +54,16 @@ interface SessionSingleton {
   cursor: number;
   lastMovieRk: string | null;
   userUuid: string | null;
+  /**
+   * The LIVE playQueue this session pushed, so a later top-up can extend the queue the
+   * viewer is actually in rather than building a second one.
+   *
+   * Set from the handoff result, which is the only place the id exists — `materialize()`
+   * returns a descriptor and `createPlayQueue` runs inside the fused handoff. Null on a pull
+   * provider (Kavita has no playQueue; its artifact is a reading list) and null before the
+   * first scan.
+   */
+  playQueueID: number | string | null;
   asDict(this: SessionSingleton): SessionState;
 }
 
@@ -98,6 +108,7 @@ export const SESSION: SessionSingleton = {
   // The active binding's managed-user uuid, so the LATER calls on this session (resume seek,
   // advance) drive playback as the same account the lineup was selected as.
   userUuid: null,
+  playQueueID: null,
   asDict() {
     return {
       kind: this.kind, set: this.set, profile: this.profile,
@@ -409,6 +420,10 @@ export async function startSession(
     _publishState({ error: result.error, playback: result, ...SESSION.asDict() });
     return result;
   }
+  // Remember the queue we just pushed, so `topup` extends THIS one. Read off the handoff
+  // result because that is where it is created; a pull provider has no playQueue and leaves
+  // it null, which is exactly what topup's Plex branch checks for.
+  SESSION.playQueueID = (result as { playQueueID?: number | string | null }).playQueueID ?? null;
   _publishState({ playback: result, ...SESSION.asDict() });
   return { ok: true, playback: result, set: setName, count: ratingKeys.length };
 }

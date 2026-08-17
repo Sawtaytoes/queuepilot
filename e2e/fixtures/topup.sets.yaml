@@ -1,0 +1,34 @@
+# Fixture for e2e/topup-test.ts — refilling channels and what a finished show does.
+sets:
+- id: refilling
+  label: Refills, window of 6
+  kind: cartoons
+  source: rotation
+  sections: []
+  item_sections: [ 15 ]
+  length: 6
+  refill: true
+
+- id: refilling_restart
+  label: Refills and restarts finished shows
+  kind: cartoons
+  source: rotation
+  sections: [ 5 ]
+  length: 6
+  refill: true
+  on_complete: restart
+
+- id: fixed
+  label: Ends when it ends
+  kind: cartoons
+  source: rotation
+  sections: [ 5 ]
+  length: 6
+  # No `refill:` — this channel is ALLOWED to end, and a top-up must not override that.
+
+- id: curated
+  label: A curated queue, not a channel
+  kind: movies
+  source: queue
+  sections: [ 1 ]
+  refill: true

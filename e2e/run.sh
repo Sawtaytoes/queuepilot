@@ -37,6 +37,10 @@ echo "=== batch-stops-at-test (node) ==="   # the same table in the Node port
 "$TSX" e2e/batch-stops-at-test.ts || TOTAL=$((TOTAL+1))
 echo "=== rotation-length-test ==="   # browserless; a set's `length:` sizes its lineup (set > env)
 "$TSX" e2e/rotation-length-test.ts || TOTAL=$((TOTAL+1))
+echo "=== on-complete-test ==="   # browserless; a finished show restarts at ep1 or drops
+"$TSX" e2e/on-complete-test.ts || TOTAL=$((TOTAL+1))
+echo "=== topup-test ==="   # browserless; when a refill tick tops up, and what it appends
+"$TSX" e2e/topup-test.ts || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
 "$TSX" e2e/collection-batch-cap-test.ts || TOTAL=$((TOTAL+1))
 echo "=== resume-on-advance-test ==="   # browserless; every queued episode resumes, not just the head
