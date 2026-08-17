@@ -162,6 +162,67 @@ describe("tileFace", () => {
     expect(face.from).toBeNull()
   })
 
+  /**
+   * Reported live 2026-08-17 on the first Steam queue: a tile headed ELDEN RING whose
+   * next-up line read "Play 1 of 1 · ELDEN RING" — the name twice, and a count whose
+   * numerator and denominator can only ever be 1.
+   *
+   * Both halves are properties of a ONE-UNIT entry rather than of Steam, so a one-play
+   * board game reads the same way and is fixed by the same change.
+   */
+  test("a single-play game reports its state, not a count of one", () => {
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 1,
+          multiSeason: false,
+          of: 1,
+          season: null,
+          title: "ELDEN RING",
+        },
+        title: "ELDEN RING",
+        unit: "play",
+      }),
+    )
+
+    expect(face.next).toBe("Not played yet")
+  })
+
+  test("a multi-play game still counts, and drops the duplicated name", () => {
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 2,
+          multiSeason: false,
+          of: 3,
+          season: null,
+          title: "Wingspan",
+        },
+        title: "Wingspan",
+        unit: "play",
+      }),
+    )
+
+    expect(face.next).toBe("Play 2 of 3")
+  })
+
+  test("an episode title that is NOT the show name is still shown", () => {
+    // The dedupe must not swallow a real episode title — the whole point of the line.
+    const face = tileFace(
+      item({
+        nextEp: {
+          episode: 5,
+          multiSeason: false,
+          season: 1,
+          title: "The Duel",
+        },
+        title: "Bantorra",
+      }),
+    )
+
+    expect(face.next).toBe("E5 · The Duel")
+  })
+
   test("a fully-watched series says so, muted", () => {
     const face = tileFace(item({ nextEp: null }))
 

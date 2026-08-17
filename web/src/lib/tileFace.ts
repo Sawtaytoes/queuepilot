@@ -160,10 +160,23 @@ export type TileFace = {
  * `volume` / `vol` are in the list for the same reason at the volume level: a manga's items
  * are named "Volume 1" by Kavita and labelled "Vol 1" here, which rendered "Vol 1 · Volume 1".
  */
-export function isSelfTitled(ep: NextEp): boolean {
+export function isSelfTitled(
+  ep: NextEp,
+  ownTitle?: string | null,
+): boolean {
   const title = String(ep.title ?? "").trim()
 
   if (!title) return true
+
+  // The next-up IS the tile. A game has no sub-item to name — one entry is one game — so
+  // its next-up title is the game's own name, and the line rendered "Play 1 of 1 · ELDEN
+  // RING" under a tile already headed ELDEN RING (reported live, 2026-08-17). The numeric
+  // test below could never catch it: the duplicate is a NAME, not a numbered stand-in.
+  // Board Game Picker has always had the same shape ("Play 2 of 3 · Wingspan").
+  const own = String(ownTitle ?? "").trim()
+
+  if (own && own.toLowerCase() === title.toLowerCase())
+    return true
 
   const number = String(ep.episode ?? "")
 
@@ -204,6 +217,18 @@ const allWatchedLabel = (unit: EntryUnit) => {
 }
 
 /**
+ * The WAITING counterpart of `allWatchedLabel`, for an entry that owes exactly one unit.
+ *
+ * "Play 1 of 1" is a denominator that can only ever be 1 and a numerator that can only ever
+ * be 1 — it answers no question anyone has. A Steam entry is always this shape (Steam
+ * publishes no session log, so an entry is done after one session), and a one-play board
+ * game is too. The useful thing to say is the STATE, which is the same thing the finished
+ * tile says, pointing the other way.
+ */
+const notYetLabel = (unit: EntryUnit) =>
+  unit === "play" ? "Not played yet" : ""
+
+/**
  * What a tile actually SHOWS — poster, title line, episode line. A collection
  * borrows the identity of the member that plays next (its poster + its name), and
  * names ITSELF only in the badge, so every tile reads the same way: title = what's
@@ -225,11 +250,17 @@ export function tileFace(item: TileEntry): TileFace {
     const unit = item.unit ?? "episode"
 
     if (n) {
-      const label = seLabel(n, unit)
+      // A single-unit entry has nothing to count, so it reports its state instead. Only
+      // `play` has such a label — an episode or a chapter always sits somewhere in a run,
+      // so "E1" still says which one.
+      const only =
+        Number(n.of) === 1 ? notYetLabel(unit) : ""
+      const label = only || seLabel(n, unit)
 
-      base.next = isSelfTitled(n)
-        ? label
-        : `${label} · ${n.title}`
+      base.next =
+        only || isSelfTitled(n, item.title)
+          ? label
+          : `${label} · ${n.title}`
     } else if (item.resolved && !item.isNextEpFailed) {
       base.next = allWatchedLabel(unit)
       base.nextDone = true
