@@ -75,6 +75,13 @@ type BindingDraft = {
   showChecked: string[]
   movieOptions: string[]
   movieChecked: string[]
+  /**
+   * CARRIED, NOT EDITED. The rewatch excludes are per-BINDING, and this editor sends the
+   * whole `profiles[]` array back — so a field it merely forgets is a field it deletes. It
+   * renders no control for these (they live beside Blocked in the Pool-filters panel), so
+   * the draft's only job is to hand them back untouched.
+   */
+  movieExcludes: string[]
   isAdvancedOpen: boolean
 }
 
@@ -88,6 +95,7 @@ const toDraft = (
     b.account_id != null ? String(b.account_id) : "",
   isAdvancedOpen: false,
   movieChecked: b.movie_ratings || [],
+  movieExcludes: b.movie_excludes || [],
   movieOptions: ratingOptions(known, b.movie_ratings || []),
   plexUser: b.plex_user || "",
   showChecked: b.allowed_ratings || [],
@@ -104,6 +112,8 @@ const readBinding = (d: BindingDraft): Binding => ({
     ? Number(d.accountId.trim())
     : null,
   allowed_ratings: d.showChecked,
+  // Round-tripped, never edited here — see BindingDraft.movieExcludes.
+  movie_excludes: d.movieExcludes,
   movie_ratings: d.movieChecked,
   plex_user: d.plexUser.trim() || null,
   user_uuid: d.userUuid.trim() || null,
@@ -351,14 +361,26 @@ export function DynModal() {
       .map(readBinding)
       .filter(hasData)
 
+    // NOT IN THE BODY: `blocklist` and `movie_excludes`.
+    //
+    // This editor has no control for either — Blocked lives in the inline Pool-filters
+    // panel and the rewatch excludes live beside it — so it never reads their stored
+    // values into state. It used to send `blocklist: []` / `movie_excludes: []` anyway,
+    // which on a CREATE is the right empty default and on an EDIT is silent data loss:
+    // every Save from ⚙ Configure wiped every show the owner had excluded (reported
+    // 2026-08-17, after the Lineup box gave him a reason to open this editor at all).
+    //
+    // Omitting a key is what leaves it alone — `updateSet` walks its allowlist with
+    // `if (!(k in patch)) continue`, and `createSet` defaults both to []. So the same
+    // body is correct on both paths, and the rule generalises: THIS EDITOR MAY ONLY SEND
+    // A KEY IT RENDERS A CONTROL FOR. The lineup trio below is the other side of that
+    // rule — it does render them, so it round-trips them rather than omitting them.
     const body: Record<string, unknown> = {
       audio_language: audio.trim(),
       behavior,
-      blocklist: [],
       item_sections: itemSections,
       kind: kind.trim() || "cartoons",
       label: name,
-      movie_excludes: [],
       // Sent unconditionally, including from a rewatch channel where the controls are hidden:
       // the values round-trip whatever that channel already stored, so switching a pool to
       // Rewatch and back cannot quietly lose its refill. The server stores all three SPARSELY
