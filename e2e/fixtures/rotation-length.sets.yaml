@@ -1,0 +1,44 @@
+# Fixture for e2e/rotation-length-test.ts — a set's `length:` sizes its LINEUP.
+#
+# Five channels, one per case the resolver has to get right. Nothing here is played; the
+# test reads the cfg `loadSets()` builds and the number `rotationLength()` derives from it.
+sets:
+- id: default_length
+  label: No length key
+  kind: cartoons
+  source: rotation
+  sections: [ 5 ]
+
+- id: short_runtime
+  label: Shorts-style long lineup
+  kind: cartoons
+  source: rotation
+  sections: []
+  item_sections: [ 15 ]
+  # The case this feature exists for: shorts run 2-5 minutes, so 12 is half an evening.
+  length: 30
+
+- id: over_cap
+  label: Fat-fingered
+  kind: cartoons
+  source: rotation
+  sections: [ 5 ]
+  # Hand-edited over SMB, past ROTATION_LENGTH_MAX. Clamped, never rejected — a channel that
+  # refuses to build is a dead card on the wall.
+  length: 5000
+
+- id: zero_length
+  label: Zero is not infinite
+  kind: cartoons
+  source: rotation
+  sections: [ 5 ]
+  # 0 must NOT read as "uncapped" — that is exactly the trap docs/todos/batch-all-or-infinite.md
+  # warns about, where a falsy batch already means unbounded in resolve.ts's applyBatch.
+  length: 0
+
+- id: junk_length
+  label: Not a number
+  kind: cartoons
+  source: rotation
+  sections: [ 5 ]
+  length: "lots"

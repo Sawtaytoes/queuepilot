@@ -13,7 +13,7 @@ import { describe, resolveMember } from './resolve.js';
 import type { EntryDescriptor } from './resolve.js';
 import { weightedInterleave } from './weight.js';
 import type { Rng } from './weight.js';
-import { WATCH_COUNT_ACCOUNTS, ROTATION_LENGTH } from '../env.js';
+import { WATCH_COUNT_ACCOUNTS, ROTATION_LENGTH, ROTATION_LENGTH_MAX } from '../env.js';
 import type { Bucket, EngineBinding, MemberValue, PlexClient, PoolItem } from '../types.js';
 
 /**
@@ -95,6 +95,30 @@ export async function channelBuckets(
   const members = await memberBuckets(client, cfg, binding);
   const seen = new Set(members.map((b) => String(b.ratingKey)));
   return members.concat(rule.filter((b) => !seen.has(String(b.ratingKey))));
+}
+
+/**
+ * How many items this channel's lineup holds: the set's `length:`, else env ROTATION_LENGTH.
+ *
+ * Deliberately TOLERANT, like `max_items` in the routing loader: a blank, zero, negative or
+ * non-numeric `length:` falls back to the env default instead of throwing. A channel that
+ * refuses to build is a dead card on the wall, and the failure mode this guards is a typo in
+ * a hand-edited YAML — the same reason `QUEUE_SERIES_LENGTH` clamps `episodes:`.
+ *
+ * There is no "infinite" sentinel here YET. `docs/todos/batch-all-or-infinite.md` (parked
+ * 2026-08-16) already settled how one must look when it lands — a NAMED value (`all`), never
+ * `0` and never `999`, because a falsy batch already reads as *uncapped* in resolve.ts's
+ * applyBatch and a typo would become a binge. Infinite also needs the top-up loop to mean
+ * anything, since a fixed playQueue cannot be infinite. Until both exist, a number is the
+ * only accepted form and anything else quietly means "the default".
+ */
+export function rotationLength(cfg: { length?: string } | null | undefined): number {
+  const n = parseInt(String(cfg?.length ?? ''), 10);
+  if (!Number.isFinite(n) || n <= 0) return ROTATION_LENGTH;
+  // Clamped HERE as well as in sets.ts's writer, not only there: these files are hand-edited
+  // over SMB as often as they are saved through the UI, so the engine cannot assume the
+  // writer's ceiling was ever applied.
+  return Math.min(n, ROTATION_LENGTH_MAX);
 }
 
 // Interleave next-unwatched episodes ACROSS shows (round-robin), TV-style: show A ep1, show B ep1,
