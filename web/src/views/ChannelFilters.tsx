@@ -130,11 +130,9 @@ export function ChannelFilters({
       return
     }
 
-    if (!showSections.length && !itemSections.length) {
-      setStatus("Pick at least one library", "err")
-
-      return
-    }
+    // Libraries are optional: none ticked pools from every video library
+    // (decision `2026-08-17-no-libraries-checked-means-every-library`). Ratings are NOT —
+    // an empty rating list is a real cap of nothing, not "any rating".
 
     setStatus("Saving filters…")
 
@@ -259,6 +257,14 @@ export function ChannelFilters({
             seedKey={profileKey}
           />
         </fieldset>
+
+        {/* The three library groups are ONE scope, and it is optional (decision
+            `2026-08-17-no-libraries-checked-means-every-library`). */}
+        <p className="subhint" id="ch-alllibs">
+          {!showSections.length && !itemSections.length
+            ? "Every video library — check a box to narrow it."
+            : "Uncheck every box to pool from all of them."}
+        </p>
 
         <fieldset className="showsonly">
           <legend>Blocked</legend>

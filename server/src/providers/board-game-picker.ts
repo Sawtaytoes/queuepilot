@@ -139,30 +139,40 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
     stampsQueuedAt: true,
 
     /**
-     * The shelf, plus the owner's own categories.
+     * The owner's own categories, and ONLY those.
      *
-     * The picker has no "libraries" — it is one collection — so `collection` is implicit
-     * and always first. His categories (Roll 'n Write, …) are the closest real analogue:
-     * they are the axis he manages himself and filters on.
+     * The picker has no libraries — it is one shelf — so the whole shelf is what an
+     * unscoped block already means (no boxes checked = every library, decision
+     * `2026-08-17-no-libraries-checked-means-every-library`). A synthetic "Collection"
+     * checkbox used to sit at the top of this list, and it was a trap: checking it
+     * alongside "Roll 'n Write" LOOKED like "the shelf plus that category" and behaved
+     * like the category alone, so `cubitos` — a game in no category — could not be found
+     * from a queue whose boxes were all ticked.
+     *
+     * His categories (Roll 'n Write, …) are the real axis: the one he manages himself and
+     * filters on.
      */
     async libraries(): Promise<ProviderLibrary[]> {
       const names = await c.categories();
-      return [
-        { id: COLLECTION_LIBRARY, title: 'Collection' },
-        ...names.map((name) => ({ id: name, title: name })),
-      ];
+      return names.map((name) => ({ id: name, title: name }));
     },
 
     /**
-     * Search the shelf. Scoped to categories when the queue's block named some; the
-     * implicit `collection` scope means "everything" and is dropped rather than sent as a
-     * category the picker has never heard of.
+     * Search the shelf, scoped to the categories the queue's block named.
+     *
+     * No categories — the normal case now — searches everything. A stored `collection` id
+     * is a queue written before the synthetic checkbox went away, and it MEANT the whole
+     * shelf, so it widens the scope back to everything rather than narrowing to a category
+     * the picker has never heard of.
      */
     async search(q: string, { libraries = [] }: { libraries?: string[] } = {}): Promise<ProviderSearchHit[]> {
       const query = String(q || '').trim();
       if (!query) return [];
 
-      const categories = libraries.map(String).filter((id) => id && id !== COLLECTION_LIBRARY);
+      const named = libraries.map(String).filter(Boolean);
+      const categories = named.includes(COLLECTION_LIBRARY)
+        ? []
+        : named;
       const games = await c.games(query, categories);
 
       return games.map((g) => ({

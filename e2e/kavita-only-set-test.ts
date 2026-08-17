@@ -16,6 +16,10 @@
 //      were silently dropped and the set would have been created with no source — the worse
 //      of the two, because it fails quietly instead of loudly.
 //
+// The library gate itself is GONE as of 2026-08-17 — naming no library means every library
+// (decision `2026-08-17-no-libraries-checked-means-every-library`), so the last case below
+// pins that an unscoped set SAVES rather than that it is refused.
+//
 // Runs offline against a scratch sets.yaml; no Plex, no Kavita, no network.
 //
 // Run:  server/node_modules/.bin/tsx e2e/kavita-only-set-test.ts   (repo root; non-zero on failure)
@@ -122,17 +126,22 @@ await ok('editing a Kavita-only set still saves with empty sections', async () =
   assert.deepEqual(s.providers[0]?.libraries, ['5']);
 });
 
-await ok('a set with NO source at all is still refused', async () => {
-  // The validation must not have been loosened into uselessness: empty sections AND empty
-  // blocks is a set that can never play anything, and that still has to fail loudly.
-  await assert.rejects(
-    sets.createSet({ kind: 'movies', label: 'Empty', providers: [], sections: [], source: 'queue' }),
-    /at least one library section required/,
-  );
-  await assert.rejects(
-    sets.updateSet('reading_manga', { providers: [], sections: [] }),
-    /at least one library section required/,
-  );
+await ok('a set that names NO library saves — it means every library', async () => {
+  // The reversal of the old "at least one library section required" gate (decision
+  // 2026-08-17-no-libraries-checked-means-every-library). An empty checkbox group means
+  // ALL, so an empty `sections` + empty `providers` is a Plex set drawing from every video
+  // library — not a set with no source. It has to SAVE, both on create and on update.
+  const { id } = await sets.createSet({
+    kind: 'movies', label: 'Everything', providers: [], sections: [], source: 'queue',
+  });
+  const created = (await sets.getRegistry()).sets.find((x) => x.id === id);
+  assert.ok(created, 'the unscoped set is missing from the registry');
+  assert.deepEqual(created.sections, []);
+
+  await sets.updateSet('reading_manga', { providers: [], sections: [] });
+  const updated = (await sets.getRegistry()).sets.find((x) => x.id === 'reading_manga');
+  assert.ok(updated, 'reading_manga missing from the registry');
+  assert.deepEqual(updated.sections, []);
 });
 
 await ok('a block naming an unknown provider is refused by name', async () => {

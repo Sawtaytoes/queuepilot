@@ -190,6 +190,9 @@ jobs:
       # Kavita-only set — its libraries live in the provider blocks. Two defects, both pinned
       # here: the validators rejected the save, and createSet never WROTE `providers` at all,
       # which would have created the set with no source and failed quietly instead of loudly.
+      # The library gate is GONE as of 2026-08-17 — naming no library means EVERY library
+      # (decision 2026-08-17-no-libraries-checked-means-every-library) — so the last case in
+      # this suite pins that an unscoped set SAVES rather than that it is refused.
       - name: Kavita-only set saves (offline)
         run: $TSX e2e/kavita-only-set-test.ts
 

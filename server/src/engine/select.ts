@@ -340,17 +340,56 @@ async function expandedBlocklist(
   return out;
 }
 
+/**
+ * A cfg that names NO library, resolved to every video library there is.
+ *
+ * "No boxes checked = all of them" (decision
+ * `2026-08-17-no-libraries-checked-means-every-library`), and this is the one place in the
+ * engine where that has to be spelled out: a filter over an empty list drops everything,
+ * so an unscoped channel used to compute an empty pool and read as "nothing to watch".
+ *
+ * The split follows PLEX's own library types, because the two arrays mean different things
+ * to the pool below — a `show` library contributes one bucket per show, a `movie` library
+ * one bucket for the whole section. Anything non-video (music, photos) is not eligible and
+ * is dropped, exactly as the editor's own picker drops it.
+ *
+ * A cfg that names ANY library is returned untouched, so every existing channel — and both
+ * parity corpora — compute exactly what they computed before.
+ */
+async function scopedCfg(client: PlexClient, cfg: SelectCfg): Promise<SelectCfg> {
+  if ((cfg.episodic_sections || []).length || (cfg.item_sections || []).length) return cfg;
+  const episodic: number[] = [];
+  const items: number[] = [];
+  try {
+    const mc = await client.container('/library/sections', null);
+    for (const d of mc.Directory || []) {
+      const key = parseInt(String(d.key), 10);
+      if (!Number.isFinite(key)) continue;
+      if (d.type === 'show') episodic.push(key);
+      else if (d.type === 'movie') items.push(key);
+    }
+  } catch {
+    // Plex unreachable: fall through with the cfg as given. An empty pool is what the
+    // caller would have got anyway, and inventing sections here would be worse.
+    return cfg;
+  }
+  return { ...cfg, episodic_sections: episodic, item_sections: items };
+}
+
 // Per-bucket ordered lists of NOT-yet-watched items for a set. Port of unwatched_buckets.
 // Episodic show -> its ordered unwatched episodes; an item section (Shorts) -> ONE bucket
 // (returned in listing order — the caller shuffles; parity compares the set).
 export async function unwatchedBuckets(
   client: PlexClient,
-  cfg: SelectCfg,
+  rawCfg: SelectCfg,
   binding: EngineBinding,
   // ACCEPTED AND IGNORED. `rotation.channelBuckets` forwards its `rng` here (the Python port
   // took one); nothing in this function is random. Declared so that call stays byte-identical.
   _rng?: Rng | null,
 ): Promise<Bucket[]> {
+  // Resolved FIRST, so the watched sweep and the blocklist expansion below run over the same
+  // libraries the pool is built from rather than over an empty list.
+  const cfg = await scopedCfg(client, rawCfg);
   const allowed = binding.allowed_ratings;
   const tok = await client.accountToken(binding.user_uuid);
   const watched = await watchedForSet(client, cfg, binding);

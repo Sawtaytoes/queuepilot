@@ -308,6 +308,23 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
   if (!def?.base_url && !client) throw new Error(`provider '${def?.id}' has no base_url`);
   const c: KavitaHttpClient = client || kavitaClient({ baseUrl: def?.base_url, apiKey });
 
+  /**
+   * The library ids a scope actually covers — the named ones, or EVERY library when the
+   * queue named none.
+   *
+   * An empty checkbox group means "all", not "none"
+   * (decision `2026-08-17-no-libraries-checked-means-every-library`), and the difference
+   * only shows up on the paths that ENUMERATE a library rather than filter one: an
+   * unscoped search has always searched the whole server, while an unscoped pool used to
+   * come back empty and read as "nothing to read".
+   */
+  async function scopeOrEveryLibrary(libraries: readonly string[]): Promise<string[]> {
+    const named = libraries.map(String).filter(Boolean);
+    if (named.length) return named;
+    const libs = await c.libraries();
+    return (libs || []).map((l) => String(l.id));
+  }
+
   return {
     id: def?.id || 'kavita',
     kind: 'kavita',
@@ -456,7 +473,11 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       { libraries = [], members = [] }: { libraries?: string[]; members?: string[] } = {},
     ): Promise<ProviderPoolBucket[]> {
       const explicit = members.map(String);
-      const libIds = (libraries.length ? libraries : []).map(String);
+      // No libraries named = EVERY library, the same answer the editor's empty checkbox
+      // group promises (decision `2026-08-17-no-libraries-checked-means-every-library`).
+      // This used to return an empty pool, so a channel saved without ticking a box read
+      // as "nothing to read" rather than "all of it".
+      const libIds = await scopeOrEveryLibrary(libraries);
       if (!libIds.length) return [];
 
       const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
@@ -585,8 +606,13 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // nor `batch` is on RoutingSetCfg — both live on a provider BLOCK — so they are read
       // through an index view. Only `max_items` is a real set field.
       const cfgAny = cfg as Record<string, unknown>;
-      const libIds = (libraries.length ? libraries : ((cfgAny.libraries as string[] | undefined) || [])).map(String);
+      const named = (libraries.length ? libraries : ((cfgAny.libraries as string[] | undefined) || [])).map(String);
       const curated = entries.filter((e) => e && e.id);
+      // ENTRIES BEAT LIBRARIES (see this method's header), so the "every library" widening
+      // is only asked for on the rule-based branch — a curated queue must never enumerate a
+      // shelf, and calling for the library list here would be a request per launch that
+      // nothing then reads.
+      const libIds = curated.length ? named : await scopeOrEveryLibrary(named);
       if (!curated.length && !libIds.length) return { play: [], buckets: [] };
       // "Read at least X chapters before switching series" — the opening ask in the
       // feasibility record. Per-entry override, else per-queue, else the env default.
