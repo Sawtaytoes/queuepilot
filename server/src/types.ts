@@ -273,6 +273,14 @@ interface SetRegistryCommon {
   sections: number[];
   item_sections: number[];
   blocklist: string[];
+  /**
+   * `'whole'` | `'split'` — how a `Collection:` member enters a filtered pool. Reported as
+   * the EFFECTIVE value (never the absence the file stores for the default), so the pool
+   * editor's picker has something to select without keeping its own copy of the default.
+   *
+   * Present on every set for one response shape; only a rotation set can act on it.
+   */
+  collection_members: 'whole' | 'split';
   /** Rotation: mirrored from `profiles[0]`. Queue: read from the top level. */
   allowed_ratings: string[] | null;
   movie_ratings: string[] | null;
@@ -533,6 +541,16 @@ export interface RoutingRotationCfg extends RoutingSetCfgCommon {
   blocklist: string[];
   /** Raw queues.yaml-style member values; `describe()` parses them. */
   members: MemberValue[];
+  /**
+   * How a `Collection:` MEMBER enters this pool: `'whole'` (the default, and what `null`
+   * means) plays it as one ordered member; `'split'` turns each of its children into a
+   * member of its own. Either way the children leave the rule pool — see
+   * `engine/rotation.ts collectionCover`.
+   *
+   * Lower-cased on the way in but otherwise uninterpreted: `isSplittingCollections()` owns
+   * the "anything unrecognised is whole" rule, so a hand-edited typo cannot be frozen here.
+   */
+  collection_members: string | null;
   profiles: EngineBinding[];
   has_explicit_profiles: boolean;
   superseded_by: string | null;

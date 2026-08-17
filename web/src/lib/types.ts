@@ -243,6 +243,14 @@ export type RegistrySet = {
   /** Legacy sets predate `behavior`; `mode: rewatch` is its ancestor. */
   mode?: string
   blocklist: string[]
+  /**
+   * `"whole"` (the default) | `"split"` — what a `Collection:` MEMBER contributes to a
+   * filtered pool: one ordered member, or one member per child show. Always sent as the
+   * EFFECTIVE value, so the pool editor's picker never keeps its own copy of the default.
+   *
+   * Either way the collection's shows leave the rule pool; only their arrangement differs.
+   */
+  collection_members?: "whole" | "split"
   members?: unknown[]
   /** Per-show manual start floors for the dynamic rule pool, keyed by show ratingKey.
    * The Channels view seeds the "Start from…" picker from this and writes it back with a

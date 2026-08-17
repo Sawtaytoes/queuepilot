@@ -178,6 +178,10 @@ export function DynModal() {
   >(LINEUP_FALLBACK.length)
   const [isPoweringOff, setIsPoweringOff] = useState(false)
   const [onComplete, setOnComplete] = useState("drop")
+  // 'whole' | 'split' — what a Collection MEMBER contributes to this pool. Seeded from the
+  // set's effective value, which the server always sends (never the absence it stores).
+  const [collectionMembers, setCollectionMembers] =
+    useState("whole")
 
   const knownRef = useRef<string[]>([])
   // The engine's own defaults, so the picker's Default chip and its ceiling are the server's
@@ -249,6 +253,11 @@ export function DynModal() {
       editing?.on_complete === "restart"
         ? "restart"
         : "drop",
+    )
+    setCollectionMembers(
+      editing?.collection_members === "split"
+        ? "split"
+        : "whole",
     )
 
     const checked = libSelection(editing)
@@ -391,6 +400,7 @@ export function DynModal() {
       //
       // These ARE sent rather than omitted, which is the other side of the rule above: this
       // editor renders a control for each, so it owns their values and round-trips them.
+      collection_members: collectionMembers,
       length: playbackLength,
       on_complete: onComplete,
       power_off_when_done: isPoweringOff,
@@ -750,6 +760,49 @@ export function DynModal() {
           show can override this from the pool grid.
         </p>
       </fieldset>
+
+      {/* WHAT A COLLECTION MEMBER CONTRIBUTES. Either way its shows leave the rule pool —
+          that part is not a choice, it is the fix for a collection being listed twice. What
+          IS a choice is whether the collection comes in as one ordered run or as its shows.
+
+          Filtered pools only, which is where it lands by construction: this editor is the
+          filtered-pool editor. Hidden on a rewatch pool for the same reason the Lineup box
+          is — a rewatch pool draws from watch history, not from members, so the control
+          would do nothing. */}
+      <fieldset
+        className="field"
+        hidden={behavior === "rewatch"}
+        id="dyn-collections"
+      >
+        <legend>Preferred queued items</legend>
+        <SelectListbox
+          className="fieldselect"
+          id="dyn-collection-members"
+          key={modalKey}
+          label="Preferred queued items"
+          onChange={setCollectionMembers}
+          options={[
+            {
+              label: "Use collections",
+              value: "whole",
+            },
+            {
+              label: "Don't use collections",
+              value: "split",
+            },
+          ]}
+          value={collectionMembers}
+        />
+        <p
+          className="subhint"
+          id="dyn-collection-members-hint"
+        >
+          {collectionMembers === "split"
+            ? "A collection you add as a member comes in as its individual shows, each taking its own turn in the rotation — the same way a show you added by hand does."
+            : "A collection you add as a member plays through in its own order, one item per turn, and its shows stop coming up separately. Pick the other option to have them take their own turns instead."}
+        </p>
+      </fieldset>
+
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>
         <p className="subhint">

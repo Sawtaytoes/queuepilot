@@ -55,6 +55,7 @@ type RawSetEntry = BindingSource & {
   on_complete_by_show?: unknown;
   blocklist?: unknown;
   members?: unknown;
+  collection_members?: unknown;
   superseded_by?: unknown;
   reel?: unknown;
   keep_completed?: unknown;
@@ -177,6 +178,13 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
         // them). Non-empty => the channel's pool is these members PLUS the dynamic rule (additive);
         // [] / absent => the pure rule pool. Consumed by engine/rotation.js channelBuckets.
         members: (Array.isArray(ent.members) ? ent.members : []) as MemberValue[],
+        // Whether a `Collection:` member plays as ONE ordered thing (`whole`, the default and
+        // what absence means) or is split back into its individual shows (`split`). Carried
+        // RAW — engine/rotation.js's isSplittingCollections() normalizes, so a typo falls back
+        // to the default there rather than being frozen into the cfg here.
+        collection_members: ent.collection_members == null
+          ? null
+          : String(ent.collection_members).trim().toLowerCase(),
         profiles,
         has_explicit_profiles: hasExplicitProfiles,
         superseded_by: ent.superseded_by ? String(ent.superseded_by) : null,

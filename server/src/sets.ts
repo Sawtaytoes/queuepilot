@@ -420,6 +420,26 @@ const toOnComplete = (v: unknown): 'restart' | null => {
   return s;
 };
 
+/**
+ * `collection_members`: how a `Collection:` MEMBER enters a filtered pool.
+ *
+ * `'split'` is the only value ever stored. `'whole'` is the default and is stored as the
+ * ABSENCE of the key — the same sparse rule `refill` and `on_complete` follow, so opening a
+ * pool to change something else never stamps a key that says what everyone already does.
+ *
+ * Unlike `toOnComplete` this THROWS on a typo rather than falling back, because the two modes
+ * differ in what is in the pool at all: silently reading `collectoin_members: split` as
+ * `whole` would leave a pool quietly playing the shape the owner just tried to change. The
+ * engine's reader is deliberately laxer (unrecognised = whole) so a hand-edited file still
+ * plays; strict on WRITE, tolerant on READ.
+ */
+const toCollectionMembers = (v: unknown): 'split' | null => {
+  const s = v == null ? '' : String(v).trim().toLowerCase();
+  if (!s || s === 'whole') return null;
+  if (s !== 'split') throw new Error(`invalid collection_members '${String(v)}' — use 'whole' or 'split'`);
+  return s;
+};
+
 // batch_stops_at: WHERE a multi-episode batch may stop — "member" (never span two collection
 // members) or "season" (also never span a season boundary, including inside one show). Anything
 // else, including the "none" default, is stored as the ABSENCE of the key: the engine reads a
@@ -623,6 +643,10 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     allowed_ratings: def ? def.allowed_ratings : (Array.isArray(ent.allowed_ratings) ? ent.allowed_ratings.map(String) : null),
     movie_ratings: def ? def.movie_ratings : (Array.isArray(ent.movie_ratings) ? ent.movie_ratings.map(String) : null),
     blocklist: Array.isArray(ent.blocklist) ? ent.blocklist.map(String) : [],
+    // 'whole' | 'split'. Reported as the EFFECTIVE value, never as the absence the file
+    // stores, so the editor's picker has something to select without duplicating the default.
+    collection_members: String(ent.collection_members ?? '').trim().toLowerCase() === 'split'
+      ? 'split' : 'whole',
     // v2 knobs (workstreams E + I): carry the full rotation field set the Python service
     // reads. user_uuid/watch_count_accounts were previously DROPPED here, so a rotation set
     // created/edited via the API lost its account binding — now round-tripped intact.
@@ -819,6 +843,8 @@ function rotationCreateObj(id: string, body: Record<string, unknown>): Record<st
       Array.isArray(body.movie_ratings) && body.movie_ratings.length ? body.movie_ratings.map(String) : null,
     blocklist: Array.isArray(body.blocklist) ? body.blocklist.map(String) : [],
   };
+  const cm = toCollectionMembers(body.collection_members);
+  if (cm) obj.collection_members = cm;
   // Profile bindings (v3 PR 2): when the body carries an explicit `profiles[]` array, write
   // it and SKIP the legacy top-level binding fields (the two shapes are mutually exclusive on
   // disk). Otherwise write the single legacy binding from the top-level fields (unchanged).
@@ -1044,6 +1070,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         'audio_language', 'movie_excludes',
         // v3 PR 2: per-profile bindings + behavior. PR 3: explicit members.
         'profiles', 'behavior', 'members',
+        // Whether a Collection member plays whole or is split into its shows.
+        'collection_members',
         // How many items the lineup holds. Rotation-only: a curated queue's length is
         // however many entries it has, so there is nothing to set there.
         'length',
@@ -1252,6 +1280,13 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         // Sparse: only `true` is written. Absent means "leave the room alone", which is what
         // every set has always done.
         if (v !== true) { node.delete('power_off_when_done'); continue; }
+      }
+      if (k === 'collection_members') {
+        // Sparse: 'whole' (and blank) drop the key, so a pool that never touched this reads
+        // as the default rather than carrying a value that says nothing.
+        const cmv = toCollectionMembers(v);
+        if (cmv == null) { node.delete('collection_members'); continue; }
+        v = cmv;
       }
       if (k === 'on_complete') {
         const s = toOnComplete(v);

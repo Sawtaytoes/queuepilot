@@ -331,6 +331,11 @@ jobs:
           "$TSX" e2e/leaves-per-account-test.ts
           "$TSX" e2e/collection-children-per-account-test.ts
           "$TSX" e2e/collection-batch-cap-test.ts
+          # A collection MEMBER covers its shows. channelBuckets deduped members against the
+          # rule pool by BUCKET ratingKey and a collection's is its own, so its children stayed
+          # in the pool as standalone shows too — it played them both ways at once, the
+          # collection in order and the same shows again at random.
+          "$TSX" e2e/collection-covers-its-shows-test.ts
           "$TSX" e2e/resume-on-advance-test.ts
 
       # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.
