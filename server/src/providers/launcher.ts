@@ -175,7 +175,17 @@ export async function launchDescriptor(
   const out = await provider.handoff(artifact);
   // A PUSH result has no `url` at all, which the old code saw as `undefined` and treated
   // exactly like a pull result with a null url. Same branch, spelled as the narrowing it is.
-  if (!('url' in out) || !out.url) return { error: out.error || 'no reader URL', status: 500 };
+  //
+  // A provider that DECLINES — it answered with a reason rather than a URL — is a 409, not a
+  // 500. MiSTer is the first: it is a pull provider with nothing a browser could follow,
+  // because a MiSTer game is started by Home Assistant (which enables the controller adapter
+  // and switches the activity) rather than by a link. Reporting that as a server error made
+  // a working, deliberate refusal look like a crash.
+  if (!('url' in out) || !out.url) {
+    return out.error
+      ? { error: out.error, status: 409 }
+      : { error: 'no reader URL', status: 500 };
+  }
   return { url: out.url, readingListId: out.readingListId, count: play.length, status: 302 };
 }
 

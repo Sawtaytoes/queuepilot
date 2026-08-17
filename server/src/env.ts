@@ -337,3 +337,11 @@ export const BOARD_GAME_PICKER_URL = str('BOARD_GAME_PICKER_URL', '').replace(/\
 // The KEY is absent from this module by the same rule Kavita's is: secrets resolve through
 // providers/config.ts, which is the only place allowed to read a token.
 export const STEAM_ID = str('STEAM_ID', '').trim();
+
+// The MiSTer's mrext "remote" API. Named to match the root .env the rest of the fleet
+// already uses (MISTER_API_SERVER_URL). Accepted with or without a trailing `/api` — the
+// client normalizes it, because both spellings are the obvious thing to write.
+//
+// No token: mrext runs on the MiSTer, on the LAN, and issues no credential. Having this URL
+// is what "configured" means for this kind.
+export const MISTER_URL = str('MISTER_API_SERVER_URL', '').replace(/\/+$/, '');
