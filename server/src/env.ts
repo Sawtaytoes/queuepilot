@@ -83,8 +83,12 @@ export const QUEUE_SERIES_LENGTH = int('QUEUE_SERIES_LENGTH', 40);
 // in sets.yaml, overridable per entry in queues.yaml. Mirrors config.BATCH_STOPS_AT.
 export const BATCH_STOPS_AT = str('BATCH_STOPS_AT', 'none');
 
-// Rotation queue length (episodes queued per cartoons session).
+// Rotation queue length (episodes queued per cartoons session) — the DEFAULT only. A set
+// overrides it with `length:`, because 12 is four hours of Shows and half an hour of Shorts.
 export const ROTATION_LENGTH = int('ROTATION_LENGTH', 12);
+// The hard safety cap on a set's `length:`, so a typo can't schedule a thousand Plex round
+// trips at scan time. Same role QUEUE_SERIES_LENGTH plays for a per-entry `episodes:`.
+export const ROTATION_LENGTH_MAX = int('ROTATION_LENGTH_MAX', 200);
 
 // --- playback target (the Family Room theater Shield) ------------------------- //
 // PLAYBACK_MODE:

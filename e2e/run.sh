@@ -35,6 +35,8 @@ echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > pla
 "$TSX" e2e/host-config-test.ts || TOTAL=$((TOTAL+1))
 echo "=== batch-stops-at-test (node) ==="   # the same table in the Node port
 "$TSX" e2e/batch-stops-at-test.ts || TOTAL=$((TOTAL+1))
+echo "=== rotation-length-test ==="   # browserless; a set's `length:` sizes its lineup (set > env)
+"$TSX" e2e/rotation-length-test.ts || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
 "$TSX" e2e/collection-batch-cap-test.ts || TOTAL=$((TOTAL+1))
 echo "=== resume-on-advance-test ==="   # browserless; every queued episode resumes, not just the head

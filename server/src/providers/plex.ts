@@ -36,7 +36,6 @@ import { profileUser, sections as plexSections, showEpisodes } from '../plex.js'
 import { toWeight } from '../engine/weight.js';
 import * as playback from '../playback.js';
 import * as driver from '../driver.js';
-import { ROTATION_LENGTH } from '../env.js';
 
 /**
  * What `buckets()` actually needs, which is NARROWER than `BucketsContext`.
@@ -282,7 +281,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         return { play: [item], rewatch: true };
       }
 
-      const queue = await rotation.buildRotation(c, cfg, binding, ROTATION_LENGTH, defaultRng);
+      const queue = await rotation.buildRotation(c, cfg, binding, rotation.rotationLength(cfg), defaultRng);
       return { play: queue };
     },
 
