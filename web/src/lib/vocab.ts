@@ -11,6 +11,7 @@ export const PLEX_WORDS: ProviderVocabulary = {
   done: "watched",
   member: "show",
   name: "Plex",
+  startIcon: "▶",
   unit: "episode",
   unitShort: "eps",
   units: "episodes",

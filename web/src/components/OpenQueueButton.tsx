@@ -1,4 +1,5 @@
 import type { RegistrySet } from "../lib/types"
+import { PLEX_WORDS } from "../lib/vocab"
 
 /**
  * The start affordance for a queue, chosen by how that queue actually starts.
@@ -15,12 +16,24 @@ import type { RegistrySet } from "../lib/types"
  * launcher being one stable URL per queue.
  *
  * Branches on `delivery`, never on the provider's name.
+ *
+ * **What it SAYS comes from the provider's vocabulary, not from this file.** The label was a
+ * hardcoded `▶ Open ↗`, which was wrong twice over on a manga queue: "Open" is what a *file*
+ * does, and the play triangle promised a screen. Kavita's vocabulary already answers both —
+ * `verb: "Read"`, `startIcon: "📖"` — so the button reads `📖 Read ↗` there and `🎲 Play ↗` on
+ * the board-game picker, with no branch on the provider's name.
+ * (decisions `2026-08-15-a-provider-carries-its-own-vocabulary`,
+ * `2026-08-16-copy-is-authored-in-plex-words-and-rewritten-per-provider`)
  */
 export function OpenQueueButton({
   set,
 }: {
-  set: Pick<RegistrySet, "id" | "delivery">
+  set: Pick<RegistrySet, "id" | "delivery" | "vocabulary">
 }) {
+  const words = set.vocabulary ?? PLEX_WORDS
+  const verb = words.verb || PLEX_WORDS.verb
+  const icon = words.startIcon || PLEX_WORDS.startIcon
+
   return (
     <a
       className="playbtn openbtn"
@@ -30,9 +43,12 @@ export function OpenQueueButton({
       // A new tab, so the queue list you launched from is still there when you come back
       // from the reader.
       target="_blank"
-      title="Rebuild the reading list and open it at your current chapter"
+      // `↗` (this leaves the app) stays in the LABEL rather than moving into the vocabulary:
+      // it is a fact about the launcher, true for every pull provider, not a word any of them
+      // gets to choose.
+      title={`Rebuild the list and open it where you left off in ${words.name || PLEX_WORDS.name}`}
     >
-      ▶ Open ↗
+      {icon} {verb} ↗
     </a>
   )
 }
