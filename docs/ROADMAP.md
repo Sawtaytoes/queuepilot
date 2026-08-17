@@ -85,6 +85,18 @@ only when the owner asks.
   has no way to say "the rest of this series this visit" without a magic number,
   and 999 is already rejected (`QUEUE_SERIES_LENGTH` = 40). Parked 2026-08-16:
   [todos/batch-all-or-infinite.md](todos/batch-all-or-infinite.md).
+  **Unparked in part 2026-08-17** — the owner asked for "play X or play
+  infinite", so its `all`-sentinel rule now binds the work in
+  [todos/lineup-length-and-top-up.md](todos/lineup-length-and-top-up.md).
+  The picker half is still parked.
+
+- **Infinite lineups + top-up** — phase 1 (`length:` per channel) shipped
+  2026-08-17. Phase 2 (`length: all`, `on_complete: restart|drop`) and phase 3
+  (top-up over `queuepilot/cmd/topup`, Plex playQueue extended in place, Kavita
+  reading list as a sliding window) are specified and NOT built:
+  [todos/lineup-length-and-top-up.md](todos/lineup-length-and-top-up.md).
+  ⚠️ Phase 3 needs the `PUT /playQueues/{id}?uri=…` spike first — it is unverified
+  against this server, and the fallback changes the UX promise.
 
 ## Deploy state
 App image currently `docker-registry.example.com/plex-channels:latest` (locally built, = merged

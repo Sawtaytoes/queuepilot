@@ -317,6 +317,14 @@ export interface RotationSet extends SetRegistryCommon {
    * by the auto router, still playable by id. */
   superseded_by: string | null;
   behavior: SetBehavior | null;
+  /**
+   * How many items this channel's lineup holds. null = the engine default (env
+   * `ROTATION_LENGTH`, which is 12).
+   *
+   * The SIZE to `episodes`'s per-entry share, and per SET because runtime differs by card:
+   * 12 is four hours of Shows and half an hour of Shorts.
+   */
+  length: number | null;
   /** Explicit curated members ([] = pure dynamic rule pool). */
   members: MemberValue[];
   /** Per-show manual start floors, keyed by ratingKey. */
@@ -409,6 +417,19 @@ interface RoutingSetCfgCommon {
    * `episodes` — a volume is not a chapter. Absent = 1.
    */
   volumes?: string;
+  /**
+   * How many items this set's LINEUP holds — the whole scan, not one entry's share. The
+   * SIZE to `episodes`'s per-entry share: a rotation channel of `length: 30` still hands
+   * each show `episodes` at a time, it just keeps going until it has 30.
+   *
+   * Per SET and not global, because the right number depends on how long an item runs.
+   * `ROTATION_LENGTH` = 12 is four hours of Shows and half an hour of Shorts, and the
+   * Shorts card ran out mid-evening (owner, 2026-08-17). Absent = env ROTATION_LENGTH.
+   *
+   * Rotation channels only, today. Curated queues size themselves from their entries, and
+   * Kavita reads `limit ?? max_items ?? ROTATION_LENGTH` — both are follow-up work.
+   */
+  length?: string;
   audio_language?: string;
   /** Always set (null when uncapped), unlike the passthroughs above it. */
   max_items: number | null;

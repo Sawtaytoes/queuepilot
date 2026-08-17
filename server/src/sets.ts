@@ -19,7 +19,7 @@ import { toWeight } from './engine/weight.js';
 import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind } from './providers/config.js';
 // The same hard cap a per-entry override is clamped to (queues.setEpisodes), applied to the
 // set-wide default so a hand-posted value cannot queue a whole library.
-import { QUEUE_SERIES_LENGTH } from './env.js';
+import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { isNodeError } from './errors.js';
 import type {
   BatchStop,
@@ -580,6 +580,10 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       default_profile: ent.default_profile != null ? String(ent.default_profile) : null,
       superseded_by: ent.superseded_by != null ? String(ent.superseded_by) : null,
       behavior: isBehavior(ent.behavior) ? ent.behavior : null,
+      // HOW MANY items the lineup holds — the SIZE to `episodes`'s per-entry share. null =
+      // the engine default (env ROTATION_LENGTH, which is 12). Rotation-only: a curated
+      // queue's length is however many entries it has.
+      length: toPosIntOrNull(ent.length),
       members: toMembers(ent.members),
       // Per-show manual start overrides for the dynamic rule pool (the Channels view
       // reads channel.starts[ratingKey] to seed the "Start from…" picker + chip).
@@ -906,6 +910,9 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         'audio_language', 'movie_excludes',
         // v3 PR 2: per-profile bindings + behavior. PR 3: explicit members.
         'profiles', 'behavior', 'members',
+        // How many items the lineup holds. Rotation-only: a curated queue's length is
+        // however many entries it has, so there is nothing to set there.
+        'length',
         // Per-show start + weight overrides for the dynamic rule pool.
         'starts', 'weights',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
@@ -1086,6 +1093,15 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       if (k === 'max_items') {
         v = toPosIntOrNull(v);
         if (v == null) { node.delete('max_items'); continue; } // cleared => drop the key (no cap)
+      }
+      if (k === 'length') {
+        // Cleared => drop the key and follow env ROTATION_LENGTH, the same sparse-default
+        // shape `episodes:` uses. Clamped rather than rejected so a fat-fingered 300 builds
+        // a long-but-finite lineup instead of failing the save; ROTATION_LENGTH_MAX exists
+        // because every item in a lineup costs a Plex round trip at scan time.
+        const n = toPosIntOrNull(v);
+        if (n == null) { node.delete('length'); continue; }
+        v = Math.min(n, ROTATION_LENGTH_MAX);
       }
       if (k === 'mode' && !isMode(v)) throw new Error(`invalid mode ${String(v)}`);
       if (k === 'audio_language') v = v == null || String(v).trim() === '' ? null : String(v).trim();

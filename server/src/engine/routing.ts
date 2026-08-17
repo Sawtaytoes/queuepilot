@@ -63,6 +63,7 @@ type RawSetEntry = BindingSource & {
   batch_stops_at?: unknown;
   episodes?: unknown;
   volumes?: unknown;
+  length?: unknown;
   audio_language?: unknown;
   max_items?: unknown;
   providers?: unknown;
@@ -233,6 +234,10 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
     if (ent.episodes != null) cfg.episodes = String(ent.episodes).trim();
     // Volumes are not chapters. A volume-based series reads this count, never `episodes`.
     if (ent.volumes != null) cfg.volumes = String(ent.volumes).trim();
+    // How many items the whole LINEUP holds — the SIZE to `episodes`'s per-entry share.
+    // providers/plex.ts's rotationLength() interprets it (set > env ROTATION_LENGTH); an
+    // absent/invalid value falls back rather than throwing, exactly like max_items.
+    if (ent.length != null) cfg.length = String(ent.length).trim();
     // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
     if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().
