@@ -37,7 +37,7 @@ import type {
 } from '../types.js';
 
 import { errMessage } from '../errors.js';
-import { boardGamesClient, type BoardGamesHttpClient } from './board-games-client.js';
+import { boardGamesClient, type BoardGamesHttpClient } from './board-game-picker-client.js';
 
 /** How many entries are probed at once. The picker is a LAN app; this is politeness. */
 const PROBE_CONCURRENCY = 8;
@@ -221,7 +221,7 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
             next: state.remaining > 0 ? playItem(state, state.played + 1) : null,
           };
         } catch (e) {
-          console.log(`[board-games] tile ${id}: ${errMessage(e)}`);
+          console.log(`[board-game-picker] tile ${id}: ${errMessage(e)}`);
           return null;
         }
       });
@@ -253,7 +253,7 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
         entries,
         PROBE_CONCURRENCY,
         (e) => entryState(e, PLAYS_PER_GAME_DEFAULT).catch((err: unknown) => {
-          console.log(`[board-games] entry ${e.id}: ${errMessage(err)}`);
+          console.log(`[board-game-picker] entry ${e.id}: ${errMessage(err)}`);
           return null;
         }),
       )).filter((s): s is BoardGamesEntryState => s != null);
@@ -319,7 +319,7 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
 
       return {
         provider: def.id,
-        kind: 'board-games',
+        kind: 'board-game-picker',
         count: items.length,
         gameId,
         head,

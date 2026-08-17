@@ -12,16 +12,16 @@
 //   4. `/go/<set>` 302s into `/play/<head>`, and answers 409 rather than the next game when
 //      the queue is played out.
 //
-// Run:  server/node_modules/.bin/tsx e2e/board-games-provider-test.ts   (repo root)
+// Run:  server/node_modules/.bin/tsx e2e/board-game-picker-provider-test.ts   (repo root)
 import assert from 'node:assert/strict';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { errMessage } from '../server/src/errors.js';
 import type { BoardGamesArtifact, BucketsResult, PullResult } from '../server/src/types.js';
-import type { BoardGamesHttpClient } from '../server/src/providers/board-games-client.js';
+import type { BoardGamesHttpClient } from '../server/src/providers/board-game-picker-client.js';
 
-const SCRATCH = mkdtempSync(path.join(tmpdir(), 'board-games-'));
+const SCRATCH = mkdtempSync(path.join(tmpdir(), 'board-game-picker-'));
 const SETS_PATH = path.join(SCRATCH, 'sets.yaml');
 const QUEUES_PATH = path.join(SCRATCH, 'queues.yaml');
 process.env.PROVIDERS_PATH = path.join(SCRATCH, 'providers.yaml');
@@ -29,7 +29,7 @@ process.env.PROVIDERS_SECRETS_PATH = path.join(SCRATCH, 'providers.secrets.yaml'
 process.env.SETS_PATH = SETS_PATH;
 process.env.QUEUES_PATH = QUEUES_PATH;
 process.env.CACHE_PATH = path.join(SCRATCH, 'cache.sqlite');
-process.env.BOARD_GAME_PICKER_URL = 'https://board-games.invalid';
+process.env.BOARD_GAME_PICKER_URL = 'https://board-game-picker.invalid';
 // Deliberately NO BOARD_GAME_PICKER_API_TOKEN: an unset token is the normal deployment for
 // this kind, and the suite proves the provider is `configured` anyway.
 
@@ -44,7 +44,7 @@ writeFileSync(
   SETS_PATH,
   'sets:\n'
   + '  - id: games\n    label: Board games\n    source: queue\n'
-  + '    providers:\n      - provider: board-games\n        libraries: [collection]\n'
+  + '    providers:\n      - provider: board-game-picker\n        libraries: [collection]\n'
   + '  - id: tv\n    label: TV\n    source: rotation\n    sections: [5]\n',
 );
 
@@ -60,10 +60,10 @@ async function ok(name: string, fn: () => Promise<void>) {
 }
 
 const DEF = {
-  id: 'board-games',
-  kind: 'board-games',
+  id: 'board-game-picker',
+  kind: 'board-game-picker',
   label: 'Board Game Picker',
-  base_url: 'https://board-games.invalid',
+  base_url: 'https://board-game-picker.invalid',
 };
 
 const NOW = Math.floor(Date.parse('2026-08-16T12:00:00.000Z') / 1000);
@@ -129,7 +129,7 @@ function stubClient({ plays = PLAYS }: { plays?: StubPlay[] } = {}) {
   };
 }
 
-const { boardGamesProvider } = await import('../server/src/providers/board-games.js');
+const { boardGamesProvider } = await import('../server/src/providers/board-game-picker.js');
 const { publicView, definitionFor, isConfigured } = await import('../server/src/providers/config.js');
 
 const provider = () => boardGamesProvider({ def: DEF, client: asClient(stubClient()) });
@@ -155,9 +155,9 @@ await ok('never asks the picker for /api/collection', async () => {
 // --- configuration ------------------------------------------------------------ //
 
 await ok('is configured by URL alone — the picker issues no token', async () => {
-  assert.equal(isConfigured('board-games', 'board-games'), true);
-  const def = definitionFor('board-games');
-  assert.ok(def, 'no implicit board-games definition');
+  assert.equal(isConfigured('board-game-picker', 'board-game-picker'), true);
+  const def = definitionFor('board-game-picker');
+  assert.ok(def, 'no implicit board-game-picker definition');
   const view = publicView(def);
   assert.equal(view.configured, true);
   assert.equal(view.supported, true);
@@ -274,13 +274,13 @@ await ok('materialize is a descriptor and handoff opens /play/<game>', async () 
   const p = provider();
   const res = await p.buckets({ cfg: {}, entries: [{ id: 'orchard', batch: 1, queuedAt: NOW }] });
   const artifact = await p.materialize(res.play, { setName: 'games' }) as BoardGamesArtifact;
-  assert.equal(artifact.kind, 'board-games');
+  assert.equal(artifact.kind, 'board-game-picker');
   assert.equal(artifact.gameId, 'orchard');
-  assert.equal(artifact.url, 'https://board-games.invalid/play/orchard');
+  assert.equal(artifact.url, 'https://board-game-picker.invalid/play/orchard');
 
   const handoff = await p.handoff(artifact) as PullResult;
   assert.equal(handoff.mode, 'pull');
-  assert.equal(handoff.url, 'https://board-games.invalid/play/orchard');
+  assert.equal(handoff.url, 'https://board-game-picker.invalid/play/orchard');
 });
 
 await ok('an empty lineup hands off an error rather than a URL', async () => {
@@ -299,7 +299,7 @@ await ok('/go/<set> 302s into the picker, and stamps queued_at on the way', asyn
   const d = await launchDescriptor('games', { client: asClient(stubClient()) as never });
   assert.equal(d.status, 302);
   assert.ok(
-    /^https:\/\/board-games\.invalid\/play\/[a-z-]+$/.test(String(d.url)),
+    /^https:\/\/board-game-picker\.invalid\/play\/[a-z-]+$/.test(String(d.url)),
     `not a /play deep link: ${String(d.url)}`,
   );
   // The stamp is the whole reason a lifetime play log does not finish a queue on day one.

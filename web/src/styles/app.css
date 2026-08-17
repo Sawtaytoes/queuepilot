@@ -147,7 +147,7 @@
 }
 
 /* --- Board Game Picker ----------------------------------------------------- */
-[data-provider="board-games"] {
+[data-provider="board-game-picker"] {
   --color-intent-accent-surface: #ffe8de;
   --color-intent-accent-surface-hover: #ffd9c8;
   --color-intent-accent-border: #c2470f;
@@ -157,8 +157,8 @@
   --color-intent-accent-on-solid: #ffffff;
 }
 
-[data-scheme="dark"] [data-provider="board-games"],
-[data-scheme="dark"][data-provider="board-games"] {
+[data-scheme="dark"] [data-provider="board-game-picker"],
+[data-scheme="dark"][data-provider="board-game-picker"] {
   --color-intent-accent-surface: #331409;
   --color-intent-accent-surface-hover: #40190b;
   --color-intent-accent-border: #5e2a12;

@@ -182,7 +182,7 @@ jobs:
       #     picker's lifetime play log: a game with twenty plays behind it and a batch of
       #     three has three plays left the day it is queued, not zero.
       - name: Board Game Picker provider + launcher (offline)
-        run: $TSX e2e/board-games-provider-test.ts
+        run: $TSX e2e/board-game-picker-provider-test.ts
 
       # A set whose ONLY source is a non-Plex provider must save. Reported from the live app:
       # creating a Channel with a single Kavita block failed with "at least one library

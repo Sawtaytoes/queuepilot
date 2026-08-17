@@ -18,8 +18,8 @@ import type { KavitaHttpClient } from './kavita-client.js';
 import { definitions, definitionFor, requireToken, tokenFor, isConfigured, KINDS } from './config.js';
 import { plexProvider } from './plex.js';
 import { kavitaProvider } from './kavita.js';
-import { boardGamesProvider } from './board-games.js';
-import type { BoardGamesHttpClient } from './board-games-client.js';
+import { boardGamesProvider } from './board-game-picker.js';
+import type { BoardGamesHttpClient } from './board-game-picker-client.js';
 
 /**
  * The injected client, which is per-KIND: `plex-replay.js` for Plex, a stubbed Kavita HTTP
@@ -57,7 +57,7 @@ export function providerFor(
       return kavitaProvider({ def, apiKey, client: client as KavitaHttpClient | null });
     }
 
-    case 'board-games': {
+    case 'board-game-picker': {
       // No requireToken(): the picker's token is OPTIONAL, and "configured" for this kind
       // is a base URL — see KINDS_CONFIGURED_BY_URL in config.js. It is a household LAN app
       // with no Authelia in front of it, and demanding a credential it does not issue would
@@ -68,7 +68,7 @@ export function providerFor(
 
     default:
       throw new Error(
-        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, board-games`,
+        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, board-game-picker`,
       );
   }
 }
