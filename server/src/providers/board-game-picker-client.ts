@@ -1,8 +1,8 @@
 // Board Game Picker HTTP client. Thin, and shaped like the endpoints rather than like the
-// engine — the media-neutral shape is board-games.ts's job, not this file's.
+// engine — the media-neutral shape is board-game-picker.ts's job, not this file's.
 //
 // The picker exposes a DELIBERATELY NARROW integration surface: games and play timestamps,
-// and nothing carrying a person (board-games decision
+// and nothing carrying a person (board-game-picker decision
 // 2026-08-16-the-integration-api-is-games-only-never-the-collection). Its `/api/collection`
 // endpoint holds players, groups and who was at the table.
 //
@@ -91,7 +91,7 @@ export function boardGamesClient({
     // wrong or unreachable, and a queue that silently renders empty is the failure mode
     // this app has been bitten by before.
     if (res.status === 404) return fallback;
-    if (!res.ok) throw new Error(`board-games ${init.method || 'GET'} ${path} -> ${res.status}`);
+    if (!res.ok) throw new Error(`board-game-picker ${init.method || 'GET'} ${path} -> ${res.status}`);
     return (await res.json()) as T;
   }
 
@@ -143,11 +143,11 @@ export function boardGamesClient({
     async cover(gameId: string): Promise<ProviderCover> {
       const game = await this.game(gameId);
       const imagePath = typeof game?.imagePath === 'string' ? game.imagePath : '';
-      if (!imagePath) throw new Error(`board-games: game '${gameId}' has no box art`);
+      if (!imagePath) throw new Error(`board-game-picker: game '${gameId}' has no box art`);
 
       const url = imagePath.startsWith('http') ? imagePath : `${base}${imagePath}`;
       const res = await doFetch(url, { headers: { ...auth } });
-      if (!res.ok) throw new Error(`board-games cover ${gameId} -> ${res.status}`);
+      if (!res.ok) throw new Error(`board-game-picker cover ${gameId} -> ${res.status}`);
 
       return {
         buffer: Buffer.from(await res.arrayBuffer()),

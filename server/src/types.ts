@@ -849,7 +849,7 @@ export interface KavitaArtifact {
  */
 export interface BoardGamesArtifact {
   provider: string;
-  kind: 'board-games';
+  kind: 'board-game-picker';
   gameId: string;
   url: string;
   setName: string;
