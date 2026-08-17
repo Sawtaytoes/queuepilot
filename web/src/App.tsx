@@ -35,6 +35,7 @@ import {
   useStore,
 } from "./state/store"
 import { ChannelsView } from "./views/ChannelsView"
+import { PendingView } from "./views/PendingView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
 import { QueueView } from "./views/QueueView"
@@ -244,6 +245,7 @@ export function App() {
         groupId={route.view === "play" ? route.group : null}
         isHidden={route.view !== "play"}
       />
+      <PendingView isHidden={route.view !== "pending"} />
       <QueuesView
         isHidden={route.view !== "queues"}
         toolbar={isNarrow ? toolbar : null}
@@ -290,6 +292,20 @@ function computeChrome(
   reg: ReturnType<typeof useStore>["reg"],
   groups: ReturnType<typeof useStore>["groups"],
 ): Chrome {
+  if (route.view === "pending") {
+    return {
+      back: { label: "‹ Play", target: "/" },
+      // `queue-view` is what HIDES the Queues toolbar. Without it the landing's add-to-any-
+      // queue search, queue filter and "New queue" all leak into this page's header.
+      bodyClasses: ["queue-view"],
+      documentTitle: "Pending — QueuePilot",
+      editableSetId: null,
+      heading: "Pending",
+      isSubHidden: false,
+      sub: "New in your libraries, and not picked up by any pool or queue yet.",
+    }
+  }
+
   if (route.view === "queues") {
     return {
       back: { label: "‹ Play", target: "/" }, // Ordered Queues is a top-level configurator

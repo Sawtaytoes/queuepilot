@@ -3501,3 +3501,56 @@ body.rowdragging .playrow:not(.dragging) {
 body.rowdragging {
   user-select: none;
 }
+
+/* --- Pending ------------------------------------------------------------------ */
+/* The way in, sitting with the shelves rather than in the header: it is a place you GO,
+   like each shelf's Configure ›, not a control on the landing. */
+.pendinglink {
+  grid-column: 1 / -1;
+  margin: 0 0 4px;
+}
+.pendinglink a {
+  color: var(--color-content-muted);
+  font-size: 0.9rem;
+}
+.pendinglink a:hover {
+  color: var(--color-content-default);
+}
+#pending .pendinghead {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+#pending .pendinghead p {
+  max-width: 70ch;
+  margin: 0;
+}
+.pendingtile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pendingtile .ptitle {
+  font-weight: 600;
+}
+.pendingtile .glib {
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+}
+.pendingtile .pendingactions {
+  position: relative;
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+/* `.qmenu` is anchored to the RIGHT because its other homes (the Home toolbar's search rows,
+   the play menu) sit at the right of a wide row. A pending tile is ~160px wide, so a
+   220px-min menu hung off its right edge runs off the left of the page — on the first tile,
+   off the viewport entirely. Anchor it to the tile's left instead. */
+.pendingtile .qmenu {
+  left: 0;
+  right: auto;
+}

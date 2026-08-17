@@ -415,6 +415,14 @@ export function PlayView({
           }
         />
       )}
+      {/* The way IN to Pending. It sits with the shelves rather than in the header because
+          it is a place you GO, like each shelf's Configure — not a control on this page. */}
+      <p className="pendinglink">
+        <Link id="gopending" to="/pending">
+          What is new and unqueued ›
+        </Link>
+      </p>
+
       <section
         className="playgroup"
         hidden={!showShelf(pools)}
