@@ -124,6 +124,68 @@ resetHistory();
 const upper = await unwatchedBuckets(client, { ...base, on_complete: 'Restart' }, binding as never);
 check('on_complete: "Restart" (case) => restart', names(upper), ['Done', 'Fresh']);
 
+console.log('=== a SINGLE SHOW can override its pool, in both directions ===');
+// The case the owner described: "it would be good for each show to override this set-level
+// config" - a pool that restarts everything, except the one the kids are done with.
+resetHistory();
+const exceptOne = await unwatchedBuckets(
+  client,
+  { ...base, on_complete: 'restart', on_complete_by_show: { show_done: 'drop' } },
+  binding as never,
+);
+check('pool restarts, this show is told to finish => absent', names(exceptOne), ['Fresh']);
+
+// …and the other way round, which is the direction a boolean could not have expressed.
+resetHistory();
+const reviveOne = await unwatchedBuckets(
+  client,
+  { ...base, on_complete_by_show: { show_done: 'restart' } },
+  binding as never,
+);
+check('pool drops, this show is told to restart => back', names(reviveOne), ['Done', 'Fresh']);
+check('  and it restarts at episode 1, whole show',
+  reviveOne.find((b) => b.show === 'Done')?.episodes.map((e) => e.ratingKey), ['d1', 'd2']);
+
+// An override names ONE show. Its neighbour is unaffected either way, or this is just a
+// second way of spelling the pool-level setting.
+resetHistory();
+const onlyNamed = await unwatchedBuckets(
+  client,
+  { ...base, on_complete_by_show: { show_fresh: 'restart' } },
+  binding as never,
+);
+check('an override for a DIFFERENT show leaves this one dropped', names(onlyNamed), ['Fresh']);
+
+console.log('=== an unrecognised override follows the pool, rather than inverting it ===');
+// sets.yaml is hand-edited over SMB. A typo must not silently flip a show to the opposite of
+// what its pool says - that is the failure mode that looks exactly like the feature working.
+for (const junk of ['', 'restart-at-1', 'true', 'DROPPED']) {
+  resetHistory();
+  const followsRestart = await unwatchedBuckets(
+    client,
+    { ...base, on_complete: 'restart', on_complete_by_show: { show_done: junk } },
+    binding as never,
+  );
+  check(`${JSON.stringify(junk)} on a restarting pool => still restarts`, names(followsRestart), ['Done', 'Fresh']);
+
+  resetHistory();
+  const followsDrop = await unwatchedBuckets(
+    client,
+    { ...base, on_complete_by_show: { show_done: junk } },
+    binding as never,
+  );
+  check(`${JSON.stringify(junk)} on a dropping pool => still drops`, names(followsDrop), ['Fresh']);
+}
+
+// Case-insensitive, like the pool-level spelling.
+resetHistory();
+const cased = await unwatchedBuckets(
+  client,
+  { ...base, on_complete_by_show: { show_done: 'ReStart' } },
+  binding as never,
+);
+check('an override is case-insensitive too', names(cased), ['Done', 'Fresh']);
+
 if (failed) {
   console.error(`\non-complete-test: ${failed} check(s) failed`);
   process.exit(1);

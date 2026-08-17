@@ -372,6 +372,16 @@ export interface RotationSet extends SetRegistryCommon {
   /** Per-show weights, keyed by ratingKey (or `section-<id>` for a whole item bucket).
    * A weight of 1 is the default and is DROPPED rather than stored. */
   weights: Record<string, number>;
+  /**
+   * Per-show `on_complete` overrides, keyed exactly as `starts` / `weights` are
+   * (`section-<id>` for a whole item bucket).
+   *
+   * THREE states, which is why it stores a value rather than a set of names: absent = follow
+   * the set's own `on_complete`, `'restart'` = start this show over, `'drop'` = let it finish.
+   * The third is the point - a pool set to restart everything needs a way to say "except this
+   * one", and a boolean could only express the other direction.
+   */
+  on_complete_by_show: Record<string, 'restart' | 'drop'>;
 }
 
 /**
@@ -517,6 +527,9 @@ export interface RoutingRotationCfg extends RoutingSetCfgCommon {
   starts: Record<string, Start>;
   /** Raw off the YAML: `{ratingKey | 'section-<id>': n}`, uncleaned. */
   weights: Record<string, number>;
+  /** Raw off the YAML: `{ratingKey | 'section-<id>': 'restart'|'drop'}`, uncleaned.
+   *  Absent, or unrecognised, follows the set's own `on_complete`. */
+  on_complete_by_show: Record<string, string>;
   blocklist: string[];
   /** Raw queues.yaml-style member values; `describe()` parses them. */
   members: MemberValue[];

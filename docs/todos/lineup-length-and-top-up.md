@@ -173,10 +173,21 @@ re-tap wins). Verified against the live instance both ways round.
 Nothing has `power_off_when_done` enabled yet, so the whole path is inert
 until the box is ticked in the editor.
 
+## Phase 6 — the per-show override (SHIPPED)
+
+`on_complete_by_show`, a map keyed by ratingKey (`section-<id>` for a
+whole item bucket) — the same shape and the same keying `starts` and
+`weights` already use, because a rule-derived show has no stored entry to
+hang a field on.
+
+THREE states per show, not a boolean: absent follows the pool, `restart`
+starts it over, `drop` lets it finish. The third is the point — a pool
+set to restart everything needs a way to say "except this one", which is
+what the owner asked for, and a boolean could only express the other
+direction.
+
+Edited from the pool grid, beside the existing weight picker.
+
 ## Still open
 
-Not built, and not blocking anything that shipped:
-
-- **`on_complete` is set-level only.** The per-entry override described
-  above was not built; every show on a channel currently shares its
-  answer.
+Nothing. Every phase of this todo has shipped.
