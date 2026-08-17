@@ -21,8 +21,10 @@ import { plexProvider } from './plex.js';
 import { kavitaProvider } from './kavita.js';
 import { boardGamesProvider } from './board-game-picker.js';
 import { steamProvider } from './steam.js';
+import { misterProvider } from './mister.js';
 import type { BoardGamesHttpClient } from './board-game-picker-client.js';
 import type { SteamHttpClient } from './steam-client.js';
+import type { MisterHttpClient } from './mister-client.js';
 
 /**
  * The injected client, which is per-KIND: `plex-replay.js` for Plex, a stubbed Kavita HTTP
@@ -30,7 +32,12 @@ import type { SteamHttpClient } from './steam-client.js';
  * lie — so this is the union, and each branch below asserts the half its own provider needs.
  * That assertion is exactly as safe as the switch it sits in: `def.kind` chose the branch.
  */
-export type InjectedProviderClient = PlexClient | KavitaHttpClient | BoardGamesHttpClient | SteamHttpClient;
+export type InjectedProviderClient =
+  | PlexClient
+  | KavitaHttpClient
+  | BoardGamesHttpClient
+  | SteamHttpClient
+  | MisterHttpClient;
 
 /**
  * Instantiate a provider by id.
@@ -85,9 +92,15 @@ export function providerFor(
       return steamProvider({ def, apiKey, steamId, client: client as SteamHttpClient | null });
     }
 
+    case 'mister':
+      // No requireToken(): mrext issues no credential — "configured" here is a base URL,
+      // the same named exception the picker takes (KINDS_CONFIGURED_BY_URL in config.ts).
+      return misterProvider({ def, client: client as MisterHttpClient | null });
+
     default:
       throw new Error(
-        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, board-game-picker, steam`,
+        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, `
+        + 'board-game-picker, steam, mister',
       );
   }
 }

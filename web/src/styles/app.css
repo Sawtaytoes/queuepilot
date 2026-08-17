@@ -192,6 +192,28 @@
   --color-intent-accent-on-solid: #ffffff;
 }
 
+/* --- MiSTer ---------------------------------------------------------------- */
+[data-provider="mister"] {
+  --color-intent-accent-surface: #efe6fb;
+  --color-intent-accent-surface-hover: #e3d4f8;
+  --color-intent-accent-border: #6d4a9e;
+  --color-intent-accent-content: #4a2d78;
+  --color-intent-accent-solid: #6b3fa0;
+  --color-intent-accent-solid-hover: #5a3488;
+  --color-intent-accent-on-solid: #ffffff;
+}
+
+[data-scheme="dark"] [data-provider="mister"],
+[data-scheme="dark"][data-provider="mister"] {
+  --color-intent-accent-surface: #1d1230;
+  --color-intent-accent-surface-hover: #251840;
+  --color-intent-accent-border: #47306b;
+  --color-intent-accent-content: #c4a5f0;
+  --color-intent-accent-solid: #6b3fa0;
+  --color-intent-accent-solid-hover: #7d4cba;
+  --color-intent-accent-on-solid: #ffffff;
+}
+
 /* The one non-token custom property left: the poster tile's width. It is a layout
    constant with no token analogue (the spacing scale is a 4px ramp, not a card
    size) and the Narrow View breakpoint shrinks it, which is exactly what a custom

@@ -29,7 +29,9 @@ import { parse, stringify } from 'yaml';
 import type { Delivery, ProviderDefinition, ProviderVocabulary } from '../types.js';
 
 import { isNodeError, errMessage } from '../errors.js';
-import { PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL, BOARD_GAME_PICKER_URL, STEAM_ID } from '../env.js';
+import {
+  PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL, BOARD_GAME_PICKER_URL, STEAM_ID, MISTER_URL,
+} from '../env.js';
 
 /**
  * A resolved token and where it came from. `token` is null when unconfigured, NEVER `''` —
@@ -67,7 +69,7 @@ export interface SecretWriteResult {
 
 // The kinds this build knows how to instantiate. A definition naming anything else is kept
 // (so a newer config on an older image is not silently dropped) but reports unsupported.
-export const KINDS = ['plex', 'kavita', 'board-game-picker', 'steam'];
+export const KINDS = ['plex', 'kavita', 'board-game-picker', 'steam', 'mister'];
 
 // Push a lineup at a device, or return a URL to open. Kavita is `pull` because it has no
 // cast and no webhooks at all — see docs/kavita-feasibility.md §4. This mirrors each
@@ -78,7 +80,7 @@ export const KINDS = ['plex', 'kavita', 'board-game-picker', 'steam'];
 // handed to a PC by Home Assistant rather than followed by a browser does not change which
 // side builds it.
 const DELIVERY: Record<string, Delivery | undefined> = {
-  plex: 'push', kavita: 'pull', 'board-game-picker': 'pull', steam: 'pull',
+  plex: 'push', kavita: 'pull', 'board-game-picker': 'pull', steam: 'pull', mister: 'pull',
 };
 
 // The WORDS each medium is described in. Kept beside DELIVERY and for the same reason: the
@@ -108,6 +110,12 @@ const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
   steam: {
     verb: 'Play', unit: 'play', units: 'plays', member: 'game', done: 'played', name: 'Steam',
     unitShort: 'plays', startIcon: '🎮',
+  },
+  // The third `play` vocabulary, and the words are right for the same reason the other two
+  // are: these are games played in sessions. `name` and the accent tell them apart.
+  mister: {
+    verb: 'Play', unit: 'play', units: 'plays', member: 'game', done: 'played', name: 'MiSTer',
+    unitShort: 'plays', startIcon: '🕹️',
   },
 };
 
@@ -197,6 +205,9 @@ function implicitDefinitions(): ProviderDefinition[] {
   // constant in steam-client.ts — so the ACCOUNT is what says "this install plays PC games".
   // Same rule, different field.
   if (STEAM_ID) out.push({ id: 'steam', kind: 'steam', label: 'Steam', base_url: '' });
+  // Back to the URL rule for the MiSTer: mrext is a LAN service and its address is the only
+  // thing to configure.
+  if (MISTER_URL) out.push({ id: 'mister', kind: 'mister', label: 'MiSTer', base_url: MISTER_URL });
   return out;
 }
 
@@ -272,7 +283,10 @@ export function requireToken(id: string, kind: string | null = null): string {
  * Kavita keep failing loudly on a missing token, which is the behaviour two production
  * outages bought us — see this file's header.
  */
-const KINDS_CONFIGURED_BY_URL = new Set(['board-game-picker']);
+// `mister` joins for the same reason and on the same evidence: mrext runs on the MiSTer
+// itself, on the LAN, and issues no credential at all. Plex, Kavita and Steam still fail
+// loudly on a missing token — that behaviour was bought with two production outages.
+const KINDS_CONFIGURED_BY_URL = new Set(['board-game-picker', 'mister']);
 
 export const isConfigured = (id: string, kind: string | null = null): boolean => (
   KINDS_CONFIGURED_BY_URL.has(kind ?? '')

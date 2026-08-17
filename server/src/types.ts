@@ -773,7 +773,12 @@ export interface ProviderTileRow {
   /** Items left to consume — chapters for Kavita, the "how much is waiting" a tile means. */
   unreadCount: number;
   /** The next item to play/read, or null when there is nothing left. */
-  next: KavitaPlayItem | BoardGamesPlayItem | SteamPlayItem | null;
+  next:
+    | KavitaPlayItem
+    | BoardGamesPlayItem
+    | SteamPlayItem
+    | MisterPlayItem
+    | null;
 }
 
 /**
@@ -904,7 +909,23 @@ export interface SteamPlayItem {
   bucket?: string;
 }
 
-export type PlayItem = PlexPlayItem | KavitaPlayItem | BoardGamesPlayItem | SteamPlayItem;
+/** One MiSTer session. Keyed by the ROM's absolute path — see providers/mister-client.ts. */
+export interface MisterPlayItem {
+  path: string;
+  title: string;
+  unit?: MediaUnit;
+  number?: number | string;
+  slot?: number;
+  of?: number;
+  bucket?: string;
+}
+
+export type PlayItem =
+  | PlexPlayItem
+  | KavitaPlayItem
+  | BoardGamesPlayItem
+  | SteamPlayItem
+  | MisterPlayItem;
 
 /** Plex's runtime artifact: a playQueue descriptor. Fused with the push in `handoff()`. */
 export interface PlexArtifact {
@@ -966,7 +987,30 @@ export interface SteamArtifact {
   count: number;
 }
 
-export type ProviderArtifact = PlexArtifact | KavitaArtifact | BoardGamesArtifact | SteamArtifact;
+/**
+ * MiSTer's runtime artifact: which ROM is next.
+ *
+ * Carries no URL, unlike every other provider's. A MiSTer launch is performed by Home
+ * Assistant, so this describes WHAT to launch and stops there — see providers/mister.ts.
+ */
+export interface MisterArtifact {
+  provider: string;
+  kind: 'mister';
+  /** The ROM's absolute path on the MiSTer. Empty when there is nothing left to play. */
+  path: string;
+  /** The system id the path sits under (`SNES`), for a caller that wants to name it. */
+  system: string;
+  setName: string;
+  head: MisterPlayItem | null;
+  count: number;
+}
+
+export type ProviderArtifact =
+  | PlexArtifact
+  | KavitaArtifact
+  | BoardGamesArtifact
+  | SteamArtifact
+  | MisterArtifact;
 
 /** What a PUSH handoff returns (playback.js playRatingKeys / castPlay, and driver.js
  * driveToPlaying, which returns the same object or its own error/cancel form). */

@@ -198,6 +198,18 @@ jobs:
       - name: Steam provider (offline)
         run: $TSX e2e/steam-provider-test.ts
 
+      # The MiSTer gates. This provider's whole character is what it REFUSES to do:
+      #   * It never claims progress. mrext keeps no history, so progressState() is empty and
+      #     newlyDone is empty. Guessing from /games/playing would retire a queued game
+      #     because something else was started from the MiSTer's own menu.
+      #   * It never launches. Calling mrext's /games/launch would skip the OSD save, the
+      #     Xbox adapter enable and the activity switch Home Assistant does around a launch —
+      #     and would be a service-to-service REST bridge. The stub asserts on the path.
+      #   * A powered-down MiSTer is not an empty queue: tiles derive from the stored path
+      #     and cost no network call at all.
+      - name: MiSTer provider (offline)
+        run: $TSX e2e/mister-provider-test.ts
+
       # A set whose ONLY source is a non-Plex provider must save. Reported from the live app:
       # creating a Channel with a single Kavita block failed with "at least one library
       # section required", because `sections` is PLEX's list and is legitimately empty on a
