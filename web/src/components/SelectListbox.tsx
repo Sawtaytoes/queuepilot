@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
  * `useVisibility` + `Button` + `Listbox` + a hand-rolled chevron.
  *
  * `Picker` exists because this file was one of **four** independent
- * versions of those thirty lines across the fleet (board-games'
+ * versions of those thirty lines across the fleet (board-game-picker's
  * `SelectMenu`, mux-magic's `ListboxPicker`, and twice inside
  * `@charcuterie/ui` itself). See charcuterie's
  * `2026-08-13-picker-is-the-assembled-listbox-and-listbox-stays-trigger-agnostic`.

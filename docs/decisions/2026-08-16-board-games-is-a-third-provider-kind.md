@@ -4,7 +4,10 @@
 - **Date:** 2026-08-16
 - **Type:** provider seam
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** its NAME only —
+  [The third provider kind is named `board-game-picker`](2026-08-17-the-third-provider-kind-is-named-board-game-picker.md)
+  (2026-08-17). Read every `board-games` below as `board-game-picker`; the seam, the
+  configured-by-URL rule and everything else in this record stand.
 - **Related:**
   [Plays before the next game is the batch knob](2026-08-16-plays-before-the-next-game-is-the-batch-knob.md),
   [A queue wears its provider's colour](2026-08-15-a-queue-wears-its-providers-colour.md),
