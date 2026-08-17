@@ -374,7 +374,7 @@ export function QueuesView({
 
   return (
     <main className="view" hidden={isHidden} id="home">
-      <div id="gslot-mobile">{toolbar}</div>
+      <div id="gslot-narrow">{toolbar}</div>
       <div id="shelves" ref={shelvesRef}>
         {isHidden
           ? null

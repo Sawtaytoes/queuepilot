@@ -170,7 +170,7 @@
 
 /* The one non-token custom property left: the poster tile's width. It is a layout
    constant with no token analogue (the spacing scale is a 4px ramp, not a card
-   size) and the mobile breakpoint shrinks it, which is exactly what a custom
+   size) and the Narrow View breakpoint shrinks it, which is exactly what a custom
    property is for. */
 :root {
   --tile: 158px;
@@ -229,7 +229,7 @@ header .bar {
   gap: 14px;
   margin-left: auto;
 }
-#gslot-desktop:empty {
+#gslot-wide:empty {
   display: none;
 }
 header h1 {
@@ -295,7 +295,7 @@ header .sub {
     min-height: 44px;
     font-size: 1.25rem;
   }
-  /* Everything the popovers absorb comes off the bar on mobile. */
+  /* Everything the popovers absorb comes off the bar in the Narrow View. */
   header #back,
   header .namepen,
   .chrome {
@@ -409,8 +409,15 @@ h3 {
   font-weight: 600;
 }
 
-input[type="checkbox"],
-input[type="radio"] {
+/* `:not(.peer)` is the whole point of this scope. The reset exists to undo Tailwind
+   preflight for a checkbox the APP renders itself; Charcuterie's `Checkbox` sets
+   `appearance: none` deliberately and paints its own box, and this file is unlayered so
+   `appearance: auto` here beat the component's utility and put the NATIVE box back —
+   measured `appearance: auto` on `#ch-ratings input` with the styled box underneath it,
+   which is why the filter panel's ticks were browser-blue rather than the accent after
+   the groups adopted the component. `.peer` is the class only that input wears. */
+input[type="checkbox"]:not(.peer),
+input[type="radio"]:not(.peer) {
   appearance: auto;
   background-color: revert;
   border: revert;
@@ -741,6 +748,36 @@ ul.grid .empty {
   flex: 0 0 auto;
 }
 
+/* ---- Every `SelectListbox` trigger, everywhere (`components/SelectListbox.tsx`) ----
+
+   A Picker trigger shows the CURRENT VALUE, which is data and can be any length —
+   "Progress — next unwatched (shows & shorts, in order)" is a real option in `#dynmodal`.
+   Charcuterie's shared `CONTROL_BASE_CLASS` is `whitespace-nowrap` (right: a button's
+   own label must not wrap), and nothing then stops the trigger sizing to that whole
+   string, so it burst `#setmodal`/`#dynmodal` and clipped at the modal edge.
+
+   Ellipsise instead. `min-width: 0` is the half that actually does the work — without
+   it a flex item refuses to shrink below min-content and `text-overflow` never gets a
+   chance. `max-width: 100%` covers the non-flex parents (a `.field` is `display: block`).
+   NOT pushed into `@charcuterie/ui`'s `Button`: a button's children are its accessible
+   name and truncating those by default would be wrong; this is only right because a
+   Picker's children are a value. */
+.qppicker {
+  min-width: 0;
+  max-width: 100%;
+}
+/* The option label `Picker` renders as the trigger's child. `white-space: nowrap`
+   is inherited from the button, so this needs no `white-space` of its own. */
+.qppicker > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The chevron is a fixed glyph, not text — it must not absorb the shrink. */
+.qppicker > svg {
+  flex-shrink: 0;
+}
+
 /* ---- QUEUE view: add bar + wrapped poster grid ---- */
 .add {
   display: flex;
@@ -752,7 +789,12 @@ ul.grid .empty {
 }
 .add input {
   flex: 1;
-  min-width: 220px;
+  /* `min(220px, 100%)`, not a flat 220px. The same `.add` block is reused inside the
+     266px `#chfilters` Blocked box and inside the queue view at a 320px width,
+     where a hard 220px floor plus 26px of padding is wider than the space there is —
+     and a `min-width` floor is precisely the thing that turns "a bit tight" into a
+     scrollbar. It still wants 220px wherever 220px exists. */
+  min-width: min(220px, 100%);
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
@@ -765,6 +807,15 @@ ul.grid .empty {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+/* An ELEMENT around the label text, so the narrow layout below can give it a column
+   width. It used to be a bare text node inside the `<label>`, which nothing can
+   select — and with each label sized to its own word ("Type" vs "Library" vs
+   "Add to"), the controls beside them started at five different x positions once
+   every pair had a row to itself. Purely presentational: the `<label>` still wraps
+   the control, so the association is unchanged. */
+.addlbl {
+  flex: 0 0 auto;
 }
 .results {
   list-style: none;
@@ -1378,12 +1429,22 @@ body.sdrag .shelf:not(.dragging) {
 body.queue-view #tools {
   display: none;
 } /* the queue view has its own add box */
+/* `flex-wrap` + `min-width: 0` are what keep this row from setting the width of the
+   whole DOCUMENT. Unwrapped, its min-content is the 200px search plus the ~224px
+   "Add to <picker>" label, so at a 390px viewport it measured 471px and
+   `documentElement.scrollWidth` went to 485. That is not merely a sideways scroll:
+   Chrome then widens the LAYOUT viewport to the content, every `position: fixed`
+   overlay centres itself on 485 instead of 390, and all four modals render ~50px off
+   the right edge of the screen (reported 2026-08-16, images 5–7). The search takes the
+   first line and the picker drops below it instead. */
 .gsearch-wrap {
   position: relative;
   display: flex;
   gap: 10px;
   align-items: center;
   flex: 2 1 320px;
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .gsearch-wrap input[type="search"] {
   flex: 1;
@@ -1535,9 +1596,14 @@ body.queue-view #tools {
   color: var(--color-content-muted);
   font-size: 0.85rem;
 }
+/* `minmax(0, 1fr)`, not `1fr`. A bare `1fr` is `minmax(auto, 1fr)`, and that `auto`
+   minimum is the track's widest item's MIN-CONTENT — which a grid honours even when it
+   overflows the container. The members box's search input was enough to hold the track
+   at 335px inside a 277px `#chbody` at a 320px width, and the whole channels view
+   scrolled sideways. `0` lets the track be as small as the container is. */
 #chbody {
   display: grid;
-  grid-template-columns: 1fr 300px;
+  grid-template-columns: minmax(0, 1fr) 300px;
   gap: 26px;
   align-items: start;
 }
@@ -1624,7 +1690,7 @@ body.queue-view #tools {
    the fold. Now the aside is a flex column capped at the viewport height, its fieldsets live
    in an inner scroller, and `#ch-save` is a pinned footer that is ALWAYS on screen.
    `min-height: 0` on the scroller is load-bearing — without it a flex child refuses to shrink
-   and the scroller never engages. `100dvh` (not `vh`) so mobile browser chrome doesn't hide
+   and the scroller never engages. `100dvh` (not `vh`) so a browser's own chrome doesn't hide
    the button. `top`/`max-height` use F4's measured --header-h (96px fallback). */
 #chfilters {
   background: var(--color-surface-raised);
@@ -1640,24 +1706,37 @@ body.queue-view #tools {
   /* The aside sits in `#chbody`, which is itself below `.chhead` + the sub line, so its
      flow-top is ~header + ~130px. Subtract that whole run (not just the header) so `#ch-save`
      clears the fold even UNSCROLLED; once the user scrolls, `position: sticky` pins the aside
-     at `top` above and it has even more room. `100dvh` keeps mobile browser chrome from
+     at `top` above and it has even more room. `100dvh` keeps a browser's own chrome from
      eating the footer. */
   max-height: calc(100dvh - var(--header-h, 96px) - 140px);
 }
+/* `overflow: clip auto`, never a bare `overflow-y: auto`. When one axis is not
+   `visible`, CSS computes the OTHER one from `visible` to `auto` — so `overflow-y: auto`
+   alone silently handed this panel a horizontal scrollbar too. It was not idle: the
+   Blocked fieldset's `.add input` carried `min-width: 220px`, which with the input's own
+   padding and the fieldset's needs 248px inside a 266px-wide panel that has already
+   given ~15px to the vertical scrollbar. Result was a real sideways scroll at EVERY
+   width, desktop included — the left edge of every label clipped behind it (reported
+   2026-08-16). `clip` also means no scroll container on that axis at all, so nothing can
+   put one back. The `min-width` itself is relaxed below; both halves are needed. */
 #chfilters .chfilters-scroll {
   flex: 1 1 auto;
   min-height: 0;
-  overflow-y: auto;
+  overflow: clip auto;
 }
 #ch-save {
   flex: 0 0 auto;
   margin-top: 12px;
 }
+/* `min-inline-size: 0` for the same UA-sheet reason as the modals' fieldsets: without
+   it the Blocked box sized itself to its widest child (the 220px-floored add input) and
+   measured 301px inside a 266px panel, which is what the sideways scroll was scrolling. */
 #chfilters fieldset {
   border: 1px solid var(--color-border-default);
   border-radius: 10px;
   margin-bottom: 12px;
   padding: 8px 10px;
+  min-inline-size: 0;
 }
 #chfilters legend {
   color: var(--color-content-muted);
@@ -1669,10 +1748,12 @@ body.queue-view #tools {
   grid-template-columns: 1fr 1fr;
   gap: 4px 10px;
 }
+/* Type SIZE only, which is this panel's own density call. The box, the gap and the
+   alignment belong to `Checkbox` now — `align-items: baseline` floated the box off its
+   own text, and re-declaring `display`/`gap` is a second copy of the component's layout.
+   Adopting a component means letting it own its own look, which this file already says
+   about `Select`. */
 #chfilters .libs label {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
   font-size: 0.88rem;
 }
 #ch-block {
@@ -1725,7 +1806,7 @@ body.queue-view #tools {
 }
 @media (max-width: 900px) {
   #chbody {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   #chfilters {
     position: static;
@@ -1749,7 +1830,12 @@ body.queue-view #tools {
   border-radius: 14px;
   padding: 20px 22px;
   max-height: 90vh;
-  overflow: auto;
+  /* `clip` on the inline axis, NOT the `auto` a bare `overflow: auto` gave all four.
+     The box has a chosen width (`min(440px, 92vw)` and friends) and content that
+     doesn't fit is a bug to fix at the source, never a sideways scroll to offer — and
+     a sideways scroll is exactly what the old shorthand produced, because the fieldsets
+     below kept the UA's `min-inline-size: min-content`. */
+  overflow: clip auto;
   overscroll-behavior: contain;
 }
 #startmodal {
@@ -1849,11 +1935,19 @@ body.queue-view #tools {
   padding: 9px 11px;
   font: inherit;
 }
+/* `min-inline-size: 0` is the whole reason these boxes stay inside the modal.
+   A `<fieldset>` carries `min-inline-size: min-content` from the UA sheet — the one
+   element that does — so it refuses to shrink below its widest child no matter what
+   the parent says. With a `Picker` inside (whose trigger is `whitespace-nowrap` and
+   shows a whole option label), the "Playback & completion" fieldset measured 374px in
+   a 357px modal and pushed its rows ~35px past the edge, which is the clipped
+   "Behavior" and "Type" rows reported 2026-08-16 (images 2 and 7). */
 #setmodal fieldset,
 #dynmodal fieldset {
   border: 1px solid var(--color-border-default);
   border-radius: 10px;
   padding: 10px 12px;
+  min-inline-size: 0;
 }
 #setmodal legend,
 #dynmodal legend {
@@ -1925,7 +2019,7 @@ body.queue-view #tools {
 }
 /* The segmented provider picker. Same 10px gutter as .fieldselect so the two controls line
    up when a modal shows one of each. It only renders at two providers — at three the row
-   overflows a phone (measured: 371px into 315px), and ProviderBlock swaps to the listbox. */
+   overflows the Narrow View (measured: 371px into 315px), and ProviderBlock swaps to the listbox. */
 #setmodal .fieldseg {
   margin-left: 10px;
 }
@@ -1941,16 +2035,10 @@ a.playbtn {
   white-space: nowrap;
 }
 #setmodal .libs label {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
   color: var(--color-content-primary);
   font-size: 0.92rem;
 }
 #dynmodal .libs label {
-  display: flex;
-  align-items: baseline;
-  gap: 7px;
   color: var(--color-content-primary);
   font-size: 0.9rem;
 }
@@ -2086,9 +2174,9 @@ html.modal-open {
 }
 
 /* PLAY landing: plain rows, no posters — the "pick and play" surface. On a wide viewport
-   the groups (Filtered Pools / Curated Pools / Ordered Queues) sit side by side as columns;
-   one column on
-   mobile. The id rule must beat the [hidden] attribute (like #selbar). */
+   the groups (Filtered Pools / Curated Pools / Ordered Queues) sit side by side as
+   columns; one column in the Narrow View. The id rule must beat the [hidden] attribute
+   (like #selbar). */
 #play:not([hidden]) {
   display: grid;
   grid-template-columns: repeat(
@@ -2151,7 +2239,7 @@ html.modal-open {
      `anywhere` also shrinks the MIN-CONTENT size, which is what a flex/grid item's
      automatic minimum is resolved against, so only `anywhere` stops the item forcing the
      track wider. The play landing wraps rather than ellipsises (`.rowmeta` is
-     `white-space: normal` on mobile), so wrapping is the right shape here. */
+     `white-space: normal` in the Narrow View), so wrapping is the right shape here. */
   overflow-wrap: anywhere;
 }
 .playrow .rowname {
@@ -2420,7 +2508,7 @@ header h1 input {
     font-size: 1.2rem;
     text-align: center;
   }
-  /* The info line now costs one truncated row, so it stays on mobile — the now-playing
+  /* The info line now costs one truncated row, so it stays in the Narrow View — the now-playing
      state and status toasts are worth the line. Un-stick the Play header still. */
   body.play-view header {
     position: static;
@@ -2435,6 +2523,14 @@ header h1 input {
   #status {
     max-width: 100%;
   }
+  /* One row, two ellipsised texts, ~360px: the sub took most of it and the toast was
+     left rendering as "R…" — a status message that cannot be read is not a status
+     message. The toast wins the row while it has something to say, and the sub (static
+     help you have read a hundred times) steps aside. Still exactly one row either way,
+     so the `min-height` that exists for CLS keeps doing its job. */
+  .infoline:has(#status:not(:empty)) .sub {
+    display: none;
+  }
   #selbar {
     left: 12px;
     right: 12px;
@@ -2442,7 +2538,7 @@ header h1 input {
     flex-wrap: wrap;
     justify-content: center;
   }
-  #gslot-mobile #tools {
+  #gslot-narrow #tools {
     margin: 0 0 16px;
   }
   #setmodal .libs,
@@ -2452,12 +2548,83 @@ header h1 input {
   #play:not([hidden]) {
     grid-template-columns: 1fr;
     gap: 18px;
-  } /* one column on mobile */
+  } /* one column in the Narrow View */
   .playrow {
     flex-wrap: wrap;
   }
   .playrow .rowmeta {
     white-space: normal;
+  }
+  /* The name takes the whole first line, so the controls form one row of their own
+     underneath it.
+
+     `flex: 1 1 190px` is right on a wide row and produces a STAIRCASE here: 190px of
+     basis leaves just enough beside it for the tier picker but not for the Play button,
+     so the picker rode up level with the channel title and Play dropped alone to the
+     next line — and which controls landed where changed per row, because it depended on
+     how long that channel's name was ("Shows & Shorts" and "Shorts" laid out
+     differently). Reported 2026-08-16, image 1. Pinning the basis to 100% makes the
+     break deterministic: title, meta, then [tier] [Play] every time. */
+  .playrow .rowmain {
+    flex-basis: 100%;
+  }
+
+  /* ---- the queue view's add bar (`.add`) ----
+
+     Six label+control pairs in one wrapping flex row. In the Narrow View every pair takes
+     its own line anyway, but each sized to its own content, so the controls started at
+     six different x positions and the whole thing read as a staircase (image 3). One
+     control per row, each filling the space its label leaves, lines them up. */
+  .add > .addpos {
+    width: 100%;
+  }
+  /* One label column, so the five controls share a left edge instead of each starting
+     wherever its own word happens to end. `5.25rem` clears the longest of them
+     ("Library") at the body size and still leaves the picker most of a 320px screen. */
+  .add > .addpos > .addlbl {
+    flex-basis: 5.25rem;
+  }
+  /* Beat the `flex: 0 0 auto; width: auto` opt-out above, which exists so an inline
+     picker keeps its intrinsic width on a WIDE row. On its own row it should fill. */
+  .add > .addpos > .qppicker {
+    flex: 1 1 auto;
+    width: auto;
+  }
+  .add > input {
+    /* The search box owns its line — it is the point of this bar. */
+    flex-basis: 100%;
+  }
+
+  /* ---- modal fields: label above, control filling the line ----
+
+     A modal `.field` is `display: block`, so its label text and its control are inline
+     siblings that share a line only while they both fit. In the Narrow View they mostly
+     don't, and the control wrapped to a line of its own while KEEPING `.fieldselect`'s
+     `margin-inline-start` — a gutter that only ever made sense between a label and a
+     control sitting beside it. On its own line that 10px is pure indent, and because the
+     trigger is also `max-width: 100%` it then measured 10px past the modal's content
+     edge and clipped (reported 2026-08-17: "no need for that left-padding, use the
+     limited space we have").
+
+     So stop pretending: below the breakpoint every modal control is a block that starts
+     at the field's left edge and runs its full width — which is exactly what
+     `.field input[type="text"]` already does two rules up, so the form finally reads as
+     one shape instead of two. */
+  #setmodal .field > .qppicker,
+  #dynmodal .field > .qppicker,
+  #entrymodal .field > .qppicker,
+  #setmodal .field > .fieldseg,
+  #dynmodal .field > .fieldseg {
+    display: flex;
+    width: 100%;
+    max-width: none;
+    margin-inline-start: 0;
+    margin-top: 5px;
+  }
+  /* The flags rows are their own flex containers rather than blocks, so their controls
+     need the same de-indent — `.fieldselect` reaches them too. */
+  #setmodal .flags > .field > .qppicker {
+    margin-inline-start: 0;
   }
 }
 
@@ -2569,9 +2736,14 @@ header h1 input {
 
 /* ---- Density: CARDS. Poster left, everything else right, several per row. ---- */
 ul.grid.cards {
+  /* `min(340px, 100%)`, not a flat 340px. `auto-fill` never drops below the track's OWN
+     minimum, so at a 320px width (292px of content box) a hard 340px floor made every
+     card 48px wider than the page and the whole queue view scrolled sideways. The
+     `min()` lets the last column collapse to the container on a screen narrower than one
+     card, which is the only sane reading of "at least 340px" there. */
   grid-template-columns: repeat(
       auto-fill,
-      minmax(340px, 1fr)
+      minmax(min(340px, 100%), 1fr)
     );
   gap: 12px;
   align-items: start;
@@ -2787,7 +2959,80 @@ ul.grid.posters .tile .badges .epstag {
   padding: 5px 8px;
 }
 
-/* ---- The per-entry settings panel ---- */
+/* ---- The per-entry sheet ----
+
+   A tap on a poster opens this panel, so it has to answer "which one is this, and can
+   I just play it?" before it asks about weights and batch stops. The head is artwork +
+   what plays next + the two actions that do something to the world; the fields below
+   are the settings it has always had.
+   (decision `2026-08-17-a-poster-tap-opens-the-entry-sheet`) */
+#entrymodal .entryhead {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+/* Bigger than any tile's thumb — being able to actually SEE the artwork is half of why
+   the owner picked "tap opens the entry" over "tap plays it". No `height`, so a 2:3
+   poster and a 16:9 still each keep their own shape. */
+#entrymodal .entryart {
+  flex: 0 0 auto;
+  width: 128px;
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+}
+/* `min-width: 0` + `overflow-wrap` or a long unbroken episode title sets this flex item's
+   floor and pushes the artwork out of the box — the same rule the play rows learned. */
+#entrymodal .entrynext {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-content-primary);
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+#entrymodal .entrynext.done {
+  color: var(--color-content-muted);
+}
+/* A one-off movie has no next-up line. Collapse it rather than leaving a blank column
+   beside the artwork. */
+#entrymodal .entrynext:empty {
+  display: none;
+}
+#entrymodal .entryactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+/* Full-size targets, deliberately. The whole reason the poster opens this sheet instead
+   of playing is that the tile's 26px ▶ was fiddly, so a play button here that repeated
+   the mistake would defeat the change. */
+#entrymodal .entryactions > .primary {
+  background: var(--color-intent-accent-solid);
+  border: none;
+  border-radius: 9px;
+  color: var(--color-intent-accent-on-solid);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 14px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+#entrymodal .entryactions > .danger {
+  background: transparent;
+  border: 1px solid var(--color-border-default);
+  border-radius: 9px;
+  color: var(--color-intent-danger-content);
+  cursor: pointer;
+  font: inherit;
+  padding: 9px 14px;
+}
+#entrymodal .entryactions > .danger:hover {
+  border-color: var(--color-intent-danger-border);
+}
+
 #entrymodal .entryfields {
   display: grid;
   gap: 16px;

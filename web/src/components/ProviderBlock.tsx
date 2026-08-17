@@ -18,10 +18,10 @@ import { SelectListbox } from "./SelectListbox"
  *
  * The owner picked **segmented if the options fit, else the listbox as the longer-term
  * fix**, and "fit" is a measurement, not a taste call. Measured against the real
- * `#setmodal` box (`width: min(440px, 92vw)`, `padding: 20px 22px`, so 396px of content on
- * desktop and 315px inside a 390px phone):
+ * `#setmodal` box (`width: min(440px, 92vw)`, `padding: 20px 22px`, so 396px of content in
+ * the Wide View and 315px at a 390px width):
  *
- * | providers | segmented, desktop | segmented, phone |
+ * | providers | segmented, wide | segmented, narrow |
  * | --- | --- | --- |
  * | 2 | 264px — fits | 264px — fits |
  * | 3 | 371px — fits | 371px — **overflows** |
@@ -29,8 +29,8 @@ import { SelectListbox } from "./SelectListbox"
  * | 5 | 560px — overflows | overflows |
  *
  * The listbox is a flat 258px at any count. So the threshold is **two**: three providers
- * already overflow the phone, and this app has a real phone layout with a CI gate against
- * horizontal scroll. Since providers are added at RUNTIME, the rule has to be evaluated at
+ * already overflow the Narrow View, which this app really has and holds with a CI gate
+ * against horizontal scroll. Since providers are added at RUNTIME, the rule has to be evaluated at
  * runtime too — which is exactly what the owner's "if they fit, otherwise…" describes.
  *
  * One provider renders NO control at all (his "C1 is good when only 1 provider"): with
@@ -144,7 +144,7 @@ export function ProviderBlock({
       </div>
 
       {/* One provider: no control. Two: segmented. Three or more: the listbox, because the
-          segmented row overflows a phone at three. See this file's header for the numbers. */}
+          segmented row overflows the Narrow View at three. See this file's header for the numbers. */}
       {providers.length > 1 ? (
         /* A <div>, not a <label>: SegmentedControl renders a `radiogroup`, which takes its
            accessible name from its own required `label` prop. Wrapping a radiogroup in a

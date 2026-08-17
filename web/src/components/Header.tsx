@@ -207,7 +207,7 @@ export function Header({
   return (
     <header ref={headerRef}>
       <div className="bar">
-        {/* Mobile-only left toggle → the nav popover (back / rename). Hidden when it
+        {/* Narrow-View-only left toggle → the nav popover (back / rename). Hidden when it
             would open empty (the Play landing has neither). Desktop shows #back inline. */}
         <button
           aria-expanded={openMenu === "nav"}
@@ -272,10 +272,10 @@ export function Header({
         </Tip>
         {/* The desktop chrome cluster: undo / redo / scheme / the Home toolbar slot,
             pushed right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and
-            ellipsises, so it yields to this width. On mobile the whole cluster is
+            ellipsises, so it yields to this width. In the Narrow View the whole cluster is
             `display:none` and the right popover below mirrors it — the header is far too
-            tight on a phone to carry it inline (that was the 300px-tall header bug).
-            `ui-test` reads `#gslot-desktop #tools`, so that id and its child stay put. */}
+            tight in the Narrow View to carry it inline (that was the 300px-tall header bug).
+            `ui-test` reads `#gslot-wide #tools`, so that id and its child stay put. */}
         <div className="chrome">
           <Tip label="Undo last change">
             <button
@@ -305,10 +305,10 @@ export function Header({
               the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`
               on `<html>`. */}
           <ColorSchemeSwitcher icons={schemeIcons} />
-          <div id="gslot-desktop">{children}</div>
+          <div id="gslot-wide">{children}</div>
         </div>
 
-        {/* Mobile-only right toggle → the actions popover. */}
+        {/* Narrow-View-only right toggle → the actions popover. */}
         <button
           aria-expanded={openMenu === "actions"}
           aria-haspopup="menu"
@@ -357,7 +357,7 @@ export function Header({
           ) : null}
         </div>
 
-        {/* RIGHT popover (actions) — the mobile mirror of `.chrome`. Undo/redo here carry
+        {/* RIGHT popover (actions) — the Narrow View mirror of `.chrome`. Undo/redo here carry
             no id: the canonical `#undo`/`#redo` live inline in `.chrome` (the e2e suite
             clicks those at desktop width), and duplicate ids would be invalid. */}
         <div
