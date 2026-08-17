@@ -21,6 +21,13 @@ export const COUNT_PRESET_COMMON = [1, 2] as const
 export const LINEUP_PRESET_COMMON = [12, 24, 60] as const
 
 /**
+ * An ORDERED queue's common answers. It counts ENTRIES, not items, so the numbers are small:
+ * 1 is what every queue does today (the entry at the top, whole), and 8 is the owner's own
+ * example of "play a few and stop". The kind's default joins the list when it is neither.
+ */
+export const SET_LENGTH_PRESETS = [1, 8] as const
+
+/**
  * The common answers plus the current default when it is some other number (so a default of 3
  * is pickable rather than hiding behind Custom…).
  *

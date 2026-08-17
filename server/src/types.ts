@@ -237,6 +237,33 @@ export interface ProviderDefinition {
  * the two variants below read as the discriminated pair they are.
  */
 interface SetRegistryCommon {
+  /**
+   * PLAYBACK LENGTH — how many ITEMS this set plays in one sitting, or `'infinite'`.
+   * `null` = it has never said, so it follows `length_default` below.
+   *
+   * On every kind of set since 2026-08-17, because three of the four hardcoded it and the
+   * fourth called it a window: "What we _really_ need is a way to specify or configure the
+   * number of movies/episodes to watch in a given setting" (owner).
+   */
+  length: number | 'infinite' | null;
+  /**
+   * What `length: null` resolves to for THIS set — its kind's own historical behaviour (a
+   * rewatch pool 1, a filtered or curated pool 12, an ordered queue 1).
+   *
+   * Sent rather than re-derived in the browser: the rule keys off `source` × `behavior` ×
+   * `kind`, and a second copy of it in the bundle is how the editor ends up chipping the
+   * wrong option "Default".
+   */
+  length_default: number;
+  /**
+   * Announce, when this sitting finishes, that the room should be shut down.
+   *
+   * The app only PUBLISHES it (`queuepilot/resp/finished`); HA owns anything with a power
+   * cable. "The whole system" is a TV, a receiver and a Shield, and whether to honour the
+   * request — who is still in the room, what time it is — is exactly the judgement that
+   * belongs in an automation rather than in a queue builder.
+   */
+  power_off_when_done: boolean;
   /** IMMUTABLE — HA automations / NFC cards / MQTT reference it. */
   id: string;
   label: string;
@@ -333,9 +360,8 @@ export interface RotationSet extends SetRegistryCommon {
    * The SIZE to `episodes`'s per-entry share, and per SET because runtime differs by card:
    * 12 is four hours of Shows and half an hour of Shorts.
    */
-  length: number | null;
-  /** Keep the lineup topped up instead of letting it end. When true, `length` is the WINDOW
-   *  (how many items to stay ahead by), not the size of the whole evening. */
+  /** DEPRECATED — the 2026-08-17 spelling of `length: 'infinite'`, still reported (and still
+   *  read by the engine) so a file written before the rename keeps working. */
   refill: boolean;
   /** What a FINISHED series does: `'restart'` (back to its start floor) or null = drop. */
   on_complete: 'restart' | null;

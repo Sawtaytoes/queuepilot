@@ -146,15 +146,30 @@ Two things fell out that were not "add a widget":
 A **rewatch** pool does not get the box (see below) — hidden with a note
 in its place, rather than shown a control that does nothing.
 
+## Phase 5 — Playback Length (SHIPPED)
+
+The knob was renamed and reframed the same day it shipped. `length` is
+no longer the queue WINDOW — it is how many things play before the set
+stops, spelled **1 / 8 / Infinite / Custom**, and the window is a fixed
+12 with top-up behind it. `refill` is gone from the UI: top-up derives
+itself from the length. Decision:
+[Playback Length is the knob](../decisions/2026-08-17-playback-length-is-the-knob-and-top-up-is-derived.md).
+
+This closed the rewatch item below: `pickRewatch` is now drawn N times
+with each pick excluded, so a rewatch pool plays as many films as it is
+asked for and never the same one twice in a sitting.
+
+It also landed the power-off half — a set may ask for the room to be
+shut down when its sitting ends, announced on `queuepilot/resp/finished`
+for HA to act on.
+
 ## Still open
 
 Not built, and not blocking anything that shipped:
 
-- **The rewatch branch is untouched.** `behavior: rewatch` (the kids'
-  Movies card) still returns exactly one item and honours neither
-  `length` nor `refill`. "Movies wrap into rewatch weighting" means
-  calling `pickRewatch` repeatedly, excluding what it already picked —
-  the remaining piece of the owner's semantics.
+- **The HA side of power-off.** The app publishes
+  `queuepilot/resp/finished` with `power_off`; nothing subscribes yet.
+  The automation belongs in the `home-assistant` repo.
 - **`on_complete` is set-level only.** The per-entry override described
   above was not built; every show on a channel currently shares its
   answer.

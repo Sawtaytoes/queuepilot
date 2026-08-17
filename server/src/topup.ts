@@ -23,8 +23,8 @@ import { SESSION } from './session.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet } from './providers/blocks.js';
 import * as routing from './engine/routing.js';
-import { rotationLength } from './engine/rotation.js';
-import { TOPUP_AT, TOPUP_COOLDOWN_SECONDS } from './env.js';
+import { isTargetMet, needsTopup, playbackLength } from './engine/playbackLength.js';
+import { ROTATION_LENGTH, TOPUP_AT, TOPUP_COOLDOWN_SECONDS } from './env.js';
 import { errMessage } from './errors.js';
 import type { BlockSourceCfg } from './providers/blocks.js';
 import type { PlexPlayItem } from './types.js';
@@ -93,7 +93,21 @@ export async function topup(
   if (cfg.source !== 'rotation') return { ok: true, set: setName, reason: 'not a rotation channel' };
   // The opt-in. A channel that has not asked to refill is ALLOWED to end — that is what a
   // fixed `length:` means, and topping it up anyway would silently delete that choice.
-  if (!cfg.refill) return { ok: true, set: setName, reason: 'set does not refill' };
+  // DERIVED from the playback length, never a stored flag of its own (owner, 2026-08-17). A
+  // lineup needs topping up exactly when it wants more items than one window holds: every
+  // `infinite` pool, and a Custom above the window. A pool at 1 or 8 never gets here, which is
+  // what makes "plays N and stops" mean it.
+  const target = playbackLength(cfg);
+
+  if (!needsTopup(target)) {
+    return { ok: true, set: setName, reason: `plays ${target} — nothing to top up` };
+  }
+
+  // A FINITE target that has already been handed everything it asked for is done, and topping
+  // it up anyway would silently delete the owner's choice of how long the sitting is.
+  if (isTargetMet(target, SESSION.queuedTotal)) {
+    return { ok: true, set: setName, reason: `target of ${target} already queued` };
+  }
 
   // The SAME provider + binding the scan used, resolved the same way `startSession` does —
   // a top-up that selected as a different account would queue the wrong kid's next episodes.
@@ -103,7 +117,11 @@ export async function topup(
     binding = await provider.profileBinding(binding, SESSION.profile);
   }
   const token = (await provider.profileToken?.(binding.user_uuid)) ?? null;
-  const window = rotationLength(cfg);
+  // How far ahead to stay. Capped by what is LEFT of a finite target, so a pool at 20 tops up
+  // to exactly 20 and then stops rather than rounding up to a whole window.
+  const window = target == null
+    ? ROTATION_LENGTH
+    : Math.max(1, Math.min(ROTATION_LENGTH, target - SESSION.queuedTotal));
   const buildLineup = async () => {
     const res = await provider.buckets({
       setName, cfg, binding, token, kind: cfg.kind || undefined, lastMovieRk: SESSION.lastMovieRk,
@@ -177,6 +195,9 @@ export async function topup(
   // not what we handed it. A persistent 0 here is the wrong-account symptom, not a quiet
   // success — the create path learned the same lesson.
   const added = sizeAfter == null ? slice.length : Math.max(0, sizeAfter - live.ratingKeys.length);
+  // Against the ACCEPTED count, not what we asked for: a finite target must not be spent on
+  // keys Plex silently dropped, or a pool at 20 would stop early and blame itself.
+  SESSION.queuedTotal += added;
   console.log(`[topup] ${setName}: ${live.remaining} left -> added ${added} (asked ${slice.length}), queue now ${sizeAfter ?? '?'}`);
   return { ok: true, set: setName, remaining: live.remaining, added };
 }

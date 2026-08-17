@@ -111,7 +111,11 @@ await ok('create carries all three knobs onto the file', async () => {
   assert.match(yaml, /on_complete: restart/);
   const s = await entry(id);
   assert.equal(s.source, 'rotation');
-  assert.equal(s.length, 60);
+  // SUPERSEDED by playback length (2026-08-17, same day): `refill: true` was the old spelling
+  // of infinite, so a set carrying it now REPORTS as infinite whatever number sits beside it.
+  // Both keys are still on the file untouched — the migration happens on the next save — which
+  // is exactly what keeps the owner's live Shorts card working without anyone editing it.
+  assert.equal(s.length, 'infinite');
   assert.equal(s.refill, true);
   assert.equal(s.on_complete, 'restart');
 });

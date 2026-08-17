@@ -30,7 +30,7 @@ import {
 } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
 import { CheckboxGroup } from "./CheckboxGroup"
-import { CountPicker } from "./CountPicker"
+import { CountPicker, type INFINITE } from "./CountPicker"
 import { Modal } from "./Modal"
 import { SelectListbox } from "./SelectListbox"
 
@@ -164,18 +164,19 @@ export function DynModal() {
   // Which binding the Play/Channels dropdowns seed to (a binding's plex_user); "" = none
   // (fall back to the first binding). (decision `2026-08-07-default-profile-per-channel`)
   const [defaultProfile, setDefaultProfile] = useState("")
-  // The LINEUP knobs (decision `2026-08-17-a-lineup-refills-instead-of-ending`). All three
-  // were API-and-YAML-only until now, which meant the answer to "why did the kids' card stop"
-  // lived in a file the owner never opens.
+  // PLAYBACK LENGTH — how many things this pool plays before it stops.
   //
-  // `lineupLength` holds the EFFECTIVE number, seeded from the app default rather than from 0
-  // or null, so the picker can chip that option Default instead of showing a number nobody
-  // chose. Storing it back sparsely is the server's job (`toLineupLength`), same split the
-  // entry counts use.
-  const [lineupLength, setLineupLength] = useState(
-    LINEUP_FALLBACK.length,
-  )
-  const [isRefilling, setIsRefilling] = useState(false)
+  // There is no top-up checkbox any more: top-up is DERIVED from this (owner, 2026-08-17), on
+  // exactly when the length exceeds one queue window. That removes the only combination that
+  // could be wrong — Infinite with top-up off, which silently stops at 12.
+  //
+  // Holds the EFFECTIVE value, seeded from this set's own default rather than from null, so
+  // the picker can chip that option Default instead of showing a number nobody chose. Storing
+  // it back sparsely is the server's job, the same split the entry counts use.
+  const [playbackLength, setPlaybackLength] = useState<
+    number | typeof INFINITE
+  >(LINEUP_FALLBACK.length)
+  const [isPoweringOff, setIsPoweringOff] = useState(false)
   const [onComplete, setOnComplete] = useState("drop")
 
   const knownRef = useRef<string[]>([])
@@ -235,10 +236,15 @@ export function DynModal() {
     setDefaultProfile(
       editing ? editing.default_profile || "" : "",
     )
-    // A channel with no `length:` of its own follows the app default — show THAT number, not
-    // a placeholder, because it is what the pool will actually queue tonight.
-    setLineupLength(editing?.length ?? lineup.length)
-    setIsRefilling(Boolean(editing?.refill))
+    // A pool with no length of its own follows ITS KIND's default — show that number, not a
+    // placeholder, because it is what the pool will actually play tonight. The server sends
+    // the default per set, so the rule that picks it lives in one place.
+    setPlaybackLength(
+      editing?.length ??
+        editing?.length_default ??
+        lineup.length,
+    )
+    setIsPoweringOff(Boolean(editing?.power_off_when_done))
     setOnComplete(
       editing?.on_complete === "restart"
         ? "restart"
@@ -381,15 +387,17 @@ export function DynModal() {
       item_sections: itemSections,
       kind: kind.trim() || "cartoons",
       label: name,
-      // Sent unconditionally, including from a rewatch channel where the controls are hidden:
-      // the values round-trip whatever that channel already stored, so switching a pool to
-      // Rewatch and back cannot quietly lose its refill. The server stores all three SPARSELY
-      // (a length equal to the app default, a `refill: false` and an `on_complete: drop` are
-      // stored by absence), which is what keeps this Save from writing three keys that say
-      // nothing onto every channel it touches.
-      length: lineupLength,
+      // The server stores these SPARSELY — a length equal to THIS KIND's default, an
+      // `on_complete: drop` and a `power_off_when_done: false` are all stored by absence —
+      // which is what keeps this Save from writing keys that say nothing onto every pool it
+      // touches. `refill` is deliberately NOT sent: saving a pool is what migrates it off the
+      // deprecated flag and onto `length: infinite`.
+      //
+      // These ARE sent rather than omitted, which is the other side of the rule above: this
+      // editor renders a control for each, so it owns their values and round-trips them.
+      length: playbackLength,
       on_complete: onComplete,
-      refill: isRefilling,
+      power_off_when_done: isPoweringOff,
       sections: showSections,
       source: "rotation",
     }
@@ -641,57 +649,60 @@ export function DynModal() {
         pool.
       </p>
 
-      {/* THE LINEUP — how much a scan queues, whether it is topped back up, and what a
-          finished show does. All three shipped 2026-08-17 as YAML + `PATCH /api/sets/:id`
-          only (decision `2026-08-17-a-lineup-refills-instead-of-ending`), which left the
-          answer to "why did the kids' card stop mid-evening" in a file the owner never opens.
+      {/* PLAYBACK LENGTH — how many things this pool plays before it stops.
 
-          HIDDEN on a rewatch pool rather than reworded, the same call `batch_stops_at` gets
-          on a queue with no Plex source: `behavior: rewatch` returns exactly one film per
-          scan and honours neither `length` nor `refill`, so every control here would be a
-          knob that does nothing. The note below says so instead of leaving a gap. */}
-      <fieldset
-        className="field flags"
-        hidden={behavior === "rewatch"}
-        id="dyn-lineup"
-      >
-        <legend>Lineup</legend>
+          Replaces the "Items queued ahead" knob that shipped hours earlier. That one named
+          the QUEUE WINDOW, which is an implementation detail nobody sitting on the sofa has
+          an opinion about; the question they actually have is "play some and stop", and the
+          window is now just 12 with top-up behind it (owner, 2026-08-17).
+
+          NOT hidden on a rewatch pool any more — that pool's hardcoded one-film-per-scan is
+          exactly what this control now expresses, and making it configurable was the point
+          ("Movies are gonna be 1 based on _my_ configuration today, but we _should_ be able
+          to change that"). */}
+      <fieldset className="field flags" id="dyn-lineup">
+        <legend>Playback</legend>
         {/* A <div>+<span>, not a <label>: CountPicker is a group of BUTTONS, not an input, so
             a <label> would have no control to name. Same shape the set editor uses. */}
         <div className="field">
-          <span className="fieldlbl">
-            Items queued ahead
-          </span>
+          <span className="fieldlbl">Playback length</span>
           <CountPicker
-            defaultValue={lineup.length}
+            defaultValue={
+              editing?.length_default ?? lineup.length
+            }
+            hasInfinite
             id="dyn-length"
-            label="Items queued ahead"
+            label="Playback length"
             max={lineup.max}
-            onChange={setLineupLength}
+            onChange={setPlaybackLength}
             presets={LINEUP_PRESET_COMMON}
-            value={lineupLength}
+            value={playbackLength}
           />
         </div>
         <p className="subhint" id="dyn-length-hint">
-          {`How many items one scan queues. With top-up off that is the whole sitting — ${lineup.length}
-            is four hours of half-hour shows but only about half an hour of shorts, which is
-            how the Shorts card ran dry mid-evening. With top-up on it becomes the WINDOW:
-            how far ahead to stay.`}
+          {behavior === "rewatch"
+            ? `How many films this pool plays before it stops. Each one is drawn least-watched-first
+               and never twice in the same sitting.`
+            : `How many episodes this pool plays before it stops. Infinite keeps going — it queues
+               ${lineup.length} ahead and tops back up whenever ${lineup.topup_at} or fewer are left, so a
+               card that is still playing never runs out.`}
         </p>
         {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once), so it remounts with
             the modal — same treatment the set editor's flags get. */}
         <Checkbox
-          id="dyn-refill"
-          isChecked={isRefilling}
-          key={`${modalKey}-refill`}
-          label="Keep it topped up — refill instead of ending"
-          onChange={setIsRefilling}
+          id="dyn-power-off"
+          isChecked={isPoweringOff}
+          key={`${modalKey}-poweroff`}
+          label="Turn everything off when it finishes"
+          onChange={setIsPoweringOff}
         />
-        <p className="subhint" id="dyn-refill-hint">
-          {`Tops the lineup back up whenever ${lineup.topup_at} or fewer items are left ahead, so a
-            card that is still playing never runs out. Home Assistant ticks while something
-            is playing; whether the lineup is actually low is judged here, so a tick on a
-            full lineup does nothing. Off, the lineup simply ends when it ends.`}
+        <p className="subhint" id="dyn-power-off-hint">
+          Starting a card wakes the room, so this is the
+          other half of it. QueuePilot announces that the
+          sitting ended and Home Assistant does the turning
+          off — which is what lets the rule check who is
+          still in the room. Nothing happens on an Infinite
+          pool: it never finishes.
         </p>
         <label className="field">
           When a show has nothing left to watch
@@ -725,18 +736,6 @@ export function DynModal() {
           around.
         </p>
       </fieldset>
-      {/* Not a gap where the fieldset was: a rewatch pool's owner should be told these knobs
-          do not reach it, rather than left to wonder where they went. */}
-      <p
-        className="subhint"
-        hidden={behavior !== "rewatch"}
-        id="dyn-lineup-rewatch-note"
-      >
-        A rewatch pool returns a single film per scan, so
-        the lineup length and top-up settings do not apply
-        to it yet.
-      </p>
-
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>
         <p className="subhint">
