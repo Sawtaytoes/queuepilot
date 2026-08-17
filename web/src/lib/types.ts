@@ -519,6 +519,14 @@ export type ProviderVocabulary = {
    * missing slot uses.
    */
   name?: string
+  /**
+   * The glyph on the start affordance: `▶` for Plex, `📖` for Kavita, `🎲` for the board-game
+   * picker. A sibling of `verb`, and for the same reason — a play triangle on a manga queue
+   * is the icon making the claim the word already stopped making.
+   *
+   * Optional on a registry response that predates the field; `PLEX_WORDS` supplies `▶`.
+   */
+  startIcon?: string
 }
 
 /** A provider's own libraries. Ids are provider-scoped and stay bare strings. */
