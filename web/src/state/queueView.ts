@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
+import { isCompleted } from "../lib/tileFace"
 import type { QueueItem } from "../lib/types"
 
 /**
@@ -141,8 +142,12 @@ export function applyFilters(
       return false
     }
     if (f.type && it.type !== f.type) return false
-    if (f.state === "done" && !it.done) return false
-    if (f.state === "active" && it.done) return false
+    // "Completed / fully watched" means what the TILE means by it — the file's flag or a
+    // live-finished entry the next scan will flag — so filtering never hides a tile that is
+    // sitting right there wearing a Completed badge.
+    if (f.state === "done" && !isCompleted(it)) return false
+    if (f.state === "active" && isCompleted(it))
+      return false
     if (f.state === "overrides" && !hasOverrides(it))
       return false
     if (f.state === "weighted" && (it.weight ?? 1) < 2)

@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest"
 
 import {
   byTitle,
+  isCompleted,
   isStartable,
   seLabel,
   startLabel,
@@ -466,5 +467,21 @@ describe("isStartable", () => {
     expect(
       isStartable(item({ resolved: false, type: "show" })),
     ).toBe(false)
+  })
+})
+
+describe("isCompleted", () => {
+  test("the file's flag says Completed, as it always has", () => {
+    expect(isCompleted(item({ done: true }))).toBe(true)
+  })
+
+  test("so does a live-finished entry the last scan never saw", () => {
+    expect(
+      isCompleted(item({ done: false, isFinished: true })),
+    ).toBe(true)
+  })
+
+  test("an entry with something left to play is neither", () => {
+    expect(isCompleted(item({ done: false }))).toBe(false)
   })
 })

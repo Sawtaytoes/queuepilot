@@ -5,13 +5,14 @@
 // it — pushing a playQueue at the Shield on Plex, or returning a URL to open on a pull
 // provider like Kavita. Nothing in this file may branch on which backend it is talking to.
 //
-// The queue write-side (queues.js markDone/clearDone/sweepCompleted) stays here and stays
-// provider-neutral: it is about entries in the shared queues.yaml recipe store being
-// finished, not about Plex.
+// The queue write-side (markDone/clearDone/sweepCompleted) is provider-neutral — it is about
+// entries in the shared queues.yaml recipe store being finished, not about Plex — and it now
+// lives in finished.js, which runs it from here on a session START and again when PLAYBACK
+// ENDS. This file still owns WHEN a scan happens; it no longer owns the rule.
 import * as routing from './engine/routing.js';
+import * as finished from './finished.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
-import * as queues from './queues.js';
 import * as profiles from './profiles.js';
 import * as adb from './adb.js';
 import * as playback from './playback.js';
@@ -281,20 +282,11 @@ export async function startSession(
     // D4 write-side: persist finished + revive stale-done + TTL sweep. This stays ABOVE the
     // seam on purpose — it is about entries in the shared queues.yaml recipe store being
     // finished, not about Plex, so a second provider reuses it verbatim.
-    if (!cfg.reel) {
-      if (Array.isArray(res.revived) && res.revived.length) {
-        await queues.clearDone(setName, res.revived);
-      }
-      const newly = res.newlyDone || [];
-      if (newly.length && !cfg.keep_completed && !cfg.reel) {
-        await queues.markDone(setName, newly);
-      }
-      await queues.sweepCompleted(setName, {
-        keepCompleted: Boolean(cfg.keep_completed),
-        reel: Boolean(cfg.reel),
-        removeCompletedAfter: cfg.remove_completed_after,
-      });
-    }
+    //
+    // It now lives in finished.js because a session START is no longer the only thing that
+    // runs it: the end of PLAYBACK reconciles the same set the same way, so the file agrees
+    // with Plex without waiting for the next scan. One copy, so the two cannot drift.
+    await finished.applyQueueWriteSide(setName, cfg, res);
     if (res.done?.length) console.log(`[session] ${setName} finished (kept): ${res.done}`);
     if (res.unresolved?.length) console.log(`[session] ${setName} unresolved: ${res.unresolved}`);
     if (!res.play?.length) {

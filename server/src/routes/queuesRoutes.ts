@@ -2,7 +2,10 @@ import { Hono } from 'hono';
 import { statSync } from 'node:fs';
 import * as cache from '../cache.js';
 import { QUEUES_PATH } from '../config.js';
+import { inProgress } from '../engine/resolve.js';
+import * as routing from '../engine/routing.js';
 import { toWeight } from '../engine/weight.js';
+import * as finished from '../finished.js';
 import * as plex from '../plex.js';
 import type { AccountScope } from '../plex.js';
 import * as providerTiles from '../providers/tiles.js';
@@ -56,7 +59,74 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     // A finished-but-kept entry (Python tagged it done); the grid greys it and the
     // "Remove all completed" button targets these. False for every plain entry.
     done: Boolean(e.done),
+    // The same thing judged LIVE rather than read off the file — see `tagFinishedMovies`.
+    // Overwritten there; false here so the field is never absent on a tile.
+    isFinished: false,
   };
+}
+
+/** A tile as the pass below mutates it: the `queueTile` fields it reads and writes. */
+type FinishableTile = ReturnType<typeof queueTile> & {
+  type?: string | null;
+  ratingKey?: string | null;
+  partiallyWatched?: boolean;
+  viewOffset?: number;
+  duration?: number;
+};
+
+/**
+ * Tag the MOVIE tiles the next scan would find nothing left to play in.
+ *
+ * `done` is only ever as fresh as the last scan (a session start, or now the end of
+ * playback), so on its own the grid cannot tell you about a film you finished a minute ago —
+ * or one watched somewhere QueuePilot never saw, on a phone. This says what the engine WOULD
+ * say, evaluated now, and it is deliberately the engine's own rule, not a second opinion:
+ * `resolveMember`'s movie branch is `keepMovie = !watched.has(rk)`, un-dropped when the film
+ * is actually in progress (`resolve.inProgress`) — so this is `watched && !inProgress`.
+ *
+ * Only movies. A show or collection already reports "nothing left" through `nextEp: null`,
+ * which the tile face turns into "All watched"
+ * (decision 2026-08-15-a-done-entry-revives-when-there-is-something-to-play), and a series'
+ * remaining-episode rules (specials, start floors, batch stops) live in the resolver — a
+ * cheap re-implementation here would be a SECOND rule that could disagree with the flag.
+ *
+ * Two reads back this: the set's watched history, memoized per accounts×sections
+ * (`finished.watchedFor`), and one batched view-state call for the watched candidates only,
+ * because a movie tile's cached viewCount can be up to 7 days old. The view state is read
+ * with the ADMIN token, exactly like every other watch-state field on this endpoint.
+ */
+async function tagFinishedMovies(
+  rows: readonly { setId: string; tile: FinishableTile }[],
+): Promise<void> {
+  const engineReg = routing.loadSets();
+  if (!engineReg) return;
+  const movies = rows.filter((r) => r.tile.type === 'movie' && r.tile.ratingKey);
+  if (!movies.length) return;
+
+  const setIds = [...new Set(movies.map((r) => r.setId))];
+  const watchedBySet = new Map<string, Set<string>>();
+  await Promise.all(setIds.map(async (id) => {
+    const cfg = engineReg.sets[id];
+    if (!cfg) return;
+    watchedBySet.set(id, await finished.watchedFor(cfg, routing.bindingFor(cfg, null)));
+  }));
+
+  const isWatched = (r: { setId: string; tile: FinishableTile }): boolean =>
+    Boolean(watchedBySet.get(r.setId)?.has(String(r.tile.ratingKey)));
+  const candidates = movies.filter(isWatched);
+  if (!candidates.length) return;
+
+  const live = await plex.viewStates(candidates.map((r) => String(r.tile.ratingKey)));
+  for (const { tile } of candidates) {
+    const state = live.get(String(tile.ratingKey));
+    // No live answer (Plex hiccup, or the item is gone): keep what the tile already said
+    // rather than promote a possibly-stale cached view state into a Completed badge.
+    if (!state) continue;
+    tile.partiallyWatched = inProgress(state.viewOffset, state.viewCount);
+    tile.viewOffset = state.viewOffset;
+    tile.duration = state.duration;
+    tile.isFinished = !tile.partiallyWatched;
+  }
 }
 
 /**
@@ -190,6 +260,9 @@ export function queuesRoutes(): Hono {
         const core = await tiles.resolveTile(s.sections, e.value, startOf(e), scopes.get(s.requires_profile || '') ?? {});
         return { setId: s.id, tile: queueTile(e, core) };
       });
+      // What the next scan would call finished, said now — one pass over the flat list, so
+      // the watched-history reads and the view-state call are shared across every set.
+      await tagFinishedMovies(resolvedItems);
       // Regroup by set, preserving the flat list's order (set-then-entry order).
       for (const { setId, tile } of resolvedItems) result[setId]?.items.push(tile);
 

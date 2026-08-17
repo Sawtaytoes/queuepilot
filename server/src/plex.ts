@@ -818,6 +818,50 @@ export async function resolveValue(
   return null;
 }
 
+/** One item's live watch state — the three fields a movie tile's badges are computed from. */
+export interface ViewState {
+  viewCount: number;
+  viewOffset: number;
+  duration: number;
+}
+
+/**
+ * Live watch state for MANY items in ONE call — Plex takes a comma-separated ratingKey list
+ * on `/library/metadata/`, so N movie tiles cost one request, not N.
+ *
+ * Deliberately UNCACHED, which is the whole point: `resolveTile` reads a movie's viewCount
+ * off `resolveTitle`, and that is the 7-day `resolved` cache, so a title-string entry's
+ * watch state can be a week stale. Nothing busts it either — the now-playing invalidation
+ * (sse.js) drops a SHOW's leaves and knows nothing about movies. Every caller here is asking
+ * precisely because it must not be told last week's answer.
+ *
+ * `{}` on a failure rather than a throw: a missing view state means the caller falls back to
+ * what the tile already said, never to a wrong badge.
+ */
+export async function viewStates(
+  ratingKeys: readonly (string | number)[],
+  token: string | null = null,
+): Promise<Map<string, ViewState>> {
+  const out = new Map<string, ViewState>();
+  const keys = [...new Set(ratingKeys.map(String).filter(Boolean))];
+  if (!keys.length) return out;
+  try {
+    const mc = container(await plexGet(`/library/metadata/${keys.join(',')}`, token));
+    for (const md of mc.Metadata || []) {
+      // viewCount is OMITTED at 0 (see posterFields) — a missing count is unwatched, never
+      // "unknown", which is what makes `Number(...) || 0` the right coercion here.
+      out.set(String(md.ratingKey), {
+        viewCount: Number(md.viewCount) || 0,
+        viewOffset: Number(md.viewOffset) || 0,
+        duration: Number(md.duration) || 0,
+      });
+    }
+  } catch {
+    /* the caller keeps whatever the tile already carried */
+  }
+  return out;
+}
+
 // A manual START floor {season, episode}: `e` is at-or-after it (so it's eligible to play).
 // Earlier episodes are skipped from the pick but never marked watched. No start => always.
 // Season defaults to 1 (single-season anime stores the sole season).

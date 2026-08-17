@@ -118,6 +118,15 @@ export type QueueItem = {
   start: StartPoint | null
   done: boolean
   /**
+   * The same thing `done` records, judged LIVE instead of read off `queues.yaml`: the next
+   * scan would find nothing left to play here. `done` is only as fresh as the last scan, so
+   * this is what makes a film you finished minutes ago — or watched on your phone, where
+   * QueuePilot never saw it — read as Completed without waiting for the next card tap.
+   * Movies only today (a finished series says so through `nextEp: null`); absent on the
+   * skeleton response.
+   */
+  isFinished?: boolean
+  /**
    * The next-up episode (or the movie itself) is mid-playback: a Plex viewOffset > 0 and
    * unwatched, the same in-progress state the engine resumes from. Drives the tile's
    * "In Progress" badge, which reads over a stale "Completed".
