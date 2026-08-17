@@ -123,6 +123,19 @@ export function ChannelsView({
   const profileValueNow = channel.has_explicit_profiles
     ? `${channel.id}::${binding.plex_user || ""}`
     : channel.id
+  /**
+   * A pool is locked to ONE account, so there is normally nothing to pick here either.
+   *
+   * Same rule the Play landing row got on 2026-08-17, and it has to be the same rule: this
+   * page and that row are two views of one pool, and a chevron on one but not the other says
+   * they disagree about whether the account is a choice. It is not — it is a fact, so it
+   * prints as text beside the pool's name.
+   * (decision `2026-08-17-a-filtered-pool-is-locked-to-one-account`)
+   */
+  const hasProfileChoice = profileOptions.length > 1
+  const onlyAccount = channel.has_explicit_profiles
+    ? (channel.profiles || [])[0]?.plex_user || null
+    : null
 
   return (
     <main
@@ -183,26 +196,32 @@ export function ChannelsView({
             value={channel.id}
           />
         </label>
-        <label>
-          Profile
-          <SelectListbox
-            id="chprofile"
-            key={channel.id}
-            label="Profile"
-            onChange={(v) => {
-              const i = v.indexOf("::")
+        {hasProfileChoice ? (
+          <label>
+            Profile
+            <SelectListbox
+              id="chprofile"
+              key={channel.id}
+              label="Profile"
+              onChange={(v) => {
+                const i = v.indexOf("::")
 
-              if (i >= 0)
-                setChannelSelection(
-                  v.slice(0, i),
-                  v.slice(i + 2) || null,
-                )
-              else setChannelSelection(v, null)
-            }}
-            options={profileOptions}
-            value={profileValueNow}
-          />
-        </label>
+                if (i >= 0)
+                  setChannelSelection(
+                    v.slice(0, i),
+                    v.slice(i + 2) || null,
+                  )
+                else setChannelSelection(v, null)
+              }}
+              options={profileOptions}
+              value={profileValueNow}
+            />
+          </label>
+        ) : onlyAccount ? (
+          <span className="chaccount" id="chprofile-fixed">
+            Plays as <strong>{onlyAccount}</strong>
+          </span>
+        ) : null}
         {isPullSet(channel) ? (
           <OpenQueueButton set={channel} />
         ) : (

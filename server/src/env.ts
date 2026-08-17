@@ -300,6 +300,12 @@ export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
 export const PROVIDERS_PATH = str('PROVIDERS_PATH', '/config/providers.yaml');
 export const PROVIDERS_SECRETS_PATH = str('PROVIDERS_SECRETS_PATH', '/config/providers.secrets.yaml');
 
+// QueuePilot GROUPS — who is watching, and which provider accounts each of them IS.
+// Plaintext and hand-editable like providers.yaml, and for the same reason: it holds names,
+// never credentials. `groups.ts`, deliberately NOT `profiles.ts` — that one is Plex's, and
+// the whole reason this concept is called a group is that PROFILE was already taken.
+export const GROUPS_PATH = str('GROUPS_PATH', '/config/groups.yaml');
+
 // Kavita's deploy-time base URL. Named to match the root .env the rest of the fleet already
 // uses (KAVITA_API_SERVER_URL / KAVITA_API_KEY) so one variable feeds every consumer. The
 // KEY is deliberately absent from this module — secrets resolve through providers/config.js,

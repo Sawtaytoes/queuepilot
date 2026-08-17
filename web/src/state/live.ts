@@ -4,6 +4,7 @@ import {
   NOT_MODIFIED,
 } from "../lib/api"
 import type {
+  GroupsResponse,
   NowState,
   QueuesResponse,
   SetsResponse,
@@ -123,6 +124,13 @@ export async function liveRefresh({
           ? api<QueuesResponse>("GET", "/api/queues")
           : apiConditional<QueuesResponse>("/api/queues"),
       (data) => setState({ data }),
+    ),
+    // Groups are watched on disk like the other two config files, so editing
+    // `groups.yaml` over SMB has to move the picker at the top of the app without an
+    // F5 — the one control that would otherwise need one.
+    refreshOne<GroupsResponse>(
+      () => api<GroupsResponse>("GET", "/api/groups"),
+      (groups) => setState({ groups }),
     ),
   ])
 

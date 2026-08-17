@@ -1836,7 +1836,8 @@ body.queue-view #tools {
 #startmodal,
 #setmodal,
 #dynmodal,
-#entrymodal {
+#entrymodal,
+#groupsmodal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
   border: 1px solid var(--color-border-default);
@@ -1863,6 +1864,11 @@ body.queue-view #tools {
 #entrymodal {
   width: min(460px, 92vw);
 }
+/* Wider than the rest: it is a two-pane settings panel (the list of groups beside the one
+   being edited), not a single form. */
+#groupsmodal {
+  width: min(780px, 95vw);
+}
 /* The panel's own primary button (Done) — the shared rule above only paints
    `[type="submit"]`, and this form has none: every field writes on change. */
 #entrymodal .modalbtns button.primary {
@@ -1876,13 +1882,15 @@ body.queue-view #tools {
 #startmodal form,
 #setmodal form,
 #dynmodal form,
-#entrymodal form {
+#entrymodal form,
+#groupsmodal form {
   position: relative;
 }
 #startmodal h3,
 #setmodal h3,
 #dynmodal h3,
-#entrymodal h3 {
+#entrymodal h3,
+#groupsmodal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
 }
@@ -2079,7 +2087,8 @@ a.playbtn {
 #startmodal .modalbtns,
 #setmodal .modalbtns,
 #dynmodal .modalbtns,
-#entrymodal .modalbtns {
+#entrymodal .modalbtns,
+#groupsmodal .modalbtns {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -2100,10 +2109,28 @@ a.playbtn {
 #dynmodal .modalbtns .spacer {
   flex: 1;
 }
+/* Delete stays hard left, Close + Save sit hard right — the same left/right split the other
+   modals get from an explicit `.spacer` child, done here with `margin-left: auto` on the
+   first of the right-hand pair so the footer needs no filler element. */
+#groupsmodal .modalbtns {
+  justify-content: flex-end;
+}
+#groupsmodal .modalbtns #groupdelete {
+  margin-right: auto;
+}
+/* This form's confirm is a click handler, not a `[type=submit]`, so the shared primary rule
+   (which paints `[type="submit"]`) does not reach it — same reason `#entrymodal` restates it. */
+#groupsmodal .modalbtns button.primary {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+  border: none;
+  font-weight: 600;
+}
 #startmodal .modalbtns button,
 #setmodal .modalbtns button,
 #dynmodal .modalbtns button,
-#entrymodal .modalbtns button {
+#entrymodal .modalbtns button,
+#groupsmodal .modalbtns button {
   border-radius: 8px;
   padding: 8px 16px;
   font: inherit;
@@ -2121,7 +2148,8 @@ a.playbtn {
   color: var(--color-intent-danger-on-solid);
   border: none;
 }
-#dynmodal .modalbtns .danger {
+#dynmodal .modalbtns .danger,
+#groupsmodal .modalbtns .danger {
   background: var(--color-intent-danger-solid);
   color: var(--color-intent-danger-on-solid);
   border: none;
@@ -2206,6 +2234,93 @@ html.modal-open {
 #channels:not([hidden]) {
   display: block;
 }
+/* WHO IS WATCHING — the group chips, and the provider filter under them.
+
+   Spans the whole grid: `#play` is a 3-column auto-fit grid of the play groups, and this bar
+   is a header for all of them, not a fourth column. `1 / -1` is what says that; without it
+   the bar becomes a column and the groups reflow around it. */
+.groupbar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin: 0 0 4px;
+}
+.groupchips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* The provider row is a second, quieter group on the same line where there is room, and
+   drops under the groups when there is not. `margin-left: auto` rather than a fixed
+   position so it hugs the right edge on a wide viewport and simply wraps on a narrow one. */
+.providerchips {
+  margin-left: auto;
+}
+.groupchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  background: var(--color-surface-raised);
+  color: var(--color-content-secondary);
+  font-size: 0.92rem;
+  font-weight: 500;
+  line-height: 1.5;
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard),
+    color var(--duration-fast) var(--ease-standard);
+}
+.groupchip:hover {
+  border-color: var(--color-border-strong);
+  color: var(--color-content-primary);
+}
+/* The SELECTED chip is `aria-current="page"`, not a class. The attribute is the fact — this
+   is the page you are on — and styling the fact keeps the two from drifting apart, which is
+   how a selected-looking chip that is not actually current gets shipped. */
+.groupchip[aria-current="page"] {
+  border-color: var(--color-intent-accent-border);
+  background: var(--color-intent-accent-surface);
+  color: var(--color-intent-accent-content);
+}
+/* A count of zero is still shown: "Kavita: 0" is the answer to "where did my stuff go", and
+   hiding it turns a filtered-to-nothing group into an unexplained empty page. */
+.groupcount {
+  min-width: 1.35em;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--color-surface-sunken);
+  color: var(--color-content-tertiary);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+.groupchip[aria-current="page"] .groupcount {
+  background: var(--color-surface-raised);
+  color: var(--color-content-secondary);
+}
+
+/* "Plays as Younger Kids" — what replaced the pool editor's single-option Profile picker.
+   Styled as the label text beside it, not as a control, because that is what it now is. */
+.chaccount {
+  color: var(--color-content-secondary);
+  font-size: 0.95rem;
+  white-space: nowrap;
+}
+.chaccount strong {
+  color: var(--color-content-primary);
+  font-weight: 600;
+}
+
 .playgroup {
   min-width: 0;
   margin: 0 0 10px;
@@ -2562,6 +2677,15 @@ header h1 input {
     grid-template-columns: 1fr;
     gap: 18px;
   } /* one column in the Narrow View */
+  /* The provider row stops hugging the right edge and takes its own line — at this width
+     `margin-left: auto` would leave one chip stranded across the page from the others. */
+  .providerchips {
+    margin-left: 0;
+    width: 100%;
+  }
+  .grouplayout {
+    grid-template-columns: 1fr;
+  }
   .playrow {
     flex-wrap: wrap;
   }
@@ -3096,4 +3220,150 @@ ul.grid.posters .tile .badges .epstag {
 }
 #entrymodal .fieldrow button:hover {
   border-color: var(--color-border-strong);
+}
+
+/* --- the Groups editor ------------------------------------------------------------- */
+/* Two panes: the list of groups (which doubles as the reorder control) beside the one being
+   edited. Collapses to one column in the Narrow View — a 220px sidebar next to a form is
+   two things that each want the whole width. */
+.grouplayout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+.grouplist ul {
+  list-style: none;
+  margin: 0 0 10px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.grouplist li {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.grouppick {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--color-content-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.grouppick:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-content-primary);
+}
+.grouppick[aria-current="true"] {
+  border-color: var(--color-intent-accent-border);
+  background: var(--color-intent-accent-surface);
+  color: var(--color-intent-accent-content);
+}
+/* Up/down live OUTSIDE the select button, or clicking a reorder arrow would also change
+   which group the form is editing — two actions on one press. */
+.groupmove {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.groupmove button {
+  padding: 0 5px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 5px;
+  background: var(--color-surface-raised);
+  color: var(--color-content-tertiary);
+  font-size: 0.62rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.groupmove button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.groupform fieldset {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+}
+.groupform legend {
+  padding: 0 6px;
+  color: var(--color-content-secondary);
+  font-size: 0.88rem;
+}
+.groupform .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.groupform .field input[type="text"] {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+  color: var(--color-content-primary);
+  font: inherit;
+}
+/* CheckboxGroup ships a bare `.libs` div; every other consumer grids it under its own modal
+   id, so this one has to as well or the account ticks run together as one paragraph. */
+.groupform .libs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+}
+.groupform .libs label {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.9rem;
+}
+.groupform .hint {
+  margin: 6px 0 0;
+  color: var(--color-content-muted);
+  font-size: 0.82rem;
+}
+/* The membership list is the tallest thing in the panel and the only one that grows with the
+   library, so it scrolls rather than the whole modal. */
+.groupsets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 260px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.groupsets label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.groupsets input:disabled + span {
+  color: var(--color-content-muted);
+}
+/* Why a tick is locked. Quiet, because it is an explanation and not a warning. */
+.derived {
+  color: var(--color-content-muted);
+  font-size: 0.78rem;
+  font-style: normal;
+}
+/* The chip that opens all this. Quieter than a group — it is not a place you can be. */
+.groupedit {
+  border-style: dashed;
+  color: var(--color-content-tertiary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 500;
 }

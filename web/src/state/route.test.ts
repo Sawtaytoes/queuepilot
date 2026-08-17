@@ -3,17 +3,48 @@ import { describe, expect, test } from "vitest"
 import { labelForPath, parsePath } from "./parsePath"
 
 /**
- * The four routes are a settled IA — Play is the landing and the two configurators
+ * The routes are a settled IA — Play is the landing and the two configurators
  * hang off it (decision `2026-07-21-queues-vs-channels-taxonomy-play-first-ia`) —
  * and they are real paths as of 2026-08-16, not `#/…`
  * (decision `2026-08-16-routing-is-paths-not-hashes`). The e2e suites navigate by
  * `page.goto()`ing these paths, which only works because the server answers them
  * with index.html.
+ *
+ * `/g/<group>` joined them on 2026-08-17. It is the LANDING with a filter, not a fifth
+ * view, which is why it parses to `{view: "play"}` carrying a group — and why `/` now
+ * reports `group: null` rather than omitting the key. Everything else stays
+ * group-agnostic: a queue has one canonical address even when three groups hold it.
  */
 
 describe("parsePath", () => {
-  test("the root path is PLAY, the landing", () => {
-    expect(parsePath("/")).toEqual({ view: "play" })
+  test("the root path is PLAY, the landing, with no group", () => {
+    expect(parsePath("/")).toEqual({
+      group: null,
+      view: "play",
+    })
+  })
+
+  test("/g/<group> is the landing filtered, id-decoded", () => {
+    expect(parsePath("/g/bob")).toEqual({
+      group: "bob",
+      view: "play",
+    })
+    expect(parsePath("/g/bob%20%26%20alice")).toEqual({
+      group: "bob & alice",
+      view: "play",
+    })
+    // Trailing slash is the same page, like every other route.
+    expect(parsePath("/g/bob/")).toEqual({
+      group: "bob",
+      view: "play",
+    })
+  })
+
+  test("a bare /g is the unfiltered landing, not an empty group", () => {
+    expect(parsePath("/g")).toEqual({
+      group: null,
+      view: "play",
+    })
   })
 
   test("/queues is the shelf configurator", () => {
@@ -65,7 +96,10 @@ describe("parsePath", () => {
   })
 
   test("an unknown path falls back to PLAY rather than a blank page", () => {
-    expect(parsePath("/nope")).toEqual({ view: "play" })
+    expect(parsePath("/nope")).toEqual({
+      group: null,
+      view: "play",
+    })
   })
 })
 

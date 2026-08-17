@@ -19,6 +19,7 @@ import type { SSEStreamingApi } from 'hono/streaming';
 import { watch } from 'node:fs';
 import path from 'node:path';
 import { QUEUES_PATH } from './config.js';
+import { GROUPS_FILE } from './groups.js';
 import * as cache from './cache.js';
 import { errMessage } from './errors.js';
 import * as mqttc from './mqttc.js';
@@ -164,7 +165,10 @@ export function startLiveUpdates(): void {
   // debounce bursts.
   let timer: NodeJS.Timeout | null = null;
   const byDir = new Map<string, Set<string>>(); // dir -> filenames we care about (may share a dir)
-  for (const p of [QUEUES_PATH, sets.SETS_PATH]) {
+  // groups.yaml joins the watch list: it is hand-edited over SMB exactly like the other
+  // two, and a group added there has to reach an open tab the same way a renamed queue
+  // does — otherwise the picker at the top of the app is the one thing that needs an F5.
+  for (const p of [QUEUES_PATH, sets.SETS_PATH, GROUPS_FILE]) {
     const d = path.dirname(p);
     if (!byDir.has(d)) byDir.set(d, new Set());
     byDir.get(d)?.add(path.basename(p));
