@@ -89,6 +89,14 @@ export function flipPaint(
  * AFTER, then releases it — so siblings glide instead of snapping. `dragEl` is
  * skipped: it is following the pointer and must not be transformed twice.
  */
+/**
+ * The frame callback that ends each tile's FLIP, so a re-entrant `flipMove` can cancel it.
+ *
+ * Keyed by element in a WeakMap rather than held on the node: a tile removed mid-drag should
+ * not be kept alive by its own bookkeeping.
+ */
+const settles = new WeakMap<HTMLElement, number>()
+
 export function flipMove(
   items: HTMLElement[],
   mutate: () => void,
@@ -114,13 +122,29 @@ export function flipMove(
 
     if (!dx && !dy) continue
 
+    // CANCEL this tile's pending settle before starting a new one.
+    //
+    // Without it, a drag that repositions again mid-settle leaves the OLD frame callback armed
+    // — and when it fires it clears the transform the NEW flipMove just set, snapping the tile
+    // to its layout box with no transition. Measured on one deliberate drag across a Cards
+    // grid: 20 repositions in about half a second, each starting a fresh 180ms glide on ~7
+    // tiles, so at any moment several stale cleanups were queued against live transforms. That
+    // is the "flashes them around the screen" the owner reported.
+    const pending = settles.get(el)
+
+    if (pending != null) cancelAnimationFrame(pending)
+
     el.style.transition = "none"
     el.style.transform = `translate(${dx}px, ${dy}px)`
 
-    requestAnimationFrame(() => {
-      el.style.transition = ""
-      el.style.transform = ""
-    })
+    settles.set(
+      el,
+      requestAnimationFrame(() => {
+        settles.delete(el)
+        el.style.transition = ""
+        el.style.transform = ""
+      }),
+    )
   }
 }
 

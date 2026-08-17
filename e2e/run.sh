@@ -53,7 +53,7 @@ echo "=== headers-test ==="   # browserless; asserts compression + cache headers
 "$TSX" e2e/headers-test.ts || TOTAL=$((TOTAL+1))
 echo "=== perf-queues ==="   # browserless; stub Plex + broker, asserts the cache/ETag (Phase B)
 "$TSX" e2e/perf-queues.ts || TOTAL=$((TOTAL+1))
-for t in narrow-scroll-test kbd-undo-test ui-test homedrag-test channels-test sse-test; do
+for t in narrow-scroll-test drag-stability-test kbd-undo-test ui-test homedrag-test channels-test sse-test; do
   echo "=== $t ==="
   # Fresh server + files PER SUITE — stale lock dirs / shared servers made runs flaky.
   rm -rf /tmp/sets-ui.yaml /tmp/sets-ui.yaml.lock /tmp/queues-ui.yaml.lock /tmp/.history.json

@@ -45,6 +45,10 @@ type Press = {
   isDragging: boolean
   isArmed: boolean
   holdTimer?: ReturnType<typeof setTimeout>
+  /** The latest pointer position, read once per frame instead of once per event. */
+  at?: { x: number; y: number }
+  /** The pending reposition frame, so a burst of moves schedules exactly one. */
+  frame?: number
   /** Where React last rendered this node, so it can be put back before setState. */
   parent: HTMLElement | null
   nextSibling: ChildNode | null
@@ -89,12 +93,20 @@ export function useGridDrag(
       if (isChannel || !press) return
 
       press.isDragging = true
+      // BEFORE the dragging class lands: the class lifts the tile (scale/rotate on .thumb) but
+      // not its slot, and capturing first keeps the snapshot free of any of the drag's own
+      // styling.
+      captureSlots()
       press.card.classList.add("dragging")
       document.body.classList.add("gdrag") // enables the sibling glide transition
     }
 
     const endPress = () => {
       if (press?.holdTimer) clearTimeout(press.holdTimer)
+      // Drop the queued reposition too, or a frame that lands after the pointer is up moves
+      // the tile once more and the saved order is not the one on screen.
+      if (press?.frame != null)
+        cancelAnimationFrame(press.frame)
 
       document.body.classList.remove("gdrag")
       window.removeEventListener("pointermove", onMove)
@@ -132,38 +144,85 @@ export function useGridDrag(
 
       e.preventDefault()
 
-      // Wrapped grid: drop next to the tile whose CENTER is nearest the pointer, on
-      // whichever side the pointer is. The old "first tile whose midpoint is right
-      // of the cursor" scan fell through to the end whenever you dropped on the
-      // right side of a row, dumping the poster at the bottom.
-      const tiles = [
+      // COALESCE to one reposition per animation frame. `pointermove` fires far faster than
+      // the screen repaints — a deliberate half-second drag across the Cards grid measured 20
+      // reorders, each starting a 180ms glide on ~7 tiles while the previous glides were still
+      // running. The gesture cannot look settled if it is restarted more often than it is
+      // drawn, so the handler now only records where the pointer IS and the work happens once
+      // per frame.
+      press.at = { x: e.clientX, y: e.clientY }
+
+      if (press.frame != null) return
+
+      press.frame = requestAnimationFrame(() => {
+        if (press) press.frame = undefined
+        reposition()
+      })
+    }
+
+    /**
+     * The grid's SLOTS, captured once when the drag arms.
+     *
+     * This is the fix for the ping-pong, and the reason a live measurement cannot work. The
+     * dragged tile stays IN FLOW (that is deliberate — decision
+     * `2026-07-21-ui-interaction-states-standard` keeps the drag transform-only so scroll
+     * anchoring never reflows the page). So wherever it is placed, every sibling after it
+     * shifts by one slot — which moves the very tiles the next decision is measured against.
+     * Insert at 2, the neighbours slide, the nearest tile is now a different one, insert back
+     * at 0, they slide back. Instrumented on a two-row Cards drag: 0-2-0-2-0-2-3-2, twenty-two
+     * direction reversals in twenty-three steps.
+     *
+     * The SLOTS, though, do not move. Reordering the same N tiles leaves the same N cells in
+     * the same places — only which tile sits in which cell changes. So the pointer is compared
+     * against geometry that the drag cannot disturb, and the loop is gone.
+     */
+    let slots: DOMRect[] = []
+
+    const captureSlots = () => {
+      slots = [
+        ...grid!.querySelectorAll<HTMLElement>("li.tile"),
+      ].map((t) => t.getBoundingClientRect())
+    }
+
+    /** Move the dragged tile to wherever the latest pointer position says it belongs. */
+    function reposition() {
+      if (!press?.isDragging || !press.at || !slots.length)
+        return
+
+      const { x: px, y: py } = press.at
+
+      // Which slot is the pointer in? Nearest CENTRE, measured in slot widths and heights
+      // rather than pixels: a Posters tile is roughly square but a Cards tile is 438 x 136, so
+      // a raw hypot is three times more sensitive horizontally and aiming at the row above
+      // barely registers against a neighbour in the same row.
+      let index = 0
+      let bestDist = Infinity
+
+      for (let i = 0; i < slots.length; i += 1) {
+        const r = slots[i]!
+        const cx = r.left + r.width / 2
+        const cy = r.top + r.height / 2
+        const d = Math.hypot(
+          (px - cx) / Math.max(1, r.width),
+          (py - cy) / Math.max(1, r.height),
+        )
+
+        if (d < bestDist) {
+          bestDist = d
+          // Past the slot's own centre horizontally means the tile belongs AFTER it.
+          index = px > cx ? i + 1 : i
+        }
+      }
+
+      // `index` is where the card should sit among ALL tiles, so it addresses the sibling list
+      // directly: inserting before the Nth sibling puts the card at overall position N,
+      // wherever it happens to be right now.
+      const others = [
         ...grid!.querySelectorAll<HTMLElement>(
           "li.tile:not(.dragging)",
         ),
       ]
-
-      if (!tiles.length) return
-
-      let best: HTMLElement | null = null
-      let bestDist = Infinity
-      let isAfter = false
-
-      for (const t of tiles) {
-        const r = t.getBoundingClientRect()
-        const cx = r.left + r.width / 2
-        const cy = r.top + r.height / 2
-        const d = Math.hypot(e.clientX - cx, e.clientY - cy)
-
-        if (d < bestDist) {
-          bestDist = d
-          best = t
-          isAfter = e.clientX > cx
-        }
-      }
-
-      if (!best) return
-
-      const ref = isAfter ? best.nextElementSibling : best
+      const ref = others[index] ?? null
 
       if (
         ref === press.card ||
@@ -172,7 +231,7 @@ export function useGridDrag(
         return
 
       flipMove(
-        tiles,
+        others,
         () => grid!.insertBefore(press!.card, ref),
         press.card,
       )

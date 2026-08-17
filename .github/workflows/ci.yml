@@ -315,6 +315,33 @@ jobs:
           kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           exit $rc
 
+      # Drag stability — ALWAYS runs, for the same reason as the narrow-view gate: the
+      # PLEX_TOKEN-gated browser suites are skipped on every PR, and `homedrag-test` /
+      # `ui-test` live there. Neither would have caught this anyway.
+      #
+      # Every symptom of the bug is in the TIME domain. A janky drag and a smooth one produce
+      # the same final order, the same saved YAML and the same still screenshot — what differs
+      # is the PATH the tile takes, so this records its index over time and counts direction
+      # reversals. Against the unfixed code: 17 reversals, 22 re-inserts, 196 style writes for
+      # one drag. After: 0, 2 and 16.
+      #
+      # Reuses the chromium the narrow-view step installed — keep it AFTER that step.
+      - name: Drag stability (browser, no Plex needed)
+        env:
+          QUEUES_PATH: /tmp/queues-drag.yaml
+          SETS_PATH: /tmp/sets-drag.yaml
+          HISTORY_PATH: /tmp/.history-drag.json
+          WEB_PORT: '18777'
+        run: |
+          unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
+          cp e2e/fixtures/queues.fixture.yaml /tmp/queues-drag.yaml
+          cp e2e/fixtures/sets.fixture.yaml /tmp/sets-drag.yaml
+          "$TSX" server/src/index.ts >/tmp/drag-e2e.log 2>&1 &
+          SRV=$!; sleep 1.5
+          "$TSX" e2e/drag-stability-test.ts; rc=$?
+          kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
+          exit $rc
+
       # Path routing: the client router and the server's SPA fallback, pinned together.
       # ALWAYS runs, like the narrow-view gate above and for the same reason — the
       # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression

@@ -267,6 +267,17 @@ export interface Page {
   ): Promise<R>;
   evaluate<R>(fn: () => R | Promise<R>): Promise<R>;
   evaluate<R, A>(fn: (arg: A) => R | Promise<R>, arg: A): Promise<R>;
+  /**
+   * The STRING form, which Playwright has always accepted and which some suites need.
+   *
+   * A function passed here is serialized by tsx first, and tsx's esbuild runs with
+   * `keepNames` — so any named inner helper compiles to a body referencing `__name`, which
+   * does not exist in the page and throws `ReferenceError: __name is not defined` at
+   * evaluate time. A source string sidesteps the transform entirely. Returns `unknown`
+   * rather than a generic, because a string carries no type for the compiler to infer from
+   * and pretending otherwise would be worse than an explicit parse at the call site.
+   */
+  evaluate(expression: string): Promise<unknown>;
 
   keyboard: Keyboard;
   mouse: Mouse;
