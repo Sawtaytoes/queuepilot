@@ -28,6 +28,7 @@
 export type Route =
   | { view: "play"; group: string | null }
   | { view: "queues" }
+  | { view: "pending" }
   | { view: "queue"; id: string }
   | { view: "channels"; id: string | null }
 
@@ -63,6 +64,8 @@ export function parsePath(pathname: string): Route {
     }
 
   if (path.startsWith("/queues")) return { view: "queues" }
+  if (path.startsWith("/pending"))
+    return { view: "pending" }
 
   // An unknown path lands on the landing rather than a blank page. With a SPA
   // fallback the server hands index.html to ANY extensionless path, so this is now
