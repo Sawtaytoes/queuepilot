@@ -272,6 +272,7 @@ jobs:
           "$TSX" e2e/specials-count-test.ts
           "$TSX" e2e/leaves-revalidate-test.ts
           "$TSX" e2e/leaves-per-account-test.ts
+          "$TSX" e2e/collection-children-per-account-test.ts
           "$TSX" e2e/collection-batch-cap-test.ts
           "$TSX" e2e/resume-on-advance-test.ts
 
