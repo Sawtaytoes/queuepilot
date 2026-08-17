@@ -334,6 +334,11 @@ export interface RotationSet extends SetRegistryCommon {
    * 12 is four hours of Shows and half an hour of Shorts.
    */
   length: number | null;
+  /** Keep the lineup topped up instead of letting it end. When true, `length` is the WINDOW
+   *  (how many items to stay ahead by), not the size of the whole evening. */
+  refill: boolean;
+  /** What a FINISHED series does: `'restart'` (back to its start floor) or null = drop. */
+  on_complete: 'restart' | null;
   /** Explicit curated members ([] = pure dynamic rule pool). */
   members: MemberValue[];
   /** Per-show manual start floors, keyed by ratingKey. */
@@ -439,6 +444,29 @@ interface RoutingSetCfgCommon {
    * Kavita reads `limit ?? max_items ?? ROTATION_LENGTH` — both are follow-up work.
    */
   length?: string;
+  /**
+   * `refill: true` — keep this channel's lineup topped up instead of letting it end.
+   *
+   * `length` stops meaning "the whole evening" and starts meaning "the WINDOW": how many
+   * items are queued ahead at any moment. A top-up tick tops it back up to that window
+   * whenever fewer than `TOPUP_AT` remain.
+   *
+   * Not spelled `length: all`. A single infinite lineup would mean queueing the entire
+   * eligible pool up front — 442 items on the live Shorts channel — which is a slow scan on
+   * a card someone just tapped and is stale the moment progress moves. The owner asked for
+   * exactly the window shape: "it'd load up X number in the queue, and then add more as you
+   * started getting close to the end of the queue" (2026-08-17).
+   */
+  refill?: true;
+  /**
+   * What happens to a SERIES that has no unwatched episodes left, on a refilling channel:
+   * `restart` puts it back at episode 1, `drop` retires it from the lineup. Absent = drop.
+   *
+   * Only consulted when the show is genuinely finished — NOT when the current lineup merely
+   * stopped drawing from it. Those are different questions and conflating them would restart
+   * a show every window.
+   */
+  on_complete?: string;
   audio_language?: string;
   /** Always set (null when uncapped), unlike the passthroughs above it. */
   max_items: number | null;
@@ -1036,6 +1064,26 @@ export interface Provider {
    */
   logProgress?(itemId: string): Promise<{ ok: boolean; remaining?: number }>;
   pool?(opts: { libraries?: string[]; members?: string[] }): Promise<ProviderPoolBucket[]>;
+  /**
+   * Top up a PULL provider's persistent artifact — Kavita's reading list.
+   *
+   * Only a pull provider has one to top up: the push side's runtime artifact is a Plex
+   * playQueue, which `topup.ts` extends directly because its id lives on the session rather
+   * than being discoverable from the set. Guarded at the call site like every optional
+   * member here.
+   *
+   * `build` is injected rather than called internally so the provider does not have to
+   * re-derive the set's libraries and batch — the caller already resolved those to run
+   * `buckets()`.
+   */
+  topupList?(opts: {
+    setName: string;
+    /** How many unread items to keep queued ahead. */
+    window: number;
+    /** Top up only when unread has fallen to this or below. */
+    at: number;
+    build: () => Promise<PlayItem[]>;
+  }): Promise<{ ok: boolean; reason?: string; added?: number; trimmed?: number; unread?: number }>;
   /**
    * Resolve stored item ids to poster rows, INDEX-ALIGNED with `ids`. Optional and guarded
    * (`providers/tiles.ts` checks `typeof provider.tiles !== 'function'` and degrades the

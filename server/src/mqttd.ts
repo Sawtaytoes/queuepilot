@@ -8,10 +8,11 @@ import * as enginePreview from './engine/preview.js';
 import * as engineRouting from './engine/routing.js';
 import * as adb from './adb.js';
 import * as devices from './devices.js';
+import * as topup from './topup.js';
 import {
   MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
-  T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW,
-  T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_STATE,
+  T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
+  T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_RESP_TOPUP, T_STATE,
   T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS,
 } from './env.js';
@@ -124,6 +125,24 @@ async function handleAdvance(): Promise<void> {
   }
 }
 
+/**
+ * One top-up tick. Answers on `resp/topup` whatever happened, including "did nothing" —
+ * silence would leave the automation unable to tell a working no-op from a dead app.
+ *
+ * Deliberately does NOT publish state: a top-up changes the lineup, not the session, and
+ * stamping `T_STATE` (retained) on every tick would churn the retained payload every few
+ * minutes for something no reader of that topic cares about.
+ */
+async function handleTopup(): Promise<void> {
+  try {
+    pub(T_RESP_TOPUP, await topup.topup());
+  } catch (e) {
+    // topup() is written not to throw; if it ever does, that is a bug worth seeing on the
+    // broker rather than a silently swallowed tick.
+    pub(T_RESP_TOPUP, { ok: false, error: errMessage(e) });
+  }
+}
+
 async function handlePreview(payload: PreviewPayload): Promise<void> {
   const setName = String(payload.set || '');
   const reply = String(payload.reply || '');
@@ -207,7 +226,7 @@ export function start(): MqttClient | null {
   client = c;
   c.on('connect', () => {
     console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
-    c.subscribe([T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW]);
+    c.subscribe([T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP]);
     announceDevices();
     publishDiscovery();
     publishState({ boot: true });
@@ -230,6 +249,10 @@ export function start(): MqttClient | null {
     }
     if (topic === T_CMD_ADVANCE) {
       void handleAdvance();
+      return;
+    }
+    if (topic === T_CMD_TOPUP) {
+      void handleTopup();
       return;
     }
     if (topic === T_CMD_PREVIEW) {

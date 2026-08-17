@@ -34,6 +34,9 @@ type SelectCfg = {
   blocklist?: readonly unknown[] | null;
   starts?: Record<string, Start | undefined> | null;
   weights?: Record<string, unknown> | null;
+  /** `restart` = a FINISHED show goes back to its start floor instead of leaving the pool.
+   *  Anything else (including absent) = drop, which is what this has always done. */
+  on_complete?: string;
 };
 
 /** One library row `episodicShows` / `sectionItems` hand to `unwatchedBuckets`. */
@@ -353,6 +356,9 @@ export async function unwatchedBuckets(
   // Per-show weights for the rule pool, keyed the same way `starts` is (`section-<id>` for a
   // whole item bucket). Absent = 1 = one slot per round, i.e. today's behaviour.
   const weights = cfg.weights || {};
+  // `restart` is the only value that DOES anything; absent/anything else means drop, which is
+  // the behaviour every existing channel already has. Compared once rather than per show.
+  const isRestarting = String(cfg.on_complete || '').toLowerCase() === 'restart';
 
   const buckets: Bucket[] = [];
   // Cast rather than `|| []`: a cfg with no `episodic_sections` has always thrown here, and a
@@ -360,7 +366,18 @@ export async function unwatchedBuckets(
   for (const show of await episodicShows(client, cfg.episodic_sections as readonly number[], allowed, blocked, tok)) {
     const allEps = await showEpisodes(client, show.ratingKey, tok);
     const start = starts[String(show.ratingKey)];
-    const eps = allEps.filter((e) => !watched.has(e.ratingKey) && atOrAfterStart(e, start));
+    const unwatched = allEps.filter((e) => !watched.has(e.ratingKey) && atOrAfterStart(e, start));
+    // A show with nothing unwatched left is FINISHED. Historically it just vanished from the
+    // pool (drop), which is still the default. `on_complete: restart` puts it back at its
+    // start floor — the whole show, watched or not — so a refilling channel keeps a rotation
+    // that would otherwise wither to nothing as the kids finish shows.
+    //
+    // Gated on `unwatched.length === 0`, i.e. the show is genuinely finished — NOT on this
+    // window failing to draw from it. Those are different questions, and conflating them
+    // would restart a show every top-up and starve everything else.
+    const eps = unwatched.length || !isRestarting
+      ? unwatched
+      : allEps.filter((e) => atOrAfterStart(e, start));
     if (eps.length) {
       buckets.push({
         // `Bucket.show` is `string`; a library row without a title is a Plex fault, and the
@@ -374,8 +391,13 @@ export async function unwatchedBuckets(
     }
   }
   for (const sec of cfg.item_sections || []) {
-    const items = (await sectionItems(client, [sec], allowed, blocked, tok))
-      .filter((it) => !watched.has(it.ratingKey))
+    const all = await sectionItems(client, [sec], allowed, blocked, tok);
+    const unwatched = all.filter((it) => !watched.has(it.ratingKey));
+    // Same finished-rule as a show, and this is the bucket that matters most for it: a
+    // Shorts-only channel is ONE item bucket, so when its last unread short is watched the
+    // channel has nothing at all rather than merely one fewer show. Under `restart` the whole
+    // section comes back; under the default it drops and the channel is genuinely done.
+    const items = (unwatched.length || !isRestarting ? unwatched : all)
       .map((it) => ({ ratingKey: it.ratingKey, title: it.title, show: 'Shorts', season: null, episode: null }));
     if (items.length) {
       buckets.push({

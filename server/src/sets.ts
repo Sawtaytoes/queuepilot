@@ -584,6 +584,12 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       // the engine default (env ROTATION_LENGTH, which is 12). Rotation-only: a curated
       // queue's length is however many entries it has.
       length: toPosIntOrNull(ent.length),
+      // Keep the lineup topped up rather than letting it end. When true, `length` above is
+      // the WINDOW (how far ahead to stay), not the whole evening.
+      refill: ent.refill === true,
+      // What a FINISHED series does on this channel. `restart` is the only value that does
+      // anything; absent reads as drop, which is what every channel has always done.
+      on_complete: String(ent.on_complete || '').toLowerCase() === 'restart' ? 'restart' : null,
       members: toMembers(ent.members),
       // Per-show manual start overrides for the dynamic rule pool (the Channels view
       // reads channel.starts[ratingKey] to seed the "Start from…" picker + chip).
@@ -913,6 +919,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         // How many items the lineup holds. Rotation-only: a curated queue's length is
         // however many entries it has, so there is nothing to set there.
         'length',
+        // Keep it topped up (`length` becomes the window), and what a finished show does.
+        'refill', 'on_complete',
         // Per-show start + weight overrides for the dynamic rule pool.
         'starts', 'weights',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
@@ -1102,6 +1110,20 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const n = toPosIntOrNull(v);
         if (n == null) { node.delete('length'); continue; }
         v = Math.min(n, ROTATION_LENGTH_MAX);
+      }
+      if (k === 'refill') {
+        // Sparse: only `true` is written. `refill: false` is the default and storing it would
+        // put a key on every channel that says nothing.
+        if (v !== true) { node.delete('refill'); continue; }
+      }
+      if (k === 'on_complete') {
+        // `restart` is the only value with meaning; anything else means drop, which is the
+        // default and is stored by ABSENCE. Rejected rather than coerced, because a typo
+        // ("restart-at-1") silently meaning "drop" is how a channel quietly stops restarting.
+        const s = v == null ? '' : String(v).trim().toLowerCase();
+        if (!s || s === 'drop') { node.delete('on_complete'); continue; }
+        if (s !== 'restart') throw new Error(`invalid on_complete '${String(v)}' — use 'restart' or 'drop'`);
+        v = s;
       }
       if (k === 'mode' && !isMode(v)) throw new Error(`invalid mode ${String(v)}`);
       if (k === 'audio_language') v = v == null || String(v).trim() === '' ? null : String(v).trim();

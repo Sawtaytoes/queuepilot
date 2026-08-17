@@ -794,6 +794,79 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
     },
 
     /**
+     * Keep a refilling reading queue's list stocked — the pull-side counterpart to extending
+     * a Plex playQueue.
+     *
+     * THE LIST IS A SLIDING WINDOW, not an append-only log. Owner, 2026-08-17: "we should
+     * probably remove some older list items when topping up to prevent the list from getting
+     * too long". So a top-up appends at the tail AND drops the rows that are fully read.
+     *
+     * That trim is what keeps the 2026-08-15 decision intact rather than reopening it. That
+     * record exists because `materialize()` silently appended forever and the live list
+     * reached 23 series — "stuff I absolutely did NOT add". A window that trims is still
+     * exactly this launch's lineup; a window that only grows is that bug by another door.
+     *
+     * Progress is read HERE, on demand, at the moment of the tick — no poll loop and no
+     * subscription, per the 2026-08-16 decision. Kavita cannot push (SignalR
+     * `UserProgressUpdate` is admin-only), so "on demand" is all there is; the MQTT tick is
+     * simply a new kind of demand.
+     *
+     * The list ID is never recreated: it is the `/lists/153` the owner has open in a tab.
+     */
+    async topupList(
+      { setName, window, at, build }: {
+        setName: string;
+        window: number;
+        at: number;
+        build: () => Promise<KavitaPlayItem[]>;
+      },
+    ): Promise<{ ok: boolean; reason?: string; added?: number; trimmed?: number; unread?: number }> {
+      const title = listTitleFor(setName);
+      const list = ((await c.readingLists({ pageSize: 200 })) || []).find((l) => l.title === title);
+      // No list means nothing was ever launched for this set. Building one here would put a
+      // lineup in front of a reader who did not ask for one.
+      if (!list?.id) return { ok: true, reason: 'no reading list for this set yet' };
+
+      const rows = (await c.readingListItems(list.id)) || [];
+      // Unread = the chapter is not finished. `pagesRead < pages` is the same test the tile
+      // grid uses; a row with no page count at all is counted as unread rather than dropped,
+      // because treating unknown as "read" would trim a chapter nobody has opened.
+      const isRead = (r: { pagesRead?: number; pagesTotal?: number }) =>
+        typeof r.pagesTotal === 'number' && r.pagesTotal > 0 && (r.pagesRead ?? 0) >= r.pagesTotal;
+      const unread = rows.filter((r) => !isRead(r)).length;
+      if (unread > at) return { ok: true, reason: `${unread} unread, tops up at ${at}`, unread };
+
+      const want = Math.max(0, window - unread);
+      const alreadyChapters = new Set(rows.map((r) => String(r.chapterId)));
+      const fresh = (await build())
+        .filter((it) => !alreadyChapters.has(String(it.chapterId)))
+        .slice(0, want);
+
+      let added = 0;
+      for (const it of fresh) {
+        // Best-effort per item, like the rebuild path: one chapter that refuses to add must
+        // not abort the top-up and leave the reader with the same short list.
+        try {
+          await c.addChapter(list.id, it.seriesId, it.chapterId);
+          added += 1;
+        } catch { /* keep going */ }
+      }
+
+      // Trim AFTER adding, never before: `remove-read` on a list whose unread tail is about
+      // to be replaced would leave the reader momentarily holding an empty list, and this
+      // runs while they may be mid-chapter.
+      let trimmed = 0;
+      if (added) {
+        try {
+          await c.removeRead(list.id);
+          const after = (await c.readingListItems(list.id)) || [];
+          trimmed = Math.max(0, rows.length + added - after.length);
+        } catch { /* a list that keeps its read rows is untidy, not broken */ }
+      }
+      return { ok: true, added, trimmed, unread };
+    },
+
+    /**
      * The substitute for cast: a deep link into the reader, in reading-list mode.
      *
      * `?readingListId=` is what makes next/prev resolve through the LIST rather than the
