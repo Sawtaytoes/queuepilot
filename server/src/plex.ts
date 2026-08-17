@@ -1009,13 +1009,17 @@ export async function episodeCounts(
 // (collectionSort), so no client-side re-sort is needed.
 export async function collectionChildren(
   collectionRatingKey: string | number,
+  { token = null, account = '' }: AccountScope = {},
 ): Promise<CollectionChild[] | null> {
   const rk = String(collectionRatingKey);
-  const hit = await cache.getCollectionChildren<CollectionChild[]>(rk);
+  // Per-account rows ('' = admin/Bob), for the same reason `leaves` has them: the member LIST
+  // is universal but its progress fields are the querying account's own. Sharing one row is
+  // what made a queue gated to Older Kids print the owner's "154/155 watched".
+  const hit = await cache.getCollectionChildren<CollectionChild[]>(rk, null, account);
   if (hit) return hit;
   let mc;
   try {
-    mc = container(await plexGet(`/library/collections/${rk}/children`));
+    mc = container(await plexGet(`/library/collections/${rk}/children`, token));
   } catch {
     return null;
   }
@@ -1033,7 +1037,7 @@ export async function collectionChildren(
       let viewedLeafCount: number | null = null;
       let leafCount: number | null = null;
       if (ch.type === 'show') {
-        const counts = await episodeCounts(String(ch.ratingKey));
+        const counts = await episodeCounts(String(ch.ratingKey), { token, account });
         if (counts) {
           viewedLeafCount = counts.viewedLeafCount;
           leafCount = counts.leafCount;
@@ -1058,7 +1062,7 @@ export async function collectionChildren(
     updatedAt: Number(mc.updatedAt ?? 0),
     childCount: Number(mc.childCount ?? children.length),
     payload: children,
-  });
+  }, account);
   return children;
 }
 
@@ -1133,11 +1137,11 @@ export async function collectionNext(
   start: Start | null = null,
   opts: AccountScope = {},
 ): Promise<CollectionNextEp | null> {
-  // The children STRUCTURE/order is account-independent (admin-cached), but each show child's
-  // next-up is resolved per-account via nextEpisode(opts) below — so a per-profile channel's
-  // collection member shows that profile's next episode. (A rare movie child's `watched`
-  // short-circuit still reads the admin view; shows are the common member.)
-  const children = await collectionChildren(collectionRatingKey);
+  // Read as the SAME account the next-up below is resolved as. This used to be an admin read
+  // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
+  // admin view" — which meant a collection whose next member is a MOVIE skipped it on the
+  // strength of someone else having seen it. Shows were already per-account via nextEpisode.
+  const children = await collectionChildren(collectionRatingKey, opts);
   if (!children) return null;
   const floorAt = startMemberIndex(children, start);
   // Which member the manual start names — the tile's start chip says so in its tooltip (the

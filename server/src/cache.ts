@@ -67,7 +67,7 @@ export interface HistoryRow {
 
 // Bump on ANY schema change below. On open, a mismatch DROPs every table and recreates them —
 // a stale cache schema is never worth migrating (it is a cache).
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 const SCHEMA = `
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
@@ -86,9 +86,15 @@ CREATE TABLE resolved (
   section TEXT, title TEXT, year TEXT, guid TEXT,
   payload TEXT, fetched_at INT, PRIMARY KEY (section, title, year, guid));
 
--- a collection's ordered children, validated against (updatedAt, childCount).
+-- a collection's ordered children, PER ACCOUNT, validated against (updatedAt, childCount).
+-- The member list and its order are account-independent, but three fields on every row are
+-- not: a movie member's watched/viewOffset, and a show member's viewedLeafCount — which is
+-- the "154/155 watched" the start editor prints. Sharing one row across accounts is what made
+-- a kid's collection show the OWNER's progress (account '' = admin/Bob), the same trap the
+-- leaves table above already had an account column for.
 CREATE TABLE collection_children (
-  rk TEXT PRIMARY KEY, updated_at INT, child_count INT, payload TEXT, fetched_at INT);
+  rk TEXT, account TEXT, updated_at INT, child_count INT, payload TEXT, fetched_at INT,
+  PRIMARY KEY (rk, account));
 
 -- a section listing (all?type=…), per (section, type, account). 5-min soft TTL,
 -- stale-while-revalidate. The account column is load-bearing: viewedLeafCount is per-account.
@@ -313,9 +319,10 @@ const COLLECTION_TTL_MS = 24 * 60 * 60 * 1000;
 export async function getCollectionChildren<T = unknown>(
   rk: string | number,
   validator: CollectionValidator | null = null,
+  account: string = '',
 ): Promise<T | null> {
   if (!ready()) return null;
-  const row = q('SELECT * FROM collection_children WHERE rk = ?').get(String(rk));
+  const row = q('SELECT * FROM collection_children WHERE rk = ? AND account = ?').get(String(rk), String(account || ''));
   if (!row) return null;
   if (validator) {
     if (
@@ -333,13 +340,14 @@ export async function getCollectionChildren<T = unknown>(
 export async function putCollectionChildren(
   rk: string | number,
   { updatedAt, childCount, payload }: CollectionValidator & { payload: unknown },
+  account: string = '',
 ): Promise<void> {
   if (!ready()) return;
   q(
-    `INSERT INTO collection_children (rk, updated_at, child_count, payload, fetched_at) VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(rk) DO UPDATE SET updated_at = excluded.updated_at, child_count = excluded.child_count,
+    `INSERT INTO collection_children (rk, account, updated_at, child_count, payload, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(rk, account) DO UPDATE SET updated_at = excluded.updated_at, child_count = excluded.child_count,
        payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(String(rk), Number(updatedAt ?? 0), Number(childCount ?? 0), JSON.stringify(payload), now());
+  ).run(String(rk), String(account || ''), Number(updatedAt ?? 0), Number(childCount ?? 0), JSON.stringify(payload), now());
 }
 
 // --- section_listing (soft TTL, stale-while-revalidate) -------------------------------- //

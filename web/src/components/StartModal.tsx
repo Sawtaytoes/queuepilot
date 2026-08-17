@@ -234,12 +234,26 @@ export function StartModal() {
       // are skipped.
       let kids: CollectionChild[] = []
 
+      // Same scoping the episode list gets, and for the same reason: every member's
+      // "N/M watched" is one account's. A channel knows its binding's uuid; a queue sends
+      // only its `set` and the server reads the profile off `requires_profile`.
+      const kidsQs = [
+        entry?.setId
+          ? `set=${encodeURIComponent(entry.setId)}`
+          : "",
+        entry?.accountUuid
+          ? `uuid=${encodeURIComponent(entry.accountUuid)}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("&")
+
       try {
         ;({ children: kids } = await api<{
           children: CollectionChild[]
         }>(
           "GET",
-          `/api/collection/${item.ratingKey}/children`,
+          `/api/collection/${item.ratingKey}/children${kidsQs ? `?${kidsQs}` : ""}`,
         ))
       } catch {
         if (!isStale) {
