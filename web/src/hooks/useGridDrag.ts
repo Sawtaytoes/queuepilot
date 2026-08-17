@@ -54,7 +54,29 @@ export function useGridDrag(
   gridRef: RefObject<HTMLElement | null>,
   currentSet: string | null,
   isChannel: boolean,
+  /**
+   * A tap on a poster while NOTHING is selected — open this entry.
+   *
+   * That gesture was dead before: the comment in `onUp` said a plain poster tap
+   * "does nothing" until move mode is on, which left the largest target on the tile
+   * doing less than the 26px ▶ sitting in the middle of it. The owner picked "tap the
+   * poster opens the entry" over "tap plays it", so the sheet is where playing,
+   * editing, choosing a start point and removing all live at full size.
+   * (decision `2026-08-17-a-poster-tap-opens-the-entry-sheet`)
+   *
+   * Ordering matters and is why this is here rather than an `onClick` on the tile: a
+   * DRAG must never also open the sheet, and only this hook knows whether the press
+   * moved. Move mode still wins — with a selection running, a tap keeps toggling it.
+   */
+  onOpenEntry?: (setId: string, key: string) => void,
 ) {
+  // `onOpenEntry` is deliberately absent from the dependency list. This effect installs
+  // imperative pointer listeners that must survive a re-render — re-running it on every
+  // new callback identity would tear them down mid-gesture, which is the same class of
+  // bug as the re-render-during-drag this hook's header documents. The one value passed
+  // in is `openEntryEditor`, a module-level store action with a stable identity, so the
+  // closure cannot go stale.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   useEffect(() => {
     const grid = gridRef.current
 
@@ -165,17 +187,21 @@ export function useGridDrag(
       endPress()
 
       if (!isDragging) {
+        const { key, set } = card.dataset
+
+        if (!set || !key) return
+
         // "Move mode": once something is checked, a plain poster tap toggles it
-        // too. Before that, a poster tap does nothing (the checkbox is the only
-        // selector), so a click that doesn't move is never mistaken for a
-        // selection instead of a drag.
-        if (
-          busy.selectedCount > 0 &&
-          card.dataset.set &&
-          card.dataset.key
-        ) {
-          toggleSelect(card.dataset.set, card.dataset.key)
+        // too, so a whole run can be selected without hunting for checkboxes.
+        if (busy.selectedCount > 0) {
+          toggleSelect(set, key)
+
+          return
         }
+
+        // Otherwise the tap opens this entry. Reached only when the press did NOT
+        // move past the threshold, so a drag can never land here.
+        onOpenEntry?.(set, key)
 
         return
       }
@@ -238,7 +264,14 @@ export function useGridDrag(
 
       if (
         target.closest(".remove") ||
-        target.closest(".check")
+        target.closest(".check") ||
+        // `.tileplay` is the one control that lives INSIDE `.thumb`, so unlike ✓ and ✕
+        // it is not excluded by the poster test below. It has to be named here and not
+        // left to its own `stopPropagation`: that stops the CLICK, while this gesture is
+        // built on pointerdown/pointerup listeners bound to the window, which a click
+        // handler cannot reach. Without this, ▶ opened the device menu and the entry
+        // sheet on top of it, from one tap.
+        target.closest(".tileplay")
       )
         return // their own clicks
       if (!target.closest(".thumb")) return // drag/select only from the poster

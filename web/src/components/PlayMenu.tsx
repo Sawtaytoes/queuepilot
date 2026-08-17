@@ -93,7 +93,7 @@ export function PlayMenu() {
       className="qmenu playmenu"
       // The token density axis, not a hand-written height: `compact` takes the 44px
       // MIN_TOUCH_TARGET floor down over --control-height, which is what made the rows
-      // read too tall on a phone (F1). One attribute, zero overrides.
+      // read too tall in the Narrow View (F1). One attribute, zero overrides.
       data-density="compact"
       style={{
         left: `${Math.max(8, Math.min(anchor.left, window.innerWidth - 260))}px`,
