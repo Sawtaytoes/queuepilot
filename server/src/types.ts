@@ -773,7 +773,7 @@ export interface ProviderTileRow {
   /** Items left to consume — chapters for Kavita, the "how much is waiting" a tile means. */
   unreadCount: number;
   /** The next item to play/read, or null when there is nothing left. */
-  next: KavitaPlayItem | BoardGamesPlayItem | null;
+  next: KavitaPlayItem | BoardGamesPlayItem | SteamPlayItem | null;
 }
 
 /**
@@ -890,7 +890,21 @@ export interface BoardGamesPlayItem {
   bucket?: string;
 }
 
-export type PlayItem = PlexPlayItem | KavitaPlayItem | BoardGamesPlayItem;
+/** One Steam session. Shaped like the picker's play item, keyed by appid instead of gameId. */
+export interface SteamPlayItem {
+  appid: string;
+  title: string;
+  /** Always `'play'`. Present so a mixed lineup can be told apart by unit alone. */
+  unit?: MediaUnit;
+  /** Which play of the entry this is. Named `number` to match what the tile layer already
+   * reads off a next-up item, so a game needs no second mapping path. */
+  number?: number | string;
+  slot?: number;
+  of?: number;
+  bucket?: string;
+}
+
+export type PlayItem = PlexPlayItem | KavitaPlayItem | BoardGamesPlayItem | SteamPlayItem;
 
 /** Plex's runtime artifact: a playQueue descriptor. Fused with the push in `handoff()`. */
 export interface PlexArtifact {
@@ -935,7 +949,24 @@ export interface BoardGamesArtifact {
   count: number;
 }
 
-export type ProviderArtifact = PlexArtifact | KavitaArtifact | BoardGamesArtifact;
+/**
+ * Steam's runtime artifact: a descriptor and a `steam://` URL.
+ *
+ * There is no lineup object on Steam's side to rebuild — no playQueue, no reading list — so
+ * like the picker's, this describes the ONE game that is next.
+ */
+export interface SteamArtifact {
+  provider: string;
+  kind: 'steam';
+  appid: string;
+  /** `steam://rungameid/<appid>`. Empty when there is nothing left to play. */
+  url: string;
+  setName: string;
+  head: SteamPlayItem | null;
+  count: number;
+}
+
+export type ProviderArtifact = PlexArtifact | KavitaArtifact | BoardGamesArtifact | SteamArtifact;
 
 /** What a PUSH handoff returns (playback.js playRatingKeys / castPlay, and driver.js
  * driveToPlaying, which returns the same object or its own error/cancel form). */
