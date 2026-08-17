@@ -159,17 +159,24 @@ This closed the rewatch item below: `pickRewatch` is now drawn N times
 with each pick excluded, so a rewatch pool plays as many films as it is
 asked for and never the same one twice in a sitting.
 
-It also landed the power-off half — a set may ask for the room to be
-shut down when its sitting ends, announced on `queuepilot/resp/finished`
-for HA to act on.
+It also landed the power-off half. A set may ask for the room to be shut
+down when its sitting ends; the app announces it on
+`queuepilot/resp/finished` and never switches anything off itself.
+
+**The HA side is built too** (`home-assistant` repo,
+`packages/queuepilot_topup.yaml`): a third trigger id and `choose` branch
+on the existing `automation.queuepilot_top_up_lineup`, guarded three
+ways — the set's own opt-in, `isComplete` (so a pool that merely ran dry
+does not black out the room), and nothing playing 45 seconds later (so a
+re-tap wins). Verified against the live instance both ways round.
+
+Nothing has `power_off_when_done` enabled yet, so the whole path is inert
+until the box is ticked in the editor.
 
 ## Still open
 
 Not built, and not blocking anything that shipped:
 
-- **The HA side of power-off.** The app publishes
-  `queuepilot/resp/finished` with `power_off`; nothing subscribes yet.
-  The automation belongs in the `home-assistant` repo.
 - **`on_complete` is set-level only.** The per-entry override described
   above was not built; every show on a channel currently shares its
   answer.
