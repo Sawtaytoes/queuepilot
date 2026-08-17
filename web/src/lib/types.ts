@@ -323,6 +323,22 @@ export type RegistrySet = {
    * not apply. null/absent = 1.
    */
   volumes?: number | null
+  /**
+   * Rotation channels only. How many items the lineup holds — the SIZE, to `episodes`'s
+   * per-entry share. null/absent = follow the app default (`lineup.length` below), which is
+   * how a channel that never touched the knob keeps following it when it moves.
+   *
+   * With `refill` on this stops meaning "the whole evening" and becomes the WINDOW: how far
+   * ahead to stay. (decision `2026-08-17-a-lineup-refills-instead-of-ending`)
+   */
+  length?: number | null
+  /** Rotation channels only. Keep the lineup topped up instead of letting it end. */
+  refill?: boolean
+  /**
+   * Rotation channels only. What a FINISHED series does: `"restart"` puts it back at its
+   * start floor, null/absent retires it — which is what every channel has always done.
+   */
+  on_complete?: "restart" | null
   audio_language?: string
   superseded_by?: string | null
   // The ultra-legacy single-binding mirror, still read by `activeBinding`.
@@ -341,9 +357,27 @@ export type Library = {
   other?: boolean
 }
 
+/**
+ * The engine's lineup defaults, sent with the registry so the pool editor never has to
+ * hardcode them. All three are env (`ROTATION_LENGTH` / `ROTATION_LENGTH_MAX` / `TOPUP_AT`):
+ * a copy in the bundle would let a deployment that moves one silently disagree with its own
+ * editor — the picker would chip the wrong option Default and accept a number the writer
+ * clamps behind the user's back.
+ */
+export type LineupDefaults = {
+  /** What a channel with no `length:` of its own queues. */
+  length: number
+  /** The writer's ceiling — the picker must not accept more. */
+  max: number
+  /** How few items may be left ahead before a top-up tick actually refills. */
+  topup_at: number
+}
+
 export type SetsResponse = {
   sets: RegistrySet[]
   libraries: Library[]
+  /** Absent only from a server older than the pool editor's lineup controls. */
+  lineup?: LineupDefaults
 }
 
 export type SearchHit = {

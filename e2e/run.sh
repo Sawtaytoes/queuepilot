@@ -41,6 +41,8 @@ echo "=== on-complete-test ==="   # browserless; a finished show restarts at ep1
 "$TSX" e2e/on-complete-test.ts || TOTAL=$((TOTAL+1))
 echo "=== topup-test ==="   # browserless; when a refill tick tops up, and what it appends
 "$TSX" e2e/topup-test.ts || TOTAL=$((TOTAL+1))
+echo "=== lineup-knobs-test ==="   # browserless; the WRITE side — create/patch store all three sparsely
+"$TSX" e2e/lineup-knobs-test.ts || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
 "$TSX" e2e/collection-batch-cap-test.ts || TOTAL=$((TOTAL+1))
 echo "=== resume-on-advance-test ==="   # browserless; every queued episode resumes, not just the head

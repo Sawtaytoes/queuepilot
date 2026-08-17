@@ -1,4 +1,4 @@
-import { Accordion } from "@charcuterie/ui"
+import { Accordion, Checkbox } from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
@@ -17,8 +17,10 @@ import {
   profileValue,
   ratingOptions,
 } from "../lib/channels"
+import { LINEUP_PRESET_COMMON } from "../lib/countPicker"
 import type {
   Binding,
+  LineupDefaults,
   Profile,
   RegistrySet,
 } from "../lib/types"
@@ -28,6 +30,7 @@ import {
 } from "../state/overlays"
 import { load, setStatus, useStore } from "../state/store"
 import { CheckboxGroup } from "./CheckboxGroup"
+import { CountPicker } from "./CountPicker"
 import { Modal } from "./Modal"
 import { SelectListbox } from "./SelectListbox"
 
@@ -50,6 +53,17 @@ import { SelectListbox } from "./SelectListbox"
  *
  * (decision `2026-07-29-binding-ratings-render-per-profile-not-shared-scope`)
  */
+
+/**
+ * First-paint fallback ONLY, for the render before `GET /api/sets` has answered. The real
+ * numbers are that response's `lineup` (server env), and every number the user can actually
+ * commit is validated against those — see `LineupDefaults`.
+ */
+const LINEUP_FALLBACK: LineupDefaults = {
+  length: 12,
+  max: 200,
+  topup_at: 3,
+}
 
 type BindingDraft = {
   /** Stable across renders so React can key the cards through add/remove. */
@@ -140,8 +154,29 @@ export function DynModal() {
   // Which binding the Play/Channels dropdowns seed to (a binding's plex_user); "" = none
   // (fall back to the first binding). (decision `2026-08-07-default-profile-per-channel`)
   const [defaultProfile, setDefaultProfile] = useState("")
+  // The LINEUP knobs (decision `2026-08-17-a-lineup-refills-instead-of-ending`). All three
+  // were API-and-YAML-only until now, which meant the answer to "why did the kids' card stop"
+  // lived in a file the owner never opens.
+  //
+  // `lineupLength` holds the EFFECTIVE number, seeded from the app default rather than from 0
+  // or null, so the picker can chip that option Default instead of showing a number nobody
+  // chose. Storing it back sparsely is the server's job (`toLineupLength`), same split the
+  // entry counts use.
+  const [lineupLength, setLineupLength] = useState(
+    LINEUP_FALLBACK.length,
+  )
+  const [isRefilling, setIsRefilling] = useState(false)
+  const [onComplete, setOnComplete] = useState("drop")
 
   const knownRef = useRef<string[]>([])
+  // The engine's own defaults, so the picker's Default chip and its ceiling are the server's
+  // numbers and not a second copy of them in this bundle.
+  const lineup = reg?.lineup ?? LINEUP_FALLBACK
+  // Identity of the open modal instance — every uncontrolled Charcuterie control here
+  // (Checkbox / SelectListbox) seeds on mount only, so it remounts in lockstep with the
+  // re-seed effect below. Keyed on OPENNESS, never on a value the user's own pick writes
+  // (decision `2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`).
+  const modalKey = dynModal ? (setId ?? "new") : "closed"
 
   const showLibs = useMemo(
     () =>
@@ -189,6 +224,15 @@ export function DynModal() {
     setAudio(editing ? editing.audio_language || "" : "")
     setDefaultProfile(
       editing ? editing.default_profile || "" : "",
+    )
+    // A channel with no `length:` of its own follows the app default — show THAT number, not
+    // a placeholder, because it is what the pool will actually queue tonight.
+    setLineupLength(editing?.length ?? lineup.length)
+    setIsRefilling(Boolean(editing?.refill))
+    setOnComplete(
+      editing?.on_complete === "restart"
+        ? "restart"
+        : "drop",
     )
 
     const checked = libSelection(editing)
@@ -315,6 +359,15 @@ export function DynModal() {
       kind: kind.trim() || "cartoons",
       label: name,
       movie_excludes: [],
+      // Sent unconditionally, including from a rewatch channel where the controls are hidden:
+      // the values round-trip whatever that channel already stored, so switching a pool to
+      // Rewatch and back cannot quietly lose its refill. The server stores all three SPARSELY
+      // (a length equal to the app default, a `refill: false` and an `on_complete: drop` are
+      // stored by absence), which is what keeps this Save from writing three keys that say
+      // nothing onto every channel it touches.
+      length: lineupLength,
+      on_complete: onComplete,
+      refill: isRefilling,
       sections: showSections,
       source: "rotation",
     }
@@ -462,7 +515,7 @@ export function DynModal() {
             from the edited channel in an effect on `[dynModal]`. */}
         <SelectListbox
           id="dyn-behavior"
-          key={dynModal ? (setId ?? "new") : "closed"}
+          key={modalKey}
           label="Behavior"
           onChange={(v) =>
             setBehavior(v as "progress" | "rewatch")
@@ -561,6 +614,102 @@ export function DynModal() {
         one-episode entries (that is how anime movies are
         scanned). Multi-episode series never enter a rewatch
         pool.
+      </p>
+
+      {/* THE LINEUP — how much a scan queues, whether it is topped back up, and what a
+          finished show does. All three shipped 2026-08-17 as YAML + `PATCH /api/sets/:id`
+          only (decision `2026-08-17-a-lineup-refills-instead-of-ending`), which left the
+          answer to "why did the kids' card stop mid-evening" in a file the owner never opens.
+
+          HIDDEN on a rewatch pool rather than reworded, the same call `batch_stops_at` gets
+          on a queue with no Plex source: `behavior: rewatch` returns exactly one film per
+          scan and honours neither `length` nor `refill`, so every control here would be a
+          knob that does nothing. The note below says so instead of leaving a gap. */}
+      <fieldset
+        className="field flags"
+        hidden={behavior === "rewatch"}
+        id="dyn-lineup"
+      >
+        <legend>Lineup</legend>
+        {/* A <div>+<span>, not a <label>: CountPicker is a group of BUTTONS, not an input, so
+            a <label> would have no control to name. Same shape the set editor uses. */}
+        <div className="field">
+          <span className="fieldlbl">
+            Items queued ahead
+          </span>
+          <CountPicker
+            defaultValue={lineup.length}
+            id="dyn-length"
+            label="Items queued ahead"
+            max={lineup.max}
+            onChange={setLineupLength}
+            presets={LINEUP_PRESET_COMMON}
+            value={lineupLength}
+          />
+        </div>
+        <p className="subhint" id="dyn-length-hint">
+          {`How many items one scan queues. With top-up off that is the whole sitting — ${lineup.length}
+            is four hours of half-hour shows but only about half an hour of shorts, which is
+            how the Shorts card ran dry mid-evening. With top-up on it becomes the WINDOW:
+            how far ahead to stay.`}
+        </p>
+        {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once), so it remounts with
+            the modal — same treatment the set editor's flags get. */}
+        <Checkbox
+          id="dyn-refill"
+          isChecked={isRefilling}
+          key={`${modalKey}-refill`}
+          label="Keep it topped up — refill instead of ending"
+          onChange={setIsRefilling}
+        />
+        <p className="subhint" id="dyn-refill-hint">
+          {`Tops the lineup back up whenever ${lineup.topup_at} or fewer items are left ahead, so a
+            card that is still playing never runs out. Home Assistant ticks while something
+            is playing; whether the lineup is actually low is judged here, so a tick on a
+            full lineup does nothing. Off, the lineup simply ends when it ends.`}
+        </p>
+        <label className="field">
+          When a show has nothing left to watch
+          {/* Keyed on modal-open identity, same reason as the selects above. */}
+          <SelectListbox
+            className="fieldselect"
+            id="dyn-on-complete"
+            key={modalKey}
+            label="When a show has nothing left to watch"
+            onChange={setOnComplete}
+            options={[
+              {
+                label: "Drop it — it leaves this pool",
+                value: "drop",
+              },
+              {
+                label: "Start it over from the beginning",
+                value: "restart",
+              },
+            ]}
+            value={onComplete}
+          />
+        </label>
+        <p className="subhint" id="dyn-on-complete-hint">
+          Only fires when a show is genuinely finished — not
+          when this lineup merely stopped drawing from it.
+          Dropping is what every pool has always done.
+          Starting over is what keeps a topped-up rotation
+          from withering as the kids finish shows, and on a
+          shorts-only pool it brings the whole library back
+          around.
+        </p>
+      </fieldset>
+      {/* Not a gap where the fieldset was: a rewatch pool's owner should be told these knobs
+          do not reach it, rather than left to wonder where they went. */}
+      <p
+        className="subhint"
+        hidden={behavior !== "rewatch"}
+        id="dyn-lineup-rewatch-note"
+      >
+        A rewatch pool returns a single film per scan, so
+        the lineup length and top-up settings do not apply
+        to it yet.
       </p>
 
       <fieldset className="field" id="dyn-profilesbox">
@@ -828,7 +977,7 @@ export function DynModal() {
               value set when a channel is (re-)opened for editing. */}
           <SelectListbox
             id="dyn-default-profile"
-            key={dynModal ? (setId ?? "new") : "closed"}
+            key={modalKey}
             label="Default profile"
             onChange={setDefaultProfile}
             options={namedProfiles.map((p) => ({
