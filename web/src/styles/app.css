@@ -3455,3 +3455,49 @@ ul.grid.posters .tile .badges .epstag {
   font-size: 0.72rem;
   white-space: nowrap;
 }
+
+/* The Play landing's reorder handle. Only the handle starts a drag — the row is a link and
+   its button plays something, so a whole-row drag would fight both. Quiet until the row is
+   hovered, the same treatment the tile controls get: reordering is occasional, and three
+   permanent grip glyphs down the page is chrome nobody asked for. */
+.playrow .rowdrag {
+  flex: 0 0 auto;
+  align-self: center;
+  padding: 2px 4px;
+  border-radius: 6px;
+  color: var(--color-content-muted);
+  cursor: grab;
+  opacity: 0;
+  line-height: 1;
+  touch-action: none; /* the hook owns the gesture; without this touch scrolls instead */
+  transition: opacity 120ms ease;
+}
+.playrow:hover .rowdrag,
+.playrow:focus-within .rowdrag {
+  opacity: 1;
+}
+/* A coarse pointer has no hover to reveal it with, so it is simply always there. */
+@media (pointer: coarse) {
+  .playrow .rowdrag {
+    opacity: 1;
+  }
+}
+.playrow.dragging {
+  position: relative;
+  z-index: 3;
+  box-shadow: 0 10px 24px rgb(0 0 0 / 35%);
+  cursor: grabbing;
+  opacity: 0.96;
+}
+.playrow.dragging .rowdrag {
+  cursor: grabbing;
+}
+/* While a drag is live, the rows it slides past glide instead of teleporting. Scoped to the
+   body class so the transition never costs anything on an ordinary render. */
+body.rowdragging .playrow:not(.dragging) {
+  transition: transform 140ms ease;
+}
+/* Nothing on the page should be selecting text mid-drag. */
+body.rowdragging {
+  user-select: none;
+}
