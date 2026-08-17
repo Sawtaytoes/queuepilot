@@ -12,6 +12,11 @@ import {
   resolveChannel,
   useChannelSelection,
 } from "./state/channelSelection"
+import {
+  findGroup,
+  lastUsedGroup,
+  rememberGroup,
+} from "./state/group"
 import { startLiveUpdates } from "./state/live"
 import {
   closePlayMenus,
@@ -57,6 +62,10 @@ const DynModal = lazy(async () => ({
 const SetModal = lazy(async () => ({
   default: (await import("./components/SetModal")).SetModal,
 }))
+const GroupsModal = lazy(async () => ({
+  default: (await import("./components/GroupsModal"))
+    .GroupsModal,
+}))
 const StartModal = lazy(async () => ({
   default: (await import("./components/StartModal"))
     .StartModal,
@@ -98,7 +107,7 @@ export function App() {
   trackRouteOrigin(path)
 
   const route = parsePath(path)
-  const { data, now, reg } = useStore()
+  const { data, groups, now, reg } = useStore()
 
   useEffect(() => {
     void load()
@@ -108,6 +117,40 @@ export function App() {
 
   // A route change closes any floating device menu, as the vanilla `route()` did.
   useEffect(closePlayMenus, [path])
+
+  /**
+   * The group rule, both halves, in one place: **the URL wins; storage only answers a URL
+   * that did not say.**
+   *
+   * Landing on `/g/<id>` records it, so the memory follows a bookmark or a link from Home
+   * Assistant and not merely a click on the picker. Landing on bare `/` with a remembered
+   * group REPLACES the entry rather than pushing one — otherwise Back from `/g/bob` lands
+   * on `/`, which immediately redirects forward again and the button appears dead.
+   *
+   * Waits for `groups`: redirecting to a remembered id before the list has loaded cannot
+   * tell "deleted" from "not fetched yet", and would strand a stale bookmark.
+   */
+  useEffect(() => {
+    if (route.view !== "play" || !groups) return
+
+    if (route.group) {
+      // An unknown id still renders (PlayView falls back to everything), but it must not
+      // be remembered — that would make one bad link sticky on this device.
+      if (findGroup(groups, route.group)) {
+        rememberGroup(route.group)
+      }
+
+      return
+    }
+
+    const last = lastUsedGroup()
+
+    if (last && findGroup(groups, last)) {
+      navigate(`/g/${encodeURIComponent(last)}`, {
+        replace: true,
+      })
+    }
+  }, [groups, navigate, route])
 
   // Redirects the vanilla render functions did with `location.assign`.
   useEffect(() => {
@@ -142,6 +185,7 @@ export function App() {
     now,
     selectedChannel,
     reg,
+    groups,
   )
 
   useEffect(() => {
@@ -196,7 +240,10 @@ export function App() {
         {isNarrow ? null : toolbar}
       </Header>
 
-      <PlayView isHidden={route.view !== "play"} />
+      <PlayView
+        groupId={route.view === "play" ? route.group : null}
+        isHidden={route.view !== "play"}
+      />
       <QueuesView
         isHidden={route.view !== "queues"}
         toolbar={isNarrow ? toolbar : null}
@@ -223,6 +270,7 @@ export function App() {
       <Suspense fallback={null}>
         {overlays.setModal ? <SetModal /> : null}
         {overlays.dynModal ? <DynModal /> : null}
+        {overlays.groupsModal ? <GroupsModal /> : null}
         {overlays.startModal ? <StartModal /> : null}
         {overlays.tileMenu ? <TileMenu /> : null}
       </Suspense>
@@ -240,6 +288,7 @@ function computeChrome(
   // draws from, and therefore whether its copy says "episodes each show" or "chapters each
   // series".
   reg: ReturnType<typeof useStore>["reg"],
+  groups: ReturnType<typeof useStore>["groups"],
 ): Chrome {
   if (route.view === "queues") {
     return {
@@ -268,8 +317,8 @@ function computeChrome(
       heading: "Pools",
       isSubHidden: false,
       sub: isMovies
-        ? "The Movies pool: a weighted rewatch of films this tier has seen — least-watched most likely."
-        : "A filtered pool (not an ordered queue): pick a tier, and these filters shape the pool.",
+        ? "The Movies pool: a weighted rewatch of films this account has seen — least-watched most likely."
+        : "A filtered pool, not an ordered queue: these filters shape what it can draw from.",
     }
   }
 
@@ -335,6 +384,28 @@ function computeChrome(
     }
   }
 
+  // The landing, filtered or not. A group page says WHOSE it is in the heading — the
+  // browser tab title too, because half the point of `/g/<id>` is that it is a bookmark and
+  // a row of tabs all called "QueuePilot" is not one.
+  const active =
+    route.view === "play"
+      ? findGroup(groups, route.group)
+      : null
+
+  if (active) {
+    return {
+      // No back button: a group is a top-level place, not somewhere you descend into.
+      // Switching is what the chips are for.
+      back: null,
+      bodyClasses: ["queue-view", "play-view"],
+      documentTitle: `${active.label} — QueuePilot`,
+      editableSetId: null,
+      heading: active.label,
+      isSubHidden: false,
+      sub: "Pick something and play it. Configure ›  opens each shelf’s editor.",
+    }
+  }
+
   return {
     back: null,
     bodyClasses: ["queue-view", "play-view"], // hides the queues toolbar
@@ -342,6 +413,6 @@ function computeChrome(
     editableSetId: null,
     heading: "QueuePilot",
     isSubHidden: false,
-    sub: "Pick something and play it. Configure ›  opens each group’s editor.",
+    sub: "Pick something and play it. Configure ›  opens each shelf’s editor.",
   }
 }

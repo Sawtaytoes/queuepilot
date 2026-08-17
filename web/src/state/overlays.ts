@@ -71,11 +71,19 @@ type Overlays = {
    * stale copy on screen.
    */
   entryEditor: { setId: string; key: string } | null
+  /**
+   * The GROUPS editor — who is watching, and what is theirs. Holds the id being edited
+   * (or null for "nothing selected yet"), not a copy of the group: the panel re-reads it
+   * from the store, so an SSE update or an SMB edit lands in the open editor rather than
+   * leaving a stale draft on screen. Same rule `entryEditor` above follows.
+   */
+  groupsModal: { selectedId: string | null } | null
 }
 
 let overlays: Overlays = {
   dynModal: null,
   entryEditor: null,
+  groupsModal: null,
   playMenu: null,
   setModal: null,
   startModal: null,
@@ -138,6 +146,17 @@ export const openDynModal = (setId: string | null) =>
   set({ dynModal: { setId } })
 
 export const closeDynModal = () => set({ dynModal: null })
+
+export const openGroupsModal = (
+  selectedId: string | null = null,
+) => set({ groupsModal: { selectedId } })
+
+export const selectGroupInModal = (
+  selectedId: string | null,
+) => set({ groupsModal: { selectedId } })
+
+export const closeGroupsModal = () =>
+  set({ groupsModal: null })
 
 // Opening the entry panel closes the tile menu that usually launched it, the same way
 // openStartModal does — two overlays over one tile is never intended.

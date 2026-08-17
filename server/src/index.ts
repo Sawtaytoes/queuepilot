@@ -15,6 +15,8 @@ import * as cache from './cache.js';
 import { WEB_PORT } from './config.js';
 import * as finished from './finished.js';
 import * as mqttd from './mqttd.js';
+import { seedIfMissing } from './groups.js';
+import * as sets from './sets.js';
 import { startLiveUpdates } from './sse.js';
 import * as warm from './warm.js';
 
@@ -47,6 +49,17 @@ const PUBLIC_DIR = path.join(__dirname, '..', '..', 'web', 'dist');
 // listening. A failure here disables caching but never blocks the server — every reader in
 // cache.js degrades to a miss.
 await cache.init();
+
+// A fresh install has no groups.yaml, and an empty group picker is indistinguishable
+// from a broken one. Seed it from whatever accounts the registry already names, once, before
+// anything can read it. Best-effort by construction — every failure path inside logs and
+// returns false, because a missing OPTIONAL config file must not stop the app serving.
+try {
+  const { sets: registrySets } = await sets.getRegistry();
+  await seedIfMissing(registrySets);
+} catch (e) {
+  console.log(`[groups] seed skipped: ${e instanceof Error ? e.message : String(e)}`);
+}
 
 // The file watcher + the two MQTT subscriptions that push over SSE. Kept out of
 // buildServer() so building the root for a test starts no timers and no watchers.
