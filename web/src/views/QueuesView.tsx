@@ -7,6 +7,7 @@ import {
 } from "react"
 import { Link } from "react-router"
 import { TypeBadge } from "../components/badges"
+import { isPullSet } from "../components/OpenQueueButton"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
@@ -16,7 +17,12 @@ import {
   progressLabel,
   tileFace,
 } from "../lib/tileFace"
-import type { NowState, QueueItem } from "../lib/types"
+import type {
+  NowState,
+  QueueItem,
+  RegistrySet,
+} from "../lib/types"
+import { PLEX_WORDS } from "../lib/vocab"
 import {
   openPlayMenu,
   openSetModal,
@@ -60,6 +66,7 @@ function Shelf({
   now,
   playingSet,
   providerKind,
+  set,
   setId,
 }: {
   setId: string
@@ -72,6 +79,12 @@ function Shelf({
   /** `plex` / `kavita` — this shelf's accent. Empty for a queue whose provider this build
    *  does not recognise, which falls back to the app's neutral accent. */
   providerKind: string
+  /** The registry row, for HOW this queue starts and what its provider calls that. Null
+   *  while the registry is still loading, which reads as push — the pre-existing default. */
+  set: Pick<
+    RegistrySet,
+    "id" | "delivery" | "vocabulary"
+  > | null
 }) {
   const stripRef = useRef<HTMLUListElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -161,22 +174,48 @@ function Shelf({
             : "Playing"}
         </span>
         <span className="shelfspacer" />
-        <Tip label="Play this queue on a device">
-          <button
-            aria-label="Play this queue on a device"
-            className="shelfplay"
-            onClick={(e) =>
-              openPlayMenu({
-                anchor:
-                  e.currentTarget.getBoundingClientRect(),
-                setId,
-              })
-            }
-            type="button"
+        {/* HOW this queue starts, never WHICH provider it is — the same rule
+            `OpenQueueButton` follows on the queue's own page. This shelf used to open the
+            device menu unconditionally, so a pull queue offered a Shield and a phone for
+            something none of them can open; with no broker it simply answered "MQTT not
+            connected" (reported 2026-08-17 on a Steam queue, and true for Kavita and the
+            board-game picker since each of those shipped).
+            (decision `2026-08-15-a-provider-carries-its-own-vocabulary`) */}
+        {isPullSet(set) ? (
+          <Tip
+            label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
           >
-            ▶
-          </button>
-        </Tip>
+            <a
+              aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
+              className="shelfplay"
+              href={`/go/${encodeURIComponent(setId)}`}
+              rel="noreferrer"
+              // A new tab, so the shelf you launched from is still here on the way back —
+              // same reason `OpenQueueButton` does it.
+              target="_blank"
+            >
+              {set?.vocabulary?.startIcon ||
+                PLEX_WORDS.startIcon}
+            </a>
+          </Tip>
+        ) : (
+          <Tip label="Play this queue on a device">
+            <button
+              aria-label="Play this queue on a device"
+              className="shelfplay"
+              onClick={(e) =>
+                openPlayMenu({
+                  anchor:
+                    e.currentTarget.getBoundingClientRect(),
+                  setId,
+                })
+              }
+              type="button"
+            >
+              ▶
+            </button>
+          </Tip>
+        )}
         <Tip label="Edit queue">
           <button
             aria-label="Edit queue"
@@ -395,6 +434,10 @@ export function QueuesView({
                   providerKind={
                     reg?.sets.find((s) => s.id === id)
                       ?.provider_kind ?? ""
+                  }
+                  set={
+                    reg?.sets.find((s) => s.id === id) ??
+                    null
                   }
                   setId={id}
                 />
