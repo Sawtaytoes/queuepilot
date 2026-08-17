@@ -19,7 +19,9 @@ import { toWeight } from './engine/weight.js';
 import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind } from './providers/config.js';
 // The same hard cap a per-entry override is clamped to (queues.setEpisodes), applied to the
 // set-wide default so a hand-posted value cannot queue a whole library.
-import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
+// ROTATION_LENGTH is read here as well as by the engine, because "equal to the default" is
+// what makes a lineup length store SPARSELY — see toLineupLength().
+import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { isNodeError } from './errors.js';
 import type {
   BatchStop,
@@ -347,6 +349,41 @@ const toPosIntOrNull = (v: unknown): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null;
 };
 
+/**
+ * A rotation channel's `length:` on the wire → what to STORE, or null for "follow env
+ * ROTATION_LENGTH", which is stored by ABSENCE.
+ *
+ * Equal-to-the-default drops the key. That is the sparse rule the entry counts already use
+ * (decision `2026-08-16-entry-count-follows-the-set-default`) and it is what keeps the pool
+ * editor non-destructive: its Save posts every knob it renders, so without this an untouched
+ * channel would grow a `length: 12` that says nothing — and would then stop following the env
+ * default if that ever moved.
+ *
+ * Clamped rather than rejected so a fat-fingered 300 builds a long-but-finite lineup instead
+ * of failing the save; ROTATION_LENGTH_MAX exists because every item in a lineup costs a Plex
+ * round trip at scan time.
+ */
+const toLineupLength = (v: unknown): number | null => {
+  const n = toPosIntOrNull(v);
+  if (n == null) return null;
+  const clamped = Math.min(n, ROTATION_LENGTH_MAX);
+  return clamped === ROTATION_LENGTH ? null : clamped;
+};
+
+/**
+ * `on_complete:` on the wire → what to store: `'restart'`, or null for the default (drop),
+ * which is stored by ABSENCE.
+ *
+ * Rejected rather than coerced, because a typo ("restart-at-1") silently meaning "drop" is how
+ * a channel quietly stops restarting — the failure looks exactly like a pool that ran out.
+ */
+const toOnComplete = (v: unknown): 'restart' | null => {
+  const s = v == null ? '' : String(v).trim().toLowerCase();
+  if (!s || s === 'drop') return null;
+  if (s !== 'restart') throw new Error(`invalid on_complete '${String(v)}' — use 'restart' or 'drop'`);
+  return s;
+};
+
 // batch_stops_at: WHERE a multi-episode batch may stop — "member" (never span two collection
 // members) or "season" (also never span a season boundary, including inside one show). Anything
 // else, including the "none" default, is stored as the ABSENCE of the key: the engine reads a
@@ -589,7 +626,9 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       refill: ent.refill === true,
       // What a FINISHED series does on this channel. `restart` is the only value that does
       // anything; absent reads as drop, which is what every channel has always done.
-      on_complete: String(ent.on_complete || '').toLowerCase() === 'restart' ? 'restart' : null,
+      // Read TOLERANTLY (unlike the writer, which rejects a typo): a hand-edited file that
+      // says `on_complete: nonsense` must still load as the channel it has always been.
+      on_complete: String(ent.on_complete || '').trim().toLowerCase() === 'restart' ? 'restart' : null,
       members: toMembers(ent.members),
       // Per-show manual start overrides for the dynamic rule pool (the Channels view
       // reads channel.starts[ratingKey] to seed the "Start from…" picker + chip).
@@ -737,6 +776,15 @@ function rotationCreateObj(id: string, body: Record<string, unknown>): Record<st
   if (mex.length) obj.movie_excludes = mex;
   const mi = toPosIntOrNull(body.max_items);
   if (mi) obj.max_items = mi;
+  // The lineup knobs, written by the SAME sparse rules updateSet uses — a length that just
+  // repeats the env default, a `refill: false` and an `on_complete: drop` are all stored by
+  // absence. Without these three lines a pool created from the editor with refill switched on
+  // would come back with it switched off, and the only clue would be the file.
+  const len = toLineupLength(body.length);
+  if (len) obj.length = len;
+  if (body.refill === true) obj.refill = true;
+  const oc = toOnComplete(body.on_complete);
+  if (oc) obj.on_complete = oc;
   return obj;
 }
 
@@ -1103,13 +1151,10 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         if (v == null) { node.delete('max_items'); continue; } // cleared => drop the key (no cap)
       }
       if (k === 'length') {
-        // Cleared => drop the key and follow env ROTATION_LENGTH, the same sparse-default
-        // shape `episodes:` uses. Clamped rather than rejected so a fat-fingered 300 builds
-        // a long-but-finite lineup instead of failing the save; ROTATION_LENGTH_MAX exists
-        // because every item in a lineup costs a Plex round trip at scan time.
-        const n = toPosIntOrNull(v);
+        // Cleared, or equal to the env default => drop the key and follow ROTATION_LENGTH.
+        const n = toLineupLength(v);
         if (n == null) { node.delete('length'); continue; }
-        v = Math.min(n, ROTATION_LENGTH_MAX);
+        v = n;
       }
       if (k === 'refill') {
         // Sparse: only `true` is written. `refill: false` is the default and storing it would
@@ -1117,12 +1162,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         if (v !== true) { node.delete('refill'); continue; }
       }
       if (k === 'on_complete') {
-        // `restart` is the only value with meaning; anything else means drop, which is the
-        // default and is stored by ABSENCE. Rejected rather than coerced, because a typo
-        // ("restart-at-1") silently meaning "drop" is how a channel quietly stops restarting.
-        const s = v == null ? '' : String(v).trim().toLowerCase();
-        if (!s || s === 'drop') { node.delete('on_complete'); continue; }
-        if (s !== 'restart') throw new Error(`invalid on_complete '${String(v)}' — use 'restart' or 'drop'`);
+        const s = toOnComplete(v);
+        if (s == null) { node.delete('on_complete'); continue; }
         v = s;
       }
       if (k === 'mode' && !isMode(v)) throw new Error(`invalid mode ${String(v)}`);
