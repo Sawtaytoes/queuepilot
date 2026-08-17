@@ -36,6 +36,7 @@ import type {
 } from './kavita-client.js';
 
 import { kavitaClient, readerSegment } from './kavita-client.js';
+import { readingListCoverBase64 } from './kavita-cover.js';
 import { errMessage } from '../errors.js';
 import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
@@ -761,6 +762,9 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      * Only the first library's run is written (see `sameLibraryPrefix`). Crossing libraries
      * in one list is a Kavita reader-profile bug: the manga reader does not remount, so a
      * manga chapter after two webtoon chapters keeps scroll + custom width.
+     *
+     * A list that has no cover of ours gets one (see `putCover` below) — the artwork is the
+     * one part of this artifact that is NOT rebuilt per launch.
      */
     async materialize(
       items: KavitaPlayItem[],
@@ -768,7 +772,12 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // this side names a persistent Reading List with it, so it is narrowed to a string here
       // rather than being made null-safe — a null would title the list "QueuePilot — null",
       // which is what the JS did too. Declared, not fixed.
-      { setName = 'queue' }: { setName?: string } = {},
+      //
+      // `setLabel` is the set's HUMAN name and is only used for the cover. The list title
+      // keeps the id, because the title is how this method finds the list again — renaming it
+      // would strand the existing one and mint a fresh id, breaking `/lists/153` and every
+      // link Kavita's own UI renders to it.
+      { setName = 'queue', setLabel = null }: { setName?: string; setLabel?: string | null } = {},
     ): Promise<KavitaArtifact> {
       const title = listTitleFor(setName);
       const existing = ((await c.readingLists({ pageSize: 200 })) || [])
@@ -807,6 +816,26 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           } catch (e) {
             console.log(`[kavita] could not clear list item ${row.id}: ${errMessage(e)}`);
           }
+        }
+      }
+      // ARTWORK. Everything else in this method is rebuilt per launch; the cover is the one
+      // thing that must NOT be, so it is written only when the list has no cover of ours:
+      // a brand-new list, or one Kavita is still auto-generating art for
+      // (`coverImageLocked: false` — an uploaded cover sets that flag and Kavita stops
+      // regenerating). Without it the cover is whatever page opened this launch's first
+      // chapter, and it changes every time the lineup does.
+      //
+      // BEFORE the items go on, deliberately: an upload while the list is empty is the same
+      // request either way, and doing it first means a failure here cannot leave the reader
+      // waiting on a render for a lineup that was otherwise ready.
+      if (listId != null && !existing?.coverImageLocked) {
+        // Best-effort, like the clear above: a cover is decoration and a launch that dies for
+        // want of one is a dead card. The render is pure CPU (Satori, no network) and the
+        // upload is one call, so the cost of trying is bounded.
+        try {
+          await c.uploadListCover(listId, await readingListCoverBase64(setLabel || setName));
+        } catch (e) {
+          console.log(`[kavita] could not set cover on list ${listId}: ${errMessage(e)}`);
         }
       }
       // The tiles still show the full rotation. The list the reader auto-advances

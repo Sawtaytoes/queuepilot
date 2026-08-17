@@ -129,19 +129,25 @@ const CONTINUE: Record<string, StubChapter | null> = {
   901: { id: 90002, number: '1', title: 'Ch 1', pages: 50, pagesRead: 0, seriesId: null },
 };
 
-interface StubList { id: number; title: string; ownerUserName?: string }
+interface StubList { id: number; title: string; ownerUserName?: string; coverImageLocked?: boolean }
 interface AddedChapter { readingListId: number; seriesId: number; chapterId: number }
+interface UploadedCover { readingListId: number | string; imageBase64: string }
 
-function stubClient({ existingLists = [] }: { existingLists?: StubList[] } = {}) {
+function stubClient(
+  { existingLists = [], coverFails = false }:
+  { existingLists?: StubList[]; coverFails?: boolean } = {},
+) {
   const lists: StubList[] = [...existingLists];
   let nextListId = 500;
   const added: AddedChapter[] = [];
   const deleted: { readingListId: number | string; readingListItemId: number | string }[] = [];
+  const covers: UploadedCover[] = [];
   return {
     _base: 'https://kavita.invalid',
     _calls: CALLS,
     _added: added,
     _deleted: deleted,
+    _covers: covers,
     _lists: lists,
     async whoami() { CALLS.push(['whoami']); return 'Sawtaytoes'; },
     async libraries() {
@@ -190,6 +196,13 @@ function stubClient({ existingLists = [] }: { existingLists?: StubList[] } = {})
     async deleteItem(readingListId: number | string, readingListItemId: number | string) {
       CALLS.push(['deleteItem', readingListId, readingListItemId]);
       deleted.push({ readingListId, readingListItemId });
+    },
+    async uploadListCover(readingListId: number | string, imageBase64: string) {
+      CALLS.push(['uploadListCover', readingListId]);
+      // The live endpoint's own failure mode, as a switch: it answers 400 for a payload it
+      // cannot decode, and the provider must survive that.
+      if (coverFails) throw new Error('kavita POST /api/Upload/reading-list -> HTTP 400');
+      covers.push({ readingListId, imageBase64 });
     },
   };
 }
@@ -478,6 +491,99 @@ await ok('a BRAND-NEW list is not cleared — there is nothing to clear', async 
   const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
   await p.materialize(play, { setName: 'reading' });
   assert.equal(c._deleted.length, 0, 'a freshly created list was pointlessly enumerated + cleared');
+});
+
+// ---------------------------------------------------------------------------
+// the cover — the one part of the artifact that is NOT rebuilt per launch
+//
+// Kavita generates a list's cover from its first item and REGENERATES it whenever the items
+// change, so a list this app rebuilds every launch wears a different interior page every time.
+// These gates are about the artwork's LIFECYCLE, not its looks: written once, then left alone.
+
+await ok('a brand-new list gets QueuePilot artwork, as RAW base64 SVG', async () => {
+  const c = stubClient();
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Reading' }) as KavitaArtifact;
+
+  assert.equal(c._covers.length, 1, 'a new list was left with Kavita\'s auto-generated cover');
+  const [cover] = c._covers;
+  assert.ok(cover, 'no cover was uploaded');
+  assert.equal(cover.readingListId, art.readingListId, 'the cover went to another list');
+  // The `data:image/png;base64,` spelling is a 400 from the live endpoint. Asserting the
+  // ABSENCE of the prefix is the only way this stays true — a stub cannot reject it for us.
+  assert.ok(
+    !cover.imageBase64.startsWith('data:'),
+    'the payload carries a data: prefix, which the live endpoint answers 400 to',
+  );
+  const svg = Buffer.from(cover.imageBase64, 'base64').toString('utf8');
+  assert.ok(svg.startsWith('<svg'), 'the payload did not decode to SVG markup');
+  assert.ok(svg.includes('<path'), 'the SVG has no glyph paths — the label was not rendered');
+});
+
+/**
+ * The label reaches the artwork. Satori converts glyphs to PATHS, so no assertion can look for
+ * the text inside the SVG; two labels that render IDENTICALLY is the observable form of "the
+ * cover ignored the label and drew something generic".
+ */
+await ok('the cover is drawn from the set LABEL, not its id', async () => {
+  const draw = async (setLabel: string) => {
+    const c = stubClient();
+    const p = kavitaProvider({ def: DEF, client: asClient(c) });
+    const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+    await p.materialize(play, { setName: 'reading', setLabel });
+    return c._covers[0]?.imageBase64 ?? '';
+  };
+  assert.notEqual(
+    await draw('Manga & Webtoons'),
+    await draw('Bob — Anime'),
+    'two different labels rendered the same cover',
+  );
+});
+
+await ok('a list whose cover is already ours is left alone', async () => {
+  const c = stubClient({
+    existingLists: [{ id: 42, title: 'QueuePilot — reading', coverImageLocked: true }],
+  });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await p.materialize(play, { setName: 'reading', setLabel: 'Reading' });
+  assert.equal(c._covers.length, 0, 'the cover was re-uploaded on a launch that did not need it');
+});
+
+/**
+ * `coverImageLocked: false` on an EXISTING list means Kavita is still generating that art
+ * itself — a list built before this shipped. Uploading then is what heals it on the next
+ * launch instead of requiring the owner to delete the list.
+ */
+await ok('an existing list still wearing Kavita\'s art gets ours', async () => {
+  const c = stubClient({
+    existingLists: [{ id: 42, title: 'QueuePilot — reading', coverImageLocked: false }],
+  });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await p.materialize(play, { setName: 'reading', setLabel: 'Reading' });
+  assert.equal(c._covers.length, 1, 'an unlocked list kept Kavita\'s per-launch cover');
+  assert.equal(c._covers[0]?.readingListId, 42);
+});
+
+/**
+ * A cover is decoration; a lineup is the point. This is the same best-effort rule the stale-
+ * item clear follows, and for the same reason: a throw here would be a dead card.
+ */
+await ok('a cover that fails to upload does not cost the reader their lineup', async () => {
+  CALLS.length = 0;
+  const c = stubClient({ coverFails: true });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Reading' }) as KavitaArtifact;
+  assert.ok(art.readingListId != null, 'materialize did not return a usable artifact');
+  assert.ok(c._added.length > 0, 'the chapters never went on the list');
+  // And it was TRIED — a green test here must not be "the upload was quietly skipped".
+  assert.ok(
+    CALLS.some((x) => x[0] === 'uploadListCover'),
+    'no cover upload was attempted at all',
+  );
 });
 
 await ok('sameLibraryPrefix keeps one library and stops at the next', async () => {
