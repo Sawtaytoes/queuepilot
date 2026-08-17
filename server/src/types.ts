@@ -93,6 +93,15 @@ export interface ProviderVocabulary {
    * The replacement engine swaps this for the word "Plex" in leftover sentences.
    */
   name: string;
+  /**
+   * The glyph on the start affordance: `▶` for Plex, `📖` for Kavita, `🎲` for the picker.
+   *
+   * A sibling of `verb`, and for exactly the same reason. `verb` alone fixed the WORD on a
+   * reading queue's button and left a play triangle sitting beside it — the icon still
+   * claiming "this is going to play on a screen" after the label had stopped. An icon is
+   * copy; it is authored per provider like the rest of the vocabulary.
+   */
+  startIcon: string;
 }
 
 /**

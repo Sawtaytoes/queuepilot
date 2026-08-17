@@ -84,11 +84,17 @@ const DELIVERY: Record<string, Delivery | undefined> = { plex: 'push', kavita: '
 // "Play “The Sword-Eating Swordmaster” now" (reported live, 2026-08-15). Delivery is HOW a
 // lineup starts; this is what the medium is CALLED, and they are not the same question.
 const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
-  plex: { verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex', unitShort: 'eps' },
-  kavita: { verb: 'Read', unit: 'chapter', units: 'chapters', member: 'series', done: 'read', name: 'Kavita', unitShort: 'ch' },
+  plex: {
+    verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex',
+    unitShort: 'eps', startIcon: '▶',
+  },
+  kavita: {
+    verb: 'Read', unit: 'chapter', units: 'chapters', member: 'series', done: 'read', name: 'Kavita',
+    unitShort: 'ch', startIcon: '📖',
+  },
   'board-game-picker': {
     verb: 'Play', unit: 'play', units: 'plays', member: 'game', done: 'played', name: 'Board Game Picker',
-    unitShort: 'plays',
+    unitShort: 'plays', startIcon: '🎲',
   },
 };
 
@@ -100,6 +106,7 @@ const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
  */
 const DEFAULT_VOCABULARY: ProviderVocabulary = {
   verb: 'Play', unit: 'episode', units: 'episodes', member: 'show', done: 'watched', name: 'Plex', unitShort: 'eps',
+  startIcon: '▶',
 };
 
 // Built-in deploy-time env names, per kind. These keep working exactly as they did before

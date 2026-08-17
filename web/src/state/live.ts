@@ -37,6 +37,60 @@ export function refreshData() {
   if (!uiBusy()) void liveRefresh({ force: true })
 }
 
+/**
+ * Fetch one endpoint and commit it on its own.
+ *
+ * **The two endpoints are refreshed INDEPENDENTLY, and that is the point.** `/api/sets` is a
+ * YAML read that answers in ~10 ms; `/api/queues` resolves every entry of every queue against
+ * Plex and Kavita and takes 7–9 s even with a warm cache. They used to be joined in one
+ * `Promise.all` whose result was committed together, which made both of these true:
+ *
+ *   * a settings change made in another tab (a renamed queue, a deleted profile binding) sat
+ *     invisible here for the length of the SLOW half, so "syncing across tabs" looked broken
+ *     when it was only late; and
+ *   * if the slow half threw — Plex asleep, Kavita restarting, a dropped socket — the fast
+ *     half was discarded with it and nothing was committed at all.
+ *
+ * Returns whether it committed, so the caller only re-reads the undo counters when something
+ * actually moved.
+ */
+async function refreshOne<TResponse>(
+  read: () => Promise<TResponse | typeof NOT_MODIFIED>,
+  commit: (value: TResponse) => void,
+): Promise<boolean> {
+  try {
+    const value = await read()
+
+    // A `304`: this endpoint genuinely has not moved. That is B8 layer 1 (conditional GET),
+    // which is what makes an SSE storm nearly free — the common event is a `now-playing`
+    // tick, which leaves both files untouched — and what fixes the optimistic-edit
+    // clobbering race, where such a tick used to force a refetch that overwrote a rename
+    // made a moment earlier.
+    if (value === NOT_MODIFIED) return false
+
+    // The fetch may have taken seconds — a gesture may have STARTED meanwhile, and
+    // committing now would replace the DOM under the drag. Defer to the retry timer.
+    if (uiBusy()) {
+      livePending = true
+
+      return false
+    }
+
+    commit(value as TResponse)
+
+    return true
+  } catch {
+    // A failed refresh is NOT self-healing on its own. `livePending` is cleared at the top
+    // of `liveRefresh`, and the 2 s timer only retries while it is set — so without this
+    // line one failed fetch left the tab stale until the next SSE event or a tab focus, and
+    // a config edit produces exactly ONE `data` event. Hence: mark it pending and let the
+    // timer come back for it.
+    livePending = true
+
+    return false
+  }
+}
+
 export async function liveRefresh({
   force = false,
 }: {
@@ -50,58 +104,29 @@ export async function liveRefresh({
 
   livePending = false
 
-  try {
-    // CONDITIONAL fetch (B8) unless `force`. An SSE event fires on any change, but
-    // the common one — a `now-playing` tick — leaves the queues untouched, so
-    // `/api/queues` answers `304` and this returns without touching the store:
-    // no re-render, no CLS, no gesture disruption. Only a genuine YAML/generation
-    // change (a 200 with a new ETag) commits.
-    //
-    // `force` is the other half: Kavita has no webhook, so marking a chapter read
-    // there never bumps the ETag. Tab-focus and an explicit refresh must hit
-    // series-detail again, or the tile stays on the chapter you just finished.
-    const [data, reg] = force
-      ? await Promise.all([
-          api<QueuesResponse>("GET", "/api/queues"),
-          api<SetsResponse>("GET", "/api/sets"),
-        ])
-      : await Promise.all([
-          apiConditional<QueuesResponse>("/api/queues"),
-          apiConditional<SetsResponse>("/api/sets"),
-        ])
+  // `force` is the other half of the conditional-GET story: Kavita has no webhook, so
+  // marking a chapter read there never bumps the ETag. Tab-focus and an explicit refresh
+  // must hit series-detail again, or the tile stays on the chapter you just finished.
+  const committed = await Promise.all([
+    // The registry FIRST in reading order because it is the one that returns immediately;
+    // both are in flight at once, so this is documentation, not scheduling.
+    refreshOne<SetsResponse>(
+      () =>
+        force
+          ? api<SetsResponse>("GET", "/api/sets")
+          : apiConditional<SetsResponse>("/api/sets"),
+      (reg) => setState({ reg }),
+    ),
+    refreshOne<QueuesResponse>(
+      () =>
+        force
+          ? api<QueuesResponse>("GET", "/api/queues")
+          : apiConditional<QueuesResponse>("/api/queues"),
+      (data) => setState({ data }),
+    ),
+  ])
 
-    // The fetch may take a moment — a gesture may have STARTED meanwhile. Committing
-    // now would replace the DOM under the drag. Defer.
-    if (uiBusy()) {
-      livePending = true
-
-      return
-    }
-
-    // Nothing changed on either endpoint — skip the whole commit.
-    //
-    // This is B8 layer 1 (conditional GET), which alone makes an SSE storm nearly free
-    // and fixes the optimistic-edit-clobbering race (a `now-playing` tick used to force a
-    // full refetch that overwrote a just-made rename). Layers 2 (echo the originating
-    // client id so a client skips the refetch for its OWN mutation) and 3 (per-set deltas)
-    // are deferred refinements — with the 304 path this cheap, their marginal value is low.
-    if (
-      !force &&
-      data === NOT_MODIFIED &&
-      reg === NOT_MODIFIED
-    )
-      return
-
-    const patch: Parameters<typeof setState>[0] = {}
-
-    if (data !== NOT_MODIFIED) patch.data = data
-    if (reg !== NOT_MODIFIED) patch.reg = reg
-
-    setState(patch)
-    void refreshHistoryButtons()
-  } catch {
-    /* the next event retries */
-  }
+  if (committed.some(Boolean)) void refreshHistoryButtons()
 }
 
 /**

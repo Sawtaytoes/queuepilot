@@ -71,10 +71,11 @@ function PlayRow({
   label: string
   meta: string
   onPlay: (anchor: DOMRect) => void
-  /** The registry entry, for `delivery` + the accent. Absent = push (pre-provider callers). */
+  /** The registry entry, for `delivery`, the accent + the start button's words. Absent =
+   * push (pre-provider callers). */
   set?: Pick<
     RegistrySet,
-    "id" | "delivery" | "provider_kind"
+    "id" | "delivery" | "provider_kind" | "vocabulary"
   >
   tier?: ReactNode
 }) {
@@ -111,8 +112,21 @@ function PlayRow({
   )
 }
 
-/** One channel's tier picker: an option per BINDING (value carries set + profile),
- * or the bare id for a legacy single-binding set. */
+/**
+ * One filtered pool's row.
+ *
+ * **A pool is locked to ONE account, so there is normally no picker here.** The tier dropdown
+ * existed because these pools predate being able to switch the Shield's Plex profile from the
+ * app: one pool had to carry every tier's binding and you chose at play time. Every pool is
+ * single-account now, and a control with one option is not a choice — it is a label wearing a
+ * chevron. So the account moves into the row's meta line as TEXT, and the row gets the same
+ * shape as a Curated Pool / Ordered Queue row: name, meta, one start button.
+ * (decision `2026-08-17-a-filtered-pool-is-locked-to-one-account`)
+ *
+ * The picker is not deleted, only conditional: a pool that still carries two or more bindings
+ * (a hand-edit, an older `sets.yaml`) keeps choosing at play time rather than silently playing
+ * as whichever binding happens to be first.
+ */
 function ChannelRow({ channel }: { channel: RegistrySet }) {
   const isRewatch = channel.behavior === "rewatch"
   const options = channel.has_explicit_profiles
@@ -146,18 +160,43 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
     defaultValue ?? options[0]?.value ?? channel.id,
   )
 
+  const hasChoice = options.length > 1
+  // `tierValue` is local state seeded ONCE, and the options are not: another tab (or a
+  // hand-edit picked up over SSE) can delete the binding this row is still holding. Falling
+  // back to the current default rather than trusting the stale value is what stops the row
+  // from quietly playing as an account the pool no longer has.
+  const value = options.some((o) => o.value === tierValue)
+    ? tierValue
+    : (defaultValue ?? options[0]?.value ?? channel.id)
+  // The account this pool is locked to, for the meta line. `has_explicit_profiles` is what
+  // separates a real binding from the synthesized one a legacy flat set reports, whose
+  // `plex_user` is the channel's own label and would read as "Shows · Shows".
+  const onlyAccount = hasChoice
+    ? null
+    : channel.has_explicit_profiles
+      ? (channel.profiles || [])[0]?.plex_user || null
+      : null
+  const behaviour = isRewatch
+    ? "weighted rewatch"
+    : "rotation · ratings-filtered"
+
   return (
     <PlayRow
       label={channel.label}
       set={channel}
+      // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
+      // until you know one is Younger Kids and the other Older Kids, and that used to be
+      // readable only off the dropdown this row no longer has.
       meta={
-        isRewatch
-          ? "weighted rewatch"
-          : "rotation · ratings-filtered"
+        onlyAccount
+          ? `${onlyAccount} · ${behaviour}`
+          : behaviour
       }
       to={`/channels/${encodeURIComponent(channel.id)}`}
       onPlay={(anchor) => {
-        const t = parseTierValue(tierValue)
+        // With one binding the row does not ask — it plays as the account the pool is
+        // configured for, which is what `tierValue` already holds.
+        const t = parseTierValue(value)
 
         openPlayMenu({
           anchor,
@@ -167,14 +206,16 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
         })
       }}
       tier={
-        <SelectListbox
-          className="rowtier"
-          label={`Profile for ${channel.label}`}
-          onChange={setTierValue}
-          options={options}
-          size="sm"
-          value={tierValue}
-        />
+        hasChoice ? (
+          <SelectListbox
+            className="rowtier"
+            label={`Profile for ${channel.label}`}
+            onChange={setTierValue}
+            options={options}
+            size="sm"
+            value={value}
+          />
+        ) : null
       }
     />
   )

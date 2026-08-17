@@ -125,7 +125,17 @@ export function ChannelsView({
     : channel.id
 
   return (
-    <main className="view" hidden={isHidden} id="channels">
+    <main
+      className="view"
+      // The pool editor wears its provider's accent, exactly as the queue grid does — this
+      // page was the ONE view that forgot to, so a Plex pool's "▶ Play on ▾" came out in the
+      // app's neutral violet while the same pool's row on the Play landing (and its own grid
+      // at `/q/<id>`) came out Plex-amber. One page, two colours, same provider.
+      // (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+      data-provider={channel.provider_kind || undefined}
+      hidden={isHidden}
+      id="channels"
+    >
       <div className="chhead">
         <label>
           Pool
