@@ -187,6 +187,7 @@ export function ChannelFilters({
               )
             }
             options={ratingOptions}
+            seedKey={profileKey}
           />
         </fieldset>
 
@@ -206,6 +207,7 @@ export function ChannelFilters({
               label: l.title,
               value: l.id,
             }))}
+            seedKey={profileKey}
           />
           {/* On a rewatch channel a show library means its FILMS: entries scanned as a
             single-episode series (that is how anime movies land in Plex).
@@ -231,6 +233,7 @@ export function ChannelFilters({
               label: l.title,
               value: l.id,
             }))}
+            seedKey={profileKey}
           />
         </fieldset>
 
@@ -253,6 +256,7 @@ export function ChannelFilters({
               label: l.title,
               value: l.id,
             }))}
+            seedKey={profileKey}
           />
         </fieldset>
 
