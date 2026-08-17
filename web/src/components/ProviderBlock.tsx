@@ -114,6 +114,10 @@ export function ProviderBlock({
     ? `Which ${provider?.label ?? "provider"} account owns the reading list. A list built as a different account is invisible to the reader that is meant to open it.`
     : "Locks this source to a Plex Home profile — a scan waits (and switches the Shield) until that profile is signed in before it plays."
 
+  // No box ticked = every library this source has, not "no source"
+  // (decision `2026-08-17-no-libraries-checked-means-every-library`).
+  const isEveryLibrary = block.libraries.length === 0
+
   const setLibrary = (id: string, on: boolean) => {
     onChange({
       ...block,
@@ -227,7 +231,10 @@ export function ProviderBlock({
             {libError}
           </p>
         ) : (
-          <div className="libs">
+          <div
+            className="libs"
+            data-scope={isEveryLibrary ? "all" : "named"}
+          >
             {/* Keyed on the PROVIDER, which is this group's second writer: switching the
                 source clears `block.libraries` without anyone touching a box, and
                 Charcuterie's Checkbox seeds `isChecked` on mount only. Not keyed on the
@@ -246,6 +253,13 @@ export function ProviderBlock({
             ))}
           </div>
         )}
+        {/* The scope is OPTIONAL, and saying so is the whole point of the change: an empty
+            group used to be a save error, so nobody could express "search all of it". */}
+        <p className="subhint">
+          {isEveryLibrary
+            ? `Every ${provider?.label ?? "library"} library — check a box to narrow it.`
+            : "Uncheck every box to search all of them."}
+        </p>
       </fieldset>
     </div>
   )

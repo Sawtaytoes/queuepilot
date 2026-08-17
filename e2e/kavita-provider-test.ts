@@ -341,10 +341,37 @@ await ok('a fully-read series yields no bucket even with a batch', async () => {
   assert.equal(play.length, 0);
 });
 
-await ok('no libraries selected yields nothing rather than the whole server', async () => {
+await ok('no libraries selected reads EVERY library, not none', async () => {
+  // Reversal of the old "yields nothing" rule (decision
+  // 2026-08-17-no-libraries-checked-means-every-library): an empty checkbox group means
+  // all of them, and the editor now says so. A rule-based queue with no scope therefore
+  // asks Kavita what its libraries are and draws from the lot.
+  CALLS.length = 0;
   const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
   const { play } = await p.buckets({ libraries: [] }) as KavitaBuckets;
-  assert.deepEqual(play, []);
+  assert.ok(play.length > 0, 'an unscoped queue drew nothing');
+  assert.ok(
+    CALLS.some(([fn]) => fn === 'libraries'),
+    'the library list was never asked for, so the scope cannot have been widened',
+  );
+  // Both stub libraries, not just the first.
+  assert.deepEqual(
+    CALLS.filter(([fn]) => fn === 'seriesForLibrary').map(([, id]) => id).sort(),
+    ['5', '6'],
+  );
+});
+
+await ok('a CURATED queue never widens: entries beat libraries', async () => {
+  // The widening above is the rule-based branch only. A queue with entries must not
+  // enumerate a shelf — that is the 93-entry reading-list bug, and asking for the library
+  // list here would be a request per launch that nothing reads.
+  CALLS.length = 0;
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  await p.buckets({ entries: [{ id: '1' }], libraries: [] }) as KavitaBuckets;
+  assert.ok(
+    CALLS.every(([fn]) => fn !== 'libraries' && fn !== 'seriesForLibrary'),
+    `a curated queue enumerated libraries: ${JSON.stringify(CALLS)}`,
+  );
 });
 
 await ok('the lineup is CAPPED — a big library does not queue its whole backlog', async () => {

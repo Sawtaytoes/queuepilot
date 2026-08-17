@@ -215,9 +215,17 @@ export function QueueView({
       : q.items
 
   // The libraries this queue actually draws from — the only ones its search can return, so
-  // offering the whole server's list would be four dead options out of five.
+  // offering the whole server's list would be four dead options out of five. A queue that
+  // names NONE draws from all of them (decision
+  // `2026-08-17-no-libraries-checked-means-every-library`), so the filter is skipped
+  // entirely rather than narrowing the dropdown to nothing.
+  const queueSections = regSet?.sections ?? []
   const libraryOptions = (reg?.libraries ?? [])
-    .filter((l) => (regSet?.sections ?? []).includes(l.id))
+    .filter(
+      (l) =>
+        !queueSections.length ||
+        queueSections.includes(l.id),
+    )
     .map((l) => ({ label: l.title, value: String(l.id) }))
 
   // Entry keys already in this queue, for the add box's "already here" answer. An object rather

@@ -881,12 +881,13 @@ function writeLineupKnobs(
 // rotation channels (source:'rotation') accept the full account-binding + filter knob set so
 // a dynamic channel is now fully authorable from the web UI (workstream E) — previously they
 // were hand-YAML only.
-// How many libraries a set's provider BLOCKS contribute.
 //
-// `sections` is Plex's library list, and since the provider seam it is no longer the only
-// way a set can have a source: a Kavita-only queue has an empty `sections` by definition and
-// draws entirely from its blocks. A validator that only counts `sections` therefore rejects
-// a perfectly valid reading queue with "at least one library section required".
+// THERE IS NO "at least one library" GATE, on any shape, and adding one back is a decision
+// reversal: a set that names no library draws from EVERY library its provider has
+// (decision `2026-08-17-no-libraries-checked-means-every-library`). The old validator had
+// already been patched once to stop rejecting Kavita-only queues over Plex's `sections`
+// field; the rule underneath it was the actual bug.
+//
 // The on-disk shape of a block. `implicit` is a READ-TIME marker (a legacy set reporting the
 // single Plex block it has always meant) and must never be written, or a re-read would treat
 // a real block as synthesized.
@@ -941,27 +942,13 @@ function providerKindForSet(ent: RawSet): string {
   return defs.get(blocks[0]?.provider ?? '') ?? '';
 }
 
-function blockLibraryCount(providers: unknown): number {
-  if (!Array.isArray(providers)) return 0;
-  return providers.reduce<number>((n, b) => {
-    const libs = b && typeof b === 'object' ? (b as { libraries?: unknown }).libraries : null;
-    return n + (Array.isArray(libs) ? libs.filter((x) => String(x).trim()).length : 0);
-  }, 0);
-}
-
 export async function createSet(body: Record<string, unknown> = {}): Promise<{ id: string }> {
   const { label, kind, sections, source } = body;
   const isRotation = source === 'rotation';
   if (!label || !String(label).trim()) throw new Error('label required');
   const secs = toInts(sections);
-  // A rotation channel may carry NO show library: a Shorts-only channel draws entirely from
-  // item_sections. A curated queue needs a real source — which is `sections` for Plex, OR a
-  // provider block's libraries for any non-Plex source.
-  const itemSecs = toInts(body.item_sections);
-  const blockLibs = blockLibraryCount(body.providers);
-  if (!secs.length && !blockLibs && !(isRotation && itemSecs.length)) {
-    throw new Error('at least one library section required');
-  }
+  // A set may name NO library at all — that is "every library", not "no source". See the
+  // note above `writableBlocks`.
   return withLock(async () => {
     const doc = await readDoc();
     const seq = setsSeq(doc);
@@ -1216,36 +1203,10 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         continue;
       }
       if (k === 'sections' || k === 'item_sections') {
+        // Normalized, never validated: clearing every library is a legitimate edit that means
+        // "draw from all of them" (see the note above `writableBlocks`). This used to throw
+        // on an empty union, which is how unchecking the last box read as a save failure.
         v = toInts(v);
-        // Validate the EFFECTIVE union, not the one key: a rotation channel is allowed to have
-        // no show library (Shorts-only), so `sections: []` is fine as long as some library
-        // remains. Curated queues still require a real `sections`.
-        if (isRotation) {
-          const otherKey = k === 'sections' ? 'item_sections' : 'sections';
-          const otherNode = node.get(otherKey);
-          const other = otherKey in patch
-            ? toInts(patch[otherKey])
-            : toInts(isNode(otherNode) ? otherNode.toJSON() : undefined);
-          const providersNode = node.get('providers');
-          const rotBlocks = 'providers' in patch
-            ? patch.providers
-            : (isNode(providersNode) ? providersNode.toJSON() : undefined);
-          if (!(v as number[]).length && !other.length && !blockLibraryCount(rotBlocks)) {
-            throw new Error('at least one library section required');
-          }
-        } else if (k === 'sections' && !(v as number[]).length) {
-          // A curated queue needs a source, but `sections` is Plex's and is legitimately
-          // EMPTY on a Kavita-only queue — its libraries live in the provider blocks. Count
-          // those before rejecting, or saving a reading queue fails with a Plex-shaped error
-          // about a field it does not use.
-          const providersNode = node.get('providers');
-          const effBlocks = 'providers' in patch
-            ? patch.providers
-            : (isNode(providersNode) ? providersNode.toJSON() : undefined);
-          if (!blockLibraryCount(effBlocks)) {
-            throw new Error('at least one library section required');
-          }
-        }
       }
       if (k === 'blocklist' || k === 'movie_excludes') v = (Array.isArray(v) ? v : []).map(String);
       if (k === 'allowed_ratings' || k === 'movie_ratings') {

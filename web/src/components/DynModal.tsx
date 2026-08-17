@@ -352,14 +352,10 @@ export function DynModal() {
       return
     }
 
-    // The server requires at least one library on a rotation channel — show OR item
-    // (a Shorts-only channel has no show library at all); enforce here so the user
-    // gets a clear message rather than a 400.
-    if (!showSections.length && !itemSections.length) {
-      setStatus("Pick at least one library", "err")
-
-      return
-    }
+    // No library gate. A channel that ticks nothing pools from EVERY video library
+    // (decision `2026-08-17-no-libraries-checked-means-every-library`); the server stopped
+    // rejecting it in the same change, so blocking it here would be the only thing left
+    // standing between the owner and the behaviour the empty group promises.
 
     // Collect the bindings; drop empty cards. When ≥1 has data, send `profiles[]`
     // (the canonical shape); Node writes it and drops the legacy top-level fields.
@@ -633,6 +629,14 @@ export function DynModal() {
             seedKey={modalKey}
           />
         </fieldset>
+        {/* The three groups are ONE scope — a channel with nothing ticked anywhere pools
+            from every video library (decision
+            `2026-08-17-no-libraries-checked-means-every-library`). */}
+        <p className="subhint" id="dyn-alllibs">
+          {!showSections.length && !itemSections.length
+            ? "Every video library — check a box to narrow it."
+            : "Uncheck every box to pool from all of them."}
+        </p>
       </div>
 
       {/* A show library means different things per behavior: episodes to progress

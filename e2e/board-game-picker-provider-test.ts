@@ -180,13 +180,39 @@ await ok('search scopes to categories, and an empty term asks nothing', async ()
   assert.deepEqual(hits?.map((h) => h.id), ['harbour-lantern']);
 });
 
-await ok('the implicit collection scope is not sent as a category', async () => {
+await ok('no categories named searches the whole shelf', async () => {
+  // The live bug (2026-08-17): `cubitos` — a real game in no owner category — could not be
+  // found from a queue whose boxes were all ticked. An unscoped search must reach the games
+  // that belong to no category at all, which is most of the shelf.
   CALLS = [];
-  await provider().search?.('lantern', { libraries: ['collection'] });
+  const hits = await provider().search?.('a', { libraries: [] });
+  assert.deepEqual(hits?.map((h) => h.id).sort(), ['harbour-lantern', 'orchard']);
   assert.ok(
-    CALLS.some((c) => c.startsWith('/api/games?q=lantern&categories=')) && CALLS.every((c) => !c.includes('categories=collection')),
+    CALLS.every((c) => !c.includes('/api/games?q=a&categories=') || c.endsWith('categories=')),
+    `an empty scope still sent a category filter: ${CALLS.join(', ')}`,
+  );
+});
+
+await ok('a stored `collection` id still means the whole shelf, never a category', async () => {
+  // `collection` was a synthetic checkbox that meant "everything" and was silently DROPPED,
+  // so ticking it alongside a real category narrowed to that category — the shape of the
+  // reported bug. Queues written then are still on disk; the id has to widen the scope back
+  // to everything rather than being dropped or sent as a category the picker never had.
+  CALLS = [];
+  const hits = await provider().search?.('a', { libraries: ['collection', "Roll 'n Write"] });
+  assert.deepEqual(hits?.map((h) => h.id).sort(), ['harbour-lantern', 'orchard']);
+  assert.ok(
+    CALLS.every((c) => !c.includes('categories=collection')),
     `collection leaked into the category filter: ${CALLS.join(', ')}`,
   );
+});
+
+await ok('the library list is the owner categories, with no synthetic Collection', async () => {
+  // The whole shelf is what checking NOTHING means now
+  // (decision 2026-08-17-no-libraries-checked-means-every-library), so a "Collection" box
+  // would be a second, contradictory way to say it — the trap the bug above was.
+  const libs = await provider().libraries?.();
+  assert.deepEqual(libs, [{ id: "Roll 'n Write", title: "Roll 'n Write" }]);
 });
 
 // --- the load-bearing one ------------------------------------------------------ //
