@@ -8,13 +8,18 @@
 // deterministic part — the combined bucket pool (channel_buckets) — is parity-gated; build_rotation
 // shuffles+round-robins via an injected rng (like next_queue's anime branch), so its interleave
 // stays a per-language seeded test, not a cross-language byte-compare.
-import { iterHistory, unwatchedBuckets } from './select.js';
+import {
+  collectionChildren, findCollection, iterHistory, unwatchedBuckets,
+} from './select.js';
+import { setSections } from './routing.js';
 import { describe, resolveMember } from './resolve.js';
 import type { EntryDescriptor } from './resolve.js';
 import { weightedInterleave } from './weight.js';
 import type { Rng } from './weight.js';
 import { WATCH_COUNT_ACCOUNTS, ROTATION_LENGTH, ROTATION_LENGTH_MAX } from '../env.js';
-import type { Bucket, EngineBinding, MemberValue, PlexClient, PoolItem } from '../types.js';
+import type {
+  Bucket, EngineBinding, MemberValue, PlexClient, PlexMetadata, PoolItem,
+} from '../types.js';
 
 /**
  * The cfg slice the rotation wiring reads. `unwatchedBuckets` and `resolveMember` each declare
@@ -22,7 +27,73 @@ import type { Bucket, EngineBinding, MemberValue, PlexClient, PoolItem } from '.
  */
 type RotationCfg = Parameters<typeof unwatchedBuckets>[1]
   & Parameters<typeof resolveMember>[2]
-  & { members?: readonly MemberValue[] | null };
+  & {
+    members?: readonly MemberValue[] | null;
+    /** `'whole'` (default) | `'split'` — see `isSplittingCollections`. */
+    collection_members?: unknown;
+  };
+
+/**
+ * Does this pool want a collection member SPLIT back into its individual shows?
+ *
+ * `whole` (the default, and absent reads as it): the collection is one member and plays
+ * through in its own order. `split`: each of its children becomes its own member, rotating
+ * independently — which is what the rule pool would have given you anyway.
+ *
+ * Anything unrecognised reads as `whole`, matching how `batchStop`/`toOnComplete` treat a
+ * typo: fall back to the intended default rather than to the other behaviour.
+ */
+function isSplittingCollections(cfg: RotationCfg): boolean {
+  return String(cfg.collection_members ?? '').trim().toLowerCase() === 'split';
+}
+
+/**
+ * Every ratingKey COVERED by a `Collection:` member — the collection's own children.
+ *
+ * This is what stops a collection from being listed twice. `channelBuckets` deduped members
+ * against the rule pool by BUCKET ratingKey, and a collection's bucket key is the
+ * collection's, which never equals a child show's — so adding "Batman: The Animated Series"
+ * as a member left Batman: The Animated Series ALSO sitting in the eligible pool as a
+ * standalone show, free to be picked mid-run and out of order (owner, 2026-08-17).
+ *
+ * Deliberately the same shape as `select.expandedBlocklist`, which has always expanded a
+ * `Collection: <name>` entry to its children's ratingKeys for exactly the same reason: at the
+ * pool level a collection IS its members.
+ */
+async function collectionCover(
+  client: PlexClient,
+  cfg: RotationCfg,
+  token: string | null | undefined,
+): Promise<Set<string>> {
+  const covered = new Set<string>();
+  for (const desc of memberDescs(cfg)) {
+    if (!desc.collection) continue;
+    for (const ch of await collectionChildrenOf(client, cfg, desc.collection, token)) {
+      covered.add(String(ch.ratingKey));
+    }
+  }
+  return covered;
+}
+
+/**
+ * The ordered children of the `Collection: <name>` member `name`, searched across the pool's
+ * own sections ([] when it resolves nowhere). The collection's own `collectionSort` order is
+ * preserved — `collectionChildren` does no client-side re-sort — which is what makes the
+ * whole-collection mode play "in order" in the first place.
+ */
+async function collectionChildrenOf(
+  client: PlexClient,
+  cfg: RotationCfg,
+  name: string,
+  token: string | null | undefined,
+): Promise<PlexMetadata[]> {
+  for (const sec of setSections(cfg) || []) {
+    const crk = await findCollection(client, sec, name, token);
+    // A collection lives in ONE section, so the first hit is the answer.
+    if (crk) return collectionChildren(client, crk, token);
+  }
+  return [];
+}
 
 // Watched ratingKeys across the binding's WHOLE history (no section filter) — members resolve by
 // ratingKey GLOBALLY (one may live outside the channel's sections), so member watched-state must
@@ -62,8 +133,32 @@ export async function memberBuckets(
 ): Promise<Bucket[]> {
   const tok = await client.accountToken(binding.user_uuid);
   const watched = await watchedAll(client, binding);
+  const isSplitting = isSplittingCollections(cfg);
   const buckets: Bucket[] = [];
   for (const desc of memberDescs(cfg)) {
+    // SPLIT: the collection stops being a member and its children become members instead —
+    // one bucket each, resolved exactly as a hand-added show member would be, so each one
+    // rotates on its own. `weight` rides down to every child: it was the collection's share
+    // of a round, and after the split each child asks for that share.
+    if (desc.collection && isSplitting) {
+      for (const child of await collectionChildrenOf(client, cfg, desc.collection, tok)) {
+        const childDesc = describe({
+          ratingKey: String(child.ratingKey),
+          title: child.title,
+          weight: desc.weight,
+        });
+        const res = await resolveMember(client, childDesc, cfg, watched, tok);
+        if (!res || !res.items.length) continue;
+        buckets.push({
+          show: res.title,
+          ratingKey: res.ratingKey || res.title,
+          episodes: res.items as PoolItem[],
+          multi_season: res.multi_season || false,
+          weight: res.weight,
+        });
+      }
+      continue;
+    }
     const res = await resolveMember(client, desc, cfg, watched, tok);
     if (!res || !res.items.length) continue;
     buckets.push({
@@ -94,6 +189,22 @@ export async function channelBuckets(
   if (!cfg.members || !cfg.members.length) return rule;
   const members = await memberBuckets(client, cfg, binding);
   const seen = new Set(members.map((b) => String(b.ratingKey)));
+  // A COLLECTION MEMBER COVERS ITS CHILDREN, in both modes.
+  //
+  // The dedupe above compares BUCKET ratingKeys, and a collection's bucket key is the
+  // collection's own — it can never equal a child show's. So a collection member used to
+  // leave every one of its shows sitting in the rule pool as well, and the pool played them
+  // both ways at once: the collection in order, and the same shows again at random.
+  //
+  // `whole` is the mode that NEEDS this: the collection speaks for its children, so they
+  // leave the rule pool and the collection's own order is the only order they play in.
+  //
+  // In `split` it is a belt-and-braces no-op for any child that resolved — that child is
+  // already a member bucket keyed by its own ratingKey, so `seen` caught it. Applying the
+  // cover in both modes anyway keeps ONE rule to state and to test ("a collection member
+  // covers its children") instead of a rule with a mode-shaped exception.
+  const tok = await client.accountToken(binding.user_uuid);
+  for (const rk of await collectionCover(client, cfg, tok)) seen.add(rk);
   return members.concat(rule.filter((b) => !seen.has(String(b.ratingKey))));
 }
 
