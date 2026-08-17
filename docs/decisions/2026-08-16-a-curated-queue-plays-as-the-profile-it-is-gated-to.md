@@ -92,3 +92,8 @@ member's `watched` short-circuit — and the start editor's "N/M watched" — re
 view. Show members (the common case, and Dragon Ball's) already resolve per-account through
 `nextEpisode(opts)`. Fixing it means adding an `account` column to the `collection_children`
 cache table, which is a schema migration and its own change.
+
+> **Done 2026-08-17** — reported the evening this deployed ("the 'Watched' is still wrong for
+> the given account"): the start editor read 154/155 where Older Kids is 45/155.
+> [A collection's members are read (and cached) per account](2026-08-17-a-collections-members-are-read-per-account.md)
+> closes it, and extends the same set-derived profile to both start-editor routes.

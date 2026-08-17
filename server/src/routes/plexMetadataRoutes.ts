@@ -186,13 +186,44 @@ export function plexMetadataRoutes(): Hono {
   // A series' playable episodes grouped by season, and a collection's members in play order.
   // Both are read-only lookups the start modal fills its dropdowns from, so a start point is
   // PICKED (season + real episode title) instead of typed blind into a tiny number box.
+
+  /**
+   * WHOSE watched marks these pickers show, resolved from the request in one place because
+   * both routes need the same answer and got it wrong in the same way.
+   *
+   * `?uuid=` wins — a rotation channel's member grid already knows the active binding's
+   * user_uuid and passes it. A CURATED QUEUE has no binding to read one from, so the profile
+   * comes from the set's `requires_profile` instead (decision
+   * 2026-08-16-a-curated-queue-plays-as-the-profile-it-is-gated-to). Deriving it server-side
+   * rather than teaching the grid to send a uuid keeps one definition of who a queue plays as.
+   *
+   * Empty for an ungated set, for the owner, and for a mint failure — all three mean "read as
+   * admin", which is what these routes have always done.
+   */
+  async function pickerScope(c: { req: { query(k: string): string | undefined } }): Promise<{
+    scope: plex.AccountScope; uuid: string | null;
+  }> {
+    const uuidQ = (c.req.query('uuid') ?? '').trim();
+    if (uuidQ) {
+      try {
+        return { scope: { token: await plex.accountToken(uuidQ), account: uuidQ }, uuid: uuidQ };
+      } catch {
+        return { scope: {}, uuid: null }; // a mint failure degrades to admin, never a 500
+      }
+    }
+    const setId = (c.req.query('set') ?? '').trim();
+    if (!setId) return { scope: {}, uuid: null };
+    const s = await sets.getSet(setId);
+    const scope = await plex.profileScope(s?.requires_profile ?? null);
+    return { scope, uuid: scope.account ?? null };
+  }
+
   app.get('/show/:ratingKey/episodes', async (c) => {
     try {
-      // `uuid` (a Plex Home profile's user_uuid) scopes the `watched` marks to that profile, so
-      // a per-profile channel's start editor reflects that profile's history, not the admin's.
-      // Absent (queues/members/admin) => admin token, unchanged. A mint failure degrades to admin.
-      const uuidQ = (c.req.query('uuid') ?? '').trim();
       const setId = (c.req.query('set') ?? '').trim();
+      // Resolved BEFORE the provider branch, so a Kavita/Plex set alike hands its provider the
+      // profile the queue plays as rather than only an explicitly-passed one.
+      const { scope, uuid } = await pickerScope(c);
       // A named set goes through ITS provider. Without this a Kavita series id is handed
       // to plex.showEpisodes, which cannot see it, and the picker says it could not
       // read the series from Plex — the live bug on Multi-mind Mayhem.
@@ -202,15 +233,11 @@ export function plexMetadataRoutes(): Hono {
           const block = providerBlocks.resolveSingle({ ...s });
           const p = providerFor(block.provider);
           if (typeof p.listUnits === 'function') {
-            const out = await p.listUnits(c.req.param('ratingKey'), { uuid: uuidQ || null });
+            const out = await p.listUnits(c.req.param('ratingKey'), { uuid });
             if (!out) return c.json({ error: 'no episodes' }, 404);
             return c.json(out);
           }
         }
-      }
-      let scope = {};
-      if (uuidQ) {
-        try { scope = { token: await plex.accountToken(uuidQ), account: uuidQ }; } catch { scope = {}; }
       }
       const out = await plex.showEpisodes(c.req.param('ratingKey'), scope);
       if (!out) return c.json({ error: 'no episodes' }, 404);
@@ -222,7 +249,10 @@ export function plexMetadataRoutes(): Hono {
 
   app.get('/collection/:ratingKey/children', async (c) => {
     try {
-      const children = await plex.collectionChildren(c.req.param('ratingKey'));
+      // Every progress field on a member row is the querying account's: a movie's `watched`,
+      // and the "154/155 watched" a show member prints in the series picker.
+      const { scope } = await pickerScope(c);
+      const children = await plex.collectionChildren(c.req.param('ratingKey'), scope);
       if (!children) return c.json({ error: 'no collection' }, 404);
       return c.json({ children });
     } catch (e) {
