@@ -29,7 +29,7 @@ import { parse, stringify } from 'yaml';
 import type { Delivery, ProviderDefinition, ProviderVocabulary } from '../types.js';
 
 import { isNodeError, errMessage } from '../errors.js';
-import { PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL, BOARD_GAME_PICKER_URL } from '../env.js';
+import { PROVIDERS_PATH, PROVIDERS_SECRETS_PATH, KAVITA_URL, BOARD_GAME_PICKER_URL, STEAM_ID } from '../env.js';
 
 /**
  * A resolved token and where it came from. `token` is null when unconfigured, NEVER `''` —
@@ -67,13 +67,19 @@ export interface SecretWriteResult {
 
 // The kinds this build knows how to instantiate. A definition naming anything else is kept
 // (so a newer config on an older image is not silently dropped) but reports unsupported.
-export const KINDS = ['plex', 'kavita', 'board-game-picker'];
+export const KINDS = ['plex', 'kavita', 'board-game-picker', 'steam'];
 
 // Push a lineup at a device, or return a URL to open. Kavita is `pull` because it has no
 // cast and no webhooks at all — see docs/kavita-feasibility.md §4. This mirrors each
 // provider's own `delivery`, kept here too so the API can report it without instantiating
 // (and therefore without needing a token for an unconfigured provider).
-const DELIVERY: Record<string, Delivery | undefined> = { plex: 'push', kavita: 'pull', 'board-game-picker': 'pull' };
+// Steam is `pull` for the same structural reason Kavita is: a launch is a URL to OPEN
+// (`steam://rungameid/<appid>`), not a lineup pushed at a device. That the URL is ultimately
+// handed to a PC by Home Assistant rather than followed by a browser does not change which
+// side builds it.
+const DELIVERY: Record<string, Delivery | undefined> = {
+  plex: 'push', kavita: 'pull', 'board-game-picker': 'pull', steam: 'pull',
+};
 
 // The WORDS each medium is described in. Kept beside DELIVERY and for the same reason: the
 // API must be able to report it without instantiating a provider, so an UNCONFIGURED backend
@@ -96,6 +102,13 @@ const VOCABULARY: Record<string, ProviderVocabulary | undefined> = {
     verb: 'Play', unit: 'play', units: 'plays', member: 'game', done: 'played', name: 'Board Game Picker',
     unitShort: 'plays', startIcon: '🎲',
   },
+  // The same words as the picker, which is correct rather than lazy: both are games played
+  // in sessions. They are told apart by `name` and the accent colour, not by inventing a
+  // synonym for "play" that nobody says out loud.
+  steam: {
+    verb: 'Play', unit: 'play', units: 'plays', member: 'game', done: 'played', name: 'Steam',
+    unitShort: 'plays', startIcon: '🎮',
+  },
 };
 
 /**
@@ -117,6 +130,10 @@ const ENV_TOKEN_KEYS: Record<string, string[] | undefined> = {
   kavita: ['KAVITA_API_KEY'],
   // Optional on purpose — see KINDS_CONFIGURED_BY_URL below.
   'board-game-picker': ['BOARD_GAME_PICKER_API_TOKEN'],
+  // Named to match the root .env the rest of the fleet already uses. REQUIRED: Steam's Web
+  // API refuses an unauthenticated GetOwnedGames outright, so this fails loudly like Plex
+  // and Kavita rather than joining the URL-configured exception.
+  steam: ['STEAM_WEB_API_KEY'],
 };
 
 // A provider added from the couch has no deploy-time env name, so it gets a generic one.
@@ -176,6 +193,10 @@ function implicitDefinitions(): ProviderDefinition[] {
   if (BOARD_GAME_PICKER_URL) {
     out.push({ id: 'board-game-picker', kind: 'board-game-picker', label: 'Board Game Picker', base_url: BOARD_GAME_PICKER_URL });
   }
+  // Steam has no self-hosted base URL to point at — the API host is Valve's and is a
+  // constant in steam-client.ts — so the ACCOUNT is what says "this install plays PC games".
+  // Same rule, different field.
+  if (STEAM_ID) out.push({ id: 'steam', kind: 'steam', label: 'Steam', base_url: '' });
   return out;
 }
 

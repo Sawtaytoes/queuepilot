@@ -15,11 +15,14 @@
 import type { PlexClient, Provider, ProviderDefinition } from '../types.js';
 import type { KavitaHttpClient } from './kavita-client.js';
 
+import { STEAM_ID } from '../env.js';
 import { definitions, definitionFor, requireToken, tokenFor, isConfigured, KINDS } from './config.js';
 import { plexProvider } from './plex.js';
 import { kavitaProvider } from './kavita.js';
 import { boardGamesProvider } from './board-game-picker.js';
+import { steamProvider } from './steam.js';
 import type { BoardGamesHttpClient } from './board-game-picker-client.js';
+import type { SteamHttpClient } from './steam-client.js';
 
 /**
  * The injected client, which is per-KIND: `plex-replay.js` for Plex, a stubbed Kavita HTTP
@@ -27,7 +30,7 @@ import type { BoardGamesHttpClient } from './board-game-picker-client.js';
  * lie — so this is the union, and each branch below asserts the half its own provider needs.
  * That assertion is exactly as safe as the switch it sits in: `def.kind` chose the branch.
  */
-export type InjectedProviderClient = PlexClient | KavitaHttpClient | BoardGamesHttpClient;
+export type InjectedProviderClient = PlexClient | KavitaHttpClient | BoardGamesHttpClient | SteamHttpClient;
 
 /**
  * Instantiate a provider by id.
@@ -66,9 +69,25 @@ export function providerFor(
       return boardGamesProvider({ def, token, client: client as BoardGamesHttpClient | null });
     }
 
+    case 'steam': {
+      // Fails loudly and by name, like Plex and Kavita: Valve's API rejects an
+      // unauthenticated GetOwnedGames, so an empty key produces a provider that talks to
+      // nothing. STEAM_ID is required for the same reason and is NOT a credential — it is
+      // which account's library to read, and without it there is no library at all.
+      const apiKey = client ? 'stub' : requireToken(def.id, def.kind);
+      const steamId = client ? 'stub' : STEAM_ID;
+      if (!steamId) {
+        throw new Error(
+          `provider '${id}' is NOT CONFIGURED: no account. Set STEAM_ID in the app env to the `
+          + '64-bit id of the account whose library should be queued.',
+        );
+      }
+      return steamProvider({ def, apiKey, steamId, client: client as SteamHttpClient | null });
+    }
+
     default:
       throw new Error(
-        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, board-game-picker`,
+        `provider '${id}' has unsupported kind '${def.kind}' — this build knows plex, kavita, board-game-picker, steam`,
       );
   }
 }

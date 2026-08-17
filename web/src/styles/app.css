@@ -168,6 +168,30 @@
   --color-intent-accent-on-solid: #ffffff;
 }
 
+/* --- Steam ----------------------------------------------------------------- */
+[data-provider="steam"] {
+  --color-intent-accent-surface: #e3f0fb;
+  --color-intent-accent-surface-hover: #d2e7f8;
+  --color-intent-accent-border: #2a6f9e;
+  --color-intent-accent-content: #10496e;
+  --color-intent-accent-solid: #1a6ea8;
+  --color-intent-accent-solid-hover: #145a8b;
+  --color-intent-accent-on-solid: #ffffff;
+}
+
+[data-scheme="dark"] [data-provider="steam"],
+[data-scheme="dark"][data-provider="steam"] {
+  --color-intent-accent-surface: #0d2233;
+  --color-intent-accent-surface-hover: #122b40;
+  --color-intent-accent-border: #245776;
+  --color-intent-accent-content: #66c0f4;
+  --color-intent-accent-solid: #1a6ea8;
+  /* The tight one, exactly as the board-game dark hover is: lightening is what costs white
+     contrast, and #1E7AB8 is as light as this step goes and stays over 4.5 (4.63). */
+  --color-intent-accent-solid-hover: #1e7ab8;
+  --color-intent-accent-on-solid: #ffffff;
+}
+
 /* The one non-token custom property left: the poster tile's width. It is a layout
    constant with no token analogue (the spacing scale is a 4px ramp, not a card
    size) and the Narrow View breakpoint shrinks it, which is exactly what a custom
