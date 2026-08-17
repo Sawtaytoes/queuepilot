@@ -133,21 +133,25 @@ interface StubList { id: number; title: string; ownerUserName?: string; coverIma
 interface AddedChapter { readingListId: number; seriesId: number; chapterId: number }
 interface UploadedCover { readingListId: number | string; imageBase64: string }
 
+interface ListPatch { title: string; summary: string; promoted: boolean; coverImageLocked: boolean }
+
 function stubClient(
-  { existingLists = [], coverFails = false }:
-  { existingLists?: StubList[]; coverFails?: boolean } = {},
+  { existingLists = [], coverFails = false, renameFails = false }:
+  { existingLists?: StubList[]; coverFails?: boolean; renameFails?: boolean } = {},
 ) {
-  const lists: StubList[] = [...existingLists];
+  const lists: StubList[] = existingLists.map((l) => ({ ...l }));
   let nextListId = 500;
   const added: AddedChapter[] = [];
   const deleted: { readingListId: number | string; readingListItemId: number | string }[] = [];
   const covers: UploadedCover[] = [];
+  const renames: { readingListId: number | string; patch: ListPatch }[] = [];
   return {
     _base: 'https://kavita.invalid',
     _calls: CALLS,
     _added: added,
     _deleted: deleted,
     _covers: covers,
+    _renames: renames,
     _lists: lists,
     async whoami() { CALLS.push(['whoami']); return 'Sawtaytoes'; },
     async libraries() {
@@ -196,6 +200,19 @@ function stubClient(
     async deleteItem(readingListId: number | string, readingListItemId: number | string) {
       CALLS.push(['deleteItem', readingListId, readingListItemId]);
       deleted.push({ readingListId, readingListItemId });
+    },
+    async updateList(readingListId: number | string, patch: ListPatch) {
+      CALLS.push(['updateList', readingListId, patch.title]);
+      if (renameFails) throw new Error('kavita POST /api/ReadingList/update -> HTTP 500');
+      renames.push({ readingListId, patch });
+      const row = lists.find((l) => String(l.id) === String(readingListId));
+      // Apply it the way the live endpoint does — the WHOLE DTO, no patch semantics. That is
+      // what makes `coverImageLocked: false` here destructive, and the stub must not be kinder
+      // than Kavita or the gate below would prove nothing.
+      if (row) {
+        row.title = patch.title;
+        row.coverImageLocked = patch.coverImageLocked;
+      }
     },
     async uploadListCover(readingListId: number | string, imageBase64: string) {
       CALLS.push(['uploadListCover', readingListId]);
@@ -584,6 +601,103 @@ await ok('a cover that fails to upload does not cost the reader their lineup', a
     CALLS.some((x) => x[0] === 'uploadListCover'),
     'no cover upload was attempted at all',
   );
+});
+
+// ---------------------------------------------------------------------------
+// the title — the set's LABEL, on a list that keeps its id
+//
+// Lists were titled with the set ID until 2026-08-17 ("QueuePilot — manga_webtoons"). They
+// carry the label now, and the existing ones are renamed IN PLACE, because the id is the
+// `/lists/153` the owner has open and every link Kavita's own UI renders points at it.
+
+await ok('a new list is titled with the set LABEL, not its id', async () => {
+  const c = stubClient();
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
+  assert.equal(art.title, 'QueuePilot — Manga & Webtoons');
+  assert.equal(c._lists[0]?.title, 'QueuePilot — Manga & Webtoons');
+});
+
+await ok('a list under the OLD id-title is renamed in place, keeping its id', async () => {
+  CALLS.length = 0;
+  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
+
+  assert.equal(art.readingListId, 42, 'the list id changed — every bookmark to it is now wrong');
+  assert.ok(!CALLS.some((x) => x[0] === 'createList'), 'a second list was minted under the new title');
+  assert.equal(c._lists.length, 1, 'the old list was left behind as a duplicate');
+  assert.equal(c._renames.length, 1, 'the list kept its old id-title');
+  assert.equal(c._renames[0]?.patch.title, 'QueuePilot — Manga & Webtoons');
+});
+
+/**
+ * The one that actually costs something if it regresses. `POST /api/ReadingList/update` takes
+ * the WHOLE DTO and applies every field: renaming with `coverImageLocked: false` on a list
+ * that HAS an uploaded cover answers 200 and comes back `coverImage: ''` — Kavita drops the
+ * artwork and starts generating one from the items again. Probed live, 2026-08-17.
+ */
+await ok('the rename ECHOES coverImageLocked — it does not wipe the artwork', async () => {
+  const c = stubClient({
+    existingLists: [{ id: 42, title: 'QueuePilot — reading', coverImageLocked: true }],
+  });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' });
+
+  assert.equal(
+    c._renames[0]?.patch.coverImageLocked,
+    true,
+    'the rename sent coverImageLocked: false, which unlocks AND clears the cover',
+  );
+  // And the end state agrees: still locked, and no cover was re-uploaded to paper over it.
+  assert.equal(c._lists[0]?.coverImageLocked, true, 'the list came out of the rename unlocked');
+  assert.equal(c._covers.length, 0, 'the artwork was re-uploaded, hiding a destructive rename');
+});
+
+await ok('a list already titled with the label is not renamed', async () => {
+  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — Reading' }] });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await p.materialize(play, { setName: 'reading', setLabel: 'Reading' });
+  assert.equal(c._renames.length, 0, 'a list already correctly titled was renamed anyway');
+});
+
+await ok('a rename that fails does not cost the reader their lineup', async () => {
+  const c = stubClient({
+    existingLists: [{ id: 42, title: 'QueuePilot — reading' }],
+    renameFails: true,
+  });
+  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
+  assert.equal(art.readingListId, 42);
+  assert.ok(c._added.length > 0, 'the chapters never went on the list');
+});
+
+/**
+ * `topupList` finds the list by title too, and it is NOT the same code path as materialize's —
+ * it was a separate `.find(l => l.title === listTitleFor(setName))`. Left alone, a renamed
+ * list would come back "nothing was ever launched for this set" and refilling would stop dead,
+ * silently, on the one queue shape that depends on it.
+ */
+await ok('topupList finds the list under EITHER title', async () => {
+  const build = async () => [];
+  for (const [label, title] of [
+    ['Manga & Webtoons', 'QueuePilot — reading'],            // not renamed yet
+    ['Manga & Webtoons', 'QueuePilot — Manga & Webtoons'],   // renamed
+  ] as const) {
+    const c = stubClient({ existingLists: [{ id: 42, title }] });
+    const p = kavitaProvider({ def: DEF, client: asClient(c) });
+    const res = await p.topupList!({ setName: 'reading', setLabel: label, window: 3, at: 1, build });
+    assert.notEqual(
+      res.reason,
+      'no reading list for this set yet',
+      `top-up lost the list titled '${title}'`,
+    );
+  }
 });
 
 await ok('sameLibraryPrefix keeps one library and stops at the next', async () => {

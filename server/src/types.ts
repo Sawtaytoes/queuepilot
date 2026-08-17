@@ -1124,6 +1124,9 @@ export interface Provider {
    */
   topupList?(opts: {
     setName: string;
+    /** The set's human label. Kavita's list is TITLED with it, so a top-up that omits it
+     *  cannot find a list built since the 2026-08-17 rename. */
+    setLabel?: string | null;
     /** How many unread items to keep queued ahead. */
     window: number;
     /** Top up only when unread has fallen to this or below. */

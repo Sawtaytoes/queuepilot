@@ -271,7 +271,29 @@ async function mapLimit<T, R>(items: T[], limit: number, fn: (item: T, index: nu
 // at launch time. The list is rebuilt on launch rather than accumulated.
 const LIST_PREFIX = 'QueuePilot';
 
-export const listTitleFor = (setName: string): string => `${LIST_PREFIX} — ${setName}`;
+export const listTitleFor = (name: string): string => `${LIST_PREFIX} — ${name}`;
+
+/**
+ * The set's list, by title, tolerating the title it USED to have.
+ *
+ * Lists were named after the set's id (`QueuePilot — manga_webtoons`) until 2026-08-17 and are
+ * named after its label now (`QueuePilot — Manga & Webtoons`). Both are candidates here, label
+ * first, so a list built under the old name is FOUND — and then renamed in place by
+ * `materialize()`, keeping the id that `/lists/153` and every link Kavita renders point at.
+ *
+ * Kept as one function because two callers need the same tolerance: `materialize()`, which
+ * does the renaming, and `topupList()`, which would otherwise decide a renamed list "was
+ * never launched for this set" and silently stop topping it up.
+ */
+export function findSetList<T extends { title?: string }>(
+  lists: T[],
+  { setName, setLabel }: { setName: string; setLabel?: string | null },
+): T | undefined {
+  const title = listTitleFor(setLabel || setName);
+  const legacy = listTitleFor(setName);
+  return lists.find((l) => l.title === title)
+    ?? (legacy === title ? undefined : lists.find((l) => l.title === legacy));
+}
 
 /**
  * The prefix of a lineup that shares the HEAD's Kavita library.
@@ -773,15 +795,38 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // rather than being made null-safe — a null would title the list "QueuePilot — null",
       // which is what the JS did too. Declared, not fixed.
       //
-      // `setLabel` is the set's HUMAN name and is only used for the cover. The list title
-      // keeps the id, because the title is how this method finds the list again — renaming it
-      // would strand the existing one and mint a fresh id, breaking `/lists/153` and every
-      // link Kavita's own UI renders to it.
+      // `setLabel` is the set's HUMAN name, and it TITLES the list — "QueuePilot — Manga &
+      // Webtoons", not "QueuePilot — manga_webtoons". A list built under the old id-title is
+      // found by `findSetList` and RENAMED IN PLACE below, so the id survives the change.
       { setName = 'queue', setLabel = null }: { setName?: string; setLabel?: string | null } = {},
     ): Promise<KavitaArtifact> {
-      const title = listTitleFor(setName);
-      const existing = ((await c.readingLists({ pageSize: 200 })) || [])
-        .find((l) => l.title === title);
+      const title = listTitleFor(setLabel || setName);
+      const existing = findSetList(
+        (await c.readingLists({ pageSize: 200 })) || [],
+        { setName, setLabel },
+      );
+
+      // RENAME IN PLACE rather than create a new list under the new title: the id is
+      // user-visible — it is the `/lists/153` the owner has open — and every link Kavita's own
+      // UI renders points at it.
+      //
+      // ⚠️ `coverImageLocked` MUST be echoed back. `POST /api/ReadingList/update` takes the
+      // whole DTO, and sending `false` for it does not merely leave the flag alone — it
+      // UNLOCKS and CLEARS the cover (`coverImage: ''`, probed live 2026-08-17). A rename that
+      // spelled that field `false` would silently delete the artwork the launch before it
+      // uploaded. `summary` and `promoted` are echoed for the same reason.
+      if (existing?.id != null && existing.title !== title) {
+        try {
+          await c.updateList(existing.id, {
+            title,
+            summary: existing.summary ?? '',
+            promoted: existing.promoted ?? false,
+            coverImageLocked: existing.coverImageLocked ?? false,
+          });
+        } catch (e) {
+          console.log(`[kavita] could not rename list ${existing.id}: ${errMessage(e)}`);
+        }
+      }
 
       let listId: number | string | null = existing?.id ?? null;
       if (listId == null) {
@@ -878,15 +923,21 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      * The list ID is never recreated: it is the `/lists/153` the owner has open in a tab.
      */
     async topupList(
-      { setName, window, at, build }: {
+      { setName, setLabel = null, window, at, build }: {
         setName: string;
+        // The list is titled with the LABEL since 2026-08-17, so a top-up that looked only for
+        // the id-title would report "nothing was ever launched for this set" about a list it
+        // is looking straight at, and quietly stop refilling it.
+        setLabel?: string | null;
         window: number;
         at: number;
         build: () => Promise<KavitaPlayItem[]>;
       },
     ): Promise<{ ok: boolean; reason?: string; added?: number; trimmed?: number; unread?: number }> {
-      const title = listTitleFor(setName);
-      const list = ((await c.readingLists({ pageSize: 200 })) || []).find((l) => l.title === title);
+      const list = findSetList(
+        (await c.readingLists({ pageSize: 200 })) || [],
+        { setName, setLabel },
+      );
       // No list means nothing was ever launched for this set. Building one here would put a
       // lineup in front of a reader who did not ask for one.
       if (!list?.id) return { ok: true, reason: 'no reading list for this set yet' };
