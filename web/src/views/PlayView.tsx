@@ -1,4 +1,10 @@
-import { type ReactNode, useMemo, useState } from "react"
+import {
+  type ReactNode,
+  useCallback,
+  useMemo,
+  useRef,
+  useState,
+} from "react"
 import { Link, useLocation } from "react-router"
 import { GroupBar } from "../components/GroupBar"
 import {
@@ -6,6 +12,11 @@ import {
   OpenQueueButton,
 } from "../components/OpenQueueButton"
 import { SelectListbox } from "../components/SelectListbox"
+import {
+  spliceOrder,
+  useRowReorder,
+} from "../hooks/useRowReorder"
+import { api } from "../lib/api"
 import { labelInGroup } from "../lib/setLabel"
 import type { Group, RegistrySet } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
@@ -16,9 +27,13 @@ import {
 } from "../state/group"
 import { openPlayMenu } from "../state/overlays"
 import {
+  bumpRevision,
   channelSetIds,
+  getState,
+  load,
   queueIds,
   rotationChannels,
+  setStatus,
   useStore,
 } from "../state/store"
 
@@ -92,8 +107,21 @@ function PlayRow({
     // the Plex rows' amber. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
     <li
       className="playrow"
+      // The id the reorder hook reads off the DOM after a drag — the rows it moves are
+      // nodes, not React state, so the new order has to be legible from the elements.
+      data-set={set?.id}
       data-provider={set?.provider_kind || undefined}
     >
+      {/* Only the HANDLE starts a drag: the row is a link and its button plays something,
+          so a whole-row drag would fight both. Hidden from assistive tech — it is a mouse
+          affordance, and reordering is not the only way to get anywhere. */}
+      <span
+        aria-hidden="true"
+        className="rowdrag"
+        title="Drag to reorder"
+      >
+        ≡
+      </span>
       <div className="rowmain">
         <Link className="rowname" to={to}>
           {label}
@@ -305,6 +333,66 @@ export function PlayView({
   const showShelf = (rows: unknown[]) =>
     !isFiltered || rows.length > 0
 
+  // --- reorder ---------------------------------------------------------------- //
+  // All three shelves are slices of ONE file order (sets.yaml), and `PATCH /api/sets-order`
+  // takes the complete order and appends anything it was not told about. So a shelf's drop
+  // permutes only the slots its own ids occupy and sends the whole list back — every other
+  // shelf stays put, and so does every row a group filter is currently hiding.
+  const poolsRef = useRef<HTMLUListElement>(null)
+  const curatedRef = useRef<HTMLUListElement>(null)
+  const orderedRef = useRef<HTMLUListElement>(null)
+
+  const commitOrder = useCallback(
+    (shelfOrder: string[]) => {
+      // Read the LIVE store rather than this render's props: a drop lands after an arbitrary
+      // amount of dragging, and the alternative is holding whatever `reg` was when the
+      // listeners were bound.
+      const state = getState()
+      const full = (state.reg?.sets ?? []).map((x) => x.id)
+
+      if (!full.length) return
+
+      const next = spliceOrder(full, shelfOrder)
+
+      if (next.join("\u0000") === full.join("\u0000"))
+        return // dropped where it started
+
+      // OPTIMISTIC, and not merely for polish: the drop restores the dragged node to where
+      // React last rendered it (so React reconciles against a DOM it believes), which means
+      // the row visibly snaps BACK until new data arrives. Waiting for `load()` would hold
+      // that snap-back for as long as `/api/queues` takes — 7-9 s warm against Plex.
+      const rank = new Map(next.map((id, i) => [id, i]))
+      const byRank = (a: string, b: string) =>
+        (rank.get(a) ?? 0) - (rank.get(b) ?? 0)
+
+      if (state.reg) {
+        state.reg.sets = [...state.reg.sets].sort((a, b) =>
+          byRank(a.id, b.id),
+        )
+      }
+
+      if (state.data)
+        state.data.order = [...state.data.order].sort(
+          byRank,
+        )
+
+      bumpRevision()
+      setStatus("Saving order…")
+      void api("PATCH", "/api/sets-order", { ids: next })
+        .then(() => setStatus("Order saved", "ok"))
+        .catch(async (e: Error) => {
+          setStatus(`Reorder failed: ${e.message}`, "err")
+          // The optimistic order is now a lie; re-read so the page shows what is on disk.
+          await load()
+        })
+    },
+    [],
+  )
+
+  useRowReorder(poolsRef, commitOrder, !isHidden)
+  useRowReorder(curatedRef, commitOrder, !isHidden)
+  useRowReorder(orderedRef, commitOrder, !isHidden)
+
   return (
     <main className="view" hidden={isHidden} id="play">
       {isHidden || !groups ? null : (
@@ -341,7 +429,11 @@ export function PlayView({
             Configure ›
           </Link>
         </h2>
-        <ul className="playlist" id="playdynamic">
+        <ul
+          className="playlist"
+          id="playdynamic"
+          ref={poolsRef}
+        >
           {isHidden
             ? null
             : pools.map((s) => (
@@ -368,7 +460,11 @@ export function PlayView({
             Configure ›
           </Link>
         </h2>
-        <ul className="playlist" id="playcurated">
+        <ul
+          className="playlist"
+          id="playcurated"
+          ref={curatedRef}
+        >
           {isHidden
             ? null
             : curated.map((id) => {
@@ -407,7 +503,11 @@ export function PlayView({
             Configure ›
           </Link>
         </h2>
-        <ul className="playlist" id="playqueues">
+        <ul
+          className="playlist"
+          id="playqueues"
+          ref={orderedRef}
+        >
           {isHidden
             ? null
             : ordered.map((id) => {

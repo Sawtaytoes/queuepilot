@@ -446,6 +446,14 @@ jobs:
       - name: Pool editor keeps Blocked (browser, no Plex needed)
         run: $TSX e2e/pool-editor-keeps-blocked-test.ts
 
+      # Drag-to-reorder on the Play landing. Browser and no Plex: the landing renders from
+      # sets.yaml, and the claim is "the dragged order is what sets.yaml ends up holding".
+      # Its sharpest assertion is the one about the row it did NOT drag — `PATCH
+      # /api/sets-order` appends anything it was not told about, so a shelf-only list would
+      # sweep every other set to the end of the file.
+      - name: Play landing reorder (browser, no Plex needed)
+        run: $TSX e2e/play-reorder-test.ts
+
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # import chromium from `e2e/playwright.ts` and drive a Chromium browser,
       # and the shared server they hit talks to Plex. We can't call e2e/run.sh
