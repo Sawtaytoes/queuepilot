@@ -336,6 +336,10 @@ jobs:
           # in the pool as standalone shows too — it played them both ways at once, the
           # collection in order and the same shows again at random.
           "$TSX" e2e/collection-covers-its-shows-test.ts
+          # PENDING is a SUBTRACTION, and the subtraction is the feature: pool rules,
+          # queue entries, a named collection's children, the watermark, per-item
+          # dismissals. Hermetic — both Plex reads are parameters.
+          "$TSX" e2e/pending-test.ts
           "$TSX" e2e/resume-on-advance-test.ts
 
       # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.

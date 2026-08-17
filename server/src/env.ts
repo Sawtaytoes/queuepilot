@@ -297,6 +297,8 @@ export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
 // undo-history and .bak machinery (decision
 // 2026-08-12-provider-tokens-live-in-a-separate-config-file). Read providers/config.js
 // before touching either path.
+/** Where the Pending watermark + dismissals live. A DECISION store, not the derived cache. */
+export const PENDING_PATH = str('PENDING_PATH', '/config/pending.yaml');
 export const PROVIDERS_PATH = str('PROVIDERS_PATH', '/config/providers.yaml');
 export const PROVIDERS_SECRETS_PATH = str('PROVIDERS_SECRETS_PATH', '/config/providers.secrets.yaml');
 

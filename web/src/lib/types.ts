@@ -645,3 +645,17 @@ export type GroupsResponse = {
   /** Set ids no group claims — surfaced so filing them is discoverable. */
   unassigned: string[]
 }
+
+/** One row of `GET /api/pending` — something added that nothing is going to play. */
+export type PendingItem = {
+  ratingKey: string
+  title: string
+  year: number | null
+  type: "movie" | "show"
+  sectionId: number
+  librarySectionTitle: string
+  contentRating: string | null
+  editionTitle: string | null
+  /** Epoch SECONDS, Plex's own `addedAt`. */
+  addedAt: number
+}
