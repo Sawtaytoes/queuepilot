@@ -411,7 +411,7 @@ export function ChannelPool({
                 onExclude={() =>
                   excludeFromBlocklist(b.ratingKey, b.show)
                 }
-                title={`Exclude ${b.show} from this channel`}
+                title={`Exclude ${b.show} from this pool`}
               />
             )}
             {start && entry ? (
@@ -531,7 +531,7 @@ export function ChannelPool({
                                 it.title,
                               )
                             }
-                            title={`Exclude ${it.title} from this channel`}
+                            title={`Exclude ${it.title} from this pool`}
                           />
                         }
                         dataKey={String(it.ratingKey)}
