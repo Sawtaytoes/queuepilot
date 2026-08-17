@@ -787,7 +787,20 @@ ul.grid .empty {
   position: relative;
   flex-wrap: wrap;
 }
-.add input {
+/* `:not([type="checkbox"])` because this is the ADD-BAR'S SEARCH FIELD, and a descendant
+   selector cannot say so on its own.
+
+   Everything below is text-field styling - a 220px floor, `flex: 1` to eat the row, 11px of
+   padding, a border and a background. It was landing on the "Hide what's already here"
+   checkbox too, which sits in the same bar: a 14px box rendered 28px wide with its own label
+   shoved 37px away, measured. That gap predates the Charcuterie migration (it looked
+   identical on the raw browser checkbox) and survived it, because the box was never the
+   problem - the rule reaching it was.
+
+   Scoped by exclusion rather than by naming `[type="search"]`: the three real targets in this
+   bar are all `search` today, but a future text field here should still be a field, and only
+   a checkbox should be spared. */
+.add input:not([type="checkbox"]) {
   flex: 1;
   /* `min(220px, 100%)`, not a flat 220px. The same `.add` block is reused inside the
      266px `#chfilters` Blocked box and inside the queue view at a 320px width,
