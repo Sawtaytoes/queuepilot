@@ -52,6 +52,7 @@ type RawSetEntry = BindingSource & {
   profiles?: unknown;
   starts?: unknown;
   weights?: unknown;
+  on_complete_by_show?: unknown;
   blocklist?: unknown;
   members?: unknown;
   superseded_by?: unknown;
@@ -163,6 +164,13 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
         // rule-derived show that has no stored entry to hang one on — same shape as `starts`.
         // rotation.js turns it into slots per round; absent/1 = the plain round-robin.
         weights: (ent.weights && typeof ent.weights === 'object' ? ent.weights : {}) as Record<string, number>,
+        // Per-show `on_complete` overrides, same shape and same keying as `starts` / `weights`.
+        // A passthrough the loader forgets does not throw — it reads `undefined` at the
+        // consumer and silently disables the feature, which is what e2e/set-passthrough-parity
+        // exists to catch.
+        on_complete_by_show: (ent.on_complete_by_show && typeof ent.on_complete_by_show === 'object'
+          ? ent.on_complete_by_show
+          : {}) as Record<string, string>,
         blocklist: ((ent.blocklist as unknown[] | null | undefined) || []).map(String),
         // Explicit curated members (v3 PR 3): raw queues.yaml-style entries (a bare ratingKey, a
         // "Collection: <name>" string, or a {ratingKey,title,episodes} mapping — describe() parses

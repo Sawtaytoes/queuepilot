@@ -715,7 +715,15 @@ export function DynModal() {
             onChange={setOnComplete}
             options={[
               {
-                label: "Drop it — it leaves this pool",
+                // NOT "it leaves this pool", which is what this said and what it does not do.
+                // Nothing is written, nothing is deleted: a finished show simply has no
+                // unwatched episodes to contribute, so no bucket is built for it (select.ts).
+                // A filtered pool is recomputed from libraries every scan, so the show returns
+                // by itself the moment a new episode lands. Removal is the CURATED queue's
+                // `done` flag and its TTL sweep, which is a different mechanism on a different
+                // kind of set.
+                label:
+                  "Let it finish — nothing plays from it",
                 value: "drop",
               },
               {
@@ -729,11 +737,13 @@ export function DynModal() {
         <p className="subhint" id="dyn-on-complete-hint">
           Only fires when a show is genuinely finished — not
           when this lineup merely stopped drawing from it.
-          Dropping is what every pool has always done.
-          Starting over is what keeps a topped-up rotation
-          from withering as the kids finish shows, and on a
-          shorts-only pool it brings the whole library back
-          around.
+          Letting it finish is what every pool has always
+          done: nothing is removed, and the show comes back
+          on its own when a new episode lands. Starting over
+          keeps a topped-up rotation from withering as the
+          kids finish shows, and on a shorts-only pool it
+          brings the whole library back around. Any single
+          show can override this from the pool grid.
         </p>
       </fieldset>
       <fieldset className="field" id="dyn-profilesbox">

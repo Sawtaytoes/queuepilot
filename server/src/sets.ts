@@ -549,6 +549,28 @@ function toStarts(v: unknown): Record<string, Start> {
 // rule-derived pool show with no stored entry to hang one on — exactly how `starts` works.
 // A weight of 1 is the default and is DROPPED, so clearing one removes its key rather than
 // leaving `weight: 1` litter behind.
+/**
+ * Per-show `on_complete` overrides, keyed by ratingKey exactly as `starts` and `weights` are
+ * (`section-<id>` for a whole item bucket).
+ *
+ * THREE states per show, which is why this is a map of values rather than a set of names:
+ * absent = follow the pool, `restart` = start it over, `drop` = let it finish. The third one
+ * is the whole point — a pool set to restart everything needs a way to say "except this show",
+ * and a boolean could only ever express the other direction.
+ *
+ * Read TOLERANTLY, unlike the set-level writer: sets.yaml is hand-edited over SMB, and an
+ * unrecognised value here means "follow the pool" rather than taking a card off the wall.
+ */
+function toOnCompleteByShow(v: unknown): Record<string, 'restart' | 'drop'> {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
+  const out: Record<string, 'restart' | 'drop'> = {};
+  for (const [rk, val] of Object.entries(v as Record<string, unknown>)) {
+    const w = String(val ?? '').trim().toLowerCase();
+    if (w === 'restart' || w === 'drop') out[String(rk)] = w;
+  }
+  return out;
+}
+
 function toWeights(v: unknown): Record<string, number> {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return {};
   const out: Record<string, number> = {};
@@ -680,6 +702,8 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       // Per-show weights for the dynamic rule pool (the Channels view reads
       // channel.weights[ratingKey] to seed the pool tile's weight control + tag).
       weights: toWeights(ent.weights),
+      // Per-show `on_complete`, same keying as `starts` / `weights`. Absent = follow the pool.
+      on_complete_by_show: toOnCompleteByShow(ent.on_complete_by_show),
     };
   }
   // Queue-only playback/consumption knobs (rotation channels ignore them). Exposed in the
@@ -1039,7 +1063,7 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         // Keep it topped up (`length` becomes the window), and what a finished show does.
         'refill', 'on_complete', 'power_off_when_done',
         // Per-show start + weight overrides for the dynamic rule pool.
-        'starts', 'weights',
+        'starts', 'weights', 'on_complete_by_show',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).
         'default_profile',
       );
@@ -1132,6 +1156,20 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const map = toStarts(v);
         if (!Object.keys(map).length) { node.delete('starts'); continue; }
         node.set('starts', doc.createNode(map));
+        continue;
+      }
+      if (k === 'on_complete_by_show') {
+        // Whole-map replace, exactly like `starts` and `weights`: the Channels view sends the
+        // full desired {ratingKey: 'restart'|'drop'} map. `toOnCompleteByShow` drops anything
+        // unrecognised, so an empty result means "no show overrides the pool any more" and the
+        // key goes with it.
+        //
+        // A `drop` IS stored, even though drop is also the engine default: on a pool set to
+        // `restart` it is a real override, and that is the case this exists for. Sparseness
+        // here is "follows the pool", not "equals the engine default".
+        const map = toOnCompleteByShow(v);
+        if (!Object.keys(map).length) { node.delete('on_complete_by_show'); continue; }
+        node.set('on_complete_by_show', doc.createNode(map));
         continue;
       }
       if (k === 'weights') {

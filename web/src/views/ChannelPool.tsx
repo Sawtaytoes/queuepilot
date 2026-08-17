@@ -5,6 +5,7 @@ import { WatchesBadge } from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
 import { WEIGHT_MAX } from "../components/EntrySettings"
 import { PosterTile } from "../components/PosterTile"
+import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
@@ -321,6 +322,37 @@ export function ChannelPool({
     onChanged()
   }
 
+  // A rule-pool show's own answer to "what happens when it finishes", overriding the pool's.
+  // Same map-keyed-by-ratingKey shape as `starts` and `weights` above, and for the same
+  // reason: a rule-derived show has no stored entry to hang a field on.
+  //
+  // "" clears the override and the show follows the pool again. A `drop` IS stored, unlike a
+  // weight of 1: on a pool set to restart it is a real choice, and it is the case this exists
+  // for - "restart everything except this one".
+  const saveOnComplete = async (
+    ratingKey: string,
+    value: string,
+  ) => {
+    const next: Record<string, "restart" | "drop"> = {
+      ...(channel.on_complete_by_show ?? {}),
+    }
+
+    if (value === "restart" || value === "drop")
+      next[String(ratingKey)] = value
+    else delete next[String(ratingKey)]
+
+    setStatus("Saving…")
+    await api("PATCH", `/api/sets/${channel.id}`, {
+      on_complete_by_show: next,
+    })
+
+    const [data, reg] = await fetchAll()
+
+    setState({ data, reg })
+    setStatus("Saved", "ok")
+    onChanged()
+  }
+
   // A rule-pool show reuses the queue/member "Start from…" flow: build the same
   // EntryActions the modal reads, with an item shaped like a resolved show. The pool is
   // rule-derived (no stored entry), so `save` writes the set's `starts` map keyed by
@@ -401,6 +433,40 @@ export function ChannelPool({
                     ] ??
                     b.weight ??
                     1
+                  }
+                />
+              </span>
+            </Tip>
+            {/* What THIS show does when it runs out, overriding the pool's own answer.
+                Applies to a Shorts bucket too: it is keyed `section-<id>` in the map exactly
+                as the engine keys it, and "bring the whole section back round" is the same
+                question for it as for a series. */}
+            <Tip label="What this one does when it has nothing left to watch. Follow pool uses the pool's own setting; the other two override it for this show only.">
+              <span className="eps">
+                <SelectListbox
+                  label={`When ${b.show} is finished`}
+                  onChange={(v) =>
+                    void saveOnComplete(
+                      String(b.ratingKey),
+                      v,
+                    )
+                  }
+                  options={[
+                    { label: "Follow pool", value: "" },
+                    {
+                      label: "Start over",
+                      value: "restart",
+                    },
+                    {
+                      label: "Let it finish",
+                      value: "drop",
+                    },
+                  ]}
+                  size="sm"
+                  value={
+                    channel.on_complete_by_show?.[
+                      String(b.ratingKey)
+                    ] ?? ""
                   }
                 />
               </span>
