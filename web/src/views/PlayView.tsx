@@ -1,12 +1,19 @@
-import { type ReactNode, useState } from "react"
-import { Link } from "react-router"
+import { type ReactNode, useMemo, useState } from "react"
+import { Link, useLocation } from "react-router"
+import { GroupBar } from "../components/GroupBar"
 import {
   isPullSet,
   OpenQueueButton,
 } from "../components/OpenQueueButton"
-
 import { SelectListbox } from "../components/SelectListbox"
-import type { RegistrySet } from "../lib/types"
+import { labelInGroup } from "../lib/setLabel"
+import type { Group, RegistrySet } from "../lib/types"
+import { PLEX_WORDS } from "../lib/vocab"
+import {
+  findGroup,
+  groupPath,
+  parseOnly,
+} from "../state/group"
 import { openPlayMenu } from "../state/overlays"
 import {
   channelSetIds,
@@ -127,7 +134,14 @@ function PlayRow({
  * (a hand-edit, an older `sets.yaml`) keeps choosing at play time rather than silently playing
  * as whichever binding happens to be first.
  */
-function ChannelRow({ channel }: { channel: RegistrySet }) {
+function ChannelRow({
+  channel,
+  groupLabel,
+}: {
+  channel: RegistrySet
+  /** The group being viewed, so the row can drop that name from its own. */
+  groupLabel: string | null
+}) {
   const isRewatch = channel.behavior === "rewatch"
   const options = channel.has_explicit_profiles
     ? (channel.profiles || []).map((b) => ({
@@ -182,7 +196,7 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
 
   return (
     <PlayRow
-      label={channel.label}
+      label={labelInGroup(channel.label, groupLabel)}
       set={channel}
       // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
       // until you know one is Younger Kids and the other Older Kids, and that used to be
@@ -223,14 +237,100 @@ function ChannelRow({ channel }: { channel: RegistrySet }) {
 
 export function PlayView({
   isHidden,
+  groupId,
 }: {
   isHidden: boolean
+  /** The `/g/<id>` segment, or null for the everything view. */
+  groupId: string | null
 }) {
-  const { data, reg } = useStore()
+  const { data, groups, reg } = useStore()
+  const { search } = useLocation()
+  const only = parseOnly(search)
+
+  const active = findGroup(groups, groupId)
+  // A stale bookmark to a deleted group shows EVERYTHING rather than an empty page. The
+  // alternative — an error state — punishes the person for our own rename.
+  const inGroup = active ? new Set(active.setIds) : null
+
+  const kindOf = (id: string) =>
+    reg?.sets.find((s) => s.id === id)?.provider_kind ?? ""
+
+  /**
+   * The one predicate every shelf filters through. Group first (whose is it), provider
+   * second (which backend) — the two are independent, which is the whole reason the
+   * provider is a chip and not a level of the route.
+   */
+  const isShown = (id: string) =>
+    (!inGroup || inGroup.has(id)) &&
+    (!only || kindOf(id) === only)
+
+  // Counts on the chips are AFTER the provider filter, so the numbers add up to what you
+  // are about to see rather than to what the group holds in the abstract.
+  const countFor = useMemo(
+    () => (group: Group) =>
+      group.setIds.filter(
+        (id) => !only || kindOf(id) === only,
+      ).length,
+    // `reg` is what `kindOf` reads; `only` is the filter itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [only, reg],
+  )
+
+  const labelForKind = (kind: string) =>
+    reg?.sets.find((s) => s.provider_kind === kind)
+      ?.vocabulary?.name ||
+    PLEX_WORDS.name ||
+    kind
+
+  const basePath = active ? groupPath(active) : "/"
+  // Inside a group, a row drops that group's own name — the heading already says it, and
+  // repeating it buries the one word that tells two rows apart. See `lib/setLabel.ts`.
+  const groupLabel = active?.label ?? null
+
+  const pools = rotationChannels(reg).filter((s) =>
+    isShown(s.id),
+  )
+  const curated = channelSetIds(data).filter(isShown)
+  const ordered = queueIds(data).filter(isShown)
+
+  /**
+   * A shelf with nothing in it is hidden ONLY while a filter is on.
+   *
+   * Unfiltered, an empty shelf still has to render: its "Configure ›" link is the only way
+   * to create the first pool, and hiding it would make an empty install a dead end. Under a
+   * filter the heading is just noise — you did not ask for a shelf, you asked for Bob's
+   * things, and three headings over one row reads as if something failed to load.
+   */
+  const isFiltered = Boolean(active || only)
+  const showShelf = (rows: unknown[]) =>
+    !isFiltered || rows.length > 0
 
   return (
     <main className="view" hidden={isHidden} id="play">
-      <section className="playgroup">
+      {isHidden || !groups ? null : (
+        <GroupBar
+          activeId={active?.id ?? null}
+          basePath={basePath}
+          countFor={countFor}
+          groups={groups.groups}
+          labelForKind={labelForKind}
+          only={only}
+          // The kinds of the group you are LOOKING AT, so the row offers Plex/Kavita only
+          // where both are actually reachable.
+          providerKinds={
+            (
+              active ??
+              groups.groups.find((g) => g.isAll) ?? {
+                providerKinds: [],
+              }
+            ).providerKinds
+          }
+        />
+      )}
+      <section
+        className="playgroup"
+        hidden={!showShelf(pools)}
+      >
         <h2>
           Filtered Pools
           <Link
@@ -244,13 +344,20 @@ export function PlayView({
         <ul className="playlist" id="playdynamic">
           {isHidden
             ? null
-            : rotationChannels(reg).map((s) => (
-                <ChannelRow channel={s} key={s.id} />
+            : pools.map((s) => (
+                <ChannelRow
+                  channel={s}
+                  groupLabel={groupLabel}
+                  key={s.id}
+                />
               ))}
         </ul>
       </section>
 
-      <section className="playgroup">
+      <section
+        className="playgroup"
+        hidden={!showShelf(curated)}
+      >
         <h2>
           Curated Pools
           <Link
@@ -264,13 +371,16 @@ export function PlayView({
         <ul className="playlist" id="playcurated">
           {isHidden
             ? null
-            : channelSetIds(data).map((id) => {
+            : curated.map((id) => {
                 const s = data!.sets[id]!
 
                 return (
                   <PlayRow
                     key={id}
-                    label={s.label}
+                    label={labelInGroup(
+                      s.label,
+                      groupLabel,
+                    )}
                     set={reg?.sets.find((x) => x.id === id)}
                     meta={`${s.items.length} shows · rotation`}
                     to={`/q/${id}`}
@@ -283,7 +393,10 @@ export function PlayView({
         </ul>
       </section>
 
-      <section className="playgroup">
+      <section
+        className="playgroup"
+        hidden={!showShelf(ordered)}
+      >
         <h2>
           Ordered Queues
           <Link
@@ -297,13 +410,16 @@ export function PlayView({
         <ul className="playlist" id="playqueues">
           {isHidden
             ? null
-            : queueIds(data).map((id) => {
+            : ordered.map((id) => {
                 const s = data!.sets[id]!
 
                 return (
                   <PlayRow
                     key={id}
-                    label={s.label}
+                    label={labelInGroup(
+                      s.label,
+                      groupLabel,
+                    )}
                     // The registry entry, same as the Curated rows above. Without it a
                     // Plex QUEUE renders in the neutral accent while a Plex CHANNEL two
                     // columns over renders amber — one page, two colours, same provider.

@@ -1,6 +1,13 @@
 # Profiles, Groups and navigation — the design conversation
 
-> **Status: OPEN. Nothing here is decided.** This is the record of what was considered on
+> **Status: PARTLY SETTLED (2026-08-17).** The identity model (§2), the routing question (§3)
+> and the naming (§4) are decided and shipped —
+> [A Group is "who is watching", it lives in the path, and explicit membership beats derived](decisions/2026-08-17-a-group-is-who-is-watching-not-a-plex-profile.md).
+> **Everything in §5 is still open**: the settings screen, the device ignore list, Plex-only
+> Filtered Pools, and the Pools-screen navigation dead end. So is carrying the group through
+> into `/q/<id>` and the Pools screen — groups exist on the landing only.
+>
+> The rest of this file stands as written: the record of what was considered on
 > **2026-08-17**, in the owner's own framing, so that a later choice can be made against the
 > full set of options rather than against whichever one was on screen last. He asked for it
 > explicitly:

@@ -212,6 +212,14 @@ jobs:
       # refilling with its file untouched.
       - name: Playback length (offline)
         run: $TSX e2e/playback-length-test.ts
+      # Group membership + the groups.yaml writer. The rule that needs a gate is
+      # EXPLICIT-BEATS-DERIVED: nearly every curated queue is gated to `sawtaytoes`, so an
+      # account-first resolution sweeps every audience into "Bob" and the distinction the
+      # feature exists for disappears — while still LOOKING like a working feature with one
+      # over-full chip. The opposite failure (derivation not firing, so the account-only
+      # groups Kids and Demo come out empty) is pinned in the same file.
+      - name: Groups (offline)
+        run: $TSX e2e/groups-test.ts
 
       # A reading queue's ARTWORK and TILES come from its provider, not from Plex. Reported
       # from the live app: a search dropdown of broken-image glyphs, because the cover proxy
