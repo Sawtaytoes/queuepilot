@@ -417,7 +417,7 @@ export async function startSession(
   // behaviour change on the push path, so the cast records the gap instead.
   const artifact = provider.materialize(
     playItems,
-    { offset: resumeMs, setName, binding },
+    { offset: resumeMs, setName, setLabel, binding },
   ) as ProviderArtifact;
 
   // `cancelled` is a PUSH-result field (a pull handoff has no device to cancel), so the read

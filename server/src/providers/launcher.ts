@@ -166,7 +166,9 @@ export async function launchDescriptor(
   // Rebuild on launch: the reading list is the RUNTIME ARTIFACT, never the store. Unlike a
   // Plex playQueue it persists and is visible in Kavita's own UI, so one list per set is
   // reused rather than a fresh one per launch.
-  const artifact = await provider.materialize(play, { setName: setId });
+  // `setLabel` is only read on the cover — same fallback the session path uses, so a set with
+  // no label paints its id rather than nothing.
+  const artifact = await provider.materialize(play, { setName: setId, setLabel: cfg.label || setId });
   // `handoff()` is declared as possibly-async (the Plex side awaits a real playback), and the
   // Kavita one is synchronous. `await` on a plain value is a no-op, so this is the same
   // behaviour the un-awaited JS had — it just says so in a way the union can be narrowed on.
