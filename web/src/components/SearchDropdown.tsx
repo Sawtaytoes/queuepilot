@@ -41,6 +41,16 @@ import { setStatus } from "../state/store"
 export type SearchRow = {
   /** Rendered inside the `<li>`; must not include the `<li>` itself. */
   content: ReactNode
+  /**
+   * A group heading rendered ABOVE this row, inside the SAME `<li>`.
+   *
+   * Inside, and not as an `<li>` of its own, because of (2) below: the delegated click
+   * handler finds a row by `indexOf` on the list's children, so it requires one child per
+   * entry in `rows`. A separator `<li>` would shift every index after it and start firing
+   * the wrong result's `pick`. Styling makes it read as a rule across the list; the DOM
+   * keeps the one-child-per-row contract the click handling depends on.
+   */
+  separator?: ReactNode
   /** Run on click-anywhere-on-the-row, or on Enter. */
   pick: () => void
   /** Nested controls that own their own clicks and must not trigger `pick`. */
@@ -265,6 +275,11 @@ export function SearchDropdown<T>({
               // biome-ignore lint/suspicious/noArrayIndexKey: the index IS the identity here — see above.
               key={i}
             >
+              {row.separator ? (
+                <span className="resultsplit">
+                  {row.separator}
+                </span>
+              ) : null}
               {row.content}
             </li>
           ))

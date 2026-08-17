@@ -3413,3 +3413,45 @@ ul.grid.posters .tile .badges .epstag {
   font-size: 0.92rem;
   font-weight: 500;
 }
+
+/* A search-result GROUP heading — "In this pool's libraries" / "Other libraries".
+   It lives INSIDE the first `<li>` of its group rather than in an `<li>` of its own,
+   because SearchDropdown's delegated click handler finds a row by its index among the
+   list's children; a separator element of its own would shift every index after it and
+   fire the wrong result's `pick`.
+
+   `flex: 0 0 100%` on a wrapping row is what makes that DOM shape read as a rule ACROSS
+   the list instead of a label beside the poster. */
+.results li {
+  flex-wrap: wrap;
+}
+.results .resultsplit {
+  flex: 0 0 100%;
+  margin: 0 0 8px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border-subtle, #2a3142);
+  color: var(--color-content-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+/* The first group has nothing above it to be divided FROM. */
+.results li:first-child .resultsplit {
+  border-top: 0;
+  padding-top: 0;
+}
+/* The title line stays ONE line (title, year/collection count, edition); `.ginfo` is a
+   column, so without this wrapper each of those would stack. */
+.results .gtitle {
+  display: block;
+}
+/* Plex's edition label, so two editions of one film are told apart at a glance. */
+.results .editionbadge {
+  margin-left: 6px;
+  padding: 0 6px;
+  border: 1px solid var(--color-intent-accent-solid);
+  border-radius: 999px;
+  color: var(--color-intent-accent-solid);
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
