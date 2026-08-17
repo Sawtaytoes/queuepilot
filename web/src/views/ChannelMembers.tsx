@@ -11,6 +11,13 @@ import { useFlipList } from "../hooks/useFlipList"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {
+  type GroupedHit,
+  groupHits,
+  hitLabel,
+  libraryTitle,
+  poolSections,
+} from "../lib/searchGroups"
+import {
   byTitle,
   isStartable,
   startLabel,
@@ -282,7 +289,7 @@ export function ChannelMembers({
           : "Members"}
       </h2>
       <div className="add chmadd">
-        <SearchDropdown<SearchHit>
+        <SearchDropdown<GroupedHit>
           doSearch={async (q) => {
             // scope=all: a curated member is a manual include, not bound to the
             // channel's pool libraries — so search every library (e.g. add an Anime
@@ -294,18 +301,31 @@ export function ChannelMembers({
               `/api/search?scope=all&set=${channel.id}&q=${encodeURIComponent(q)}&collections=1`,
             )
 
-            return results
+            // Grouped HERE rather than in `rowFor`, because the order is a property of the
+            // whole result set and a row cannot see its neighbours.
+            return groupHits(
+              results,
+              poolSections(channel),
+              {
+                inPool: "In this pool's libraries",
+                rest: "Other libraries",
+              },
+            )
           }}
           inputId="chmsearch"
           listId="chmresults"
-          placeholder="Add a member — search this pool's libraries…"
-          rowFor={(hit, _index, close) => {
+          placeholder="Add a member — search every library…"
+          rowFor={({ hit, separator }, _index, close) => {
             const isCollection = hit.type === "collection"
+            // `hitLabel` adds the EDITION when Plex gave the item one — two editions of a
+            // film are two library items with the same title and year, so without it the
+            // rows are identical and the stored entry title is ambiguous too.
             const label = isCollection
               ? hit.title
-              : `${hit.title}${hit.year ? ` (${hit.year})` : ""}`
+              : hitLabel(hit)
 
             return {
+              separator,
               content: (
                 <>
                   <Poster
@@ -323,20 +343,38 @@ export function ChannelMembers({
                         : hit.ratingKey
                     }
                   />
-                  <span>
-                    {hit.title}{" "}
-                    {isCollection ? (
-                      <>
-                        <span className="collbadge">
-                          Collection
-                        </span>{" "}
-                        <span className="y">{`${hit.childCount || 0} items`}</span>
-                      </>
-                    ) : (
-                      <span className="y">
-                        {hit.year || ""}
-                      </span>
-                    )}
+                  <span className="ginfo">
+                    <span className="gtitle">
+                      {hit.title}{" "}
+                      {isCollection ? (
+                        <>
+                          <span className="collbadge">
+                            Collection
+                          </span>{" "}
+                          <span className="y">{`${hit.childCount || 0} items`}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="y">
+                            {hit.year || ""}
+                          </span>
+                          {hit.editionTitle ? (
+                            <span className="editionbadge">
+                              {hit.editionTitle}
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </span>
+                    {/* Which library this came from. The picker searches EVERY library, so
+                        without it a result says nothing about whether this pool can reach
+                        it — and two libraries can hold the same title. */}
+                    <span className="glib">
+                      {libraryTitle(
+                        getState().reg?.libraries ?? [],
+                        hit.sectionId,
+                      )}
+                    </span>
                   </span>
                 </>
               ),
