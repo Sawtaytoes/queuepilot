@@ -166,9 +166,14 @@ export function App() {
       document.body.classList.add("name-editable")
   }, [chrome.bodyClasses, chrome.editableSetId])
 
-  // Desktop: the toolbar lives in the sticky header; mobile: at the top of the Home
-  // content (the header is too tight — Bob's explicit ask).
-  const isMobile = useMediaQuery("(max-width: 760px)")
+  // Wide View: the toolbar lives in the sticky header. Narrow View: at the top of the
+  // Home content, because the header is far too tight to carry it — Bob's explicit ask.
+  //
+  // `isNarrow`, not `isMobile`: the trigger is the WIDTH and nothing else. A docked
+  // Surface is touch-capable and never narrow; a half-width desktop window is the Narrow
+  // View on a machine nobody would call mobile.
+  // (root decision `2026-08-17-the-cramped-layout-is-the-narrow-view-not-mobile`)
+  const isNarrow = useMediaQuery("(max-width: 760px)")
   const toolbar = <Toolbar />
 
   // Gate each lazy overlay's chunk fetch on its own overlay state, so importing it
@@ -188,13 +193,13 @@ export function App() {
         isSubHidden={chrome.isSubHidden}
         sub={chrome.sub}
       >
-        {isMobile ? null : toolbar}
+        {isNarrow ? null : toolbar}
       </Header>
 
       <PlayView isHidden={route.view !== "play"} />
       <QueuesView
         isHidden={route.view !== "queues"}
-        toolbar={isMobile ? toolbar : null}
+        toolbar={isNarrow ? toolbar : null}
       />
       <ChannelsView
         isHidden={route.view !== "channels"}

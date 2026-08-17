@@ -5,7 +5,7 @@ import {
   effectiveCount,
   isCountOverride,
 } from "../lib/countPicker"
-import { startLabel } from "../lib/tileFace"
+import { startLabel, tileFace } from "../lib/tileFace"
 import type {
   BatchStop,
   ProviderVocabulary,
@@ -15,6 +15,7 @@ import { applyVocab, PLEX_WORDS } from "../lib/vocab"
 import { refreshData } from "../state/live"
 import {
   type EntryActions,
+  openPlayMenu,
   openStartModal,
 } from "../state/overlays"
 import {
@@ -25,6 +26,8 @@ import {
 } from "../state/store"
 import { CountPicker } from "./CountPicker"
 import { Modal } from "./Modal"
+import { isPullSet } from "./OpenQueueButton"
+import { Poster } from "./Poster"
 import { SelectListbox } from "./SelectListbox"
 import { Tip } from "./Tip"
 
@@ -298,6 +301,13 @@ export function EntryEditor({
   const isVolume = item.unit === "volume"
   const isSeries =
     item.type === "show" || item.type === "collection"
+  const face = tileFace(item)
+  const entry = entryFor(item)
+  // Pushed at a device, or opened by a link — the same split the tile's ▶ makes. A pull
+  // queue has no device to name, so offering one here would repeat the bug the tile
+  // already fixed: a Shield, a Plex Dash and a phone for a manga chapter.
+  const isPull = isPullSet(setInfo)
+  const verb = vocab.verb
 
   return (
     <Modal
@@ -310,12 +320,96 @@ export function EntryEditor({
           Done
         </button>
       }
+      // The sheet wears the queue's provider colour, like every other surface under
+      // `#queue` — it is portalled to `document.body`, so it cannot inherit the
+      // `data-provider` the view sets and has to be told.
+      // (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+      dataProvider={setInfo?.provider_kind || undefined}
       id="entrymodal"
       isOpen={isOpen}
       onClose={onClose}
       title={item.title}
       titleId="entrymodal-title"
     >
+      {/* The head of the sheet: the artwork, what plays next, and the two actions that
+          do something to the WORLD rather than to this entry's settings.
+
+          It exists because the poster is now the way in. A tap on a tile opens this
+          panel (decision `2026-08-17-a-poster-tap-opens-the-entry-sheet`), which means
+          the panel has to answer "which one is this, and can I just play it?" before it
+          asks about weights and batch stops — and at a size a finger can hit, which the
+          26px ▶ on the tile never was. */}
+      <div className="entryhead">
+        <Poster
+          className="entryart"
+          cover={item.cover}
+          ratingKey={item.resolved ? face.ratingKey : null}
+        />
+        {/* What plays next, beside the artwork. Empty for a one-off movie — `:empty`
+            collapses it rather than reserving a blank column. */}
+        <p
+          className={`entrynext${face.nextDone ? " done" : ""}`}
+        >
+          {face.next}
+        </p>
+      </div>
+
+      {/* Its OWN full-width row, not a column beside the poster. A 96px poster leaves
+          203px of a 313px sheet, and "Remove from this queue" wrapped to two lines in
+          it while ▶ sat at 110px — two cramped buttons in the panel whose entire reason
+          for existing is that the control on the tile was too small. */}
+      <div className="entryactions">
+        {/* Only a RESOLVED entry can play: an unresolved one has no library item
+            behind it, so the server would reject the start after the device menu had
+            already asked which TV. Same rule as the tile's ▶. */}
+        {item.resolved && !isPull ? (
+          <button
+            className="primary"
+            onClick={(clickEvent) =>
+              openPlayMenu({
+                anchor:
+                  clickEvent.currentTarget.getBoundingClientRect(),
+                kind: undefined,
+                only: item.key,
+                onlyLabel: face.title,
+                setId,
+              })
+            }
+            type="button"
+          >
+            ▶ {verb} on ▾
+          </button>
+        ) : null}
+        {item.resolved && isPull ? (
+          // An anchor because it NAVIGATES — middle-clickable and bookmarkable like
+          // every other link here (decision
+          // `2026-08-15-navigation-is-an-anchor-not-a-button`). New tab, so the queue
+          // you launched from is still there when you come back from the reader.
+          <a
+            className="primary openbtn"
+            href={`/go/${encodeURIComponent(setId)}?only=${encodeURIComponent(item.key)}`}
+            rel="noreferrer"
+            target="_blank"
+          >
+            ▶ {verb} now
+          </a>
+        ) : null}
+        {entry.remove ? (
+          <button
+            className="danger"
+            onClick={() => {
+              // The entry this panel is about is about to stop existing, so the
+              // panel goes with it rather than sitting there describing nothing.
+              onClose()
+              entry.remove?.()
+            }}
+            type="button"
+          >
+            {entry.removeLabel || "Remove"}
+          </button>
+        ) : null}
+      </div>
+
       <div className="entryfields">
         {isSeries ? (
           <div className="field">

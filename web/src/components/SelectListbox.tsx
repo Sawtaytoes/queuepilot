@@ -78,7 +78,14 @@ export function SelectListbox({
 }: SelectListboxProps): ReactNode {
   return (
     <Picker
-      className={className}
+      // Every trigger in the app carries `.qppicker`, which is what lets one rule
+      // in app.css make a picker shrink and ellipsise. It has to be a class rather
+      // than a Tailwind utility list here because the rule also has to reach the
+      // trigger's inner `<span>` (the option label), which this file never renders —
+      // `Picker` puts `options[].label` there itself.
+      className={
+        className ? `qppicker ${className}` : "qppicker"
+      }
       data-testid={id}
       isDisabled={isDisabled}
       label={label}
