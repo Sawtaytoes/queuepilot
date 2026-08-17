@@ -49,6 +49,8 @@ echo "=== playback-length-test ==="   # browserless; how long each KIND of set p
 "$TSX" e2e/playback-length-test.ts || TOTAL=$((TOTAL+1))
 echo "=== collection-batch-cap-test ==="   # browserless; a Collection is ONE member = ONE batch
 "$TSX" e2e/collection-batch-cap-test.ts || TOTAL=$((TOTAL+1))
+echo "=== play-reorder-test ==="   # browser, no Plex; dragging a landing row sticks
+"$TSX" e2e/play-reorder-test.ts || TOTAL=$((TOTAL+1))
 echo "=== collection-covers-its-shows-test ==="   # browserless; a collection member covers its shows
 "$TSX" e2e/collection-covers-its-shows-test.ts || TOTAL=$((TOTAL+1))
 echo "=== resume-on-advance-test ==="   # browserless; every queued episode resumes, not just the head
