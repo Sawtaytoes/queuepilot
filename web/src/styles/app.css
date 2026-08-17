@@ -2566,9 +2566,6 @@ header h1 input {
 .qtoolbar-right {
   margin-left: auto;
 }
-.addcheck {
-  gap: 6px;
-}
 
 /* ---- Density: CARDS. Poster left, everything else right, several per row. ---- */
 ul.grid.cards {

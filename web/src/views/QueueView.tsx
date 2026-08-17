@@ -1,5 +1,6 @@
 import {
   Badge,
+  Checkbox,
   EmptyState,
   SegmentedControl,
 } from "@charcuterie/ui"
@@ -585,16 +586,23 @@ export function QueueView({
               value={searchState}
             />
           </label>
-          <label className="addpos addcheck">
-            <input
-              checked={hideQueued}
-              onChange={(e) =>
-                setHideQueued(e.target.checked)
-              }
-              type="checkbox"
+          {/* The toolbar's positioning class goes on a WRAPPER, not on the Checkbox.
+              Charcuterie's Checkbox IS a `<label>` with its own box-then-text layout, and
+              since 2.17.0 `className` beats a component's base utilities — so putting
+              `.addpos` (`display: flex`) on it replaced that layout and left the box
+              stranded a hundred pixels from its own text.
+
+              No key: this box's only writer is the user, so the uncontrolled input IS the
+              store and nothing re-seeds it behind them. No `value` either — it is a lone
+              boolean, not a member of a group. */}
+          <div className="addpos">
+            <Checkbox
+              isChecked={hideQueued}
+              label="Hide what’s already here"
+              onChange={setHideQueued}
+              size="sm"
             />
-            Hide what&rsquo;s already here
-          </label>
+          </div>
           <label className="addpos">
             Add to
             <SelectListbox
