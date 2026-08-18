@@ -133,13 +133,30 @@ async function handleAdvance(): Promise<void> {
  * One top-up tick. Answers on `resp/topup` whatever happened, including "did nothing" —
  * silence would leave the automation unable to tell a working no-op from a dead app.
  *
+ * TWO LINEUPS, ONE TICK. The live session's playQueue (there is at most one, and it is on the
+ * screen), and every persistent reading list (which has no session at all — see
+ * `topupPullLists`). A tick that only ever asked about the session is why the Kavita list was
+ * seeded once at launch and then only shrank. Both are answered on the one topic, because to
+ * the automation this is one wake-up: "keep the lineups stocked".
+ *
+ * `ok` is the AND of everything attempted, so the failure branch in HA still means what it
+ * said before — a reading list that cannot be reached surfaces, a no-op does not.
+ *
  * Deliberately does NOT publish state: a top-up changes the lineup, not the session, and
  * stamping `T_STATE` (retained) on every tick would churn the retained payload every few
  * minutes for something no reader of that topic cares about.
  */
 async function handleTopup(): Promise<void> {
   try {
-    pub(T_RESP_TOPUP, await topup.topup());
+    const session = await topup.topup();
+    const lists = await topup.topupPullLists();
+    pub(T_RESP_TOPUP, {
+      ...session,
+      ok: session.ok && lists.every((r) => r.ok),
+      // Only when there is something to say: a deployment with no pull provider keeps the
+      // exact payload shape it has always published.
+      ...(lists.length ? { lists } : {}),
+    });
   } catch (e) {
     // topup() is written not to throw; if it ever does, that is a bug worth seeing on the
     // broker rather than a silently swallowed tick.

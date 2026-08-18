@@ -32,3 +32,16 @@ sets:
   source: queue
   sections: [ 1 ]
   refill: true
+
+# A CURATED READING queue — the shape of the live Manga & Webtoons pool. No session ever
+# names it (nobody "starts" a reading list), it is `source: queue`, and it states no
+# `length:` — all three of which used to make a top-up tick skip it entirely.
+- id: reading
+  label: Manga & Webtoons
+  kind: anime
+  source: queue
+  sections: []
+  providers:
+  - provider: kavita
+    libraries: [ "2", "5" ]
+  episodes: 2
