@@ -205,6 +205,32 @@ await ok('an untouched pool gains no keys when something unrelated is saved', as
   assert.doesNotMatch(yaml, /length:|power_off_when_done:|refill:/);
 });
 
+await ok('a CURATED queue can save its playback length — createSet already could', async () => {
+  // The bug this pins: `updateSet` allowed `length` only on a rotation channel, while
+  // `createSet` wrote it for a curated queue too. The editor renders the control on every
+  // set, so setting the live `manga_webtoons` reading pool to Infinite was accepted by the
+  // UI, dropped by the API without a word, and read back as "Default".
+  const { id } = await sets.createSet({
+    kind: 'anime', label: 'Reading Pool', sections: [], source: 'queue',
+  });
+  await sets.updateSet(id, { length: INFINITE });
+  assert.match(blockFor(id), /length: infinite/);
+  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === id)?.length, INFINITE);
+
+  // …and the sparse rule still applies on this path: a curated anime pool defaults to 12, so
+  // saving 12 stores nothing rather than freezing the set against a future env change.
+  await sets.updateSet(id, { length: 12 });
+  assert.doesNotMatch(blockFor(id), /length:/);
+});
+
+await ok('power-off saves on a curated queue too', async () => {
+  const { id } = await sets.createSet({
+    kind: 'movies', label: 'Lights Out Queue', sections: [1], source: 'queue',
+  });
+  await sets.updateSet(id, { power_off_when_done: true });
+  assert.match(blockFor(id), /power_off_when_done: true/);
+});
+
 await ok('the registry tells the editor what null resolves to', async () => {
   const rw = await sets.createSet(rotation('Default Rewatch', { behavior: 'rewatch' }));
   const pg = await sets.createSet(rotation('Default Progress'));

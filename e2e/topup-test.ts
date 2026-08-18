@@ -73,16 +73,47 @@ const providerStub = {
   buckets: async () => ({ play: ['4', '5', '6', '7', '8', '9'].map((rk) => ({ ratingKey: rk, title: `item ${rk}` })) }),
 };
 
+// The PULL provider — a reading list, not a playQueue. It owns its own append + trim, so all
+// topup.ts hands it is the window, the top-up threshold and a builder; what comes back is
+// what the tick reports. Every call is recorded, because the interesting assertions here are
+// about WHETHER it was called at all and WITH WHAT — this provider was unreachable before
+// 2026-08-17.
+const listCalls: { window: number; at: number; built: unknown[] }[] = [];
+// A HOLDER rather than a bare `let`: TypeScript's control-flow analysis does not know the
+// stub below ever runs, so a `let … = null` stays narrowed to `null` at every read site and
+// `ctx?.entries` types as `never`. Property narrowing is invalidated by the intervening
+// `await topup(…)`, which is exactly the honest answer here.
+const seen: { ctx: Record<string, unknown> | null } = { ctx: null };
+const readingStub = {
+  label: 'FakeKavita',
+  delivery: 'pull',
+  // The shared builder calls this; recording the context is how the test proves the top-up
+  // uses it rather than the old Plex-shaped `buckets({ setName, cfg, binding, token })` call,
+  // which omitted `entries` and served the library shelf instead of the owner's own series.
+  buckets: async (ctx: Record<string, unknown>) => {
+    seen.ctx = ctx;
+    return { play: [{ chapterId: 7, seriesId: 1, title: 'ch 7' }] };
+  },
+  topupList: async ({ window, at, build }: {
+    window: number; at: number; build: () => Promise<unknown[]>;
+  }) => {
+    const built = await build();
+    listCalls.push({ window, at, built });
+    return { ok: true, added: built.length, trimmed: 2, unread: 1 };
+  },
+};
+
 // ESM namespace objects are FROZEN, so the collaborators are injected rather than stubbed by
 // assignment — `topup()` takes them as `deps`, defaulted to the real modules in production.
 const { SESSION } = await import('../server/src/session.js');
-const { topup: topupReal, _resetCooldown } = await import('../server/src/topup.js');
+const { topup: topupReal, topupPullLists: sweepReal, _resetCooldown } = await import('../server/src/topup.js');
 type Deps = Parameters<typeof topupReal>[0];
 const DEPS = {
   ...playbackStub,
-  providerFor: () => providerStub,
+  providerFor: (id: string) => (id === 'kavita' ? readingStub : providerStub),
 } as unknown as NonNullable<Deps>['deps'];
-const topup = (opts: { now?: number } = {}) => topupReal({ ...opts, deps: DEPS });
+const topup = (opts: { now?: number; set?: string | null } = {}) => topupReal({ ...opts, deps: DEPS });
+const sweep = (opts: { now?: number } = {}) => sweepReal({ ...opts, deps: DEPS });
 
 const resetSession = (set: string | null) => {
   SESSION.set = set;
@@ -146,6 +177,37 @@ check('  and appended nothing', appended, []);
 appended = [];
 const later = await topup({ now: Date.now() + 61_000 });
 check('a tick after the cooldown works again', (later.added ?? 0) >= 0 && !String(later.reason || '').startsWith('cooling down'), true);
+
+// --- 4. the reading list, which has no session at all -------------------------
+console.log('=== a reading list is topped up without a session ===');
+
+// EVERY guard on the push path would have refused this set, and all three were wrong about
+// it: it is `source: queue`, it states no `length:` (so its target is the 12-item window and
+// `needsTopup(12)` is false), and nothing is playing. The result was a list that was seeded
+// once at launch and then only shrank as chapters were read.
+resetSession(null);
+listCalls.length = 0;
+const reading = await topup({ set: 'reading' });
+check('a named reading set tops up with no session', (reading.added ?? 0) > 0, true);
+check('  it refilled to the WINDOW the launch seeded (12)', listCalls[0]?.window, 12);
+check('  and asked at the same threshold as a playQueue', listCalls[0]?.at, 3);
+check('  the provider both added and trimmed', [reading.added, reading.remaining], [1, 1]);
+// The lineup came from the SHARED builder: `entries` is the key the old call omitted, and
+// `batch` carries the set's own `episodes: 2`.
+check('  the lineup was built entries-first, not shelf-first', Array.isArray(seen.ctx?.entries), true);
+check('  with the set\'s own per-series batch', seen.ctx?.batch, 2);
+
+// The sweep is what the MQTT tick actually calls: no set name, no session, find them.
+resetSession(null);
+listCalls.length = 0;
+_resetCooldown();
+const swept = await sweep();
+check('the sweep finds the reading set on its own', swept.map((r) => r.set), ['reading']);
+check('  and tops it up', (swept[0]?.added ?? 0) > 0, true);
+
+// A push set is NOT swept — it has a session, and a lineup nobody is watching must not be
+// extended behind the viewer's back.
+check('  push channels are left to the session tick', listCalls.length, 1);
 
 if (failed) {
   console.error(`\ntopup-test: ${failed} check(s) failed`);

@@ -224,7 +224,7 @@ function stubClient(
   };
 }
 
-const { kavitaProvider, sameLibraryPrefix } = await import('../server/src/providers/kavita.js');
+const { kavitaProvider } = await import('../server/src/providers/kavita.js');
 const { readerSegment, FORMAT } = await import('../server/src/providers/kavita-client.js');
 const DEF = { id: 'kavita', kind: 'kavita', label: 'Kavita', base_url: 'https://kavita.invalid' };
 
@@ -700,41 +700,24 @@ await ok('topupList finds the list under EITHER title', async () => {
   }
 });
 
-await ok('sameLibraryPrefix keeps one library and stops at the next', async () => {
-  const a = { chapterId: 1, seriesId: 10, title: 'A', libraryId: 5 };
-  const b = { chapterId: 2, seriesId: 10, title: 'B', libraryId: 5 };
-  const c = { chapterId: 3, seriesId: 20, title: 'C', libraryId: 6 };
-  assert.deepEqual(
-    sameLibraryPrefix([a, b, c]).map((i) => i.chapterId),
-    [1, 2],
-  );
-  assert.deepEqual(sameLibraryPrefix([a, b]).map((i) => i.chapterId), [1, 2]);
-  assert.deepEqual(sameLibraryPrefix([]), []);
-});
-
-await ok('sameLibraryPrefix cannot split when the head has no library', async () => {
-  const a = { chapterId: 1, seriesId: 10, title: 'A' };
-  const b = { chapterId: 2, seriesId: 20, title: 'B', libraryId: 6 };
-  assert.deepEqual(
-    sameLibraryPrefix([a, b]).map((i) => i.chapterId),
-    [1, 2],
-  );
-});
-
-await ok('materialize does not put a second library on the reading list', async () => {
-  // Kavita's manga reader applies a library reading profile only on first open.
-  // Auto-advance is replaceState + init(), so a manga after a webtoon keeps
-  // scroll + custom width. The list must stop at the library boundary.
+await ok('materialize writes the WHOLE lineup, libraries and all', async () => {
+  // The inverse of the 2026-08-16 gate this replaces. Stopping at the library boundary
+  // dodged Kavita's reader-profile bug (Kareadita/Kavita#4859) by cutting the list to its
+  // first series or two — the live Manga & Webtoons list came back holding 4 chapters out of
+  // 12, because the lineup interleaves series and a random-order pool alternates libraries.
+  // The owner backs out of the reader and reopens instead
+  // (decision `2026-08-17-the-reading-list-crosses-libraries-again`).
   const c = stubClient();
   const p = kavitaProvider({ def: DEF, client: asClient(c) });
   const play: KavitaPlayItem[] = [
     { chapterId: 11, seriesId: 1, title: 'webtoon 1', libraryId: 5 },
     { chapterId: 12, seriesId: 1, title: 'webtoon 2', libraryId: 5 },
     { chapterId: 21, seriesId: 2, title: 'manga vol 1', libraryId: 6 },
+    { chapterId: 13, seriesId: 3, title: 'webtoon 3', libraryId: 5 },
   ];
   const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
-  assert.deepEqual(c._added.map((a) => a.chapterId), [11, 12]);
-  assert.equal(art.count, 2);
+  assert.deepEqual(c._added.map((a) => a.chapterId), [11, 12, 21, 13]);
+  assert.equal(art.count, 4);
   assert.equal(art.head?.chapterId, 11);
 });
 

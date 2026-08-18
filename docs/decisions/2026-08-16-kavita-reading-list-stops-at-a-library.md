@@ -1,11 +1,17 @@
 # A Kavita reading list must not cross libraries
 
-- **Status:** Accepted
+- **Status:** Superseded
 - **Date:** 2026-08-16
 - **Type:** bug / workaround
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-08-17-the-reading-list-crosses-libraries-again](2026-08-17-the-reading-list-crosses-libraries-again.md)
 - **Extends:** [2026-08-15-the-reading-list-is-rebuilt-not-appended](2026-08-15-the-reading-list-is-rebuilt-not-appended.md)
+
+> **SUPERSEDED 2026-08-17.** The truncation cost far more than this record
+> priced it at — the lineup interleaves libraries, so the cut landed after one
+> or two series and the live list came back with 4 items out of 12. The owner
+> backs out of the reader and reopens instead. See
+> [the-reading-list-crosses-libraries-again](2026-08-17-the-reading-list-crosses-libraries-again.md).
 
 ## Decision
 
