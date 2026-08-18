@@ -296,34 +296,6 @@ export function findSetList<T extends { title?: string }>(
 }
 
 /**
- * The prefix of a lineup that shares the HEAD's Kavita library.
- *
- * Kavita reading-list auto-advance stays INSIDE the manga reader (`history.replaceState`
- * + `init()`, never a remount). Library reading profiles (Webtoon scroll + custom width
- * vs manga paginated + 100% width) are applied only by the route resolver on first open.
- * Crossing a library in one list therefore keeps the previous library's reader. Until
- * Kavita reloads the profile on series change, the list we hand the reader must not
- * cross that boundary. QueuePilot tiles still show the full rotation; the next launch
- * opens the next library as a fresh navigation, which does apply its profile.
- *
- * Items with no `libraryId` stay in the prefix (we cannot split on a missing key).
- */
-export function sameLibraryPrefix(items: readonly KavitaPlayItem[]): KavitaPlayItem[] {
-  if (!items.length) return [];
-  const head = items[0]!.libraryId;
-  if (head == null || head === '') return [...items];
-  const headKey = String(head);
-  const out: KavitaPlayItem[] = [];
-  for (const it of items) {
-    if (it.libraryId != null && it.libraryId !== '' && String(it.libraryId) !== headKey) {
-      break;
-    }
-    out.push(it);
-  }
-  return out;
-}
-
-/**
  * `client` is injectable so the offline tests can stub HTTP entirely — they run with no
  * token and no network, in the house style.
  */
@@ -781,9 +753,15 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      * That is a UX consequence, not a design one: we reuse one list per set rather than
      * littering the user's list view with a new one per launch.
      *
-     * Only the first library's run is written (see `sameLibraryPrefix`). Crossing libraries
-     * in one list is a Kavita reader-profile bug: the manga reader does not remount, so a
-     * manga chapter after two webtoon chapters keeps scroll + custom width.
+     * THE WHOLE LINEUP IS WRITTEN, libraries and all. It did not use to be: between
+     * 2026-08-16 and 2026-08-17 the list stopped at the first library change, to dodge a
+     * Kavita reader-profile bug (Kareadita/Kavita#4859 — the manga reader does not remount on
+     * auto-advance, so a manga after a webtoon keeps scroll + custom width). That cost far
+     * more than it bought: the lineup INTERLEAVES series and a random-order queue alternates
+     * libraries, so the cut landed after one or two series and the live Manga & Webtoons list
+     * came back holding 4 chapters out of 12. The owner backs out of the reader and reopens
+     * when the pagination is wrong, which is one tap against a list that is a third the size
+     * it should be (decision `2026-08-17-the-reading-list-crosses-libraries-again`).
      *
      * A list that has no cover of ours gets one (see `putCover` below) — the artwork is the
      * one part of this artifact that is NOT rebuilt per launch.
@@ -883,11 +861,10 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           console.log(`[kavita] could not set cover on list ${listId}: ${errMessage(e)}`);
         }
       }
-      // The tiles still show the full rotation. The list the reader auto-advances
-      // through stops at the first library change — otherwise Kavita keeps the
-      // previous library's reading profile (webtoon scroll on a paginated manga).
-      const forList = sameLibraryPrefix(items);
-      for (const it of forList) {
+      // Every item, in lineup order — the list the reader walks is the rotation the tiles
+      // show. A library change mid-list can leave Kavita on the previous library's reading
+      // profile (see this method's header); backing out and reopening applies the right one.
+      for (const it of items) {
         await c.addChapter(listId as number | string, it.seriesId, it.chapterId);
       }
       const head = items[0] || null;
@@ -898,7 +875,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         title,
         setName,
         head,
-        count: forList.length,
+        count: items.length,
       };
     },
 

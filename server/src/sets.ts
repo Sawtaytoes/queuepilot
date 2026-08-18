@@ -1061,6 +1061,17 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // The repeating {provider, profile, libraries} block. Valid on BOTH sources, unlike
       // most knobs here — a reading queue and a reading channel are both plausible.
       'providers',
+      // PLAYBACK LENGTH, on every kind of set since #122 — and its power-off companion. Both
+      // were rotation-only here while `createSet` (writeLineupKnobs) wrote them for a curated
+      // queue too, so the two writers disagreed and only the CREATE side was right.
+      //
+      // What that cost: the editor renders Playback Length for every set and its Save posts
+      // this key every time, so setting the live curated `manga_webtoons` pool to Infinite was
+      // accepted by the UI, dropped here without a word, and read back as "Default" — a
+      // control that looked broken rather than one that refused. The per-key handler below is
+      // already kind-aware (it stores sparsely against `defaultFor`, which answers for a
+      // curated queue as readily as a channel), so this list was the only thing in the way.
+      'length', 'power_off_when_done',
     ];
     if (isRotation) {
       allow.push(
@@ -1072,11 +1083,10 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         'profiles', 'behavior', 'members',
         // Whether a Collection member plays whole or is split into its shows.
         'collection_members',
-        // How many items the lineup holds. Rotation-only: a curated queue's length is
-        // however many entries it has, so there is nothing to set there.
-        'length',
         // Keep it topped up (`length` becomes the window), and what a finished show does.
-        'refill', 'on_complete', 'power_off_when_done',
+        // `refill` is the deprecated pre-#122 spelling of `length: infinite` and stays
+        // rotation-only; `length` itself is in the shared list above, on every kind of set.
+        'refill', 'on_complete',
         // Per-show start + weight overrides for the dynamic rule pool.
         'starts', 'weights', 'on_complete_by_show',
         // Which binding the Play/Channels dropdowns default to (a binding's plex_user).

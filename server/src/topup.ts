@@ -23,7 +23,8 @@ import { SESSION } from './session.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet } from './providers/blocks.js';
 import * as routing from './engine/routing.js';
-import { isTargetMet, needsTopup, playbackLength } from './engine/playbackLength.js';
+import { initialQueueSize, isTargetMet, needsTopup, playbackLength } from './engine/playbackLength.js';
+import { pullLineup } from './providers/pullLineup.js';
 import { ROTATION_LENGTH, TOPUP_AT, TOPUP_COOLDOWN_SECONDS } from './env.js';
 import { errMessage } from './errors.js';
 import type { BlockSourceCfg } from './providers/blocks.js';
@@ -42,13 +43,18 @@ export interface TopupResult {
   error?: string;
 }
 
-// Last successful top-up, so a stuck (or duplicated) HA automation cannot walk the lineup up
-// one tick at a time. Module state and not SESSION state: it is about THIS process's recent
-// behaviour, not about what is playing, and a new scan should not license an instant top-up.
-let lastTopupMs = 0;
+// Last successful top-up PER SET, so a stuck (or duplicated) HA automation cannot walk the
+// lineup up one tick at a time. Module state and not SESSION state: it is about THIS
+// process's recent behaviour, not about what is playing, and a new scan should not license an
+// instant top-up.
+//
+// Keyed by set since the reading sweep landed: one shared timestamp meant a Kavita list that
+// topped up put the kids' Shorts channel into cooldown too, and whichever tick arrived first
+// silently owned the next minute. Different lineups are different lineups.
+const lastTopupMs = new Map<string, number>();
 
 /** Test seam — reset the cooldown between cases. Not called in production. */
-export function _resetCooldown(): void { lastTopupMs = 0; }
+export function _resetCooldown(): void { lastTopupMs.clear(); }
 
 /**
  * The two collaborators a test replaces. Injected rather than imported-and-stubbed because
@@ -76,21 +82,83 @@ const REAL_DEPS: TopupDeps = {
  * than as anything actionable.
  */
 export async function topup(
-  { now = Date.now(), deps = REAL_DEPS }: { now?: number; deps?: TopupDeps } = {},
+  { now = Date.now(), deps = REAL_DEPS, set = null }: {
+    now?: number;
+    deps?: TopupDeps;
+    /**
+     * Which set to top up, when it is not the one playing.
+     *
+     * A PUSH lineup is always the live session's — there is exactly one, and it is on the
+     * screen. A reading list is not: it is a persistent artifact on a tablet that nobody
+     * "starts", so the sweep below names it instead. Absent = the session, which is every
+     * pre-existing caller.
+     */
+    set?: string | null;
+  } = {},
 ): Promise<TopupResult> {
-  const setName = SESSION.set;
+  const setName = set || SESSION.set;
   if (!setName) return { ok: true, reason: 'no active session' };
 
   // Cooldown BEFORE any network read: the cheapest guard, and the one that still holds when
   // Plex is slow or the playQueue read is flaky.
-  const sinceMs = now - lastTopupMs;
-  if (lastTopupMs && sinceMs < TOPUP_COOLDOWN_SECONDS * 1000) {
+  const last = lastTopupMs.get(setName) ?? 0;
+  const sinceMs = now - last;
+  if (last && sinceMs < TOPUP_COOLDOWN_SECONDS * 1000) {
     return { ok: true, set: setName, reason: `cooling down (${Math.round(sinceMs / 1000)}s of ${TOPUP_COOLDOWN_SECONDS}s)` };
   }
 
   const cfg = routing.loadSets()?.sets?.[setName];
   if (!cfg) return { ok: true, set: setName, reason: 'set not in registry' };
+  // Resolved BEFORE the rotation/length gates below, because those gates are about a PUSH
+  // lineup and a pull one answers to none of them.
+  const provider = deps.providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+
+  // PULL provider (Kavita): the artifact is a persistent reading list, not a playQueue, and
+  // the provider owns both the append and the trim. There is no session to measure against —
+  // "how much is left" is the list's own unread count, read on demand at this tick.
+  //
+  // NONE of the push gates apply here, and each one used to make this branch unreachable for
+  // the live `manga_webtoons` queue:
+  //
+  //   * `source: rotation` — a reading list is a CURATED queue. It was rejected as "not a
+  //     rotation channel" before it got this far.
+  //   * `needsTopup` — that asks "does this set want MORE than one window", which is the
+  //     right question for a sitting that should be allowed to end. A reading list is a
+  //     sliding window BY CONSTRUCTION: it holds ~12 and the tablet pulls from it over days,
+  //     so it always wants to be kept at its window (owner, 2026-08-17: "make it 12, then add
+  //     and remove items"). A finite `length:` here sizes the window, it does not end it.
+  //   * `isTargetMet` / `SESSION.queuedTotal` — bookkeeping for a queue this launch sent.
+  //     Nobody "starts" a reading list; the read state in Kavita is the only truth.
+  if (typeof provider.topupList === 'function') {
+    // The SAME window the launch seeded the list with, so a top-up refills to exactly the
+    // size the artifact was built at rather than to some second opinion. `ROTATION_LENGTH` is
+    // the fallback the Kavita provider itself passes for a set that has never stated a
+    // length — see playbackLength's `fallback` note.
+    const window = initialQueueSize(playbackLength(cfg, ROTATION_LENGTH));
+    let res: Awaited<ReturnType<NonNullable<typeof provider.topupList>>>;
+    try {
+      res = await provider.topupList({
+        setName,
+        setLabel: cfg.label || setName,
+        window,
+        at: TOPUP_AT,
+        // The SHARED builder, not a hand-rolled `buckets()` call: a curated reading queue's
+        // lineup is its entries, and the call that omits them serves the library shelf.
+        build: () => pullLineup(setName, cfg, provider),
+      });
+    } catch (e) {
+      return { ok: false, set: setName, error: `list top-up failed: ${errMessage(e)}` };
+    }
+    // The cooldown is only spent when something actually landed, so a run of "already full"
+    // ticks does not lock out the tick that finally matters.
+    if (res.added) lastTopupMs.set(setName, now);
+    console.log(`[topup] ${setName}: reading list +${res.added ?? 0}, trimmed ${res.trimmed ?? 0}`
+      + `${res.reason ? ` (${res.reason})` : ''}`);
+    return { ok: res.ok, set: setName, added: res.added ?? 0, remaining: res.unread, reason: res.reason };
+  }
+
   if (cfg.source !== 'rotation') return { ok: true, set: setName, reason: 'not a rotation channel' };
+
   // The opt-in. A channel that has not asked to refill is ALLOWED to end — that is what a
   // fixed `length:` means, and topping it up anyway would silently delete that choice.
   // DERIVED from the playback length, never a stored flag of its own (owner, 2026-08-17). A
@@ -109,9 +177,8 @@ export async function topup(
     return { ok: true, set: setName, reason: `target of ${target} already queued` };
   }
 
-  // The SAME provider + binding the scan used, resolved the same way `startSession` does —
-  // a top-up that selected as a different account would queue the wrong kid's next episodes.
-  const provider = deps.providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+  // The SAME binding the scan used, resolved the same way `startSession` does — a top-up that
+  // selected as a different account would queue the wrong kid's next episodes.
   let binding = routing.bindingFor(cfg, SESSION.profile);
   if (typeof provider.profileBinding === 'function') {
     binding = await provider.profileBinding(binding, SESSION.profile);
@@ -128,26 +195,6 @@ export async function topup(
     });
     return res?.play || [];
   };
-
-  // PULL provider (Kavita): the artifact is a persistent reading list, not a playQueue, and
-  // the provider owns both the append and the trim. There is no session to measure against —
-  // "how much is left" is the list's own unread count, read on demand at this tick.
-  if (typeof provider.topupList === 'function') {
-    let res: Awaited<ReturnType<NonNullable<typeof provider.topupList>>>;
-    try {
-      res = await provider.topupList({
-        setName, setLabel: cfg.label || setName, window, at: TOPUP_AT, build: buildLineup,
-      });
-    } catch (e) {
-      return { ok: false, set: setName, error: `list top-up failed: ${errMessage(e)}` };
-    }
-    // The cooldown is only spent when something actually landed, so a run of "already full"
-    // ticks does not lock out the tick that finally matters.
-    if (res.added) lastTopupMs = now;
-    console.log(`[topup] ${setName}: reading list +${res.added ?? 0}, trimmed ${res.trimmed ?? 0}`
-      + `${res.reason ? ` (${res.reason})` : ''}`);
-    return { ok: res.ok, set: setName, added: res.added ?? 0, remaining: res.unread, reason: res.reason };
-  }
 
   if (SESSION.playQueueID == null) return { ok: true, set: setName, reason: 'no live playQueue' };
 
@@ -192,7 +239,7 @@ export async function topup(
   } catch (e) {
     return { ok: false, set: setName, error: `extend failed: ${errMessage(e)}` };
   }
-  lastTopupMs = now;
+  lastTopupMs.set(setName, now);
   // Plex silently drops keys the playing token cannot see, so report what the queue GREW by,
   // not what we handed it. A persistent 0 here is the wrong-account symptom, not a quiet
   // success — the create path learned the same lesson.
@@ -202,4 +249,38 @@ export async function topup(
   SESSION.queuedTotal += added;
   console.log(`[topup] ${setName}: ${live.remaining} left -> added ${added} (asked ${slice.length}), queue now ${sizeAfter ?? '?'}`);
   return { ok: true, set: setName, remaining: live.remaining, added };
+}
+
+/**
+ * Keep every PULL artifact stocked, session or no session.
+ *
+ * The push path has one lineup at a time and the app knows which one, because something is
+ * playing. Reading has neither: the tablet pulls from a list that persists for days and
+ * nobody "starts" it, so there is no session to hang a tick on — which is why the reading
+ * list never topped up at all before 2026-08-17. It was seeded at launch and then only
+ * shrank as chapters were read.
+ *
+ * So the tick sweeps instead. A set with no reading list yet answers "nothing was ever
+ * launched for this set" and costs one enumerate; that is the whole guard against topping up
+ * a queue the owner has never opened.
+ */
+export async function topupPullLists(
+  { now = Date.now(), deps = REAL_DEPS }: { now?: number; deps?: TopupDeps } = {},
+): Promise<TopupResult[]> {
+  const sets = routing.loadSets()?.sets || {};
+  const out: TopupResult[] = [];
+  for (const [setName, cfg] of Object.entries(sets)) {
+    if (cfg?.enabled === false) continue;
+    let provider;
+    try {
+      provider = deps.providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+    } catch {
+      // NOT CONFIGURED — a provider block pointing at something this deployment has no
+      // credentials for. Every other set still gets its tick.
+      continue;
+    }
+    if (typeof provider.topupList !== 'function') continue;
+    out.push(await topup({ now, deps, set: setName }));
+  }
+  return out;
 }
