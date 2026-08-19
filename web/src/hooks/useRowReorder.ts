@@ -1,7 +1,7 @@
 import { type RefObject, useEffect, useRef } from "react"
 
 /**
- * Drag-to-reorder for a vertical list of rows — the Play landing's three shelves.
+ * Drag-to-reorder for the Play landing's card grid.
  *
  * The Queues configurator has had this for whole shelves since the beginning
  * (`useHomeDrags`), but only there, and only for Ordered Queues. On the landing — the screen
@@ -12,15 +12,24 @@ import { type RefObject, useEffect, useRef } from "react"
  * The gestures follow `useHomeDrags` deliberately, because they are the same gesture:
  *
  * - **Mouse** drags past a small threshold; **touch** arms on a ~200 ms long-press, so a
- *   swipe still scrolls the page rather than dragging a row out from under the finger.
- * - Only the **handle** starts a drag. The row is a link and its buttons play things; a
- *   whole-row drag would fight both.
+ *   swipe still scrolls the page rather than dragging a card out from under the finger.
+ * - Only the **handle** starts a drag. The card is a link and its buttons play things; a
+ *   whole-card drag would fight both.
  * - The moved node is **restored to where React last rendered it** before `onCommit` runs, so
  *   React re-renders from a DOM it believes rather than one this hook rearranged behind it.
  *   Skipping that is what produces `NotFoundError` on a later commit.
  *
  * Reordering is transform-only while dragging and a single `insertBefore` per crossing — no
- * layout thrash, and the browser keeps the rows' own transitions.
+ * layout thrash, and the browser keeps the cards' own transitions.
+ *
+ * **It moves in TWO axes as of 2026-08-19, because the landing is a wrapped grid.** The
+ * original compared the dragged row's midpoint against each neighbour's midpoint on Y alone,
+ * which is exactly right for a single column and silently wrong for a grid: every card in a
+ * row shares a Y midpoint, so dragging sideways swapped with whichever of them happened to
+ * come first in the DOM, and dragging up one row picked a card three columns away. The test
+ * is containment now — which card is the POINTER inside — which is unambiguous in both
+ * layouts and needs no special case for the one-column Narrow View.
+ * (decision `2026-08-19-the-landing-is-one-wrapped-grid-of-typed-cards`)
  */
 
 const DRAG_THRESHOLD = 6
@@ -30,8 +39,11 @@ type Drag = {
   row: HTMLElement
   /** Where React had it, restored before we hand control back. */
   nextSibling: ChildNode | null
+  /** The pointer's origin, RE-ANCHORED on every move: the node's untransformed home moves
+   * when it is spliced elsewhere in the grid, so the running offset has to be measured from
+   * the new home on both axes or the card jumps out from under the cursor. */
+  startX: number
   startY: number
-  offset: number
   isDragging: boolean
   isArmed: boolean
   holdTimer?: ReturnType<typeof setTimeout>
@@ -79,52 +91,60 @@ export function useRowReorder(
     const onMove = (e: PointerEvent) => {
       if (!drag) return
 
+      const dx = e.clientX - drag.startX
       const dy = e.clientY - drag.startY
 
       if (!drag.isDragging) {
-        // Touch waits for the long-press timer; a mouse only needs to mean it.
-        if (drag.isArmed || Math.abs(dy) < DRAG_THRESHOLD)
+        // Touch waits for the long-press timer; a mouse only needs to mean it. The
+        // threshold is on the DISTANCE moved, not on dy — a sideways drag in the grid is a
+        // real drag and used to have to travel vertically before it counted as one.
+        if (
+          drag.isArmed ||
+          Math.hypot(dx, dy) < DRAG_THRESHOLD
+        )
           return
 
         begin()
       }
 
       e.preventDefault()
-      drag.offset = dy
-      drag.row.style.transform = `translateY(${dy}px)`
+      drag.row.style.transform = `translate(${dx}px, ${dy}px)`
 
-      // Swap when the pointer passes a neighbour's midpoint. Comparing against the MIDPOINT
-      // (not the edge) is what stops a row oscillating between two slots on a 1px move.
-      const box = drag.row.getBoundingClientRect()
-      const midY = box.top + box.height / 2
+      // The card the POINTER is inside, if any. Containment rather than a midpoint
+      // comparison: in a wrapped grid every card in a row shares a midpoint on Y, so the
+      // old test could not tell them apart, and the gaps between cards mean "over nothing"
+      // is a real answer that should move nothing.
+      const target = rows().find((other) => {
+        if (other === drag?.row) return false
 
-      for (const other of rows()) {
-        if (other === drag.row) continue
+        const r = other.getBoundingClientRect()
 
-        const otherBox = other.getBoundingClientRect()
-        const otherMid = otherBox.top + otherBox.height / 2
-        const isBefore =
-          drag.row.compareDocumentPosition(other) &
-          Node.DOCUMENT_POSITION_FOLLOWING
+        return (
+          e.clientX >= r.left &&
+          e.clientX <= r.right &&
+          e.clientY >= r.top &&
+          e.clientY <= r.bottom
+        )
+      })
 
-        if (isBefore ? midY > otherMid : midY < otherMid) {
-          // Re-anchor: the node moved, so its untransformed origin moved with it and the
-          // running offset has to be measured from the new home or the row jumps.
-          const beforeTop = box.top
+      if (!target) return
 
-          list.insertBefore(
-            drag.row,
-            isBefore ? other.nextSibling : other,
-          )
+      const before = drag.row.getBoundingClientRect()
+      const isBefore =
+        drag.row.compareDocumentPosition(target) &
+        Node.DOCUMENT_POSITION_FOLLOWING
 
-          const afterTop =
-            drag.row.getBoundingClientRect().top
+      list.insertBefore(
+        drag.row,
+        isBefore ? target.nextSibling : target,
+      )
 
-          drag.startY += afterTop - beforeTop
-          drag.row.style.transform = `translateY(${e.clientY - drag.startY}px)`
-          break
-        }
-      }
+      // Re-anchor: the node moved, so its untransformed origin moved with it.
+      const after = drag.row.getBoundingClientRect()
+
+      drag.startX += after.left - before.left
+      drag.startY += after.top - before.top
+      drag.row.style.transform = `translate(${e.clientX - drag.startX}px, ${e.clientY - drag.startY}px)`
     }
 
     const finish = () => {
@@ -169,8 +189,8 @@ export function useRowReorder(
         isArmed: e.pointerType === "touch",
         isDragging: false,
         nextSibling: row.nextSibling,
-        offset: 0,
         row,
+        startX: e.clientX,
         startY: e.clientY,
       }
 
@@ -203,22 +223,25 @@ export function useRowReorder(
 }
 
 /**
- * Splice one shelf's new order back into the FULL set order.
+ * Splice the grid's new order back into the FULL set order.
  *
  * `PATCH /api/sets-order` takes the complete order and appends anything it was not told
- * about — so sending one shelf's ids would sweep every other set to the end of `sets.yaml`.
- * Permuting only the slots the shelf's own ids occupy leaves every other row exactly where
- * it was, and is also what makes reordering correct while a GROUP FILTER is on: the hidden
- * rows never move, because their slots are never touched.
+ * about — so sending only what is on screen would sweep every other set to the end of
+ * `sets.yaml`. Permuting only the slots the visible cards occupy leaves every other set
+ * exactly where it was, which is what makes reordering correct while a GROUP or PROVIDER
+ * FILTER is on: the hidden cards never move, because their slots are never touched.
+ *
+ * This mattered for three separate shelves before the landing became one grid, and it still
+ * matters for one grid, for the filter reason alone.
  */
 export function spliceOrder(
   fullOrder: readonly string[],
-  shelfOrder: readonly string[],
+  visibleOrder: readonly string[],
 ): string[] {
-  const moving = new Set(shelfOrder)
+  const moving = new Set(visibleOrder)
   let next = 0
 
   return fullOrder.map((id) =>
-    moving.has(id) ? (shelfOrder[next++] as string) : id,
+    moving.has(id) ? (visibleOrder[next++] as string) : id,
   )
 }

@@ -29,10 +29,10 @@ await page.goto(BASE, { waitUntil: 'domcontentloaded' });
 // 0. Landing = the Play list, grouped Filtered Pools (2 generic) / Curated Pools (3 anime)
 // / Ordered Queues (3),
 // no posters.
-await page.waitForSelector('.playrow', { timeout: 30000 });
-const dynRows = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
-const curRows = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
-const qRows = await page.$$eval('#playqueues .playrow .rowname', (els) => els.map((e) => e.textContent));
+await page.waitForSelector('.playcard', { timeout: 30000 });
+const dynRows = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent));
+const curRows = await page.$$eval('#playgrid li[data-kind="curated"] .rowname', (els) => els.map((e) => e.textContent));
+const qRows = await page.$$eval('#playgrid li[data-kind="ordered"] .rowname', (els) => els.map((e) => e.textContent));
 ok('landing: 2 filtered-pool rows (Shows & Shorts + Movies)',
   dynRows.length === 2 && dynRows[0] === 'Shows & Shorts' && dynRows[1] === 'Movies');
 ok('landing: 3 curated-pool (anime) rows', curRows.length === 3);
@@ -188,15 +188,19 @@ ok('K: toast auto-dismissed', (await page.textContent('#status')) === '');
 // navigation — `page.goto` is. The reload is harmless here: everything asserted
 // below is re-fetched from the server, and the rename above already persisted.
 await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('#playdynamic .playrow', { timeout: 20000 });
-const dyn = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
-const cur = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
+await page.waitForSelector('#playgrid li[data-kind="filtered"]', { timeout: 20000 });
+const dyn = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent));
+const cur = await page.$$eval('#playgrid li[data-kind="curated"] .rowname', (els) => els.map((e) => e.textContent));
 ok('F: Filtered Pools group = Shows & Shorts + Movies', dyn.length === 2 && dyn[0] === 'Shows & Shorts' && dyn[1] === 'Movies');
 ok('F: Curated Pools group holds the anime sets', cur.length >= 1);
-const groupHeads = await page.$$eval('#play .playgroup h2', (els) => els.map((e) => (e.textContent ?? '').replace('Configure ›', '').trim()));
-ok('F: group headings named Filtered/Curated Pools + Ordered Queues',
-  groupHeads.includes('Filtered Pools') && groupHeads.includes('Curated Pools')
-  && groupHeads.includes('Ordered Queues'));
+// The three names the taxonomy decision settled. They were three shelf HEADINGS until the
+// landing became one grid (2026-08-19); each card carries its own kind badge now, so the same
+// words are asserted where they actually live.
+const kindWords = await page.$$eval('#playgrid .cardkind', (els) =>
+  [...new Set(els.map((e) => (e.textContent ?? '').trim()))]);
+ok('F: cards named Filtered/Curated Pool + Ordered Queue',
+  kindWords.includes('Filtered Pool') && kindWords.includes('Curated Pool')
+  && kindWords.includes('Ordered Queue'));
 // The Pools picker lists the same pools — now a flat SelectListbox, NOT a native
 // <select> with optgroups (Listbox has no option groups; filtered pools come first,
 // then curated). 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.

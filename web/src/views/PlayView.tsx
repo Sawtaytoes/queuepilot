@@ -1,3 +1,4 @@
+import { EmptyState } from "@charcuterie/ui"
 import {
   type ReactNode,
   useCallback,
@@ -18,9 +19,15 @@ import {
 } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
 import { labelInGroup } from "../lib/setLabel"
-import type { Group, RegistrySet } from "../lib/types"
+import type {
+  Group,
+  QueuesResponse,
+  RegistrySet,
+  SetsResponse,
+} from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
 import {
+  ALL_ID,
   findGroup,
   groupPath,
   parseOnly,
@@ -28,28 +35,50 @@ import {
 import { openPlayMenu } from "../state/overlays"
 import {
   bumpRevision,
-  channelSetIds,
   getState,
   load,
-  queueIds,
   rotationChannels,
   setStatus,
   useStore,
 } from "../state/store"
 
 /**
- * PLAY — the landing. Every channel and queue as a plain, posterless row: pick one
- * and play it. The configurators (posters, drag, filters) live behind the three
- * "Configure ›" links.
+ * PLAY — the landing. Every pool and queue as a posterless card: pick one and play it.
+ * The configurators (posters, drag, filters) live behind the "Configure ›" links.
  * (decision `2026-07-21-queues-vs-channels-taxonomy-play-first-ia`)
  *
- * The dynamic group is DATA-DRIVEN, one row per rotation channel — Shows & Shorts,
+ * **ONE wrapped grid, not three columns.** Until 2026-08-19 the three kinds were three
+ * fixed columns, and the shape of the page was decided by the taxonomy rather than by
+ * what the household owns: a install with no curated pools painted two thirds of the
+ * screen blank, and the household's real install ran the Ordered Queues column eight
+ * cards deep beside a column of three. The kinds have not gone away — each card SAYS
+ * which kind it is — but they no longer choose the layout, so the cards wrap to fill
+ * whatever width there is and the Narrow View is one honest column instead of three
+ * headings to scroll past.
+ * (decision `2026-08-19-the-landing-is-one-wrapped-grid-of-typed-cards`)
+ *
+ * The filtered pools are DATA-DRIVEN, one card per rotation pool — Shows & Shorts,
  * Shows, Shorts, Movies, and any future rotation. It used to hardcode two function
  * buckets and fold every `progress` channel into the first, which listed
  * "Younger Kids / Older Kids" three times each once the kid channels were split.
- * Each row's tier picker lists only THAT channel's own bindings, so a tier can
+ * Each card's tier picker lists only THAT pool's own bindings, so a tier can
  * never appear twice. (decision `2026-07-29-dynamic-channels-first-class-and-deletable`)
  */
+
+/**
+ * The three kinds, as the card says them out loud.
+ *
+ * These are the words the taxonomy decision settled, and the badge is now the ONLY place
+ * the page says them — there are no shelf headings left to carry them.
+ * (decision `2026-08-16-filtered-pools-curated-pools-ordered-queues`)
+ */
+type SetKind = "curated" | "filtered" | "ordered"
+
+const KIND_WORD: Record<SetKind, string> = {
+  curated: "Curated Pool",
+  filtered: "Filtered Pool",
+  ordered: "Ordered Queue",
+}
 
 /** A tier-select value → `{set, profile?}` (JSON for a binding option, a bare id
  * otherwise). */
@@ -68,7 +97,8 @@ function parseTierValue(v: string): {
   return { set: v }
 }
 
-function PlayRow({
+function PlayCard({
+  kind,
   label,
   meta,
   onPlay,
@@ -77,7 +107,7 @@ function PlayRow({
   to,
 }: {
   /**
-   * Where this row GOES — a real link target, not an `onClick` that calls `navigate()`.
+   * Where this card GOES — a real link target, not an `onClick` that calls `navigate()`.
    * Middle-click, ⌘/Ctrl-click, "Open in new tab", "Copy link address" and the status-bar
    * preview all come from the ELEMENT being an anchor; none of them can be added to a
    * `<button>` by styling it like a link.
@@ -90,6 +120,7 @@ function PlayRow({
    * affordance above survives; it just intercepts the plain left-click.
    */
   to: string
+  kind: SetKind
   label: string
   meta: string
   onPlay: (anchor: DOMRect) => void
@@ -102,72 +133,83 @@ function PlayRow({
   tier?: ReactNode
 }) {
   return (
-    // Each row wears its own queue's colour, so the landing page says at a glance which
-    // service each button will talk to — the Kavita row's Open button is Kavita-green beside
-    // the Plex rows' amber. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
+    // Each card wears its own set's colour, so the landing says at a glance which service
+    // each button will talk to — the Kavita card's Open button is Kavita-green beside the
+    // Plex cards' amber. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
     <li
-      className="playrow"
-      // The id the reorder hook reads off the DOM after a drag — the rows it moves are
+      className="playcard"
+      // The id the reorder hook reads off the DOM after a drag — the cards it moves are
       // nodes, not React state, so the new order has to be legible from the elements.
       data-set={set?.id}
+      data-kind={kind}
       data-provider={set?.provider_kind || undefined}
     >
-      {/* Only the HANDLE starts a drag: the row is a link and its button plays something,
-          so a whole-row drag would fight both. Hidden from assistive tech — it is a mouse
-          affordance, and reordering is not the only way to get anywhere. */}
-      <span
-        aria-hidden="true"
-        className="rowdrag"
-        title="Drag to reorder"
-      >
-        ≡
-      </span>
-      <div className="rowmain">
+      <div className="cardhead">
+        {/* Only the HANDLE starts a drag: the card is a link and its button plays
+            something, so a whole-card drag would fight both. Hidden from assistive tech —
+            it is a pointer affordance, and reordering is not the only way to get
+            anywhere. */}
+        <span
+          aria-hidden="true"
+          className="rowdrag"
+          title="Drag to reorder"
+        >
+          ≡
+        </span>
         <Link className="rowname" to={to}>
           {label}
         </Link>
-        <span className="rowmeta">{meta}</span>
+        {/* Not a `<Badge>`: charcuterie's badge is a status pill with an intent colour,
+            and this is a permanent classification rather than a state that changes. It
+            also has to sit flush against a heading that may wrap to two lines, which the
+            pill's own line-height fights. */}
+        <span className="cardkind">{KIND_WORD[kind]}</span>
       </div>
-      {tier}
-      {isPullSet(set) ? (
-        // Nothing to cast to — the launcher URL is the whole affordance.
-        <OpenQueueButton set={set!} />
-      ) : (
-        <button
-          className="playbtn"
-          onClick={(e) =>
-            onPlay(e.currentTarget.getBoundingClientRect())
-          }
-          type="button"
-        >
-          ▶ Play on ▾
-        </button>
-      )}
+      <div className="cardfoot">
+        <span className="rowmeta">{meta}</span>
+        {tier}
+        {isPullSet(set) ? (
+          // Nothing to cast to — the launcher URL is the whole affordance.
+          <OpenQueueButton set={set!} />
+        ) : (
+          <button
+            className="playbtn"
+            onClick={(e) =>
+              onPlay(
+                e.currentTarget.getBoundingClientRect(),
+              )
+            }
+            type="button"
+          >
+            ▶ Play on ▾
+          </button>
+        )}
+      </div>
     </li>
   )
 }
 
 /**
- * One filtered pool's row.
+ * One filtered pool's card.
  *
  * **A pool is locked to ONE account, so there is normally no picker here.** The tier dropdown
  * existed because these pools predate being able to switch the Shield's Plex profile from the
  * app: one pool had to carry every tier's binding and you chose at play time. Every pool is
  * single-account now, and a control with one option is not a choice — it is a label wearing a
- * chevron. So the account moves into the row's meta line as TEXT, and the row gets the same
- * shape as a Curated Pool / Ordered Queue row: name, meta, one start button.
+ * chevron. So the account moves into the card's meta line as TEXT, and the card gets the same
+ * shape as a Curated Pool / Ordered Queue card: name, kind, meta, one start button.
  * (decision `2026-08-17-a-filtered-pool-is-locked-to-one-account`)
  *
  * The picker is not deleted, only conditional: a pool that still carries two or more bindings
  * (a hand-edit, an older `sets.yaml`) keeps choosing at play time rather than silently playing
  * as whichever binding happens to be first.
  */
-function ChannelRow({
+function ChannelCard({
   channel,
   groupLabel,
 }: {
   channel: RegistrySet
-  /** The group being viewed, so the row can drop that name from its own. */
+  /** The group being viewed, so the card can drop that name from its own. */
   groupLabel: string | null
 }) {
   const isRewatch = channel.behavior === "rewatch"
@@ -204,8 +246,8 @@ function ChannelRow({
 
   const hasChoice = options.length > 1
   // `tierValue` is local state seeded ONCE, and the options are not: another tab (or a
-  // hand-edit picked up over SSE) can delete the binding this row is still holding. Falling
-  // back to the current default rather than trusting the stale value is what stops the row
+  // hand-edit picked up over SSE) can delete the binding this card is still holding. Falling
+  // back to the current default rather than trusting the stale value is what stops the card
   // from quietly playing as an account the pool no longer has.
   const value = options.some((o) => o.value === tierValue)
     ? tierValue
@@ -223,12 +265,13 @@ function ChannelRow({
     : "rotation · ratings-filtered"
 
   return (
-    <PlayRow
+    <PlayCard
+      kind="filtered"
       label={labelInGroup(channel.label, groupLabel)}
       set={channel}
       // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
       // until you know one is Younger Kids and the other Older Kids, and that used to be
-      // readable only off the dropdown this row no longer has.
+      // readable only off the dropdown this card no longer has.
       meta={
         onlyAccount
           ? `${onlyAccount} · ${behaviour}`
@@ -236,7 +279,7 @@ function ChannelRow({
       }
       to={`/channels/${encodeURIComponent(channel.id)}`}
       onPlay={(anchor) => {
-        // With one binding the row does not ask — it plays as the account the pool is
+        // With one binding the card does not ask — it plays as the account the pool is
         // configured for, which is what `tierValue` already holds.
         const t = parseTierValue(value)
 
@@ -263,6 +306,66 @@ function ChannelRow({
   )
 }
 
+/** What one card needs to render, in the order the grid lays them out. */
+type Entry =
+  | { kind: "filtered"; id: string; set: RegistrySet }
+  | { kind: "curated" | "ordered"; id: string }
+
+/**
+ * Every playable set, in ONE list, in file order.
+ *
+ * The registry is what carries the order — it is `sets.yaml`'s own, and it is what
+ * `PATCH /api/sets-order` reads and writes, so laying the grid out by anything else would
+ * make a drag land somewhere other than where it was dropped. `data.order` is consulted
+ * only for the sets the registry cannot classify on its own (a curated set's `kind` and its
+ * member count live on the queues payload), and anything the registry does not name is
+ * appended rather than dropped — a set that arrives in one payload before the other should
+ * render late, not vanish.
+ */
+function buildEntries(
+  reg: SetsResponse | null,
+  data: QueuesResponse | null,
+): Entry[] {
+  const rotations = new Set(
+    rotationChannels(reg).map((s) => s.id),
+  )
+  const out: Entry[] = []
+  const seen = new Set<string>()
+
+  const classify = (id: string): Entry | null => {
+    const set = reg?.sets.find((s) => s.id === id)
+
+    if (set && rotations.has(id))
+      return { id, kind: "filtered", set }
+
+    const q = data?.sets[id]
+
+    if (q?.source !== "queue") return null
+
+    // kind 'movies' = an ordered QUEUE, 'anime' = a curated pool played as a rotation.
+    // The same split `queueIds` / `channelSetIds` made when these were separate shelves.
+    return {
+      id,
+      kind: q.kind === "anime" ? "curated" : "ordered",
+    }
+  }
+
+  for (const id of [
+    ...(reg?.sets ?? []).map((s) => s.id),
+    ...(data?.order ?? []),
+  ]) {
+    if (seen.has(id)) continue
+
+    seen.add(id)
+
+    const entry = classify(id)
+
+    if (entry) out.push(entry)
+  }
+
+  return out
+}
+
 export function PlayView({
   isHidden,
   groupId,
@@ -284,7 +387,7 @@ export function PlayView({
     reg?.sets.find((s) => s.id === id)?.provider_kind ?? ""
 
   /**
-   * The one predicate every shelf filters through. Group first (whose is it), provider
+   * The one predicate the grid filters through. Group first (whose is it), provider
    * second (which backend) — the two are independent, which is the whole reason the
    * provider is a chip and not a level of the route.
    */
@@ -310,88 +413,74 @@ export function PlayView({
     PLEX_WORDS.name ||
     kind
 
-  const basePath = active ? groupPath(active) : "/"
-  // Inside a group, a row drops that group's own name — the heading already says it, and
-  // repeating it buries the one word that tells two rows apart. See `lib/setLabel.ts`.
+  // What the provider chips hang off. `/g/all` has to stay `/g/all` here: sending them to
+  // bare `/` would hand the remembered-group redirect a URL that "did not say" and bounce a
+  // provider tap on the everything view into somebody's group — the All-chip bug, one
+  // control over. Bare `/` is still itself, for the visit that has no memory to answer.
+  const basePath = active
+    ? groupPath(active)
+    : groupId === ALL_ID
+      ? `/g/${ALL_ID}`
+      : "/"
+  // Inside a group, a card drops that group's own name — the heading already says it, and
+  // repeating it buries the one word that tells two cards apart. See `lib/setLabel.ts`.
   const groupLabel = active?.label ?? null
 
-  const pools = rotationChannels(reg).filter((s) =>
-    isShown(s.id),
-  )
-  const curated = channelSetIds(data).filter(isShown)
-  const ordered = queueIds(data).filter(isShown)
-
-  /**
-   * A shelf with nothing in it is hidden ONLY while a filter is on.
-   *
-   * Unfiltered, an empty shelf still has to render: its "Configure ›" link is the only way
-   * to create the first pool, and hiding it would make an empty install a dead end. Under a
-   * filter the heading is just noise — you did not ask for a shelf, you asked for Bob's
-   * things, and three headings over one row reads as if something failed to load.
-   */
-  const isFiltered = Boolean(active || only)
-  const showShelf = (rows: unknown[]) =>
-    !isFiltered || rows.length > 0
+  const entries = useMemo(
+    () => buildEntries(reg, data),
+    [data, reg],
+  ).filter((e) => isShown(e.id))
 
   // --- reorder ---------------------------------------------------------------- //
-  // All three shelves are slices of ONE file order (sets.yaml), and `PATCH /api/sets-order`
-  // takes the complete order and appends anything it was not told about. So a shelf's drop
-  // permutes only the slots its own ids occupy and sends the whole list back — every other
-  // shelf stays put, and so does every row a group filter is currently hiding.
-  const poolsRef = useRef<HTMLUListElement>(null)
-  const curatedRef = useRef<HTMLUListElement>(null)
-  const orderedRef = useRef<HTMLUListElement>(null)
+  // The grid is ONE list now, so a drop permutes one list — but it is still only a SLICE
+  // of `sets.yaml` whenever a group or provider filter is on, and `PATCH /api/sets-order`
+  // takes the complete order and appends anything it was not told about. So the drop sends
+  // the whole file order back with only the visible slots permuted, and every card a
+  // filter is currently hiding stays exactly where it was.
+  const gridRef = useRef<HTMLUListElement>(null)
 
-  const commitOrder = useCallback(
-    (shelfOrder: string[]) => {
-      // Read the LIVE store rather than this render's props: a drop lands after an arbitrary
-      // amount of dragging, and the alternative is holding whatever `reg` was when the
-      // listeners were bound.
-      const state = getState()
-      const full = (state.reg?.sets ?? []).map((x) => x.id)
+  const commitOrder = useCallback((gridOrder: string[]) => {
+    // Read the LIVE store rather than this render's props: a drop lands after an arbitrary
+    // amount of dragging, and the alternative is holding whatever `reg` was when the
+    // listeners were bound.
+    const state = getState()
+    const full = (state.reg?.sets ?? []).map((x) => x.id)
 
-      if (!full.length) return
+    if (!full.length) return
 
-      const next = spliceOrder(full, shelfOrder)
+    const next = spliceOrder(full, gridOrder)
 
-      if (next.join("\u0000") === full.join("\u0000"))
-        return // dropped where it started
+    if (next.join(" ") === full.join(" ")) return // dropped where it started
 
-      // OPTIMISTIC, and not merely for polish: the drop restores the dragged node to where
-      // React last rendered it (so React reconciles against a DOM it believes), which means
-      // the row visibly snaps BACK until new data arrives. Waiting for `load()` would hold
-      // that snap-back for as long as `/api/queues` takes — 7-9 s warm against Plex.
-      const rank = new Map(next.map((id, i) => [id, i]))
-      const byRank = (a: string, b: string) =>
-        (rank.get(a) ?? 0) - (rank.get(b) ?? 0)
+    // OPTIMISTIC, and not merely for polish: the drop restores the dragged node to where
+    // React last rendered it (so React reconciles against a DOM it believes), which means
+    // the card visibly snaps BACK until new data arrives. Waiting for `load()` would hold
+    // that snap-back for as long as `/api/queues` takes — 7-9 s warm against Plex.
+    const rank = new Map(next.map((id, i) => [id, i]))
+    const byRank = (a: string, b: string) =>
+      (rank.get(a) ?? 0) - (rank.get(b) ?? 0)
 
-      if (state.reg) {
-        state.reg.sets = [...state.reg.sets].sort((a, b) =>
-          byRank(a.id, b.id),
-        )
-      }
+    if (state.reg) {
+      state.reg.sets = [...state.reg.sets].sort((a, b) =>
+        byRank(a.id, b.id),
+      )
+    }
 
-      if (state.data)
-        state.data.order = [...state.data.order].sort(
-          byRank,
-        )
+    if (state.data)
+      state.data.order = [...state.data.order].sort(byRank)
 
-      bumpRevision()
-      setStatus("Saving order…")
-      void api("PATCH", "/api/sets-order", { ids: next })
-        .then(() => setStatus("Order saved", "ok"))
-        .catch(async (e: Error) => {
-          setStatus(`Reorder failed: ${e.message}`, "err")
-          // The optimistic order is now a lie; re-read so the page shows what is on disk.
-          await load()
-        })
-    },
-    [],
-  )
+    bumpRevision()
+    setStatus("Saving order…")
+    void api("PATCH", "/api/sets-order", { ids: next })
+      .then(() => setStatus("Order saved", "ok"))
+      .catch(async (e: Error) => {
+        setStatus(`Reorder failed: ${e.message}`, "err")
+        // The optimistic order is now a lie; re-read so the page shows what is on disk.
+        await load()
+      })
+  }, [])
 
-  useRowReorder(poolsRef, commitOrder, !isHidden)
-  useRowReorder(curatedRef, commitOrder, !isHidden)
-  useRowReorder(orderedRef, commitOrder, !isHidden)
+  useRowReorder(gridRef, commitOrder, !isHidden)
 
   return (
     <main className="view" hidden={isHidden} id="play">
@@ -403,7 +492,7 @@ export function PlayView({
           groups={groups.groups}
           labelForKind={labelForKind}
           only={only}
-          // The kinds of the group you are LOOKING AT, so the row offers Plex/Kavita only
+          // The kinds of the group you are LOOKING AT, so the card offers Plex/Kavita only
           // where both are actually reachable.
           providerKinds={
             (
@@ -415,133 +504,76 @@ export function PlayView({
           }
         />
       )}
-      {/* The way IN to Pending. It sits with the shelves rather than in the header because
-          it is a place you GO, like each shelf's Configure — not a control on this page. */}
-      <p className="pendinglink">
+      {/*
+        Where you GO from here. These were three "Configure ›" links, one per shelf heading,
+        and the headings are gone — so they gather into one quiet row. It stays rendered even
+        when the grid is empty: these links are the only way to create the first pool or
+        queue, and hiding them would make a fresh install a dead end.
+      */}
+      <p className="playlinks">
         <Link id="gopending" to="/pending">
           What is new and unqueued ›
         </Link>
+        <Link id="gochannels" to="/channels">
+          Configure pools ›
+        </Link>
+        <Link id="goqueues" to="/queues">
+          Configure ordered queues ›
+        </Link>
       </p>
 
-      <section
-        className="playgroup"
-        hidden={!showShelf(pools)}
-      >
-        <h2>
-          Filtered Pools
-          <Link
-            className="ghost"
-            id="gochannels"
-            to="/channels"
-          >
-            Configure ›
-          </Link>
-        </h2>
-        <ul
-          className="playlist"
-          id="playdynamic"
-          ref={poolsRef}
-        >
-          {isHidden
-            ? null
-            : pools.map((s) => (
-                <ChannelRow
-                  channel={s}
+      {/*
+        Nothing to show is a real state now that there are no headings to stand in for the
+        cards. Unfiltered it means a fresh install (the links above are the way out of it);
+        under a filter it means this group holds nothing on this provider, which is worth
+        saying rather than leaving as a blank page that reads like a failed load.
+      */}
+      {!isHidden && reg && !entries.length ? (
+        <EmptyState
+          description={
+            active || only
+              ? "Nothing in this group on this provider. Try All, or another group."
+              : "Configure a pool or an ordered queue to put something here."
+          }
+          heading="Nothing to play"
+          headingLevel={2}
+        />
+      ) : null}
+
+      <ul className="playgrid" id="playgrid" ref={gridRef}>
+        {isHidden
+          ? null
+          : entries.map((e) =>
+              e.kind === "filtered" ? (
+                <ChannelCard
+                  channel={e.set}
                   groupLabel={groupLabel}
-                  key={s.id}
+                  key={e.id}
                 />
-              ))}
-        </ul>
-      </section>
-
-      <section
-        className="playgroup"
-        hidden={!showShelf(curated)}
-      >
-        <h2>
-          Curated Pools
-          <Link
-            className="ghost"
-            id="gocurated"
-            to="/channels"
-          >
-            Configure ›
-          </Link>
-        </h2>
-        <ul
-          className="playlist"
-          id="playcurated"
-          ref={curatedRef}
-        >
-          {isHidden
-            ? null
-            : curated.map((id) => {
-                const s = data!.sets[id]!
-
-                return (
-                  <PlayRow
-                    key={id}
-                    label={labelInGroup(
-                      s.label,
-                      groupLabel,
-                    )}
-                    set={reg?.sets.find((x) => x.id === id)}
-                    meta={`${s.items.length} shows · rotation`}
-                    to={`/q/${id}`}
-                    onPlay={(anchor) =>
-                      openPlayMenu({ anchor, setId: id })
-                    }
-                  />
-                )
-              })}
-        </ul>
-      </section>
-
-      <section
-        className="playgroup"
-        hidden={!showShelf(ordered)}
-      >
-        <h2>
-          Ordered Queues
-          <Link
-            className="ghost"
-            id="goqueues"
-            to="/queues"
-          >
-            Configure ›
-          </Link>
-        </h2>
-        <ul
-          className="playlist"
-          id="playqueues"
-          ref={orderedRef}
-        >
-          {isHidden
-            ? null
-            : ordered.map((id) => {
-                const s = data!.sets[id]!
-
-                return (
-                  <PlayRow
-                    key={id}
-                    label={labelInGroup(
-                      s.label,
-                      groupLabel,
-                    )}
-                    // The registry entry, same as the Curated rows above. Without it a
-                    // Plex QUEUE renders in the neutral accent while a Plex CHANNEL two
-                    // columns over renders amber — one page, two colours, same provider.
-                    set={reg?.sets.find((x) => x.id === id)}
-                    meta={`${s.items.length} titles · top plays next`}
-                    to={`/q/${id}`}
-                    onPlay={(anchor) =>
-                      openPlayMenu({ anchor, setId: id })
-                    }
-                  />
-                )
-              })}
-        </ul>
-      </section>
+              ) : (
+                <PlayCard
+                  key={e.id}
+                  kind={e.kind}
+                  label={labelInGroup(
+                    data!.sets[e.id]!.label,
+                    groupLabel,
+                  )}
+                  // The registry entry, so a Plex QUEUE and a Plex POOL two cards apart
+                  // render in the same amber rather than one of them in the neutral accent.
+                  set={reg?.sets.find((x) => x.id === e.id)}
+                  meta={
+                    e.kind === "curated"
+                      ? `${data!.sets[e.id]!.items.length} shows · rotation`
+                      : `${data!.sets[e.id]!.items.length} titles · top plays next`
+                  }
+                  to={`/q/${e.id}`}
+                  onPlay={(anchor) =>
+                    openPlayMenu({ anchor, setId: e.id })
+                  }
+                />
+              ),
+            )}
+      </ul>
     </main>
   )
 }

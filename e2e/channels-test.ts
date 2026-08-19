@@ -96,9 +96,9 @@ await page.click('#heading');
 
 // Back to the Play landing; rows have play buttons; queue view has one too.
 await page.click('#back');
-await page.waitForSelector('#play:not([hidden]) .playrow');
+await page.waitForSelector('#play:not([hidden]) .playcard');
 ok('channels back out to Play landing', true);
-ok('landing rows have play buttons', (await page.$$('.playrow .playbtn')).length >= 5);
+ok('landing rows have play buttons', (await page.$$('.playcard .playbtn')).length >= 5);
 await page.click('#goqueues');
 await page.waitForSelector('#home:not([hidden]) .shelf');
 ok('shelf play button present', Boolean(await page.$('.shelf .shelfplay')));

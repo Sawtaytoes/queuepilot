@@ -7,11 +7,11 @@ page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 await page.goto('https://plex-channels.example.com', { waitUntil: 'domcontentloaded' });
 
 // Landing = the Play list.
-await page.waitForSelector('.playrow', { timeout: 60000 });
+await page.waitForSelector('.playcard', { timeout: 60000 });
 // Post-v2 IA: Filtered Pools (rule-derived) + Curated Pools (anime) + Ordered Queues.
-const dynRows = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent));
-const curRows = await page.$$eval('#playcurated .playrow .rowname', (els) => els.map((e) => e.textContent));
-const qRows = await page.$$eval('#playqueues .playrow .rowname', (els) => els.map((e) => e.textContent));
+const dynRows = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent));
+const curRows = await page.$$eval('#playgrid li[data-kind="curated"] .rowname', (els) => els.map((e) => e.textContent));
+const qRows = await page.$$eval('#playgrid li[data-kind="ordered"] .rowname', (els) => els.map((e) => e.textContent));
 // Structural, not exact counts: since first-class channels (2026-07-29) each rotation
 // channel is its own row (Shows & Shorts, Shows, Shorts, Movies, …) and Bob adds/removes
 // channels + queues over time, so all three groups are lower-bounded. The Movies rewatch
@@ -46,7 +46,7 @@ ok(`device menu lists devices (${devs.length}): ${devs.slice(0, 4).join(', ')}`,
 ok('no duplicate Shield entry', shields.length === 1);
 await page.keyboard.press('Escape');
 await page.click('#back');
-await page.waitForSelector('#play:not([hidden]) .playrow');
+await page.waitForSelector('#play:not([hidden]) .playcard');
 
 // Queues configurator + header search keyboard on live data (no add — navigate + close).
 await page.click('#goqueues');

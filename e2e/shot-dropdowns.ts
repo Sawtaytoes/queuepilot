@@ -40,14 +40,14 @@ try {
 
   // 1 + 2 — Play landing: the tier picker open, then the Play menu open.
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#playdynamic .playrow');
-  await page.locator('#playdynamic .playrow').first().locator('.rowtier').click();
+  await page.waitForSelector('#playgrid li[data-kind="filtered"]');
+  await page.locator('#playgrid li[data-kind="filtered"]').first().locator('.rowtier').click();
   await page.waitForSelector('[role="listbox"] [role="option"]');
   await page.screenshot({ path: `${OUT}/dd-tier-listbox.png` });
   await page.keyboard.press('Escape').catch(() => {});
   await page.waitForTimeout(150);
 
-  await page.locator('#playdynamic .playrow').first().locator('.playbtn').click();
+  await page.locator('#playgrid li[data-kind="filtered"]').first().locator('.playbtn').click();
   await page.waitForSelector('.playmenu');
   await page.waitForTimeout(400); // let devices arrive
   await page.screenshot({ path: `${OUT}/dd-playmenu-width.png` });

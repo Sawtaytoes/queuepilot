@@ -14,7 +14,7 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
 
 await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('.playrow', { timeout: 30000 });
+await page.waitForSelector('.playcard', { timeout: 30000 });
 // The group bar paints from `GET /api/groups`, one request after the landing itself.
 await page.waitForTimeout(2500);
 await page.screenshot({ path: `__screenshots__/groups-landing-${TAG}.png` });
