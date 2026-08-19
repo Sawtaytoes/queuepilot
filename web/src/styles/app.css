@@ -3506,30 +3506,45 @@ ul.grid.posters .tile .badges .epstag {
   white-space: nowrap;
 }
 
-/* The Play landing's reorder handle. Only the handle starts a drag — the card is a link and
-   its button plays something, so a whole-card drag would fight both. Quiet until the card is
-   hovered, the same treatment the tile controls get: reordering is occasional, and a grip
-   glyph on every card is chrome nobody asked for. */
+/* ---- reordering: the WHOLE CARD is the handle, except on a touch screen ----
+
+   The grip glyph used to sit in the card's first line, invisible until hover but holding its
+   ~22px of gutter on every card at every moment — so each name was indented past an empty
+   column that showed nothing 99% of the time (owner, 2026-08-19: "the drag 'n drop is taking
+   up precious space and leaving a huge margin, but it doesn't need to. If it's only on hover,
+   then make the whole card draggable").
+
+   So on a FINE pointer the glyph is not rendered at all and the card itself starts the drag —
+   `cursor: grab` is the hover affordance the glyph used to be, and it costs no layout. The
+   hook ignores presses that land on a link or a button, so the name still navigates and Play
+   still plays; a press has to travel 6px before it counts as a drag, so a plain click is
+   still a click.
+
+   **A COARSE pointer keeps the glyph, and that is not an oversight.** Making the whole card
+   draggable by touch means `touch-action: none` on the card, which is the surface the page is
+   scrolled by — the landing would stop scrolling under a finger. The handle is the only part
+   that opts out of scrolling, so on touch it stays, always visible (there is no hover to
+   reveal it with).
+   (decision `2026-08-19-the-whole-card-is-the-drag-handle-on-a-fine-pointer`) */
 .playcard .rowdrag {
-  flex: 0 0 auto;
-  align-self: center;
-  padding: 2px 4px;
-  border-radius: 6px;
-  color: var(--color-content-muted);
-  cursor: grab;
-  opacity: 0;
-  line-height: 1;
-  touch-action: none; /* the hook owns the gesture; without this touch scrolls instead */
-  transition: opacity 120ms ease;
+  display: none;
 }
-.playcard:hover .rowdrag,
-.playcard:focus-within .rowdrag {
-  opacity: 1;
+@media (pointer: fine) {
+  .playcard {
+    cursor: grab;
+  }
 }
-/* A coarse pointer has no hover to reveal it with, so it is simply always there. */
 @media (pointer: coarse) {
   .playcard .rowdrag {
-    opacity: 1;
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-self: center;
+    padding: 2px 4px;
+    border-radius: 6px;
+    color: var(--color-content-muted);
+    cursor: grab;
+    line-height: 1;
+    touch-action: none; /* the hook owns the gesture; without this touch scrolls instead */
   }
 }
 .playcard.dragging {

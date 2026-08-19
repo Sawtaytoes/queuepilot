@@ -145,10 +145,13 @@ function PlayCard({
       data-provider={set?.provider_kind || undefined}
     >
       <div className="cardhead">
-        {/* Only the HANDLE starts a drag: the card is a link and its button plays
-            something, so a whole-card drag would fight both. Hidden from assistive tech —
-            it is a pointer affordance, and reordering is not the only way to get
-            anywhere. */}
+        {/* TOUCH ONLY, and CSS decides that — the glyph is `display: none` on a fine pointer,
+            where the whole card is grabbable and this would be an empty gutter indenting
+            every name for a control shown on hover. It survives on a coarse pointer because
+            whole-card touch dragging would cost the page its scroll surface, and because
+            there is no hover there to reveal an affordance with. Hidden from assistive tech:
+            it is a pointer affordance, and reordering is not the only way to get anywhere.
+            (decision `2026-08-19-the-whole-card-is-the-drag-handle-on-a-fine-pointer`) */}
         <span
           aria-hidden="true"
           className="rowdrag"
