@@ -1,0 +1,119 @@
+# Landing-layout harness fixture — the DENSITY of the owner's live install (17 sets across
+# three kinds and three providers) with the repo's anonymized cast. Nothing here is real data.
+global:
+  excluded_sections: []
+
+sets:
+  # ---- Filtered Pools (source: rotation) ----
+  - id: younger
+    label: Shows & Shorts
+    kind: cartoons
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-Y, TV-Y7, TV-G, G]
+    plex_user: Younger Kids
+    account_id: 11111111
+    user_uuid: "1111111111111111"
+  - id: older
+    label: Shows
+    kind: cartoons
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-PG, PG]
+    plex_user: Older Kids
+    account_id: 22222222
+    user_uuid: "2222222222222222"
+  - id: shorts
+    label: Shorts
+    kind: cartoons
+    source: rotation
+    sections: [15]
+    item_sections: [15]
+    plex_user: Younger Kids
+    account_id: 11111111
+    user_uuid: "1111111111111111"
+  - id: movies_rewatch
+    label: Movies
+    kind: movies
+    source: rotation
+    behavior: rewatch
+    item_sections: [1]
+    plex_user: Older Kids
+    account_id: 22222222
+    user_uuid: "2222222222222222"
+
+  # ---- Curated Pools (source: queue, kind: anime) ----
+  - id: bob_alice_anime
+    label: Bob & Alice — Anime
+    kind: anime
+    source: queue
+    sections: [11]
+  - id: bob_carol_anime
+    label: Bob & Carol — Anime
+    kind: anime
+    source: queue
+    sections: [11]
+  - id: family_anime
+    label: Family — Anime
+    kind: anime
+    source: queue
+    sections: [11]
+  - id: bob_anime
+    label: Bob — Anime
+    kind: anime
+    source: queue
+    sections: [11]
+  - id: bob_manga
+    label: Bob — Manga
+    kind: anime
+    source: queue
+    providers:
+      - provider: kavita
+        libraries: [2]
+
+  # ---- Ordered Queues (source: queue, kind: movies) ----
+  - id: family
+    label: Family — Movies
+    kind: movies
+    source: queue
+    sections: [1]
+  - id: bob_alice
+    label: Bob & Alice — Movies
+    kind: movies
+    source: queue
+    sections: [1]
+  - id: bob_dave
+    label: Bob & Dave — Movies
+    kind: movies
+    source: queue
+    sections: [1]
+  - id: bob_erin
+    label: Bob & Erin — Movies
+    kind: movies
+    source: queue
+    sections: [1]
+  - id: bob
+    label: Bob — Movies
+    kind: movies
+    source: queue
+    sections: [1, 14]
+  - id: demo_reel
+    label: Theater Demo Reel
+    kind: movies
+    source: queue
+    reel: true
+    sections: [2]
+  - id: bob_docs
+    label: Bob — Documentaries
+    kind: movies
+    source: queue
+    sections: [14]
+  - id: bob_reading
+    label: Bob — Reading List
+    kind: anime
+    source: queue
+    providers:
+      - provider: kavita
+        libraries: [5]

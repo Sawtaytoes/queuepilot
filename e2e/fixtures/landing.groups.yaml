@@ -1,0 +1,16 @@
+groups:
+- id: bob
+  label: Bob
+  sets: [bob, bob_anime, bob_docs]
+- id: demo
+  label: Demo
+  sets: [demo_reel, bob_reading]
+- id: older-kids
+  label: Older Kids
+  sets: [older, movies_rewatch]
+- id: younger-kids
+  label: Younger Kids
+  sets: [younger, shorts, family_anime]
+- id: bob-others
+  label: Bob & Others
+  sets: [bob_alice_anime, bob_carol_anime, family_anime, family, bob_alice, bob_dave, bob_erin]

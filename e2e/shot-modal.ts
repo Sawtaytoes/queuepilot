@@ -4,7 +4,7 @@ const BASE = `http://localhost:${PORT}`;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 900 } });
 await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('.playrow');
+await page.waitForSelector('.playcard');
 // Grid header: navigate into a queue to see Configure inline with Play/search.
 await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf', { timeout: 15000 }).catch(() => {});

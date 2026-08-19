@@ -178,11 +178,11 @@ try {
 
   // --- 7. Play landing: profile options mirror the bindings; play carries profile //
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#play:not([hidden]) .playrow');
+  await page.waitForSelector('#play:not([hidden]) .playcard');
   // The tier picker is a themed Listbox now, not a native <select>
   // (2026-08-07-plex-channels-pickers-are-listbox-not-native-select): open it, read the portalled
   // options, then dismiss. The selected option carries a decorative ✓ — strip it.
-  await page.locator('#playdynamic .playrow:first-child .rowtier').click();
+  await page.locator('#playgrid li[data-kind="filtered"]:first-child .rowtier').click();
   await page.waitForSelector('[role="listbox"] [role="option"]');
   const tierOpts = await page.$$eval('[role="listbox"] [role="option"]',
     (os) => os.map((o) => (o.textContent ?? '').replace('✓', '').trim()));
@@ -193,10 +193,10 @@ try {
     tierOpts.join(',') === 'Younger Kids,Older Kids');
   // The two migrated function channels are the ONLY rows; the superseded legacy tiers
   // never surface as their own rows.
-  const rowNames = await page.$$eval('#playdynamic .playrow .rowname', (els) => els.map((e) => e.textContent ?? ''));
+  const rowNames = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent ?? ''));
   ok('landing dynamic rows = the two function channels', rowNames.join(',') === 'Shows & Shorts,Movies');
   // Locators (auto-retrying) instead of stale element handles — the list can re-render.
-  const movieRow = page.locator('#playdynamic .playrow').nth(1);
+  const movieRow = page.locator('#playgrid li[data-kind="filtered"]').nth(1);
   await movieRow.locator('.rowtier').click();
   await page.getByRole('option', { name: 'Older Kids', exact: true }).click();
   await movieRow.locator('.playbtn').click();
