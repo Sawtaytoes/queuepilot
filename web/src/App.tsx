@@ -428,7 +428,7 @@ function computeChrome(
       editableSetId: null,
       heading: active.label,
       isSubHidden: false,
-      sub: "Pick something and play it. Drag a card by its ≡ to reorder.",
+      sub: "Pick something and play it. Drag a card to reorder.",
     }
   }
 
@@ -439,6 +439,6 @@ function computeChrome(
     editableSetId: null,
     heading: "QueuePilot",
     isSubHidden: false,
-    sub: "Pick something and play it. Drag a card by its ≡ to reorder.",
+    sub: "Pick something and play it. Drag a card to reorder.",
   }
 }

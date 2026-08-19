@@ -13,8 +13,11 @@ import { type RefObject, useEffect, useRef } from "react"
  *
  * - **Mouse** drags past a small threshold; **touch** arms on a ~200 ms long-press, so a
  *   swipe still scrolls the page rather than dragging a card out from under the finger.
- * - Only the **handle** starts a drag. The card is a link and its buttons play things; a
- *   whole-card drag would fight both.
+ * - **The whole card starts a drag on a fine pointer**, and only the handle on a coarse one.
+ *   The card holds a link and a button, so a press that lands on one of those is left alone;
+ *   everything else on the card is grabbable. Touch keeps the handle because whole-card touch
+ *   dragging costs the page its scroll surface.
+ *   (decision `2026-08-19-the-whole-card-is-the-drag-handle-on-a-fine-pointer`)
  * - The moved node is **restored to where React last rendered it** before `onCommit` runs, so
  *   React re-renders from a DOM it believes rather than one this hook rearranged behind it.
  *   Skipping that is what produces `NotFoundError` on a later commit.
@@ -173,17 +176,39 @@ export function useRowReorder(
     }
 
     const onDown = (e: PointerEvent) => {
-      const handle = (e.target as HTMLElement).closest(
-        ".rowdrag",
-      )
-
-      if (!handle) return
-
+      const target = e.target as HTMLElement
+      const handle = target.closest(".rowdrag")
       const row =
-        handle.closest<HTMLElement>("li[data-set]")
+        target.closest<HTMLElement>("li[data-set]")
 
       if (!row) return
 
+      /**
+       * **Touch must use the handle; a pointer may grab the card anywhere.**
+       *
+       * Whole-card dragging by touch means `touch-action: none` on the card — and the card
+       * is the surface the page is scrolled by, so the landing would stop scrolling under a
+       * finger. Only `.rowdrag` opts out of scrolling, which is why it is still rendered on
+       * a coarse pointer and why touch is still required to start there.
+       */
+      if (e.pointerType === "touch" && !handle) return
+
+      /**
+       * A press that lands on something you CLICK is not a drag. The card holds a link (the
+       * name) and a button (Play on), and on a filtered pool a listbox as well — grabbing
+       * those would fight the thing they are for. This is what makes "the whole card is the
+       * handle" safe; the 6px threshold below is what keeps a plain click a click.
+       */
+      if (
+        !handle &&
+        target.closest(
+          'a, button, input, select, textarea, [role="combobox"], [role="listbox"]',
+        )
+      )
+        return
+
+      // Not on an interactive child, so nothing here wants the browser's default — and the
+      // default is a text selection that would drag a highlight across the page instead.
       e.preventDefault()
       drag = {
         isArmed: e.pointerType === "touch",
