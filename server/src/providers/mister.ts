@@ -38,6 +38,7 @@ import type {
   PlayItem,
   Provider,
   ProviderDefinition,
+  ProviderCover,
   ProviderLibrary,
   ProviderSearchHit,
   ProviderTileRow,
@@ -163,16 +164,27 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
     },
 
     /**
-     * Poster tiles — titles only.
+     * Box art, from the libretro thumbnail archive rather than from the MiSTer.
      *
-     * mrext serves no artwork of any kind: it indexes ROM files, and the MiSTer's own menu
-     * draws text. So every tile resolves with no image, which the grid already handles (a
-     * provider that cannot answer `cover()` degrades to a bare title rather than a 500).
-     * `cover()` is therefore deliberately ABSENT rather than throwing — an absent optional
-     * member is the interface's way of saying "cannot", and the call site guards it.
+     * mrext serves no artwork at all, so a MiSTer queue drew as a grid of grey rectangles
+     * beside Plex posters and Steam library art. The archive is keyed on No-Intro names,
+     * which is exactly what this ROM share is named in — see mister-boxart.ts, which also
+     * records the measured hit rate and why an unmapped system returns nothing rather than
+     * guessing at a neighbouring console's art.
      *
-     * Everything here is derived from the stored path, so a tile costs no network call and
-     * a powered-down MiSTer still renders its queue.
+     * Both arguments come out of the stored PATH, so this needs no index lookup and works
+     * while the MiSTer is powered down.
+     */
+    cover(path: string): Promise<ProviderCover> {
+      return c.cover(systemFromPath(path), titleFromPath(path));
+    },
+
+    /**
+     * Poster tiles.
+     *
+     * Everything here is derived from the stored path, so a tile costs no network call to
+     * the MiSTer and a powered-down MiSTer still renders its queue. The art is fetched
+     * separately, by the cover route, from a host that is not the MiSTer.
      */
     async tiles(ids: Iterable<string>, entries: CuratedEntryRef[] = []): Promise<(ProviderTileRow | null)[]> {
       const byId = new Map(entries.map((e) => [String(e.id), e]));
