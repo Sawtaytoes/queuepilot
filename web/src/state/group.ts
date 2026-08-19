@@ -45,9 +45,10 @@ export function rememberGroup(id: string | null): void {
   }
 }
 
-/** The group the given route id names, or null for "all"/unknown. Unknown falls back to
- * everything rather than to an empty page — a stale bookmark to a deleted group should still
- * show the app. */
+/** The group the given route id names, or null for "all"/unknown. `ALL_ID` returns null
+ * BY DESIGN — the everything view is the absence of a filter, so `/g/all` and an unknown id
+ * both render every set. Unknown falls back to everything rather than to an empty page: a
+ * stale bookmark to a deleted group should still show the app. */
 export function findGroup(
   groups: GroupsResponse | null,
   id: string | null,
@@ -60,13 +61,32 @@ export function findGroup(
   )
 }
 
-/** `/g/<id>`, or `/` for the everything view. The one place the group URL is spelled. */
+/**
+ * The id the server reserves for the synthesized everything-view (`server/src/groups.ts`),
+ * and therefore the one group id a real group can never take.
+ */
+export const ALL_ID = "all"
+
+/**
+ * `/g/<id>` — including `/g/all`. The one place a group URL is spelled.
+ *
+ * **"All" is an address, not the absence of one.** It used to be bare `/`, and that made the
+ * chip unclickable: `/` is exactly the URL that "did not say", so the effect in `App.tsx`
+ * read the remembered group and redirected straight back to it. Tapping All from Bob went
+ * `/g/bob` → `/` → `/g/bob` in one frame, which reads as a chip that does nothing. Reported
+ * 2026-08-19: *"clicking 'Alex' or any tag, then clicking 'All', it never goes back to
+ * 'All'. I think it keeps redirecting or something."*
+ *
+ * Giving All its own path is what resolves it without weakening the rule the memory exists
+ * for: the URL still wins, and All is now a URL that says something. It is also bookmarkable
+ * and shareable, which bare `/` never was — a link to `/` shows the recipient THEIR last
+ * group, not the everything view you meant to send.
+ * (decision `2026-08-19-all-is-an-address-not-the-absence-of-one`)
+ */
 export function groupPath(
   group: Pick<Group, "id" | "isAll">,
 ): string {
-  return group.isAll
-    ? "/"
-    : `/g/${encodeURIComponent(group.id)}`
+  return `/g/${encodeURIComponent(group.isAll ? ALL_ID : group.id)}`
 }
 
 /**

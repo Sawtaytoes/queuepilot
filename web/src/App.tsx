@@ -13,6 +13,7 @@ import {
   useChannelSelection,
 } from "./state/channelSelection"
 import {
+  ALL_ID,
   findGroup,
   lastUsedGroup,
   rememberGroup,
@@ -128,6 +129,14 @@ export function App() {
    * group REPLACES the entry rather than pushing one — otherwise Back from `/g/bob` lands
    * on `/`, which immediately redirects forward again and the button appears dead.
    *
+   * **`/g/all` is a URL that DID say.** Picking All is a choice, so it clears the memory and
+   * stays put. While All was spelled bare `/` it was indistinguishable from "did not say",
+   * so this effect bounced every tap on the All chip straight back to the remembered group
+   * and the chip looked dead (reported 2026-08-19). Clearing rather than storing `"all"`
+   * keeps the stored value meaning one thing — a specific group — and makes the next bare
+   * `/` land on All, which is what this device did in fact look at last.
+   * (decision `2026-08-19-all-is-an-address-not-the-absence-of-one`)
+   *
    * Waits for `groups`: redirecting to a remembered id before the list has loaded cannot
    * tell "deleted" from "not fetched yet", and would strand a stale bookmark.
    */
@@ -135,9 +144,10 @@ export function App() {
     if (route.view !== "play" || !groups) return
 
     if (route.group) {
+      if (route.group === ALL_ID) rememberGroup(null)
       // An unknown id still renders (PlayView falls back to everything), but it must not
       // be remembered — that would make one bad link sticky on this device.
-      if (findGroup(groups, route.group)) {
+      else if (findGroup(groups, route.group)) {
         rememberGroup(route.group)
       }
 
@@ -418,7 +428,7 @@ function computeChrome(
       editableSetId: null,
       heading: active.label,
       isSubHidden: false,
-      sub: "Pick something and play it. Configure ›  opens each shelf’s editor.",
+      sub: "Pick something and play it. Drag a card by its ≡ to reorder.",
     }
   }
 
@@ -429,6 +439,6 @@ function computeChrome(
     editableSetId: null,
     heading: "QueuePilot",
     isSubHidden: false,
-    sub: "Pick something and play it. Configure ›  opens each shelf’s editor.",
+    sub: "Pick something and play it. Drag a card by its ≡ to reorder.",
   }
 }

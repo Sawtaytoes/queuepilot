@@ -22,6 +22,20 @@ Editing it: hand-edit the JSON (the path hash is `sha1(path)[:16]`, so a NEW pat
 filename computed the same way), then re-run every gate that reads it. Adding items changes
 what the goldens below expect — that is a behaviour change to reason about, not a refresh.
 
+## `landing.sets.yaml` + `landing.queues.yaml` + `landing.groups.yaml`
+
+The Play landing at the **density the household actually has** — 17 sets across all three
+kinds (4 filtered pools, 5 curated pools, 8 ordered queues), two providers, six groups — for
+`e2e/shot-landing.ts`. The three-column layout looked fine on a 5-set fixture and fell apart
+on this one, which is the whole reason it exists.
+
+**Anonymized, and that is load-bearing.** The landing renders set NAMES, so a screenshot of
+the real thing carries the household's names into a public repo. Everything here is the
+repo's own cast — Bob, Alice, Carol, Dave, Erin, Family, Younger/Older Kids — in the same
+SHAPES as the real sets (long two-person names, a reel, a Kavita reading list) so the layout
+is stressed the same way
+([decision](../../docs/decisions/2026-08-19-the-landing-is-one-wrapped-grid-of-typed-cards.md)).
+
 ## `golden/`
 
 The recorded answers of the retired Python engine, frozen the day it was deleted:

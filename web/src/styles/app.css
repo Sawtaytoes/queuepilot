@@ -511,7 +511,7 @@ a.ghost:hover {
    that a <button> did not (an underline, and a text-only inline box).
    (decision `2026-08-15-navigation-is-an-anchor-not-a-button`) */
 a.ghost,
-.playrow .rowname,
+.playcard .rowname,
 .shelf h2 .open {
   text-decoration: none;
   cursor: pointer;
@@ -790,7 +790,7 @@ ul.grid .empty {
 /* The tier picker is no longer a native <select> in a full-width wrapper — it is a
    `Listbox` whose trigger IS `.rowtier` (a Button). It sizes to its content already; it
    only needs to keep its intrinsic width in the flex row rather than being stretched. */
-.playrow > .rowtier {
+.playcard .rowtier {
   flex: 0 0 auto;
 }
 
@@ -2260,18 +2260,18 @@ html.modal-open {
   transform: scale(1.06);
 }
 
-/* PLAY landing: plain rows, no posters — the "pick and play" surface. On a wide viewport
-   the groups (Filtered Pools / Curated Pools / Ordered Queues) sit side by side as
-   columns; one column in the Narrow View. The id rule must beat the [hidden] attribute
-   (like #selbar). */
+/* PLAY landing: posterless cards, no shelves — the "pick and play" surface.
+
+   It was a three-column grid of the three KINDS until 2026-08-19, which let the taxonomy
+   decide the shape of the page: a kind with nothing in it left a third of the screen blank,
+   and a kind with eight cards ran far past its neighbours. The page is a plain block now and
+   the CARDS do the wrapping (`.playgrid`), so the layout answers to how much you own rather
+   than to how many kinds exist.
+   (decision `2026-08-19-the-landing-is-one-wrapped-grid-of-typed-cards`)
+
+   The id rule must beat the [hidden] attribute (like #selbar). */
 #play:not([hidden]) {
-  display: grid;
-  grid-template-columns: repeat(
-      auto-fit,
-      minmax(320px, 1fr)
-    );
-  gap: 26px;
-  align-items: start;
+  display: block;
   max-width: 1400px;
   margin: 0 auto;
 }
@@ -2282,11 +2282,10 @@ html.modal-open {
 }
 /* WHO IS WATCHING — the group chips, and the provider filter under them.
 
-   Spans the whole grid: `#play` is a 3-column auto-fit grid of the play groups, and this bar
-   is a header for all of them, not a fourth column. `1 / -1` is what says that; without it
-   the bar becomes a column and the groups reflow around it. */
+   `#play` was a 3-column grid until 2026-08-19 and this bar needed `grid-column: 1 / -1` to
+   stay a header rather than becoming a fourth column. `#play` is a block now, so the span is
+   gone with it — the bar is simply the first block on the page. */
 .groupbar {
-  grid-column: 1 / -1;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -2367,57 +2366,85 @@ html.modal-open {
   font-weight: 600;
 }
 
-.playgroup {
-  min-width: 0;
-  margin: 0 0 10px;
-}
-.playgroup h2 {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 0 0 10px;
-  font-size: 1.15rem;
-}
-.playgroup h2 button {
-  margin-left: auto;
-}
-.playlist {
+/* ---- the landing's card grid ----
+
+   ONE wrapped grid of every pool and queue, in file order, instead of three columns of one
+   kind each. `auto-fill` rather than `auto-fit`: with `auto-fit` a landing that holds two
+   cards stretches them to half the page each, which is the same "the taxonomy decided the
+   layout" problem in a new costume — `auto-fill` keeps a card a card and leaves the empty
+   tracks empty. (decision `2026-08-19-the-landing-is-one-wrapped-grid-of-typed-cards`) */
+.playgrid {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(320px, 1fr)
+    );
+  gap: 10px;
+  align-items: stretch;
+}
+/* Where you GO from here — Pending plus the two configurators, one quiet row where three
+   shelf headings used to each carry their own "Configure ›". */
+.playlinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0 0 14px;
+}
+.playlinks a {
+  color: var(--color-content-muted);
+  font-size: 0.9rem;
+}
+.playlinks a:hover {
+  color: var(--color-content-default);
+}
+.playcard {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-}
-.playrow {
-  display: flex;
-  flex-wrap: wrap; /* controls drop to a second line before they crowd the name */
-  align-items: center;
-  gap: 8px 12px;
+  gap: 6px;
+  min-width: 0;
+  /* `anywhere`, NOT `break-word`, and on the CARD rather than on the name — `overflow-wrap`
+     inherits, so this covers the name AND the meta line in one declaration. Scoping it to
+     the name alone shipped a 390px viewport measuring 643px, because a long unbroken token
+     in the META has exactly the same effect (caught by `narrow-scroll-test`, which stresses
+     both).
+
+     Both halves are user-supplied and can be one unbroken token with no break opportunity;
+     with the default `normal` the text paints straight past `min-width: 0` and grows
+     `documentElement.scrollWidth` (measured 797px at 390px before any of this existed). The
+     two values wrap identically — the difference is that only `anywhere` also shrinks the
+     MIN-CONTENT size, which is what a grid item's automatic minimum resolves against, so
+     only `anywhere` stops the card forcing its track wider. */
+  overflow-wrap: anywhere;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-default);
   border-radius: 10px;
-  padding: 10px 14px;
+  padding: 10px 12px;
 }
-/* name + meta stacked so a shrinking column never overlaps them; keeps a sane min width. */
-.playrow .rowmain {
-  flex: 1 1 190px;
-  min-width: 0;
+/* `baseline`, not `center`: the kind badge is set in a much smaller face than the name, and
+   centring the two hangs the badge visibly below the name's x-height on every card. */
+.playcard .cardhead {
   display: flex;
-  flex-direction: column;
-  gap: 1px;
-  /* `anywhere`, NOT `break-word`. A channel/queue name is user-supplied and can be one
-     unbroken token with no break opportunity; with the default `normal` the text paints
-     straight past `min-width: 0` and grows `documentElement.scrollWidth` (measured: 797px
-     at a 390px viewport). The two values wrap identically — the difference is that only
-     `anywhere` also shrinks the MIN-CONTENT size, which is what a flex/grid item's
-     automatic minimum is resolved against, so only `anywhere` stops the item forcing the
-     track wider. The play landing wraps rather than ellipsises (`.rowmeta` is
-     `white-space: normal` in the Narrow View), so wrapping is the right shape here. */
-  overflow-wrap: anywhere;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
-.playrow .rowname {
-  max-width: 100%;
+.playcard .cardfoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-top: auto; /* the button sits on the floor, so a row of cards agrees where that is */
+}
+.playcard .cardfoot .rowmeta {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.playcard .rowname {
+  flex: 1 1 auto;
+  min-width: 0;
   text-align: left;
   background: none;
   border: none;
@@ -2426,16 +2453,45 @@ html.modal-open {
   font-size: 1.02rem;
   font-weight: 600;
   cursor: pointer;
-  padding: 4px 0;
+  padding: 2px 0;
 }
-.playrow .rowname:hover {
+.playcard .rowname:hover {
   color: var(--color-intent-accent-content);
 }
-.playrow .rowmeta {
+.playcard .rowmeta {
   color: var(--color-content-muted);
   font-size: 0.83rem;
 }
-.playrow .playbtn {
+/* WHICH KIND THIS IS — the words the taxonomy decision settled, and now the only place on
+   the landing that says them, because the shelf headings that used to are gone.
+
+   Deliberately quiet and deliberately NOT a `<Badge>`: it is a permanent classification
+   rather than a status, so it must not read as an alert, and it must not compete with the
+   name it sits beside.
+
+   **Monochrome, and that is a decision rather than an omission.** The first cut gave each
+   kind a coloured dot, which put a SECOND colour system on a card that already has one: on
+   this page colour means PROVIDER (`2026-08-15-a-queue-wears-its-providers-colour`), so an
+   amber dot beside an amber Plex button and a green dot beside a green Kavita button teach
+   the eye a rule the page then breaks. The kind is a word; the colour stays the provider's.
+   Dropping the dot also buys back ~11px on a 320px card, which is the difference between
+   "Bob & Alice — Movies" fitting on one line and wrapping onto two.
+   (decision `2026-08-16-filtered-pools-curated-pools-ordered-queues`) */
+.playcard .cardkind {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 999px;
+  color: var(--color-content-tertiary);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+.playcard .playbtn {
   flex-shrink: 0;
 }
 
@@ -2719,10 +2775,11 @@ header h1 input {
   #dynmodal .libs {
     grid-template-columns: 1fr;
   }
-  #play:not([hidden]) {
+  /* One column, and the cards keep their own gap — `#play` is a block, so what needs
+     narrowing is the GRID inside it, not the page. */
+  .playgrid {
     grid-template-columns: 1fr;
-    gap: 18px;
-  } /* one column in the Narrow View */
+  }
   /* The provider row stops hugging the right edge and takes its own line — at this width
      `margin-left: auto` would leave one chip stranded across the page from the others. */
   .providerchips {
@@ -2732,24 +2789,17 @@ header h1 input {
   .grouplayout {
     grid-template-columns: 1fr;
   }
-  .playrow {
-    flex-wrap: wrap;
-  }
-  .playrow .rowmeta {
+  .playcard .rowmeta {
     white-space: normal;
   }
-  /* The name takes the whole first line, so the controls form one row of their own
-     underneath it.
-
-     `flex: 1 1 190px` is right on a wide row and produces a STAIRCASE here: 190px of
-     basis leaves just enough beside it for the tier picker but not for the Play button,
-     so the picker rode up level with the channel title and Play dropped alone to the
-     next line — and which controls landed where changed per row, because it depended on
-     how long that channel's name was ("Shows & Shorts" and "Shorts" laid out
-     differently). Reported 2026-08-16, image 1. Pinning the basis to 100% makes the
-     break deterministic: title, meta, then [tier] [Play] every time. */
-  .playrow .rowmain {
-    flex-basis: 100%;
+  /* The card is already name-then-controls stacked at every width, so the 2026-08-16
+     staircase (`flex: 1 1 190px` leaving room for the tier picker but not the Play button,
+     so which control landed on which line depended on how long the name was) cannot happen
+     here — the name owns its own line by construction. What is left to say is the kind
+     badge: on a 320px card a long name plus "ORDERED QUEUE" is a two-line head, so the
+     badge wraps under the name rather than squeezing it. */
+  .playcard .cardhead {
+    flex-wrap: wrap;
   }
 
   /* ---- the queue view's add bar (`.add`) ----
@@ -3456,11 +3506,11 @@ ul.grid.posters .tile .badges .epstag {
   white-space: nowrap;
 }
 
-/* The Play landing's reorder handle. Only the handle starts a drag — the row is a link and
-   its button plays something, so a whole-row drag would fight both. Quiet until the row is
-   hovered, the same treatment the tile controls get: reordering is occasional, and three
-   permanent grip glyphs down the page is chrome nobody asked for. */
-.playrow .rowdrag {
+/* The Play landing's reorder handle. Only the handle starts a drag — the card is a link and
+   its button plays something, so a whole-card drag would fight both. Quiet until the card is
+   hovered, the same treatment the tile controls get: reordering is occasional, and a grip
+   glyph on every card is chrome nobody asked for. */
+.playcard .rowdrag {
   flex: 0 0 auto;
   align-self: center;
   padding: 2px 4px;
@@ -3472,29 +3522,29 @@ ul.grid.posters .tile .badges .epstag {
   touch-action: none; /* the hook owns the gesture; without this touch scrolls instead */
   transition: opacity 120ms ease;
 }
-.playrow:hover .rowdrag,
-.playrow:focus-within .rowdrag {
+.playcard:hover .rowdrag,
+.playcard:focus-within .rowdrag {
   opacity: 1;
 }
 /* A coarse pointer has no hover to reveal it with, so it is simply always there. */
 @media (pointer: coarse) {
-  .playrow .rowdrag {
+  .playcard .rowdrag {
     opacity: 1;
   }
 }
-.playrow.dragging {
+.playcard.dragging {
   position: relative;
   z-index: 3;
   box-shadow: 0 10px 24px rgb(0 0 0 / 35%);
   cursor: grabbing;
   opacity: 0.96;
 }
-.playrow.dragging .rowdrag {
+.playcard.dragging .rowdrag {
   cursor: grabbing;
 }
-/* While a drag is live, the rows it slides past glide instead of teleporting. Scoped to the
+/* While a drag is live, the cards it slides past glide instead of teleporting. Scoped to the
    body class so the transition never costs anything on an ordinary render. */
-body.rowdragging .playrow:not(.dragging) {
+body.rowdragging .playcard:not(.dragging) {
   transition: transform 140ms ease;
 }
 /* Nothing on the page should be selecting text mid-drag. */
@@ -3503,19 +3553,6 @@ body.rowdragging {
 }
 
 /* --- Pending ------------------------------------------------------------------ */
-/* The way in, sitting with the shelves rather than in the header: it is a place you GO,
-   like each shelf's Configure ›, not a control on the landing. */
-.pendinglink {
-  grid-column: 1 / -1;
-  margin: 0 0 4px;
-}
-.pendinglink a {
-  color: var(--color-content-muted);
-  font-size: 0.9rem;
-}
-.pendinglink a:hover {
-  color: var(--color-content-default);
-}
 #pending .pendinghead {
   display: flex;
   gap: 16px;

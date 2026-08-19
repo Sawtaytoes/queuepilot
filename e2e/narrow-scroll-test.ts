@@ -9,8 +9,10 @@
 //      A transform does not remove a box from the document's scrollable overflow region,
 //      and neither does `visibility: hidden`, so the 204px right-hand panel sat at
 //      x 396→600 in a 390px viewport and `documentElement.scrollWidth` read 600.
-//   2. `.playrow .rowmain` had no `overflow-wrap`, so a channel/queue name that is one
-//      long unbroken token painted straight past `min-width: 0` (measured 797px).
+//   2. the landing's name element had no `overflow-wrap`, so a channel/queue name that is one
+//      long unbroken token painted straight past `min-width: 0` (measured 797px). It was
+//      `.playrow .rowmain` then and is `.playcard .rowname` now — same bug, same fix, one
+//      landing rewrite later.
 //
 // Both are invisible to every other suite — they assert behaviour, not geometry — and to
 // typecheck and the build. Only a measured scrollWidth catches them, so: measure it.
@@ -110,7 +112,7 @@ for (const width of WIDTHS) {
   const page = await browser.newPage({ viewport: { width, height: 844 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.playrow', { timeout: 30000 });
+  await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400); // let the header's ResizeObserver settle --header-h
 
   // 1. As rendered, menus closed. This is the reported bug.
@@ -151,8 +153,8 @@ for (const width of WIDTHS) {
   {
     const applied = await page.evaluate(() => {
       const LONG = 'Supercalifragilisticexpialidocious'.repeat(3); // 99 chars, zero break opportunities
-      const name = document.querySelector('.playrow .rowname');
-      const meta = document.querySelector('.playrow .rowmeta');
+      const name = document.querySelector('.playcard .rowname');
+      const meta = document.querySelector('.playcard .rowmeta');
       if (!name) return false;
       name.textContent = LONG;
       if (meta) meta.textContent = `${LONG}-meta`;
@@ -173,13 +175,13 @@ for (const width of WIDTHS) {
   //    suite keeps working against whatever `queues.fixture.yaml` holds. A route that
   //    yields no id is SKIPPED loudly rather than silently passing.
   const queueId = await page.evaluate(() => {
-    const link = document.querySelector<HTMLAnchorElement>('.playrow a[href^="/q/"]');
+    const link = document.querySelector<HTMLAnchorElement>('.playcard a[href^="/q/"]');
     return link?.getAttribute('href')?.replace(/^\/q\//, '') ?? null;
   });
   ok(`${width}px: found a queue id on the landing to visit`, Boolean(queueId));
 
   const routes = [
-    ['/queues', '.playrow, #newqueue, .shelf'],
+    ['/queues', '.playcard, #newqueue, .shelf'],
     ['/channels/shows', '#chbody'],
     ...(queueId ? [[`/q/${queueId}`, '#queue:not([hidden]) .add']] : []),
   ] as const;
@@ -276,7 +278,7 @@ for (const width of WIDTHS) {
   });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
   await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.playrow', { timeout: 30000 });
+  await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400);
 
   for (const hash of ['/', '/queues', '/channels/shows'] as const) {

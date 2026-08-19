@@ -97,12 +97,12 @@ try {
 
     // 1. Play landing (desktop).
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.playrow', { timeout: 30000 });
+    await page.waitForSelector('.playcard', { timeout: 30000 });
     await page.waitForTimeout(600);
     await shot('01-play');
 
     // 2. The "Play on ▾" device menu open — a popover sized to its own text.
-    const playBtn = await page.$('.playrow .playbtn');
+    const playBtn = await page.$('.playcard .playbtn');
     if (playBtn) {
       await playBtn.click();
       await page.waitForTimeout(600);
@@ -161,7 +161,7 @@ try {
     await page.keyboard.press('Escape').catch(() => {});
 
     await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('.playrow', { timeout: 30000 }).catch(() => {});
+    await page.waitForSelector('.playcard', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(800);
     await shot('10-phone-play');
 
