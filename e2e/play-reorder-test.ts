@@ -104,7 +104,12 @@ try {
 
   ok('the grid renders every kind in file order',
     (await gridOrder()).join(',') === 'q_alpha,pool_mid,q_beta,q_gamma');
-  ok('every card carries a drag handle', (await page.$$('#playgrid .rowdrag')).length === 4);
+  // The handle is `display: none` on a fine pointer as of 2026-08-19 — the whole card is the
+  // handle there, and an always-reserved gutter for a hover-only control is what this replaced.
+  // It is still in the DOM (CSS decides, not React), so assert the COMPUTED style, which is
+  // the thing that actually stopped indenting every name.
+  ok('no drag gutter on a fine pointer', (await page.$$eval('#playgrid .rowdrag',
+    (els) => els.every((e) => getComputedStyle(e).display === 'none'))));
   ok('every card says which kind it is',
     (await page.$$eval('#playgrid li[data-set]', (els) =>
       els.map((e) => (e as HTMLElement).dataset.kind))).join(',') === 'ordered,filtered,ordered,ordered');
@@ -118,19 +123,21 @@ try {
     new Set(rowTops).size === 1);
 
   const drag = async (setId: string, ontoId: string) => {
-    const handle = page.locator(`#playgrid li[data-set="${setId}"] .rowdrag`);
+    const card = page.locator(`#playgrid li[data-set="${setId}"]`);
     const onto = page.locator(`#playgrid li[data-set="${ontoId}"]`);
-    await page.locator(`#playgrid li[data-set="${setId}"]`).hover(); // the handle reveals on hover
-    const from = (await handle.boundingBox())!;
+    await card.hover();
+    const from = (await card.boundingBox())!;
     const to = (await onto.boundingBox())!;
     const target = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
 
-    await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2);
+    // The card's BOTTOM-LEFT — its meta line's dead space. Not the centre: that can be the
+    // name (a link) or the Play button, and a press on either is deliberately not a drag.
+    const startX = from.x + 12;
+    const startY = from.y + from.height - 10;
+    await page.mouse.move(startX, startY);
     await page.mouse.down();
     // Several small steps, not one jump: the hook re-tests containment on every move, and a
     // single leap would prove nothing about the crossing.
-    const startX = from.x + from.width / 2;
-    const startY = from.y + from.height / 2;
     for (let i = 1; i <= 12; i++) {
       await page.mouse.move(
         startX + ((target.x - startX) * i) / 12,
@@ -170,6 +177,39 @@ try {
   await drag(beforeNarrow[3] as string, beforeNarrow[0] as string);
   ok('a vertical drag reorders in the Narrow View too',
     (await gridOrder())[0] === beforeNarrow[3]);
+
+  // ---- what a whole-card drag must NOT eat ----
+  //
+  // The card holds a link and a button, and making the card grabbable is exactly the change
+  // that could swallow them. A press on either is deliberately not a drag, so both still
+  // behave — this is the assertion that keeps "the whole card is the handle" honest.
+  await page.setViewportSize({ width: 1400, height: 950 });
+  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
+
+  await page.locator('#playgrid li[data-set="q_alpha"] .rowname').click();
+  await page.waitForTimeout(600);
+  ok('the name still navigates', page.url().endsWith('/q/q_alpha'));
+
+  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
+  await page.locator('#playgrid li[data-set="q_alpha"] .playbtn').click();
+  await page.waitForTimeout(600);
+  ok('the start button still opens its menu',
+    Boolean(await page.$('#playmenu, .playmenu, [role="menu"]')));
+
+  // ---- a coarse pointer keeps the handle ----
+  //
+  // Whole-card touch dragging would need `touch-action: none` on the card, which is the
+  // surface the page scrolls by. So the glyph survives there, and CSS is what decides.
+  const touch = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
+  const tp = await touch.newPage();
+  await tp.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await tp.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
+  ok('a coarse pointer still gets a handle to grab',
+    await tp.$$eval('#playgrid .rowdrag', (els) =>
+      els.length > 0 && els.every((e) => getComputedStyle(e).display !== 'none')));
+  await touch.close();
 
 } finally {
   await browser.close();
