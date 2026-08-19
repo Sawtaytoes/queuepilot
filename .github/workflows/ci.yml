@@ -363,7 +363,34 @@ jobs:
           WEB_PORT: '18769'
         run: |
           npm install playwright
-          npx playwright install chromium --with-deps
+          # The LOCAL binary, never `npx`. npx PROMPTS ("Ok to proceed? (y)") when it decides
+          # it must fetch a package, and a runner has no stdin to answer with — so it blocks
+          # forever rather than failing. That is exactly how this step hung twice on
+          # 2026-08-19 (40min, then 25min on a clean re-run, both killed by hand), while the
+          # same gate passed locally in seconds.
+          #
+          # It also must stay the root-installed copy rather than a `yarn dlx` / `npx -y`
+          # fetch: e2e/playwright.ts resolves `playwright` from THIS node_modules and then
+          # checks `chromium.executablePath()` exists on disk. A browser set installed by a
+          # different Playwright version is pinned to a different build number, so the
+          # resolver would find the package and reject its browsers — the failure its own
+          # header documents.
+          #
+          # noninteractive + timeout because `--with-deps` shells out to apt: a held lock
+          # (unattended-upgrades) is the other way this blocks, and a 10-minute failure is
+          # worth infinitely more than a 6-hour hang.
+          # SPLIT, and the apt half is best-effort. `--with-deps` shells out to apt-get, and
+          # on 2026-08-19 GitHub's azure.archive.ubuntu.com mirror stopped answering: every
+          # index line came back `Ign:`, apt retried forever, and the step hung for 40
+          # minutes twice before a timeout was added to prove it (exit 124).
+          #
+          # The BROWSER download comes from Playwright's own CDN and is the part this gate
+          # actually needs, so it runs unconditionally and on its own. The system libraries
+          # are a nice-to-have on ubuntu-latest, whose image already ships what chromium
+          # needs — so a dead apt mirror must not be able to block CI for a whole repo.
+          DEBIAN_FRONTEND=noninteractive timeout 300 ./node_modules/.bin/playwright install-deps chromium \
+            || echo "playwright install-deps failed or timed out (apt mirror?) — continuing; the runner image ships chromium's libs"
+          timeout 600 ./node_modules/.bin/playwright install chromium
           unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
           cp e2e/fixtures/queues.fixture.yaml /tmp/queues-narrow.yaml
           "$TSX" server/src/index.ts >/tmp/narrow-e2e.log 2>&1 &
@@ -476,7 +503,34 @@ jobs:
           NODE_TLS_REJECT_UNAUTHORIZED: '0'
         run: |
           npm install playwright
-          npx playwright install chromium --with-deps
+          # The LOCAL binary, never `npx`. npx PROMPTS ("Ok to proceed? (y)") when it decides
+          # it must fetch a package, and a runner has no stdin to answer with — so it blocks
+          # forever rather than failing. That is exactly how this step hung twice on
+          # 2026-08-19 (40min, then 25min on a clean re-run, both killed by hand), while the
+          # same gate passed locally in seconds.
+          #
+          # It also must stay the root-installed copy rather than a `yarn dlx` / `npx -y`
+          # fetch: e2e/playwright.ts resolves `playwright` from THIS node_modules and then
+          # checks `chromium.executablePath()` exists on disk. A browser set installed by a
+          # different Playwright version is pinned to a different build number, so the
+          # resolver would find the package and reject its browsers — the failure its own
+          # header documents.
+          #
+          # noninteractive + timeout because `--with-deps` shells out to apt: a held lock
+          # (unattended-upgrades) is the other way this blocks, and a 10-minute failure is
+          # worth infinitely more than a 6-hour hang.
+          # SPLIT, and the apt half is best-effort. `--with-deps` shells out to apt-get, and
+          # on 2026-08-19 GitHub's azure.archive.ubuntu.com mirror stopped answering: every
+          # index line came back `Ign:`, apt retried forever, and the step hung for 40
+          # minutes twice before a timeout was added to prove it (exit 124).
+          #
+          # The BROWSER download comes from Playwright's own CDN and is the part this gate
+          # actually needs, so it runs unconditionally and on its own. The system libraries
+          # are a nice-to-have on ubuntu-latest, whose image already ships what chromium
+          # needs — so a dead apt mirror must not be able to block CI for a whole repo.
+          DEBIAN_FRONTEND=noninteractive timeout 300 ./node_modules/.bin/playwright install-deps chromium \
+            || echo "playwright install-deps failed or timed out (apt mirror?) — continuing; the runner image ships chromium's libs"
+          timeout 600 ./node_modules/.bin/playwright install chromium
           # suites assert the degraded no-broker path — keep MQTT unset
           unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
           fail=0
