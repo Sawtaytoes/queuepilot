@@ -3,6 +3,7 @@ import * as cache from '../cache.js';
 import { ROTATION_LENGTH, ROTATION_LENGTH_MAX, TOPUP_AT } from '../env.js';
 import { toWeight } from '../engine/weight.js';
 import { errMessage } from '../errors.js';
+import { fileSetIntoGroup } from '../groups.js';
 import * as plex from '../plex.js';
 import * as providerTiles from '../providers/tiles.js';
 import * as queues from '../queues.js';
@@ -39,12 +40,40 @@ export function setsRoutes(): Hono {
     }
   });
 
-  // Create a curated queue. Body: {label, kind, sections}. Returns its generated id.
+  /**
+   * Create a curated queue. Body: {label, kind, sections, group?}. Returns its generated id
+   * and the group it was filed into.
+   *
+   * `group` is the group that was ON SCREEN when the person pressed Save, and filing it
+   * here rather than in the browser is deliberate. The client alternative is POST /api/sets
+   * then PATCH /api/groups/:id, and that flow HALF-FAILS in a way this one cannot: a closed
+   * tab, a dropped connection or a navigation between the two leaves a queue that exists and
+   * belongs to nobody, with nothing left running to notice.
+   *
+   * The two writes are still two files — sets.yaml then groups.yaml — so this is ordered
+   * rather than atomic, and the order is the safe one. The SET is written first, so the
+   * failure that survives is an UNFILED queue: visible under `All`, listed in
+   * `GET /api/groups`'s `unassigned`, and one tick away in the groups editor. The reverse
+   * order could name a set id that does not exist.
+   *
+   * A failed filing is therefore a 200 carrying `groupError`, never a 400. The queue exists
+   * by then, and answering "create failed" would invite a retry that makes a second one.
+   */
   app.post('/sets', async (c) => {
+    let body: Record<string, unknown>;
+    let created: { id: string };
     try {
-      return c.json(await sets.createSet(await readBody(c)));
+      body = await readBody(c);
+      created = await sets.createSet(body);
     } catch (e) {
       return c.json({ error: errMessage(e) }, 400);
+    }
+
+    try {
+      const group = await fileSetIntoGroup(body.group == null ? '' : String(body.group), created.id);
+      return c.json({ ...created, group });
+    } catch (e) {
+      return c.json({ ...created, group: null, groupError: errMessage(e) });
     }
   });
 

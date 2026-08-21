@@ -464,6 +464,50 @@ export async function updateGroup(id: string, body: GroupWrite): Promise<{ ok: t
   return { ok: true, id };
 }
 
+/**
+ * File one set into one group, by NAME — append its id to the stored `sets:` list.
+ *
+ * This is the write behind "it should join wherever I added it" (owner, 2026-08-21): a set
+ * created while a group is on screen joins that group. It appends to `sets:`, the EXPLICIT
+ * half of membership, and never to the resolved `setIds` — that half is derived from
+ * `accounts:` at read time and has nowhere to be written
+ * (decision `2026-08-17-a-group-is-who-is-watching-not-a-plex-profile`, rule 2).
+ *
+ * Three returns, and the difference matters to the caller:
+ *   - the group id — filed, or already there (this is idempotent, so a retried POST cannot
+ *     write the same id twice),
+ *   - `null` — nothing to do: no group asked for, or `all` asked for. `all` is SYNTHESIZED
+ *     and is not in the file, so filing into it is not a failure, it is the absence of a
+ *     filter. `/g/all` already means "no group" everywhere else in the app.
+ *   - a throw — the caller named a group that is not there. The caller decides what that is
+ *     worth; in `POST /api/sets` the set is already written, so it is a warning, not a 400.
+ */
+export async function fileSetIntoGroup(
+  groupId: string | null | undefined,
+  setId: string,
+): Promise<string | null> {
+  const id = String(groupId ?? '').trim();
+  const wanted = String(setId ?? '').trim();
+  if (!id || !wanted || id === ALL_ID) return null;
+
+  const doc = await readDoc();
+  const { seq, index } = nodeFor(doc, id);
+  const node = seq.get(index) as {
+    get: (k: string) => unknown;
+    set: (k: string, v: unknown) => void;
+  };
+
+  const raw = node.get('sets');
+  const listed = isSeq(raw) ? (raw.toJSON() as unknown[]) : Array.isArray(raw) ? raw : [];
+  const existing = listed.map((s) => String(s ?? '').trim()).filter(Boolean);
+  if (existing.includes(wanted)) return id;
+
+  // Appended, never sorted: `sets:` is a hand-edited list and its order is the person's.
+  node.set('sets', doc.createNode([...existing, wanted]));
+  await writeDoc(doc);
+  return id;
+}
+
 export async function deleteGroup(id: string): Promise<{ ok: true; deleted: boolean }> {
   const doc = await readDoc();
   let found = false;

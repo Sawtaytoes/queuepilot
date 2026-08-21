@@ -1,5 +1,6 @@
 import { Checkbox } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
+import { useLocation } from "react-router"
 
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
@@ -9,10 +10,12 @@ import type {
   ProviderBlockValue,
   ProviderInfo,
 } from "../lib/types"
+import { findGroup } from "../state/group"
 import {
   closeSetModal,
   useOverlays,
 } from "../state/overlays"
+import { parsePath } from "../state/parsePath"
 import { load, setStatus, useStore } from "../state/store"
 import { CountPicker, type INFINITE } from "./CountPicker"
 import { EPISODES_MAX } from "./EntrySettings"
@@ -52,7 +55,8 @@ const newUid = () => {
 
 export function SetModal() {
   const { setModal } = useOverlays()
-  const { data, reg } = useStore()
+  const { data, groups, reg } = useStore()
+  const { pathname } = useLocation()
 
   const setId = setModal?.setId ?? null
   const editing = useMemo(
@@ -62,6 +66,35 @@ export function SetModal() {
         : null,
     [reg, setId],
   )
+
+  /**
+   * WHERE A NEW SET IS FILED — the group that is on screen behind this modal.
+   *
+   * Read off the URL rather than passed in through `openSetModal`, because the URL is
+   * already the one truth about which group is active (`state/group.ts`: the path wins,
+   * storage only answers a `/` that did not say). A second copy travelling through the
+   * overlay store would be a second answer to the same question, and the first thing to
+   * drift would be a modal opened before a route change.
+   *
+   * It falls out of that rule that the OTHER two create buttons are unaffected and need no
+   * case here: `#newqueue` in the Ordered Queues toolbar is `/queues` and `＋ Curated pool`
+   * is `/channels`, and `parsePath` gives a group on the play route alone. Nothing is on
+   * screen to join, so nothing is sent.
+   *
+   * `findGroup` returns null for `all` and for an id no longer in the list, which is the
+   * behaviour we want twice over: the everything view is the absence of a filter, and a
+   * stale bookmark to a deleted group must not fail a save.
+   */
+  const destination = editing
+    ? null
+    : findGroup(
+        groups,
+        (() => {
+          const route = parsePath(pathname)
+
+          return route.view === "play" ? route.group : null
+        })(),
+      )
 
   const [label, setLabel] = useState("")
   const [kind, setKind] = useState("movies")
@@ -328,19 +361,39 @@ export function SetModal() {
     }
 
     try {
-      if (setId) {
-        await api("PATCH", `/api/sets/${setId}`, body)
-      } else {
-        await api("POST", "/api/sets", body)
-      }
-
       const word =
         kind === "anime" ? "Curated pool" : "Ordered queue"
 
+      if (setId) {
+        await api("PATCH", `/api/sets/${setId}`, body)
+        closeSetModal()
+        setStatus(`${word} updated`, "ok")
+        await load()
+
+        return
+      }
+
+      // `group` rides along with the CREATE so the two writes are one request. The server
+      // writes sets.yaml first and groups.yaml second, and reports a failed filing as
+      // `groupError` on an otherwise successful 200 — the queue exists by then, so
+      // "Save failed" would be a lie that invites a second queue.
+      const made = await api<{
+        id: string
+        group?: string | null
+        groupError?: string
+      }>("POST", "/api/sets", {
+        ...body,
+        group: destination?.id ?? "",
+      })
+
       closeSetModal()
       setStatus(
-        setId ? `${word} updated` : `${word} created`,
-        "ok",
+        made.groupError
+          ? `${word} created, but it did not join ${destination?.label ?? "the group"}: ${made.groupError}`
+          : made.group && destination
+            ? `${word} created in ${destination.label}`
+            : `${word} created`,
+        made.groupError ? "err" : "ok",
       )
       await load()
     } catch (err) {
@@ -479,6 +532,24 @@ export function SetModal() {
           value={kind}
         />
       </label>
+      {/* WHERE IT LANDS, said out loud, so filing is never a thing you discover afterwards.
+          Only on CREATE (an edit changes nothing about membership) and only when a group is
+          on screen. With no group there is nothing to say that the app has not always done:
+          it lands in All, which is where everything is, and a permanent "not filed" line on
+          every create from /queues would be noise on the common path.
+
+          A LINE and not a picker. The destination is a consequence of the URL you are
+          already looking at, so a control here would offer a choice the route has made and
+          put a second membership editor next to the real one — the groups editor stays the
+          one place membership is edited. It is also the smaller claim: the owner asked for
+          "it should join wherever I added it", not for a filing control. */}
+      {destination ? (
+        <p className="groupnote" id="set-groupnote">
+          Joins <strong>{destination.label}</strong> — the
+          group you are looking at. The groups editor can
+          move it later.
+        </p>
+      ) : null}
       {/* The repeating source blocks. Everyday fields first (source, profile, libraries);
           playlist/reel/TTL sit below as advanced options so a normal edit doesn't scroll
           past them. (decision `2026-08-13-provider-block-repeats-and-picks-its-control`) */}

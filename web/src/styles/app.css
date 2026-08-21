@@ -2142,6 +2142,19 @@ a.playbtn {
 #startmodal .idnote:empty {
   display: none;
 }
+/* Where a new set will be FILED. Same muted size as `.idnote` — it is a statement of fact,
+   not a warning — but it sits BETWEEN two fields rather than under the last one, so it needs
+   a bottom margin the `.idnote` rule above deliberately gave up. The group's own name is
+   `<strong>`: that word is the whole content of the line, and it is the one the eye is
+   looking for when the question is "where did my queue go". */
+#setmodal .groupnote {
+  color: var(--color-content-muted);
+  font-size: 0.82rem;
+  margin: -2px 0 12px;
+}
+#setmodal .groupnote strong {
+  color: var(--color-content-primary);
+}
 /* The footer OWNS the space above it. Nothing used to: `margin-top` and `padding-top` were
    0 on all four modals, and the three that looked right were only borrowing the 14px bottom
    margin of the `.idnote` line that happens to sit last in their bodies. `#entrymodal` has
