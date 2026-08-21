@@ -1,6 +1,9 @@
 {
   "$schema": "https://biomejs.dev/schemas/2.5.7/schema.json",
-  "extends": ["@charcuterie/biome-config"],
+  "extends": [
+    "@charcuterie/biome-config",
+    "@charcuterie/biome-config/app"
+  ],
   "vcs": {
     "root": ".."
   },

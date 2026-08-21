@@ -103,10 +103,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/biome-config@npm:^1.0.0":
-  version: 1.1.0
-  resolution: "@charcuterie/biome-config@npm:1.1.0"
-  checksum: 10c0/4c0d51f9c9a8edd0790b29501d5e5ea54caddfcf0b15b18121c17f2ccaf65e16dc7c66b2b12d07c2bcae815e02a93f4907b61637cf93eaf59ad345fe586720fb
+"@charcuterie/biome-config@npm:^1.2.0":
+  version: 1.2.0
+  resolution: "@charcuterie/biome-config@npm:1.2.0"
+  checksum: 10c0/6256ff742c88063cb0adc5ce124c9a70226f39eaf7fbc7212df962edd87c31d882081256a62a0ba9a9abb9bf7c6eb205221aba0df555a420d96bbb5a0423a79e
   languageName: node
   linkType: hard
 
@@ -2556,7 +2556,7 @@ __metadata:
   resolution: "queuepilot-web@workspace:web"
   dependencies:
     "@biomejs/biome": "npm:^2.5.7"
-    "@charcuterie/biome-config": "npm:^1.0.0"
+    "@charcuterie/biome-config": "npm:^1.2.0"
     "@charcuterie/logic": "npm:^2.0.0"
     "@charcuterie/server": "npm:^0.2.0"
     "@charcuterie/tokens": "npm:^1.5.0"

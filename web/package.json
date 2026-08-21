@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "^2.5.7",
-    "@charcuterie/biome-config": "^1.0.0",
+    "@charcuterie/biome-config": "^1.2.0",
     "@charcuterie/server": "^0.2.0",
     "@charcuterie/tsconfig": "^1.0.0",
     "@charcuterie/vite-config": "^1.0.2",
