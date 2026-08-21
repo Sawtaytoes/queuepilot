@@ -28,6 +28,7 @@ import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
 import { QUEUES_PATH } from '../config.js';
+import { legacyEntryMessage } from '../entryFormat.js';
 import { isNodeError } from '../errors.js';
 import type { Rng } from './weight.js';
 import type { PlexClient, PlexMetadata, Start } from '../types.js';
@@ -125,6 +126,16 @@ export interface EntryDescriptor {
    * set's intent instead of being flattened to "off" on the way in.
    */
   batch_stops_at: unknown;
+  /**
+   * TRUE when this descriptor came from a bare SCALAR — the legacy entry form.
+   *
+   * `describe()` still parses one, because `entryKey()` still keys one and because a
+   * sets.yaml `members:` list is a different list with a different rule. What changed is
+   * `loadEntries()`: a legacy descriptor is REFUSED there by name and never reaches the
+   * resolver, so a stale hand-typed line stops one entry rather than a whole file
+   * (decision `2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key`).
+   */
+  legacy: boolean;
 }
 
 /**
@@ -275,13 +286,14 @@ export function describe(entry: unknown): EntryDescriptor {
       doneAt: entry.done_at != null && Number.isFinite(Number(entry.done_at))
         ? Number(entry.done_at) : null,
       raw: entry,
+      legacy: false,
     };
   }
   if (isRatingKey(entry)) {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
-      weight: 1, done: false, doneAt: null, raw: entry,
+      weight: 1, done: false, doneAt: null, raw: entry, legacy: true,
     };
   }
   const { title, year, guid } = parseTitleString(entry);
@@ -290,12 +302,28 @@ export function describe(entry: unknown): EntryDescriptor {
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
     collection: coll, episodes: null, batch_stops_at: null, start: null, weight: 1, done: false,
-    doneAt: null, raw: entry,
+    doneAt: null, raw: entry, legacy: true,
   };
 }
 
+/**
+ * Legacy-scalar complaints already logged, as `<set>[<index>] <raw>`.
+ *
+ * `loadEntries()` runs on every scan and on several request paths, so an unguarded log line
+ * would repeat a broken entry into the container log for ever. One line per distinct entry
+ * per process is enough to find it; a restart says it again, which is correct — it is still
+ * broken.
+ */
+const complained = new Set<string>();
+
 // Ordered resolution descriptors for a set, [] if the set/file is empty. Port of queues.entries
 // (the read side only — the write-side lock/ruamel round-trip is D4's queues.py port).
+//
+// THE FORMAT GATE LIVES HERE (2026-08-21). A bare-string entry is refused BY NAME and does not
+// become a descriptor, so nothing plays it. The refusal is per ENTRY and never per file: this
+// app runs unattended on the household TV, and one stale hand-typed line must not take a whole
+// queue — let alone every queue — off the air. The entry stays in the file, stays visible in
+// the editor and stays addressable by its key, so it can be fixed or deleted.
 export function loadEntries(setName: string): EntryDescriptor[] {
   let data: Record<string, unknown>;
   try {
@@ -306,10 +334,19 @@ export function loadEntries(setName: string): EntryDescriptor[] {
   }
   const seq = ((data && data[setName]) || []) as unknown[];
   const out: EntryDescriptor[] = [];
-  for (const e of seq) {
+  seq.forEach((e, index) => {
     const desc = describe(e);
-    if (desc.key != null) out.push(desc);
-  }
+    if (desc.key == null) return;
+    if (desc.legacy) {
+      const once = `${setName}[${index}] ${JSON.stringify(e)}`;
+      if (!complained.has(once)) {
+        complained.add(once);
+        console.log(`[queues] ${legacyEntryMessage(setName, index, e)}`);
+      }
+      return;
+    }
+    out.push(desc);
+  });
   return out;
 }
 

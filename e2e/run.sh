@@ -29,6 +29,8 @@ echo "=== sse-resync-test ==="   # browserless; SSE now-playing replay on (re)co
 "$TSX" e2e/sse-resync-test.ts || TOTAL=$((TOTAL+1))
 echo "=== yaml-roundtrip-test ==="   # browserless; comments survive every queues/sets mutation (Phase E)
 "$TSX" e2e/yaml-roundtrip-test.ts || TOTAL=$((TOTAL+1))
+echo "=== entry-objects-test ==="   # browserless; the entry OBJECT format + the migration (2026-08-21)
+"$TSX" e2e/entry-objects-test.ts || TOTAL=$((TOTAL+1))
 echo "=== profile-gate-test (node, D1) ==="   # browserless; PMS-log profile detection port
 "$TSX" e2e/profile-gate-test.ts || TOTAL=$((TOTAL+1))
 echo "=== host-config-test ==="   # browserless; env > /config/config.yaml > placeholder

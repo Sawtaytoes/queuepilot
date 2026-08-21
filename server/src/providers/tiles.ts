@@ -86,7 +86,9 @@ function displayFor(value: unknown): string {
   if (value && typeof value === 'object') {
     // Same assertion (and same latent lie) as `tiles.ts displayFor()`: a YAML `title: 2012`
     // is a NUMBER at runtime and has always been returned unchanged.
-    const o = value as { title?: string; ratingKey?: string | number };
+    const o = value as { title?: string; ratingKey?: string | number; collection?: string };
+    // Same as tiles.ts displayFor: a `{collection: <name>}` entry carries no title.
+    if (!o.title && o.collection) return `Collection: ${o.collection}`;
     return o.title || `item ${o.ratingKey}`;
   }
   return String(value);

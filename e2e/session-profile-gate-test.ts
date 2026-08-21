@@ -70,7 +70,7 @@ const SETS = `sets:
     sections: [1, 5]
     requires_profile: Demo
 `;
-const QUEUES = 'demo:\n  - 2001\n';
+const QUEUES = 'demo:\n  - {ratingKey: 2001}\n';
 useFixtures({ sets: SETS, queues: QUEUES });
 
 const session = await import('../server/src/session.js');

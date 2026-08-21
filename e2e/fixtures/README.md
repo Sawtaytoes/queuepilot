@@ -57,6 +57,15 @@ or change the golden deliberately, in a commit that says why.
 `queues.harness.yaml` — hand-written YAML inputs for the routing, passthrough, API and
 write-side tests.
 
+**Every queue ENTRY in here is a mapping.** A bare `- "Some Title"` / `- 12345` /
+`- "Collection: X"` is the pre-2026-08-21 form, and the engine now refuses one by name
+([decision](../../docs/decisions/2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key.md)),
+so a fixture that still holds one fails the gate that reads it. Write `{title: …}`,
+`{ratingKey: …, title: …}` or `{collection: …}` — flow style, so a per-entry comment can stay
+on its own line. The rewrite of these files was a SPELLING change and nothing else: `entryKey()`
+returns the same key for each of them as it did for the scalar it replaced, which is why the
+goldens below did not move.
+
 `batch-stops-at.queues.yaml` — one queue per entry SHAPE for `e2e/batch-stops-at-test.ts`, which
 resolves them through `loadEntries()` so the per-entry `batch_stops_at:` override is read the way
 the service reads it. It used to hand-build descriptor literals instead, and so passed against a

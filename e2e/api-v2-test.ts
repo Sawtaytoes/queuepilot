@@ -43,10 +43,10 @@ const patch = (p: string, body?: unknown) =>
 // A queues.yaml with two done entries (mapping w/ done:true) + two plain entries under a
 // seeded curated queue (`bob` exists in the default sets.yaml the server writes on boot).
 const QUEUES_SEED = `bob:
-- "Plain Movie A (2020)"
+- {title: "Plain Movie A (2020)"}
 - {title: "Done Movie B (2019)", done: true}
 - {ratingKey: 555, title: "Done Movie C", done: true}
-- "Plain Movie D"
+- {title: "Plain Movie D"}
 `;
 
 for (const f of [QUEUES, SETS, HIST]) {

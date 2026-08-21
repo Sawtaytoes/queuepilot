@@ -123,16 +123,16 @@ const env = {
 };
 
 await fs.writeFile(env.QUEUES_PATH, `bob:
-- Duel (1971)
-- The Iron Giant (1999)
-- Steamboy (2004)
-- Jin-Roh (1999)
-- Akira (1988)
-- Ghost in the Shell (1995)
+- {title: Duel (1971)}
+- {title: The Iron Giant (1999)}
+- {title: Steamboy (2004)}
+- {title: Jin-Roh (1999)}
+- {title: Akira (1988)}
+- {title: Ghost in the Shell (1995)}
 family:
-- Ponyo (2008)
-- Song of the Sea (2014)
-- The Secret of Kells (2009)
+- {title: Ponyo (2008)}
+- {title: Song of the Sea (2014)}
+- {title: The Secret of Kells (2009)}
 `);
 await fs.writeFile(env.SETS_PATH, `sets:
 - id: bob

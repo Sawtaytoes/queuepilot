@@ -109,9 +109,11 @@ export function hitLabel(hit: SearchHit): string {
  * The title a PICK stores in the file — `hitLabel` for an item, the bare name for a
  * collection.
  *
- * A collection is written as the literal `Collection: <name>` entry the resolver expands by
- * NAME, so it must not carry a year or an edition; an item is addressed by `ratingKey` and
- * its title is the human-readable half of the same entry, so it carries both.
+ * A collection is stored as a `{collection: "<name>"}` entry and expanded by NAME, so it must
+ * not carry a year or an edition; an item is addressed by `ratingKey` and its title is the
+ * human-readable half of the same entry, so it carries both. (Before 2026-08-21 the collection
+ * was the literal string `Collection: <name>`. The entry KEY is unchanged either way —
+ * `title:Collection: <name>` — which is why `keyOfHit` in the views still spells it that way.)
  *
  * One function because three pickers write the same entry shape — the queue add box, the
  * Home toolbar's add-to-any-queue menu, and the pool member picker. It was copied three

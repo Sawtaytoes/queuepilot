@@ -94,7 +94,7 @@ let server: ChildProcess | undefined;
 const browser = await chromium.launch();
 
 try {
-  await fs.writeFile(QUEUES, 'bob:\n- "1"\n');
+  await fs.writeFile(QUEUES, 'bob:\n- {ratingKey: "1"}\n');
   await fs.writeFile(SETS, SETS_SEED);
   await fs.rm(`${SETS}.lock`, { force: true, recursive: true });
   server = await startServer();

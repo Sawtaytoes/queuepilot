@@ -48,7 +48,7 @@ export const SHOWS = [
  * watermark in `pending.fixture.yaml` sits before every `addedAt` above, so all six items are
  * new and only coverage and watch state can remove any of them.
  */
-export const QUEUES_YAML = 'bob:\n- "The Cabinet of Dr. Caligari"\nseries:\n- []\n';
+export const QUEUES_YAML = 'bob:\n- {title: "The Cabinet of Dr. Caligari"}\nseries:\n- []\n';
 
 export const SETS_YAML = `sets:
   - id: bob

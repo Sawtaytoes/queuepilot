@@ -8,11 +8,13 @@
 # seasons) and every collection entry is "Both Shows"; the fake Plex client in the test resolves
 # both.
 
-# A plain entry, no override: whatever the set (or the env default) says.
+# A plain entry, no override: whatever the set (or the env default) says. Both are MAPPINGS
+# (2026-08-21); `entryKey()` returns `rk:600` and `title:Collection: Both Shows` for these
+# exactly as it did for the `- 600` / `- "Collection: Both Shows"` scalars they replace.
 show-plain:
-- 600
+- {ratingKey: 600}
 coll-plain:
-- "Collection: Both Shows"
+- {collection: Both Shows}
 
 # The overrides, as the web UI writes them (queues.setBatchStop) and as a hand-edit spells them.
 show-none:
