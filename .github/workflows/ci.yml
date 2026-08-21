@@ -26,6 +26,19 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    # A CI job that stops making progress must FAIL, not sit there.
+    #
+    # 2026-08-19: four runs stalled inside `playwright install --with-deps`, which is an apt
+    # call — the log ends mid `apt-get update` against archive.ubuntu.com and resumes six
+    # hours later with "Terminate orphan process". With no timeout anywhere, the only thing
+    # that eventually stopped it was GitHub's own 6h workflow cap, and each of those runs
+    # held a concurrency slot for the whole time. One of them took the deploy with it: the
+    # run had to be cancelled by hand, and `docker-deploy.yml` gates on
+    # `workflow_run.conclusion == 'success'`, so a cancelled CI silently SKIPS the deploy.
+    #
+    # This suite is ~4-8 minutes warm. 30 is generous enough that a slow-but-working run is
+    # never killed, and short enough that a wedged one costs minutes.
+    timeout-minutes: 30
     env:
       # Job-level so the browser-suite step can gate on `env.PLEX_TOKEN != ''`
       # (GitHub forbids referencing `secrets` in a job-level `if:`, but a
@@ -356,6 +369,9 @@ jobs:
       # step's `"$TSX" e2e/narrow-scroll-test.ts` into the gated loop below and accept that
       # the gate only fires when the secret is present.
       - name: Narrow-view horizontal-scroll gate (browser, no Plex needed)
+        # Tighter than the job, because this is where the browser install lives and where
+        # every one of the 2026-08-19 stalls happened. A failure here names the step.
+        timeout-minutes: 15
         env:
           QUEUES_PATH: /tmp/queues-narrow.yaml
           SETS_PATH: /tmp/sets-narrow.yaml
@@ -438,6 +454,7 @@ jobs:
       # tests, the build and every other suite stay green — the app just 404s on every
       # reload of a deep link.
       - name: Path routing + SPA fallback (browser, no Plex needed)
+        timeout-minutes: 15
         env:
           QUEUES_PATH: /tmp/queues-routing.yaml
           SETS_PATH: /tmp/sets-routing.yaml
