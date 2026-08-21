@@ -12,9 +12,14 @@ export const CTL = {
   switchResult: [true, 'selected on the picker'],
   same: new Map(), // "a|b" -> bool override for sameProfile
   playResults: [],
-  lastSeen: { title: null }, // mirrors profiles.LAST_SEEN for the stub
+  // Mirrors profiles.LAST_SEEN, provenance included: `isObserved` marks a title the PMS
+  // log actually SAW, as opposed to one driveProfile claimed after an unverified switch.
+  // Only an observation may satisfy a gate — see the bug2 scenarios in fsm-wake-and-skip.
+  lastSeen: { title: null, isObserved: false },
   awake: true,
   onSwitch: null, // optional hook fired inside switchTo (cancel-mid-flight scenarios)
+  // What playback.verifyAccount() should answer; null = 'the account matches'.
+  accountVerdict: null,
 };
 
 export function reset() {
@@ -25,8 +30,10 @@ export function reset() {
   CTL.same = new Map();
   CTL.playResults = [{ queued: 1, played: true, mode: 'client', client: 'SHIELD' }];
   CTL.lastSeen.title = null;
+  CTL.lastSeen.isObserved = false;
   CTL.awake = true;
   CTL.onSwitch = null;
+  CTL.accountVerdict = null;
 }
 
 export const record = (...call) => CTL.calls.push(call);

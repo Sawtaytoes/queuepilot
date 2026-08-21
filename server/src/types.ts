@@ -959,6 +959,11 @@ export interface PlexArtifact {
   /** The account the lineup was SELECTED as must be the account it is PLAYED as, so the
    * binding's uuid rides on the artifact rather than being re-derived from the set. */
   userUuid: string | null;
+  /** The same binding's numeric account id. `userUuid` picks the token playback is BUILT
+   * with; this is what the post-play audit holds the running session TO. Both, because a
+   * correct token has never implied a correct session — the Shield scrobbles as whoever it
+   * is signed in as, whatever token built the playQueue. */
+  accountId: number | null;
 }
 
 /** Kavita's runtime artifact: a persistent Reading List, rebuilt per launch. */

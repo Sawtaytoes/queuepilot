@@ -49,6 +49,12 @@ const SWITCH_ERROR = (
   + 'switch to it. Pick it on the TV.'
 );
 const PLAY_ERROR = "Plex wasn't ready to play on the Shield. Try the card again.";
+// Read aloud like the two above, so it stays a sentence a person would say. This one is the
+// audit failing: playback DID start, and it started as the wrong person.
+const ACCOUNT_ERROR = (
+  "'{label}' is for the '{profile}' profile, but the Shield played it as '{actual}'. "
+  + 'I stopped it. Pick the right profile on the TV and try again.'
+);
 
 const sleep = (s: number): Promise<void> => new Promise((r) => {
   setTimeout(r, Math.max(0, Number(s) || 0) * 1000);
@@ -123,12 +129,19 @@ export function isConnRefused(result: { error?: string } | null | undefined): bo
   );
 }
 
-// Is the Shield already signed into `required`, per the cached LAST_SEEN? Alias-aware.
+// Is the Shield already signed into `required`, per an OBSERVED LAST_SEEN? Alias-aware.
 // The one place the skip decision is made, so the picker is never walked when a cheap,
 // alias-resolved read of the last-seen profile already proves we're on the right one.
+//
+// `isObserved` is load-bearing, not defensive. This used to read `LAST_SEEN.title` alone —
+// but `driveProfile()` below WRITES that field itself on a switch it never verified, so the
+// skip was a cache confirming its own last guess. Once the guess was wrong it stayed wrong,
+// silently, on every later play: "already signed in; no picker walk" against a Shield that
+// was signed in as somebody else. Only a profile the PMS log actually SAW may skip the walk.
+// (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
 async function onRequired(required: string): Promise<boolean> {
   const seen = profiles.LAST_SEEN.title;
-  if (!seen) return false;
+  if (!seen || !profiles.LAST_SEEN.isObserved) return false;
   return Boolean(await Promise.resolve(adb.sameProfile(seen, required)));
 }
 
@@ -187,8 +200,12 @@ async function driveProfile(
     }
     if (ok) {
       console.log(`[driver] switched to '${required}': ${detail}`);
-      // Cache the confirmed profile so the NEXT gated scan short-circuits (no picker).
+      // A CLAIM, not an observation: adb.switchTo confirms the right tile was highlighted
+      // when CENTER was pressed, never that Plex signed in. Recorded as the picker HINT for
+      // the next walk (it saves a ~1.9s dump) and deliberately NOT marked observed, so it
+      // cannot satisfy onRequired() and skip the walk on a later play.
       profiles.LAST_SEEN.title = required;
+      profiles.LAST_SEEN.isObserved = false;
       return null;
     }
     // A human or HA may have signed in meanwhile — a fresh LAST_SEEN also clears the gate.
@@ -292,6 +309,7 @@ export async function driveToPlaying({
   cancel = null,
   setLabel = null,
   userUuid = null,
+  accountId = null,
 }: {
   ratingKeys?: (string | number)[];
   requiredProfile?: string | null;
@@ -301,6 +319,8 @@ export async function driveToPlaying({
   cancel?: CancelFlag | null;
   setLabel?: string | null;
   userUuid?: string | null;
+  /** The bound account (`binding.account_id`) the audit below holds playback to. */
+  accountId?: number | null;
 } = {}): Promise<PlaybackResult | PushResult> {
   if (isCancelled(cancel)) return { cancelled: true };
 
@@ -326,13 +346,49 @@ export async function driveToPlaying({
   if (isCancelled(cancel)) return { cancelled: true };
 
   // signed_in(required) -> playing(target). Play is the last action, verified + retried.
-  return drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
+  const result = await drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
+
+  // playing(target) -> playing(target) AS THE RIGHT ACCOUNT.
+  //
+  // Everything above this line is the gate PROMISING the right profile; this is the only step
+  // that CHECKS it. `adb.switchTo` reports success on the CENTER keypress and cannot see
+  // whether Plex acted on it, so until a session exists there is nothing to read — which is
+  // why the audit runs here, after play, and stops a mismatch instead of preventing it.
+  //
+  // Only a POSITIVE mismatch is terminal. `verifyAccount` abstains when it cannot tell (no
+  // session surfaced in time, Plex unreachable), because failing a play that is probably fine
+  // is worse than an audit that occasionally has no opinion.
+  if (result && (result as PlaybackResult).played && accountId != null) {
+    if (isCancelled(cancel)) return { cancelled: true };
+    const verdict = await playback.verifyAccount(accountId, { device });
+    if (verdict.isMismatch) {
+      console.log(
+        `[driver] WRONG ACCOUNT: '${setLabel || setName}' is bound to account ${accountId} `
+        + `but the Shield is playing as ${verdict.accountId} ('${verdict.title}'); stopping`,
+      );
+      await playback.stopPlayback(device);
+      return {
+        error: ACCOUNT_ERROR
+          .replace('{label}', setLabel || setName || '')
+          .replace('{profile}', requiredProfile || String(accountId))
+          .replace('{actual}', verdict.title || String(verdict.accountId)),
+        _diag: result,
+      };
+    }
+    if (verdict.accountId == null) {
+      console.log(`[driver] account audit had no opinion: ${verdict.reason}`);
+    } else {
+      console.log(`[driver] account audit OK: playing as ${verdict.accountId} ('${verdict.title}')`);
+    }
+  }
+  return result;
 }
 
 // Exported for unit tests (parity with e2e/playback-fsm-test.py scenarios).
 export const _internals = {
   SWITCH_ERROR,
   PLAY_ERROR,
+  ACCOUNT_ERROR,
   plexForeground,
   ensurePlex,
   onRequired,

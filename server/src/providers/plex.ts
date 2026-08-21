@@ -340,6 +340,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         // carry the resolved binding's uuid on the artifact rather than letting playback
         // re-derive it from the set (which only knows the default binding).
         userUuid: (binding && binding.user_uuid) || null,
+        accountId: (binding && binding.account_id) ?? null,
       };
     },
 
@@ -357,6 +358,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
           cancel,
           setLabel,
           userUuid: artifact.userUuid,
+          accountId: artifact.accountId,
         });
       }
       return playback.playRatingKeys(artifact.ratingKeys, {
