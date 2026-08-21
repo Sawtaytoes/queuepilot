@@ -45,10 +45,20 @@ never in the tree.
   the user's own focus
   ([decision](docs/decisions/2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer.md)).
   The `#chchannel` / `#chprofile` pair in `ChannelsView.tsx` is the worked example.
-- **`charcuterie/no-raw-select` and `charcuterie/prefer-listbox-over-select` do not run
-  here.** They ship in `@charcuterie/eslint-config`, and this repo lints with **Biome**
-  (`@charcuterie/biome-config`) and has no ESLint at all. The rule above is enforced by
-  review, not by a linter — adding a second linter is its own change.
+- **The picker rule is machine-enforced, by Biome, with no second linter.** `web/biome.json`
+  extends **both** `@charcuterie/biome-config` and `@charcuterie/biome-config/app`; the
+  second is a delta that bans a raw `<select>`, a `<Select>` and the `Select` import via
+  `noRestrictedElements` + `noRestrictedImports`. It replaces the note that used to sit
+  here saying the rule ran nowhere in this repo — it does now, and it is an error.
+
+  **Both entries, and the order matters.** Biome does not resolve a nested `extends` inside
+  an extended config, so a lone `/app` would give you the picker rules and silently revert
+  the entire house style — 60 columns, no semicolons, the Tailwind CSS parser — to Biome's
+  stock defaults, with no error at all.
+
+  The equivalent ESLint rules (`charcuterie/no-raw-select`,
+  `charcuterie/prefer-listbox-over-select`) still do not run here, and do not need to:
+  this repo lints with Biome and the ban is expressed natively.
 
 ## Gates
 
