@@ -191,6 +191,33 @@ export interface Response {
   json(): Promise<unknown>;
 }
 
+/** What `route.fulfill()` answers a request with. Everything is optional; an omitted
+ *  status is 200. */
+export interface FulfillOptions {
+  status?: number;
+  headers?: Record<string, string>;
+  contentType?: string;
+  body?: string | Buffer;
+  json?: unknown;
+}
+
+/**
+ * One intercepted request, handed to the `page.route()` handler.
+ *
+ * `fetch()` performs the request the page asked for and hands back the real `Response`
+ * without answering the page — which is how a handler patches a field into a live
+ * payload instead of inventing the whole thing (`shot-addto-menus` adds `libraries` to
+ * `/api/sets`). Exactly one of `fulfill`/`continue`/`abort` must be called, or the page
+ * waits forever.
+ */
+export interface Route {
+  request(): Request;
+  fulfill(options?: FulfillOptions): Promise<void>;
+  continue(): Promise<void>;
+  abort(errorCode?: string): Promise<void>;
+  fetch(): Promise<Response>;
+}
+
 /** The `page.on(...)` events these suites listen for, each with its real payload. */
 export interface PageEvents {
   console: ConsoleMessage;
@@ -222,6 +249,15 @@ export interface Page {
   screenshot(options?: ScreenshotOptions): Promise<Buffer>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   addInitScript(fn: () => void): Promise<void>;
+
+  /** Intercept matching requests. The screenshot harnesses use it to serve FIXTURE
+   *  payloads for the endpoints that would otherwise need a live Plex server — the repo
+   *  is public, so a committed PNG must never show real library or queue names. */
+  route(
+    url: string | RegExp,
+    handler: (route: Route, request: Request) => void | Promise<void>,
+  ): Promise<void>;
+  unroute(url: string | RegExp): Promise<void>;
 
   click(selector: string, options?: ClickOptions): Promise<void>;
   hover(selector: string, options?: TimeoutOptions): Promise<void>;
