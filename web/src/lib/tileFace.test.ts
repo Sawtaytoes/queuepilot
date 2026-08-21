@@ -469,6 +469,98 @@ describe("tileFace", () => {
       ).next,
     ).toBe("")
   })
+
+  /**
+   * The edition, which is what makes two tiles of one film distinguishable. Two library
+   * items share a title AND a year and differ only here, so the pair below is the whole
+   * point: the tagged one names itself, the plain one stays plain.
+   * (decision `2026-08-21-a-tile-names-the-edition-plex-gave-it`)
+   */
+  test("a tagged edition reaches the face", () => {
+    expect(
+      tileFace(
+        item({
+          editionTitle: "Director's Cut",
+          title: "Ulysses",
+          type: "movie",
+          year: 1954,
+        }),
+      ).edition,
+    ).toBe("Director's Cut")
+  })
+
+  // Plex tags only the NON-DEFAULT item of a pair, so its twin has no label at all. The
+  // face must not invent a "Standard" Plex never wrote — the same rule the search row's
+  // `EditionBadge` follows.
+  test("the plain edition of a pair stays plain", () => {
+    expect(
+      tileFace(
+        item({
+          title: "Ulysses",
+          type: "movie",
+          year: 1954,
+        }),
+      ).edition,
+    ).toBeNull()
+  })
+
+  // A server that sends the key explicitly null is the same as one that omits it. Every
+  // non-Plex provider tile omits it, and the shelf SKELETON omits it too.
+  test("an explicit null edition is null, not undefined", () => {
+    expect(
+      tileFace(
+        item({
+          editionTitle: null,
+          title: "Ulysses",
+          type: "movie",
+        }),
+      ).edition,
+    ).toBeNull()
+  })
+
+  // A long label must still reach the face WHOLE — the truncation is the chip's job (the
+  // `Badge` cap plus its ellipsis), never a substring cut here, or the hover readout would
+  // repeat the clipped text instead of completing it.
+  test("a long edition is not shortened on the way to the face", () => {
+    expect(
+      tileFace(
+        item({
+          editionTitle: "Original TV Version – 16mm scan",
+          title: "Ulysses",
+          type: "movie",
+        }),
+      ).edition,
+    ).toBe("Original TV Version – 16mm scan")
+  })
+
+  /**
+   * A COLLECTION face borrows its next-up MEMBER's identity, and the next-up payload carries
+   * no edition for that member — so the face says null. Lending it the collection's own
+   * `editionTitle` would label a member tile with something that is not the member's.
+   */
+  test("a collection's borrowed face claims no edition", () => {
+    const face = tileFace(
+      item({
+        childCount: 3,
+        editionTitle: "Director's Cut",
+        nextEp: {
+          episode: null,
+          kind: "movie",
+          member: "Ulysses",
+          memberRatingKey: "77",
+          memberYear: 1954,
+          multiSeason: false,
+          position: 1,
+          season: null,
+        },
+        title: "Ulysses Collection",
+        type: "collection",
+      }),
+    )
+
+    expect(face.title).toBe("Ulysses")
+    expect(face.edition).toBeNull()
+  })
 })
 
 describe("byTitle", () => {

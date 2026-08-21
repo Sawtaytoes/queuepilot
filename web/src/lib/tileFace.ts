@@ -148,6 +148,15 @@ export type TileFace = {
   nextDone: boolean
   /** The collection a borrowed face came from (null for a plain series/movie). */
   from: string | null
+  /**
+   * Plex's EDITION label for the item this face IS ("3D", "Director's Cut"), or null.
+   *
+   * Belongs to the same item as `title`, which is what makes it correct on a collection: a
+   * collection face borrows its next-up MEMBER's identity, and the next-up payload carries no
+   * edition for that member, so the face says null rather than lending the collection's own
+   * (which is always null anyway — a collection has no edition).
+   */
+  edition: string | null
 }
 
 /**
@@ -238,6 +247,7 @@ const notYetLabel = (unit: EntryUnit) =>
 export function tileFace(item: TileEntry): TileFace {
   const n = item.nextEp
   const base: TileFace = {
+    edition: item.editionTitle ?? null,
     from: null,
     next: "",
     nextDone: false,
@@ -295,6 +305,10 @@ export function tileFace(item: TileEntry): TileFace {
   }
 
   return {
+    // The face is the MEMBER, and the member's edition is not in the next-up payload — so
+    // this is null rather than `item.editionTitle`, which would name the collection's
+    // edition on a tile whose title is the member's.
+    edition: null,
     from: item.title,
     fullTitle: n.member,
     // A series member reads exactly like a series tile (episode + episode title —

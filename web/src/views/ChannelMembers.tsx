@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react"
 
-import { TypeBadge } from "../components/badges"
+import {
+  EditionChip,
+  TypeBadge,
+} from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
 import { EditionBadge } from "../components/EditionBadge"
 import { WEIGHT_MAX } from "../components/EntrySettings"
@@ -478,6 +481,9 @@ export function ChannelMembers({
               badges={
                 <>
                   <TypeBadge face={face} item={m} />
+                  {/* Which EDITION this member is — a pool that holds both cuts of one
+                      film had two identical member tiles. */}
+                  <EditionChip face={face} />
                   {/* One control, not the queue editor's four: a member has no batch to cap
                       or stop, so weight is the only per-member number there is. */}
                   <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the pool is shuffled.">
