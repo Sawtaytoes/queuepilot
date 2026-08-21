@@ -358,11 +358,16 @@ export interface PlaywrightModule {
 // --- the lookup ---------------------------------------------------------------------
 
 const ROOTS = [
-  // This repo's OWN node_modules first, when it has one. The sibling-borrowing below is
-  // for the NAS sandbox, where those absolute paths exist; in CI they do not, and Node
-  // resolves a nonexistent `/mnt/...` prefix by walking up to `/`, never reaching the
-  // checkout — so `npm install playwright` at the repo root (which ci.yml does, and which
-  // its comment already assumed worked) was in fact unreachable from here.
+  // e2e's OWN node_modules first: Playwright is a declared devDependency of this workspace
+  // as of the 2026-08-19 yarn migration, so in CI and on the NAS alike this is the one that
+  // hits. `nmHoistingLimits: workspaces` is why it lands here rather than at the root.
+  //
+  // The sibling-borrowing below is the pre-migration fallback, kept for a checkout whose
+  // install has not been run: those absolute paths exist on the NAS, and in CI they do not —
+  // Node resolves a nonexistent `/mnt/...` prefix by walking up to `/`, never reaching the
+  // checkout, which is why the old unpinned `npm install playwright` was unreachable from
+  // here even when it had run.
+  new URL('./node_modules/', import.meta.url).pathname,
   new URL('../node_modules/', import.meta.url).pathname,
   '/mnt/TrueNAS-Apps/Repos/mux-magic/node_modules/',
   '/mnt/TrueNAS-Apps/Repos/castkit/node_modules/',

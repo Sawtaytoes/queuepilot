@@ -4,7 +4,7 @@
 # (e2e/fake-mqtt.ts — real broker is unreachable), and the REAL Plex server (posters,
 # search, ratings, collections all resolve live). Foreground; Ctrl-C stops both processes.
 #
-# One-time: `cd e2e/broker && npm install` (hydrates aedes for the fake broker).
+# The fake broker's aedes comes from the root `yarn install` (e2e/broker is a workspace).
 # Screenshots without the interactive server: `server/node_modules/.bin/tsx e2e/shots.ts`
 # (self-contained).
 set -euo pipefail
@@ -18,7 +18,7 @@ FAKE_MQTT_PORT="${FAKE_MQTT_PORT:-11883}"
 # broker below runs through tsx exactly like the server does. tsx is a server/ devDependency
 # (there is no root manifest), hence the explicit bin path — and hydrating server/ has to
 # happen BEFORE the first tsx invocation, not just before the server's.
-[ -d server/node_modules ] || npm --prefix server ci --no-audit --no-fund
+[ -d server/node_modules ] || node "$(dirname "$0")/../.yarn/releases"/yarn-*.cjs install --immutable
 TSX=server/node_modules/.bin/tsx
 
 # Never touch real data: fixtures are copied to /tmp and the server writes only there.

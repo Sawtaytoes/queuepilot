@@ -47,10 +47,21 @@ jobs:
       PLEX_TOKEN: ${{ secrets.PLEX_TOKEN }}
       # server/src is TypeScript since the Hono conversion: plain `node` can neither load an
       # entry point ending .ts nor resolve the `./foo.js` specifiers inside it, so every
-      # harness and every server boot below goes through tsx. It is a server/ devDependency
-      # (this repo has no root manifest), installed by the "Install server deps" step, so it
-      # is addressed by bin path rather than `npx`.
+      # harness and every server boot below goes through tsx. It is a server/ devDependency,
+      # installed by the yarn step below, and addressed by bin path — `npx` is denied fleet
+      # wide (decision 2026-06-18) and `yarn workspace … run` would spawn a shell per call.
+      #
+      # `nmHoistingLimits: workspaces` is what keeps this path valid: each workspace has its
+      # own node_modules, exactly as the three npm installs used to.
       TSX: server/node_modules/.bin/tsx
+      # The COMMITTED yarn release, run through node — NOT corepack. `actions/setup-node`
+      # gives us Node 26, and Node dropped corepack from the distribution in 25, so
+      # `corepack enable` is "command not found" here (and in the Dockerfile's node:26 base,
+      # where it was caught by an actual build). Running the release file directly also means
+      # CI never fetches a package manager over the network to install packages with.
+      #
+      # Same file `.yarnrc.yml` names as `yarnPath` — if you bump yarn, bump both.
+      YARN: node .yarn/releases/yarn-4.14.1.cjs
     steps:
       - uses: actions/checkout@v7
 
@@ -58,10 +69,58 @@ jobs:
         with:
           node-version: 26
 
-      # server deps are needed so the e2e suites can spawn the server AND so `$TSX` exists
-      # (node_modules is gitignored; package-lock.json is committed → npm ci).
-      - name: Install server deps
-        run: npm ci --prefix server
+      # ONE install for all three workspaces (web, server, e2e). It was three `npm ci`s and
+      # an unpinned `npm install playwright`; yarn is the fleet's package manager and npm/npx
+      # are denied (decision 2026-06-18-use-yarn-base-on-mux-magic).
+      #
+      # `--immutable` is the point of committing the lockfile: CI fails on a manifest whose
+      # lockfile was not updated, rather than quietly resolving something else.
+      - name: Install (yarn workspaces)
+        run: $YARN install --immutable
+
+      # ---- Playwright's browser, ONCE, cached ----
+      #
+      # This ran TWICE per job (the narrow-view gate and the browser-e2e gate each did their
+      # own `npm install playwright` + install), unpinned both times, downloading chromium
+      # from the network on every run of every PR.
+      #
+      # Playwright is a real, pinned devDependency of the e2e workspace now, so the CLI and
+      # the module are the SAME copy at the SAME version — which is the property
+      # `e2e/playwright.ts` depends on: it resolves `playwright`, asks it for
+      # `chromium.executablePath()`, and requires that path to exist. A browser set installed
+      # by a different Playwright is pinned to a different build number, so a mismatch finds
+      # the package and rejects its browsers.
+      #
+      # The cache key is the resolved version out of the lockfile, so a Playwright bump
+      # invalidates it and nothing else does.
+      - name: Resolve the pinned Playwright version
+        id: pw
+        run: echo "version=$(node -p "require('./e2e/node_modules/playwright/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.pw.outputs.version }}
+
+      # SPLIT, and the apt half is best-effort — inherited from #144 and still exactly right.
+      # `--with-deps` shells out to apt-get, and on 2026-08-19 GitHub's
+      # azure.archive.ubuntu.com mirror stopped answering: every index line came back `Ign:`,
+      # apt retried forever, and with no bound anywhere one run sat for SIX HOURS before the
+      # workflow cap killed it.
+      #
+      # The BROWSER download comes from Playwright's own CDN and is the part the gates
+      # actually need, so it runs on its own. The system libraries are a nice-to-have on
+      # ubuntu-latest, whose image already ships what chromium needs — so a dead apt mirror
+      # must not be able to block CI for a whole repo.
+      - name: Install chromium
+        timeout-minutes: 15
+        run: |
+          PW=e2e/node_modules/.bin/playwright
+          DEBIAN_FRONTEND=noninteractive timeout 300 "$PW" install-deps chromium \
+            || echo "playwright install-deps failed or timed out (apt mirror?) — continuing; the runner image ships chromium's libs"
+          timeout 600 "$PW" install chromium
 
       # The server's real gate. This replaced a `for f in $(find server/src -name '*.js');
       # do node --check "$f"; done` loop, which after the Hono/TypeScript conversion matched
@@ -69,47 +128,42 @@ jobs:
       # before that it only ever proved each file PARSED. `tsc --noEmit` against
       # server/tsconfig.json is the gate `node --check` never was.
       #
-      # No extra install: `npm ci --prefix server` above installs devDependencies, which is
-      # where `typescript` (and `tsx`, and `esbuild`) live.
+      # No extra install: the one `yarn install` above hydrates every workspace, and
+      # `typescript` (and `tsx`, and `esbuild`) are server/ devDependencies.
       - name: Server typecheck
-        run: npm --prefix server run typecheck
+        run: $YARN workspace queuepilot-server run typecheck
 
       # The harnesses are TypeScript too, and they are the only consumer of several
       # server/src exports — a signature change that server/ typechecks against its own
-      # callers still breaks them. `e2e/package.json` exists only to declare
-      # `"type": "module"` and installs nothing, so there is no `npm ci --prefix e2e` here:
-      # e2e/tsconfig.json extends the preset by PATH out of server/node_modules, and tsc is
-      # addressed by bin path for the same reason $TSX is.
+      # callers still breaks them. e2e/ is a real workspace with its own `typescript` and
+      # `playwright` now, so it runs its own script rather than borrowing server's tsc.
       - name: e2e typecheck
-        run: server/node_modules/.bin/tsc -p e2e/tsconfig.json
+        run: $YARN workspace queuepilot-e2e run typecheck
 
       # The prod artifact is an esbuild bundle, not the tsc output — `tsc --noEmit` above
       # cannot catch a bundling break (an unresolvable import, a native dep that will not
       # bundle), and the Dockerfile builds it. Gate it here rather than discovering it at
       # deploy time; mux-magic and castkit both do this.
       - name: Server build (esbuild bundle)
-        run: npm --prefix server run build
+        run: $YARN workspace queuepilot-server run build
 
       # --- the React frontend (M6d) --------------------------------------------
       # `web/` is React 19 + TypeScript + Vite + Tailwind v4 on @charcuterie/tokens.
       # These three are the frontend's gates and they must run BEFORE the browser
       # suites, which drive the server — and that serves web/dist.
-      - name: Install web deps
-        run: npm ci --prefix web --no-audit --no-fund
-
       # Biome is formatter + linter for web/. Runs before typecheck so a
       # formatting/lint failure reads as one, rather than as a build problem.
       - name: Web lint (Biome)
-        run: npm --prefix web run lint:biome
+        run: $YARN workspace queuepilot-web run lint:biome
 
       - name: Web typecheck
-        run: npm --prefix web run typecheck
+        run: $YARN workspace queuepilot-web run typecheck
 
       - name: Web unit tests
-        run: npm --prefix web test
+        run: $YARN workspace queuepilot-web run test
 
       - name: Web build
-        run: npm --prefix web run build
+        run: $YARN workspace queuepilot-web run build
 
       # Engine unit tests that stub Plex entirely (no token, no network). Node ports of the
       # Python engine tests that were deleted with queue_builder/ on 2026-08-12 — the collection
@@ -378,35 +432,6 @@ jobs:
           HISTORY_PATH: /tmp/.history-narrow.json
           WEB_PORT: '18769'
         run: |
-          npm install playwright
-          # The LOCAL binary, never `npx`. npx PROMPTS ("Ok to proceed? (y)") when it decides
-          # it must fetch a package, and a runner has no stdin to answer with — so it blocks
-          # forever rather than failing. That is exactly how this step hung twice on
-          # 2026-08-19 (40min, then 25min on a clean re-run, both killed by hand), while the
-          # same gate passed locally in seconds.
-          #
-          # It also must stay the root-installed copy rather than a `yarn dlx` / `npx -y`
-          # fetch: e2e/playwright.ts resolves `playwright` from THIS node_modules and then
-          # checks `chromium.executablePath()` exists on disk. A browser set installed by a
-          # different Playwright version is pinned to a different build number, so the
-          # resolver would find the package and reject its browsers — the failure its own
-          # header documents.
-          #
-          # noninteractive + timeout because `--with-deps` shells out to apt: a held lock
-          # (unattended-upgrades) is the other way this blocks, and a 10-minute failure is
-          # worth infinitely more than a 6-hour hang.
-          # SPLIT, and the apt half is best-effort. `--with-deps` shells out to apt-get, and
-          # on 2026-08-19 GitHub's azure.archive.ubuntu.com mirror stopped answering: every
-          # index line came back `Ign:`, apt retried forever, and the step hung for 40
-          # minutes twice before a timeout was added to prove it (exit 124).
-          #
-          # The BROWSER download comes from Playwright's own CDN and is the part this gate
-          # actually needs, so it runs unconditionally and on its own. The system libraries
-          # are a nice-to-have on ubuntu-latest, whose image already ships what chromium
-          # needs — so a dead apt mirror must not be able to block CI for a whole repo.
-          DEBIAN_FRONTEND=noninteractive timeout 300 ./node_modules/.bin/playwright install-deps chromium \
-            || echo "playwright install-deps failed or timed out (apt mirror?) — continuing; the runner image ships chromium's libs"
-          timeout 600 ./node_modules/.bin/playwright install chromium
           unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
           cp e2e/fixtures/queues.fixture.yaml /tmp/queues-narrow.yaml
           "$TSX" server/src/index.ts >/tmp/narrow-e2e.log 2>&1 &
@@ -519,35 +544,6 @@ jobs:
           WEB_PORT: '18768'
           NODE_TLS_REJECT_UNAUTHORIZED: '0'
         run: |
-          npm install playwright
-          # The LOCAL binary, never `npx`. npx PROMPTS ("Ok to proceed? (y)") when it decides
-          # it must fetch a package, and a runner has no stdin to answer with — so it blocks
-          # forever rather than failing. That is exactly how this step hung twice on
-          # 2026-08-19 (40min, then 25min on a clean re-run, both killed by hand), while the
-          # same gate passed locally in seconds.
-          #
-          # It also must stay the root-installed copy rather than a `yarn dlx` / `npx -y`
-          # fetch: e2e/playwright.ts resolves `playwright` from THIS node_modules and then
-          # checks `chromium.executablePath()` exists on disk. A browser set installed by a
-          # different Playwright version is pinned to a different build number, so the
-          # resolver would find the package and reject its browsers — the failure its own
-          # header documents.
-          #
-          # noninteractive + timeout because `--with-deps` shells out to apt: a held lock
-          # (unattended-upgrades) is the other way this blocks, and a 10-minute failure is
-          # worth infinitely more than a 6-hour hang.
-          # SPLIT, and the apt half is best-effort. `--with-deps` shells out to apt-get, and
-          # on 2026-08-19 GitHub's azure.archive.ubuntu.com mirror stopped answering: every
-          # index line came back `Ign:`, apt retried forever, and the step hung for 40
-          # minutes twice before a timeout was added to prove it (exit 124).
-          #
-          # The BROWSER download comes from Playwright's own CDN and is the part this gate
-          # actually needs, so it runs unconditionally and on its own. The system libraries
-          # are a nice-to-have on ubuntu-latest, whose image already ships what chromium
-          # needs — so a dead apt mirror must not be able to block CI for a whole repo.
-          DEBIAN_FRONTEND=noninteractive timeout 300 ./node_modules/.bin/playwright install-deps chromium \
-            || echo "playwright install-deps failed or timed out (apt mirror?) — continuing; the runner image ships chromium's libs"
-          timeout 600 ./node_modules/.bin/playwright install chromium
           # suites assert the degraded no-broker path — keep MQTT unset
           unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS
           fail=0
