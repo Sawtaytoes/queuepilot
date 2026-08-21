@@ -45,7 +45,24 @@ export function _resetLineRe(): void {
 // The most recent profile the Shield was seen acting as, updated by every wait below. adb.js's
 // switch will use it as a HINT (the picker opens on the current user) — never as anything that
 // clears a profile gate; the switcher reads back after pressing.
-export const LAST_SEEN: { title: string | null } = { title: null };
+//
+// `isObserved` is that rule made enforceable. Two different things write this field and they
+// are NOT interchangeable:
+//
+//   * `waitForProfile()` below writes an OBSERVATION — it matched a real PMS log line, so the
+//     Shield demonstrably acted as that profile. `isObserved: true`.
+//   * `driver.driveProfile()` writes a CLAIM after an ADB switch reports success — but that
+//     report is only "CENTER was pressed on the right tile", never "Plex signed in". It has
+//     been wrong on the TV. `isObserved: false`.
+//
+// Reading the claim back as if it were an observation is a cache that confirms whatever it was
+// last told, and that is exactly how a Younger Kids pool played under the owner's account on
+// 2026-08-18 (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md).
+// Only an observation may satisfy a gate; a claim is a hint for the picker walk and nothing more.
+export const LAST_SEEN: { title: string | null; isObserved: boolean } = {
+  title: null,
+  isObserved: false,
+};
 
 // Map a Plex Home profile title to a set name, or null if unmapped. (config.set_for_profile)
 export function setForProfile(title: string): string | null {
@@ -121,7 +138,10 @@ export async function waitForProfile(
           // index-checked under noUncheckedIndexedAccess.
           const title = lineRe().exec(line)?.[1];
           if (title !== undefined) {
+            // An OBSERVATION: the Shield served a request under this profile. This is the
+            // only writer allowed to set isObserved.
             LAST_SEEN.title = title;
+            LAST_SEEN.isObserved = true;
             if (match === null || title === match) return title;
             // Signed in, but as the wrong profile: keep waiting for the switch.
             console.log(`[profiles] saw '${title}', holding out for '${match}'`);

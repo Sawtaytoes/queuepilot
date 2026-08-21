@@ -79,6 +79,25 @@ export interface CurrentSession {
 }
 
 /**
+ * The verdict of `verifyAccount()` — who Plex is ACTUALLY playing as on our client.
+ *
+ * Three outcomes, and the caller must treat them differently:
+ *   * `isMismatch: true`  — a session exists and it belongs to somebody else. Terminal.
+ *   * `isMismatch: false` with an `accountId` — confirmed correct.
+ *   * `isMismatch: false` with `accountId: null` — could not tell (no session yet, Plex
+ *     unreachable, or nothing to compare against). NOT a failure: a transcode can take
+ *     longer to surface a session than we are willing to block a card scan for, and failing
+ *     a play that is probably fine is worse than the audit occasionally abstaining.
+ */
+export interface AccountVerdict {
+  isMismatch: boolean;
+  accountId: number | null;
+  title: string | null;
+  /** Why we could not tell, when `accountId` is null. Log-only. */
+  reason?: string;
+}
+
+/**
  * A player as plex.tv's `/api/v2/devices` describes it, flattened by `playerDevices()`.
  *
  * NOT `Device` from types.ts: every field here is nullable, because plex.tv omits `name` on
@@ -713,6 +732,106 @@ export async function currentSession(
   const m = mine || (wanted ? null : md[0]);
   if (!m) return null;
   return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0) };
+}
+
+// --- the post-play account audit --------------------------------------------------------- //
+//
+// The ONE fact this system could never read back: which Plex Home profile the Shield is
+// signed into. `profiles.waitForProfile()` infers it from a PMS DEBUG line keyed on
+// SHIELD_IP; `adb.selectedProfile()` only reports which picker TILE is highlighted, and the
+// picker is gone the moment it matters. So `adb.switchTo()` reports success on the CENTER
+// keypress and the gate has always taken that on trust.
+//
+// Once something is PLAYING there is a direct answer. `/status/sessions` stamps every live
+// session with the `User` whose token owns it — and that account IS the one Plex will
+// scrobble to, which is the only definition of "the right profile" that ever mattered.
+//
+// This is why it is a POST-play audit and not a pre-play gate: before playMedia there is no
+// session to read. Play, then immediately confirm, then stop if it was wrong.
+// (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
+
+/**
+ * Who is Plex playing as on our client? `expectAccountId` is the bound account
+ * (`binding.account_id`); null means the caller has nothing to compare and this abstains.
+ *
+ * Polls, because a session does not appear the instant Companion answers 200 — the client
+ * still has to open the stream. Bounded by `timeoutMs`; abstains rather than fails on
+ * timeout.
+ */
+export async function verifyAccount(
+  expectAccountId: number | null | undefined,
+  {
+    device = null,
+    timeoutMs = 12_000,
+    pollMs = 1_000,
+  }: { device?: Device | null; timeoutMs?: number; pollMs?: number } = {},
+): Promise<AccountVerdict> {
+  if (expectAccountId == null) {
+    return { isMismatch: false, accountId: null, title: null, reason: 'no bound account to check' };
+  }
+  let wanted: ClientTarget | null = null;
+  try { wanted = await findClient(device); } catch { wanted = null; }
+
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  let lastReason = 'no session appeared on the target client';
+  for (;;) {
+    let data: PlexReqJson;
+    try {
+      // ADMIN token, for the same reason currentSession() uses it, and here the reason is
+      // sharper: /status/sessions returns an EMPTY container to a managed user, so asking as
+      // Younger Kids could never reveal that the Shield is playing as the owner — which is
+      // the entire question this function exists to answer.
+      data = await plexReq('GET', '/status/sessions', { token: PLEX_TOKEN });
+    } catch (e) {
+      lastReason = `/status/sessions unreadable: ${errMessage(e)}`;
+      data = {};
+    }
+    const md = (data && data.MediaContainer && data.MediaContainer.Metadata) || [];
+    const mine = md.find((m) => {
+      const pl = m.Player || {};
+      if (!wanted) return true;
+      return (wanted.machineIdentifier && pl.machineIdentifier === wanted.machineIdentifier)
+        || (wanted.name && pl.title === wanted.name);
+    });
+    if (mine) {
+      const row = mine as typeof mine & { User?: { id?: unknown; title?: unknown } };
+      const parsed = parseInt(String(row.User?.id), 10);
+      const accountId = Number.isFinite(parsed) ? parsed : null;
+      const title = row.User?.title != null ? String(row.User.title) : null;
+      if (accountId == null) {
+        return { isMismatch: false, accountId: null, title, reason: 'session carries no User id' };
+      }
+      return { isMismatch: accountId !== Number(expectAccountId), accountId, title };
+    }
+    if (Date.now() >= deadline) break;
+    await sleep(Math.max(0.05, pollMs / 1000));
+  }
+  return { isMismatch: false, accountId: null, title: null, reason: lastReason };
+}
+
+/**
+ * Stop playback on the target client. Used ONLY to abort a play that landed on the wrong
+ * account — the one case where destroying playback is the correct outcome, because letting
+ * it run writes somebody else's watch history.
+ */
+export async function stopPlayback(device: Device | null = null): Promise<boolean> {
+  const client = await findClient(device);
+  if (!client) return false;
+  const params = new URLSearchParams({
+    type: 'video',
+    'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
+    'X-Plex-Client-Identifier': CLIENT_ID,
+    commandID: '1',
+  });
+  try {
+    await plexReq('GET', `/player/playback/stop?${params}`, {
+      token: PLEX_TOKEN, host: client.uri || null,
+    });
+    return true;
+  } catch (e) {
+    console.log(`[playback] could not stop the wrong-account play: ${errMessage(e)}`);
+    return false;
+  }
 }
 
 // Seek the target player to `offsetMs` via Companion. Same transport as playMedia.

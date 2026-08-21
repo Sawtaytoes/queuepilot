@@ -179,6 +179,10 @@ jobs:
       # curated-queue profile (a queue gated to a kid selects from THAT kid's history — the
       # 2026-08-16 "Carol 1" bug, where `requires_profile` was a play gate and never an
       # account, so the queue picked up where the OWNER left off).
+      # account (the 2026-08-18 wrong-account play: the gate said Younger Kids, HA was told
+      # `played: true`, and Plex scrobbled all three shorts to the OWNER — because nothing
+      # between "CENTER was pressed" and "Companion answered 200" can see which profile Plex
+      # actually signed into. account-audit-test pins the read-back that now can).
       # The §B.3 TTL sweep + specials/extras filter run in the browserless block below.
       - name: Engine tests (offline)
         run: |
@@ -188,6 +192,7 @@ jobs:
           "$TSX" e2e/resume-in-progress-done-test.ts
           "$TSX" e2e/playback-fsm-test.ts
           "$TSX" e2e/fsm-wake-and-skip-test.ts
+          "$TSX" e2e/account-audit-test.ts
           "$TSX" e2e/session-profile-gate-test.ts
           "$TSX" e2e/profile-gate-test.ts
           "$TSX" e2e/binding-token-test.ts
