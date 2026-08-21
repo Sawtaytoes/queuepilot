@@ -260,8 +260,21 @@ export function ChannelFilters({
         </fieldset>
 
         {/* The three library groups are ONE scope, and it is optional (decision
-            `2026-08-17-no-libraries-checked-means-every-library`). */}
-        <p className="subhint" id="ch-alllibs">
+            `2026-08-17-no-libraries-checked-means-every-library`).
+
+            `hint`, not `subhint`. `.subhint` is only ever written `#startmodal .subhint`
+            / `#setmodal .subhint` / `#dynmodal .subhint`, and this panel is none of them,
+            so the paragraph rendered at body size and full contrast — the same borrowed-
+            class defect the Pending tile had. There is no Charcuterie component for a
+            standing hint that belongs to SEVERAL sibling control groups rather than to
+            one: `Field`/`FieldGroup` are the only slots for it and both attach to exactly
+            one group, and `FieldGroup` renders a `<fieldset>`, which `#chfilters fieldset`
+            paints as a bordered box — so adopting it here would draw a fourth box around
+            the three library boxes. `.hint` is this panel's OWN hint class, correctly
+            scoped for it (`#chfilters .hint`), and is what the sibling note under "Show
+            libraries" already wears.
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+        <p className="hint" id="ch-alllibs">
           {!showSections.length && !itemSections.length
             ? "Every video library — check a box to narrow it."
             : "Uncheck every box to pool from all of them."}

@@ -1466,28 +1466,20 @@ body.sdrag .shelf:not(.dragging) {
   gap: 6px;
   align-items: center;
 }
-#selbar button {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-weight: 600;
-}
-#selbar button.danger {
-  background: var(--color-intent-danger-solid);
-  color: var(--color-intent-danger-on-solid);
-}
-#selbar button:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-#selbar button.ghost {
-  background: var(--color-surface-raised);
-  color: var(--color-content-primary);
-  border: 1px solid var(--color-border-default);
-  font-weight: 400;
-}
+/* The five `#selbar button…` skin rules that used to live here are GONE, not moved. Every
+   control in that bar is a Charcuterie `Button` now and says what it is with `appearance`
+   and `intent` (`components/SelectionBar.tsx`). Two things went wrong while they existed,
+   and both are the reason this file must not paint a component:
+
+     1. Apply wore `primary`, whose only rules are `#entrymodal`/`#groupsmodal`, so the
+        class did nothing and `#selbar button` painted it exactly like Reset and Move.
+     2. A `Picker` trigger IS a `<button>`. This file is unlayered and Tailwind's utilities
+        are in `@layer utilities`, so `#selbar button` outranked the component and both
+        pickers came out solid indigo instead of `Picker`'s `outline`.
+
+   Adopting a component means letting it own its own look — the same sentence this file
+   already says about `Select`'s wrapper above.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
 
 /* ---- Home toolbar (global add-search + filter + queue management) ---- */
 #tools {
@@ -2044,6 +2036,16 @@ body.queue-view #tools {
 #setmodal legend,
 #dynmodal legend {
   padding: 0 6px;
+}
+/* The modal's block rhythm, on the ELEMENT rather than on `.field`. Every fieldset in this
+   editor used to carry `.field` and take its 14px from there — but a Charcuterie
+   `FieldGroup` cannot wear that class, because `#dynmodal .field` sets `display: block` and
+   would cancel the component's own flex column, which is the very thing the Playback box
+   was missing. This is app LAYOUT (the gap between two form blocks), which is the one thing
+   a component library has no opinion about.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
+#dynmodal fieldset {
+  margin-bottom: 14px;
 }
 #setmodal .libs,
 #dynmodal .libs {

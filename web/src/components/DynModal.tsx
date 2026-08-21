@@ -1,4 +1,9 @@
-import { Accordion, Checkbox } from "@charcuterie/ui"
+import {
+  Accordion,
+  Checkbox,
+  Field,
+  FieldGroup,
+} from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
@@ -674,8 +679,20 @@ export function DynModal() {
           exactly what this control now expresses, and making it configurable was the point
           ("Movies are gonna be 1 based on _my_ configuration today, but we _should_ be able
           to change that"). */}
-      <fieldset className="field flags" id="dyn-lineup">
-        <legend>Playback</legend>
+      {/* A Charcuterie `FieldGroup`, configured by props — a `<fieldset>` + `<legend>` over
+          SEVERAL controls, which is exactly what this box is. It replaces a hand-rolled
+          `<fieldset className="field flags">`, whose `flags` class matched nothing here:
+          the only rules for it are `#setmodal .flags…`, and this is `#dynmodal`, so the box
+          never got the flex column, the gap or the margin it was asking for.
+          (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`)
+
+          ⚠️ `className="dyn-lineup"`, not `id="dyn-lineup"`, and that is not a preference.
+          `FieldGroupProps` is a closed six-key type with no rest spread, so `id`,
+          `data-testid` and `hidden` cannot reach the `<fieldset>` at all — the one prop it
+          does forward is `className`. Reported upstream; `e2e/shot-lineup.ts` and
+          `e2e/shot-playback-length.ts` take the class instead. The class carries no rule and
+          is a DOM handle only. */}
+      <FieldGroup className="dyn-lineup" label="Playback">
         {/* A <div>+<span>, not a <label>: CountPicker is a group of BUTTONS, not an input, so
             a <label> would have no control to name. Same shape the set editor uses. */}
         <div className="field">
@@ -718,11 +735,27 @@ export function DynModal() {
           still in the room. Nothing happens on an Infinite
           pool: it never finishes.
         </p>
-        <label className="field">
-          When a show has nothing left to watch
+        {/* A Charcuterie `Field`, configured by props: the label and the control, wired
+            together by the component. It replaces a `<label className="field">` wrapping a
+            `<SelectListbox className="fieldselect">`, and `fieldselect` matched nothing here
+            — its one rule is `#setmodal .fieldselect`, and this is `#dynmodal` — so the
+            trigger never had the 10px gutter that class asks for.
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`)
+
+            `Field` CLONES onto its child, so this only works because `SelectListbox` is a
+            pass-through — see the `SlotProps` note in that file. The `<label htmlFor>` now
+            names the trigger's real `id`.
+
+            **No `description`, deliberately.** `Field`'s hint slot renders `text-sm` /
+            `content-secondary`, and the two hints directly above are `.subhint` (0.8rem,
+            muted) — one of which belongs to a `Checkbox`, which has no description slot at
+            all, so it CANNOT follow. Using the slot for this one control alone leaves a box
+            with two hint typographies and the odd one in the middle. Moving this editor's
+            hints onto Charcuterie's slots is worth doing; it is a uniform change across
+            every modal, not a side effect of this one. */}
+        <Field label="When a show has nothing left to watch">
           {/* Keyed on modal-open identity, same reason as the selects above. */}
           <SelectListbox
-            className="fieldselect"
             id="dyn-on-complete"
             key={modalKey}
             label="When a show has nothing left to watch"
@@ -747,7 +780,7 @@ export function DynModal() {
             ]}
             value={onComplete}
           />
-        </label>
+        </Field>
         <p className="subhint" id="dyn-on-complete-hint">
           Only fires when a show is genuinely finished — not
           when this lineup merely stopped drawing from it.
@@ -759,7 +792,7 @@ export function DynModal() {
           brings the whole library back around. Any single
           show can override this from the pool grid.
         </p>
-      </fieldset>
+      </FieldGroup>
 
       {/* WHAT A COLLECTION MEMBER CONTRIBUTES. Either way its shows leave the rule pool —
           that part is not a choice, it is the fix for a collection being listed twice. What
@@ -775,8 +808,16 @@ export function DynModal() {
         id="dyn-collections"
       >
         <legend>Preferred queued items</legend>
+        {/* No `className="fieldselect"` any more. Its one rule is `#setmodal .fieldselect`,
+            so on this modal it was decoration — and there is nothing to restore, because a
+            trigger that starts a block-level line after a `<legend>` never wanted a 10px
+            inline-start gutter in the first place. The `Field` treatment its sibling above
+            gets does not fit here twice over: the `<legend>` already names the control, so a
+            `Field` label would print it a second time, and this box needs `hidden`, which
+            `FieldProps` cannot carry (same closed-type gap as `FieldGroup`, reported
+            upstream).
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
         <SelectListbox
-          className="fieldselect"
           id="dyn-collection-members"
           key={modalKey}
           label="Preferred queued items"
