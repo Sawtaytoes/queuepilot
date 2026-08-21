@@ -1220,15 +1220,22 @@ ul.grid {
   border-radius: 10px;
 }
 
-/* tile chrome — only in queue (editable) view */
-.tile .check,
-.tile .remove {
+/* tile chrome.
+   The ✓ is the queue grid's multi-select and exists nowhere else, so it stays gated on
+   `.editable`. The ✕ is NOT gated on anything: `PosterTile` renders it only when a call
+   site passes `onRemove`, so its PRESENCE in the DOM already says the grid is editable,
+   and a second gate is a second thing to forget. Forgetting it is exactly what happened —
+   the Home shelf passed no `onRemove` AND sat outside `.editable`, so the page that
+   reorders a title and moves it between queues could not remove one
+   (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`). */
+.tile .check {
   display: none;
 }
 /* The tile is the positioning context for the chrome now that `.check`/`.remove` are
    siblings of `.thumb` rather than children of it (see PosterTile). Only the `posters`
-   density actually overlays them; `cards`/`rows` place them in real grid columns. */
-.editable .tile {
+   density (and the shelf, which has none) actually overlays them; `cards`/`rows` place
+   them in real grid columns. */
+.tile {
   position: relative;
 }
 /* QUIET UNTIL ASKED FOR. Two always-on controls per tile turned a wall of posters into a
@@ -1238,14 +1245,14 @@ ul.grid {
    whatever the pointer is doing — that check is state, not an affordance.
    (decision `2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster`) */
 .editable .tile .check,
-.editable .tile .remove {
+.tile .remove {
   opacity: 0;
   transition: opacity 0.12s;
 }
 .editable .tile:hover .check,
-.editable .tile:hover .remove,
+.tile:hover .remove,
 .editable .tile:focus-within .check,
-.editable .tile:focus-within .remove,
+.tile:focus-within .remove,
 .editable .tile.selected .check {
   opacity: 1;
 }
@@ -1253,7 +1260,7 @@ ul.grid {
    controller, and a hover-capable stylus should still get the quiet treatment. */
 @media (hover: none) {
   .editable .tile .check,
-  .editable .tile .remove {
+  .tile .remove {
     opacity: 1;
   }
 }
@@ -1322,7 +1329,7 @@ ul.grid.cards .tile .tileplay {
 .editable .tile.dragging .thumb {
   cursor: grabbing;
 }
-.editable .tile .remove {
+.tile .remove {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1339,10 +1346,10 @@ ul.grid.cards .tile .tileplay {
   cursor: pointer;
 }
 /* An SVG cross, not a text ×: font glyphs drift off-center at fractional zoom (150%). */
-.editable .tile .remove svg {
+.tile .remove svg {
   display: block;
 }
-.editable .tile .remove:hover {
+.tile .remove:hover {
   background: var(--color-intent-danger-solid);
 }
 .editable .tile .check {
@@ -3120,8 +3127,8 @@ ul.grid.cards .tile .remove {
 }
 /* POSTERS (and the member grid, which has no density class) keep the overlay: those tiles
    carry a full-size poster that can afford it. They need no rule here — the base
-   `.editable .tile .check/.remove` insets still apply, and now resolve against the TILE
-   instead of `.thumb`. `.thumb` is the tile's full-width first row, so the artwork's
+   `.editable .tile .check` / `.tile .remove` insets still apply, and now resolve against
+   the TILE instead of `.thumb`. `.thumb` is the tile's full-width first row, so the artwork's
    top corners are the same two points they always were. */
 
 /* ---- Density: POSTERS. Today's wall — the tags ride ON the poster so the caption

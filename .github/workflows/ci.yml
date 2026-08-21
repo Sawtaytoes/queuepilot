@@ -524,6 +524,22 @@ jobs:
       - name: Pool editor keeps Blocked (browser, no Plex needed)
         run: $TSX e2e/pool-editor-keeps-blocked-test.ts
 
+      # The shelf's ✕. Browser, no Plex, its own server and temp files.
+      #
+      # It belongs in this always-on block rather than in the PLEX_TOKEN-gated one below for
+      # the reason the bug itself demonstrates: the Ordered Queues page is driven by
+      # `homedrag-test` and `ui-test`, both of which are gated, so they are skipped on every
+      # PR — and neither asserts anything about the tile chrome anyway. The page shipped with
+      # a reorder gesture, a move-between-queues gesture and no way to remove.
+      #
+      # Its sharpest assertion is a COMPUTED style, not a selector lookup. Two independent
+      # things gate the ✕ (the `onRemove` prop, and CSS that used to hang off an `.editable`
+      # ancestor the shelf's <main> does not carry), and with only the first restored the
+      # button renders `display: none` — present to every `querySelector`, invisible to the
+      # owner. That is the same class of bug `narrow-scroll-test` exists for.
+      - name: Shelf remove ✕ (browser, no Plex needed)
+        run: $TSX e2e/shelf-remove-test.ts
+
       # Drag-to-reorder on the Play landing. Browser and no Plex: the landing renders from
       # sets.yaml, and the claim is "the dragged order is what sets.yaml ends up holding".
       # Its sharpest assertion is the one about the row it did NOT drag — `PATCH

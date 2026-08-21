@@ -26,7 +26,12 @@ import { PLEX_WORDS } from "../lib/vocab"
 import {
   openPlayMenu,
   openSetModal,
+  openTileMenu,
 } from "../state/overlays"
+import {
+  queueEntryActions,
+  removeQueueItem,
+} from "../state/queueEntry"
 import { queueIds, useStore } from "../state/store"
 import {
   homeScroll,
@@ -345,6 +350,27 @@ function Shelf({
                         ? `${face.next} — ${item.childCount} in order`
                         : face.next,
                   }}
+                  // The same per-entry menu the queue grid opens. It was already
+                  // half-wired here: `useHomeDrags` suppresses the browser's native menu
+                  // over a poster so a touch long-press can arm a drag, so a right-click
+                  // on a shelf poster did NOTHING at all. It also carries the start-point
+                  // actions, which had no shelf route either.
+                  onContextMenu={(e) => {
+                    e.preventDefault()
+                    openTileMenu(
+                      e.clientX,
+                      e.clientY,
+                      queueEntryActions(setId, item),
+                    )
+                  }}
+                  // The ✕. A shelf already REORDERS a title and MOVES it to another queue
+                  // (`useHomeDrags`), so "open the queue first" was the only write it
+                  // refused — reported 2026-08-21: "From the Ordered Queues view, I can't
+                  // remove items either."
+                  // (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`)
+                  onRemove={() =>
+                    removeQueueItem(setId, item)
+                  }
                   posterCover={item.cover}
                   posterRatingKey={
                     item.resolved ? face.ratingKey : null
