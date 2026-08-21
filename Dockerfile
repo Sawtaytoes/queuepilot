@@ -12,11 +12,28 @@
 # its sources — and none of its ~48 dev dependencies. Keeping the build in its own
 # stage means React, Vite, Tailwind and TypeScript never reach the final image.
 FROM node:26-trixie-slim AS web-build
-WORKDIR /web
-COPY web/package.json web/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY web/ ./
-# `npm run build` is plain `vite build`; the `.br`/`.gz` siblings the server's static
+WORKDIR /repo
+# The workspace root's manifest + lockfile + the pinned yarn release, then the workspace
+# manifests: everything the install resolves from and nothing that invalidates it on a
+# source-only edit. `--immutable` makes a lockfile that does not match the manifests a BUILD
+# failure rather than a silent re-resolve.
+#
+# e2e/package.json is copied but its workspace is not built here: yarn needs every manifest
+# named in `workspaces` to resolve the lockfile at all.
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn/releases ./.yarn/releases
+COPY web/package.json ./web/
+COPY server/package.json ./server/
+COPY e2e/package.json ./e2e/
+# The COMMITTED yarn release, run through node — not corepack. node:26 ships neither
+# corepack (dropped from the distribution in Node 25) nor yarn, so `corepack enable` fails
+# with "not found"; and even where it exists it would fetch yarn over the network at build
+# time. `.yarnrc.yml` pins the same file as `yarnPath`, so this is the exact yarn the
+# lockfile was written by.
+RUN node .yarn/releases/yarn-*.cjs workspaces focus queuepilot-web
+COPY web/ ./web/
+WORKDIR /repo/web
+# `yarn run build` is plain `vite build`; the `.br`/`.gz` siblings the server's static
 # handler serves are emitted by `precompressAssets()` from `@charcuterie/server/vite`,
 # inside the build (this replaced the hand-rolled web/scripts/precompress.mjs).
 #
@@ -25,7 +42,7 @@ COPY web/ ./
 # ~2 MB of unreachable files. The glob is `*.map*`, not `*.map`: the precompress
 # plugin walks the whole `dist/` and also writes `<chunk>.js.map.br`/`.gz`, which
 # `-name '*.map'` would leave behind as orphans.
-RUN npm run build && find dist -name '*.map*' -delete
+RUN node ../.yarn/releases/yarn-*.cjs run build && find dist -name '*.map*' -delete
 
 # --- stage 2: bundle the Node server ------------------------------------------ #
 # esbuild collapses server/src/**.ts into ONE ESM file plus its source map, so the
@@ -34,13 +51,20 @@ RUN npm run build && find dist -name '*.map*' -delete
 # for the life of the container; `node --enable-source-maps dist/index.js` gets the
 # same readable stack traces from the `.map` alone.
 FROM node:26-trixie-slim AS server-build
-WORKDIR /app/server
-# Manifest first so the (dev-inclusive) install layer is keyed on it and survives
+WORKDIR /repo
+# Manifests first so the (dev-inclusive) install layer is keyed on them and survives
 # source-only edits.
-COPY server/package.json server/package-lock.json ./
-RUN npm ci --no-audit --no-fund
-COPY server/ ./
-RUN npm run build
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn/releases ./.yarn/releases
+COPY web/package.json ./web/
+COPY server/package.json ./server/
+COPY e2e/package.json ./e2e/
+# `workspaces focus` installs ONE workspace's dependency tree instead of all three — the
+# server-build stage has no use for React, Vite or Playwright.
+RUN node .yarn/releases/yarn-*.cjs workspaces focus queuepilot-server
+COPY server/ ./server/
+WORKDIR /repo/server
+RUN node ../.yarn/releases/yarn-*.cjs run build
 
 # --- stage 3: the runtime image ----------------------------------------------- #
 FROM node:26-trixie-slim
@@ -78,17 +102,21 @@ RUN python3 -m venv /opt/venv \
 # were needed only by the server-build stage. The bundle currently externalizes
 # NOTHING (see server/scripts/build-server.mjs), so this layer is a safety net rather
 # than a hard requirement — but it is what makes an added `external:` entry work
-# without a second Dockerfile change, and it keeps `npm ls` answerable inside the
+# without a second Dockerfile change, and it keeps `yarn info` answerable inside the
 # container.
-COPY server/package.json server/package-lock.json ./server/
-RUN cd server && npm ci --omit=dev --no-audit --no-fund
+COPY package.json yarn.lock .yarnrc.yml ./
+COPY .yarn/releases ./.yarn/releases
+COPY web/package.json ./web/
+COPY server/package.json ./server/
+COPY e2e/package.json ./e2e/
+RUN node .yarn/releases/yarn-*.cjs workspaces focus queuepilot-server --production
 
 # --- source + build artifacts ---
 # cast_sidecar is plain Python and ships as source. The Node half ships ONLY as the
 # esbuild bundle + its map: `server/src/*.ts` is deliberately absent from this image.
 COPY cast_sidecar ./cast_sidecar
-COPY --from=server-build /app/server/dist ./server/dist
-COPY --from=web-build /web/dist ./web/dist
+COPY --from=server-build /repo/server/dist ./server/dist
+COPY --from=web-build /repo/web/dist ./web/dist
 COPY entrypoint.sh ./entrypoint.sh
 RUN chmod +x entrypoint.sh
 

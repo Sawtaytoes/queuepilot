@@ -2,6 +2,8 @@
   "name": "queuepilot-fake-broker",
   "private": true,
   "type": "module",
-  "description": "Harness-only: embedded aedes MQTT broker + mock responder for offline UI screenshots. NOT shipped. Run `npm install` here to (re)hydrate.",
-  "dependencies": { "aedes": "^0.51.3" }
+  "description": "Harness-only: embedded aedes MQTT broker + mock responder for offline UI screenshots. NOT shipped. A yarn workspace as of 2026-08-19 — the root `yarn install` hydrates it; it used to carry its own package-lock.json and a hand-run `npm install`.",
+  "dependencies": {
+    "aedes": "^0.51.3"
+  }
 }
