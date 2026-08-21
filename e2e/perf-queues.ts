@@ -29,7 +29,7 @@ const ok = (name: string, cond: boolean, extra = '') => {
 
 // A one-entry queue is enough to prove the mechanism, and keeps the counts legible.
 // queues.yaml's top-level keys ARE the set ids (no `sets:` wrapper — that is sets.yaml).
-const QUEUES = 'perf:\n  - "Test Show (2020)"\n';
+const QUEUES = 'perf:\n  - {title: "Test Show (2020)"}\n';
 const SETS = `sets:
   - id: perf
     label: Perf

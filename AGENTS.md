@@ -113,6 +113,27 @@ never in the tree.
   `charcuterie/prefer-listbox-over-select`) still do not run here, and do not need to:
   this repo lints with Biome and the ban is expressed natively.
 
+## queues.yaml
+
+**Every entry is a MAPPING** — `{ratingKey, title}` for an item, `{collection: "<name>"}` for a
+collection, `{title: "<text>"}` for a title with no key yet. A bare string (`- "Duel (1971)"`,
+`- 12345`, `- "Collection: X"`) is the pre-2026-08-21 form: `loadEntries()` refuses it BY ENTRY
+and logs the mapping to write, so that one line stops playing and the rest of the queue does not
+([decision](docs/decisions/2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key.md)).
+
+Three things follow, and each has cost something already:
+
+- **`entryKey()` is PINNED and still keys a scalar.** It is the LINE identity that
+  `e2e/fixtures/golden/` records and that remove/reorder/move address a line by. Do not widen it.
+- **No writer may emit a scalar.** `queues.toEntryObject()` normalizes at the write boundary
+  (the HTTP API still accepts a bare title — only the disk shape changed), and `entryNode()` no
+  longer collapses an entry back to a string when its last override is cleared.
+- **A fixture with a bare string fails the gate that reads it.** They were all rewritten; a new
+  one must be written as a mapping.
+
+The one-shot upgrade is `server/src/tools/migrate-entry-objects.ts` — dry run by default, backup
+first, idempotent. **It runs BEFORE the new code deploys**, never after.
+
 ## Gates
 
 Everything CI runs is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and it is

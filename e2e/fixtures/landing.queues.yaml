@@ -1,177 +1,177 @@
 # Landing-layout harness fixture — anonymized, generated. Not real data.
 
 bob_alice_anime:
-- "Cowboy Bebop"
-- "Trigun"
-- "Samurai Champloo"
-- "Mushishi"
-- "Planetes"
-- "Baccano!"
-- "Durarara!!"
-- "Monster"
-- "Berserk"
-- "Kino's Journey"
-- "Haibane Renmei"
-- "Texhnolyze"
-- "Boogiepop Phantom"
-- "Serial Experiments Lain"
-- "Ergo Proxy"
+- {title: "Cowboy Bebop"}
+- {title: "Trigun"}
+- {title: "Samurai Champloo"}
+- {title: "Mushishi"}
+- {title: "Planetes"}
+- {title: "Baccano!"}
+- {title: "Durarara!!"}
+- {title: "Monster"}
+- {title: "Berserk"}
+- {title: "Kino's Journey"}
+- {title: "Haibane Renmei"}
+- {title: "Texhnolyze"}
+- {title: "Boogiepop Phantom"}
+- {title: "Serial Experiments Lain"}
+- {title: "Ergo Proxy"}
 
 bob_carol_anime:
-- "Cowboy Bebop"
-- "Trigun"
-- "Samurai Champloo"
-- "Mushishi"
-- "Planetes"
-- "Baccano!"
-- "Durarara!!"
+- {title: "Cowboy Bebop"}
+- {title: "Trigun"}
+- {title: "Samurai Champloo"}
+- {title: "Mushishi"}
+- {title: "Planetes"}
+- {title: "Baccano!"}
+- {title: "Durarara!!"}
 
 family_anime:
-- "Cowboy Bebop"
-- "Trigun"
-- "Samurai Champloo"
-- "Mushishi"
-- "Planetes"
-- "Baccano!"
-- "Durarara!!"
-- "Monster"
-- "Berserk"
-- "Kino's Journey"
+- {title: "Cowboy Bebop"}
+- {title: "Trigun"}
+- {title: "Samurai Champloo"}
+- {title: "Mushishi"}
+- {title: "Planetes"}
+- {title: "Baccano!"}
+- {title: "Durarara!!"}
+- {title: "Monster"}
+- {title: "Berserk"}
+- {title: "Kino's Journey"}
 
 bob_anime:
-- "Cowboy Bebop"
-- "Trigun"
-- "Samurai Champloo"
-- "Mushishi"
-- "Planetes"
-- "Baccano!"
-- "Durarara!!"
-- "Monster"
-- "Berserk"
-- "Kino's Journey"
-- "Haibane Renmei"
-- "Texhnolyze"
+- {title: "Cowboy Bebop"}
+- {title: "Trigun"}
+- {title: "Samurai Champloo"}
+- {title: "Mushishi"}
+- {title: "Planetes"}
+- {title: "Baccano!"}
+- {title: "Durarara!!"}
+- {title: "Monster"}
+- {title: "Berserk"}
+- {title: "Kino's Journey"}
+- {title: "Haibane Renmei"}
+- {title: "Texhnolyze"}
 
 bob_manga:
-- "Cowboy Bebop"
-- "Trigun"
-- "Samurai Champloo"
-- "Mushishi"
-- "Planetes"
-- "Baccano!"
+- {title: "Cowboy Bebop"}
+- {title: "Trigun"}
+- {title: "Samurai Champloo"}
+- {title: "Mushishi"}
+- {title: "Planetes"}
+- {title: "Baccano!"}
 
 family:
-- "Duel (1971)"
-- "Ronin (1998)"
-- "Witness (1985)"
-- "Barbarella (1968)"
-- "Highlander (1986)"
-- "Fargo (1996)"
-- "Unforgiven (1992)"
-- "Tenet (2020)"
-- "Citizen Kane (1941)"
-- "Django (1966)"
-- "Marathon Man (1976)"
-- "Mean Streets (1973)"
-- "Black Hawk Down (2001)"
-- "Barry Lyndon (1975)"
-- "The Beastmaster (1982)"
-- "Duel (1971) #15"
-- "Ronin (1998) #16"
-- "Witness (1985) #17"
-- "Barbarella (1968) #18"
-- "Highlander (1986) #19"
-- "Fargo (1996) #20"
-- "Unforgiven (1992) #21"
-- "Tenet (2020) #22"
-- "Citizen Kane (1941) #23"
-- "Django (1966) #24"
-- "Marathon Man (1976) #25"
-- "Mean Streets (1973) #26"
-- "Black Hawk Down (2001) #27"
-- "Barry Lyndon (1975) #28"
-- "The Beastmaster (1982) #29"
-- "Duel (1971) #30"
-- "Ronin (1998) #31"
-- "Witness (1985) #32"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
+- {title: "Witness (1985)"}
+- {title: "Barbarella (1968)"}
+- {title: "Highlander (1986)"}
+- {title: "Fargo (1996)"}
+- {title: "Unforgiven (1992)"}
+- {title: "Tenet (2020)"}
+- {title: "Citizen Kane (1941)"}
+- {title: "Django (1966)"}
+- {title: "Marathon Man (1976)"}
+- {title: "Mean Streets (1973)"}
+- {title: "Black Hawk Down (2001)"}
+- {title: "Barry Lyndon (1975)"}
+- {title: "The Beastmaster (1982)"}
+- {title: "Duel (1971) #15"}
+- {title: "Ronin (1998) #16"}
+- {title: "Witness (1985) #17"}
+- {title: "Barbarella (1968) #18"}
+- {title: "Highlander (1986) #19"}
+- {title: "Fargo (1996) #20"}
+- {title: "Unforgiven (1992) #21"}
+- {title: "Tenet (2020) #22"}
+- {title: "Citizen Kane (1941) #23"}
+- {title: "Django (1966) #24"}
+- {title: "Marathon Man (1976) #25"}
+- {title: "Mean Streets (1973) #26"}
+- {title: "Black Hawk Down (2001) #27"}
+- {title: "Barry Lyndon (1975) #28"}
+- {title: "The Beastmaster (1982) #29"}
+- {title: "Duel (1971) #30"}
+- {title: "Ronin (1998) #31"}
+- {title: "Witness (1985) #32"}
 
 bob_alice:
-- "Duel (1971)"
-- "Ronin (1998)"
-- "Witness (1985)"
-- "Barbarella (1968)"
-- "Highlander (1986)"
-- "Fargo (1996)"
-- "Unforgiven (1992)"
-- "Tenet (2020)"
-- "Citizen Kane (1941)"
-- "Django (1966)"
-- "Marathon Man (1976)"
-- "Mean Streets (1973)"
-- "Black Hawk Down (2001)"
-- "Barry Lyndon (1975)"
-- "The Beastmaster (1982)"
-- "Duel (1971) #15"
-- "Ronin (1998) #16"
-- "Witness (1985) #17"
-- "Barbarella (1968) #18"
-- "Highlander (1986) #19"
-- "Fargo (1996) #20"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
+- {title: "Witness (1985)"}
+- {title: "Barbarella (1968)"}
+- {title: "Highlander (1986)"}
+- {title: "Fargo (1996)"}
+- {title: "Unforgiven (1992)"}
+- {title: "Tenet (2020)"}
+- {title: "Citizen Kane (1941)"}
+- {title: "Django (1966)"}
+- {title: "Marathon Man (1976)"}
+- {title: "Mean Streets (1973)"}
+- {title: "Black Hawk Down (2001)"}
+- {title: "Barry Lyndon (1975)"}
+- {title: "The Beastmaster (1982)"}
+- {title: "Duel (1971) #15"}
+- {title: "Ronin (1998) #16"}
+- {title: "Witness (1985) #17"}
+- {title: "Barbarella (1968) #18"}
+- {title: "Highlander (1986) #19"}
+- {title: "Fargo (1996) #20"}
 
 bob_dave:
-- "Duel (1971)"
-- "Ronin (1998)"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
 
 bob_erin:
-- "Duel (1971)"
-- "Ronin (1998)"
-- "Witness (1985)"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
+- {title: "Witness (1985)"}
 
 bob:
-- "Duel (1971)"
-- "Ronin (1998)"
-- "Witness (1985)"
-- "Barbarella (1968)"
-- "Highlander (1986)"
-- "Fargo (1996)"
-- "Unforgiven (1992)"
-- "Tenet (2020)"
-- "Citizen Kane (1941)"
-- "Django (1966)"
-- "Marathon Man (1976)"
-- "Mean Streets (1973)"
-- "Black Hawk Down (2001)"
-- "Barry Lyndon (1975)"
-- "The Beastmaster (1982)"
-- "Duel (1971) #15"
-- "Ronin (1998) #16"
-- "Witness (1985) #17"
-- "Barbarella (1968) #18"
-- "Highlander (1986) #19"
-- "Fargo (1996) #20"
-- "Unforgiven (1992) #21"
-- "Tenet (2020) #22"
-- "Citizen Kane (1941) #23"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
+- {title: "Witness (1985)"}
+- {title: "Barbarella (1968)"}
+- {title: "Highlander (1986)"}
+- {title: "Fargo (1996)"}
+- {title: "Unforgiven (1992)"}
+- {title: "Tenet (2020)"}
+- {title: "Citizen Kane (1941)"}
+- {title: "Django (1966)"}
+- {title: "Marathon Man (1976)"}
+- {title: "Mean Streets (1973)"}
+- {title: "Black Hawk Down (2001)"}
+- {title: "Barry Lyndon (1975)"}
+- {title: "The Beastmaster (1982)"}
+- {title: "Duel (1971) #15"}
+- {title: "Ronin (1998) #16"}
+- {title: "Witness (1985) #17"}
+- {title: "Barbarella (1968) #18"}
+- {title: "Highlander (1986) #19"}
+- {title: "Fargo (1996) #20"}
+- {title: "Unforgiven (1992) #21"}
+- {title: "Tenet (2020) #22"}
+- {title: "Citizen Kane (1941) #23"}
 
 demo_reel:
-- "Duel (1971)"
-- "Ronin (1998)"
-- "Witness (1985)"
-- "Barbarella (1968)"
-- "Highlander (1986)"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
+- {title: "Witness (1985)"}
+- {title: "Barbarella (1968)"}
+- {title: "Highlander (1986)"}
 
 bob_docs:
-- "Duel (1971)"
-- "Ronin (1998)"
-- "Witness (1985)"
-- "Barbarella (1968)"
-- "Highlander (1986)"
-- "Fargo (1996)"
-- "Unforgiven (1992)"
-- "Tenet (2020)"
+- {title: "Duel (1971)"}
+- {title: "Ronin (1998)"}
+- {title: "Witness (1985)"}
+- {title: "Barbarella (1968)"}
+- {title: "Highlander (1986)"}
+- {title: "Fargo (1996)"}
+- {title: "Unforgiven (1992)"}
+- {title: "Tenet (2020)"}
 
 bob_reading:
-- "Cowboy Bebop"
-- "Trigun"
-- "Samurai Champloo"
-- "Mushishi"
+- {title: "Cowboy Bebop"}
+- {title: "Trigun"}
+- {title: "Samurai Champloo"}
+- {title: "Mushishi"}

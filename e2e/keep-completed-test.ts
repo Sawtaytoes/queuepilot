@@ -45,7 +45,7 @@ const SETS = `sets:
 `;
 // "Movie C (2003)" is finished for the corpus's admin account, so it is the entry that
 // triggers the mark-done branch; "Movie A (2001)" is unwatched and keeps the queue playable.
-const ENTRIES = ['  - "Movie A (2001)"', '  - "Movie C (2003)"'].join('\n');
+const ENTRIES = ['  - {title: "Movie A (2001)"}', '  - {title: "Movie C (2003)"}'].join('\n');
 const QUEUES = ['consuming:', ENTRIES, 'keeper:', ENTRIES, 'reelset:', ENTRIES, ''].join('\n');
 const FX = useFixtures({ sets: SETS, queues: QUEUES });
 

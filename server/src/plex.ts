@@ -667,7 +667,8 @@ export async function search(sections: SectionIds, query: string): Promise<Poste
 // Collections are their own listing (`/library/sections/<id>/collections`), not part of the
 // `all?title=` search, so they're fetched separately and title-filtered client-side (the
 // collections endpoint doesn't reliably honor `?title=`). Each result is tagged
-// {type:'collection', ...} so the add flow writes it as the literal "Collection: <name>"
+// {type:'collection', ...} so the add flow writes it as a `{collection: "<name>"}` entry
+// (before 2026-08-21, the literal string "Collection: <name>"; same entry key either way)
 // entry the Python resolver expands. Collections per library are few, so this stays cheap.
 export async function collections(sections: SectionIds, query: string): Promise<CollectionHit[]> {
   const ql = String(query || '').trim().toLowerCase();
@@ -798,7 +799,14 @@ export async function resolveValue(
   let ratingKey: string | null = null;
   let titleText: string | null = null;
   if (value && typeof value === 'object') {
-    const mapping = value as { ratingKey?: unknown; title?: unknown };
+    const mapping = value as { ratingKey?: unknown; title?: unknown; collection?: unknown };
+    // `{collection: <name>}` is the entry form a collection takes since 2026-08-21, and it
+    // resolves by NAME per section exactly as the `Collection: <name>` string below always
+    // did. It was already a shape `entryKey()` and the engine's `describe()` understood, and
+    // this resolver could not see it: every `{collection:}` entry painted as an UNRESOLVED
+    // tile in the grid while playing perfectly. Read before the `title` branch, because a
+    // collection entry may carry both.
+    if (mapping.collection) return resolveCollection(sections, String(mapping.collection));
     if (mapping.ratingKey != null) ratingKey = String(mapping.ratingKey);
     if (mapping.title) titleText = String(mapping.title);
   } else if (typeof value === 'number' || /^\d+$/.test(String(value).trim())) {

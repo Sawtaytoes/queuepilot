@@ -64,11 +64,11 @@ const SETS_SEED = `sets:
   sections: [ 1 ]
 `;
 const QUEUES_SEED = `q_shelf:
-- Duel (1971)
-- Cowboy Bebop
-- The Iron Giant (1999)
+- {title: Duel (1971)}
+- {title: Cowboy Bebop}
+- {title: The Iron Giant (1999)}
 q_other:
-- Steamboy (2004)
+- {title: Steamboy (2004)}
 `;
 
 /**

@@ -5,6 +5,9 @@
 - **Type:** fix / semantics
 - **Supersedes:** —
 - **Superseded by:** —
+- **Completed by:** [2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key](2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key.md)
+  — the data repair this record proposed and did not perform. The 84 title-only entries are
+  backfilled, and the string entry form is gone.
 - **Extends:** [2026-08-17-pending-is-what-nothing-will-play](2026-08-17-pending-is-what-nothing-will-play.md)
 
 ## Decision
@@ -133,5 +136,6 @@ flagged for him to confirm rather than settled here.
   profile should get its own Pending list.
 - **A partly-watched MOVIE is hidden.** Defensible, and the one judgement here he may want the
   other way.
-- **The data repair is not done.** 84 live entries still name a title with no rating key.
+- ~~**The data repair is not done.** 84 live entries still name a title with no rating key.~~
+  Done 2026-08-21 — see *Completed by* above.
 - **A queued collection still does not block adding one of its films.**

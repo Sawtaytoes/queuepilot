@@ -36,9 +36,9 @@ export const LIVE = {
 
 /** The queue that renders those three, in the live queue's own entry format. */
 export const QUEUES_YAML = `movies:
-- "2001: A Space Odyssey (1968)"
-- "Logan's Run (1976)"
-- "Predator (1987)"
+- {title: "2001: A Space Odyssey (1968)"}
+- {title: "Logan's Run (1976)"}
+- {title: "Predator (1987)"}
 `;
 
 export const SETS_YAML = `sets:

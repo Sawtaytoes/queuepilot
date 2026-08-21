@@ -5,7 +5,11 @@
 - **Type:** reversal / data format
 - **Supersedes:** the implicit ratingKey-only entry format shipped in the first
   `queues.py` / `plex.next_queue` cut (2026-07-20).
-- **Superseded by:** —
+- **Superseded by:** [2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key](2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key.md)
+  — **in part.** The SHAPE is superseded: an entry is a mapping, and a bare string is not read
+  any more. What still holds is the half this record is really about — a human never needs a
+  rating key. `- {title: "Duel (1971)"}` is a legal hand-written entry and still resolves at
+  scan time; the editor writes the key back when it adds one.
 
 ## Decision
 
