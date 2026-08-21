@@ -47,12 +47,15 @@ import {
   useOverlays,
 } from "../state/overlays"
 import {
+  queueEntryActions,
+  removeQueueItem,
+} from "../state/queueEntry"
+import {
   applyFilters,
   type Density,
   useQueueView,
 } from "../state/queueView"
 import {
-  deselect,
   toggleSelect,
   useSelected,
 } from "../state/selection"
@@ -255,43 +258,15 @@ export function QueueView({
 
   const playingSet = activeSet(now, data)
 
-  const removeTile = (item: QueueItem) => {
-    if (!setId) return
+  // Both live in `state/queueEntry` rather than here: the Home shelf renders the same
+  // `PosterTile` and needs the same two, and a second copy of an optimistic write is a
+  // second place for it to drift
+  // (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`).
+  const removeTile = (item: QueueItem) =>
+    removeQueueItem(setId, item)
 
-    const set = getState().data?.sets[setId]
-
-    if (set) {
-      set.items = set.items.filter(
-        (it) => it.key !== item.key,
-      )
-      bumpRevision()
-    }
-
-    deselect(setId, item.key)
-    setStatus("Removed", "ok")
-
-    api(
-      "DELETE",
-      `/api/queues/${setId}/items/${encodeURIComponent(item.key)}`,
-    ).catch((err: Error) => {
-      setStatus(`Remove failed: ${err.message}`, "err")
-      refreshData()
-    })
-  }
-
-  const entryFor = (item: QueueItem): EntryActions => ({
-    item,
-    refresh: () => refreshData(),
-    remove: () => removeTile(item),
-    removeLabel: "Remove from this queue",
-    setId,
-    save: (start) =>
-      api(
-        "PATCH",
-        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/start`,
-        { start },
-      ),
-  })
+  const entryFor = (item: QueueItem): EntryActions =>
+    queueEntryActions(setId, item)
 
   return (
     <main

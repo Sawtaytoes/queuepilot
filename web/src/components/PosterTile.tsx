@@ -7,9 +7,9 @@ import { Tip } from "./Tip"
 /**
  * The poster tile shell — the vanilla `#tile-tpl` template, as a component.
  *
- * Shared by the Home shelf (read-only), the queue grid (editable), the channel
- * member grid (editable) and the channel eligible pool (read-only, no chrome), so
- * the same entry reads identically wherever it appears. Its class names are the
+ * Shared by the Home shelf, the queue grid, the channel member grid (all three
+ * editable — every one of them can remove an entry) and the channel eligible pool
+ * (read-only, no chrome), so the same entry reads identically wherever it appears. Its class names are the
  * e2e suites' contract (`li.tile`, `.thumb`, `.poster`, `.check`, `.remove`,
  * `.cap`, `.title`, `.next`, `.badges`) and `data-key` must be stable across
  * re-render, drag and reload.
@@ -63,10 +63,19 @@ type Props = {
    */
   playHref?: string
   playTitle?: string
-  /** The × — queue grid and member grid. */
+  /**
+   * The ✕.
+   *
+   * EVERY editable grid passes this. The shelf did not until 2026-08-21, so the one
+   * page that reorders a title and drags it into another queue was also the one page
+   * that could not remove it — the owner had to open `/q/<id>` first. Its presence is
+   * what the CSS keys on, so a tile that renders one always shows one
+   * (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`).
+   */
   onRemove?: () => void
   removeTitle?: string
-  /** Right-click / long-press opens the per-entry menu (editable grids only). */
+  /** Right-click / long-press opens the per-entry menu (editable grids only —
+   *  the shelf, the queue grid and the member grid). */
   onContextMenu?: (
     e: React.MouseEvent<HTMLLIElement>,
   ) => void
