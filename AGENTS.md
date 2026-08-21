@@ -30,6 +30,19 @@ never in the tree.
   - `agentic:docs/decisions/2026-08-20-listbox-is-the-picker-in-every-owned-app-and-native-select-is-a-hatch-we-have-never-needed.md`
   - `charcuterie:docs/decisions/2026-08-10-listbox-and-combobox-are-the-default-and-select-is-demoted.md`
     (on `origin/master`)
+- **A menu is not a picker, and the picker rule does not reach it.** `Listbox`/`Picker` is
+  for a control that HOLDS a value; a list of *actions* is a Charcuterie **`Menu`**. The test
+  is the row: a `menuitem` **does** something, an `option` **is** something. The two Add-to
+  menus (`PendingView.tsx`, `Toolbar.tsx`) POST an add and keep no selected value, so they
+  are `Menu`s — do **not** "finish the picker migration" by converting them
+  ([decision](docs/decisions/2026-08-21-an-add-to-menu-is-a-menu-not-a-picker.md)). The
+  Add-to POSITION control one element away in the same toolbar does hold a value and is
+  correctly a `SelectListbox`. Two consequences: a `Menu` panel **portals to `<body>`**, so
+  `#gresults .addtomenu` is wrong by construction and e2e reads `.addtomenu
+  [role="menuitem"]` document-wide; and **no linter can catch a hand-rolled menu** — the ban
+  below is on a native `<select>`, and a `<div>` full of `<button>`s trips nothing.
+  `PlayMenu.tsx` is the one hand-rolled menu left, on purpose, and says why at the top of the
+  file.
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any

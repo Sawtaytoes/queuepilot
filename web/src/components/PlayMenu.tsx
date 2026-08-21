@@ -25,6 +25,32 @@ import { setStatus } from "../state/store"
  * With no MQTT broker the fetch fails and the menu shows the error text — which is
  * what `channels-test` asserts (`.playmenu p` matching `/MQTT/i`), so the failure
  * message must stay inside the menu rather than becoming a toast.
+ *
+ * ## Why this one is still hand-rolled, when the two Add-to menus are not
+ *
+ * On 2026-08-21 the Pending tile's and the Home toolbar's Add-to menus became
+ * Charcuterie `Menu`s. This is the third hand-rolled `.qmenu` and it is a menu by the
+ * same test — a device row STARTS playback and keeps no selected value — so the role is
+ * right and only the mechanism is wrong. It was left alone deliberately, because
+ * converting it is a different change from converting those two:
+ *
+ *  - **`Menu` clones a TRIGGER; this component has none.** It is a singleton, rendered
+ *    once in `App`, and it is opened from six unrelated places (`QueuesView`,
+ *    `QueueView` twice, `ChannelsView`, `SelectionBar`, `EntrySettings`) through
+ *    `openPlayMenu({ anchor: e.currentTarget.getBoundingClientRect(), … })`. The anchor
+ *    is a DOMRect in module state, not an element `Menu` could clone. `Menu` would have
+ *    to be rendered at each of the six ▶ buttons instead, which deletes the
+ *    `overlays.playMenu` singleton and rewrites all six call sites.
+ *  - **The devices query would move with it.** `useQuery({ enabled: Boolean(playMenu) })`
+ *    is one fetch today because there is one menu. Six mounted `Menu`s mean six copies of
+ *    that hook, which react-query dedupes on the key but which still changes when and how
+ *    often the registry is read.
+ *  - **A wrong conversion is worse than none.** The obvious half-measure — keep the
+ *    singleton and feed `Menu` a hidden trigger positioned at the rect — is the
+ *    hand-rolled positioning again, with a component wrapped around it.
+ *
+ * So this is a KNOWN gap, not an oversight: `.qmenu` below is the last hand-rolled menu
+ * in the app, and its conversion is its own change.
  */
 export function PlayMenu() {
   const { playMenu } = useOverlays()
@@ -119,7 +145,7 @@ export function PlayMenu() {
           // Charcuterie `Button`, `ghost` (nothing until hover) — the app's own row
           // skin is DELETED per 2026-08-02-adopting-a-component-means-deleting-its-skin;
           // `.qmenu button` keeps only layout. Still a native <button> with the label,
-          // so `ui-test`/`kbd-undo`'s `.qmenu button` reads are unchanged.
+          // so `channels-test`/`live-smoke`'s `.playmenu button` reads are unchanged.
           <Button
             appearance="ghost"
             intent="neutral"

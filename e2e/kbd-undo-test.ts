@@ -32,8 +32,10 @@ await page.fill('#gsearch', 'duel');
 await page.waitForSelector('#gresults.open li', { timeout: 15000 });
 await page.keyboard.press('ArrowDown');
 await page.keyboard.press('Enter'); // opens menu, focuses first queue button
-await page.waitForSelector('#gresults .qmenu button');
-const isFocusInMenu = await page.evaluate(() => document.activeElement?.closest('.qmenu') != null);
+// NOT `#gresults .addtomenu`: the Add-to menu is a Charcuterie `Menu` and its panel is a
+// portal child of <body>, so it is inside the results on screen and outside them in the DOM.
+await page.waitForSelector('.addtomenu [role="menuitem"]');
+const isFocusInMenu = await page.evaluate(() => document.activeElement?.closest('.addtomenu') != null);
 ok('Enter opens Add-to menu with focus inside', isFocusInMenu);
 await page.keyboard.press('Enter'); // native button activation = add to first queue
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Added'), undefined, { timeout: 20000 });

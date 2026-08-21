@@ -236,12 +236,18 @@ export function SearchDropdown<T>({
           // NOT an immediate close: a click on a row has to land first, and a
           // nested menu inside a row needs focus time.
           setTimeout(() => {
-            if (
-              !listRef.current?.contains(
-                document.activeElement,
-              )
-            )
-              close()
+            const focused = document.activeElement
+
+            // A row's Add-to menu is a Charcuterie `Menu`, and a `Menu` PORTALS its
+            // panel to <body>. So the element that now holds focus is inside the
+            // dropdown on screen and outside it in the DOM, and a containment test
+            // against the list alone reads it as "focus left" — which closed the
+            // results the instant the menu opened, taking the menu with them.
+            const isFocusHeld =
+              listRef.current?.contains(focused) ||
+              focused?.closest('[role="menu"]') != null
+
+            if (!isFocusHeld) close()
           }, 250)
         }}
         onKeyDown={onKeyDown}

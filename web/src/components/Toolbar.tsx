@@ -1,9 +1,10 @@
-import { Button } from "@charcuterie/ui"
-import { useEffect, useState } from "react"
+import type { MenuItem } from "@charcuterie/ui"
+import { Menu } from "@charcuterie/ui"
+import { useState } from "react"
 import { useNavigate } from "react-router"
 import { api } from "../lib/api"
 import { entryTitle } from "../lib/searchGroups"
-import type { SearchHit } from "../lib/types"
+import type { RegistrySet, SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
 import {
@@ -26,7 +27,7 @@ import { SelectListbox } from "./SelectListbox"
  * The Home toolbar: one search across every library any queue draws from, plus the
  * queue filter and the create/navigate buttons.
  *
- * Each result offers "Add to ▾" listing only the queues whose libraries include
+ * Each result offers "Add to" listing only the queues whose libraries include
  * that result's section — and **the results stay open after an add**, so several
  * titles can fan out to different queues in one go.
  *
@@ -44,32 +45,17 @@ export function Toolbar() {
   )
   const [addPosition, setAddPosition] = useState("top")
 
-  /**
-   * Escape closes the Add-to menu, from wherever focus happens to be.
+  /*
+   * The document-level Escape listener that used to sit here is GONE, and its whole
+   * reason for existing went with it.
    *
-   * The menu already handles Escape on its own `onKeyDown`, and its `ref` focuses
-   * the first button so that handler can hear it — but the menu has a state with NO
-   * buttons ("No queue includes … — add it to a queue via its ⚙"). In that state
-   * focus stays on the `.addto` trigger, which is a SIBLING of the menu, so the
-   * menu's handler never fires and Escape did nothing at all. The menu then stayed
-   * open indefinitely and the next click on `.addto` read as a toggle-CLOSED.
-   *
-   * A document listener is the right level for this: a menu is a dismissable layer,
-   * and "Escape dismisses the topmost layer" is not a property of any one node
-   * inside it.
+   * It existed because the hand-rolled menu heard Escape on its own `onKeyDown`, which
+   * requires focus to be inside the menu — and the no-compatible-queue state had no
+   * focusable row at all, so focus stayed on the `.addto` trigger (a SIBLING of the
+   * menu) and Escape did nothing. `Menu`'s dismissal is floating-ui's `useDismiss`,
+   * which listens on the DOCUMENT, so Escape closes it from the trigger, from a row, or
+   * from anywhere else. Outside-press dismissal came with it.
    */
-  useEffect(() => {
-    if (openMenu === null) return
-
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpenMenu(null)
-    }
-
-    document.addEventListener("keydown", onKey)
-
-    return () =>
-      document.removeEventListener("keydown", onKey)
-  }, [openMenu])
 
   const ids = queueIds(data)
   const isAllCollapsed =
@@ -113,6 +99,58 @@ export function Toolbar() {
                 s.sections.includes(hit.sectionId),
             )
 
+            const addToQueue = async (s: RegistrySet) => {
+              setStatus(`Adding to ${s.label}…`)
+
+              try {
+                await api(
+                  "POST",
+                  `/api/queues/${s.id}/items`,
+                  {
+                    position: addPosition,
+                    value: {
+                      ratingKey: hit.ratingKey,
+                      title: label,
+                    },
+                  },
+                )
+                setStatus(
+                  `Added “${hit.title}” to ${s.label}`,
+                  "ok",
+                )
+                // Background: update the shelves but keep the results open for the
+                // next pick.
+                refreshData()
+              } catch (err) {
+                setStatus(
+                  "Add failed: " + (err as Error).message,
+                  "err",
+                )
+              }
+            }
+
+            /**
+             * The no-compatible-queue case is one DISABLED item, not an empty menu:
+             * `Menu` renders `items` and nothing else, and a panel with no rows says
+             * nothing at all. Disabled keeps the sentence announced and skipped by the
+             * arrow keys (`MenuAction` never registers a disabled item).
+             */
+            const menuItems: MenuItem[] =
+              compatible.length === 0
+                ? [
+                    {
+                      isDisabled: true,
+                      key: "none",
+                      label: `No queue includes “${libTitle(hit.sectionId)}” — add it to a queue via its ⚙.`,
+                      onSelect: () => {},
+                    },
+                  ]
+                : compatible.map((s) => ({
+                    key: s.id,
+                    label: s.label,
+                    onSelect: () => void addToQueue(s),
+                  }))
+
             return {
               content: (
                 <>
@@ -134,117 +172,43 @@ export function Toolbar() {
                       {libTitle(hit.sectionId)}
                     </span>
                   </span>
-                  <button
-                    className="addto"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setOpenMenu((cur) =>
-                        cur === index ? null : index,
-                      )
-                    }}
-                    type="button"
-                  >
-                    Add to ▾
-                  </button>
-                  {openMenu === index ? (
-                    <div
-                      className="qmenu"
-                      data-density="compact"
-                      onKeyDown={(e) => {
-                        const btns = [
-                          ...e.currentTarget.querySelectorAll(
-                            "button",
-                          ),
-                        ]
-
-                        if (!btns.length) return
-
-                        const i = btns.indexOf(
-                          document.activeElement as HTMLButtonElement,
-                        )
-
-                        if (
-                          e.key === "ArrowDown" ||
-                          e.key === "ArrowUp"
-                        ) {
-                          e.preventDefault()
-                          btns[
-                            (i +
-                              (e.key === "ArrowDown"
-                                ? 1
-                                : -1) +
-                              btns.length) %
-                              btns.length
-                          ]?.focus()
-                        } else if (e.key === "Escape") {
-                          setOpenMenu(null)
-                        }
-                      }}
-                      ref={(el) => {
-                        el?.querySelector("button")?.focus()
-                      }}
-                    >
-                      {compatible.length === 0 ? (
-                        <p>
-                          {`No queue includes “${libTitle(hit.sectionId)}” — add it to a queue via its ⚙.`}
-                        </p>
-                      ) : (
-                        compatible.map((s) => (
-                          // ghost Button, skin deleted — see PlayMenu. Still a native
-                          // <button> (the qmenu keyboard nav queries `button` and
-                          // focuses via document.activeElement).
-                          <Button
-                            appearance="ghost"
-                            intent="neutral"
-                            isFullWidth
-                            key={s.id}
-                            onClick={async (e) => {
-                              e.stopPropagation()
-                              setOpenMenu(null)
-                              setStatus(
-                                `Adding to ${s.label}…`,
-                              )
-
-                              try {
-                                await api(
-                                  "POST",
-                                  `/api/queues/${s.id}/items`,
-                                  {
-                                    position: addPosition,
-                                    value: {
-                                      ratingKey:
-                                        hit.ratingKey,
-                                      title: label,
-                                    },
-                                  },
-                                )
-                                setStatus(
-                                  `Added “${hit.title}” to ${s.label}`,
-                                  "ok",
-                                )
-                                // Background: update the shelves but keep the
-                                // results open for the next pick.
-                                refreshData()
-                              } catch (err) {
-                                setStatus(
-                                  "Add failed: " +
-                                    (err as Error).message,
-                                  "err",
-                                )
-                              }
-                            }}
-                          >
-                            {s.label}
-                          </Button>
-                        ))
-                      )}
-                    </div>
-                  ) : null}
+                  {/*
+                    A `Menu`, not a `Picker`/`Listbox`: every row PERFORMS an add and
+                    leaves no selected value behind (the results deliberately stay open
+                    for the next title). `menuitem` does something; `option` is
+                    something. The Add-to POSITION control beside the search box is the
+                    opposite case and is correctly a `SelectListbox`.
+                  */}
+                  <Menu
+                    className="addtomenu"
+                    isVisible={openMenu === index}
+                    items={menuItems}
+                    onDismiss={() => setOpenMenu(null)}
+                    trigger={
+                      <button
+                        className="addto"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setOpenMenu((cur) =>
+                            cur === index ? null : index,
+                          )
+                        }}
+                        type="button"
+                      >
+                        Add to
+                        {/* Decoration only — `useRole` already writes
+                            `aria-haspopup="menu"` and `aria-expanded` here. */}
+                        <span aria-hidden="true"> ▾</span>
+                      </button>
+                    }
+                  />
                 </>
               ),
-              // The Add-to button and the menu own their own clicks; a row pick is
-              // "open my menu", so it must not fire from inside them.
-              ignoreSelector: ".addto, .qmenu",
+              // The Add-to button owns its own clicks; a row pick is "open my menu", so
+              // it must not fire from inside it. `.qmenu` used to be listed here too —
+              // the panel is a PORTAL child of <body> now, so it is not inside the `<li>`
+              // this delegated handler walks up from and cannot reach it at all.
+              ignoreSelector: ".addto",
               // Row pick (click anywhere on it, or Enter) = open its Add-to menu.
               pick: () =>
                 setOpenMenu((cur) =>
