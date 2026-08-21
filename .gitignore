@@ -1,3 +1,12 @@
+# yarn Berry (4.14.1, pinned in .yarnrc.yml). The RELEASE binary is committed —
+# `.yarn/releases/` is deliberately not ignored — so CI and the Dockerfile run the
+# exact yarn this lockfile was written by. Everything else under .yarn/ is derived.
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+
 __pycache__/
 *.pyc
 # NO trailing slash, deliberately. `node_modules/` matches a DIRECTORY only, so a

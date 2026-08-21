@@ -10,7 +10,14 @@ __pycache__/
 **/node_modules/
 server/dist/
 web/dist/
+# The HARNESSES stay out of the image — but their MANIFESTS have to come in. yarn resolves
+# the lockfile against every workspace named in the root `workspaces`, so an absent
+# e2e/package.json makes `yarn install --immutable` fail before it installs anything. Docker
+# (unlike git) honours a re-include for a file inside an excluded directory, and last match
+# wins — so these two lines must stay AFTER `e2e/`.
 e2e/
+!e2e/package.json
+!e2e/broker/package.json
 __screenshots__/
 .env
 .env.local

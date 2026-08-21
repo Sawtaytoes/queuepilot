@@ -1,6 +1,14 @@
 {
-  "//": "e2e/*.ts are ES MODULES, and this three-line file is the only thing that says so. Node (and tsc's NodeNext, and tsx/esbuild) decide a bare `.ts`/`.js` file's module format from the NEAREST enclosing package.json `type` — and this repo has no root manifest, so before this file existed the nearest one was nothing at all, i.e. CommonJS. Every harness here is top-level-await + import.meta, so the .mjs -> .ts conversion failed outright: `Top-level await is currently not supported with the \"cjs\" output format`. A tsconfig cannot fix it: the format is resolved by the loader, not the compiler. `.mjs` files are unaffected either way (always ESM), so this is additive.",
+  "//": "e2e/*.ts are ES MODULES, and this three-line file is the only thing that says so. Node (and tsc's NodeNext, and tsx/esbuild) decide a bare `.ts`/`.js` file's module format from the NEAREST enclosing package.json `type` — and when this file was written the repo had no root manifest at all, so the nearest one was nothing, i.e. CommonJS. (A root manifest exists as of the 2026-08-19 yarn migration; this file still has to say `module`, because the root deliberately declares no `type`.) Every harness here is top-level-await + import.meta, so the .mjs -> .ts conversion failed outright: `Top-level await is currently not supported with the \"cjs\" output format`. A tsconfig cannot fix it: the format is resolved by the loader, not the compiler. `.mjs` files are unaffected either way (always ESM), so this is additive. Playwright is declared HERE as of 2026-08-19: these harnesses are its only consumer, and before this it was fetched unpinned by CI on every run (`npm install playwright`) while local runs borrowed a sibling repo's copy off the NAS. A pinned devDependency makes `yarn playwright` a LOCAL binary — no npx, no dlx, no network — and gives `e2e/playwright.ts` a resolution root that exists in CI and on the NAS alike.",
   "name": "queuepilot-e2e",
   "private": true,
-  "type": "module"
+  "type": "module",
+  "devDependencies": {
+    "playwright": "^1.61.1",
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "playwright": "playwright",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  }
 }
