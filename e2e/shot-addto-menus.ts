@@ -31,8 +31,13 @@ const LIBRARIES = [
 ];
 
 // Public-domain films, so the list reads like a library without being anyone's.
+//
+// `p1` carries an EDITION, and it is the tile the close-up frames. The owner's report was a
+// caption reading "Duel 1971Original TV Version" — year and edition run together with no
+// separator — so the fixture has to produce that same shape or the before/after proves
+// nothing. Everything here is synthetic; the repo is public.
 const PENDING = [
-  { ratingKey: 'p1', title: 'Night of the Living Dead', year: 1968, type: 'movie', sectionId: 1, librarySectionTitle: 'Movies', contentRating: null, editionTitle: null, addedAt: 1755000000 },
+  { ratingKey: 'p1', title: 'Night of the Living Dead', year: 1968, type: 'movie', sectionId: 1, librarySectionTitle: 'Movies', contentRating: null, editionTitle: 'Restored Cut', addedAt: 1755000000 },
   { ratingKey: 'p2', title: 'Nosferatu', year: 1922, type: 'movie', sectionId: 1, librarySectionTitle: 'Movies', contentRating: null, editionTitle: null, addedAt: 1755000100 },
   { ratingKey: 'p3', title: 'The General', year: 1926, type: 'movie', sectionId: 1, librarySectionTitle: 'Movies', contentRating: null, editionTitle: null, addedAt: 1755000200 },
   // Section 15 is in NO fixture queue, so this tile is the empty-state case.
@@ -107,11 +112,26 @@ try {
       { timeout: 60000 },
     );
 
-  // 1 — the Pending tile's Add-to menu, the one the owner reported.
+  // The Add-to trigger's handle spans both revisions of this change ON PURPOSE: `before` is
+  // captured against the raw `<button class="addto">` and `after` against the Charcuterie
+  // `Button`, which carries `data-testid` instead. One script, two trees, same frames.
+  const ADDTO = '.addto, [data-testid="pending-addto"]';
+
+  // 0 — the TILE itself, closed. This is where the owner's three complaints live: the
+  // edition badge jammed against the year, and two controls that do not read as controls.
+  // Clipped to the first row, because a 1300px page shrinks a 160px tile to nothing.
   await page.goto(`${BASE}/pending`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#pendinggrid li', { timeout: 30000 });
   await waitForRegistry();
-  await page.locator('#pendinggrid li').first().locator('.addto').click();
+  await page.waitForTimeout(300);
+  await page.screenshot({
+    path: `${OUT}/addto-pending-tile-${STAGE}.png`,
+    clip: { x: 0, y: 90, width: 660, height: 330 },
+  });
+  console.log(`shot: ${OUT}/addto-pending-tile-${STAGE}.png`);
+
+  // 1 — the Pending tile's Add-to menu, the one the owner reported.
+  await page.locator('#pendinggrid li').first().locator(ADDTO).click();
   await page.waitForSelector('.qmenu, .addtomenu', { timeout: 10000 });
   await page.waitForTimeout(300);
   await shot('pending');
@@ -119,7 +139,7 @@ try {
   // 1b — the same menu on the tile whose library no queue draws from (the empty state).
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
-  await page.locator('#pendinggrid li').nth(3).locator('.addto').click();
+  await page.locator('#pendinggrid li').nth(3).locator(ADDTO).click();
   await page.waitForSelector('.qmenu, .addtomenu', { timeout: 10000 });
   await page.waitForTimeout(300);
   await shot('pending-empty');

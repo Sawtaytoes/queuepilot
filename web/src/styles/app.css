@@ -917,7 +917,12 @@ ul.grid .empty {
   border-radius: 4px;
   background: var(--color-surface-raised);
 }
-.results .y {
+/* The year beside a title, in a search row and in a Pending tile caption alike. Also
+   deliberately un-scoped from `.results`, and for the same reason `.editionbadge` is: the
+   Pending tile's year rendered at full contrast inside a `font-weight: 600` caption, so
+   "Night of the Living Dead 1968" read as one continuous title. The declaration is one
+   colour and reads nothing about where it sits. */
+.y {
   color: var(--color-content-muted);
 }
 
@@ -3549,8 +3554,15 @@ ul.grid.posters .tile .badges .epstag {
 .results .gtitle {
   display: block;
 }
-/* Plex's edition label, so two editions of one film are told apart at a glance. */
-.results .editionbadge {
+/* Plex's edition label, so two editions of one film are told apart at a glance.
+   Deliberately NOT `.results .editionbadge`. It was, for four days, and a class scoped to
+   one container is a class that is silently unstyled everywhere else: `EditionBadge` is a
+   SHARED component, and the Pending tile rendered it with no `.results` ancestor — so the
+   badge lost its margin, its border and its pill and came out as bare text welded to the
+   year ("Night of the Living Dead 1968Restored Cut"). Nothing in this rule reads its
+   container, so nothing in it wanted the ancestor. A shared component needs a
+   container-independent rule, or the sharing is a lie. */
+.editionbadge {
   margin-left: 6px;
   padding: 0 6px;
   border: 1px solid var(--color-intent-accent-solid);
@@ -3648,6 +3660,10 @@ body.rowdragging {
 }
 .pendingtile .pendingactions {
   display: flex;
+  /* Both controls are real `Button`s now, so they carry a border and the control height
+     instead of collapsing to their text. A tile in this grid is ~160px in the Narrow View
+     and "Add to ▾" + "Dismiss" no longer fits on one line there. */
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
 }
