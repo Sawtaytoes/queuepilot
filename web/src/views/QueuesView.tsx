@@ -6,7 +6,10 @@ import {
   useRef,
 } from "react"
 import { Link } from "react-router"
-import { TypeBadge } from "../components/badges"
+import {
+  EditionChip,
+  TypeBadge,
+} from "../components/badges"
 import { isPullSet } from "../components/OpenQueueButton"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
@@ -280,6 +283,9 @@ function Shelf({
                   badges={
                     <>
                       <TypeBadge face={face} item={item} />
+                      {/* Which EDITION this is — see QueueView. The shelf shows the same
+                          entries the grid does, so it has the same pair to tell apart. */}
+                      <EditionChip face={face} />
                       {/* "In Progress" wins over "Completed": a mid-episode resume point
                             (Plex viewOffset, unwatched) means the item is being watched, not
                             finished — the Prison School OAD case must never read "Completed". */}

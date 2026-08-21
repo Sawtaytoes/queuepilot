@@ -1330,6 +1330,16 @@ export interface Tile {
   /** The resolved title, or `displayFor(value)` when unresolved. */
   title: string;
   year: number | null;
+  /**
+   * Plex's EDITION label, when the resolved item has one — `null` on a collection, on an
+   * unresolved entry, and on the plain edition of a pair (only the tagged item names
+   * itself, which is Plex's own shape).
+   *
+   * Two editions of one film are two library items with the same title and the same year,
+   * so without this the two tiles are identical and the grid cannot tell them apart. The
+   * field was already on `PosterFields` and was dropped here, one layer short of the wire.
+   */
+  editionTitle: string | null;
   /** Collections only; null for everything else. */
   childCount: number | null;
   nextEp: NextEp | null;
