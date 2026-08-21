@@ -40,7 +40,11 @@ function displayFor(value: unknown): string {
     // `title` is asserted to be a string rather than stringified: a YAML `title: 2012` is a
     // NUMBER at runtime and this function has always returned it unchanged. Wrapping it in
     // `String()` would be a (small) wire change, so the assertion carries the existing lie.
-    const o = value as { title?: string; ratingKey?: string | number };
+    const o = value as { title?: string; ratingKey?: string | number; collection?: string };
+    // A `{collection: <name>}` entry has no `title`, so without this it read
+    // "ratingKey undefined" — the caption on every collection tile the moment the file
+    // stopped spelling a collection as a `Collection: <name>` string.
+    if (!o.title && o.collection) return `Collection: ${o.collection}`;
     return o.title || `ratingKey ${o.ratingKey}`;
   }
   return String(value);
@@ -121,6 +125,32 @@ export async function resolveTile(
     partiallyWatched,
     viewOffset,
     duration,
+  };
+}
+
+/**
+ * The tile a value gets when it is not going to be resolved at all — its stored caption, no
+ * art, `resolved: false`.
+ *
+ * Written for the LEGACY SCALAR entry (2026-08-21): the engine refuses to play one, and a tile
+ * that resolved anyway would paint a normal-looking poster for a line that never plays. The
+ * grid already paints `resolved: false` with the red "unresolved" border, so the broken entry
+ * reports itself with no frontend change at all.
+ */
+export function unresolvedTile(value: unknown): ResolvedTile {
+  return {
+    resolved: false,
+    ratingKey: null,
+    type: null,
+    title: displayFor(value),
+    year: null,
+    editionTitle: null,
+    childCount: null,
+    nextEp: null,
+    isNextEpFailed: false,
+    partiallyWatched: false,
+    viewOffset: 0,
+    duration: 0,
   };
 }
 

@@ -605,10 +605,20 @@ export interface EntryExtras {
 }
 
 /**
- * One entry as it appears on disk: a bare title/ratingKey scalar, or a mapping.
- * `entryKey()` accepts both, and a numeric-looking string is treated as a ratingKey.
+ * One entry MAPPING — the only shape `queues.yaml` holds since 2026-08-21
+ * (decision `2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key`).
  */
-export type EntryValue = string | number | ({ ratingKey?: string | number; title?: string } & EntryExtras);
+export type EntryObject = { ratingKey?: string | number; title?: string } & EntryExtras;
+
+/**
+ * One entry as it may reach a WRITER: the mapping above, or a bare title/ratingKey scalar.
+ *
+ * The scalar arm is still here because the HTTP API and MQTT still accept one — `POST
+ * /api/queues/:set/items` takes `{value: "Some Title"}` and always has. `queues.toEntryObject()`
+ * normalizes it at the write boundary, so what lands ON DISK is always a mapping.
+ * `entryKey()` is identical either side of that normalization.
+ */
+export type EntryValue = string | number | EntryObject;
 
 /** One entry as `queues.js entriesOf()` reports it. Entries whose key is null are dropped
  * before this, so `key` is non-null here. */

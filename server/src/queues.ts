@@ -4,14 +4,15 @@
 // container but as separate processes, so the Python threading lock can't cover us — a
 // mkdir-based advisory lock on `<queues.yaml>.lock` does (see queue_builder/queues.py).
 import { promises as fs } from 'node:fs';
-import { parseDocument, YAMLSeq, Scalar, isCollection, isNode, isPair, isScalar } from 'yaml';
+import { parseDocument, YAMLSeq, isCollection, isNode, isPair, isScalar } from 'yaml';
 import type { Document, Node } from 'yaml';
 import { QUEUES_PATH } from './config.js';
 import { QUEUE_SERIES_LENGTH } from './env.js';
 import { toWeight } from './engine/weight.js';
 import { isNodeError } from './errors.js';
 import * as sets from './sets.js';
-import type { EntryExtras, EntryValue, QueueEntry, Start } from './types.js';
+import { toEntryObject } from './entryFormat.js';
+import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
 
 /**
  * The MAPPING form of an on-disk entry, as it comes back off a YAML node.
@@ -20,7 +21,7 @@ import type { EntryExtras, EntryValue, QueueEntry, Start } from './types.js';
  * object arm, named so the four readers below (`entryKey`, `entryDone`, `entryDoneAt`,
  * `splitEntry`) narrow through ONE place instead of casting individually.
  */
-type EntryMapping = { ratingKey?: string | number; title?: string } & EntryExtras;
+type EntryMapping = EntryObject;
 
 /**
  * `value` as a mapping, or null when it is a scalar / array / absent — the exact test the
@@ -98,6 +99,13 @@ export function entryKey(value: unknown): string | null {
   if (/^\d+$/.test(s)) return `rk:${s}`;
   return s ? `title:${s}` : null;
 }
+
+// --- the entry FORMAT (2026-08-21) ------------------------------------------- //
+//
+// The rule itself lives in `entryFormat.ts` — one module, so the engine can state it without
+// importing this whole write-side. Re-exported here because this is where `entryKey()` lives
+// and where every caller already looks for the entry vocabulary.
+export { isLegacyScalarEntry, toEntryObject, legacyEntryMessage } from './entryFormat.js';
 
 // A finished entry is KEPT and tagged by the Python service as a `{title/ratingKey, done: true}`
 // mapping (decision: keep+tag rather than auto-prune). A plain string, a bare ratingKey, or a
@@ -305,7 +313,8 @@ export async function sweepCompleted(setName: string, opts: SweepOptions = {}): 
   });
 }
 
-// Add a new entry. `value` is a string (title), a number (ratingKey), or {ratingKey,title}.
+// Add a new entry. `value` is a string (title), a number (ratingKey), or a mapping — the API
+// still takes all three, and `toEntryObject` turns it into the mapping that lands on disk.
 // `position` is 'top' (default — top plays next) or 'bottom'. Set-name validity is the
 // caller's (server.js) job — it checks against the live sets.yaml registry.
 export async function addItem(
@@ -316,18 +325,15 @@ export async function addItem(
   return withLock(async () => {
     const doc = await readDoc();
     const seq = seqFor(doc, setName);
-    const key = entryKey(value);
+    // Keyed off the NORMALIZED value. `toEntryObject` is identity-preserving, so this is the
+    // same key the raw value has always produced — spelled once, from what actually gets
+    // written, rather than trusting the two to agree.
+    const entry = toEntryObject(value);
+    const key = entryKey(entry);
     if (!key) throw new Error('empty entry');
     if (seq.items.some((n) => entryKey(plain(n)) === key)) return { added: false, key };
     seq.flow = false; // a populated queue is always a block list, never `[ ... ]`
-    // Force double-quoted title strings so a `:` (e.g. "Star Trek: ...") stays readable.
-    let node: Node;
-    if (typeof value === 'string') {
-      node = doc.createNode(value);
-      if (node instanceof Scalar) node.type = Scalar.QUOTE_DOUBLE;
-    } else {
-      node = doc.createNode(value);
-    }
+    const node: Node = doc.createNode(entry);
     if (position === 'bottom') seq.items.push(node);
     else seq.items.unshift(node);
     await writeDoc(doc);
@@ -474,21 +480,15 @@ export function splitEntry(cur: unknown): SplitEntry {
   return { ratingKey: null, title: String(cur), extras: {} };
 }
 
-// Rebuild an entry node from its identity + extras, collapsing to the plainest form (a bare
-// title string / ratingKey scalar) when there are no extras left to carry.
+// Rebuild an entry node from its identity + extras.
+//
+// It used to COLLAPSE to the plainest form — a bare title string or a bare ratingKey scalar —
+// whenever the last extra was cleared, so `setWeight(key, 1)` turned `{title: X, weight: 2}`
+// back into `- "X"`. That collapse is gone: the file holds mappings now, and a writer that
+// re-created the legacy shape on an unrelated edit would have undone the migration one entry
+// at a time.
 function entryNode(doc: Document, { ratingKey, title, extras }: SplitEntry): Node {
   const keys = Object.keys(extras).filter((k) => extras[k] != null);
-  if (!keys.length) {
-    if (title != null && ratingKey == null) {
-      const node = doc.createNode(title);
-      // Force a double-quoted title so a `:` (e.g. "Star Trek: …") stays readable.
-      if (node instanceof Scalar) node.type = Scalar.QUOTE_DOUBLE;
-      return node;
-    }
-    if (ratingKey != null && title == null) {
-      return doc.createNode(/^\d+$/.test(String(ratingKey)) ? Number(ratingKey) : ratingKey);
-    }
-  }
   const o: Record<string, unknown> = {};
   if (ratingKey != null) o.ratingKey = ratingKey;
   if (title != null) o.title = title;

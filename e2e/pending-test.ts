@@ -60,16 +60,18 @@ await fs.writeFile(
     'my_movies:',
     '- ratingKey: "901"',
     '  title: Named Film (2020)',
-    // A BARE TITLE for a film that two library items answer to (see COPY_OLD / COPY_NEW).
-    '- "Copy Cat"',
+    // A TITLE with no rating key, for a film that two library items answer to (see
+    // COPY_OLD / COPY_NEW). Still a legal entry: a hand-added line has no key until the
+    // editor writes one back.
+    '- {title: "Copy Cat"}',
     // A title Plex no longer answers to — the fail-safe case.
-    '- "Gone From The Library"',
+    '- {title: "Gone From The Library"}',
     'franchise:',
-    '- "Collection: Bunny Films"',
+    '- {collection: "Bunny Films"}',
     'anime:',
-    // The reported shape: a bare string, no ratingKey. This is the entry that covered nothing.
-    '- "Detective Days"',
-    // The other title-only shape in the live file: a mapping with a title and no ratingKey.
+    // The reported shape: a title, no ratingKey. This is the entry that covered nothing.
+    '- {title: "Detective Days"}',
+    // The same thing spelled as a block mapping, which is how the live file writes it.
     '- title: Kurozuka',
     '',
   ].join('\n'),

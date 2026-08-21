@@ -100,7 +100,7 @@ const stop = (child: ChildProcess | null) => new Promise<void>((r) => {
     await fs.rm(f, { force: true });
     await fs.rm(f + '.lock', { recursive: true, force: true });
   }
-  await fs.writeFile(QUEUES, 'bob:\n- "Plain Movie A (2020)"\n', 'utf8');
+  await fs.writeFile(QUEUES, 'bob:\n- {title: "Plain Movie A (2020)"}\n', 'utf8');
   const env = {
     ...process.env,
     WEB_PORT: String(PORT),
@@ -155,7 +155,7 @@ if (startFakeMqtt) {
     await fs.rm(f, { force: true });
     await fs.rm(f + '.lock', { recursive: true, force: true });
   }
-  await fs.writeFile(QUEUES, 'bob:\n- "Plain Movie A (2020)"\n', 'utf8');
+  await fs.writeFile(QUEUES, 'bob:\n- {title: "Plain Movie A (2020)"}\n', 'utf8');
 
   const broker = await startFakeMqtt({ port: FAKE_PORT });
   // A concrete RETAINED now-playing — the snapshot the server must replay on connect. Plex is

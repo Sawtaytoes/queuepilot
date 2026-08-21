@@ -386,6 +386,19 @@ jobs:
       - name: Queue write-side (markDone/clearDone)
         run: $TSX e2e/mark-done-parity.ts
 
+      # THE ENTRY FORMAT (2026-08-21): a queues.yaml entry is an object. Three claims, and the
+      # first is the expensive one to get wrong — the migration must not silently drop a
+      # sibling field (`done_at`, `start`, `weight`, a field this code has never heard of),
+      # because nothing downstream would ever report the loss. Also: the reader refuses a bare
+      # string PER ENTRY and never per file, and no writer can put one back.
+      - name: Queue entry format + migration (offline, injected resolver)
+        run: $TSX e2e/entry-objects-test.ts
+
+      # Comments survive every queues.yaml / sets.yaml mutation. It ran only in run.sh before
+      # this, which meant nothing in CI covered the write-side round trip.
+      - name: YAML comment round-trip
+        run: $TSX e2e/yaml-roundtrip-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 

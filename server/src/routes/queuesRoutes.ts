@@ -6,6 +6,7 @@ import { liveClient } from '../engine/plex-live.js';
 import { inProgress } from '../engine/resolve.js';
 import * as routing from '../engine/routing.js';
 import { toWeight } from '../engine/weight.js';
+import { COLLECTION_PREFIX_RE, isLegacyScalarEntry } from '../entryFormat.js';
 import { findDuplicateItem } from '../entryIdentity.js';
 import * as finished from '../finished.js';
 import * as plex from '../plex.js';
@@ -259,7 +260,13 @@ export function queuesRoutes(): Hono {
         // member ("Next: <member>", not an opaque "N in order"). A manual start override on the
         // entry floors the pick — {season,episode} for a show, {series,season,episode} for a
         // collection (which member to begin at plus the floor inside it).
-        const core = await tiles.resolveTile(s.sections, e.value, startOf(e), scopes.get(s.requires_profile || '') ?? {});
+        // A LEGACY SCALAR entry is not resolved at all. The engine refuses to play one
+        // (`loadEntries`), so resolving it here would paint a normal poster for a line that
+        // never plays — the one genuinely dangerous failure of a per-entry refusal. An
+        // unresolved tile is what the grid already paints red.
+        const core = isLegacyScalarEntry(e.value)
+          ? tiles.unresolvedTile(e.value)
+          : await tiles.resolveTile(s.sections, e.value, startOf(e), scopes.get(s.requires_profile || '') ?? {});
         return { setId: s.id, tile: queueTile(e, core) };
       });
       // What the next scan would call finished, said now — one pass over the flat list, so
@@ -275,7 +282,14 @@ export function queuesRoutes(): Hono {
         // this key; upstream indexed it directly and the entry is always there.
         const row = result[s.id];
         // `cores` is index-aligned with `entries` by contract, which is what the `!` says.
-        if (row) row.items = entries.map((e, i) => queueTile(e, cores[i]!));
+        // Same refusal on the PULL path — the provider would happily resolve a bare title
+        // against Kavita and paint a cover for an entry the engine will not queue.
+        if (row) {
+          row.items = entries.map((e, i) => queueTile(
+            e,
+            isLegacyScalarEntry(e.value) ? tiles.unresolvedTile(e.value) : cores[i]!,
+          ));
+        }
       }));
 
       return c.json({ sets: result, order: reg.sets.map((s) => s.id) });
@@ -316,7 +330,11 @@ export function queuesRoutes(): Hono {
         : value;
       const nm = name == null ? '' : String(name).trim();
       if (!nm) return c.json({ error: 'empty collection name' }, 400);
-      value = /^collection:/i.test(nm) ? nm : `Collection: ${nm}`;
+      // `{collection: <name>}`, not the `"Collection: <name>"` STRING this used to write.
+      // Same `entryKey` either way (`title:Collection: <name>`), so nothing is re-keyed — but
+      // the file holds mappings now, and a collection says what it is in its key rather than
+      // in a prefix every reader has to re-parse.
+      value = { collection: COLLECTION_PREFIX_RE.exec(nm)?.[1]?.trim() ?? nm };
     }
     if (value == null || value === '') return c.json({ error: 'empty value' }, 400);
     try {

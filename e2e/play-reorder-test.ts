@@ -80,7 +80,7 @@ let server: ChildProcess | undefined;
 const browser = await chromium.launch();
 
 try {
-  await fs.writeFile(env.QUEUES_PATH, 'q_alpha:\n- "1"\nq_beta:\n- "2"\nq_gamma:\n- "3"\n');
+  await fs.writeFile(env.QUEUES_PATH, 'q_alpha:\n- {ratingKey: "1"}\nq_beta:\n- {ratingKey: "2"}\nq_gamma:\n- {ratingKey: "3"}\n');
   await fs.writeFile(SETS, SETS_SEED);
   await fs.rm(`${SETS}.lock`, { force: true, recursive: true });
   server = spawnServer({ env, stdio: 'ignore' });

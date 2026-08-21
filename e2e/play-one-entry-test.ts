@@ -33,7 +33,7 @@ writeFileSync(
 );
 // Three entries, in this order. `alpha` is what the queue would play on its own (it leads);
 // `gamma` is the one the ▶ names.
-writeFileSync(QUEUES_PATH, 'bob:\n  - alpha\n  - beta\n  - gamma\n');
+writeFileSync(QUEUES_PATH, 'bob:\n  - {title: alpha}\n  - {title: beta}\n  - {title: gamma}\n');
 
 const FAILS: string[] = [];
 function ok(name: string, cond: boolean, detail = ''): void {
