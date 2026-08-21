@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  entryTitle,
   groupHits,
   hitLabel,
   poolSections,
@@ -164,5 +165,59 @@ describe("hitLabel", () => {
     expect(
       hitLabel({ ...hit("3", 15), title: "Untitled" }),
     ).toBe("Untitled")
+  })
+})
+
+describe("entryTitle", () => {
+  // The 2026-08-21 defect: the queue add box built this string itself, without the edition,
+  // so two editions of one film went into `queues.yaml` under the same title.
+  it("tells two editions of one film apart", () => {
+    const tagged = entryTitle({
+      ...hit("267280", 15),
+      title: "Big Buck Bunny",
+      year: 2008,
+      editionTitle: "3D",
+    })
+    const plain = entryTitle({
+      ...hit("267281", 15),
+      title: "Big Buck Bunny",
+      year: 2008,
+    })
+
+    expect(tagged).toBe("Big Buck Bunny (2008) — 3D")
+    expect(plain).toBe("Big Buck Bunny (2008)")
+    expect(tagged).not.toBe(plain)
+  })
+
+  it("leaves the plain edition plain — Plex tags only one of the pair", () => {
+    expect(
+      entryTitle({
+        ...hit("2", 15),
+        title: "Big Buck Bunny",
+        year: 2008,
+      }),
+    ).toBe("Big Buck Bunny (2008)")
+  })
+
+  it("stores a COLLECTION by its bare name, with no year and no edition", () => {
+    // A collection entry is written as the literal `Collection: <name>` the resolver expands
+    // by NAME, so anything appended to the title stops it resolving.
+    expect(
+      entryTitle({
+        ...hit("77", 15, "collection"),
+        title: "Blender Open Movies",
+        year: 2008,
+      }),
+    ).toBe("Blender Open Movies")
+  })
+
+  it("names a SHOW the same way an item is named", () => {
+    expect(
+      entryTitle({
+        ...hit("9", 5, "show"),
+        title: "A Fixture Series",
+        year: 2019,
+      }),
+    ).toBe("A Fixture Series (2019)")
   })
 })
