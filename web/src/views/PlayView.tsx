@@ -32,7 +32,10 @@ import {
   groupPath,
   parseOnly,
 } from "../state/group"
-import { openPlayMenu } from "../state/overlays"
+import {
+  openPlayMenu,
+  openSetModal,
+} from "../state/overlays"
 import {
   bumpRevision,
   getState,
@@ -510,10 +513,39 @@ export function PlayView({
       {/*
         Where you GO from here. These were three "Configure ›" links, one per shelf heading,
         and the headings are gone — so they gather into one quiet row. It stays rendered even
-        when the grid is empty: these links are the only way to create the first pool or
-        queue, and hiding them would make a fresh install a dead end.
+        when the grid is empty: this row is the only way to create the first pool or queue,
+        and hiding it would make a fresh install a dead end.
       */}
       <p className="playlinks">
+        {/*
+          CREATE, on the page that lists what you own. The landing had no version of this
+          until 2026-08-21 — `#tools` carries the app's other "＋ New queue", and
+          `body.queue-view #tools` hides that whole toolbar here on purpose, so the only
+          route to a new queue was Configure ordered queues › and then the button. Reported
+          from a group page: "Even here, I can't add a new queue."
+
+          A local affordance rather than un-hiding the toolbar: the hide is what keeps the
+          queue filter, Collapse all and the add-to-any-queue search out of this header,
+          which is the same reason Pending sets the class. `ChannelsView` already solves it
+          this way with its own ＋ Filtered pool / ＋ Curated pool pair.
+
+          Its own id, NOT a second `#newqueue`: `narrow-scroll-test` and `ui-test` both
+          `click('#newqueue')` on /queues, PlayView renders BEFORE QueuesView, and a
+          duplicate id would hand them this hidden button instead.
+
+          It seeds `movies` — an ORDERED QUEUE — because that is the thing that was asked
+          for, and because the modal's second field is a Type picker holding both kinds, so
+          the choice is asked rather than decided here. A FILTERED pool is a different
+          editor (`openDynModal`) and stays behind Configure pools ›.
+        */}
+        <button
+          className="ghost accent"
+          id="playnewqueue"
+          onClick={() => openSetModal(null, "movies")}
+          type="button"
+        >
+          ＋ New queue
+        </button>
         <Link id="gopending" to="/pending">
           What is new and unqueued ›
         </Link>

@@ -208,6 +208,12 @@ for (const width of WIDTHS) {
   //    measurement above — `position: fixed` boxes are excluded from `scrollWidth` by
   //    definition, which is exactly why they get to be wrong on their own.
   const modals = [
+    // The LANDING's own create button. It is in this list rather than in a suite of its own
+    // because this is the always-on browser gate: the Plex-gated suites are skipped on every
+    // PR, so a landing that quietly loses its only create affordance again — which is how it
+    // shipped for a month — would reach main unchallenged. The assertion is both halves at
+    // once: the trigger exists on `/`, and the modal it opens lands inside the screen.
+    ['/', '#playnewqueue', 'setmodal', 'New queue (landing)'],
     ['/queues', '#newqueue', 'setmodal', 'New queue'],
     ['/channels/shows', '#newcurated', 'setmodal', 'New curated pool'],
     ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a filtered pool'],
