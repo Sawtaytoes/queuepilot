@@ -43,6 +43,19 @@ never in the tree.
   below is on a native `<select>`, and a `<div>` full of `<button>`s trips nothing.
   `PlayMenu.tsx` is the one hand-rolled menu left, on purpose, and says why at the top of the
   file.
+- **A class name is not a style — never copy one into a view it was not scoped for.** Most
+  rules in `app.css` are descendant rules (`.results .addto`, `.tile .exclude`), so the same
+  class on a page without that ancestor renders **unstyled** while looking styled in the
+  source, in review and in the diff. It reached the owner three times in one screen
+  ([decision](docs/decisions/2026-08-21-a-class-name-is-not-a-style.md)). Two rules follow:
+  a control that needs a look is a **Charcuterie component**, not a class name plus a hope;
+  and a class used by a **shared component** gets a **container-independent** rule, or the
+  component only works where it was born. Nothing automated can catch this — Biome sees a
+  string, tsc never reads the CSS, and unstyled markup passes axe — so the check is
+  `server/node_modules/.bin/tsx e2e/borrowed-class-audit.ts`, which asks the browser whether
+  each element matches any rule for each class it wears. It **reports, it is not a CI gate**
+  (a state class on an ancestor matches nothing on purpose), and five real findings were open
+  on other pages when it was written.
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any

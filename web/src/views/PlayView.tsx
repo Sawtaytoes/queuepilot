@@ -456,7 +456,7 @@ export function PlayView({
 
     const next = spliceOrder(full, gridOrder)
 
-    if (next.join(" ") === full.join(" ")) return // dropped where it started
+    if (next.join("\u0000") === full.join("\u0000")) return // dropped where it started
 
     // OPTIMISTIC, and not merely for polish: the drop restores the dragged node to where
     // React last rendered it (so React reconciles against a DOM it believes), which means

@@ -7,6 +7,7 @@ import {
 } from "@charcuterie/ui"
 import { useCallback, useEffect, useState } from "react"
 
+import { EditionBadge } from "../components/EditionBadge"
 import { Poster } from "../components/Poster"
 import { api } from "../lib/api"
 import type { PendingItem, RegistrySet } from "../lib/types"
@@ -226,11 +227,12 @@ export function PendingView({
                   {item.year ? (
                     <span className="y"> {item.year}</span>
                   ) : null}
-                  {item.editionTitle ? (
-                    <span className="editionbadge">
-                      {item.editionTitle}
-                    </span>
-                  ) : null}
+                  {/* The SHARED badge, not a fifth copy of the same `<span>` — this file
+                      carried the copy, and a copy is exactly how the four search pickers
+                      ended up with one of them drawing an edition and three not (#139).
+                      `PendingItem` names `editionTitle` the same way a `SearchHit` does,
+                      which is all the component asks for. */}
+                  <EditionBadge hit={item} />
                 </span>
                 <span className="glib">
                   {item.librarySectionTitle}
@@ -254,8 +256,38 @@ export function PendingView({
                     items={menuItemsFor(item, compatible)}
                     onDismiss={() => setOpenMenu(null)}
                     trigger={
-                      <button
-                        className="addto"
+                      /*
+                        A Charcuterie `Button`, and the class it used to carry (`.addto`)
+                        is gone rather than kept as a handle. Its only stylesheet rules
+                        are `.results .addto`, and a Pending tile has no `.results`
+                        ancestor — so the trigger painted as bare text on this page while
+                        looking styled in the source.
+
+                        `Menu` CLONES its trigger rather than wrapping it, so the element
+                        has to forward what the clone injects. `Button` does: its props
+                        are `ComponentPropsWithRef<"button">` and everything it does not
+                        destructure is spread straight onto the native `<button>` — the
+                        `ref`, `aria-haspopup`, `aria-expanded`, `aria-controls` and the
+                        dismiss handlers all land. `useClonedChild` composes rather than
+                        replaces for the two props that are not values, so this `onClick`
+                        and floating-ui's own both fire.
+
+                        `outline`/`accent` rather than `solid`: this is the affirmative
+                        action on the tile, but the page is a GRID and twenty filled
+                        accent buttons is a wall of indigo. Outline is also what every
+                        other secondary control in this app wears, and what `Picker`'s
+                        trigger wears.
+                      */
+                      <Button
+                        appearance="outline"
+                        data-testid="pending-addto"
+                        /* Decoration. `useRole` already puts `aria-haspopup="menu"` and
+                           `aria-expanded` on this button, so a glyph in the accessible
+                           name would only say it twice. */
+                        iconEnd={
+                          <span aria-hidden="true">▾</span>
+                        }
+                        intent="accent"
                         onClick={() =>
                           setOpenMenu((cur) =>
                             cur === item.ratingKey
@@ -263,23 +295,33 @@ export function PendingView({
                               : item.ratingKey,
                           )
                         }
-                        type="button"
+                        size="sm"
                       >
                         Add to
-                        {/* Decoration. `useRole` already puts `aria-haspopup="menu"` and
-                            `aria-expanded` on this button, so a glyph in the accessible
-                            name would only say it twice. */}
-                        <span aria-hidden="true"> ▾</span>
-                      </button>
+                      </Button>
                     }
                   />
-                  <button
-                    className="exclude"
+                  {/*
+                    Also a `Button`, for the same reason: `.exclude` is only ever
+                    `.tile .exclude`, and this list item's class is `pendingtile`. The
+                    owner's words were "Dismiss isn't a button", and it was not one.
+
+                    `outline`/`neutral`, NOT `ghost`: ghost is transparent until hovered,
+                    which is the defect being fixed rather than a fix for it. And not
+                    `danger` — dismissing writes one ratingKey to `pending.yaml`, deletes
+                    nothing and adds nothing, so red would overstate it twenty times over
+                    on a full grid. Quiet, but visibly a control, and secondary to Add to
+                    because Add to is the answer this screen is asking for.
+                  */}
+                  <Button
+                    appearance="outline"
+                    data-testid="pending-dismiss"
+                    intent="neutral"
                     onClick={() => void dismiss(item)}
-                    type="button"
+                    size="sm"
                   >
                     Dismiss
-                  </button>
+                  </Button>
                 </div>
               </li>
             )

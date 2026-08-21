@@ -18,7 +18,7 @@ await page.waitForFunction(
 ).catch(() => {});
 await page.waitForTimeout(1500);
 await page.screenshot({ path: '__screenshots__/pending-list.png' });
-const menu = await page.$('#pendinggrid .addto');
+const menu = await page.$('#pendinggrid [data-testid="pending-addto"]');
 if (menu) {
   await menu.click();
   await page.waitForTimeout(400);
