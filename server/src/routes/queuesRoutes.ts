@@ -2,9 +2,11 @@ import { Hono } from 'hono';
 import { statSync } from 'node:fs';
 import * as cache from '../cache.js';
 import { QUEUES_PATH } from '../config.js';
+import { liveClient } from '../engine/plex-live.js';
 import { inProgress } from '../engine/resolve.js';
 import * as routing from '../engine/routing.js';
 import { toWeight } from '../engine/weight.js';
+import { findDuplicateItem } from '../entryIdentity.js';
 import * as finished from '../finished.js';
 import * as plex from '../plex.js';
 import type { AccountScope } from '../plex.js';
@@ -288,6 +290,19 @@ export function queuesRoutes(): Hono {
   // {type:'collection'} the entry is written as the literal "Collection: <name>" string the
   // Python resolver expands into that collection's ordered children (name taken from the
   // value's title, or the string itself).
+  //
+  // THE DUPLICATE TEST LIVES HERE, not in `queues.addItem` and not in `entryKey`.
+  //
+  // `entryKey` is the LINE identity and is pinned — the Python writer addresses the same lines
+  // by it and `e2e/fixtures/golden/` records what it returns — so the looser ITEM test is a
+  // second, separate check (`entryIdentity.findDuplicateItem`). `addItem` keeps its exact-key
+  // refusal untouched and stays a pure YAML editor with no Plex dependency, which is what lets
+  // every offline gate keep calling it. This route is the one place every user-initiated add
+  // passes through (Pending, the toolbar search, the queue search row), and it already holds
+  // both a Plex client and the set's cfg.
+  //
+  // Reported 2026-08-21: an anime queue named a show by BARE TITLE, the Pending tile posted the
+  // same show by rating key, the two keyed differently, and a second copy landed.
   app.post('/queues/:set/items', async (c) => {
     const set = c.req.param('set');
     if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
@@ -305,6 +320,15 @@ export function queuesRoutes(): Hono {
     }
     if (value == null || value === '') return c.json({ error: 'empty value' }, 400);
     try {
+      // `added: false` is what `addItem` already answers for an exact key repeat, so the wire
+      // shape is unchanged; `duplicateOf` names the line that made it a repeat. The cfg is the
+      // ENGINE's (`routing.loadSets`), because it is the engine's resolver that runs — the
+      // registry entry `isQueueSet` reads is the file shape, which is a different object.
+      const cfg = routing.loadSets()?.sets[set];
+      if (cfg) {
+        const dup = await findDuplicateItem(liveClient(), cfg, await queues.listSet(set), value);
+        if (dup) return c.json({ added: false, key: dup.key, duplicateOf: dup.key });
+      }
       return c.json(await queues.addItem(set, value, position));
     } catch (e) {
       return c.json({ error: String(e) }, 500);

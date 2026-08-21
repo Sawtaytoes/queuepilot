@@ -26,7 +26,10 @@ import { PENDING_PATH } from './env.js';
 import { errMessage, isNodeError } from './errors.js';
 import * as queues from './queues.js';
 import * as routing from './engine/routing.js';
+import { describe, resolveQueueEntry, resolveSections } from './engine/resolve.js';
 import { collectionChildren, findCollection } from './engine/select.js';
+import { mapLimit } from './routes/mapLimit.js';
+import type { EntryDescriptor } from './engine/resolve.js';
 import type { PlexClient, PlexMetadata, RoutingRotationCfg, RoutingSetCfg } from './types.js';
 
 export interface PendingState {
@@ -107,23 +110,78 @@ export async function markSeen(at?: number): Promise<PendingState> {
 
 // --- coverage ------------------------------------------------------------------ //
 
-/** Every ratingKey a CURATED set already names — queue entries and pool members alike. */
+/**
+ * COULD `desc` name `item`? A cheap, deliberately OVER-inclusive pre-filter, and the reason
+ * resolving title entries costs nothing on a normal page load.
+ *
+ * It is the engine's own scoring from `resolve.resolveTitle`, run offline against one candidate
+ * we already hold, minus the guid term — the section listing Pending reads carries no `Guid`.
+ * A guid hint therefore short-circuits to true rather than being scored: a +100 guid match can
+ * carry a title that matches nothing at all, so scoring it as 0 would DROP a resolution the
+ * engine would have made.
+ *
+ * Over-inclusive is the safe direction and the only correct one. `resolveTitle` never returns
+ * an item it scored at or below zero, so anything the engine would resolve to `item` scores
+ * above zero here too, and survives. The cost of a false positive is one Plex query that comes
+ * back not matching; the cost of a false negative would be an item wrongly reported as new.
+ */
+function couldName(desc: EntryDescriptor, item: PendingItem): boolean {
+  if (desc.guid) return true;
+  const wanted = (desc.title || '').toLowerCase();
+  if (!wanted) return false;
+  const candidate = item.title.toLowerCase();
+  let score = 0;
+  if (desc.year != null && item.year === desc.year) score += 10;
+  else if (desc.year != null && item.year != null && item.year !== desc.year) score -= 5;
+  if (candidate === wanted) score += 5;
+  else if (candidate.startsWith(wanted)) score += 1;
+  return score > 0;
+}
+
+/** How many title lookups run at once. Matches the tile fan-out in `/api/queues`. */
+const RESOLVE_CONCURRENCY = 6;
+
+/**
+ * Every ratingKey a CURATED set already names — queue entries and pool members alike.
+ *
+ * Three shapes name an item, and only the first two used to be read:
+ *
+ *   1. a rating key, free;
+ *   2. `Collection: <name>`, which covers the collection's children;
+ *   3. a bare TITLE (`- "Detectives These Days Are Crazy!"`) or a `{title: …}` mapping.
+ *
+ * The third contributed nothing, so every title-only entry covered nothing — 84 of them in the
+ * owner's live file, which is why he could add a show to a queue that already held it. It now
+ * resolves through the ENGINE's resolver, so a covered item is exactly an item the engine would
+ * play, and not whatever a second title matcher happened to agree with.
+ *
+ * `fresh` is what makes that affordable: a title entry is only worth resolving when some new
+ * arrival could plausibly be the thing it names, and on a normal load nothing can, so the
+ * common case costs ZERO Plex calls. See `couldName`.
+ *
+ * FAIL-SAFE: a title nothing in Plex answers to contributes NOTHING, so the arrival stays on
+ * the list. A hand-typed title that no longer matches the library is a broken entry — nothing
+ * is going to play it, which is precisely what this screen reports.
+ */
 async function curatedKeys(
   client: PlexClient,
   sets: Record<string, RoutingSetCfg>,
+  fresh: readonly PendingItem[],
 ): Promise<Set<string>> {
   const named = new Set<string>();
   const collections: { name: string; cfg: RoutingSetCfg }[] = [];
+  const titled: { desc: EntryDescriptor; cfg: RoutingSetCfg }[] = [];
 
   const noteValue = (value: unknown, cfg: RoutingSetCfg): void => {
     if (value == null) return;
-    const raw = typeof value === 'object'
-      ? (value as { ratingKey?: unknown; collection?: unknown; title?: unknown })
-      : { title: value };
-    if (raw.ratingKey != null) named.add(String(raw.ratingKey));
-    const asText = String(raw.collection ?? raw.title ?? '').trim();
-    const m = /^collection:\s*(.+)$/i.exec(asText);
-    if (m) collections.push({ name: m[1]!.trim(), cfg });
+    // `describe()` is the engine's own entry parser. Using it instead of the hand-rolled
+    // reader that stood here also repairs a shape that reader could not see: a
+    // `{collection: <name>}` MAPPING never matched its `^collection:` regex (the prefix is in
+    // the KEY, not the value), so that collection's children were all reported as pending.
+    const desc = describe(value);
+    if (desc.ratingKey) named.add(desc.ratingKey);
+    if (desc.collection) collections.push({ name: desc.collection, cfg });
+    else if (!desc.ratingKey && desc.title) titled.push({ desc, cfg });
   };
 
   for (const [id, cfg] of Object.entries(sets)) {
@@ -147,6 +205,26 @@ async function curatedKeys(
       break;
     }
   }
+
+  // A title entry, resolved only where a new arrival could be what it names. The sections come
+  // from the engine's own `resolveSections` rather than `routing.setSections`, because that is
+  // the list `resolveQueueEntry` will search — filtering against a different one would skip a
+  // resolution the engine goes on to make.
+  const freshBySection = new Map<number, PendingItem[]>();
+  for (const item of fresh) {
+    const list = freshBySection.get(item.sectionId);
+    if (list) list.push(item);
+    else freshBySection.set(item.sectionId, [item]);
+  }
+  const worthResolving = titled.filter(({ desc, cfg }) =>
+    resolveSections(cfg)
+      .flatMap((sec) => (sec == null ? [] : freshBySection.get(Number(sec)) || []))
+      .some((item) => couldName(desc, item)));
+  await mapLimit(worthResolving, RESOLVE_CONCURRENCY, async ({ desc, cfg }) => {
+    const [ratingKey] = await resolveQueueEntry(client, desc, cfg, null);
+    if (ratingKey) named.add(ratingKey);
+  });
+
   return named;
 }
 
@@ -181,6 +259,43 @@ function isInAnyRule(
   return false;
 }
 
+/**
+ * Has the household already SEEN this? Then it is not a new arrival, whatever covers it.
+ *
+ * A separate axis from coverage, and it belongs beside the watermark and the dismissals rather
+ * than beside the pool rules: those three all answer "is this still news?", while coverage
+ * answers "is anything going to play it?".
+ *
+ * The rule, stated so it can be argued with:
+ *
+ *   * A MOVIE is watched when Plex reports ANY view activity — `viewCount > 0` (finished) or a
+ *     `viewOffset > 0` resume point (started and abandoned). `tiles.ts` already names those two
+ *     states "Completed" and "In Progress" and this matches its fields rather than inventing a
+ *     second definition. Both are excluded, because an arrival you have already started is one
+ *     you have already noticed, and Plex's own Continue Watching is where a half-finished film
+ *     belongs.
+ *   * A SHOW is watched only when it is FULLY watched: `viewedLeafCount >= leafCount`. A series
+ *     with one unplayed episode is still something to queue, so a partly-watched show stays on
+ *     the list. `leafCount > 0` guards the empty show, whose 0 >= 0 would otherwise read as
+ *     watched.
+ *
+ * WHOSE watch state: the ADMIN's. `listSection` runs on the admin token, `pending.yaml` holds
+ * one watermark and one dismissal list for the whole household, and the owner asked for this
+ * about his own viewing. A per-profile Pending screen would need an `AccountScope` and a
+ * per-profile state file, and that is a feature, not a detail of this fix.
+ *
+ * Every field is read off the section listing `pendingItems` already fetched — Plex puts all
+ * four on it — so the whole rule costs no extra request. Plex OMITS a count at 0, which is what
+ * makes `Number(…) || 0` the right coercion: absent means zero, never unknown.
+ */
+function isWatched(md: PlexMetadata, kind: 1 | 2): boolean {
+  if (kind === 2) {
+    const leaves = Number(md.leafCount) || 0;
+    return leaves > 0 && (Number(md.viewedLeafCount) || 0) >= leaves;
+  }
+  return (Number(md.viewCount) || 0) > 0 || (Number(md.viewOffset) || 0) > 0;
+}
+
 /** One library as `pendingItems` needs it — the slice of `plex.sections()` it reads. */
 export interface PendingLibrary {
   id: number;
@@ -192,7 +307,8 @@ export interface PendingLibrary {
 }
 
 /**
- * Items added after the watermark that nothing is going to play. Newest first.
+ * Items added after the watermark, not already watched, that nothing is going to play. Newest
+ * first.
  *
  * BOTH Plex reads are parameters rather than imports. That is not only for the gate: it is
  * the same seam the selection engine uses (`PlexClient`), and it keeps the SUBTRACTION rules
@@ -239,6 +355,7 @@ export async function pendingItems(
       const ratingKey = String(md.ratingKey);
       if (addedAt <= state.seen_through) continue;
       if (dismissed.has(ratingKey)) continue;
+      if (isWatched(md, kind)) continue;
       fresh.push({
         ratingKey,
         title: String(md.title ?? ''),
@@ -255,7 +372,7 @@ export async function pendingItems(
 
   if (!fresh.length) return { items: [], state };
 
-  const named = await curatedKeys(client, sets);
+  const named = await curatedKeys(client, sets, fresh);
   const blockedBySet = new Map<string, Set<string>>();
   for (const [id, cfg] of Object.entries(sets)) {
     blockedBySet.set(id, new Set(((cfg as RoutingRotationCfg).blocklist || []).map(String)));
