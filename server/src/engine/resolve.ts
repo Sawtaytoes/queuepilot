@@ -45,8 +45,11 @@ import type { PlexClient, PlexMetadata, Start } from '../types.js';
  */
 type Token = string | null | undefined;
 
-/** The cfg slice the curated resolver reads. Structural so a fixture cfg fits it too. */
-type ResolveCfg = {
+/** The cfg slice the curated resolver reads. Structural so a fixture cfg fits it too.
+ *
+ * EXPORTED because `entryIdentity.ts` asks this resolver the same question the engine does —
+ * "which item does this entry name?" — and must be able to name the parameter it passes. */
+export type ResolveCfg = {
   queue_sections?: readonly number[] | null;
   queue_section?: number | undefined;
   episodic_sections?: readonly number[] | null;
@@ -485,7 +488,12 @@ export async function resolveTitle(
 
 // The sections a curated set resolves entries against. Port of the shared
 // `queue_sections or set_sections or [queue_section]` expression.
-function resolveSections(cfg: ResolveCfg): readonly (number | undefined)[] {
+//
+// EXPORTED for `pending.ts`, whose cheap pre-filter must scope a title entry to exactly the
+// sections THIS function would search. `routing.setSections()` is not the same list — it drops
+// the `queue_sections` override — and a pre-filter over the wrong sections would silently skip
+// a resolution the engine would have made.
+export function resolveSections(cfg: ResolveCfg): readonly (number | undefined)[] {
   if (cfg.queue_sections && cfg.queue_sections.length) return cfg.queue_sections;
   const ss = setSections(cfg);
   if (ss.length) return ss;
