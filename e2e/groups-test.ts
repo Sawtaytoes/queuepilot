@@ -206,6 +206,57 @@ await check('reorder never drops a group the caller did not mention', async () =
   assert.deepEqual([...order].sort(), ['bob', 'bob-alice', 'kids']);
 });
 
+// --- filing a NEW set into the group that was on screen -------------------------------- //
+//
+// "It should join wherever I added it" (owner, 2026-08-21). The write is an append to the
+// stored `sets:` — the EXPLICIT half — because the resolved `setIds` is derived at read time
+// and has nowhere to be written. Four things are pinned, and the last two are the ones a
+// refactor breaks silently.
+
+await check('a set created inside a group joins that group', async () => {
+  const made = await sets.createSet({ label: 'Made In Bob', kind: 'movies', sections: [11] });
+  const filed = await groups.fileSetIntoGroup('bob', made.id);
+  assert.equal(filed, 'bob');
+  assert.ok(groups.storedGroups().find((g) => g.id === 'bob')?.sets.includes(made.id));
+  const byId = await resolve();
+  assert.ok(byId.get('bob')?.setIds.includes(made.id), 'not in the resolved membership');
+  assert.ok(!byId.get('kids')?.setIds.includes(made.id), 'leaked into another group');
+});
+
+await check('filing into an ACCOUNTS-only group works and settles the set there', async () => {
+  // `Kids` names no set ids at all — its membership derives from `accounts:`. Filing is
+  // still an append to `sets:`, and the appended set is now NAMED, so explicit-beats-derived
+  // keeps it in Kids even though it plays as sawtaytoes, which Bob claims by account. That
+  // is the rule working, not a bug: the person chose Kids by being there.
+  const made = await sets.createSet({
+    label: 'Made In Kids', kind: 'movies', sections: [11], requires_profile: 'sawtaytoes',
+  });
+  assert.equal(await groups.fileSetIntoGroup('kids', made.id), 'kids');
+  const byId = await resolve();
+  assert.ok(byId.get('kids')?.setIds.includes(made.id));
+  assert.ok(!byId.get('bob')?.setIds.includes(made.id), 'the account match beat the name');
+});
+
+await check('filing is idempotent — a retried save cannot double-list a set', async () => {
+  const before = groups.storedGroups().find((g) => g.id === 'bob')?.sets ?? [];
+  assert.equal(await groups.fileSetIntoGroup('bob', 'bob_anime'), 'bob');
+  assert.deepEqual(groups.storedGroups().find((g) => g.id === 'bob')?.sets, before);
+});
+
+await check('`all` is not a destination — it is the absence of one, not an error', async () => {
+  // The everything view is synthesized and is in no file, so filing into it must be a no-op
+  // rather than a throw: the client sends `all` for exactly the case that means "no group".
+  assert.equal(await groups.fileSetIntoGroup(groups.ALL_ID, 'bob_anime'), null);
+  assert.equal(await groups.fileSetIntoGroup('', 'bob_anime'), null);
+  assert.equal(await groups.fileSetIntoGroup(null, 'bob_anime'), null);
+});
+
+await check('a group that is not there throws, so the caller can SAY so', async () => {
+  // POST /api/sets turns this into `groupError` on a 200 — the set is already written, and a
+  // 400 would invite a retry that creates a second queue.
+  await assert.rejects(() => groups.fileSetIntoGroup('never-existed', 'bob_anime'), /no such group/);
+});
+
 await check('the hand-written header survives every write', () => {
   assert.ok(readFileSync(GROUPS_PATH, 'utf8').startsWith(HEADER), 'header gone');
 });
