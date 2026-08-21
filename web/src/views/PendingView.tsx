@@ -85,15 +85,25 @@ export function PendingView({
     setStatus(`Adding to ${set.label}…`)
 
     try {
-      await api("POST", `/api/queues/${set.id}/items`, {
-        position: "bottom",
-        value: {
-          ratingKey: item.ratingKey,
-          title: `${item.title}${item.year ? ` (${item.year})` : ""}`,
+      // `added: false` means the queue ALREADY names this item — by a bare title, which keys
+      // differently from the ratingKey posted here and so used to slip past the duplicate
+      // check and land a second copy. Saying "Added" for that would be a lie, and it is the
+      // exact case the owner reported.
+      const { added } = await api<{ added?: boolean }>(
+        "POST",
+        `/api/queues/${set.id}/items`,
+        {
+          position: "bottom",
+          value: {
+            ratingKey: item.ratingKey,
+            title: `${item.title}${item.year ? ` (${item.year})` : ""}`,
+          },
         },
-      })
+      )
       setStatus(
-        `Added “${item.title}” to ${set.label}`,
+        added === false
+          ? `“${item.title}” is already in ${set.label}`
+          : `Added “${item.title}” to ${set.label}`,
         "ok",
       )
       refreshData()
