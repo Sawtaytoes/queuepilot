@@ -540,6 +540,17 @@ jobs:
       - name: Shelf remove ✕ (browser, no Plex needed)
         run: $TSX e2e/shelf-remove-test.ts
 
+      # A queue created while a GROUP is on screen joins that group. Browser, no Plex, its
+      # own server and temp files.
+      #
+      # `groups-test.ts` above pins the WRITE, and cannot pin the half that was broken: which
+      # group the browser NAMES when it POSTs. That is derived from the URL inside `SetModal`,
+      # so only a real browser on a real route can hold it. Both directions are asserted here
+      # and they fail opposite ways — filing nothing from `/g/<id>` is the reported bug, and
+      # filing anything from `/queues` (where no group is on screen) would be a new one.
+      - name: A new queue joins the group on screen (browser, no Plex needed)
+        run: $TSX e2e/group-create-test.ts
+
       # Drag-to-reorder on the Play landing. Browser and no Plex: the landing renders from
       # sets.yaml, and the claim is "the dragged order is what sets.yaml ends up holding".
       # Its sharpest assertion is the one about the row it did NOT drag — `PATCH
