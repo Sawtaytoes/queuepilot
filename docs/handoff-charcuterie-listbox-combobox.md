@@ -1,7 +1,26 @@
 # Handoff — `Listbox` and `Combobox` belong in `@charcuterie/ui`
 
+> ## ⚠️ DELIVERED, and its "keep native for plain lists" rule is DEAD
+>
+> **Read this as history, not as guidance.** The ask landed — `@charcuterie/ui` ships
+> `Listbox`, `Combobox` and the assembled `Picker` — and every picker in this app went over
+> on 2026-08-07
+> ([decision](decisions/2026-08-07-plex-channels-pickers-are-listbox-not-native-select.md)),
+> with `SelectListbox` becoming a `Picker` adapter on 2026-08-13
+> ([decision](decisions/2026-08-13-selectlistbox-adopts-the-shared-charcuterie-picker.md)).
+> There is **not one native `Select` left in this repo**, and there should never be another.
+>
+> Two passages below are the opposite of what is now settled, and are struck through where
+> they appear: **"Keep the native path"** with its *"pick `Select` unless you need a rich
+> option or filtering"* rule, and the note that the `StartModal` season/episode pickers
+> *"should probably stay `Select`"*. Native `Select` is a **compatibility hatch**, not a
+> default — fleet-wide as of 2026-08-20, and library-wide since 2026-08-10 (see
+> [`AGENTS.md`](../AGENTS.md) for both records). Everything else here — the prior art, the
+> consumer counts, the floating-ui and density constraints — is still an accurate account of
+> why the components exist.
+
 **Audience:** an agent working in `/mnt/TrueNAS-Apps/Repos/charcuterie`.
-**Status:** requirements, not a plan. Nothing has been built.
+**Status:** ✅ delivered 2026-08-07 / 2026-08-13. Written as requirements; kept for the record.
 **Origin:** the plex-channels first-load performance + UI work of 2026-08-03. The UI complaint
 that produced this doc was *"the selects look native and chunky on desktop."* That complaint is
 **not** fixable in plex-channels, and the reason is below.
@@ -30,11 +49,15 @@ docblock already names the gap and scopes it:
 That reasoning was right at the time and is why `Select` shipped native-only. What has changed
 is that the callers now exist and are counted below.
 
-**Keep the native path.** Whatever gets built must not replace `Select`. On a phone a native
+~~**Keep the native path.** Whatever gets built must not replace `Select`. On a phone a native
 `<select>` is genuinely better than any hand-rolled listbox — it gets the system wheel picker,
 type-ahead, Home/End, PageUp/PageDown, form submission, `:invalid` and autofill for free. The
 desktop-only complaint is the one worth solving, and the two components should coexist with a
-documented "pick `Select` unless you need a rich option or filtering" rule.
+documented "pick `Select` unless you need a rich option or filtering" rule.~~
+**↑ REVERSED** (2026-08-07 here, 2026-08-10 in the library, 2026-08-20 fleet-wide). `Listbox`
+keeps type-ahead and full keyboard nav; what it forfeits — the mobile wheel, autofill,
+`:invalid`, no-JS form submission — is not used by a single control in this app. `Select` is
+the hatch, and reaching for it now needs a written reason.
 
 ---
 
@@ -125,9 +148,12 @@ adopting a component means deleting the app's `background`/`border`/`border-radi
 outranks every Tailwind utility, so a kept declaration makes the component's props a no-op with
 the build green.
 
-Note that several of these should probably **stay** `Select` — the season/episode pickers in
+~~Note that several of these should probably **stay** `Select` — the season/episode pickers in
 `StartModal` are short numeric lists and get real value from the native mobile wheel. Migration
-is per-call-site judgement, not a sweep.
+is per-call-site judgement, not a sweep.~~
+**↑ DID NOT HAPPEN, deliberately.** It was a sweep: `start-series`, `start-season` and
+`start-episode` are `SelectListbox` like everything else, and the app has no touch surface
+where the wheel picker would have been the point.
 
 ---
 
