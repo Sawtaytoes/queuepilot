@@ -109,6 +109,12 @@ export async function resolveTile(
     type: resolved ? resolved.type : null,
     title: resolved ? resolved.title : displayFor(value),
     year: resolved ? resolved.year : null,
+    // The edition, carried the last layer to the wire. `posterFields()` has always set it on
+    // a resolved movie/show and this function dropped it, so the search rows named the
+    // edition (#153) and the tile the pick WROTE went back to being one of two identical
+    // captions. A COLLECTION has no edition, and the union is discriminated on `type`, so the
+    // narrowing is the check rather than a cast.
+    editionTitle: resolved && resolved.type !== 'collection' ? resolved.editionTitle : null,
     childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
     nextEp,
     isNextEpFailed,

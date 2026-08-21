@@ -85,6 +85,16 @@ export type QueueItem = {
   type: EntryType
   title: string
   year: number | null
+  /**
+   * Plex's EDITION label, when this entry's library item has one ("3D", "Director's Cut").
+   *
+   * Two editions of one film are two library items with the SAME title and the SAME year, so
+   * two tiles for them are identical without this. Absent/null on a collection, on an
+   * unresolved entry, on every non-Plex provider entry, and on the PLAIN edition of a pair —
+   * Plex tags only the non-default item, and inventing a "Standard" label it never wrote is
+   * what `EditionBadge` already refuses to do on a search row.
+   */
+  editionTitle?: string | null
   childCount: number | null
   nextEp: NextEp | null
   /**
@@ -163,6 +173,16 @@ export type ChannelMember = {
   type: EntryType
   title: string
   year: number | null
+  /**
+   * Plex's EDITION label, when this entry's library item has one ("3D", "Director's Cut").
+   *
+   * Two editions of one film are two library items with the SAME title and the SAME year, so
+   * two tiles for them are identical without this. Absent/null on a collection, on an
+   * unresolved entry, on every non-Plex provider entry, and on the PLAIN edition of a pair —
+   * Plex tags only the non-default item, and inventing a "Standard" label it never wrote is
+   * what `EditionBadge` already refuses to do on a search row.
+   */
+  editionTitle?: string | null
   childCount: number | null
   nextEp: NextEp | null
   /**

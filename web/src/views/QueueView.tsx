@@ -5,7 +5,10 @@ import {
   SegmentedControl,
 } from "@charcuterie/ui"
 import { useRef, useState } from "react"
-import { TypeBadge } from "../components/badges"
+import {
+  EditionChip,
+  TypeBadge,
+} from "../components/badges"
 import { EditionBadge } from "../components/EditionBadge"
 import {
   EntryEditor,
@@ -842,6 +845,9 @@ export function QueueView({
                 badges={
                   <>
                     <TypeBadge face={face} item={item} />
+                    {/* Which EDITION this is, when Plex tagged one — the only thing that
+                            tells two tiles of the same film in the same year apart. */}
+                    <EditionChip face={face} />
                     {/* "In Progress" wins over "Completed": a mid-episode resume point
                             (Plex viewOffset, unwatched) means the item is being watched, not
                             finished — the Prison School OAD case must never read "Completed". */}
