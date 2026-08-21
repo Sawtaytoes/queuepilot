@@ -155,9 +155,11 @@ export function ChannelsView({
           {/* `key={channel.id}` on BOTH pickers, for two different reasons, and
               neither is "the value changed".
 
-              `Select` is uncontrolled by decision — `value` seeds `defaultValue`
-              and the DOM owns it thereafter — so a key is needed exactly where a
-              SECOND writer exists.
+              A picker is uncontrolled by decision — `value` seeds the `Listbox`,
+              which owns the selection thereafter (it was a native `Select` seeding
+              `defaultValue` when this was written; the reasoning survived the
+              2026-08-07 move to `Listbox` unchanged) — so a key is needed exactly
+              where a SECOND writer exists.
 
               - Channel: the second writer is the router. Picking here navigates,
                 and the DOM is already right; but a back button or a typed
