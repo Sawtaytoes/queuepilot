@@ -12,7 +12,7 @@ await page.waitForSelector('#chconfigure', { timeout: 20000 });
 await page.click('#chconfigure');
 await page.waitForSelector('#dynmodal[data-open]', { timeout: 10000 });
 await page.waitForTimeout(900);
-const pool = await page.$('#dyn-lineup');
+const pool = await page.$('.dyn-lineup');
 if (pool) await pool.screenshot({ path: `__screenshots__/playback-pool-${TAG}.png` });
 console.log('wrote pool');
 

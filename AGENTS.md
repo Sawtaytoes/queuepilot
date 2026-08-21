@@ -54,8 +54,35 @@ never in the tree.
   string, tsc never reads the CSS, and unstyled markup passes axe — so the check is
   `server/node_modules/.bin/tsx e2e/borrowed-class-audit.ts`, which asks the browser whether
   each element matches any rule for each class it wears. It **reports, it is not a CI gate**
-  (a state class on an ancestor matches nothing on purpose), and five real findings were open
-  on other pages when it was written.
+  (a state class on an ancestor matches nothing on purpose). The five findings it left open
+  on other pages are **all fixed** as of 2026-08-21, by adopting components rather than by
+  un-scoping rules; it now returns 16 pairs and every one of them is a state class or one of
+  Tailwind's own `peer` / `divide-*` primitives. ⚠️ Do not trust a zero from it — its first
+  draft returned zero on every route, which was a bug (CSS nesting gives every `CSSStyleRule`
+  a truthy empty `cssRules`). Confirm the self-test probe fires.
+- **A control is a Charcuterie component configured by PROPS, not an app class name.** When
+  `@charcuterie/ui` ships the thing, use it: a pressable control is a `Button` /
+  `ButtonLink` / `IconButton` with `appearance` / `intent` / `size`, a pill is a `Badge`, a
+  label over one control is a `Field` and over several a `FieldGroup`. **A `className` on a
+  Charcuterie component is a smell** — `app.css` is unlayered and Tailwind's utilities are in
+  `@layer utilities`, so *any* app rule outranks the component it lands on. It is never a
+  tweak; it is a silent override. `#selbar button` was the third time this bit, and it
+  reached two `Picker` triggers and a `Badge` nobody had thought about: the rule was written
+  for hand-rolled buttons and a `Picker`'s trigger IS a `<button>`. This is the stronger half
+  of the borrowed-class rule above — it binds a class that **does** match too, which is why
+  `borrowed-class-audit.ts` cannot see it
+  ([decision](docs/decisions/2026-08-21-a-component-configured-by-props-not-a-borrowed-class.md)).
+  Three exceptions, and they are the whole list: **app layout** (page scaffolding, grids, the
+  gap between two form blocks) is not a component-library concern and may sit on a
+  component's outer element when it sets position and spacing only; **a shape the library
+  cannot express yet** (the two-part Collection chip) keeps its app class and says why; and a
+  **DOM handle** — `data-testid`, or a class used *only* as a selector and carrying no rule,
+  which is what `#dyn-lineup` had to become because `FieldGroupProps` forwards nothing but
+  `className`. ⚠️ Two upstream gaps to know before reaching for a form component:
+  `FieldProps` / `FieldGroupProps` spread **no** rest props (no `id`, no `hidden`, no
+  `data-testid`, unlike `Button` / `Badge` / `Picker`), and `Checkbox` has **no
+  `description`** slot — so a box whose hints belong to a checkbox cannot move to
+  Charcuterie's field typography as a set.
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any

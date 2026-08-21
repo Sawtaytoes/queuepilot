@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import {
@@ -244,43 +245,56 @@ export function ChannelsView({
             ▶ Play on ▾
           </button>
         )}
-        <button
-          className="ghost"
+        {/* Four Charcuterie `Button`s, configured by PROPS. They were raw `<button>`s
+            wearing `ghost` (which paints) and `accent` (which did NOT — its only rules
+            are `#tools button.accent` and `.playlinks button.accent`, and this row is
+            neither, so the two pool-creation buttons had never once shown the accent
+            treatment their class asked for).
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`)
+
+            The intents are the row's meaning, not decoration: Resample and Configure act
+            on the pool you are already looking at, so they are `neutral`; the two `＋`
+            buttons MAKE something, which is what `accent` was reaching for and what
+            `＋ New queue` gets in the Home toolbar. `outline` throughout, because the
+            row already has one solid control (`▶ Play on`) and a second would stop it
+            reading as the thing to press. */}
+        <Button
+          appearance="outline"
           id="chresample"
+          intent="neutral"
           onClick={() => setResampleToken((n) => n + 1)}
-          type="button"
         >
           Resample
-        </button>
+        </Button>
         <Tip label="Full pool config">
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
             id="chconfigure"
+            intent="neutral"
             onClick={() => openDynModal(channel.id)}
-            type="button"
           >
             ⚙ Configure
-          </button>
+          </Button>
         </Tip>
-        <button
-          className="ghost accent"
+        <Button
+          appearance="outline"
           id="newdyn"
+          intent="accent"
           onClick={() => openDynModal(null)}
-          type="button"
         >
           ＋ Filtered pool
-        </button>
+        </Button>
         {/* "New pool" splits by how membership is decided: a Curated pool is a
             hand-picked member set (the set modal, kind=anime); a Filtered pool
             derives its members from rules. */}
-        <button
-          className="ghost accent"
+        <Button
+          appearance="outline"
           id="newcurated"
+          intent="accent"
           onClick={() => openSetModal(null, "anime")}
-          type="button"
         >
           ＋ Curated pool
-        </button>
+        </Button>
         <span className="chnote">
           A sample of what could play — the real rotation
           re-draws fresh every scan.
