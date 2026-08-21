@@ -104,3 +104,22 @@ export function hitLabel(hit: SearchHit): string {
     : ""
   return `${hit.title}${year}${edition}`
 }
+
+/**
+ * The title a PICK stores in the file — `hitLabel` for an item, the bare name for a
+ * collection.
+ *
+ * A collection is written as the literal `Collection: <name>` entry the resolver expands by
+ * NAME, so it must not carry a year or an edition; an item is addressed by `ratingKey` and
+ * its title is the human-readable half of the same entry, so it carries both.
+ *
+ * One function because three pickers write the same entry shape — the queue add box, the
+ * Home toolbar's add-to-any-queue menu, and the pool member picker. It was copied three
+ * times, and only the member picker was updated when the edition arrived (#139), which is
+ * exactly how the queue box came to store two editions under one title.
+ */
+export function entryTitle(hit: SearchHit): string {
+  return hit.type === "collection"
+    ? hit.title
+    : hitLabel(hit)
+}

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
+import { EditionBadge } from "../components/EditionBadge"
 import { Poster } from "../components/Poster"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { api } from "../lib/api"
@@ -318,9 +319,15 @@ export function ChannelFilters({
                             <span className="y">{`${hit.childCount || 0} items`}</span>
                           </>
                         ) : (
-                          <span className="y">
-                            {hit.year || ""}
-                          </span>
+                          <>
+                            <span className="y">
+                              {hit.year || ""}
+                            </span>
+                            {/* A movie library holds two editions of one film as two items
+                                with the same title and year. Blocking is by ratingKey, so it
+                                excludes exactly ONE of them — the row has to say which. */}
+                            <EditionBadge hit={hit} />
+                          </>
                         )}
                       </span>
                     </>

@@ -2,6 +2,7 @@ import { Button } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 import { useNavigate } from "react-router"
 import { api } from "../lib/api"
+import { entryTitle } from "../lib/searchGroups"
 import type { SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
@@ -16,6 +17,7 @@ import {
   setFilter,
   useUi,
 } from "../state/ui"
+import { EditionBadge } from "./EditionBadge"
 import { Poster } from "./Poster"
 import { SearchDropdown } from "./SearchDropdown"
 import { SelectListbox } from "./SelectListbox"
@@ -101,7 +103,10 @@ export function Toolbar() {
           onClose={() => setOpenMenu(null)}
           placeholder="Add to any queue — search all libraries…"
           rowFor={(hit, index) => {
-            const label = `${hit.title}${hit.year ? ` (${hit.year})` : ""}`
+            // `entryTitle` appends the EDITION when Plex gave the item one — this menu adds
+            // to a QUEUE, so it writes the same entry the in-queue add box does and must
+            // name the item the same way.
+            const label = entryTitle(hit)
             const compatible = (reg?.sets ?? []).filter(
               (s) =>
                 s.source === "queue" &&
@@ -116,9 +121,14 @@ export function Toolbar() {
                     ratingKey={hit.ratingKey}
                   />
                   <span className="ginfo">
-                    {hit.title}{" "}
-                    <span className="y">
-                      {hit.year || ""}
+                    {/* `.gtitle` keeps title, year and edition on ONE line — `.ginfo` is a
+                        flex column, so each of them would otherwise stack. */}
+                    <span className="gtitle">
+                      {hit.title}{" "}
+                      <span className="y">
+                        {hit.year || ""}
+                      </span>
+                      <EditionBadge hit={hit} />
                     </span>
                     <span className="glib">
                       {libTitle(hit.sectionId)}
