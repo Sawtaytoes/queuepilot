@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
 import { openPlayMenu } from "../state/overlays"
@@ -31,6 +32,25 @@ import { SelectListbox } from "./SelectListbox"
  * The target list is the same FAMILY only — a queue's titles move to queues, a
  * channel's shows to channels. Mixing families would silently change an entry's
  * playback semantics from "top plays next" to "random rotation".
+ *
+ * ## Every control here is a Charcuterie component, configured by props
+ *
+ * `#selbar button { background: accent-solid; color: on-solid; border: none; … }` used
+ * to paint every button in this bar, and it did two things wrong at once
+ * (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`):
+ *
+ *  - **Apply was not emphasised.** It wore `primary`, whose only rules are
+ *    `#entrymodal .modalbtns button.primary` and its `#groupsmodal` twin — neither of
+ *    them this bar. The class did nothing, `#selbar button` caught it, and the one
+ *    control that commits the edit painted exactly like Reset and Move beside it.
+ *  - **It repainted the two `Picker` triggers**, which are `<button>`s. `app.css` is
+ *    unlayered and Tailwind's utilities are in `@layer utilities`, so an id-scoped rule
+ *    beats a component every time: both pickers came out solid indigo, against this
+ *    repo's own rule that a picker trigger keeps `Picker`'s `outline`.
+ *
+ * So the skin rules are gone and each button says what it IS. `solid` is one per view —
+ * Apply, because it is the thing you are meant to press — and `danger` is Remove, which
+ * is the only destructive one. Everything else is `outline`.
  */
 
 const KEEP = "keep"
@@ -130,7 +150,8 @@ export function SelectionBar({
           the queue does not already have (that IS the queue). With more than one selected the
           button says so rather than vanishing, which would read as a missing feature. */}
       {only ? (
-        <button
+        <Button
+          appearance="outline"
           id="selplay"
           onClick={(e) =>
             openPlayMenu({
@@ -141,27 +162,30 @@ export function SelectionBar({
               setId: only.fromSet,
             })
           }
-          type="button"
         >
           ▶ Play on ▾
-        </button>
+        </Button>
       ) : (
-        <button disabled id="selplay" type="button">
+        <Button
+          appearance="outline"
+          id="selplay"
+          isDisabled
+        >
           ▶ Play — pick one
-        </button>
+        </Button>
       )}
 
       {/* --- the settings, applied together --- */}
       <div className="bulkfield">
         <span>Episodes</span>
         {episodes === null ? (
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
+            intent="neutral"
             onClick={() => setEpisodes(chapterDefault)}
-            type="button"
           >
             — keep —
-          </button>
+          </Button>
         ) : (
           <CountPicker
             defaultValue={chapterDefault}
@@ -175,13 +199,13 @@ export function SelectionBar({
       <div className="bulkfield">
         <span>Weight</span>
         {weight === null ? (
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
+            intent="neutral"
             onClick={() => setWeight(1)}
-            type="button"
           >
             — keep —
-          </button>
+          </Button>
         ) : (
           <CountPicker
             defaultValue={1}
@@ -208,10 +232,11 @@ export function SelectionBar({
           value={batchStop}
         />
       </div>
-      <button
-        className="primary"
-        disabled={!hasEdit}
+      {/* The one `solid` control in the bar. This is what `primary` was asking for and
+          never got. */}
+      <Button
         id="bulkapply"
+        isDisabled={!hasEdit}
         onClick={() =>
           void applyBulk(
             {
@@ -224,20 +249,19 @@ export function SelectionBar({
             "Updated",
           )
         }
-        type="button"
       >
         {`Apply to ${count}`}
-      </button>
-      <button
+      </Button>
+      <Button
+        appearance="outline"
         id="bulkreset"
         onClick={() =>
           void applyBulk({ reset: true }, "Reset")
         }
         title="Back to the queue default, 1x, follow the set, automatic start"
-        type="button"
       >
         Reset to defaults
-      </button>
+      </Button>
 
       {/* --- the existing move/remove actions --- */}
       <label>
@@ -259,7 +283,8 @@ export function SelectionBar({
           value={value}
         />
       </label>
-      <button
+      <Button
+        appearance="outline"
         id="movebtn"
         onClick={async () => {
           const items = [...selected.values()]
@@ -284,13 +309,12 @@ export function SelectionBar({
             )
           }
         }}
-        type="button"
       >
         Move
-      </button>
-      <button
-        className="danger"
+      </Button>
+      <Button
         id="rmbtn"
+        intent="danger"
         onClick={async () => {
           const items = [...selected.values()]
 
@@ -309,18 +333,17 @@ export function SelectionBar({
             )
           }
         }}
-        type="button"
       >
         Remove
-      </button>
-      <button
-        className="ghost"
+      </Button>
+      <Button
+        appearance="outline"
         id="clearsel"
+        intent="neutral"
         onClick={clearSelection}
-        type="button"
       >
         Clear
-      </button>
+      </Button>
     </div>
   )
 }

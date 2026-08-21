@@ -32,7 +32,7 @@ const shot = async (name: string) => {
 
 // 1. A refilling pool, as saved: 60 ahead, top-up on, finished shows restart.
 await openConfigure('younger_kids_shorts');
-const box = await page.$('#dyn-lineup');
+const box = await page.$('.dyn-lineup');
 if (box) {
   await box.scrollIntoViewIfNeeded();
   await page.waitForTimeout(200);
@@ -40,7 +40,7 @@ if (box) {
 await shot('box');
 
 // 2. The length picker OPEN, so the presets and the Default chip are visible.
-const trigger = await page.$('#dyn-lineup .countpick button, #dyn-lineup [role="combobox"], #dyn-lineup button');
+const trigger = await page.$('.dyn-lineup .countpick button, .dyn-lineup [role="combobox"], .dyn-lineup button');
 if (trigger) {
   await trigger.click();
   await page.waitForTimeout(400);

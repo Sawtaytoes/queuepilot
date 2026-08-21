@@ -1,4 +1,5 @@
 import type { ControlSize } from "@charcuterie/tokens"
+import type { SlotProps } from "@charcuterie/ui"
 import { Badge, Picker } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
@@ -51,7 +52,19 @@ export type SelectListboxOption = {
   value: string
 }
 
-export type SelectListboxProps = {
+/**
+ * `SlotProps` is what makes this component usable inside a Charcuterie `Field`.
+ *
+ * `Field` CLONES onto its one child and does not wrap it, so it hands this component
+ * an `id`, an `aria-describedby`, and (when required) `aria-required`/`required`. A
+ * component that declares none of them drops all four in silence — React does not
+ * warn, TypeScript never sees them, the render is pixel-identical, and the `Field`'s
+ * `<label htmlFor>` then points at an id that is nowhere in the document. That is the
+ * exact defect `slotProps.ts` was written to make impossible, so the rule it states —
+ * *a slot component is a pass-through* — is honoured here: everything received is
+ * forwarded to `Picker`, which spreads it onto the real `<button>`.
+ */
+export type SelectListboxProps = SlotProps & {
   className?: string
   id?: string
   isDisabled?: boolean
@@ -75,9 +88,11 @@ export function SelectListbox({
   placeholder,
   size = "md",
   value,
+  ...slotProps
 }: SelectListboxProps): ReactNode {
   return (
     <Picker
+      {...slotProps}
       // Every trigger in the app carries `.qppicker`, which is what lets one rule
       // in app.css make a picker shrink and ellipsise. It has to be a class rather
       // than a Tailwind utility list here because the rule also has to reach the
@@ -87,6 +102,13 @@ export function SelectListbox({
         className ? `qppicker ${className}` : "qppicker"
       }
       data-testid={id}
+      // `data-testid` stays the e2e handle, and the `id` is now ALSO rendered.
+      // `useAnchoredOverlay` used to overwrite a trigger's `id` with a generated one,
+      // which is why this component only ever emitted `data-testid`; `Picker` fixed
+      // that (it prefers the trigger's own id and mints one only when absent) exactly
+      // so a `<label htmlFor>` above a picker can name it. A `Field` around this
+      // control needs that, and every call site's `id` is already unique.
+      id={id}
       isDisabled={isDisabled}
       label={label}
       onChange={onChange}
