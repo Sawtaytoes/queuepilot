@@ -1,6 +1,8 @@
+import type { MenuItem } from "@charcuterie/ui"
 import {
   Button,
   EmptyState,
+  Menu,
   Spinner,
 } from "@charcuterie/ui"
 import { useCallback, useEffect, useState } from "react"
@@ -22,8 +24,10 @@ import { setStatus, useStore } from "../state/store"
  *
  * So the three affordances are the three answers to "why is this here?":
  *
- * - **Add to ▾** — it should be in a queue. Only queues whose libraries include the item are
- *   offered, the same rule the Home toolbar's search uses.
+ * - **Add to** — it should be in a queue. Only queues whose libraries include the item are
+ *   offered, the same rule the Home toolbar's search uses. A Charcuterie `Menu`, because each
+ *   row PERFORMS an add and leaves no selected state behind — see the note on the `Menu`
+ *   below.
  * - **Dismiss** — no. Per item, because skipping one film must not hide the twelve after it.
  * - **Mark all as seen** — none of this, and do not ask again. One watermark, one write.
  */
@@ -75,7 +79,8 @@ export function PendingView({
     item: PendingItem,
     set: RegistrySet,
   ) => {
-    setOpenMenu(null)
+    // No `setOpenMenu(null)` here: choosing an item is what dismisses a `Menu`, and
+    // `onDismiss` already clears this.
     setStatus(`Adding to ${set.label}…`)
 
     try {
@@ -104,6 +109,35 @@ export function PendingView({
       )
     }
   }
+
+  /**
+   * The rows of one tile's Add-to menu.
+   *
+   * The no-compatible-queue case is a single **disabled** item rather than the loose
+   * `<p>` the hand-rolled menu had. `Menu` takes `items`, and an empty `items` is an
+   * empty panel that says nothing; a disabled `menuitem` keeps the sentence inside the
+   * menu where a screen reader reaches it by arrowing, announces itself as unavailable,
+   * and is skipped by the arrow keys because `MenuAction` never registers it. It is the
+   * difference between "you cannot do this right now" and "this does not exist".
+   */
+  const menuItemsFor = (
+    item: PendingItem,
+    compatible: RegistrySet[],
+  ): MenuItem[] =>
+    compatible.length === 0
+      ? [
+          {
+            isDisabled: true,
+            key: "none",
+            label: `No queue draws from “${item.librarySectionTitle}” — add it to one via its ⚙.`,
+            onSelect: () => {},
+          },
+        ]
+      : compatible.map((s) => ({
+          key: s.id,
+          label: s.label,
+          onSelect: () => void addTo(item, s),
+        }))
 
   const dismiss = async (item: PendingItem) => {
     setItems((prev) =>
@@ -202,19 +236,43 @@ export function PendingView({
                   {item.librarySectionTitle}
                 </span>
                 <div className="pendingactions">
-                  <button
-                    className="addto"
-                    onClick={() =>
-                      setOpenMenu((cur) =>
-                        cur === item.ratingKey
-                          ? null
-                          : item.ratingKey,
-                      )
+                  {/*
+                    A `Menu`, NOT a `Picker`/`Listbox`, and the distinction is the one
+                    Charcuterie's own `Menu` states: a `menuitem` DOES something, an
+                    `option` IS something. Choosing "Bob — Movies" here POSTs the add and
+                    keeps no selected value — the tile leaves the list entirely — so
+                    `role="menu"` is the true role and a listbox here would be the same
+                    mistake mux-magic's `TypePicker` made from the other side.
+
+                    What the hand-rolled `.qmenu` never had, and now comes for free:
+                    arrow-key navigation, Home/End, Escape, outside-press dismiss, focus
+                    moved into the panel on open and returned to the trigger on close.
+                  */}
+                  <Menu
+                    className="addtomenu"
+                    isVisible={openMenu === item.ratingKey}
+                    items={menuItemsFor(item, compatible)}
+                    onDismiss={() => setOpenMenu(null)}
+                    trigger={
+                      <button
+                        className="addto"
+                        onClick={() =>
+                          setOpenMenu((cur) =>
+                            cur === item.ratingKey
+                              ? null
+                              : item.ratingKey,
+                          )
+                        }
+                        type="button"
+                      >
+                        Add to
+                        {/* Decoration. `useRole` already puts `aria-haspopup="menu"` and
+                            `aria-expanded` on this button, so a glyph in the accessible
+                            name would only say it twice. */}
+                        <span aria-hidden="true"> ▾</span>
+                      </button>
                     }
-                    type="button"
-                  >
-                    Add to ▾
-                  </button>
+                  />
                   <button
                     className="exclude"
                     onClick={() => void dismiss(item)}
@@ -222,30 +280,6 @@ export function PendingView({
                   >
                     Dismiss
                   </button>
-                  {openMenu === item.ratingKey ? (
-                    <div
-                      className="qmenu"
-                      data-density="compact"
-                    >
-                      {compatible.length === 0 ? (
-                        <p>{`No queue draws from “${item.librarySectionTitle}” — add it to one via its ⚙.`}</p>
-                      ) : (
-                        compatible.map((s) => (
-                          <Button
-                            appearance="ghost"
-                            intent="neutral"
-                            isFullWidth
-                            key={s.id}
-                            onClick={() =>
-                              void addTo(item, s)
-                            }
-                          >
-                            {s.label}
-                          </Button>
-                        ))
-                      )}
-                    </div>
-                  ) : null}
                 </div>
               </li>
             )

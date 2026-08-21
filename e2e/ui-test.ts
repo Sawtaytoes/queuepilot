@@ -53,7 +53,10 @@ ok('tools in header (Wide View)', await page.$eval('#gslot-wide #tools', () => t
 await page.fill('#gsearch', 'toy tinkers');
 await page.waitForSelector('#gresults.open li', { timeout: 15000 });
 await page.click('#gresults li .addto');
-const notice = await page.textContent('.qmenu');
+// `.addtomenu` is the Charcuterie `Menu` panel, and it PORTALS to <body> — so this is a
+// document-wide read, never `#gresults .addtomenu`. The notice is a DISABLED menuitem
+// rather than the old loose <p>: `Menu` renders `items` and nothing else.
+const notice = await page.textContent('.addtomenu');
 ok('shorts: no-compatible-queue notice', /No queue includes/.test(notice ?? ''));
 await page.keyboard.press('Escape');
 
@@ -74,10 +77,10 @@ ok('new queue shelf appears', true);
 await page.fill('#gsearch', 'toy tinkers');
 await page.waitForSelector('#gresults.open li', { timeout: 15000 });
 await page.click('#gresults li .addto');
-await page.waitForSelector('.qmenu button');
-const menuLabels = await page.$$eval('.qmenu button', (bs) => bs.map((b) => b.textContent));
+await page.waitForSelector('.addtomenu [role="menuitem"]');
+const menuLabels = await page.$$eval('.addtomenu [role="menuitem"]', (bs) => bs.map((b) => b.textContent));
 ok('menu offers Bob — Shorts', menuLabels.includes('Bob — Shorts'));
-await page.click('.qmenu button:has-text("Bob — Shorts")');
+await page.click('.addtomenu [role="menuitem"]:has-text("Bob — Shorts")');
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Added'), undefined, { timeout: 20000 });
 ok('added via header search', true);
 ok('results stay open after add', await page.$eval('#gresults', (e) => e.classList.contains('open')));

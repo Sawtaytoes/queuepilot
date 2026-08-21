@@ -1573,6 +1573,19 @@ body.queue-view #tools {
 .results li {
   position: relative;
 }
+/* The Add-to menus (a Pending tile's, and a search row's) are Charcuterie `Menu`s, and a
+   `Menu` brings its own surface, its own rows and its own POSITION — floating-ui writes
+   `position: fixed` plus a transform straight onto the panel. So there is nothing to lay
+   out here and exactly one thing to say: cap the width, because the panel sizes to its
+   content and the no-compatible-queue row is a whole sentence. */
+.addtomenu {
+  max-width: 18rem;
+}
+
+/* `.qmenu` is now the PLAY menu's only home — the two Add-to menus moved to Charcuterie's
+   `Menu` on 2026-08-21 and took the hand-rolled positioning, focus and dismissal with them.
+   Kept as-is (rather than folded into `.playmenu`) because `PlayMenu` is anchored by a
+   caller-supplied DOMRect and is NOT converted; see the note at the top of PlayMenu.tsx. */
 .qmenu {
   position: absolute;
   right: 8px;
@@ -1586,7 +1599,7 @@ body.queue-view #tools {
   /* F1: the rows are 44px each (Button's MIN_TOUCH_TARGET — an accessibility floor, not
      padding to trim), so the height comes off the CONTAINER instead. padding 4px, gap 0, and
      a hairline between rows rather than a gap. `data-density="compact"` on the root (set in
-     PlayMenu/Toolbar) brings the 44px floor itself down over --control-height. */
+     PlayMenu) brings the 44px floor itself down over --control-height. */
   padding: 4px;
   display: flex;
   flex-direction: column;
@@ -3621,16 +3634,12 @@ body.rowdragging {
   font-size: 0.8rem;
 }
 .pendingtile .pendingactions {
-  position: relative;
   display: flex;
   gap: 6px;
   margin-top: 4px;
 }
-/* `.qmenu` is anchored to the RIGHT because its other homes (the Home toolbar's search rows,
-   the play menu) sit at the right of a wide row. A pending tile is ~160px wide, so a
-   220px-min menu hung off its right edge runs off the left of the page — on the first tile,
-   off the viewport entirely. Anchor it to the tile's left instead. */
-.pendingtile .qmenu {
-  left: 0;
-  right: auto;
-}
+/* The `.pendingtile .qmenu { left: 0 }` override that used to sit here is GONE. It existed
+   because `.qmenu` hung off its container's RIGHT edge, and a ~160px pending tile put a
+   220px-min menu off the left of the page — off the viewport entirely on the first tile.
+   Charcuterie's `Menu` is placed by floating-ui's `flip` + `shift`, which reads the real
+   viewport, so the case that needed an app override is handled by the component. */
