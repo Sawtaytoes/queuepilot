@@ -53,7 +53,7 @@ interface DriverCtl {
   /** `"a|b"` -> the sameProfile answer to force. */
   same: Map<string, boolean>;
   playResults: { queued?: number; played?: boolean; mode?: string; client?: string; error?: string }[];
-  lastSeen: { title: string | null };
+  lastSeen: { title: string | null; isObserved: boolean };
   awake: boolean;
   onSwitch: (() => void) | null;
 }
@@ -93,6 +93,9 @@ const drive = (kw: Partial<DriveArgs> = {}) => driver.driveToPlaying({
 // --------------------------------------------------------------------------- //
 reset();
 CTL.lastSeen.title = 'Younger Kids';
+// OBSERVED, not merely remembered: only a profile the PMS log actually saw may skip the
+// picker walk. A title driveProfile itself wrote after an unverified switch must not.
+CTL.lastSeen.isObserved = true;
 let res = await drive({ requiredProfile: 'Younger Kids' });
 ok('(a) already-on-profile: plays and reports played', res.played === true);
 ok('(a) already-on-profile: NEVER walks the picker (no switchTo)', nCalls('switch_to') === 0);
@@ -221,6 +224,7 @@ ok('(g) profile gate: still switches and plays', res.played === true);
 reset();
 PUBLISHED.length = 0;
 CTL.lastSeen.title = 'Younger Kids';
+CTL.lastSeen.isObserved = true;
 res = await drive({ requiredProfile: 'Younger Kids' });
 ok('(g) already-on-profile: publishes no wait at all', PUBLISHED.length === 0,
   JSON.stringify(PUBLISHED));

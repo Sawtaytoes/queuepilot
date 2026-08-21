@@ -58,7 +58,7 @@ interface DriverCtl {
   /** `"a|b"` -> the sameProfile answer to force. */
   same: Map<string, boolean>;
   playResults: unknown[];
-  lastSeen: { title: string | null };
+  lastSeen: { title: string | null; isObserved: boolean };
   awake: boolean;
   onSwitch: (() => void) | null;
 }
@@ -133,36 +133,64 @@ function wireDriver(aliasGroups: readonly (readonly string[])[] = [], switchOk =
 }
 const switches = () => CTL.calls.filter((c) => c[0] === 'switch_to');
 
-// (a) LAST_SEEN == required exactly -> no picker walk.
+// Every scenario below now turns on PROVENANCE as well as the title, because the skip is
+// only sound for a profile the PMS log actually SAW. `isObserved: true` is what
+// `profiles.waitForProfile()` sets; `driveProfile` writes the title alone, as a claim.
+// (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
+
+// (a) An OBSERVED LAST_SEEN == required exactly -> no picker walk.
 wireDriver();
 CTL.lastSeen.title = 'sawtaytoes';
+CTL.lastSeen.isObserved = true;
 let r = await driveProfile('sawtaytoes', null);
-ok('(bug2a) exact LAST_SEEN==required: gate satisfied (null)', r === null);
-ok('(bug2a) exact LAST_SEEN==required: NO switchTo call', switches().length === 0);
+ok('(bug2a) observed LAST_SEEN==required: gate satisfied (null)', r === null);
+ok('(bug2a) observed LAST_SEEN==required: NO switchTo call', switches().length === 0);
 
-// (b) LAST_SEEN is the DISPLAY name, required the USERNAME — the alias must short-circuit.
+// (b) An OBSERVED LAST_SEEN is the DISPLAY name, required the USERNAME — alias short-circuits.
 wireDriver([['Bob Smith', 'sawtaytoes']]);
 CTL.lastSeen.title = 'Bob Smith';
+CTL.lastSeen.isObserved = true;
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2b) display-name==username alias: gate satisfied (null)', r === null);
 ok('(bug2b) display-name==username alias: NO picker/switch call', switches().length === 0);
 
-// (c) A real change: LAST_SEEN cold (null) -> switch once, and LAST_SEEN is then RECORDED as
-//     `required`, so an immediate second call short-circuits with no further switch.
+// (b2) The SAME title, UNOBSERVED, must NOT satisfy the gate. This is the whole fix: the only
+//      thing separating this case from (a) is where the knowledge came from.
+wireDriver();
+CTL.lastSeen.title = 'sawtaytoes';
+CTL.lastSeen.isObserved = false;
+r = await driveProfile('sawtaytoes', null);
+ok('(bug2b2) UNOBSERVED LAST_SEEN==required: still walks the picker',
+  r === null && switches().length === 1, JSON.stringify(switches()));
+
+// (c) A real change: LAST_SEEN cold (null) -> switch once, and the switch RECORDS the profile
+//     as a picker hint — but as a CLAIM, so it cannot clear the next gate by itself.
 wireDriver([['Bob Smith', 'sawtaytoes']], true);
 CTL.lastSeen.title = null;
+CTL.lastSeen.isObserved = false;
 const r1 = await driveProfile('sawtaytoes', null);
 ok('(bug2c) cold cache: switch runs once', r1 === null && switches().length === 1,
   JSON.stringify(switches()));
 ok('(bug2c) switch records the profile into LAST_SEEN', CTL.lastSeen.title === 'sawtaytoes',
   String(CTL.lastSeen.title));
+ok('(bug2c) ...but records it as a CLAIM, not an observation',
+  CTL.lastSeen.isObserved === false, String(CTL.lastSeen.isObserved));
+
+// (c2) THE REGRESSION THIS FIX EXISTS FOR. A second gated scan must walk the picker AGAIN
+//      rather than trust what the first one wrote. `adb.switchTo` reports success on the
+//      CENTER keypress and cannot see whether Plex acted on it, so a scan that short-circuits
+//      on that claim is a cache confirming its own last guess — and once the guess is wrong it
+//      stays wrong on every later play, silently. Live on 2026-08-18: the Younger Kids Shorts
+//      pool published `profile: Younger Kids, played: true` while Plex scrobbled all three
+//      shorts to the OWNER's account.
 const r2 = await driveProfile('sawtaytoes', null);
-ok('(bug2c) second gated scan short-circuits: still only ONE switch total',
-  r2 === null && switches().length === 1, JSON.stringify(switches()));
+ok('(bug2c2) second gated scan does NOT trust the claim: it walks again',
+  r2 === null && switches().length === 2, JSON.stringify(switches()));
 
 // (d) Cold cache + a DIFFERENT signed-in profile -> a real switch is still driven.
 wireDriver([['Bob Smith', 'sawtaytoes'], ['Younger Kids']]);
 CTL.lastSeen.title = 'Younger Kids'; // signed in as someone else
+CTL.lastSeen.isObserved = true;
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2d) genuinely-wrong profile: drives the switch once',
   r === null && switches().length === 1, JSON.stringify(switches()));

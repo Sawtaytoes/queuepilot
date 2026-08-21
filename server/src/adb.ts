@@ -546,6 +546,24 @@ async function waitActivity(fragment: string, timeout = 8.0, poll = 0.2): Promis
 }
 
 /**
+ * Did the profile picker go away? The inverse of `waitActivity` — polls the foreground
+ * activity until it is no longer the picker.
+ *
+ * Short timeout on purpose: accepting a profile is a local UI transition, not a network
+ * round trip, so a picker still up after a couple of seconds is a picker that rejected the
+ * pick. A LONGER wait here would just delay the error.
+ */
+async function pickerGone(timeout = 3.0, poll = 0.2): Promise<boolean> {
+  const deadline = Date.now() + timeout * 1000;
+  while (Date.now() < deadline) {
+    const act = foregroundActivity() || '';
+    if (!act.includes(PICKER_ACTIVITY)) return true;
+    await sleep(poll);
+  }
+  return false;
+}
+
+/**
  * Walk Plex's own "Switch user" path back to the picker. Returns true on success.
  *
  * Verified 2026-07-26: LEFT (open sidebar) -> UP to the pinned user -> CENTER ->
@@ -837,9 +855,31 @@ export async function switchTo(
     verified = true;
   }
 
-  // Commit straight away. The loop only exits on a VERIFIED read-back showing `target`,
-  // moments ago — re-verifying would cost another ~1.9s dump to learn what we just learned.
+  // Commit. The loop only exits on a VERIFIED read-back showing `target` moments ago, so the
+  // right tile WAS highlighted — but that is a statement about the picker, not about Plex.
   if (!(await press('KEYCODE_DPAD_CENTER'))) return [false, 'the commit press failed'];
-  console.log(`[adb] committed '${current}' after ${presses} presses`);
+
+  // Then confirm the commit was ACCEPTED, by waiting for the picker to go away.
+  //
+  // This used to return `true` on the keypress alone, reasoning that re-verifying would cost
+  // another ~1.9s dump "to learn what we just learned". It would not have: the dump says which
+  // tile is lit, and the question after CENTER is a different one — did Plex act on it? A PIN
+  // prompt, a pick that does not take, or a picker that re-renders all leave the right tile lit
+  // and the sign-in unchanged, and every one of them returned success here. That is how a
+  // Younger Kids pool played under the owner's account on 2026-08-18 while this reported ok.
+  //
+  // The picker closing is NOT proof of WHICH profile Plex signed into — nothing on the device
+  // can prove that (non-root ADB cannot read Plex's app data). It is only proof that the commit
+  // registered at all, which is strictly more than a keypress proves. The account itself is
+  // settled after playback starts, by playback.verifyAccount() reading /status/sessions.
+  // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
+  if (!(await pickerGone())) {
+    return [
+      false,
+      `pressed CENTER on '${current}' but the picker is still up — Plex did not accept the ` +
+        'pick (a profile PIN, or the Plex UI changed)',
+    ];
+  }
+  console.log(`[adb] committed '${current}' after ${presses} presses; picker dismissed`);
   return [true, `selected '${current}' on the picker`];
 }
