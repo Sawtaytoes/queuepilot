@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 
 import { TypeBadge } from "../components/badges"
 import { CountPicker } from "../components/CountPicker"
+import { EditionBadge } from "../components/EditionBadge"
 import { WEIGHT_MAX } from "../components/EntrySettings"
 import { Poster } from "../components/Poster"
 import { PosterTile } from "../components/PosterTile"
@@ -11,9 +12,9 @@ import { useFlipList } from "../hooks/useFlipList"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {
+  entryTitle,
   type GroupedHit,
   groupHits,
-  hitLabel,
   libraryTitle,
   poolSections,
 } from "../lib/searchGroups"
@@ -317,12 +318,10 @@ export function ChannelMembers({
           placeholder="Add a member — search every library…"
           rowFor={({ hit, separator }, _index, close) => {
             const isCollection = hit.type === "collection"
-            // `hitLabel` adds the EDITION when Plex gave the item one — two editions of a
+            // `entryTitle` adds the EDITION when Plex gave the item one — two editions of a
             // film are two library items with the same title and year, so without it the
             // rows are identical and the stored entry title is ambiguous too.
-            const label = isCollection
-              ? hit.title
-              : hitLabel(hit)
+            const label = entryTitle(hit)
 
             return {
               separator,
@@ -358,11 +357,7 @@ export function ChannelMembers({
                           <span className="y">
                             {hit.year || ""}
                           </span>
-                          {hit.editionTitle ? (
-                            <span className="editionbadge">
-                              {hit.editionTitle}
-                            </span>
-                          ) : null}
+                          <EditionBadge hit={hit} />
                         </>
                       )}
                     </span>

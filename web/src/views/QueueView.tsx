@@ -6,6 +6,7 @@ import {
 } from "@charcuterie/ui"
 import { useRef, useState } from "react"
 import { TypeBadge } from "../components/badges"
+import { EditionBadge } from "../components/EditionBadge"
 import {
   EntryEditor,
   PLEX_WORDS,
@@ -25,6 +26,7 @@ import { useGridDrag } from "../hooks/useGridDrag"
 import { api } from "../lib/api"
 import { flashTile } from "../lib/flip"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
+import { entryTitle } from "../lib/searchGroups"
 import {
   byTitle,
   isCompleted,
@@ -371,9 +373,12 @@ export function QueueView({
           }
           rowFor={(hit, _index, close) => {
             const isCollection = hit.type === "collection"
-            const label = isCollection
-              ? hit.title
-              : `${hit.title}${hit.year ? ` (${hit.year})` : ""}`
+            // `entryTitle` appends the EDITION when Plex gave the item one. Two editions of a
+            // film are two library items with the same title and the same year, so without it
+            // the two rows are identical AND the two entries this box writes are stored under
+            // one indistinguishable title. The pool member picker has done this since #139;
+            // the queue box was simply never carried across.
+            const label = entryTitle(hit)
             const queuedKey = keyOfHit(hit)
             const isQueued = queuedKey in queuedKeys
 
@@ -404,7 +409,8 @@ export function QueueView({
                       {hit.title}{" "}
                       <span className="y">
                         {hit.year || ""}
-                      </span>{" "}
+                      </span>
+                      <EditionBadge hit={hit} />{" "}
                       <span className="collbadge">
                         In this queue
                       </span>
@@ -464,9 +470,12 @@ export function QueueView({
                         <span className="y">{`${hit.childCount || 0} items`}</span>
                       </>
                     ) : (
-                      <span className="y">
-                        {hit.year || ""}
-                      </span>
+                      <>
+                        <span className="y">
+                          {hit.year || ""}
+                        </span>
+                        <EditionBadge hit={hit} />
+                      </>
                     )}
                   </span>
                 </>
