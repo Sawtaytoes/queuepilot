@@ -2393,10 +2393,13 @@ html.modal-open {
   align-items: stretch;
 }
 /* Where you GO from here — Pending plus the two configurators, one quiet row where three
-   shelf headings used to each carry their own "Configure ›". */
+   shelf headings used to each carry their own "Configure ›". Since 2026-08-21 it also holds
+   the page's one ACTION, "＋ New queue", so `align-items: center` puts a bordered pill on
+   the same optical line as the text links beside it. */
 .playlinks {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px 20px;
   margin: 0 0 14px;
 }
@@ -2406,6 +2409,24 @@ html.modal-open {
 }
 .playlinks a:hover {
   color: var(--color-content-default);
+}
+/* The create button. Deliberately NOT muted like its neighbours: the three links navigate
+   and this one makes something, and the defect it fixes was that nobody could find where a
+   queue gets created. Same accent treatment `#tools button.accent` gives the toolbar's own
+   "＋ New queue", so the two read as one control in two places rather than two controls.
+   Sized down to the links' 0.9rem so the row stays a row and not a button bar. */
+.playlinks button.ghost {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+.playlinks button.accent {
+  border-color: var(--color-intent-accent-border);
+  color: var(--color-intent-accent-content);
+}
+.playlinks button.accent:hover {
+  background: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
 }
 .playcard {
   display: flex;
