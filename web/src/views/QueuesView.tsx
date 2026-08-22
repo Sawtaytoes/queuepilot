@@ -1,4 +1,8 @@
-import { Badge, EmptyState } from "@charcuterie/ui"
+import {
+  Badge,
+  EmptyState,
+  IconButton,
+} from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
@@ -152,14 +156,20 @@ function Shelf({
       hidden={isHiddenByFilter}
     >
       <h2>
-        <button
-          aria-label="collapse queue"
+        {/* `ghost` is the appearance for an icon row — nothing until hovered — which is
+            what all four of this heading's controls painted by hand. The class stays and
+            carries only the ROTATE: ▾ turns to ► when the shelf is collapsed, a state no
+            component prop describes. */}
+        <IconButton
+          appearance="ghost"
           className="collapse-toggle"
+          intent="neutral"
+          label="collapse queue"
           onClick={() => toggleCollapsed(setId)}
-          type="button"
+          size="sm"
         >
           ▾
-        </button>
+        </IconButton>
         {/* An anchor, so the shelf title can be middle-clicked / ⌘-clicked into a new tab
             like any other link. The handler stays but no longer navigates: it only records
             where we were, and letting the default run is what performs the navigation.
@@ -209,9 +219,15 @@ function Shelf({
           </Tip>
         ) : (
           <Tip label="Play this queue on a device">
-            <button
-              aria-label="Play this queue on a device"
+            {/* ⚠️ `.shelfplay` is LOAD-BEARING as a selector, not only as a hover state:
+                `PlayMenu`'s outside-click handler asks `t.closest(".shelfplay")`, so a
+                control that opens that menu and does not wear the class opens a menu that
+                shuts on the same click — measured, and the whole of #173. */}
+            <IconButton
+              appearance="ghost"
               className="shelfplay"
+              intent="accent"
+              label="Play this queue on a device"
               onClick={(e) =>
                 openPlayMenu({
                   anchor:
@@ -219,30 +235,37 @@ function Shelf({
                   setId,
                 })
               }
-              type="button"
+              size="sm"
             >
               ▶
-            </button>
+            </IconButton>
           </Tip>
         )}
         <Tip label="Edit queue">
-          <button
-            aria-label="Edit queue"
+          <IconButton
+            appearance="ghost"
             className="shelfedit"
+            intent="neutral"
+            label="Edit queue"
             onClick={() => openSetModal(setId)}
-            type="button"
+            size="sm"
           >
             ⚙
-          </button>
+          </IconButton>
         </Tip>
         <Tip label="Drag to reorder queues">
-          <button
-            aria-label="Drag to reorder queues"
+          {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
+              `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
+              second. */}
+          <IconButton
+            appearance="ghost"
             className="shelfdrag"
-            type="button"
+            intent="neutral"
+            label="Drag to reorder queues"
+            size="sm"
           >
             ≡
-          </button>
+          </IconButton>
         </Tip>
       </h2>
       <div className="strip-wrap" ref={wrapRef}>

@@ -1,4 +1,4 @@
-import { Button } from "@charcuterie/ui"
+import { Button, IconButton } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
@@ -281,23 +281,31 @@ export function GroupsModal() {
                 </button>
                 {/* Up/down rather than drag: the row is short, this is a settings panel
                     rather than the poster grid, and a keyboard reaches it. */}
+                {/* ⚠️ `.groupmove button` was an ELEMENT selector, and an `IconButton`
+                    renders a `<button>` — so it would have kept matching and outranking the
+                    component it landed on. Deleting that rule is the migration. `.groupmove`
+                    itself stays: it stacks the pair, which is app layout. */}
                 <span className="groupmove">
-                  <button
-                    aria-label={`Move ${g.label} earlier`}
-                    disabled={i === 0}
+                  <IconButton
+                    appearance="outline"
+                    intent="neutral"
+                    isDisabled={i === 0}
+                    label={`Move ${g.label} earlier`}
                     onClick={() => move(g.id, -1)}
-                    type="button"
+                    size="sm"
                   >
                     ▲
-                  </button>
-                  <button
-                    aria-label={`Move ${g.label} later`}
-                    disabled={i === list.length - 1}
+                  </IconButton>
+                  <IconButton
+                    appearance="outline"
+                    intent="neutral"
+                    isDisabled={i === list.length - 1}
+                    label={`Move ${g.label} later`}
                     onClick={() => move(g.id, 1)}
-                    type="button"
+                    size="sm"
                   >
                     ▼
-                  </button>
+                  </IconButton>
                 </span>
               </li>
             ))}
