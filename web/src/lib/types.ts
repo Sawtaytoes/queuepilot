@@ -712,11 +712,16 @@ export type PendingItem = {
   ratingKey: string
   title: string
   year: number | null
-  type: "movie" | "show"
+  /** A COLLECTION is a row of its own, beside the films inside it — never instead of them
+   *  (decision `2026-08-22-pending-lists-collections-as-well-as-their-members`). */
+  type: "movie" | "show" | "collection"
   sectionId: number
   librarySectionTitle: string
   contentRating: string | null
   editionTitle: string | null
-  /** Epoch SECONDS, Plex's own `addedAt`. */
+  /** Epoch SECONDS, Plex's own `addedAt`. On a COLLECTION, the newest pending child's — a
+   *  franchise sorts by the arrival that made it interesting, not by the day it was made. */
   addedAt: number
+  /** Collections only: how many items are in it. */
+  childCount?: number | null
 }

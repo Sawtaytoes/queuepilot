@@ -3623,6 +3623,13 @@ body.rowdragging {
   margin-top: 4px;
 }
 
+/* The Collection chip on a pending tile. Layout only — the chip's look is the Charcuterie
+   `Badge`'s own props; this stops the flex column stretching it edge to edge. */
+.pendingtile .pcollection,
+.pendingrow .pcollection {
+  align-self: start;
+}
+
 /* The start point chosen but NOT yet written — it lands when the item is added to a queue.
    Accent, because it is the one thing on the tile that is a pending edit rather than a fact
    about the library. */
