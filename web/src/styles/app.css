@@ -1529,19 +1529,13 @@ body.queue-view #tools {
   padding: 9px 12px;
   font-size: 0.95rem;
 }
-#tools button.ghost {
-  padding: 8px 12px;
-  font-size: 0.92rem;
-  white-space: nowrap;
-}
-#tools button.accent {
-  border-color: var(--color-intent-accent-border);
-  color: var(--color-intent-accent-content);
-}
-#tools button.accent:hover {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-}
+/* The toolbar's three buttons are Charcuterie `Button`s now, so their skin is props:
+   `appearance="outline"` for what `.ghost` painted, and `intent="accent"` for the accent
+   border + accent text that `#tools button.accent` gave `＋ New queue`. The tighter padding
+   and smaller face are not restated either — `#tools` carries `data-density="compact"`, so
+   the component sizes itself from the density axis.
+   (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
+   `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
 .gsearch-wrap .results {
   top: 46px;
 }
@@ -2411,24 +2405,16 @@ html.modal-open {
 .playlinks a:hover {
   color: var(--color-content-default);
 }
-/* The create button. Deliberately NOT muted like its neighbours: the three links navigate
-   and this one makes something, and the defect it fixes was that nobody could find where a
-   queue gets created. Same accent treatment `#tools button.accent` gives the toolbar's own
-   "＋ New queue", so the two read as one control in two places rather than two controls.
-   Sized down to the links' 0.9rem so the row stays a row and not a button bar. */
-.playlinks button.ghost {
-  padding: 6px 12px;
-  font-size: 0.9rem;
-  white-space: nowrap;
-}
-.playlinks button.accent {
-  border-color: var(--color-intent-accent-border);
-  color: var(--color-intent-accent-content);
-}
-.playlinks button.accent:hover {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-}
+/* The create button is a Charcuterie `Button`, and the whole of this rule is now props.
+   It is deliberately NOT muted like its neighbours: the three links navigate and this one
+   MAKES something, and the defect it fixed was that nobody could find where a queue gets
+   created — `intent="accent"`, the same answer the toolbar's own "＋ New queue" gets, so the
+   two read as one control in two places. It was also sized DOWN to the links' 0.9rem so the
+   row stays a row and not a button bar; that is `size="sm"`, the size axis the component
+   already has, rather than a per-row override that outranks it. Measured: the row is 38px
+   either side of the change.
+   (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
+   `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
 .playcard {
   display: flex;
   flex-direction: column;

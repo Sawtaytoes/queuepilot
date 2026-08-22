@@ -302,15 +302,22 @@ export function GroupsModal() {
               </li>
             ))}
           </ul>
-          <button
+          {/* ⚠️ THIS ONE CHANGES ON SCREEN, deliberately. Its `accent` matched NEITHER
+              `#tools button.accent` NOR `.playlinks button.accent` — the only two rules the
+              class has ever had — and this panel is neither, so `＋ New group` has never once
+              shown the treatment its class asked for. It is the same latent bug the channels
+              toolbar's two pool buttons had, and it gets the same answer: a button that MAKES
+              something is `intent="accent"`, which is what the class was reaching for.
+              (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+          <Button
+            appearance="outline"
             aria-current={selectedId ? undefined : "true"}
-            className="ghost accent"
             id="groupnew"
+            intent="accent"
             onClick={() => selectGroupInModal(null)}
-            type="button"
           >
             ＋ New group
-          </button>
+          </Button>
         </aside>
 
         <div className="groupform">
