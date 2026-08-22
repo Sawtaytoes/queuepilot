@@ -210,6 +210,16 @@ jobs:
       - name: Finished-entry freshness (offline)
         run: $TSX e2e/finished-live-test.ts
 
+      # The same freshness question pointing the other way, and the live bug behind it
+      # (2026-08-22): a returning show's `done` flag outlives the truth, because an episode
+      # AIRING triggers no scan. The engine already revives such an entry; the grid used to
+      # grey it out and wear a Completed badge over the line naming the episode it was about
+      # to play. `/api/queues` now reports `isRevived`, and all three cases are pinned — the
+      # revived entry, the hand-marked skip that must KEEP its badge, and the genuinely
+      # finished control — plus that the file is never written. Own server, stub Plex.
+      - name: Returning-show badge (offline)
+        run: $TSX e2e/returning-show-badge-test.ts
+
       # The retained device registry — the "Play on ▾" dropdown's source. Its failures are
       # invisible: retained topics keep serving the last announcement, so a registry that
       # stopped sweeping and one that stopped clearing both look like a plausible list of

@@ -137,6 +137,15 @@ export type QueueItem = {
    */
   isFinished?: boolean
   /**
+   * The mirror of `isFinished`: the next scan would REVIVE this entry, because a `done` one
+   * has something to play again. New content — a returning season, a fresh episode, a new
+   * collection member — lands with no scan to notice it, so the flag outlives the truth and
+   * the tile greys out while its own next-up line names the episode about to play. Shows and
+   * collections only, and never a hand-marked `done` (a deliberate skip); absent on the
+   * skeleton response.
+   */
+  isRevived?: boolean
+  /**
    * The next-up episode (or the movie itself) is mid-playback: a Plex viewOffset > 0 and
    * unwatched, the same in-progress state the engine resumes from. Drives the tile's
    * "In Progress" badge, which reads over a stale "Completed".
