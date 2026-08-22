@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
@@ -445,13 +446,19 @@ export function ChannelFilters({
         </fieldset>
       </div>
 
-      <button
+      {/* A Charcuterie `Button`. `#ch-save` painted a solid accent, full-width control by
+          hand; that is `intent="accent"` plus `isFullWidth`. The id STAYS — the panel is a
+          flex column with an inner scroller and `#ch-save` is its pinned footer
+          (`flex: 0 0 auto; margin-top: 12px`), which is app layout and the reason the button
+          is always on screen. */}
+      <Button
         id="ch-save"
+        intent="accent"
+        isFullWidth
         onClick={() => void onSave()}
-        type="button"
       >
         Save filters
-      </button>
+      </Button>
     </aside>
   )
 }
@@ -501,7 +508,13 @@ function BlocklistRow({
           </>
         ) : null}
       </span>
-      <button
+      {/* `#ch-block button` / `#ch-movieexcludes button` painted the same small outline
+          control in two places. Both are ELEMENT selectors, so they would have kept matching
+          a Charcuterie `Button` and outranked it — they are deleted, and the look is
+          `appearance="outline"` at `size="sm"`. */}
+      <Button
+        appearance="outline"
+        intent="neutral"
         onClick={async () => {
           setStatus("Unblocking…")
 
@@ -520,10 +533,10 @@ function BlocklistRow({
             )
           }
         }}
-        type="button"
+        size="sm"
       >
         Unblock
-      </button>
+      </Button>
     </li>
   )
 }
@@ -562,7 +575,9 @@ function ExcludeRow({
   return (
     <li>
       <span>{title}</span>
-      <button
+      <Button
+        appearance="outline"
+        intent="neutral"
         onClick={async () => {
           setStatus("Un-excluding…")
 
@@ -585,10 +600,10 @@ function ExcludeRow({
             )
           }
         }}
-        type="button"
+        size="sm"
       >
         Un-exclude
-      </button>
+      </Button>
     </li>
   )
 }
