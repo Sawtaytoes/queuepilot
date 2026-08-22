@@ -1043,22 +1043,9 @@ ul.grid {
   outline-offset: 2px;
   border-radius: 4px;
 }
-/* An entry that HAS an override wears one amber chip (also a button back into the picker). */
-.badge.startbadge {
-  background: none;
-  color: var(--color-intent-accent-content);
-  border-color: var(--color-intent-accent-border);
-  font: inherit;
-  font-size: 0.72rem;
-  cursor: pointer;
-}
-.badge.startbadge:hover {
-  background: var(--color-intent-accent-surface);
-}
-.badge.startbadge:focus-visible {
-  outline: 2px solid var(--color-intent-accent-solid);
-  outline-offset: 2px;
-}
+/* An entry that HAS an override wears one accent chip, and it is a button back into the
+   picker — a `BadgeButton` with `intent="accent"`, so the colour, the hover fill and the
+   focus ring are the component's. This block used to spell all three by hand. */
 
 /* Tile context menu (right-click / long-press): the per-entry actions. */
 .ctxmenu {
@@ -1098,10 +1085,11 @@ ul.grid {
    `.badge.collection` and `.badge.warn` survive only as SELECTORS — the e2e suites
    read them, so the classes are still passed through `Badge`'s `className`.
 
-   What is left is for the two chips that could NOT become a `Badge`: `.startbadge`
-   (a real `<button>`, and 0.2.0 has no `asChild`) and the two-part collection chip
-   below. Both need the pill shape a `Badge` would have given them. */
-.badge.startbadge,
+   ⚠️ This block used to carry the pill shape for `.startbadge` as well, "because a
+   `Badge` cannot be a button". It can now: `@charcuterie/ui@3.10.0` added `BadgeButton`,
+   built for these six chips, so the start chip takes its shape from the component and only
+   the two-part collection chip is left here. That one still has no component — a `kind` +
+   `name` pill is a shape the library does not express. */
 .badge.collection:has(.badgename) {
   font-size: 0.72rem;
   padding: 1px 8px;
@@ -1825,14 +1813,10 @@ body.queue-view #tools {
 /* Save filters is a Charcuterie `Button`, `intent="accent"` + `isFullWidth` — which is the
    whole of what this rule said. The `#ch-save` rule further up keeps `flex: 0 0 auto` and
    `margin-top: 12px`, the app layout that pins it as the panel's always-visible footer. */
-.tile .exclude {
-  background: none;
-  border: 1px solid var(--color-border-default);
-  color: var(--color-content-muted);
-  border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 0.72rem;
-}
+/* A `BadgeButton`, `outline` + `neutral`, so the pill and the resting colour are the
+   component's. What is left is the STATE: this chip turns red on hover because pressing it
+   drops a show from the pool, and `intent="danger"` would instead paint every tile in the
+   pool with a red chip warning about nothing. Same exception `.b-remove` keeps. */
 .tile .exclude:hover {
   border-color: var(--color-intent-danger-solid);
   color: var(--color-intent-danger-content);
@@ -3106,35 +3090,13 @@ ul.grid.posters .tile .badges .epstag {
   );
 }
 
-/* ---- The setting tags themselves ---- */
-.badge.tagbtn {
-  cursor: pointer;
-  font: inherit;
-  font-size: 0.72rem;
-  line-height: 1.5;
-  padding: 1px 8px;
-  border-radius: 999px;
-  border: 1px solid var(--color-border-default);
-  background: transparent;
-  color: var(--color-content-secondary);
-}
-.badge.tagbtn:hover {
-  border-color: var(--color-border-strong);
-  color: var(--color-content-primary);
-}
-.badge.tagbtn.weighttag {
-  border-color: var(--color-intent-success-border);
-  color: var(--color-intent-success-content);
-}
-.badge.tagbtn.startbadge {
-  border-color: var(--color-intent-warning-border);
-  color: var(--color-intent-warning-content);
-}
-/* The Edit affordance is deliberately the quietest chip on the tile: it is a door, not
-   a state. */
-.badge.tagbtn.editbtn {
-  color: var(--color-content-muted);
-}
+/* ---- The setting tags themselves ----
+   `.tagbtn` is GONE. Every one of these chips is a `BadgeButton` now — the pill, the
+   border, the hover and the focus ring come from the component, and the colour comes from
+   the `intent` the call site was already passing to the non-pressable branch beside it.
+   `.weighttag` / `.startbadge` / `.editbtn` survive as SELECTORS only (the e2e suites read
+   them) and carry no paint, exactly as `.badge.movie` and `.badge.show` already do.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
 
 /* ---- The 1 / 2 / Custom… count control ---- */
 .countpick {

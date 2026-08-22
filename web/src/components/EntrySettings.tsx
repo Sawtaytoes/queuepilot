@@ -1,4 +1,9 @@
-import { Badge, Button, ButtonLink } from "@charcuterie/ui"
+import {
+  Badge,
+  BadgeButton,
+  Button,
+  ButtonLink,
+} from "@charcuterie/ui"
 
 import { api } from "../lib/api"
 import {
@@ -91,15 +96,21 @@ export function SettingTags({
     className: string,
     intent: "accent" | "neutral" | "success" | "warning",
   ) => (
+    // The two branches are the SAME pill now: `BadgeButton` and `Badge` build it through
+    // one shared hook in the library, so a tag you can press and a tag you cannot are
+    // indistinguishable until you reach for it. That is what `.badge.tagbtn` was spelling
+    // by hand, one `intent` at a time, in `app.css`.
     <Tip key={className} label={tip}>
       {onEdit ? (
-        <button
-          className={`badge tagbtn ${className}`}
+        <BadgeButton
+          appearance="outline"
+          className={`badge ${className}`}
+          intent={intent}
           onClick={onEdit}
-          type="button"
+          size="sm"
         >
           {label}
-        </button>
+        </BadgeButton>
       ) : (
         <Badge
           appearance="outline"
