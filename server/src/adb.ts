@@ -162,8 +162,35 @@ export function run(args: string[], timeoutSec: number | null = null): string | 
   }
 }
 
-/** Idempotent — 'already connected' is success. Returns true if the device is up. */
-export function connect(): boolean {
+/**
+ * `get-state`'s answer, INCLUDING the words that arrive on a non-zero exit.
+ *
+ * `run()` cannot do this job: it maps rc != 0 to null, and `unauthorized` / `offline` both
+ * exit non-zero. Those two are precisely what `connect()` has to tell apart from a Shield
+ * that is off or off the network, so this reads stdout and stderr itself.
+ *
+ * Returns null only when adb could not be run at all.
+ */
+function deviceState(): string | null {
+  try {
+    const p = spawnSync(ADB_BIN, ['-s', ADB_TARGET, 'get-state'], {
+      encoding: 'utf8',
+      env: envForAdb(),
+      timeout: ADB_TIMEOUT * 1000,
+    });
+    if (p.error) return null;
+    const text = `${p.stdout ?? ''} ${p.stderr ?? ''}`.toLowerCase();
+    if (/\bunauthorized\b/.test(text)) return 'unauthorized';
+    if (/\boffline\b/.test(text)) return 'offline';
+    return String(p.stdout ?? '').trim() || null;
+  } catch (e) {
+    console.log(`[adb] get-state ${ADB_TARGET}: ${errMessage(e)}`);
+    return null;
+  }
+}
+
+/** `adb connect` then `get-state`. Null when adb itself could not run. */
+function connectOnce(): string | null {
   try {
     spawnSync(ADB_BIN, ['connect', ADB_TARGET], {
       encoding: 'utf8',
@@ -172,10 +199,50 @@ export function connect(): boolean {
     });
   } catch (e) {
     console.log(`[adb] connect ${ADB_TARGET}: ${errMessage(e)}`);
-    return false;
+    return null;
   }
-  const out = run(['get-state']);
-  return Boolean(out && out.trim() === 'device');
+  return deviceState();
+}
+
+/** Idempotent — 'already connected' is success. Returns true if the device is up. */
+export function connect(): boolean {
+  let state = connectOnce();
+  if (state === 'device') return true;
+
+  // A WEDGED connection record, and the reason this retry exists. When the Shield reboots
+  // (or its adbd restarts) the server keeps an entry for the target in `unauthorized` or
+  // `offline`. `adb connect` is idempotent against that entry — it reports "already
+  // connected" and never re-handshakes — so the wedge outlives every later attempt for the
+  // whole life of the container. Observed 2026-08-22: 49 consecutive `device unauthorized`
+  // failures, every profile-gated play dead, with a key the Shield still trusted. An
+  // explicit disconnect is the only thing that drops the record and forces a new handshake.
+  if (state === 'unauthorized' || state === 'offline') {
+    console.log(`[adb] ${ADB_TARGET} is ${state}; dropping the stale record and re-handshaking`);
+    disconnect();
+    state = connectOnce();
+  }
+
+  if (state !== 'device') console.log(`[adb] ${ADB_TARGET} is ${state ?? 'unreachable'}`);
+  return state === 'device';
+}
+
+/**
+ * Forget the server's connection record for the target.
+ *
+ * Only `connect()` calls this, and only to clear a wedge. Do not call it to "tidy up" after
+ * a command: the next call would pay a full handshake, and a disconnect during a picker walk
+ * would strand it.
+ */
+function disconnect(): void {
+  try {
+    spawnSync(ADB_BIN, ['disconnect', ADB_TARGET], {
+      encoding: 'utf8',
+      env: envForAdb(),
+      timeout: ADB_TIMEOUT * 1000,
+    });
+  } catch (e) {
+    console.log(`[adb] disconnect ${ADB_TARGET}: ${errMessage(e)}`);
+  }
 }
 
 /** The focused window's component, e.g. 'com.plexapp.android/...PickUserActivity'. */
