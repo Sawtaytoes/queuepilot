@@ -101,6 +101,30 @@ never in the tree.
   Narrow-View back row was a bare `<a href>` and **did** full-reload; that is what the seam
   fixed. A `<Link>` in a hand-painted skin is the thing this replaces, not an alternative
   to it.
+- **The button migration is finished, and what is still a raw `<button>` is a decision.**
+  65 hand-rolled buttons became Charcuterie components over 2026-08-21/22, and the skins
+  went with them — `.primary`, `.accent`, `.ghost`, `.tagbtn`, four modal-footer skins and
+  five element selectors are all deleted. **Seven** raw `<button>`s are left, and each is
+  deliberate, so do not "finish the migration" by converting them:
+  - **`Modal`'s `.modalx`** — the app's `Modal` is hand-rolled (a `<form>` plus the
+    `busy.openModals` guard), and its round scrim ✕ is part of that shape. Converting the
+    MODAL is the change; the close button is not separable from it.
+  - **`PosterTile`'s `.tileplay` and `.remove`** — chrome positioned ON the artwork, a
+    38px circle centred over a poster and a ✕ in its corner. Neither is a control shape the
+    library expresses.
+  - **`QueuesView`'s two `.scroll` arrows** — a 44px full-height gradient over the strip's
+    edge, revealed on hover. A fade, not a button.
+  - **`GroupsModal`'s `.grouppick`** — a master-detail list ROW carrying `aria-current`,
+    not a button.
+  - **`GroupBar`'s `#groupsedit`** — the only one of these blocked on the LIBRARY rather
+    than settled. It is a chip-shaped button among four chip-shaped `<Link>`s, and
+    `BadgeButton` would migrate one of five and split the row. It needs a `BadgeLink`,
+    which does not exist yet.
+
+  Everything pill-shaped and pressable is a **`BadgeButton`** (`@charcuterie/ui@3.10.0`),
+  built for this app's six chips — the setting tags, the Edit chip, two start chips and a
+  pool's Exclude. It shares `Badge`'s paint through one hook upstream, so a tag you can
+  press and a tag you cannot are now the same pill; they were different sizes before.
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any

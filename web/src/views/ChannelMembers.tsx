@@ -1,3 +1,4 @@
+import { BadgeButton } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import {
@@ -508,15 +509,17 @@ export function ChannelMembers({
                           : ""
                       }. Click to change it or go back to automatic.`}
                     >
-                      <button
+                      <BadgeButton
+                        appearance="outline"
                         className="badge startbadge"
+                        intent="accent"
                         onClick={() =>
                           openStartModal(entry)
                         }
-                        type="button"
+                        size="sm"
                       >
                         {startLabel(m.start)}
-                      </button>
+                      </BadgeButton>
                     </Tip>
                   ) : null}
                 </>
