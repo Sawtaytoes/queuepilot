@@ -78,11 +78,15 @@ never in the tree.
   cannot express yet** (the two-part Collection chip) keeps its app class and says why; and a
   **DOM handle** — `data-testid`, or a class used *only* as a selector and carrying no rule,
   which is what `#dyn-lineup` had to become because `FieldGroupProps` forwards nothing but
-  `className`. ⚠️ Two upstream gaps to know before reaching for a form component:
-  `FieldProps` / `FieldGroupProps` spread **no** rest props (no `id`, no `hidden`, no
-  `data-testid`, unlike `Button` / `Badge` / `Picker`), and `Checkbox` has **no
-  `description`** slot — so a box whose hints belong to a checkbox cannot move to
-  Charcuterie's field typography as a set.
+  `className`. ✅ The two upstream gaps this file used to warn about are **closed** as of
+  `@charcuterie/ui@3.7.0`: `FieldProps` and `FieldGroupProps` now spread their rest props,
+  and `Checkbox` takes a `description`. They land on different elements and the difference is
+  not a preference — `Field` **clones** onto its one child, so its rest props are that
+  **control's** (`name`, `placeholder`, `aria-*`, `ref`) and only `className` stays on the
+  wrapping `<div>`; `FieldGroup` **wraps**, so its rest props are the **`<fieldset>`'s**
+  (`id`, `hidden`, `data-testid`, `ref`). A box that needs a handle on itself — an `id` for a
+  shot script, a `hidden` that takes the label with it — is a `FieldGroup`, even when it
+  holds one control.
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any
@@ -150,9 +154,23 @@ server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 ```
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
-PR**; the no-Plex browser gates (`pick-contract`, `narrow-scroll`, `routing`, `play-reorder`,
-`pool-editor-keeps-blocked`) always run, which is why picker/layout/routing claims belong
-there rather than in the gated block.
+PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
+there rather than in the gated block. All eight of them, in the order `ci.yml` runs them:
+
+| Gate | What it pins |
+| --- | --- |
+| `narrow-scroll-test.ts` | the Narrow View never scrolls horizontally |
+| `drag-stability-test.ts` | a drag's PATH, not its result — reversals, re-inserts, style writes |
+| `routing-test.ts` | the client router and the server's SPA fallback, together |
+| `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
+| `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |
+| `shelf-remove-test.ts` | the shelf's remove ✕ |
+| `group-create-test.ts` | a new queue joins the group on screen |
+| `play-reorder-test.ts` | the play landing's reorder |
+
+Three of them — `drag-stability`, `shelf-remove` and `group-create` — were missing from this
+list while running in CI the whole time. A gate this file does not name is a gate nobody
+re-runs by hand before claiming a change is safe.
 
 ## Working here
 

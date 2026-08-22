@@ -195,8 +195,18 @@ try {
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
   await page.locator('#playgrid li[data-set="q_alpha"] .playbtn').click();
   await page.waitForTimeout(600);
+  // `.playmenu` ALONE, and the two selectors that used to sit beside it were both wrong.
+  // `#playmenu` is an id that exists nowhere in the app, and `[role="menu"]` matches the
+  // header's `.hmenu-left` / `.hmenu-right`, which Header.tsx mounts in BOTH states so they
+  // can transition — so the assertion passed on a page where nothing had been clicked, and
+  // would have passed with the start button completely broken. `PlayMenu` returns null when
+  // closed, so its own class is the honest handle; the row count is what proves it opened
+  // rather than merely mounted.
+  await page.waitForSelector('.playmenu', { timeout: 10000 });
   ok('the start button still opens its menu',
-    Boolean(await page.$('#playmenu, .playmenu, [role="menu"]')));
+    Boolean(await page.$('.playmenu')));
+  ok('…and the menu has content, not just a box',
+    (await page.$$eval('.playmenu button, .playmenu p', (els) => els.length)) > 0);
 
   // ---- a coarse pointer keeps the handle ----
   //
