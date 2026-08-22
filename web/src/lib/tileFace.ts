@@ -241,11 +241,14 @@ export function isSelfTitled(
 /**
  * Completed as the GRID means it: nothing left to play here.
  *
- * Two sources say that, and both count. `done` is the flag in `queues.yaml`, written by a
- * scan — so it is exactly as fresh as the last one, and a film finished after it says
+ * Three sources say that, and all three count. `done` is the flag in `queues.yaml`, written by
+ * a scan — so it is exactly as fresh as the last one, and a film finished after it says
  * nothing. `isFinished` is the same rule judged live by `/api/queues`, which is what covers
  * the gap between the credits and the next scan (and anything watched where QueuePilot never
- * saw it).
+ * saw it). `isRevived` is that same live judgement pointing the OTHER way: the entry has
+ * something to play again — a new episode aired — so the flag is stale and the next scan will
+ * clear it, which makes a "Completed" badge over a tile naming the episode it is about to play
+ * simply wrong.
  *
  * NOT what "Remove all completed" acts on: that button removes entries from the file, so it
  * still keys off `done` alone.
@@ -253,7 +256,9 @@ export function isSelfTitled(
 export const isCompleted = (item: {
   done?: boolean
   isFinished?: boolean
-}): boolean => Boolean(item.done || item.isFinished)
+  isRevived?: boolean
+}): boolean =>
+  !item.isRevived && Boolean(item.done || item.isFinished)
 
 /** "Nothing left to play" in this entry's own unit — a reading queue is read, not watched,
  *  and a board game that has had all its plays is played out. */

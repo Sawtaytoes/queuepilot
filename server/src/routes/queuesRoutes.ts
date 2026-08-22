@@ -37,6 +37,43 @@ const startOf = (e: QueueEntry): Start | null => (
 );
 
 /**
+ * Will the next scan REVIVE this entry? The mirror image of `isFinished`.
+ *
+ * `done` is a cache of a resolution result, and the resolver clears it the moment the entry
+ * resolves to anything playable again — a new season, a new episode, a new member in a
+ * collection (decision 2026-08-15-a-done-entry-revives-when-there-is-something-to-play). But
+ * an episode AIRING triggers no scan, so the flag stays true until the card is next tapped:
+ * the tile greys out and wears "Completed" while its own yellow line names the very episode
+ * that is about to play. That contradiction is what the owner reported, on the same Dating
+ * Sim collection the 2026-08-15 decision was written about, the week its S2E7 landed.
+ *
+ * So this says now what that scan will decide, exactly as `isFinished` does in the other
+ * direction. It changes the BADGE only — the file stays the record of truth for everything
+ * that writes, and the next scan is still what clears the flag.
+ *
+ * A HAND-marked `done: true` carries no `done_at`, which is what marks it a deliberate skip.
+ * The resolver revives one of those only for an in-progress head, and an in-progress tile
+ * already reads "In Progress" over "Completed" — so it keeps its badge here and the two agree.
+ *
+ * Shows, collections and reading series only. "Something to play" is `nextEp`, which this
+ * endpoint has already resolved per entry, and a next-up lookup that ERRORED reports no
+ * `nextEp` — so a Plex hiccup leaves every badge exactly as it was. A MOVIE is deliberately
+ * out: its head is the watched HISTORY, and a history read that fails comes back as an empty
+ * set (`finished.watchedFor`), which is indistinguishable from "nothing is watched" — reviving
+ * off that would drop the badge from every finished film in the app on one bad read. A movie
+ * gains no new content anyway; the one revival it has is an in-progress head, which the
+ * "In Progress" badge already covers.
+ */
+function isRevivedEntry(e: QueueEntry, core: ResolvedTile | ProviderTile): boolean {
+  if (!e.done || e.doneAt == null) return false;
+  if (core.type !== 'show' && core.type !== 'collection') return false;
+  // `collectionNext` answers null (never a memberless object) once a collection is played
+  // out, so this is the same test for both types, and the same one the tile face turns into
+  // its "All watched" line.
+  return Boolean(core.nextEp);
+}
+
+/**
  * One resolved queue entry, as the grid reads it: the tile CORE (from whichever resolver
  * answered — Plex's tiles.ts or the provider's) plus the per-entry knobs, which are stored on
  * the entry and so are identical whatever resolved it.
@@ -65,6 +102,8 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     // The same thing judged LIVE rather than read off the file — see `tagFinishedMovies`.
     // Overwritten there; false here so the field is never absent on a tile.
     isFinished: false,
+    // The opposite prediction — see `isRevivedEntry`.
+    isRevived: isRevivedEntry(e, core),
   };
 }
 

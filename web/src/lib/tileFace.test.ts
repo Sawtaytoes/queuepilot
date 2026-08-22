@@ -638,6 +638,22 @@ describe("isCompleted", () => {
   test("an entry with something left to play is neither", () => {
     expect(isCompleted(item({ done: false }))).toBe(false)
   })
+
+  test("a done entry the next scan will revive is not Completed", () => {
+    // S2E7 aired after the entry was marked done. The flag is stale, the scan that clears it
+    // has not run, and the tile is already naming the episode it will play.
+    expect(
+      isCompleted(item({ done: true, isRevived: true })),
+    ).toBe(false)
+  })
+
+  test("…and the same is true of a live-finished one", () => {
+    expect(
+      isCompleted(
+        item({ isFinished: true, isRevived: true }),
+      ),
+    ).toBe(false)
+  })
 })
 
 describe("runtimeLabel", () => {
