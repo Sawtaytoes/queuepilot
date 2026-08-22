@@ -1,9 +1,10 @@
 import {
+  Button,
+  ButtonLink,
   ColorSchemeSwitcher,
   IconButton,
 } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
-import { Link } from "react-router"
 
 /** Which header popover is open. Only one at a time, mux-magic's `PageHeader` model:
  * a left "nav" menu (back / rename) and a right "actions" menu (undo / redo / scheme).
@@ -212,31 +213,36 @@ export function Header({
       <div className="bar">
         {/* Narrow-View-only left toggle → the nav popover (back / rename). Hidden when it
             would open empty (the Play landing has neither). Desktop shows #back inline. */}
-        <button
+        <IconButton
+          appearance="outline"
           aria-expanded={openMenu === "nav"}
           aria-haspopup="menu"
-          aria-label="Navigation menu"
-          className="ghost menu-toggle"
+          className="menu-toggle"
           hidden={!back && !editableSetId}
           id="menu-nav"
+          intent="neutral"
+          label="Navigation menu"
           onClick={() =>
             setOpenMenu((m) => (m === "nav" ? null : "nav"))
           }
-          type="button"
         >
           ☰
-        </button>
+        </IconButton>
         {/* "‹ Play" goes to a page, so it is a link too — same reasoning as the landing rows.
-            `to` falls back to `/` only while `hidden`, since an anchor with no href is not
-            focusable and would silently drop out of the tab order the moment `back` is null. */}
-        <Link
-          className="ghost"
+            `href` falls back to `/` only while `hidden`, since an anchor with no href is not
+            focusable and would silently drop out of the tab order the moment `back` is null.
+            A `ButtonLink` rather than a router `Link` in a borrowed skin: it is still an
+            `<a href>` (middle-click, ⌘-click, "copy link address") and it still routes,
+            because `main.tsx` injects react-router into the link seam. */}
+        <ButtonLink
+          appearance="outline"
           hidden={!back}
+          href={back?.target ?? "/"}
           id="back"
-          to={back?.target ?? "/"}
+          intent="neutral"
         >
           {back?.label ?? "← All queues"}
-        </Link>
+        </ButtonLink>
         <h1 id="heading" onClick={begin}>
           {isEditing ? (
             <input
@@ -262,16 +268,17 @@ export function Header({
           )}
         </h1>
         <Tip label="Rename">
-          <button
-            aria-label="Rename"
-            className="ghost namepen"
+          <IconButton
+            appearance="outline"
+            className="namepen"
             hidden={!editableSetId}
             id="editname"
+            intent="neutral"
+            label="Rename"
             onClick={begin}
-            type="button"
           >
             ✎
-          </button>
+          </IconButton>
         </Tip>
         {/* The desktop chrome cluster: undo / redo / scheme / the Home toolbar slot,
             pushed right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and
@@ -321,21 +328,22 @@ export function Header({
         </div>
 
         {/* Narrow-View-only right toggle → the actions popover. */}
-        <button
+        <IconButton
+          appearance="outline"
           aria-expanded={openMenu === "actions"}
           aria-haspopup="menu"
-          aria-label="Actions menu"
-          className="ghost menu-toggle"
+          className="menu-toggle"
           id="menu-actions"
+          intent="neutral"
+          label="Actions menu"
           onClick={() =>
             setOpenMenu((m) =>
               m === "actions" ? null : "actions",
             )
           }
-          type="button"
         >
           ⋮
-        </button>
+        </IconButton>
 
         {/* LEFT popover (nav). Mounted in both states so it can transition; `.hmenu` is
             `display:none` on desktop entirely. */}
@@ -345,27 +353,32 @@ export function Header({
           role="menu"
         >
           {back ? (
-            <a
-              className="ghost hmenu-item"
+            <ButtonLink
+              appearance="outline"
+              className="hmenu-item"
               href={back.target}
+              intent="neutral"
+              isFullWidth
               onClick={() => setOpenMenu(null)}
               role="menuitem"
             >
               {back.label}
-            </a>
+            </ButtonLink>
           ) : null}
           {editableSetId ? (
-            <button
-              className="ghost hmenu-item"
+            <Button
+              appearance="outline"
+              className="hmenu-item"
+              intent="neutral"
+              isFullWidth
               onClick={() => {
                 setOpenMenu(null)
                 begin()
               }}
               role="menuitem"
-              type="button"
             >
               ✎ Rename
-            </button>
+            </Button>
           ) : null}
         </div>
 
@@ -377,30 +390,34 @@ export function Header({
           className={`hmenu hmenu-right${openMenu === "actions" ? " open" : ""}`}
           role="menu"
         >
-          <button
-            className="ghost hmenu-item"
-            disabled={!history.undo}
+          <Button
+            appearance="outline"
+            className="hmenu-item"
+            intent="neutral"
+            isDisabled={!history.undo}
+            isFullWidth
             onClick={() => {
               setOpenMenu(null)
               void runHistory("undo")
             }}
             role="menuitem"
-            type="button"
           >
             ↶ Undo
-          </button>
-          <button
-            className="ghost hmenu-item"
-            disabled={!history.redo}
+          </Button>
+          <Button
+            appearance="outline"
+            className="hmenu-item"
+            intent="neutral"
+            isDisabled={!history.redo}
+            isFullWidth
             onClick={() => {
               setOpenMenu(null)
               void runHistory("redo")
             }}
             role="menuitem"
-            type="button"
           >
             ↷ Redo
-          </button>
+          </Button>
           <div className="hmenu-scheme">
             <ColorSchemeSwitcher icons={schemeIcons} />
           </div>

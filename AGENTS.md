@@ -90,6 +90,17 @@ never in the tree.
   (`id`, `hidden`, `data-testid`, `ref`). A box that needs a handle on itself — an `id` for a
   shot script, a `hidden` that takes the label with it — is a `FieldGroup`, even when it
   holds one control.
+- **An in-app navigation that looks like a control is a `ButtonLink`, and the app injects its
+  router.** `@charcuterie/ui` is router-agnostic: `ButtonLink` renders a plain `<a href>`
+  unless the app fills the **link seam**, and a plain `<a>` to an in-app path is a **full
+  reload** — the SPA boots again and the query cache goes with it. `main.tsx` wraps the tree
+  in `RouterLinkProvider link={ReactRouterLink}` (from `@charcuterie/ui/react-router`, an
+  optional peer on its own entry point, so the base package never resolves `react-router`),
+  and `getIsRoutedHref` still hands another origin, `mailto:` and a `#fragment` back to the
+  browser — which is why the Plex and Kavita launchers keep opening a new tab. The header's
+  Narrow-View back row was a bare `<a href>` and **did** full-reload; that is what the seam
+  fixed. A `<Link>` in a hand-painted skin is the thing this replaces, not an alternative
+  to it.
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any

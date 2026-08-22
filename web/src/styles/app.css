@@ -406,15 +406,15 @@ header .sub {
       transform 0.18s ease-out,
       visibility 0s linear 0s;
   }
+  /* The popover rows are `Button`s / a `ButtonLink`. `isFullWidth` gives the width, the
+     component gives the box — what is left is the popover's own layout: a row reads from
+     the start edge rather than centred, and it is a 44px tap target (the token
+     `minTouchTarget`) because this panel only exists in the Narrow View. */
   .hmenu-item {
     justify-content: flex-start;
-    width: 100%;
     min-height: 44px;
     text-align: start;
     font-size: 1rem;
-  }
-  .hmenu-item:disabled {
-    opacity: 0.4;
   }
   .hmenu-scheme {
     display: flex;
@@ -474,50 +474,27 @@ button {
   font: inherit;
   cursor: pointer;
 }
-#undo,
-#redo {
-  padding: 6px 11px;
-  font-size: 1.05rem;
-  line-height: 1;
-}
-#undo:disabled,
-#redo:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-#undo:disabled:hover,
-#redo:disabled:hover {
-  border-color: var(--color-border-default);
-}
-/* `a.ghost` too, not just `button.ghost`: the three "Configure ›" controls are anchors now
-   (they GO somewhere, so they must be middle-clickable), and a tag-qualified selector would
-   have silently dropped every one of them back to unstyled link text. */
-button.ghost,
-a.ghost {
-  background: var(--color-surface-overlay);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-primary);
-  padding: 8px 14px;
-}
-button.ghost:hover,
-a.ghost:hover {
-  border-color: var(--color-intent-accent-solid);
-}
+/* `#undo` / `#redo` are Charcuterie `IconButton`s and carry NO rule here. An id selector is
+   the same silent override a `className` is — this file is unlayered, so `padding`,
+   `font-size` and a `:disabled { opacity }` written for the hand-rolled pair beat the
+   component's own control sizing and its `DISABLED_CLASS`. They were left behind when the
+   pair was adopted; the component paints both states.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
+
+/* `.ghost` is GONE. It was this app's spelling of Charcuterie's `appearance="outline"`, and
+   the header was the last thing wearing it — three glyph toggles, the rename pen, the two
+   popover rows and both back links are `IconButton` / `Button` / `ButtonLink` now.
+   (decision `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
 
 /* NAVIGATION ANCHORS — the controls that used to be `<button onClick={navigate(…)}>` and are
    now real `<a href>`, so middle-click / ⌘-click / "open in new tab" work. Each keeps the
    class it always had, so its skin is unchanged; these are only the two things an <a> brings
    that a <button> did not (an underline, and a text-only inline box).
    (decision `2026-08-15-navigation-is-an-anchor-not-a-button`) */
-a.ghost,
 .playcard .rowname,
 .shelf h2 .open {
   text-decoration: none;
   cursor: pointer;
-}
-a.ghost {
-  display: inline-block;
 }
 
 .view {
@@ -2571,11 +2548,12 @@ body:not(.movies-channel) #chfilters .moviesonly {
   font: inherit;
 }
 
-/* ---- inline pen-rename of the heading ---- */
+/* ---- inline pen-rename of the heading ----
+   An `IconButton`, so its box, border and focus ring are the component's. What is left is
+   the STATE below: while the heading is editable, hovering anywhere on the bar or the title
+   lights the pen, which is how the title advertises that it can be renamed. That is a
+   relationship between three elements and no component prop describes it. */
 .namepen {
-  padding: 6px 10px;
-  font-size: 1rem;
-  line-height: 1;
   transition:
     color 0.12s,
     border-color 0.12s;
