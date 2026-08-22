@@ -52,7 +52,7 @@ ok('tools in header (Wide View)', await page.$eval('#gslot-wide #tools', () => t
 // 3. Global search finds a Short; no compatible queue yet → notice.
 await page.fill('#gsearch', 'toy tinkers');
 await page.waitForSelector('#gresults.open li', { timeout: 15000 });
-await page.click('#gresults li .addto');
+await page.click('#gresults li [data-testid="results-addto"]');
 // `.addtomenu` is the Charcuterie `Menu` panel, and it PORTALS to <body> — so this is a
 // document-wide read, never `#gresults .addtomenu`. The notice is a DISABLED menuitem
 // rather than the old loose <p>: `Menu` renders `items` and nothing else.
@@ -76,7 +76,7 @@ ok('new queue shelf appears', true);
 // 5. Search again → menu now offers the new queue; add Toy Tinkers to it.
 await page.fill('#gsearch', 'toy tinkers');
 await page.waitForSelector('#gresults.open li', { timeout: 15000 });
-await page.click('#gresults li .addto');
+await page.click('#gresults li [data-testid="results-addto"]');
 await page.waitForSelector('.addtomenu [role="menuitem"]');
 const menuLabels = await page.$$eval('.addtomenu [role="menuitem"]', (bs) => bs.map((b) => b.textContent));
 ok('menu offers Bob — Shorts', menuLabels.includes('Bob — Shorts'));

@@ -185,21 +185,33 @@ export function Toolbar() {
                     items={menuItems}
                     onDismiss={() => setOpenMenu(null)}
                     trigger={
-                      <button
-                        className="addto"
+                      /*
+                        The SAME control the Pending tile's Add-to is — `outline` /
+                        `accent` / `sm` — because they do the same thing one route apart,
+                        and `.results .addto` was a second hand-painted spelling of it.
+                        `Menu` CLONES its trigger and `Button` spreads what it does not
+                        destructure onto the native `<button>`, so the `ref`, the ARIA and
+                        the dismiss handlers all still land.
+                      */
+                      <Button
+                        appearance="outline"
+                        data-testid="results-addto"
+                        iconEnd={
+                          // Decoration only — `useRole` already writes
+                          // `aria-haspopup="menu"` and `aria-expanded` here.
+                          <span aria-hidden="true">▾</span>
+                        }
+                        intent="accent"
                         onClick={(e) => {
                           e.stopPropagation()
                           setOpenMenu((cur) =>
                             cur === index ? null : index,
                           )
                         }}
-                        type="button"
+                        size="sm"
                       >
                         Add to
-                        {/* Decoration only — `useRole` already writes
-                            `aria-haspopup="menu"` and `aria-expanded` here. */}
-                        <span aria-hidden="true"> ▾</span>
-                      </button>
+                      </Button>
                     }
                   />
                 </>
@@ -208,7 +220,11 @@ export function Toolbar() {
               // it must not fire from inside it. `.qmenu` used to be listed here too —
               // the panel is a PORTAL child of <body> now, so it is not inside the `<li>`
               // this delegated handler walks up from and cannot reach it at all.
-              ignoreSelector: ".addto",
+              // ⚠️ Keyed on the `data-testid`, because the trigger is a `Button` and no
+              // longer wears `.addto` — this selector is BEHAVIOUR, not a test hook: miss
+              // it and a click on Add-to also fires the row's own pick.
+              ignoreSelector:
+                '[data-testid="results-addto"]',
               // Row pick (click anywhere on it, or Enter) = open its Add-to menu.
               pick: () =>
                 setOpenMenu((cur) =>
