@@ -3574,15 +3574,84 @@ body.rowdragging {
   max-width: 70ch;
   margin: 0;
 }
+/* The view switch, and the count it belongs beside. Right-aligned like the queue grid's own
+   density toggle, because it is the same control doing the same job on the same content. */
+#pending .pendingtoolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+#pending .pendingtoolbar .pcount {
+  color: var(--color-content-muted);
+  font-size: 0.86rem;
+  margin-inline-end: auto;
+}
+
 .pendingtile {
   position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
-  /* The tile is now the CONTENT of a `VirtualizedGrid` cell rather than the cell itself, so
-     it has to claim the cell's height. Without this a short tile (no artwork yet) sits at
-     its natural height inside a tall row and its controls float halfway up the gap. */
-  block-size: 100%;
+  /* NOT `block-size: 100%` any more, and this is the change the owner asked for by name:
+     "I don't like that because I'm losing content and we're creating gaps." Claiming the
+     cell's full height pushed every tile's controls down to the tallest row's baseline, so
+     a short title left a band of empty card between the words and the buttons. The controls
+     now sit directly under whatever the words came to, and the tile ends where it ends. */
+}
+
+/* The one thing that IS fixed. A row of artwork only reads as a row if every poster is the
+   same box, and Plex's own posters are not all 2:3 — without this, one 4:3 cover shoulders
+   the titles beside it out of line. `cover` crops the odd one rather than letterboxing it. */
+.pendingtile img,
+.pendingrow img {
+  inline-size: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 8px;
+  display: block;
+}
+
+/* --- Pending, LIST view -------------------------------------------------------- */
+/* Poster beside the words, so every control keeps its name. The poster is a fixed 84px
+   column: it is an identifier here, not the content, which is the poster wall's job. */
+.pendingrow {
+  position: relative;
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 12px;
+  align-items: start;
+}
+.pendingrow img {
+  inline-size: 84px;
+}
+.pendingrowtext {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-inline-size: 0;
+}
+.pendingrow .ptitle {
+  font-weight: 600;
+}
+.pendingrow .glib {
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+}
+.pendingrow .pendingactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+/* The start point chosen but NOT yet written — it lands when the item is added to a queue.
+   Accent, because it is the one thing on the tile that is a pending edit rather than a fact
+   about the library. */
+.pendingtile .pstart,
+.pendingrow .pstart {
+  color: var(--color-intent-accent-content);
+  font-size: 0.78rem;
 }
 
 /* WHICH libraries the Pending screen draws from. Sits between the explanation and the grid
