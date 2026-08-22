@@ -1,4 +1,4 @@
-import { Badge } from "@charcuterie/ui"
+import { Badge, Button } from "@charcuterie/ui"
 
 import { api } from "../lib/api"
 import {
@@ -312,13 +312,14 @@ export function EntryEditor({
   return (
     <Modal
       footer={
-        <button
-          className="primary"
-          onClick={onClose}
-          type="button"
-        >
+        // A Charcuterie `Button`, configured by props. `.primary` had to be restated at
+        // `#entrymodal .modalbtns button.primary` because this panel's confirm is a click
+        // handler and the shared rule only painted `[type="submit"]` — two spellings of one
+        // accent, which is the duplication `intent` removes.
+        // (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`)
+        <Button intent="accent" onClick={onClose}>
           Done
-        </button>
+        </Button>
       }
       // The sheet wears the queue's provider colour, like every other surface under
       // `#queue` — it is portalled to `document.body`, so it cannot inherit the
