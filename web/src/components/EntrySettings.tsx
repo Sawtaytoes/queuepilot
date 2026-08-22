@@ -1,4 +1,4 @@
-import { Badge, Button } from "@charcuterie/ui"
+import { Badge, Button, ButtonLink } from "@charcuterie/ui"
 
 import { api } from "../lib/api"
 import {
@@ -364,8 +364,18 @@ export function EntryEditor({
             behind it, so the server would reject the start after the device menu had
             already asked which TV. Same rule as the tile's ▶. */}
         {item.resolved && !isPull ? (
-          <button
-            className="primary"
+          // A Charcuterie `Button`, `intent="accent"` — what `#entrymodal .entryactions >
+          // .primary` painted by hand.
+          //
+          // ⚠️ `className="playbtn"` FIXES A BUG, it does not just carry a look. This button
+          // opens the device menu, and `PlayMenu`'s outside-click handler only spares
+          // `.playmenu`, `.playbtn` and `.shelfplay` — `.primary` is in none of them, so the
+          // document handler closed the menu on the very click that opened it. Measured
+          // before the change: `after clicking the panel ▶, .playmenu present: false`. The
+          // class is the same DOM handle the other three play buttons carry.
+          <Button
+            className="playbtn"
+            intent="accent"
             onClick={(clickEvent) =>
               openPlayMenu({
                 anchor:
@@ -376,38 +386,42 @@ export function EntryEditor({
                 setId,
               })
             }
-            type="button"
           >
             ▶ {verb} on ▾
-          </button>
+          </Button>
         ) : null}
         {item.resolved && isPull ? (
           // An anchor because it NAVIGATES — middle-clickable and bookmarkable like
           // every other link here (decision
           // `2026-08-15-navigation-is-an-anchor-not-a-button`). New tab, so the queue
           // you launched from is still there when you come back from the reader.
-          <a
-            className="primary openbtn"
+          <ButtonLink
             href={`/go/${encodeURIComponent(setId)}?only=${encodeURIComponent(item.key)}`}
-            rel="noreferrer"
-            target="_blank"
+            intent="accent"
+            // Replaces `target="_blank"` + `rel="noreferrer"`, and ANNOUNCES the new tab
+            // rather than leaving that to a glyph a screen reader does not read as one.
+            isExternal
           >
             ▶ {verb} now
-          </a>
+          </ButtonLink>
         ) : null}
         {entry.remove ? (
-          <button
-            className="danger"
+          // `appearance="outline"`, not solid: the rule it replaces was a TRANSPARENT
+          // background with a neutral border and danger-coloured text, which is what
+          // `outline` means. A solid danger button here would shout louder than the
+          // panel's own primary action.
+          <Button
+            appearance="outline"
+            intent="danger"
             onClick={() => {
               // The entry this panel is about is about to stop existing, so the
               // panel goes with it rather than sitting there describing nothing.
               onClose()
               entry.remove?.()
             }}
-            type="button"
           >
             {entry.removeLabel || "Remove"}
-          </button>
+          </Button>
         ) : null}
       </div>
 

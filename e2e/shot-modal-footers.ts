@@ -169,11 +169,13 @@ try {
   await page.waitForSelector('#tilemenu:not([hidden])', { timeout: 10000 });
   await page.waitForTimeout(400);
 
-  // ⚠️ NOT a silent skip. `#startmodal` is reachable only from a startable entry, and this
-  // harness cannot make one: `isStartable` wants `resolved` AND a show/collection, and with
-  // Plex unroutable the synthetic entry patched into `/api/queues` above still comes back
-  // through the tile menu with only its remove action. The row is asserted rather than
-  // assumed, so this prints what the menu DID offer instead of quietly shooting nothing.
+  // `#startmodal` is reachable only from a STARTABLE entry — `isStartable` wants `resolved`
+  // AND a show or collection — which is exactly what the `/api/queues*` stub above patches
+  // in. An earlier version of this comment claimed the harness could not make one; that was
+  // a stale build, not a limitation, and the frame captures.
+  //
+  // The branch stays anyway, and it prints what the menu DID offer rather than shooting
+  // nothing, because the row is the thing being asserted.
   const rows = await page.locator('#tilemenu button').allTextContents();
   const startRow = page.locator('#tilemenu').getByRole('button', { name: 'Start from an episode…' });
   if (await startRow.count()) {
