@@ -522,20 +522,11 @@ button {
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
    Tailwind v4 scans source for class tokens it emits that utility the moment the
    word appears, hiding this very button. `-toggle` keeps us off the reserved name. */
+/* An `IconButton`, `ghost` — so the background, border, colour, padding and hover all come
+   from the component. What is left is the ROTATE, which is this control's whole point.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
 .shelf .collapse-toggle {
-  background: none;
-  border: none;
-  color: var(--color-content-muted);
-  font-size: 0.95rem;
-  padding: 4px 6px;
-  line-height: 1;
-  cursor: pointer;
-  transition:
-    transform 0.15s,
-    color 0.15s;
-}
-.shelf .collapse-toggle:hover {
-  color: var(--color-intent-accent-solid);
+  transition: transform 0.15s;
 }
 .shelf.collapsed .collapse-toggle {
   transform: rotate(-90deg);
@@ -572,26 +563,19 @@ button {
 .shelf h2 .shelfspacer {
   flex: 1;
 }
+/* `IconButton`s, `ghost`. The REVEAL is what these classes keep: the heading's controls
+   are invisible until the shelf is hovered, so the Home page is posters and titles until
+   you reach for something. That is a relationship between the `h2` and its children, and
+   no component prop describes it. */
 .shelf h2 .shelfedit,
 .shelf h2 .shelfdrag {
-  background: none;
-  border: none;
-  color: var(--color-content-muted);
-  font-size: 1.05rem;
-  padding: 4px 8px;
-  line-height: 1;
   opacity: 0;
-  transition:
-    opacity 0.15s,
-    color 0.15s;
+  transition: opacity 0.15s;
 }
 .shelf h2:hover .shelfedit,
 .shelf h2:hover .shelfdrag,
 .shelf.dragging .shelfdrag {
   opacity: 1;
-}
-.shelf h2 .shelfedit:hover {
-  color: var(--color-intent-accent-solid);
 }
 .shelf h2 .shelfdrag {
   cursor: grab;
@@ -1556,18 +1540,11 @@ body.queue-view #tools {
   color: var(--color-content-muted);
   font-size: 0.78rem;
 }
-.results .addto {
-  background: var(--color-surface-raised);
-  color: var(--color-content-primary);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 0.88rem;
-  white-space: nowrap;
-}
-.results .addto:hover {
-  border-color: var(--color-intent-accent-solid);
-}
+/* `.results .addto` is gone. The search row's Add-to is the same `Button` the Pending
+   tile's is — `outline` / `accent` / `sm` — and this rule was the second, hand-painted
+   spelling of that one control. Both are keyed for tests and behaviour by
+   `data-testid`, never by a class.
+   (decision `2026-08-21-a-class-name-is-not-a-style`) */
 .results li {
   position: relative;
 }
@@ -1634,13 +1611,9 @@ body.queue-view #tools {
    `.playcard .playbtn`'s `flex-shrink: 0` below is app layout.
    (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
    `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
+/* `IconButton`, `ghost` + `intent="accent"` — the accent is what set this control apart
+   from the two neutral ones beside it, and it is a prop now. The reveal stays. */
 .shelf h2 .shelfplay {
-  background: none;
-  border: none;
-  color: var(--color-intent-accent-content);
-  font-size: 0.95rem;
-  padding: 4px 8px;
-  line-height: 1;
   opacity: 0;
   transition: opacity 0.15s;
 }
@@ -3178,14 +3151,8 @@ ul.grid.posters .tile .badges .epstag {
   padding: 6px 8px;
   font-size: 0.95rem;
 }
-.countpick .countback {
-  background: transparent;
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-muted);
-  cursor: pointer;
-  padding: 5px 8px;
-}
+/* `.countback` is gone — it was an `outline` `IconButton` spelled by hand, and the
+   control is one now. */
 
 /* ---- The per-entry sheet ----
 
@@ -3333,25 +3300,17 @@ ul.grid.posters .tile .badges .epstag {
 }
 /* Up/down live OUTSIDE the select button, or clicking a reorder arrow would also change
    which group the form is editing — two actions on one press. */
+/* Side by side, not stacked. The pair used to be two 9px glyphs in a column, which fitted
+   inside a 42px row; an `IconButton` is honestly sized (`--control-height-sm`), so stacking
+   two of them made every row 74px and the five-group list nearly twice as tall. A row of
+   two keeps the list scannable, and each arrow is now a real target rather than a speck. */
 .groupmove {
   display: flex;
-  flex-direction: column;
   gap: 2px;
 }
-.groupmove button {
-  padding: 0 5px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 5px;
-  background: var(--color-surface-raised);
-  color: var(--color-content-tertiary);
-  font-size: 0.62rem;
-  line-height: 1.5;
-  cursor: pointer;
-}
-.groupmove button:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
+/* ⚠️ `.groupmove button` was an ELEMENT selector and is deleted rather than trimmed: an
+   `IconButton` renders a `<button>`, so it would have kept matching and outranking the
+   component that landed inside `.groupmove`. `isDisabled` paints the disabled pair. */
 .groupform fieldset {
   margin: 16px 0 0;
   padding: 12px 14px;

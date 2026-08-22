@@ -1,3 +1,4 @@
+import { IconButton } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import {
@@ -173,9 +174,10 @@ export function CountPicker({
           type="number"
           value={draft}
         />
-        <button
-          aria-label={`${label} — back to the presets`}
-          className="countback"
+        <IconButton
+          appearance="outline"
+          intent="neutral"
+          label={`${label} — back to the presets`}
           onClick={() => {
             setIsCustom(false)
             if (
@@ -185,8 +187,8 @@ export function CountPicker({
               emit(defaultValue ?? 1)
             }
           }}
+          size="sm"
           title="Back to the presets"
-          type="button"
         >
           {/* An inline SVG, not "▾": the app's font ships no glyph for it, so the character
               rendered as an empty box beside the number field. */}
@@ -204,7 +206,7 @@ export function CountPicker({
               strokeWidth="1.6"
             />
           </svg>
-        </button>
+        </IconButton>
       </span>
     )
   }

@@ -115,7 +115,7 @@ try {
   // The Add-to trigger's handle spans both revisions of this change ON PURPOSE: `before` is
   // captured against the raw `<button class="addto">` and `after` against the Charcuterie
   // `Button`, which carries `data-testid` instead. One script, two trees, same frames.
-  const ADDTO = '.addto, [data-testid="pending-addto"]';
+  const ADDTO = '[data-testid="results-addto"], [data-testid="pending-addto"]';
 
   // 0 — the TILE itself, closed. This is where the owner's three complaints live: the
   // edition badge jammed against the year, and two controls that do not read as controls.
@@ -150,7 +150,7 @@ try {
   await waitForRegistry();
   await page.fill('#gsearch', 'metropolis');
   await page.waitForSelector('#gresults.open li', { timeout: 15000 });
-  await page.locator('#gresults li').first().locator('.addto').click();
+  await page.locator('#gresults li').first().locator('[data-testid="results-addto"]').click();
   await page.waitForSelector('.qmenu, .addtomenu', { timeout: 10000 });
   await page.waitForTimeout(300);
   await shot('toolbar');
