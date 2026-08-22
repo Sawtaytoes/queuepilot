@@ -673,21 +673,26 @@ export function QueueView({
             // No device to cast to — hand back the launcher URL instead.
             <OpenQueueButton set={regSet!} />
           ) : (
-            <button
-              className="playbtn"
-              id="qplay"
-              onClick={(e) =>
-                setId &&
-                openPlayMenu({
-                  anchor:
-                    e.currentTarget.getBoundingClientRect(),
-                  setId,
-                })
-              }
-              type="button"
-            >
-              ▶ Play on ▾
-            </button>
+            <>
+              {/* A Charcuterie `Button`, `intent="accent"` — what `.playbtn`'s solid accent skin
+              painted by hand. The class STAYS as a DOM handle: `PlayMenu` asks
+              `t.closest(".playbtn")` so pressing this does not close the menu it opens. */}
+              <Button
+                className="playbtn"
+                id="qplay"
+                intent="accent"
+                onClick={(e) =>
+                  setId &&
+                  openPlayMenu({
+                    anchor:
+                      e.currentTarget.getBoundingClientRect(),
+                    setId,
+                  })
+                }
+              >
+                ▶ Play on ▾
+              </Button>
+            </>
           )}
         </SearchDropdown>
       </div>
