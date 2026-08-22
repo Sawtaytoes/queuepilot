@@ -36,6 +36,7 @@ import {
   isCompleted,
   isStartable,
   progressLabel,
+  runtimeLabel,
   tileFace,
 } from "../lib/tileFace"
 import type { QueueItem, SearchHit } from "../lib/types"
@@ -1009,6 +1010,13 @@ export function QueueView({
                 }
                 playTitle={`${verb} “${face.title}” now`}
                 posterCover={item.cover}
+                // How long the next episode runs. The next-up leaf's runtime is the one Plex
+                // sends for a show; a film reads its own. The batch is the entry's override,
+                // else the queue's default — the same number the engine will queue.
+                runtime={runtimeLabel(
+                  item.nextEp?.duration || item.duration,
+                  item.episodes ?? regSet?.episodes ?? 1,
+                )}
                 posterRatingKey={
                   item.resolved ? face.ratingKey : null
                 }

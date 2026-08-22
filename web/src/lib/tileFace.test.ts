@@ -4,6 +4,7 @@ import {
   byTitle,
   isCompleted,
   isStartable,
+  runtimeLabel,
   seLabel,
   startLabel,
   tileFace,
@@ -636,5 +637,41 @@ describe("isCompleted", () => {
 
   test("an entry with something left to play is neither", () => {
     expect(isCompleted(item({ done: false }))).toBe(false)
+  })
+})
+
+describe("runtimeLabel", () => {
+  test("an episode reads in whole minutes", () => {
+    // 1,421,852 ms — the live runtime of the .hack//SIGN episode that first showed this line.
+    expect(runtimeLabel(1421852)).toBe("24 min")
+  })
+
+  test("a film past the hour splits the hours out", () => {
+    expect(runtimeLabel(107 * 60000)).toBe("1 h 47 min")
+  })
+
+  test("a whole number of hours drops the empty minutes", () => {
+    expect(runtimeLabel(120 * 60000)).toBe("2 h")
+  })
+
+  test("a batch multiplies, and says the total is an estimate", () => {
+    // Only the NEXT episode's runtime is known, so the total is "about" by construction.
+    expect(runtimeLabel(24 * 60000, 2)).toBe(
+      "2 x 24 min · about 48 min",
+    )
+  })
+
+  test("a batch of one is just the one runtime", () => {
+    expect(runtimeLabel(24 * 60000, 1)).toBe("24 min")
+  })
+
+  test("no runtime is no line — a chapter, a board game, an empty next-up", () => {
+    expect(runtimeLabel(0)).toBeNull()
+    expect(runtimeLabel(null)).toBeNull()
+    expect(runtimeLabel(undefined, 3)).toBeNull()
+  })
+
+  test("under a minute is not a runtime worth printing", () => {
+    expect(runtimeLabel(20_000)).toBeNull()
   })
 })

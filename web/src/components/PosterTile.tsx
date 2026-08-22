@@ -51,6 +51,16 @@ type Props = {
     isDone?: boolean
     onStart?: () => void
   }
+  /**
+   * How long the next thing runs — "24 min", "2 x 24 min · about 48 min". Its OWN line,
+   * under the next-up line: on the next-up line it competed with an episode title that
+   * already truncates, and in the badge row it read as one more chip
+   * (decision `2026-08-22-a-tile-names-the-runtime-on-its-own-line`).
+   *
+   * Absent/null renders nothing at all — a reading queue and a board game have no runtime,
+   * and an empty line would leave a gap on those tiles.
+   */
+  runtime?: string | null
   badges?: ReactNode
   /** The multi-select checkbox — queue grid only. */
   onCheck?: () => void
@@ -129,6 +139,7 @@ export function PosterTile({
   posterCover,
   posterRatingKey,
   removeTitle = "Remove",
+  runtime,
   title,
   titleHref,
   titleHrefLabel = "Plex",
@@ -299,6 +310,9 @@ export function PosterTile({
             {next?.text ?? ""}
           </span>
         </Tip>
+        {runtime ? (
+          <span className="runtime">{runtime}</span>
+        ) : null}
         <span className="badges">{badges}</span>
       </div>
     </li>
