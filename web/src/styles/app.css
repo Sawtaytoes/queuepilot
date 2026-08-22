@@ -1834,27 +1834,12 @@ body.queue-view #tools {
   justify-content: space-between;
   font-size: 0.9rem;
 }
-#ch-block button {
-  background: var(--color-surface-overlay);
-  color: var(--color-content-primary);
-  border: 1px solid var(--color-border-default);
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 0.8rem;
-}
-#ch-block button:hover {
-  border-color: var(--color-intent-accent-solid);
-}
-#ch-save {
-  width: 100%;
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-  border: none;
-  border-radius: 8px;
-  padding: 9px 14px;
-  font: inherit;
-  font-weight: 600;
-}
+/* The row's Unblock is a Charcuterie `Button`, `appearance="outline"` at `size="sm"`. An
+   ELEMENT selector had to go rather than be left alone: a `Button` renders a `<button>`, so
+   this would still have matched and outranked it. */
+/* Save filters is a Charcuterie `Button`, `intent="accent"` + `isFullWidth` — which is the
+   whole of what this rule said. The `#ch-save` rule further up keeps `flex: 0 0 auto` and
+   `margin-top: 12px`, the app layout that pins it as the panel's always-visible footer. */
 .tile .exclude {
   background: none;
   border: 1px solid var(--color-border-default);
@@ -2069,7 +2054,8 @@ body.queue-view #tools {
   font-size: 0.92rem;
   color: var(--color-content-primary);
 }
-#setmodal .rmblock,
+/* `.rmblock` is a Charcuterie `Button` now (`appearance="outline"`, `size="sm"`), so only
+   `.addblock` still needs the hand-rolled chip skin. */
 #setmodal .addblock {
   background: transparent;
   border: 1px solid var(--color-border-default);
@@ -2538,17 +2524,8 @@ body:not(.movies-channel) #chfilters .moviesonly {
   justify-content: space-between;
   font-size: 0.9rem;
 }
-#ch-movieexcludes button {
-  background: var(--color-surface-overlay);
-  color: var(--color-content-primary);
-  border: 1px solid var(--color-border-default);
-  border-radius: 6px;
-  padding: 3px 8px;
-  font-size: 0.8rem;
-}
-#ch-movieexcludes button:hover {
-  border-color: var(--color-intent-accent-solid);
-}
+/* Same control, same answer as `#ch-block button` above — Un-exclude is an outline `Button`
+   at `size="sm"`, and the element selector is deleted for the same reason. */
 #ch-audio {
   width: 100%;
   background: var(--color-surface-overlay);
@@ -2708,11 +2685,11 @@ header h1 input {
   flex: 1;
   margin-bottom: 0;
 }
+/* LAYOUT + one state. The padding, font-size and radius are `size="sm"` on the component
+   now; what is left is where the button sits in the card and the danger-tinted hover, which
+   is a thing this control does and `intent="neutral"` does not describe. */
 #dynmodal .binding .b-remove {
   flex: none;
-  padding: 6px 12px;
-  font-size: 0.82rem;
-  border-radius: 8px;
   align-self: flex-end;
   transition:
     border-color 0.15s,
@@ -2723,15 +2700,10 @@ header h1 input {
   color: var(--color-intent-danger-content);
 }
 #dynmodal .binding .b-remove:focus-visible,
-#dynmodal .addbinding:focus-visible {
-  outline: 2px solid var(--color-intent-accent-solid);
-  outline-offset: 2px;
-}
+/* Margin only. The padding, font-size and radius come from the component, and the
+   hand-rolled focus ring is gone — `Button` brings the token system's own. */
 #dynmodal .addbinding {
   margin-top: 12px;
-  padding: 8px 14px;
-  font-size: 0.88rem;
-  border-radius: 8px;
 }
 
 @media (max-width: 760px) {
@@ -3296,18 +3268,8 @@ ul.grid.posters .tile .badges .epstag {
 }
 /* The start-point row's buttons are secondary actions, not text — the shared modal rule
    only paints `.modalbtns` children, and these live in the body. */
-#entrymodal .fieldrow button {
-  background: var(--color-surface-base);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-primary);
-  cursor: pointer;
-  font: inherit;
-  padding: 6px 12px;
-}
-#entrymodal .fieldrow button:hover {
-  border-color: var(--color-border-strong);
-}
+/* The row's Choose… / Back to automatic are outline `Button`s at `size="sm"`. Element
+   selector, so deleted rather than left to outrank the component. */
 
 /* --- the Groups editor ------------------------------------------------------------- */
 /* Two panes: the list of groups (which doubles as the reorder control) beside the one being

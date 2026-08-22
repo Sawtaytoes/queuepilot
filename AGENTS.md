@@ -56,8 +56,11 @@ never in the tree.
   each element matches any rule for each class it wears. It **reports, it is not a CI gate**
   (a state class on an ancestor matches nothing on purpose). The five findings it left open
   on other pages are **all fixed** as of 2026-08-21, by adopting components rather than by
-  un-scoping rules; it now returns 16 pairs and every one of them is a state class or one of
-  Tailwind's own `peer` / `divide-*` primitives. ⚠️ Do not trust a zero from it — its first
+  un-scoping rules; it now returns **18** pairs. Sixteen are a state class or one of Tailwind's own
+  `peer` / `divide-*` primitives; the other two are **`.playbtn`**, which is deliberately a
+  DOM handle carrying no rule — `PlayMenu`'s outside-click handler asks
+  `t.closest(".playbtn")`, so the class has to exist and must not paint. A rise in this
+  number is not automatically a regression, but it needs a reason written down here. ⚠️ Do not trust a zero from it — its first
   draft returned zero on every route, which was a bug (CSS nesting gives every `CSSStyleRule`
   a truthy empty `cssRules`). Confirm the self-test probe fires.
 - **A control is a Charcuterie component configured by PROPS, not an app class name.** When
