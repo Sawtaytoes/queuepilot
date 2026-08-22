@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import { useCallback, useEffect, useState } from "react"
 import { api } from "../lib/api"
 import {
@@ -363,27 +364,43 @@ export function StartModal() {
     <Modal
       footer={
         <>
-          <button
-            className="ghost"
+          {/* THE FOOTER IS THREE CHARCUTERIE `Button`s, configured by props. Each one used to
+            be a raw `<button>` wearing an app class, and `app.css` painted every skin by
+            hand across five modals: `.modalbtns button` set the radius, the padding and the
+            font, `[type="submit"]` painted the confirm accent, `.danger` painted the
+            destructive one, and `#groupsmodal`/`#entrymodal` restated the accent under
+            `.primary` because their confirms are click handlers rather than submits.
+
+            ⚠️ `.ghost` is Charcuterie's `outline`, NOT its `ghost`. The app class sets a
+            surface background AND a border, which is what `outline` means here; Charcuterie's
+            `ghost` is the borderless one (`PlayMenu`'s rows). Matching on the NAME would have
+            quietly flattened every secondary button in the app.
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+          <Button
+            appearance="outline"
             hidden={!item.start}
             id="start-clear"
+            intent="neutral"
             onClick={() => void commitStart(entry, null)}
-            type="button"
           >
             Clear — start automatically
-          </button>
+          </Button>
           <span className="spacer" />
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
             id="start-cancel"
+            intent="neutral"
             onClick={closeStartModal}
-            type="button"
           >
             Cancel
-          </button>
-          <button id="start-save" type="submit">
+          </Button>
+          <Button
+            id="start-save"
+            intent="accent"
+            type="submit"
+          >
             Save
-          </button>
+          </Button>
         </>
       }
       id="startmodal"

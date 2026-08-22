@@ -1,4 +1,4 @@
-import { Checkbox } from "@charcuterie/ui"
+import { Button, Checkbox } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router"
 
@@ -441,27 +441,42 @@ export function SetModal() {
     <Modal
       footer={
         <>
-          <button
-            className="danger"
+          {/* THE FOOTER IS THREE CHARCUTERIE `Button`s, configured by props. Each one used to
+            be a raw `<button>` wearing an app class, and `app.css` painted every skin by
+            hand across five modals: `.modalbtns button` set the radius, the padding and the
+            font, `[type="submit"]` painted the confirm accent, `.danger` painted the
+            destructive one, and `#groupsmodal`/`#entrymodal` restated the accent under
+            `.primary` because their confirms are click handlers rather than submits.
+
+            ⚠️ `.ghost` is Charcuterie's `outline`, NOT its `ghost`. The app class sets a
+            surface background AND a border, which is what `outline` means here; Charcuterie's
+            `ghost` is the borderless one (`PlayMenu`'s rows). Matching on the NAME would have
+            quietly flattened every secondary button in the app.
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+          <Button
             hidden={!editing}
             id="set-delete"
+            intent="danger"
             onClick={() => void onDelete()}
-            type="button"
           >
             Delete queue
-          </button>
+          </Button>
           <span className="spacer" />
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
             id="set-cancel"
+            intent="neutral"
             onClick={closeSetModal}
-            type="button"
           >
             Cancel
-          </button>
-          <button id="set-save" type="submit">
+          </Button>
+          <Button
+            id="set-save"
+            intent="accent"
+            type="submit"
+          >
             Save
-          </button>
+          </Button>
         </>
       }
       // The editor wears the source being edited, so the selected "Kavita" chip in the

@@ -1932,14 +1932,6 @@ body.queue-view #tools {
 #groupsmodal {
   width: min(780px, 95vw);
 }
-/* The panel's own primary button (Done) — the shared rule above only paints
-   `[type="submit"]`, and this form has none: every field writes on change. */
-#entrymodal .modalbtns button.primary {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-  border: none;
-  font-weight: 600;
-}
 /* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
    native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
 #startmodal form,
@@ -2204,42 +2196,18 @@ a.playbtn {
 #groupsmodal .modalbtns #groupdelete {
   margin-right: auto;
 }
-/* This form's confirm is a click handler, not a `[type=submit]`, so the shared primary rule
-   (which paints `[type="submit"]`) does not reach it — same reason `#entrymodal` restates it. */
-#groupsmodal .modalbtns button.primary {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-  border: none;
-  font-weight: 600;
-}
-#startmodal .modalbtns button,
-#setmodal .modalbtns button,
-#dynmodal .modalbtns button,
-#entrymodal .modalbtns button,
-#groupsmodal .modalbtns button {
-  border-radius: 8px;
-  padding: 8px 16px;
-  font: inherit;
-}
-#startmodal .modalbtns button[type="submit"],
-#setmodal .modalbtns button[type="submit"],
-#dynmodal .modalbtns button[type="submit"] {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-  border: none;
-  font-weight: 600;
-}
-#setmodal .modalbtns .danger {
-  background: var(--color-intent-danger-solid);
-  color: var(--color-intent-danger-on-solid);
-  border: none;
-}
-#dynmodal .modalbtns .danger,
-#groupsmodal .modalbtns .danger {
-  background: var(--color-intent-danger-solid);
-  color: var(--color-intent-danger-on-solid);
-  border: none;
-}
+/* EVERY FOOTER BUTTON'S SKIN IS GONE, not moved. All five `.modalbtns` are Charcuterie
+   `Button`s now, so the radius, the padding, the font, the `[type="submit"]` accent and the
+   `.danger` paint are all props — `intent="accent"`, `intent="danger"`, `appearance="outline"`.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`, and
+   `2026-08-02-adopting-a-component-means-deleting-its-skin`)
+
+   ⚠️ DELETING THEM IS THE POINT, not tidiness. `.modalbtns button` is an ELEMENT selector and
+   a `Button` renders a `<button>`, so every one of these rules would still have matched — and
+   `app.css` is unlayered while Tailwind's utilities sit in `@layer utilities`, so each one
+   would have silently outranked the component it landed on. Leaving them would have looked
+   like a working migration and shipped the old skin. `#selbar button` is the same trap, three
+   times over. */
 
 /* RESERVE THE SCROLLBAR'S WIDTH, ALWAYS — even on a page short enough not to need one.
    This is not cosmetic. Both this rule below and @charcuterie/ui's `lockScrollBehind`
