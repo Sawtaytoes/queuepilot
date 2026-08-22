@@ -739,7 +739,7 @@ export function DynModal() {
           id="dyn-power-off"
           isChecked={isPoweringOff}
           key={`${modalKey}-poweroff`}
-          label="Turn everything off when it finishes"
+          label="Turn off everything when it finishes"
           onChange={setIsPoweringOff}
         />
         <p className="subhint" id="dyn-power-off-hint">

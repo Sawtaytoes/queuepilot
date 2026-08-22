@@ -665,7 +665,7 @@ export function SetModal() {
           id="set-power-off"
           isChecked={isPoweringOff}
           key={`${modalKey}-poweroff`}
-          label="Turn everything off when it finishes"
+          label="Turn off everything when it finishes"
           onChange={setIsPoweringOff}
         />
         <p className="subhint" id="set-power-off-hint">
