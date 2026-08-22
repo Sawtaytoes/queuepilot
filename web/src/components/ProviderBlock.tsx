@@ -256,8 +256,12 @@ export function ProviderBlock({
         {/* The scope is OPTIONAL, and saying so is the whole point of the change: an empty
             group used to be a save error, so nobody could express "search all of it". */}
         <p className="subhint">
+          {/* The provider NAMES the libraries ("Every Plex library"), so with no provider
+              there is no adjective to write — not the word "library" a second time, which
+              is what the `?? "library"` fallback printed. Its sibling at the top of this
+              block falls back to "provider" for the same reason. */}
           {isEveryLibrary
-            ? `Every ${provider?.label ?? "library"} library — check a box to narrow it.`
+            ? `${provider?.label ? `Every ${provider.label} library` : "Every library"} — check a box to narrow it.`
             : "Uncheck every box to search all of them."}
         </p>
       </fieldset>
