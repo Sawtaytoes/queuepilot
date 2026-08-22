@@ -33,6 +33,18 @@ type Props = {
   posterCover?: string | null
   title: string
   titleTooltip?: string
+  /**
+   * The item's page in the app that owns it (Plex, Kavita) — the server sends it as
+   * `webUrl` and the title becomes the link to it
+   * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
+   *
+   * The TITLE and not a chip: the tile already carries a ▶, a ✓, a ✕ and an Edit chip, and
+   * the owner's words were that a new control has nowhere to go. Absent/null renders the
+   * title as plain text, which is what an unresolved entry gets.
+   */
+  titleHref?: string | null
+  /** What opening `titleHref` reaches, for the link's accessible name ("Plex", "Kavita"). */
+  titleHrefLabel?: string
   next?: {
     text: string
     tooltip?: string
@@ -118,6 +130,8 @@ export function PosterTile({
   posterRatingKey,
   removeTitle = "Remove",
   title,
+  titleHref,
+  titleHrefLabel = "Plex",
   titleTooltip,
 }: Props) {
   const isStartable = Boolean(next?.onStart && next.text)
@@ -219,8 +233,38 @@ export function PosterTile({
         </Tip>
       ) : null}
       <div className="cap">
-        <Tip label={titleTooltip ?? title}>
-          <span className="title">{title}</span>
+        <Tip
+          label={
+            titleHref
+              ? `${titleTooltip ?? title}\nOpens in ${titleHrefLabel}`
+              : (titleTooltip ?? title)
+          }
+        >
+          {/* The `.title` SPAN survives the link: it is the class the e2e suites read a
+              tile's caption from, and the four density rules (`ul.grid.rows .tile .title`
+              and friends) all hang off it. The anchor lives inside it, so nothing that
+              selects `.title` changes.
+
+              `draggable={false}` because a tile is a drag source — a browser drags an
+              anchor as a URL by default, which would replace the reorder with a link drag.
+              `stopPropagation` because the tile itself is clickable underneath. */}
+          <span className="title">
+            {titleHref ? (
+              <a
+                draggable={false}
+                href={titleHref}
+                onClick={(e) => e.stopPropagation()}
+                rel="noreferrer"
+                // A new tab: the queue you were arranging is still there when you come back,
+                // matching the ▶ link and OpenQueueButton.
+                target="_blank"
+              >
+                {title}
+              </a>
+            ) : (
+              title
+            )}
+          </span>
         </Tip>
         {/* The manual start point has NO always-on control — the next-up line
             itself is the button, which is touch-reachable in a way a right-click is

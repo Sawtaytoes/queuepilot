@@ -118,6 +118,18 @@ export const coverUrl = (providerId: string, itemId: string | number): string =>
   `/api/providers/${encodeURIComponent(providerId)}/cover/${encodeURIComponent(itemId)}`
 );
 
+/**
+ * Where a tile's title points for a PULL entry: this server, not the provider.
+ *
+ * The redirect exists so a provider's own address never travels in a JSON body — Kavita's
+ * image endpoint takes the API key as a query parameter, so its base URL is treated as
+ * credential-adjacent and `e2e/kavita-covers-test.ts` asserts it never reaches the browser
+ * in a response. One 302 at click time is the same trade `/go/<set>` already makes.
+ */
+export const openUrl = (providerId: string, itemId: string | number): string => (
+  `/api/providers/${encodeURIComponent(providerId)}/open/${encodeURIComponent(itemId)}`
+);
+
 /** Every provider that is both supported and configured, ready to serve a queue. */
 export function availableProviders(): ProviderDefinition[] {
   // KINDS rather than a second hand-maintained list of kinds: this filter and the switch

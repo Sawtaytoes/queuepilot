@@ -1253,6 +1253,17 @@ export interface Provider {
    */
   tiles?(ids: Iterable<string>, entries?: CuratedEntryRef[]): Promise<(ProviderTileRow | null)[]>;
   /**
+   * This item's page in the provider's own UI, resolved on demand.
+   *
+   * Called by `GET /api/providers/:id/open/:itemId` at the moment of navigation, NOT while
+   * drawing a tile: a provider's base URL must not travel in a JSON body (Kavita's image
+   * endpoint carries the API key as a query parameter, and `e2e/kavita-covers-test.ts` gates
+   * on it), and one extra round trip on a click is cheaper than one per tile on every render.
+   *
+   * Absent on a provider with no web UI; null for an item it cannot address.
+   */
+  webUrl?(itemId: string): Promise<string | null>;
+  /**
    * The "Start from…" picker's list of playable units, grouped the way the
    * modal already consumes (`seasons[].episodes[]`). Optional: a provider that
    * cannot answer degrades the picker to its "could not read" note rather than
@@ -1365,6 +1376,15 @@ export interface Tile {
   /** ms; 0 when not started / unknown. */
   viewOffset: number;
   duration: number;
+  /**
+   * Where this item lives in the app that owns it — a Plex `app.plex.tv` details page, a
+   * Kavita series page. The SHOW or the FILM, never the next episode
+   * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
+   *
+   * null on an unresolved entry, and on a resolved one whose owner could not be addressed
+   * (no machineIdentifier read yet). The tile then renders its title as plain text.
+   */
+  webUrl: string | null;
 }
 
 /** A tile as `GET /api/queues` emits it (server.js ~:264-279). */

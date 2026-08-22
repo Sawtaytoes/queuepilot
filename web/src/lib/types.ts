@@ -155,6 +155,16 @@ export type QueueItem = {
    * `Skeleton` poster instead of a `<img>`, so the swap when the resolved response
    * arrives moves nothing. Absent (falsy) on every resolved item.
    */
+  /**
+   * Where this item lives in the app that owns it — its Plex details page, its Kavita
+   * series page. The SHOW or the FILM, never the next episode: the next-up line already
+   * names the episode and is already a control
+   * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
+   *
+   * null/absent on an unresolved entry, and whenever the server could not address the
+   * owner. The tile then renders its title as plain text — a dead link is worse than none.
+   */
+  webUrl?: string | null
   pending?: boolean
 }
 
@@ -190,6 +200,16 @@ export type ChannelMember = {
    * empty. Both leave `nextEp` null, but only the empty one means "all watched".
    */
   isNextEpFailed?: boolean
+  /**
+   * Where this item lives in the app that owns it — its Plex details page, its Kavita
+   * series page. The SHOW or the FILM, never the next episode: the next-up line already
+   * names the episode and is already a control
+   * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
+   *
+   * null/absent on an unresolved entry, and whenever the server could not address the
+   * owner. The tile then renders its title as plain text — a dead link is worse than none.
+   */
+  webUrl?: string | null
   start: StartPoint | null
   /** Episodes queued per visit (1 = the channel default). */
   episodes?: number

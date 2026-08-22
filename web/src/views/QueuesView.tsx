@@ -385,6 +385,11 @@ function Shelf({
                     face.title +
                     (face.year ? ` (${face.year})` : "")
                   }
+                  // The item's own page in Plex / Kavita — see QueueView.
+                  titleHref={item.webUrl}
+                  titleHrefLabel={
+                    set?.vocabulary?.name || PLEX_WORDS.name
+                  }
                   titleTooltip={
                     face.from
                       ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
