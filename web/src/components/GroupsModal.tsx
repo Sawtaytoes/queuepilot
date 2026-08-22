@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
@@ -214,33 +215,43 @@ export function GroupsModal() {
     <Modal
       footer={
         <>
+          {/* THE FOOTER IS THREE CHARCUTERIE `Button`s, configured by props. Each one used to
+            be a raw `<button>` wearing an app class, and `app.css` painted every skin by
+            hand across five modals: `.modalbtns button` set the radius, the padding and the
+            font, `[type="submit"]` painted the confirm accent, `.danger` painted the
+            destructive one, and `#groupsmodal`/`#entrymodal` restated the accent under
+            `.primary` because their confirms are click handlers rather than submits.
+
+            ⚠️ `.ghost` is Charcuterie's `outline`, NOT its `ghost`. The app class sets a
+            surface background AND a border, which is what `outline` means here; Charcuterie's
+            `ghost` is the borderless one (`PlayMenu`'s rows). Matching on the NAME would have
+            quietly flattened every secondary button in the app.
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
           {selected ? (
-            <button
-              className="ghost danger"
-              disabled={isSaving}
+            <Button
               id="groupdelete"
+              intent="danger"
+              isDisabled={isSaving}
               onClick={remove}
-              type="button"
             >
               Delete group
-            </button>
+            </Button>
           ) : null}
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
+            intent="neutral"
             onClick={closeGroupsModal}
-            type="button"
           >
             Close
-          </button>
-          <button
-            className="primary"
-            disabled={isSaving}
+          </Button>
+          <Button
             id="groupsave"
+            intent="accent"
+            isDisabled={isSaving}
             onClick={save}
-            type="button"
           >
             {selected ? "Save" : "Create group"}
-          </button>
+          </Button>
         </>
       }
       id="groupsmodal"
