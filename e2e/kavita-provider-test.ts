@@ -249,12 +249,10 @@ await ok('continue-point returning a NULL seriesId is repaired, not propagated',
   }
 });
 
-await ok('a FULLY READ series never enters a lineup — continue-point WRAPS', async () => {
-  // Reader/continue-point is "where would you resume", not "the next unread chapter". On a
-  // finished series it hands back chapter 1 ALREADY READ — verified live on six Webtoons
-  // series (e.g. "Ultimate Shut-in": chapter 1 at 183/183 pages, unreadCount 0). Trusting it
-  // re-queues finished series forever, which breaks the property the whole design leans on:
-  // that Kavita's read state IS the done store.
+await ok('a FULLY READ series never enters a lineup — page counters are the done store', async () => {
+  // Kavita's read state IS the done store. A finished series whose every chapter is fully
+  // read must not produce a bucket — even when a continue-point wrap would have handed
+  // chapter 1 back already-read (verified live on six Webtoons series).
   const c = {
     ...stubClient(),
     async seriesForLibrary() {
@@ -263,11 +261,11 @@ await ok('a FULLY READ series never enters a lineup — continue-point WRAPS', a
         { id: 11, name: 'Has More', libraryId: 9, format: 1 },
       ];
     },
-    async continuePoint(id: number | string) {
+    async seriesDetail(id: number | string) {
+      CALLS.push(['seriesDetail', String(id)]);
       return Number(id) === 10
-        // The wrap: chapter 1, fully read.
-        ? { id: 1001, number: '1', pages: 183, pagesRead: 183, seriesId: 10 }
-        : { id: 1101, number: '42', pages: 20, pagesRead: 0, seriesId: 11 };
+        ? { chapters: [{ id: 1001, number: '1', minNumber: 1, pages: 183, pagesRead: 183 }], specials: [], volumes: [] }
+        : { chapters: [{ id: 1101, number: '42', minNumber: 42, pages: 20, pagesRead: 0 }], specials: [], volumes: [] };
     },
   };
   const p = kavitaProvider({ def: DEF, client: asClient(c) });
@@ -282,7 +280,9 @@ await ok('a chapter of UNKNOWN length is kept, not silently dropped', async () =
   const c = {
     ...stubClient(),
     async seriesForLibrary() { return [{ id: 12, name: 'Unknown', libraryId: 9, format: 1 }]; },
-    async continuePoint() { return { id: 1200, number: '1', pages: 0, pagesRead: 0, seriesId: 12 }; },
+    async seriesDetail() {
+      return { chapters: [{ id: 1200, number: '1', minNumber: 1, pages: 0, pagesRead: 0 }], specials: [], volumes: [] };
+    },
   };
   const p = kavitaProvider({ def: DEF, client: asClient(c) });
   const { play } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
@@ -351,14 +351,15 @@ await ok('already-read chapters are skipped, not queued', async () => {
   }
 });
 
-await ok('batch: 1 uses continue-point, NOT the heavier series-detail call', async () => {
-  // One chapter is the common case and continue-point answers it in a single call; paying
-  // for the full chapter list per series would be a needless fan-out on every launch.
+await ok('batch: 1 still walks series-detail (volume context is load-bearing)', async () => {
+  // The old continue-point shortcut named a chapter without its volume, so a whole-volume
+  // item lost its label and a mixed series could not apply volumes-first order. Launch now
+  // always pays for series-detail — the same call tiles/pool already make.
   const c = runStub();
   const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  await p.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
-  assert.ok(c._calls.some((x) => x[0] === 'continuePoint'), 'continue-point was not used');
-  assert.ok(!c._calls.some((x) => x[0] === 'seriesDetail'), 'series-detail was called for a batch of 1');
+  const { play } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
+  assert.ok(c._calls.some((x) => x[0] === 'seriesDetail'), 'series-detail was not used');
+  assert.equal(play.length, 2, 'batch 1 should still draw one chapter per series');
 });
 
 await ok('a fully-read series yields no bucket even with a batch', async () => {
@@ -414,7 +415,14 @@ await ok('the lineup is CAPPED — a big library does not queue its whole backlo
   const c = {
     ...stubClient(),
     async seriesForLibrary() { return many; },
-    async continuePoint(id: number | string) { return { id: Number(id) * 10, number: '1', pages: 10, pagesRead: 0, seriesId: Number(id) }; },
+    async seriesDetail(id: number | string) {
+      CALLS.push(['seriesDetail', String(id)]);
+      const n = Number(id);
+      return {
+        chapters: [{ id: n * 10, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }],
+        specials: [], volumes: [],
+      };
+    },
   };
   const p = kavitaProvider({ def: DEF, client: asClient(c) });
   const { play, buckets } = await p.buckets({ libraries: ['9'], limit: 12 }) as KavitaBuckets;
@@ -439,7 +447,14 @@ await ok('the lineup INTERLEAVES series rather than draining one', async () => {
   const c = {
     ...stubClient(),
     async seriesForLibrary() { return many; },
-    async continuePoint(id: number | string) { return { id: Number(id) * 100, number: '1', pages: 10, pagesRead: 0, seriesId: Number(id) }; },
+    async seriesDetail(id: number | string) {
+      CALLS.push(['seriesDetail', String(id)]);
+      const n = Number(id);
+      return {
+        chapters: [{ id: n * 100, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }],
+        specials: [], volumes: [],
+      };
+    },
   };
   const p = kavitaProvider({ def: DEF, client: asClient(c) });
   const { play } = await p.buckets({ libraries: ['9'], limit: 2 }) as KavitaBuckets;

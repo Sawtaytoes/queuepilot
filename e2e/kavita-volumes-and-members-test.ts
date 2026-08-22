@@ -90,10 +90,64 @@ const SWORD_DETAIL = {
   }],
 };
 
-const DETAILS: Record<string, unknown> = { 4672: ALICE_DETAIL, 4577: SWORD_DETAIL };
+/**
+ * 5100 — a TANKOBON series whose volume files were parsed as `number: '1'` / "Chapter 1"
+ * rather than the `-100000` sentinel. Live shape (Otherworldly Munchkin): each volume has
+ * exactly one chapter, those chapters ALSO appear in the top-level `chapters[]`, and there
+ * are loose weekly releases ahead of the volumes. Without the sole-chapter + volume-wins
+ * rules every volume labelled itself "Chapter 1".
+ */
+const SOLO_VOL_CHAPTERS = Array.from({ length: 3 }, (_, i) => ({
+  id: 81000 + i, number: '1', minNumber: 1, title: 'Chapter 1',
+  titleName: '', range: '1', pages: 190, pagesRead: i < 1 ? 190 : 0,
+}));
+const SOLO_LOOSE_AHEAD = [
+  { id: 82001, number: '134', minNumber: 134, title: 'Chapter 134', titleName: '', range: '134', pages: 16, pagesRead: 0 },
+  { id: 82002, number: '135', minNumber: 135, title: 'Chapter 135', titleName: '', range: '135', pages: 16, pagesRead: 0 },
+];
+const SOLO_DETAIL = {
+  chapters: [...SOLO_VOL_CHAPTERS, ...SOLO_LOOSE_AHEAD],
+  specials: [],
+  unreadCount: 4,
+  volumes: SOLO_VOL_CHAPTERS.map((ch, i) => ({
+    id: 9100 + i, name: `Volume ${i + 1}`, number: i + 1, minNumber: i + 1,
+    pages: ch.pages, pagesRead: ch.pagesRead, chapters: [ch],
+  })),
+};
+
+/**
+ * 5200 — MIXED: sentinel volumes AND loose weekly chapters ahead of them. Live shape
+ * (Red Ranger): Volume 1 still unread, but a `batch: 3` queue opened on chapter 48.5
+ * because loose chapters sorted as "volume 0" and therefore FIRST.
+ */
+const MIXED_VOLUMES = Array.from({ length: 3 }, (_, i) => ({
+  id: 9300 + i, name: `Volume ${i + 1}`, number: i + 1, minNumber: i + 1,
+  pages: 400, pagesRead: 0,
+  chapters: [{
+    id: 83000 + i, number: '-100000', minNumber: -100000, title: 'Chapter -100000',
+    titleName: '', range: '-100000', pages: 400, pagesRead: 0,
+  }],
+}));
+const MIXED_LOOSE = [
+  { id: 84001, number: '48.5', minNumber: 48.5, title: 'Chapter 48.5', titleName: '', range: '48.5', pages: 38, pagesRead: 0 },
+  { id: 84002, number: '50', minNumber: 50, title: 'Chapter 50', titleName: '', range: '50', pages: 50, pagesRead: 0 },
+  { id: 84003, number: '51', minNumber: 51, title: 'Chapter 51', titleName: '', range: '51', pages: 26, pagesRead: 0 },
+];
+const MIXED_DETAIL = {
+  chapters: MIXED_LOOSE,
+  specials: [],
+  unreadCount: 6,
+  volumes: MIXED_VOLUMES,
+};
+
+const DETAILS: Record<string, unknown> = {
+  4672: ALICE_DETAIL, 4577: SWORD_DETAIL, 5100: SOLO_DETAIL, 5200: MIXED_DETAIL,
+};
 const SERIES: Record<string, { id: number; name: string; libraryId: number; format: number }> = {
   4672: { id: 4672, name: 'Alice in Borderland', libraryId: 2, format: 1 },
   4577: { id: 4577, name: 'The Sword-Eating Swordmaster', libraryId: 5, format: 1 },
+  5100: { id: 5100, name: 'Solo Chapter Volumes', libraryId: 2, format: 1 },
+  5200: { id: 5200, name: 'Mixed Volumes And Chapters', libraryId: 2, format: 1 },
   99: { id: 99, name: 'Shelf Filler', libraryId: 5, format: 1 },
 };
 
@@ -334,6 +388,77 @@ await ok('a per-entry volumes override wins over the queue volume default', asyn
     limit: 5,
   }) as KavitaBuckets;
   assert.deepEqual(play.map((i) => i.number), [1, 2, 3, 4]);
+});
+
+// --------------------------------------------------------------------------- //
+// 5. Sole-chapter volumes (no -100000 sentinel) + volumes before loose chapters
+// --------------------------------------------------------------------------- //
+
+await ok('a sole-chapter volume numbered "1" is labelled Volume N, not Chapter 1', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const [tile] = await p.tiles!(['5100']);
+  assert.ok(tile?.next, 'Solo Chapter Volumes resolved to nothing next');
+  const next = tile!.next! as KavitaPlayItem;
+  // Volume 1 is fully read; next unread is Volume 2 — NEVER "Chapter 1" / "Chapter 134".
+  assert.equal(next.unit, 'volume');
+  assert.equal(next.number, 2);
+  assert.equal(next.title, 'Volume 2');
+});
+
+await ok('sole-chapter volumes keep volume labels even when they also appear loose', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const out = await p.listUnits!('5100');
+  assert.ok(out);
+  const eps = out.seasons[0]!.episodes;
+  // 3 volumes + 2 loose weekly chapters. Volumes lead; the "Chapter 1" title never surfaces.
+  assert.deepEqual(eps.map((e) => e.title), [
+    'Volume 1', 'Volume 2', 'Volume 3', 'Chapter 134', 'Chapter 135',
+  ]);
+  assert.deepEqual(eps.map((e) => e.episode), [1, 2, 3, 134, 135]);
+});
+
+await ok('a MIXED series queues volumes BEFORE loose weekly chapters', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    // The live bug: chapter batch 3 drew 48.5 / 50 / 51 and never reached Volume 1.
+    entries: [{ id: '5200' }],
+    batch: 3,
+    volumeBatch: 3,
+    limit: 5,
+  }) as KavitaBuckets;
+  assert.deepEqual(play.map((i) => i.unit), ['volume', 'volume', 'volume']);
+  assert.deepEqual(play.map((i) => i.number), [1, 2, 3]);
+  assert.deepEqual(play.map((i) => i.title), ['Volume 1', 'Volume 2', 'Volume 3']);
+});
+
+await ok('loose chapters of a MIXED series follow after every volume', async () => {
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '5200', volumes: 10 }],
+    batch: 10,
+    limit: 10,
+  }) as KavitaBuckets;
+  assert.deepEqual(
+    play.map((i) => ({ unit: i.unit, number: i.number })),
+    [
+      { unit: 'volume', number: 1 },
+      { unit: 'volume', number: 2 },
+      { unit: 'volume', number: 3 },
+      { unit: 'chapter', number: '48.5' },
+      { unit: 'chapter', number: '50' },
+      { unit: 'chapter', number: '51' },
+    ],
+  );
+});
+
+await ok('a WEBTOON still queues as chapters after the volume-wins dedupe', async () => {
+  // Preferring the volume copy must not relabel a many-chapter volume-1 webtoon as volumes.
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await p.buckets({
+    entries: [{ id: '4577', batch: 10 }], limit: 10,
+  }) as KavitaBuckets;
+  assert.deepEqual(play.map((i) => i.chapterId), [67095, 67096, 67097]);
+  assert.ok(play.every((i) => i.unit === 'chapter'));
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall passed');

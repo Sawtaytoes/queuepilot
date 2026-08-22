@@ -86,11 +86,11 @@ export interface KavitaProviderOptions {
   client?: KavitaHttpClient | null;
 }
 
-// How many continue-point probes run at once. One call per series, and a real library here
-// has ~100 series with something unread: serially that measured 4.7s against the live
-// instance, which is dead time on a 302 the owner is waiting through after tapping a
-// bookmark. Bounded rather than unbounded because this is someone's self-hosted Kavita, not
-// a CDN — a 100-wide burst is a denial-of-service impression.
+// How many series-detail probes run at once. One call per series, and a real library here
+// has ~100 series with something unread. Bounded rather than unbounded because this is
+// someone's self-hosted Kavita, not a CDN — a 100-wide burst is a denial-of-service
+// impression. (An earlier continue-point shortcut was dropped: it named the next chapter
+// without its volume, which broke volume labelling and the volumes-first order.)
 const PROBE_CONCURRENCY = 8;
 
 // The pool view pays one call per series and is an explicit "show me everything" action, so
@@ -98,41 +98,38 @@ const PROBE_CONCURRENCY = 8;
 const POOL_CONCURRENCY = 16;
 
 /**
- * Is this chapter actually unread?
- *
- * ⚠️ `Reader/continue-point` is "where would you resume", NOT "the next unread chapter".
- * On a FULLY READ series it WRAPS and hands back chapter 1, already read — verified live on
- * six Webtoons series (e.g. "Ultimate Shut-in", continue-point chapter 1 at 183/183 pages
- * with `unreadCount: 0`). Taking it at face value re-queues finished series forever, which
- * is the opposite of the read-state-is-the-done-store property the design relies on.
- *
- * So every continue-point answer is checked against its own page counters before it is
- * allowed into a lineup.
- */
-function isUnread(ch: KavitaChapterDto | null): ch is KavitaChapterDto {
-  if (!ch || ch.id == null) return false;
-  const pages = ch.pages ?? 0;
-  if (pages <= 0) return true; // unknown length — do not silently drop it
-  return (ch.pagesRead ?? 0) < pages;
-}
-
-/**
  * Kavita's "this file is not subdivided into chapters" sentinel (`Parser.DefaultChapterNumber`).
  * Every chapter of a VOLUME-based manga carries it, so a volume of Alice in Borderland arrives
  * as `number: '-100000'`. Rendering that verbatim gives a tile reading "Ch -100000".
+ *
+ * It is NOT the only shape. Some tankobon libraries parse each volume file as
+ * `number: '1'` / title "Chapter 1" — every volume identical — and Kavita's own series
+ * view still labels them Vol. N. The sole-chapter-of-a-volume rule below catches that.
  */
 const NO_CHAPTER_NUMBER = -100000;
 
-const isWholeVolume = (ch: KavitaChapterDto): boolean => (
-  Number(ch.minNumber ?? ch.number) === NO_CHAPTER_NUMBER
-);
+/**
+ * Is this chapter the volume itself (one file = one volume), rather than a chapter inside it?
+ *
+ * Two live shapes both mean "the volume":
+ *   1. The `-100000` sentinel (Alice in Borderland, Skeleton Knight).
+ *   2. Exactly one chapter hanging off the volume, even when Kavita numbered it `1`
+ *      (Otherworldly Munchkin — every volume file titled "Chapter 1").
+ *
+ * A webtoon puts many chapters under volume 1, so (2) does not fire and they stay chapters.
+ */
+function isWholeVolume(ch: KavitaChapterDto, volume: KavitaVolumeDto | null): boolean {
+  if (volume == null) return false;
+  if (Number(ch.minNumber ?? ch.number) === NO_CHAPTER_NUMBER) return true;
+  return (volume.chapters?.length ?? 0) === 1;
+}
 
 /**
  * One unread chapter plus the volume it came from (null for a loose chapter).
  *
  * The volume is carried rather than discarded because it is the only place the reader's
- * actual unit of progress is named: for a volume-based series the chapter number is the
- * sentinel above, and "Volume 3" lives on the volume alone.
+ * actual unit of progress is named: for a volume-based series the chapter number is often
+ * the sentinel (or a repeated "1"), and "Volume 3" lives on the volume alone.
  */
 interface UnreadEntry {
   chapter: KavitaChapterDto;
@@ -144,24 +141,25 @@ function chapterItem(
   entry: UnreadEntry | KavitaChapterDto,
   seriesId: number | string | undefined,
 ): KavitaPlayItem {
-  // Accepts a bare chapter too: the `continue-point` path (perSeries <= 1) has no volume to
-  // offer, and inventing one there would be a lie about what Kavita answered.
+  // Accepts a bare chapter too: a continue-point answer has no volume on the wire. Prefer
+  // the UnreadEntry form whenever series-detail is available — without the volume, a
+  // whole-volume chapter cannot be labelled as one.
   const { chapter: ch, volume } = 'chapter' in entry
     ? entry as UnreadEntry
     : { chapter: entry as KavitaChapterDto, volume: null };
   // A whole-volume chapter is presented AS the volume: that is what the reader opens, what
   // Kavita's own UI calls it, and the only number that means anything to a person.
-  const asVolume = isWholeVolume(ch) && volume != null;
+  const asVolume = isWholeVolume(ch, volume);
   return {
-    // `id` is optional on the DTO and every caller has already proved it non-null (isUnread /
-    // orderedUnread both reject a chapter without one), so this asserts rather than defaults —
+    // `id` is optional on the DTO and every caller has already proved it non-null
+    // (orderedUnread rejects a chapter without one), so this asserts rather than defaults —
     // a `?? 0` here would mint a chapter id that does not exist.
     chapterId: ch.id as number,
     seriesId: seriesId as number | string,
     title: asVolume
-      ? (volume.name || `Volume ${volume.number ?? volume.minNumber ?? '?'}`)
+      ? (volume!.name || `Volume ${volume!.number ?? volume!.minNumber ?? '?'}`)
       : (ch.titleName || ch.title || ch.range || String(ch.number)),
-    number: asVolume ? (volume.number ?? volume.minNumber) : ch.number,
+    number: asVolume ? (volume!.number ?? volume!.minNumber) : ch.number,
     // What this item IS, for the tile's wording. Per ITEM and not per provider: one Kavita
     // library holds volume-based manga beside chapter-based webtoons, so `provider.unit` is
     // the default and this is the correction.
@@ -194,10 +192,23 @@ function chapterItem(
  * is just a filter — and filtering rather than slicing from the continue point is what makes
  * a gap (an unread chapter behind a read one) lead, exactly as `continue-point` would.
  *
- * Sorted by (volume, chapter) rather than trusted as-returned: the array happened to be
- * ordered on the instance this was verified against, but nothing documents that guarantee —
- * and for a volume-based series the chapter numbers are ALL the sentinel, so a sort on the
- * chapter number alone would leave the volumes in whatever order the wire chose.
+ * ## Volumes before loose chapters
+ *
+ * A MIXED series (tankobon volumes AND weekly chapter releases) must not lead with the
+ * newest chapter. Volumes are the real catch-up read; loose chapters are the brand-new
+ * ones that sit ahead of the latest volume. Sorting by
+ * `(volume?.minNumber ?? 0, chapter)` put every loose chapter at "volume 0" and therefore
+ * FIRST — which is how a queue with `batch: 3` opened on chapter 48.5 of a series whose
+ * Volume 1 was still unread. Volumes go first (by volume number); loose chapters follow
+ * (by chapter number). Decision: `2026-08-22-volumes-read-before-loose-chapters`.
+ *
+ * ## The volume copy wins the dedupe
+ *
+ * The same chapter id often appears loose AND under a volume. Preferring the loose copy
+ * (the original rule) stripped the volume off every tankobon that Kavita also listed in
+ * `chapters[]`, so a sole-chapter volume labelled itself "Chapter 1" instead of "Volume N".
+ * Preferring the volume copy keeps labelling working without changing a webtoon's order:
+ * its chapters still sort by chapter number under volume 1.
  */
 function orderedAll(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
   const loose: UnreadEntry[] = [
@@ -209,26 +220,46 @@ function orderedAll(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
     (volume?.chapters || []).map((chapter) => ({ chapter, volume }))
   ));
 
+  // Volume copy first so it wins the dedupe — see the header.
   const seen = new Set<number>();
-  return [...loose, ...fromVolumes]
-    .filter(({ chapter: ch }) => {
-      if (!ch || ch.id == null) return false;
-      // Dedupe by chapter id — the loose copy wins, which keeps a webtoon's ordering and
-      // labelling byte-identical to what it was before volumes were read at all.
-      if (seen.has(ch.id)) return false;
-      seen.add(ch.id);
-      return true;
-    })
-    .sort((a, b) => (
-      (a.volume?.minNumber ?? 0) - (b.volume?.minNumber ?? 0)
-      || (a.chapter.minNumber ?? 0) - (b.chapter.minNumber ?? 0)
-    ));
+  const merged: UnreadEntry[] = [];
+  for (const entry of [...fromVolumes, ...loose]) {
+    const ch = entry.chapter;
+    if (!ch || ch.id == null) continue;
+    if (seen.has(ch.id)) continue;
+    seen.add(ch.id);
+    merged.push(entry);
+  }
+
+  return merged.sort((a, b) => {
+    const aHasVol = a.volume != null;
+    const bHasVol = b.volume != null;
+    // Volumes before loose chapters — the catch-up read leads; weekly releases trail.
+    if (aHasVol !== bHasVol) return aHasVol ? -1 : 1;
+    if (aHasVol && bHasVol) {
+      return (a.volume!.minNumber ?? 0) - (b.volume!.minNumber ?? 0)
+        || (a.chapter.minNumber ?? 0) - (b.chapter.minNumber ?? 0);
+    }
+    return (a.chapter.minNumber ?? 0) - (b.chapter.minNumber ?? 0);
+  });
+}
+
+/**
+ * Is this chapter unread?
+ *
+ * `pages: 0` means Kavita does not know the length — keep it rather than treat the gap as
+ * "already read". The old continue-point path had the same rule; dropping unknowns here
+ * would make a whole series vanish from the rotation for a metadata hole.
+ */
+function isChapterUnread(ch: KavitaChapterDto): boolean {
+  if (ch.id == null) return false;
+  const pages = ch.pages ?? 0;
+  if (pages <= 0) return true;
+  return (ch.pagesRead ?? 0) < pages;
 }
 
 function orderedUnread(detail: KavitaSeriesDetailDto | null): UnreadEntry[] {
-  return orderedAll(detail).filter(({ chapter: ch }) => (
-    (ch.pages ?? 0) > 0 && (ch.pagesRead ?? 0) < (ch.pages ?? 0)
-  ));
+  return orderedAll(detail).filter(({ chapter: ch }) => isChapterUnread(ch));
 }
 
 function isFullyRead(ch: KavitaChapterDto): boolean {
@@ -685,7 +716,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           }));
       }
 
-      // One continue-point probe per series, bounded. A series with nothing unread yields no
+      // One series-detail probe per series, bounded. A series with nothing unread yields no
       // bucket at all, which is what keeps a finished series out of the rotation without a
       // separate "done" store — the read state in Kavita IS the done state.
       const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({
@@ -699,21 +730,16 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           format: s.format ?? null,
         };
 
-        // Cheap path: both counts are 1 and there is no start floor, so continue-point
-        // names the single next item whether it is a chapter or a whole volume.
-        if (chapterBatch <= 1 && volWant <= 1 && !start) {
-          const ch = await c.continuePoint(s.id as number | string);
-          if (!isUnread(ch)) return null;
-          return { ...bucket, batch: 1, items: [chapterItem(ch, s.id)] };
-        }
-
-        // Need the ordered run to know WHAT the series is (volume vs chapter) and
-        // therefore WHICH count applies. A volume-based manga must not inherit the
-        // chapter count — that is the live "3 chapters" queue dumping 3 volumes.
+        // Always walk series-detail. The old continue-point shortcut named the next
+        // chapter WITHOUT its volume, so a whole-volume item lost its label (and a
+        // mixed series could not apply the volumes-first order). series-detail is
+        // the same call tiles/pool already pay for; the volume context is load-bearing.
         const detail = await c.seriesDetail(s.id as number | string);
         const unread = orderedUnread(detail).filter((e) => atOrAfterStart(e, start));
         if (!unread.length) return null;
         const head = chapterItem(unread[0] as UnreadEntry, s.id);
+        // A volume-based manga must not inherit the chapter count — that is the live
+        // "3 chapters" queue dumping 3 volumes.
         const want = head.unit === 'volume' ? volWant : chapterBatch;
         return {
           ...bucket,
