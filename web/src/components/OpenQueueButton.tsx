@@ -1,3 +1,4 @@
+import { ButtonLink } from "@charcuterie/ui"
 import type { RegistrySet } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
 
@@ -35,21 +36,26 @@ export function OpenQueueButton({
   const icon = words.startIcon || PLEX_WORDS.startIcon
 
   return (
-    <a
-      className="playbtn openbtn"
+    // A Charcuterie `ButtonLink` — an ANCHOR that looks like the `.playbtn` beside it,
+    // which is exactly the pair this component exists to choose between. `intent="accent"`
+    // is what `.playbtn`'s solid skin painted; `isExternal` is what `target="_blank"` plus
+    // `rel` meant, and it announces the new tab rather than leaving that to the `↗`.
+    //
+    // `.playcard .playbtn`'s `flex-shrink: 0` is why the class stays: this button sits in a
+    // card's footer row beside the metadata and must not be squeezed. That is app layout.
+    <ButtonLink
+      className="playbtn"
       href={`/go/${encodeURIComponent(set.id)}`}
       id="qopen"
-      rel="noreferrer"
-      // A new tab, so the queue list you launched from is still there when you come back
-      // from the reader.
-      target="_blank"
+      intent="accent"
+      isExternal
       // `↗` (this leaves the app) stays in the LABEL rather than moving into the vocabulary:
       // it is a fact about the launcher, true for every pull provider, not a word any of them
       // gets to choose.
       title={`Rebuild the list and open it where you left off in ${words.name || PLEX_WORDS.name}`}
     >
       {icon} {verb} ↗
-    </a>
+    </ButtonLink>
   )
 }
 

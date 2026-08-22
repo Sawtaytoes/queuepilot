@@ -1616,19 +1616,17 @@ body.queue-view #tools {
 }
 
 /* ---- Play on ▾ ---- */
-.playbtn {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-  border: none;
-  border-radius: 8px;
-  padding: 8px 14px;
-  font: inherit;
-  font-weight: 600;
-  white-space: nowrap;
-}
-.playbtn:hover {
-  filter: brightness(1.1);
-}
+/* `.playbtn`'s SKIN is gone — the four play buttons are Charcuterie `Button`s /
+   `ButtonLink`s with `intent="accent"`, which is what the solid accent background, the
+   on-solid text, the missing border and the 600 weight were spelling by hand.
+
+   ⚠️ THE CLASS ITSELF STAYS, on purpose, and carries no paint. `PlayMenu`'s outside-click
+   handler asks `t.closest(".playbtn")` so that pressing a play button does not immediately
+   close the menu it just opened — remove the class and every one of them opens a menu that
+   shuts on the same click. It is a DOM handle, which is the documented third exception, and
+   `.playcard .playbtn`'s `flex-shrink: 0` below is app layout.
+   (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
+   `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
 .shelf h2 .shelfplay {
   background: none;
   border: none;
@@ -2106,8 +2104,10 @@ body.queue-view #tools {
 /* The pull-queue start affordance. An <a> so it can be middle-clicked, bookmarked or put on
    a home screen — the launcher is one stable URL per queue and that is the point — but it
    has to sit in the same row as the .playbtn it replaces, so it borrows those metrics. */
-.openbtn,
-a.playbtn {
+/* `a.playbtn` is dropped from this selector: the one anchor that wore it
+   (`OpenQueueButton`) is a `ButtonLink` now and lays itself out. `.openbtn` stays for
+   `EntrySettings`' launcher anchor, which is still hand-rolled. */
+.openbtn {
   display: inline-flex;
   align-items: center;
   gap: 6px;
