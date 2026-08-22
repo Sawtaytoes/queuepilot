@@ -228,22 +228,34 @@ export function ChannelsView({
         {isPullSet(channel) ? (
           <OpenQueueButton set={channel} />
         ) : (
-          <button
-            className="playbtn"
-            id="chplay"
-            onClick={(e) =>
-              openPlayMenu({
-                anchor:
-                  e.currentTarget.getBoundingClientRect(),
-                kind: isMovies ? "movie" : undefined,
-                profile: currentProfile || undefined,
-                setId: channel.id,
-              })
-            }
-            type="button"
-          >
-            ▶ Play on ▾
-          </button>
+          <>
+            {/* A Charcuterie `Button`. `.playbtn` was a SOLID accent skin — background, on-solid
+            text, no border, 600 weight — which is the component's default `appearance` with
+            `intent="accent"`.
+
+            ⚠️ THE CLASS STAYS, and it is a DOM HANDLE now, not a skin. `PlayMenu`'s
+            outside-click handler asks `t.closest(".playbtn")` so that pressing a play button
+            does not immediately close the menu it just opened; drop the class and every one
+            of these opens a menu that shuts on the same click. `.playcard .playbtn`'s
+            `flex-shrink: 0` is the other survivor, and that is app layout.
+            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+            <Button
+              className="playbtn"
+              id="chplay"
+              intent="accent"
+              onClick={(e) =>
+                openPlayMenu({
+                  anchor:
+                    e.currentTarget.getBoundingClientRect(),
+                  kind: isMovies ? "movie" : undefined,
+                  profile: currentProfile || undefined,
+                  setId: channel.id,
+                })
+              }
+            >
+              ▶ Play on ▾
+            </Button>
+          </>
         )}
         {/* Four Charcuterie `Button`s, configured by PROPS. They were raw `<button>`s
             wearing `ghost` (which paints) and `accent` (which did NOT — its only rules

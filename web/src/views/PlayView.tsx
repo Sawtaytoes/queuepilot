@@ -178,17 +178,22 @@ function PlayCard({
           // Nothing to cast to — the launcher URL is the whole affordance.
           <OpenQueueButton set={set!} />
         ) : (
-          <button
-            className="playbtn"
-            onClick={(e) =>
-              onPlay(
-                e.currentTarget.getBoundingClientRect(),
-              )
-            }
-            type="button"
-          >
-            ▶ Play on ▾
-          </button>
+          <>
+            {/* A Charcuterie `Button`, `intent="accent"` — what `.playbtn`'s solid accent skin
+              painted by hand. The class STAYS as a DOM handle: `PlayMenu` asks
+              `t.closest(".playbtn")` so pressing this does not close the menu it opens. */}
+            <Button
+              className="playbtn"
+              intent="accent"
+              onClick={(e) =>
+                onPlay(
+                  e.currentTarget.getBoundingClientRect(),
+                )
+              }
+            >
+              ▶ Play on ▾
+            </Button>
+          </>
         )}
       </div>
     </li>
