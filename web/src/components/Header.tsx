@@ -1,4 +1,7 @@
-import { ColorSchemeSwitcher } from "@charcuterie/ui"
+import {
+  ColorSchemeSwitcher,
+  IconButton,
+} from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router"
 
@@ -277,29 +280,38 @@ export function Header({
             tight in the Narrow View to carry it inline (that was the 300px-tall header bug).
             `ui-test` reads `#gslot-wide #tools`, so that id and its child stay put. */}
         <div className="chrome">
+          {/* Charcuterie `IconButton`s, and this pair is the component's OWN worked example:
+              its docstring names "plex-channels renders raw glyphs (`↶`, `↷`, `▶`, `⚙`, `≡`)
+              straight into a `<button>`" as the reason it exists. `label` is required and
+              becomes the `aria-label`, so the name cannot go missing the way it can on a
+              hand-rolled one — and the glyph stops being the accessible name.
+
+              `.ghost` is Charcuterie's `outline`; `disabled` becomes `isDisabled`, which is
+              the prop `ButtonProps` deliberately keeps instead of the native one.
+              (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
           <Tip label="Undo last change">
-            <button
-              aria-label="Undo last change"
-              className="ghost"
-              disabled={!history.undo}
+            <IconButton
+              appearance="outline"
               id="undo"
+              intent="neutral"
+              isDisabled={!history.undo}
+              label="Undo last change"
               onClick={() => void runHistory("undo")}
-              type="button"
             >
               ↶
-            </button>
+            </IconButton>
           </Tip>
           <Tip label="Redo">
-            <button
-              aria-label="Redo"
-              className="ghost"
-              disabled={!history.redo}
+            <IconButton
+              appearance="outline"
               id="redo"
+              intent="neutral"
+              isDisabled={!history.redo}
+              label="Redo"
               onClick={() => void runHistory("redo")}
-              type="button"
             >
               ↷
-            </button>
+            </IconButton>
           </Tip>
           {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
               the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`

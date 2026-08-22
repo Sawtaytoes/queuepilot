@@ -1,5 +1,6 @@
 import {
   Badge,
+  Button,
   Checkbox,
   EmptyState,
   SegmentedControl,
@@ -619,14 +620,19 @@ export function QueueView({
             />
           </label>
           {/* Actions live on the right (the search grows to push them there). */}
-          <button
-            className="ghost"
+          {/* Charcuterie `Button`s, configured by props. `.ghost` is Charcuterie's
+              `outline` — the app class paints a surface background AND a border, which is
+              what `outline` means; the borderless one is Charcuterie's own `ghost`.
+              (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+          <Button
+            appearance="outline"
             // `done`, NOT `isCompleted`: this removes entries from queues.yaml, and the
             // endpoint behind it can only remove what the FILE has flagged. A live-finished
             // entry gets its flag from the next reconcile (finished.js), seconds after
             // playback ends — offering to remove it before then would do nothing.
             hidden={!items.some((it) => it.done)}
             id="qremovedone"
+            intent="neutral"
             onClick={async () => {
               if (!setId) return
 
@@ -650,19 +656,18 @@ export function QueueView({
                 )
               }
             }}
-            type="button"
           >
             Remove all completed
-          </button>
+          </Button>
           <Tip label="Configure this set">
-            <button
-              className="ghost"
+            <Button
+              appearance="outline"
               id="qconfigure"
+              intent="neutral"
               onClick={() => setId && openSetModal(setId)}
-              type="button"
             >
               ⚙ Configure
-            </button>
+            </Button>
           </Tip>
           {isPull ? (
             // No device to cast to — hand back the launcher URL instead.
@@ -784,14 +789,14 @@ export function QueueView({
             a filter you forgot you set is indistinguishable from a queue that lost its
             contents. */}
         {view.isFiltered ? (
-          <button
-            className="ghost"
+          <Button
+            appearance="outline"
             id="qfilterclear"
+            intent="neutral"
             onClick={view.resetFilters}
-            type="button"
           >
             {`Clear filters — showing ${items.length} of ${allItems.length}`}
-          </button>
+          </Button>
         ) : (
           <span className="qcount">
             {`${allItems.length} ${allItems.length === 1 ? "entry" : "entries"}`}

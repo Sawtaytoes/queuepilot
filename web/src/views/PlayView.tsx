@@ -1,4 +1,4 @@
-import { EmptyState } from "@charcuterie/ui"
+import { Button, EmptyState } from "@charcuterie/ui"
 import {
   type ReactNode,
   useCallback,
@@ -538,14 +538,25 @@ export function PlayView({
           the choice is asked rather than decided here. A FILTERED pool is a different
           editor (`openDynModal`) and stays behind Configure pools ›.
         */}
-        <button
-          className="ghost accent"
+        {/* A Charcuterie `Button`. `.playlinks button.accent` is the second of the only two
+            rules `.accent` ever had, and it says the same thing `#tools`' does: an accent
+            border and accent text that fill on hover — `appearance="outline"
+            intent="accent"`.
+
+            `size="sm"`, because `.playlinks button.ghost` sized this control DOWN
+            (`padding: 6px 12px`, `font-size: 0.9rem`) so it would sit in a row of text
+            links without dominating it. That is a real requirement and it survives as a
+            PROP — the size axis the component already has — rather than as a per-row CSS
+            override that outranks the component. */}
+        <Button
+          appearance="outline"
           id="playnewqueue"
+          intent="accent"
           onClick={() => openSetModal(null, "movies")}
-          type="button"
+          size="sm"
         >
           ＋ New queue
-        </button>
+        </Button>
         <Link id="gopending" to="/pending">
           What is new and unqueued ›
         </Link>

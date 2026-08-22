@@ -1,5 +1,5 @@
 import type { MenuItem } from "@charcuterie/ui"
-import { Menu } from "@charcuterie/ui"
+import { Button, Menu } from "@charcuterie/ui"
 import { useState } from "react"
 import { useNavigate } from "react-router"
 import { api } from "../lib/api"
@@ -244,37 +244,47 @@ export function Toolbar() {
         type="search"
         value={filter}
       />
-      <button
-        className="ghost"
+      {/* Three Charcuterie `Button`s, configured by props. `.ghost` here is Charcuterie's
+          `outline` — the app class paints a surface background AND a border, which is what
+          `outline` means; the borderless one is Charcuterie's `ghost`. `#tools button.accent`
+          gave `＋ New queue` an accent border and accent text that fill on hover, which is
+          exactly `intent="accent"` over the same `outline`.
+
+          `#tools button.ghost`'s tighter padding and smaller face are NOT restated: `#tools`
+          already carries `data-density="compact"`, so the component sizes itself from the
+          density axis rather than from a per-toolbar override.
+          (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
+      <Button
+        appearance="outline"
         id="collapseall"
+        intent="neutral"
         onClick={() =>
           setCollapsed(
             isAllCollapsed ? new Set() : new Set(ids),
           )
         }
-        type="button"
       >
         {isAllCollapsed ? "Expand all" : "Collapse all"}
-      </button>
-      <button
-        className="ghost accent"
+      </Button>
+      <Button
+        appearance="outline"
         id="newqueue"
+        intent="accent"
         onClick={() => openSetModal(null, "movies")}
-        type="button"
       >
         ＋ New queue
-      </button>
-      <button
-        className="ghost"
+      </Button>
+      <Button
+        appearance="outline"
         id="channelslink"
+        intent="neutral"
         onClick={() => {
           homeScroll.y = window.scrollY
           navigate("/channels")
         }}
-        type="button"
       >
         Pools ›
-      </button>
+      </Button>
     </div>
   )
 }
