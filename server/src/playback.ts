@@ -814,9 +814,24 @@ export async function verifyAccount(
  * account — the one case where destroying playback is the correct outcome, because letting
  * it run writes somebody else's watch history.
  */
-export async function stopPlayback(device: Device | null = null): Promise<boolean> {
+/**
+ * One Companion transport verb against the target client.
+ *
+ * `stop`, `pause`, `play` and `skipNext` are the same GET with a different last path
+ * segment, so they share this. `seekTo()` deliberately does NOT: it needs the server's
+ * machineIdentifier and the BINDING's play token, because a seek is addressed to the
+ * playQueue rather than to the player.
+ *
+ * Admin token, matching what the stop path has always sent. Companion routes by target
+ * client identifier, not by who owns the session, so the admin token controls a managed
+ * user's player — which is the whole point when a kids' queue is on screen.
+ */
+async function playerCommand(
+  verb: 'stop' | 'pause' | 'play' | 'skipNext',
+  device: Device | null = null,
+): Promise<{ ok: boolean; error?: string }> {
   const client = await findClient(device);
-  if (!client) return false;
+  if (!client) return { ok: false, error: 'target client not found' };
   const params = new URLSearchParams({
     type: 'video',
     'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
@@ -824,14 +839,45 @@ export async function stopPlayback(device: Device | null = null): Promise<boolea
     commandID: '1',
   });
   try {
-    await plexReq('GET', `/player/playback/stop?${params}`, {
+    // Companion answers 200 with a "Failure: 200 OK" body even on success — status only,
+    // exactly as seekTo() notes.
+    await plexReq('GET', `/player/playback/${verb}?${params}`, {
       token: PLEX_TOKEN, host: client.uri || null,
     });
-    return true;
+    return { ok: true };
   } catch (e) {
-    console.log(`[playback] could not stop the wrong-account play: ${errMessage(e)}`);
-    return false;
+    return { ok: false, error: errMessage(e) };
   }
+}
+
+export async function stopPlayback(device: Device | null = null): Promise<boolean> {
+  const r = await playerCommand('stop', device);
+  if (!r.ok && r.error) console.log(`[playback] stop failed: ${r.error}`);
+  return r.ok;
+}
+
+/**
+ * Transport control from the web app's Now-playing bar.
+ *
+ * Returns the failure reason rather than a bare false, because unlike `stopPlayback()` —
+ * whose only caller is the wrong-account kill, where nobody is watching — a human just
+ * pressed this button and is owed a sentence when it does not work.
+ *
+ * Deliberately NOT the driver's retry loop. `drivePlay()` re-opens Plex and retries because
+ * it is starting a session from an unknown state, possibly against a sleeping Shield. These
+ * verbs only make sense while something is already on screen, so Plex is foreground and
+ * Companion is up; a refusal here is real news, not a state to grind through.
+ */
+export async function transport(
+  action: 'stop' | 'pause' | 'resume' | 'next',
+  device: Device | null = null,
+): Promise<{ ok: boolean; error?: string }> {
+  // `resume` is Companion's `play`. The app's vocabulary is pause/resume because the bar
+  // shows one toggle; Plex's is pause/play. Translate here, once.
+  const verb = action === 'resume' ? 'play' : action === 'next' ? 'skipNext' : action;
+  const r = await playerCommand(verb, device);
+  if (!r.ok) console.log(`[playback] ${action} failed: ${r.error}`);
+  return r;
 }
 
 // Seek the target player to `offsetMs` via Companion. Same transport as playMedia.

@@ -1,8 +1,11 @@
 import { Hono } from 'hono';
+import type { Device } from '../types.js';
 import * as enginePreview from '../engine/preview.js';
 import * as engineRouting from '../engine/routing.js';
 import { errMessage } from '../errors.js';
+import * as devices from '../devices.js';
 import * as mqttc from '../mqttc.js';
+import * as playback from '../playback.js';
 import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
@@ -47,6 +50,39 @@ export function playbackRoutes(): Hono {
         ? (kindReq === 'movie' ? 'movie' : 'cartoons')
         : s.kind === 'anime' ? 'anime' : 'movie';
       return c.json({ sent: mqttc.play(s.id, kind, tgt, prof, entryKey) });
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 503);
+    }
+  });
+
+  // Transport control for the Now-playing bar: stop / pause / resume / next / seek.
+  //
+  // One route rather than five, because the bar's buttons differ only by a word and every
+  // one of them resolves the same target device. `seek` is the odd one — it carries an
+  // offset and goes through a different Companion call — so it branches here rather than
+  // growing a second route that would duplicate the device lookup.
+  //
+  // This does NOT go over MQTT. The `cmd/session/*` topics exist so Home Assistant can
+  // START a sitting; these verbs act on a player that is already playing, and routing them
+  // through the broker would buy nothing but a hop and a second failure mode. The workspace
+  // rule is about services talking to each other, and this is the app talking to Plex.
+  app.post('/control', async (c) => {
+    const { action, offset, target } = await readBody(c);
+    const act = String(action || '');
+    // Same resolution mqttd.handleStart() does for a start command's `target`: the UI
+    // sends the registry ID, playback wants the announced ENTRY (it reads .uri/.mode/.name).
+    const dev = target ? (devices.known(String(target)) as Device | null) : null;
+    if (target && !dev) return c.json({ error: `unknown device '${String(target)}'` }, 400);
+    try {
+      if (act === 'seek') {
+        const r = await playback.seekTo(offset as number, { device: dev });
+        return r.seeked ? c.json({ ok: true, offset: r.offset }) : c.json({ error: r.error }, 503);
+      }
+      if (act !== 'stop' && act !== 'pause' && act !== 'resume' && act !== 'next') {
+        return c.json({ error: `unknown action '${act}'` }, 400);
+      }
+      const r = await playback.transport(act, dev);
+      return r.ok ? c.json({ ok: true }) : c.json({ error: r.error }, 503);
     } catch (e) {
       return c.json({ error: errMessage(e) }, 503);
     }

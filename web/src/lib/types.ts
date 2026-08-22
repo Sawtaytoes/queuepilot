@@ -497,6 +497,17 @@ export type NowState = {
     title?: string
     showTitle?: string
     show?: string
+    /** Seconds. HA's `media_duration`, forwarded verbatim. */
+    duration?: number
+    /**
+     * Seconds, and a READING rather than a live value — Plex reports a
+     * position only when something changes, so this one is already
+     * stale by the time it is painted. `positionAt` is what makes it
+     * usable: the Now-playing bar adds the elapsed time since.
+     */
+    position?: number
+    /** Epoch seconds, from `media_position_updated_at`. */
+    positionAt?: number
     context?: {
       showRatingKey?: string
       collections?: string[]
