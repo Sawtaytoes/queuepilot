@@ -944,21 +944,28 @@ export function DynModal() {
                     }
                   />
                 </label>
-                <button
+                {/* `.ghost` is Charcuterie's `outline`; `size="sm"` is what
+                    `#dynmodal .binding .b-remove`'s 6px/12px and 0.82rem were asking for.
+                    The `b-remove` class STAYS and now carries only layout — `flex: none`,
+                    `align-self: flex-end` and the danger-tinted hover, which is a state this
+                    control has and `intent="neutral"` does not describe. */}
+                <Button
+                  appearance="outline"
                   aria-label="Remove this profile"
-                  className="b-remove ghost"
+                  className="b-remove"
                   /* A channel keeps ≥1 binding, so the button only exists once
                      there is more than one card. */
                   hidden={bindings.length <= 1}
+                  intent="neutral"
                   onClick={() =>
                     setBindings((prev) =>
                       prev.filter((x) => x.uid !== d.uid),
                     )
                   }
-                  type="button"
+                  size="sm"
                 >
                   Remove
-                </button>
+                </Button>
               </div>
               {/* Was a `<details>`, and it was the exact two-owners case
                   `Accordion`'s own docs describe: `<details>` owns `open`, while
@@ -1112,19 +1119,24 @@ export function DynModal() {
             </div>
           ))}
         </div>
-        <button
-          className="ghost addbinding"
+        {/* `.ghost` is Charcuterie's `outline`. `addbinding` keeps its `margin-top: 12px`
+            (app layout); its padding, radius and font-size are the component's now, and its
+            hand-rolled `:focus-visible` outline is deleted — `Button` brings its own, and the
+            app's version fired on `:focus` semantics the token system already settled. */}
+        <Button
+          appearance="outline"
+          className="addbinding"
           id="dyn-addprofile"
+          intent="neutral"
           onClick={() =>
             setBindings((prev) => [
               ...prev,
               toDraft({} as Binding, knownRef.current),
             ])
           }
-          type="button"
         >
           + Add profile
-        </button>
+        </Button>
         {/* The default only means something with ≥2 bindings — with one profile there is
             nothing to pick between, and Play already lands on it. */}
         <label

@@ -1,4 +1,8 @@
-import { Checkbox, SegmentedControl } from "@charcuterie/ui"
+import {
+  Button,
+  Checkbox,
+  SegmentedControl,
+} from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 
 import { api } from "../lib/api"
@@ -137,13 +141,18 @@ export function ProviderBlock({
             : ""}
         </span>
         {canRemove ? (
-          <button
-            className="rmblock"
+          // `#setmodal .rmblock` painted a small outline chip — transparent, a border, muted
+          // text at 0.78rem. That is `appearance="outline"` at `size="sm"`. The rule is
+          // scoped to `#setmodal` and this block only ever renders there, so nothing else
+          // relied on it.
+          <Button
+            appearance="outline"
+            intent="neutral"
             onClick={onRemove}
-            type="button"
+            size="sm"
           >
             Remove
-          </button>
+          </Button>
         ) : null}
       </div>
 

@@ -527,28 +527,36 @@ export function EntryEditor({
                     vocab,
                   )}
             </span>
-            <button
+            {/* `#entrymodal .fieldrow button` painted a small outline control — surface
+                base, a border, 6px/12px — which is `appearance="outline"` at `size="sm"`.
+                An ELEMENT selector, so it is deleted rather than left to outrank the
+                component. */}
+            <Button
+              appearance="outline"
+              intent="neutral"
               onClick={() => {
                 // The picker is its own modal with its own season/episode loads; stacking it
                 // on top of this one would put two dialogs in the overlay stack for one entry.
                 onClose()
                 openStartModal(entryFor(item))
               }}
-              type="button"
+              size="sm"
             >
               {item.start ? "Change…" : "Choose…"}
-            </button>
+            </Button>
             {item.start ? (
-              <button
+              <Button
+                appearance="outline"
+                intent="neutral"
                 onClick={() =>
                   void entryFor(item)
                     .save(null)
                     .then(() => refreshData())
                 }
-                type="button"
+                size="sm"
               >
                 Back to automatic
-              </button>
+              </Button>
             ) : null}
           </div>
         </div>
