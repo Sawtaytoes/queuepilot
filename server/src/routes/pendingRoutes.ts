@@ -31,7 +31,43 @@ export function pendingRoutes(): Hono {
         video: Boolean(l.video), other: Boolean(l.other),
       }));
       const { items, state } = await pending.pendingItems(liveClient(), libs, listSection);
-      return c.json({ items, seen_through: state.seen_through, dismissed: state.dismissed.length });
+      // The filter panel is drawn from THIS response rather than from `/api/sets`, and the
+      // two differ in the way that matters: `libraries` here is every video library the
+      // screen COULD draw from, and `selected` is the ids it did. Sending the resolved
+      // selection — not the raw `state.libraries` — is what lets the panel show the default
+      // as checked boxes instead of as an empty set the owner would read as "nothing".
+      const choosable = libs.filter((l) => l.video);
+      return c.json({
+        items,
+        seen_through: state.seen_through,
+        dismissed: state.dismissed.length,
+        libraries: choosable,
+        selected: pending.selectedLibraries(libs, state).map((l) => l.id),
+        // Whether the selection is a real choice or the fallback, so the panel can offer
+        // "back to default" only when there is something to go back from.
+        isDefault: state.libraries === null,
+      });
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  /**
+   * Choose the libraries. `{ libraries: null }` clears the choice and restores the default;
+   * `{ libraries: [] }` is the deliberate blank page. They are different states and the
+   * route keeps them apart.
+   */
+  app.post('/pending/libraries', async (c) => {
+    const body = await readBody(c);
+    const value = (body as { libraries?: unknown }).libraries;
+    if (value !== null && !Array.isArray(value)) {
+      return c.json({ error: 'libraries must be an array of section ids, or null' }, 400);
+    }
+    try {
+      const state = await pending.setLibraries(
+        value === null ? null : (value as unknown[]).map(Number),
+      );
+      return c.json({ ok: true, libraries: state.libraries });
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

@@ -667,6 +667,27 @@ export type GroupsResponse = {
 }
 
 /** One row of `GET /api/pending` — something added that nothing is going to play. */
+/**
+ * The whole `/api/pending` response.
+ *
+ * `libraries` and `selected` are here rather than read off the registry because the two
+ * answer different questions: the registry's list is every library the APP knows, and these
+ * are the ones this SCREEN could draw from and the ones it did. Sending the resolved
+ * selection — not the stored one — is what lets the filter show the default as checked boxes
+ * rather than as an empty set the owner would read as "nothing".
+ */
+export type PendingResponse = {
+  items: PendingItem[]
+  /** Every video library the screen could draw from. */
+  libraries: Library[]
+  /** The section ids it actually drew from. */
+  selected: number[]
+  /** True while nobody has chosen — so the reset is offered only when it does something. */
+  isDefault: boolean
+  seen_through: number
+  dismissed: number
+}
+
 export type PendingItem = {
   ratingKey: string
   title: string

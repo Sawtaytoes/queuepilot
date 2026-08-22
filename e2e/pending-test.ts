@@ -176,8 +176,9 @@ const LIBRARIES = [
   { id: 5, title: 'Shows', video: true, type: 'show' },
   { id: 1, title: 'Movies', video: true, type: 'movie' },
   { id: 7, title: 'Music Videos', video: false, type: 'movie' },
-  // "Other Videos" — Personal Media. Nothing draws from it, so it must not be reported:
-  // on the first real run these were 7 of 11 rows, every one a test encode of one clip.
+  // "Other Videos" — Personal Media. Kept OUT by default however it is used elsewhere:
+  // on the first real run these were 7 of 11 rows, every one a test encode of one clip,
+  // and on the owner's live server 1,097 of 2,162.
   { id: 8, title: 'Demos', video: true, type: 'movie', other: true },
 ];
 
@@ -210,7 +211,7 @@ check('a library no set draws from is pending', first.includes('900'), true);
 
 // A non-video library is never listed at all.
 check('a non-video library is not scanned', first.includes('999'), false);
-check('an Other Videos library nothing draws from is not reported', first.includes('990'), false);
+check('an Other Videos library is not reported', first.includes('990'), false);
 
 // --- coverage by TITLE (the reported bug) -------------------------------------- //
 // The entry is `- "Detective Days"`: a bare string, no ratingKey. It used to contribute
@@ -305,6 +306,77 @@ const collDup = await findDuplicateItem(
   fakeClient, routing.loadSets()!.sets.franchise!, await queues.listSet('franchise'), 'Collection: Bunny Films',
 );
 check('a collection add is never an item duplicate', collDup, null);
+
+// --- WHICH libraries the screen draws from -------------------------------------- //
+// "Pending is for new additions not in a queue, not watched, from specific libraries (not
+// the inverse). So instead of exclude, just have it be include."
+//
+// The rule this replaced admitted an Other Videos library whenever any set drew from it,
+// which read as conservative and was not: two of the owner's queues name `Demos` and
+// `Movie Clips` between them, so 1,097 of his 2,162 rows were clips and test encodes.
+
+// The default, as a fold — no state, no Plex.
+check('the default is every video library that is not Other Videos',
+  pending.defaultLibraries(LIBRARIES).map((l) => l.id).sort(), [1, 5]);
+
+// An explicit choice OVERRIDES the default in both directions. Naming the clips library is
+// allowed: the default is a default, and a household that wants it says so.
+check('an explicit list wins, Other Videos included',
+  pending.selectedLibraries(LIBRARIES, { libraries: [1, 8] }).map((l) => l.id).sort(), [1, 8]);
+check('an explicit list can also NARROW past the default',
+  pending.selectedLibraries(LIBRARIES, { libraries: [1] }).map((l) => l.id), [1]);
+
+// `[]` and `null` are different answers and must stay different: one is "I said none", the
+// other is "I have not said". Collapsing them would make the reset button clear the screen.
+check('an EMPTY list is a real answer — no libraries',
+  pending.selectedLibraries(LIBRARIES, { libraries: [] }).map((l) => l.id), []);
+check('null is not an empty list — it means unconfigured, so the default',
+  pending.selectedLibraries(LIBRARIES, { libraries: null }).map((l) => l.id).sort(), [1, 5]);
+
+// `video` is enforced even against an explicit choice. Nothing this app builds can queue a
+// photo or music section, so naming one is a mistake and not a preference.
+check('a non-video library named explicitly is still refused',
+  pending.selectedLibraries(LIBRARIES, { libraries: [1, 7] }).map((l) => l.id), [1]);
+check('an id matching no library is dropped rather than throwing',
+  pending.selectedLibraries(LIBRARIES, { libraries: [1, 4242] }).map((l) => l.id), [1]);
+
+// End to end, through the state file: only the chosen library's items are on the screen.
+await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 1 ]\n`);
+const moviesOnly = await keysNow();
+check('choosing Movies alone leaves the shows off the screen',
+  moviesOnly.some((k) => k.startsWith('7')), false);
+check('…and keeps the movies that nothing plays', moviesOnly.includes('900'), true);
+
+// Naming the clips library puts its test encode on the screen, which is the point of the
+// override: it is the owner's call and not the app's.
+await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 8 ]\n`);
+check('naming Other Videos DOES report it', (await keysNow()).includes('990'), true);
+
+// `[]` written to the file is honoured rather than read as "unset".
+await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: []\n`);
+check('an empty list in the file empties the screen', await keysNow(), []);
+
+// --- writing the choice back ---------------------------------------------------- //
+// Ids are de-duplicated and sorted, so a re-save that changed nothing does not churn the
+// file and a hand-edited one looks like a UI-written one.
+check('ids are de-duplicated and sorted on save',
+  (await pending.setLibraries([8, 1, 8, 5])).libraries, [1, 5, 8]);
+check('…and a round trip reads back what was written',
+  (await pending.readState()).libraries, [1, 5, 8]);
+
+// `null` clears the choice, which is a different write from `[]`.
+check('null clears the choice', (await pending.setLibraries(null)).libraries, null);
+check('…and the cleared file falls back to the default',
+  (await keysNow()).includes('990'), false);
+// The KEY is gone, not written as an explicit null. Anchored to the start of a line: the
+// file's header comment documents `libraries`, so a bare text search matches the
+// documentation rather than the data.
+check('…and the key is gone from the file, not written as null',
+  /^libraries:/m.test(await fs.readFile(STATE, 'utf8')), false);
+
+// Clearing the choice must not clear the rest of the file.
+check('clearing the libraries leaves the watermark alone',
+  (await pending.readState()).seen_through, 0);
 
 console.log(failed ? `pending FAILED (${failed})` : 'pending OK');
 process.exit(failed ? 1 : 0);
