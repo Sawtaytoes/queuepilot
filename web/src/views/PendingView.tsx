@@ -1,5 +1,6 @@
 import type { MenuItem, MenuProps } from "@charcuterie/ui"
 import {
+  Badge,
   Button,
   EmptyState,
   IconButton,
@@ -345,15 +346,28 @@ export function PendingView({
       // differently from the ratingKey posted here and so used to slip past the duplicate
       // check and land a second copy. Saying "Added" for that would be a lie, and it is the
       // exact case the owner reported.
+      /*
+        A COLLECTION is written as a collection entry, not as a rating key.
+
+        `{collection: "<name>"}` is what the engine expands to the ordered members, which is
+        the whole reason the owner wants collections on this screen — "I wanna add the
+        collection, not a single or set of movies to retain order". The route takes
+        `type: 'collection'` and normalizes the value; posting the collection's ratingKey
+        instead would write one entry that plays one item.
+      */
+      const isCollection = item.type === "collection"
       const { added, key } = await api<{
         added?: boolean
         key?: string
       }>("POST", `/api/queues/${set.id}/items`, {
         position: "bottom",
-        value: {
-          ratingKey: item.ratingKey,
-          title: `${item.title}${item.year ? ` (${item.year})` : ""}`,
-        },
+        type: isCollection ? "collection" : undefined,
+        value: isCollection
+          ? { title: item.title }
+          : {
+              ratingKey: item.ratingKey,
+              title: `${item.title}${item.year ? ` (${item.year})` : ""}`,
+            },
       })
 
       /*
@@ -759,6 +773,27 @@ export function PendingView({
                       which is all the component asks for. */}
                       <EditionBadge hit={item} />
                     </span>
+                    {/* A collection says so, and says how big it is: the tile is otherwise
+                        identical to a film's, and "The Muppets" the collection sits beside
+                        "The Muppets" the film. `childCount` is Plex's own. */}
+                    {item.type === "collection" ? (
+                      <Badge
+                        appearance="outline"
+                        /* LAYOUT only, and the exception the component rule allows: the
+                           tile is a flex column, so without `align-self: start` the chip
+                           stretches the full width of the card. It carries no look — the
+                           look is `appearance`/`intent`/`size`. NOT the app's
+                           `.badge.collection`, which is the two-part queue-tile chip and
+                           would render unstyled here for want of a `.badgename`. */
+                        className="pcollection"
+                        intent="accent"
+                        size="sm"
+                      >
+                        {item.childCount
+                          ? `Collection · ${item.childCount}`
+                          : "Collection"}
+                      </Badge>
+                    ) : null}
                     <span className="glib">
                       {item.librarySectionTitle}
                     </span>

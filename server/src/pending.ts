@@ -61,12 +61,26 @@ export interface PendingItem {
   ratingKey: string;
   title: string;
   year: number | null;
-  type: 'movie' | 'show';
+  /**
+   * A COLLECTION is a pending row of its own, beside the films inside it — never instead of
+   * them (decision `2026-08-22-pending-lists-collections-as-well-as-their-members`).
+   */
+  type: 'movie' | 'show' | 'collection';
   sectionId: number;
   librarySectionTitle: string;
   contentRating: string | null;
   editionTitle: string | null;
   addedAt: number;
+  /** Collections only: how many items are in it. Null on everything else. */
+  childCount?: number | null;
+}
+
+/** One collection as the pending pass needs it — `plex.collections()`' row, narrowed. */
+export interface PendingCollectionRow {
+  ratingKey: string;
+  title: string | undefined;
+  sectionId: number;
+  childCount: number | null;
 }
 
 const HEADER = `# QueuePilot — what has arrived that nothing is going to play.
@@ -233,8 +247,12 @@ async function curatedKeys(
   client: PlexClient,
   sets: Record<string, RoutingSetCfg>,
   fresh: readonly PendingItem[],
-): Promise<Set<string>> {
+): Promise<{ named: Set<string>; namedCollections: Set<string> }> {
   const named = new Set<string>();
+  // The collections a queue or pool ALREADY names, by ratingKey. Collected here because this
+  // is the one place that resolves a `{collection: <name>}` entry to a collection id, and the
+  // collections pass needs exactly that answer to not offer what is already covered.
+  const namedCollections = new Set<string>();
   const collections: { name: string; cfg: RoutingSetCfg }[] = [];
   const titled: { desc: EntryDescriptor; cfg: RoutingSetCfg }[] = [];
 
@@ -267,6 +285,7 @@ async function curatedKeys(
     for (const sec of routing.setSections(cfg) || []) {
       const crk = await findCollection(client, sec, name, null);
       if (!crk) continue;
+      namedCollections.add(String(crk));
       for (const ch of await collectionChildren(client, crk, null)) named.add(String(ch.ratingKey));
       break;
     }
@@ -291,7 +310,7 @@ async function curatedKeys(
     if (ratingKey) named.add(ratingKey);
   });
 
-  return named;
+  return { named, namedCollections };
 }
 
 /**
@@ -422,10 +441,103 @@ export function selectedLibraries(
  * the same seam the selection engine uses (`PlexClient`), and it keeps the SUBTRACTION rules
  * — which are the actual feature — testable without a server or a network.
  */
+/**
+ * The COLLECTIONS worth offering, beside the items inside them.
+ *
+ * The owner's ask: *"there are no collections here. I'd really like those to show up too.
+ * Often, I wanna add the collection, not a single or set of movies to retain order."*
+ *
+ * A collection is pending when something inside it is — nothing else would be news. So the
+ * rule reads off the items this pass already decided about (`freshKeys`), rather than asking
+ * Plex a second question:
+ *
+ *   * at least one child is itself pending — new, unwatched, and covered by nothing;
+ *   * the collection is not dismissed;
+ *   * no queue or pool already names it (`covered`, from `curatedKeys`).
+ *
+ * `addedAt` is the NEWEST pending child's, so a franchise sorts by the arrival that made it
+ * interesting rather than by the day the collection was created — Plex's own `addedAt` on a
+ * collection is when someone made it, which is usually years ago and always the wrong answer
+ * for a list ordered by "what turned up".
+ *
+ * Cost: one collections listing per library (cheap — collections are few), then one children
+ * read per collection, capped at `RESOLVE_CONCURRENCY`. Only for libraries that HAVE a
+ * pending item, because a library with nothing new cannot produce a pending collection.
+ */
+export async function pendingCollections(
+  client: PlexClient,
+  libraries: readonly PendingLibrary[],
+  freshItems: readonly PendingItem[],
+  covered: ReadonlySet<string>,
+  dismissed: ReadonlySet<string>,
+  listCollections: (sectionId: number) => Promise<PendingCollectionRow[]>,
+): Promise<PendingItem[]> {
+  const addedByKey = new Map<string, number>();
+  const sectionsWithNews = new Set<number>();
+  for (const it of freshItems) {
+    addedByKey.set(it.ratingKey, it.addedAt);
+    sectionsWithNews.add(it.sectionId);
+  }
+  if (!addedByKey.size) return [];
+
+  const rows: { row: PendingCollectionRow; lib: PendingLibrary }[] = [];
+  for (const lib of libraries) {
+    if (!sectionsWithNews.has(lib.id)) continue;
+    let found: PendingCollectionRow[] = [];
+    try {
+      found = await listCollections(lib.id);
+    } catch {
+      // A library whose collections cannot be read simply contributes none. The items in it
+      // are already on the page; failing the whole request over the extra question would
+      // trade the feature for the screen.
+      continue;
+    }
+    for (const row of found) {
+      const rk = String(row.ratingKey);
+      if (dismissed.has(rk) || covered.has(rk)) continue;
+      rows.push({ lib, row });
+    }
+  }
+  if (!rows.length) return [];
+
+  const out = await mapLimit(rows, RESOLVE_CONCURRENCY, async ({ lib, row }): Promise<PendingItem | null> => {
+    let children: { ratingKey?: string | number }[] = [];
+    try {
+      children = await collectionChildren(client, String(row.ratingKey), null);
+    } catch {
+      return null;
+    }
+    let newest = 0;
+    for (const ch of children) {
+      const at = addedByKey.get(String(ch.ratingKey));
+      if (at != null && at > newest) newest = at;
+    }
+    // Nothing pending inside it, so it is not news. A collection whose films are all already
+    // in a queue is exactly the case this must not offer.
+    if (!newest) return null;
+
+    return {
+      ratingKey: String(row.ratingKey),
+      title: String(row.title ?? ''),
+      year: null,
+      type: 'collection' as const,
+      sectionId: lib.id,
+      librarySectionTitle: String(lib.title ?? ''),
+      contentRating: null,
+      editionTitle: null,
+      addedAt: newest,
+      childCount: row.childCount ?? children.length,
+    };
+  });
+
+  return out.filter((row) => row != null);
+}
+
 export async function pendingItems(
   client: PlexClient,
   libraries: readonly PendingLibrary[],
   listSection: (sectionId: number, type: 1 | 2) => Promise<PlexMetadata[]>,
+  listCollections?: (sectionId: number) => Promise<PendingCollectionRow[]>,
 ): Promise<{ items: PendingItem[]; state: PendingState }> {
   const state = await readState();
   const reg = routing.loadSets();
@@ -459,7 +571,7 @@ export async function pendingItems(
 
   if (!fresh.length) return { items: [], state };
 
-  const named = await curatedKeys(client, sets, fresh);
+  const { named, namedCollections } = await curatedKeys(client, sets, fresh);
   const blockedBySet = new Map<string, Set<string>>();
   for (const [id, cfg] of Object.entries(sets)) {
     blockedBySet.set(id, new Set(((cfg as RoutingRotationCfg).blocklist || []).map(String)));
@@ -469,5 +581,26 @@ export async function pendingItems(
     .filter((it) => !named.has(it.ratingKey) && !isInAnyRule(it, sets, blockedBySet))
     .sort((a, b) => b.addedAt - a.addedAt);
 
-  return { items, state };
+  // The collections those items sit in, as rows of their own. Skipped entirely when the
+  // caller passes no lister, which is what keeps every existing test calling three arguments.
+  const collections = listCollections
+    ? await pendingCollections(client, videoLibs, items, namedCollections, dismissed, listCollections)
+    : [];
+
+  // One list, one order. A collection is not a separate KIND of news — it is news about the
+  // same arrivals, so it sorts among them by the same clock.
+  //
+  // The tie is the interesting half, and it is not incidental: a collection's `addedAt` IS
+  // its newest pending child's, so it always ties with a film that is also on the page. The
+  // collection wins that tie, so "The Muppets" the collection sits directly above the Muppet
+  // film that put it there rather than below it — the broader choice reads first, which is
+  // the choice the owner said he usually wants.
+  const all = collections.length
+    ? [...items, ...collections].sort((a, b) => (
+      b.addedAt - a.addedAt
+      || (a.type === 'collection' ? -1 : 0) - (b.type === 'collection' ? -1 : 0)
+    ))
+    : items;
+
+  return { items: all, state };
 }
