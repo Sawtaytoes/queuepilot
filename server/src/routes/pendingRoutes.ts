@@ -24,13 +24,31 @@ export function pendingRoutes(): Hono {
     return mc?.Metadata || [];
   };
 
+  /**
+   * The collections in one library, for the pending pass.
+   *
+   * `plex.collections()` takes a query and title-filters client-side; an empty query is every
+   * collection in the section, which is what this wants. Collections per library are few, so
+   * this is one cheap read on top of the listing that was already happening.
+   */
+  const listCollections = async (sectionId: number) => (
+    (await plex.collections([sectionId], '')).map((row) => ({
+      childCount: row.childCount,
+      ratingKey: row.ratingKey,
+      sectionId: row.sectionId,
+      title: row.title,
+    }))
+  );
+
   app.get('/pending', async (c) => {
     try {
       const libs = (await plex.sections()).map((l) => ({
         id: Number(l.id), title: String(l.title ?? ''), type: String(l.type ?? ''),
         video: Boolean(l.video), other: Boolean(l.other),
       }));
-      const { items, state } = await pending.pendingItems(liveClient(), libs, listSection);
+      const { items, state } = await pending.pendingItems(
+        liveClient(), libs, listSection, listCollections,
+      );
       // The filter panel is drawn from THIS response rather than from `/api/sets`, and the
       // two differ in the way that matters: `libraries` here is every video library the
       // screen COULD draw from, and `selected` is the ids it did. Sending the resolved

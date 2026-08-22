@@ -126,6 +126,35 @@ export const SETS_YAML = `sets:
 /** Watermark before every arrival, so coverage and the library choice are the only filters. */
 export const PENDING_YAML = `seen_through: ${ADDED}\ndismissed: []\n`;
 
+/**
+ * The collections one section reports. Ids are `77<section><n>` so a child lookup can read
+ * the section back out of the collection id without a second table.
+ */
+const COLLECTION_TITLES = ['The Restored Set', 'Serial Omnibus'];
+
+const COLLECTIONS_FOR = (section) => COLLECTION_TITLES.map((title, n) => ({
+  ratingKey: `77${section}${n}`,
+  type: 'collection',
+  title: `${title} ${n + 1}`,
+  childCount: 3,
+  thumb: null,
+}));
+
+/**
+ * Its members: three arrivals from the section the id encodes, taken from the NEWEST end.
+ *
+ * `addedAt` climbs with creation order in this fixture, and a collection takes its newest
+ * pending child's — so drawing from the newest end is what puts the collection near the top
+ * of the page, which is the row the shot needs to show.
+ */
+const COLLECTION_CHILDREN = (ratingKey) => {
+  const [, section, n] = /^77(\d+)(\d)$/.exec(String(ratingKey)) || [];
+  const pool = BY_SECTION[Number(section)] || [];
+  const end = pool.length - Number(n) * 3;
+
+  return pool.slice(Math.max(0, end - 3), end);
+};
+
 /** Start the stub on `port`; `close()` stops it. */
 export function startStubPlex(port) {
   const server = createServer((req, res) => {
@@ -145,6 +174,27 @@ export function startStubPlex(port) {
       const wanted = String(url.searchParams.get('title') || '').toLowerCase();
       if (wanted) return wrap(pool.filter((m) => m.title.toLowerCase().includes(wanted)));
       return wrap(pool);
+    }
+    /*
+      Collections, so the shot can show a collection row beside the films inside it.
+
+      Two per film library, each holding three of that library's arrivals. Their children are
+      the FIRST three of the section, which are also the newest — so every collection here has
+      something pending in it and is offered, which is the state worth picturing.
+    */
+    const cols = /^\/library\/sections\/(\d+)\/collections$/.exec(url.pathname);
+    if (cols) {
+      const section = Number(cols[1]);
+      const pool = BY_SECTION[section] || [];
+      if (!pool.length || section === CLIPS || section === DEMOS || section === CALIBRATION) {
+        return wrap([]);
+      }
+
+      return wrap(COLLECTIONS_FOR(section));
+    }
+    const kids = /^\/library\/collections\/(\d+)\/children$/.exec(url.pathname);
+    if (kids) {
+      return wrap(COLLECTION_CHILDREN(Number(kids[1])));
     }
     const batch = /^\/library\/metadata\/([\d,]+)$/.exec(url.pathname);
     if (batch) {

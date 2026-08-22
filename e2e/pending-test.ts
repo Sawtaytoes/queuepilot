@@ -155,6 +155,20 @@ const fakeClient = {
     if (path === '/library/collections/5500/children') {
       return { Metadata: [{ ratingKey: '902', title: 'In The Collection', type: 'movie' }] };
     }
+    // A collection NOTHING names, holding one PENDING film (900, which no queue covers) and
+    // one the queue already names by ratingKey (901). One pending child is what makes it news.
+    if (path === '/library/collections/5501/children') {
+      return {
+        Metadata: [
+          { ratingKey: '900', title: 'Nobody Wants Me', type: 'movie' },
+          { ratingKey: '901', title: 'Named Film', type: 'movie' },
+        ],
+      };
+    }
+    // A collection whose every film is already covered — the case that must NOT be offered.
+    if (path === '/library/collections/5502/children') {
+      return { Metadata: [{ ratingKey: '901', title: 'Named Film', type: 'movie' }] };
+    }
     // The section title search `resolve.resolveTitle` makes. Plex matches loosely and the
     // resolver scores the candidates, so this answers with a substring match and lets the
     // real scoring (exact title, year, lowest-ratingKey tie-break) do the deciding.
@@ -195,6 +209,27 @@ const check = (label: string, actual: unknown, expected: unknown): void => {
 
 const keysNow = async () =>
   (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items.map((i) => i.ratingKey);
+
+/**
+ * The collections each library holds, as the route's own lister answers.
+ *
+ * A PARAMETER for the same reason `listSection` is one: no server, no ES-module stubbing.
+ * `5500` is the one a queue already names (`Collection: Bunny Films`), `5501` holds one
+ * pending film, `5502` holds only covered ones.
+ */
+const listCollections = async (sectionId: number) => (
+  sectionId === 1
+    ? [
+      { ratingKey: '5500', title: 'Bunny Films', sectionId: 1, childCount: 1 },
+      { ratingKey: '5501', title: 'New Franchise', sectionId: 1, childCount: 2 },
+      { ratingKey: '5502', title: 'All Covered', sectionId: 1, childCount: 1 },
+    ]
+    : []
+);
+
+const withCollections = async () => (
+  await pending.pendingItems(fakeClient, LIBRARIES, listSection, listCollections)
+).items;
 
 // --- the subtraction ----------------------------------------------------------- //
 const first = await keysNow();
@@ -377,6 +412,39 @@ check('…and the key is gone from the file, not written as null',
 // Clearing the choice must not clear the rest of the file.
 check('clearing the libraries leaves the watermark alone',
   (await pending.readState()).seen_through, 0);
+
+// --- collections ---------------------------------------------------------------- //
+// "There are no collections here. I'd really like those to show up too. Often, I wanna add
+// the collection, not a single or set of movies to retain order." A collection is a row of
+// its OWN, beside its members — never instead of them.
+await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 5, 1 ]\n`);
+
+const withCols = await withCollections();
+const colKeys = withCols.filter((i) => i.type === 'collection').map((i) => i.ratingKey);
+
+check('a collection holding something pending is offered', colKeys.includes('5501'), true);
+check('a collection a queue already names is NOT', colKeys.includes('5500'), false);
+check('a collection whose every film is covered is NOT', colKeys.includes('5502'), false);
+check('the collection carries its size',
+  withCols.find((i) => i.ratingKey === '5501')?.childCount, 2);
+check('…and the pending child stays on the list beside it',
+  withCols.some((i) => i.ratingKey === '900' && i.type === 'movie'), true);
+check('…sorted among the items by the newest pending child',
+  withCols.find((i) => i.ratingKey === '5501')?.addedAt,
+  withCols.find((i) => i.ratingKey === '900')?.addedAt);
+
+// The lister is optional, and without it the page is exactly what it was.
+check('no lister means no collections at all',
+  (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items
+    .some((i) => i.type === 'collection'),
+  false);
+
+// Dismiss addresses a collection by its ratingKey, like everything else on the screen.
+await pending.dismiss('5501');
+check('a dismissed collection leaves the screen',
+  (await withCollections()).some((i) => i.ratingKey === '5501'), false);
+check('…and its pending film stays',
+  (await withCollections()).some((i) => i.ratingKey === '900'), true);
 
 console.log(failed ? `pending FAILED (${failed})` : 'pending OK');
 process.exit(failed ? 1 : 0);
