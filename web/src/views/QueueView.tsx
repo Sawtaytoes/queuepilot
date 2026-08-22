@@ -1,5 +1,6 @@
 import {
   Badge,
+  BadgeButton,
   Button,
   Checkbox,
   EmptyState,
@@ -923,15 +924,19 @@ export function QueueView({
                       <Tip
                         label={`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per turn, weight, where the batch stops, start point`}
                       >
-                        <button
-                          className="badge tagbtn editbtn"
+                        {/* The quietest chip on the tile — it is a door, not a state — so
+                            `neutral`, beside the tags that carry a real intent. */}
+                        <BadgeButton
+                          appearance="outline"
+                          className="badge editbtn"
+                          intent="neutral"
                           onClick={() =>
                             openEntryEditor(setId, item.key)
                           }
-                          type="button"
+                          size="sm"
                         >
                           Edit
-                        </button>
+                        </BadgeButton>
                       </Tip>
                     ) : null}
                   </>

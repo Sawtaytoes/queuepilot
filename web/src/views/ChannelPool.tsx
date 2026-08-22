@@ -1,4 +1,9 @@
-import { Badge, Skeleton, Spinner } from "@charcuterie/ui"
+import {
+  Badge,
+  BadgeButton,
+  Skeleton,
+  Spinner,
+} from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import { WatchesBadge } from "../components/badges"
@@ -59,14 +64,20 @@ function ExcludeButton({
   onExclude: () => Promise<void>
 }) {
   return (
+    // Neutral at rest and red on hover — "quiet until you mean it". `intent="danger"`
+    // would paint the resting chip red on every tile in the pool, which is a warning
+    // about nothing; the hover half stays in `app.css` as a STATE, the same exception
+    // `.b-remove` keeps.
     <Tip label={title}>
-      <button
+      <BadgeButton
+        appearance="outline"
         className="exclude"
+        intent="neutral"
         onClick={() => void onExclude()}
-        type="button"
+        size="sm"
       >
         {label}
-      </button>
+      </BadgeButton>
     </Tip>
   )
 }
@@ -482,13 +493,15 @@ export function ChannelPool({
             )}
             {start && entry ? (
               <Tip label="Manual start point. Click to change it or go back to automatic.">
-                <button
+                <BadgeButton
+                  appearance="outline"
                   className="badge startbadge"
+                  intent="accent"
                   onClick={() => openStartModal(entry)}
-                  type="button"
+                  size="sm"
                 >
                   {startLabel(start)}
-                </button>
+                </BadgeButton>
               </Tip>
             ) : null}
           </>
