@@ -189,7 +189,9 @@ export function SetModal() {
           }))
         : [
             {
-              libraries: [],
+              // A queue created FOR an item starts with that item's library ticked, so the
+              // add that follows has somewhere to land. Empty for every other opener.
+              libraries: setModal.presetLibraries ?? [],
               profile: "",
               provider: "",
               uid: newUid(),
@@ -386,6 +388,12 @@ export function SetModal() {
         group: destination?.id ?? "",
       })
 
+      /*
+        Whoever asked for this queue gets told which one it is, BEFORE the modal state is
+        cleared. The Pending screen's "New queue…" adds the item that prompted it; nothing
+        else passes a callback, so nothing else changes.
+      */
+      setModal?.onCreated?.(made.id)
       closeSetModal()
       setStatus(
         made.groupError

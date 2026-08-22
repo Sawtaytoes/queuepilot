@@ -1,4 +1,4 @@
-import type { MenuItem } from "@charcuterie/ui"
+import type { MenuItem, MenuProps } from "@charcuterie/ui"
 import {
   Button,
   EmptyState,
@@ -31,7 +31,10 @@ import type {
   StartPoint,
 } from "../lib/types"
 import { refreshData } from "../state/live"
-import { openStartModal } from "../state/overlays"
+import {
+  openSetModal,
+  openStartModal,
+} from "../state/overlays"
 import { usePendingView } from "../state/pendingView"
 import { setStatus, useStore } from "../state/store"
 
@@ -323,9 +326,15 @@ export function PendingView({
         s.sections.includes(sectionId),
     )
 
+  /**
+   * Add one item to one queue.
+   *
+   * Takes an id and a label rather than a `RegistrySet`, because "New queue…" adds to a
+   * queue that was created a moment ago and is not in the registry the view is holding yet.
+   */
   const addTo = async (
     item: PendingItem,
-    set: RegistrySet,
+    set: { id: string; label: string },
   ) => {
     // No `setOpenMenu(null)` here: choosing an item is what dismisses a `Menu`, and
     // `onDismiss` already clears this.
@@ -410,21 +419,61 @@ export function PendingView({
   const menuItemsFor = (
     item: PendingItem,
     compatible: RegistrySet[],
-  ): MenuItem[] =>
-    compatible.length === 0
+    /*
+      `MenuProps["items"]` rather than `MenuEntry[]`: the separator's type is declared in
+      Charcuterie's `Menu.tsx` but is NOT re-exported from the package index (only `MenuItem`
+      and `MenuProps` are), so this is how the entry union is named from outside. An upstream
+      gap, of the same kind as `FieldProps` spreading no rest props — worth closing there
+      rather than working around further here.
+    */
+  ): MenuProps["items"] => [
+    ...(compatible.length === 0
       ? [
           {
             isDisabled: true,
             key: "none",
-            label: `No queue draws from “${item.librarySectionTitle}” — add it to one via its ⚙.`,
+            label: `No queue draws from “${item.librarySectionTitle}” yet — make one below.`,
             onSelect: () => {},
-          },
+          } satisfies MenuItem,
         ]
-      : compatible.map((s) => ({
-          key: s.id,
-          label: s.label,
-          onSelect: () => void addTo(item, s),
-        }))
+      : compatible.map(
+          (s): MenuItem => ({
+            key: s.id,
+            label: s.label,
+            onSelect: () => void addTo(item, s),
+          }),
+        )),
+    /*
+      Make the queue this item is going into, without leaving the screen.
+
+      The owner's report: *"I also cannot add a queue from here either. I wanted to create a
+      new one to add one of the movies. Not a huge deal, but it would be nice to have that
+      option somewhere. It's not in the dropdown."*
+
+      A separator and a last row, so it never sits among the queues that already exist —
+      choosing a queue and making one are different kinds of act, and the rule between them
+      is what says so. `role="separator"`, which the arrow keys pass straight over.
+    */
+    { key: "sep", type: "separator" },
+    {
+      key: "new",
+      label: "New queue…",
+      onSelect: () =>
+        openSetModal(null, undefined, {
+          // The item's own library, ticked. Without it the new queue draws from nothing and
+          // the add that follows would have nowhere to land.
+          presetLibraries: [String(item.sectionId)],
+          onCreated: (setId) =>
+            void addTo(item, {
+              id: setId,
+              // The label the modal wrote is not read back here — `addTo` only names the
+              // queue in a toast, and the registry refresh that follows carries the real
+              // one onto the screen.
+              label: "the new queue",
+            }),
+        }),
+    },
+  ]
 
   /**
    * Open the start picker for an item that is not in a queue yet.
