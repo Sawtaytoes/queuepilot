@@ -3652,6 +3652,38 @@ body.rowdragging {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* The tile is now the CONTENT of a `VirtualizedGrid` cell rather than the cell itself, so
+     it has to claim the cell's height. Without this a short tile (no artwork yet) sits at
+     its natural height inside a tall row and its controls float halfway up the gap. */
+  block-size: 100%;
+}
+
+/* WHICH libraries the Pending screen draws from. Sits between the explanation and the grid
+   because it is a premise of the list rather than a control over it — reading order is
+   "these libraries, minus what plays, is what follows". */
+.pendinglibs {
+  margin-bottom: 18px;
+}
+.pendinglibshead {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+/* `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own id —
+   see the note above `.groupform .libs`. This one WRAPS in a row rather than taking the
+   modals' two columns: it sits full-width above the grid, not in a 420px dialog, and eleven
+   library names in two tall columns would push the first tile off the fold. */
+.pendinglibs .libs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.pendinglibs .libs label {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  font-size: 0.9rem;
 }
 .pendingtile .ptitle {
   font-weight: 600;
