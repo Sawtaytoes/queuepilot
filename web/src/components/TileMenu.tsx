@@ -1,3 +1,4 @@
+import { Button } from "@charcuterie/ui"
 import {
   useEffect,
   useLayoutEffect,
@@ -115,38 +116,50 @@ export function TileMenu() {
         pos ? { left: pos.left, top: pos.top } : undefined
       }
     >
+      {/* Charcuterie `Button`s, `ghost` (nothing until hover) — the same shape `PlayMenu`'s
+          device rows already use, and for the same reason: this is a hand-rolled menu whose
+          ROWS are still ordinary buttons. `.ctxmenu button`'s skin is deleted; what stays is
+          layout (`justify-content`, `width`, `text-align`), exactly as `.qmenu button` does.
+          `intent="danger"` replaces `.ctxmenu button.danger`'s colour.
+          (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
+          `2026-08-02-adopting-a-component-means-deleting-its-skin`) */}
       {entry && item && isStartable(item) ? (
-        <button
+        <Button
+          appearance="ghost"
+          intent="neutral"
+          isFullWidth
           onClick={() => openStartModal(entry)}
-          type="button"
         >
           {item.start
             ? t("Change start episode…")
             : t("Start from an episode…")}
-        </button>
+        </Button>
       ) : null}
       {entry && item && isStartable(item) && item.start ? (
-        <button
+        <Button
+          appearance="ghost"
+          intent="neutral"
+          isFullWidth
           onClick={() => {
             closeTileMenu()
             void commitStart(entry, null)
           }}
-          type="button"
         >
           Start automatically (clear override)
-        </button>
+        </Button>
       ) : null}
       {entry?.remove ? (
-        <button
-          className="danger"
+        <Button
+          appearance="ghost"
+          intent="danger"
+          isFullWidth
           onClick={() => {
             closeTileMenu()
             entry.remove?.()
           }}
-          type="button"
         >
           {entry.removeLabel || "Remove"}
-        </button>
+        </Button>
       ) : null}
     </div>
   )
