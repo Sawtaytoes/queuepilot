@@ -62,6 +62,17 @@ type Overlays = {
   setModal: {
     setId: string | null
     presetKind?: string
+    /**
+     * Libraries the FIRST provider block starts with, as Plex section ids.
+     *
+     * Set when the queue is being created FOR something — the Pending screen's "New queue…",
+     * which knows the library the item came from. Without it a queue created from that menu
+     * draws from nothing, so the item that prompted it could not be added to it
+     * (decision `2026-08-22-pending-can-make-the-queue-it-is-adding-to`).
+     */
+    presetLibraries?: string[]
+    /** Called with the new set's id after a successful CREATE (never on an edit). */
+    onCreated?: (setId: string) => void
   } | null
   dynModal: { setId: string | null } | null
   /**
@@ -138,7 +149,19 @@ export const closePlayMenus = () => {
 export const openSetModal = (
   setId: string | null,
   presetKind?: string,
-) => set({ setModal: { presetKind, setId } })
+  opts?: {
+    presetLibraries?: string[]
+    onCreated?: (setId: string) => void
+  },
+) =>
+  set({
+    setModal: {
+      onCreated: opts?.onCreated,
+      presetKind,
+      presetLibraries: opts?.presetLibraries,
+      setId,
+    },
+  })
 
 export const closeSetModal = () => set({ setModal: null })
 

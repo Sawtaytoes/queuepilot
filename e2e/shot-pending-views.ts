@@ -125,6 +125,14 @@ try {
     await page.waitForTimeout(1500);
     await page.screenshot({ path: `${OUT}/pending-views-start.png` });
     console.log('shot:', `${OUT}/pending-views-start.png`);
+
+    // The Add-to menu, open: the queues that draw from this library, a rule, then the row
+    // that makes a new one.
+    await page.locator('[data-testid="pending-addto"]').first().click();
+    await page.waitForSelector('.addtomenu [role="menuitem"]', { timeout: 15000 });
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: `${OUT}/pending-views-menu.png` });
+    console.log('shot:', `${OUT}/pending-views-menu.png`);
   }
 
   await browser.close();
