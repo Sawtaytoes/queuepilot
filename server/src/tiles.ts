@@ -13,6 +13,7 @@
 import * as plex from './plex.js';
 import type { AccountScope, CollectionNextEp, ResolvedItem, SectionIds } from './plex.js';
 import type { NextEp, Start, Tile } from './types.js';
+import { plexWebUrl } from './webLinks.js';
 
 /**
  * What `resolveTile()` actually returns: `types.ts`'s `Tile`, widened in exactly four spots
@@ -110,6 +111,9 @@ export async function resolveTile(
   return {
     resolved: Boolean(resolved),
     ratingKey: resolved ? resolved.ratingKey : null,
+    // The item's own Plex page. Built from the tile's OWN ratingKey, so a collection links
+    // to the collection and a show to the show — not to the next-up leaf the caption names.
+    webUrl: resolved ? await plexWebUrl(resolved.ratingKey) : null,
     type: resolved ? resolved.type : null,
     title: resolved ? resolved.title : displayFor(value),
     year: resolved ? resolved.year : null,
@@ -141,6 +145,7 @@ export function unresolvedTile(value: unknown): ResolvedTile {
   return {
     resolved: false,
     ratingKey: null,
+    webUrl: null,
     type: null,
     title: displayFor(value),
     year: null,

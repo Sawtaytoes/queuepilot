@@ -16,7 +16,7 @@
 import { errMessage } from '../errors.js';
 import type { CuratedEntryRef, MediaUnit, NextEp } from '../types.js';
 import * as blocks from './blocks.js';
-import { coverUrl, providerFor } from './index.js';
+import { coverUrl, openUrl, providerFor } from './index.js';
 
 /**
  * What this module needs off a set: an id for the log line, plus whatever `blocks.js` reads
@@ -44,6 +44,8 @@ export interface ProviderTile {
   resolved: boolean;
   ratingKey: string | null;
   cover: string | null;
+  /** The item's page in the provider's own UI — see `Tile.webUrl` in ../types.ts. */
+  webUrl: string | null;
   type: string | null;
   title: string;
   year: number | null;
@@ -100,6 +102,7 @@ function unresolvedTile(value: unknown): ProviderTile {
     resolved: false,
     ratingKey: null,
     cover: null,
+    webUrl: null,
     type: null,
     title: displayFor(value),
     year: null,
@@ -163,6 +166,10 @@ export async function resolveTiles(
       resolved: true,
       ratingKey: String(row.id),
       cover: coverUrl(block.provider, row.id),
+      // A link to THIS server, which redirects — see `openUrl`. Offered only when the
+      // provider can resolve a page at all; one that cannot leaves the title as plain text
+      // rather than pointing at a 404.
+      webUrl: typeof provider.webUrl === 'function' ? openUrl(block.provider, row.id) : null,
       // 'show' is the tile shape a series wants — a title line plus a "what's next" line —
       // and the frontend already renders it. A reading-only entry type would need a second
       // render path for no behavioural difference; `unit` carries the wording instead.

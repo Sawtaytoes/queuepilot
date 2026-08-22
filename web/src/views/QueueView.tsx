@@ -1016,6 +1016,10 @@ export function QueueView({
                   face.title +
                   (face.year ? ` (${face.year})` : "")
                 }
+                // The item's own page in Plex / Kavita. `webUrl` is absent on an unresolved
+                // entry, and the tile then renders the caption as plain text.
+                titleHref={item.webUrl}
+                titleHrefLabel={vocab.name ?? "Plex"}
                 titleTooltip={
                   face.from
                     ? `${face.fullTitle || face.title} — from the “${face.from}” collection`

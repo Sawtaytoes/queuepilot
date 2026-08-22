@@ -236,6 +236,11 @@ try {
   ok('a part-read chapter reads as in progress', dp?.partiallyWatched === true);
   ok('no season is invented for a chapter', dp?.nextEp?.season === null && dp?.nextEp?.multiSeason === false);
 
+  // The title's link goes through THIS server (see providers/index.ts `openUrl`): the
+  // redirect is what keeps Kavita's own address out of the body the assertion below checks.
+  ok(`a reading tile links through this server (${dp?.webUrl})`,
+    dp?.webUrl === '/api/providers/kavita/open/599');
+
   const fin = items.find((i: JsonBody) => i.title === 'Finished Series');
   ok('a fully-read series resolves with nothing next', fin?.resolved === true && fin?.nextEp === null);
 
