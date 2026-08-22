@@ -36,6 +36,25 @@ export interface PendingState {
   /** Epoch SECONDS, matching Plex's own `addedAt`. */
   seen_through: number;
   dismissed: string[];
+  /**
+   * Which library sections Pending draws from — an INCLUDE list, and `null` for "not
+   * configured yet".
+   *
+   * Include and not exclude, because the owner's sentence is an include one:
+   *
+   * > "Pending is for new additions not in a queue, not watched, from specific libraries
+   * > (not the inverse). So instead of exclude, just have it be include."
+   *
+   * The difference is what happens to a library nobody has thought about. Under an exclude
+   * list a new Plex library silently joins the screen and has to be noticed and named to
+   * get rid of; under an include list it stays out until someone asks for it. On a screen
+   * whose whole job is subtraction, the second is the correct default direction.
+   *
+   * `null` rather than `[]`: an empty list is a real answer that means "no libraries",
+   * which is a page the owner can choose and must not be handed by accident. Unconfigured
+   * falls back to `defaultLibraries` instead.
+   */
+  libraries: number[] | null;
 }
 
 export interface PendingItem {
@@ -57,6 +76,11 @@ const HEADER = `# QueuePilot — what has arrived that nothing is going to play.
 #               costs one line rather than one line per item.
 # dismissed     ratingKeys you said no to individually. Per-item on purpose: skipping ONE
 #               film must not also hide everything added after it.
+# libraries     WHICH library sections this screen draws from, by section id. An INCLUDE
+#               list: a library that is not named here is not on the screen, and a new Plex
+#               library stays out until someone asks for it. Remove the key entirely to go
+#               back to the default (every video library that is not Plex "Other Videos").
+#               An empty list is a real answer and means no libraries at all.
 #
 # Delete this file to start over — nothing else reads it.`;
 
@@ -68,12 +92,18 @@ export async function readState(): Promise<PendingState> {
       // install should show you the backlog rather than an empty page you cannot explain.
       seen_through: Number(doc.seen_through) || 0,
       dismissed: Array.isArray(doc.dismissed) ? doc.dismissed.map(String) : [],
+      // Absent stays `null` — "nobody has chosen" — and only an actual list becomes one.
+      // Non-numeric ids are dropped rather than coerced: `Number("Movies")` is `NaN`, which
+      // matches no section and would silently empty the screen.
+      libraries: Array.isArray(doc.libraries)
+        ? doc.libraries.map(Number).filter((id) => Number.isFinite(id))
+        : null,
     };
   } catch (e) {
     if (!isNodeError(e) || e.code !== 'ENOENT') {
       console.log(`[pending] could not read ${PENDING_PATH}: ${errMessage(e)}`);
     }
-    return { seen_through: 0, dismissed: [] };
+    return { seen_through: 0, dismissed: [], libraries: null };
   }
 }
 
@@ -81,8 +111,40 @@ export async function writeState(next: PendingState): Promise<void> {
   await fsp.mkdir(path.dirname(PENDING_PATH), { recursive: true });
   await fsp.writeFile(
     PENDING_PATH,
-    `${HEADER}\n${stringify({ seen_through: next.seen_through, dismissed: next.dismissed })}`,
+    // `libraries` is omitted while it is `null` rather than written as an explicit null:
+    // the file is meant to be read and edited by hand, and a key that is present but empty
+    // reads like a choice when it is the absence of one.
+    `${HEADER}\n${stringify({
+      seen_through: next.seen_through,
+      dismissed: next.dismissed,
+      ...(next.libraries === null ? {} : { libraries: next.libraries }),
+    })}`,
   );
+}
+
+/**
+ * Choose which libraries the screen draws from.
+ *
+ * `null` clears the choice and goes back to `defaultLibraries`, which is a different state
+ * from `[]` — "I have not said" against "I said none". Both are reachable from the UI on
+ * purpose: the first is the reset, the second is a deliberate blank page.
+ *
+ * Ids are de-duplicated and sorted so the file does not churn on a re-save that changed
+ * nothing, and so a hand-edited file and a UI-written one look the same.
+ */
+export async function setLibraries(ids: number[] | null): Promise<PendingState> {
+  const state = await readState();
+  const next: PendingState = {
+    ...state,
+    libraries:
+      ids === null
+        ? null
+        : [...new Set(ids.map(Number).filter((id) => Number.isFinite(id)))].sort(
+            (a, b) => a - b,
+          ),
+  };
+  await writeState(next);
+  return next;
 }
 
 /** Dismiss one item. Idempotent — dismissing twice is not an error, it is a double-click. */
@@ -103,7 +165,11 @@ export async function dismiss(ratingKey: string): Promise<PendingState> {
 export async function markSeen(at?: number): Promise<PendingState> {
   const now = at ?? Math.floor(Date.now() / 1000);
   const state = await readState();
-  const next: PendingState = { seen_through: now, dismissed: state.dismissed };
+  const next: PendingState = {
+    seen_through: now,
+    dismissed: state.dismissed,
+    libraries: state.libraries,
+  };
   await writeState(next);
   return next;
 }
@@ -307,6 +373,48 @@ export interface PendingLibrary {
 }
 
 /**
+ * Which libraries Pending draws from when nobody has said.
+ *
+ * Every video library that is not Plex "Other Videos" (Personal Media, no metadata agent).
+ *
+ * That the default EXCLUDES those is not tidiness. They are where the household's test
+ * encodes live, and on the first real run they were 7 of the 11 rows — eleven
+ * `[Betterman QC] … x265-10bit {SD SDR}` variants of one clip, burying a film someone might
+ * genuinely want to queue. "Nothing plays this" is true of a test encode and also completely
+ * uninteresting.
+ *
+ * The rule this REPLACES let one in whenever any set drew from it, which read as
+ * conservative and was not: two queues name `Demos` and `Movie Clips` between them, so
+ * 1,097 of the owner's 2,162 pending rows were clips and test encodes. A queue that plays
+ * out of a scratch library says something about that queue and nothing about whether a new
+ * file there is news.
+ *
+ * It is only a DEFAULT. `pending.yaml`'s `libraries` overrides it completely, in either
+ * direction — a household that wants its clips library on the screen names it and gets it.
+ */
+export function defaultLibraries(
+  libraries: readonly PendingLibrary[],
+): PendingLibrary[] {
+  return libraries.filter((l) => l.video && !l.other);
+}
+
+/**
+ * The libraries this screen reports on: the configured include list, or the default.
+ *
+ * `video` is enforced even against an explicit choice. A photo or music section cannot be
+ * queued by anything this app builds, so naming one is a mistake rather than a preference,
+ * and honouring it would put rows on the screen with no working "Add to".
+ */
+export function selectedLibraries(
+  libraries: readonly PendingLibrary[],
+  state: Pick<PendingState, 'libraries'>,
+): PendingLibrary[] {
+  if (state.libraries === null) return defaultLibraries(libraries);
+  const wanted = new Set(state.libraries);
+  return libraries.filter((l) => l.video && wanted.has(l.id));
+}
+
+/**
  * Items added after the watermark, not already watched, that nothing is going to play. Newest
  * first.
  *
@@ -324,28 +432,7 @@ export async function pendingItems(
   const sets = reg?.sets || {};
   const dismissed = new Set(state.dismissed);
 
-  // Which libraries anything is CONFIGURED to draw from. Used only to decide whether an
-  // "Other Videos" library is worth reporting on — see below.
-  const usedSections = new Set<number>();
-  for (const cfg of Object.values(sets)) {
-    for (const sec of routing.setSections(cfg) || []) usedSections.add(Number(sec));
-  }
-
-  /**
-   * Plex "Other Videos" (Personal Media, no metadata agent) are SKIPPED unless some set
-   * actually draws from them.
-   *
-   * Not tidiness: those libraries are where the household's test encodes live, and on the
-   * first real run they were 7 of the 11 rows — eleven `[Betterman QC] … x265-10bit {SD SDR}`
-   * variants of one clip, burying a film someone might genuinely want to queue. "Nothing
-   * plays this" is TRUE of a test encode and also completely uninteresting.
-   *
-   * Conditional rather than a hard exclusion, because the judgement belongs to the config: if
-   * a queue names one of these libraries, a new item in it IS a candidate and gets reported.
-   */
-  const videoLibs = libraries.filter(
-    (l) => l.video && (!l.other || usedSections.has(l.id)),
-  );
+  const videoLibs = selectedLibraries(libraries, state);
 
   const fresh: PendingItem[] = [];
   for (const lib of videoLibs) {
