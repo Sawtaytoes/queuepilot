@@ -211,7 +211,12 @@ try {
   await poster.click({ button: 'right' });
   await page.waitForSelector('#tilemenu:not([hidden])', { timeout: 15000 });
   ok('right-click opens the per-entry menu', true);
-  const menuRemove = page.locator('#tilemenu button.danger');
+  // By NAME, not by `.danger`. That class was the app's own colour, and it stopped existing
+  // when the row became a Charcuterie `Button` with `intent="danger"` — a skin is not a
+  // handle, and a test that addresses one breaks the moment the skin becomes a prop. The
+  // accessible name is the thing being asserted anyway, and it is what an agent driving this
+  // menu would match on.
+  const menuRemove = page.getByRole('button', { name: 'Remove from this queue' });
   ok('the menu offers a scoped Remove',
     ((await menuRemove.textContent()) ?? '').includes('Remove from this queue'));
   await menuRemove.click();

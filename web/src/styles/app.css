@@ -1080,25 +1080,20 @@ ul.grid {
 .ctxmenu[hidden] {
   display: none;
 }
+/* LAYOUT ONLY, like `.qmenu button` two menus over. The rows are Charcuterie `Button`s
+   with `appearance="ghost"`, so the background, the border, the content colour, the font,
+   the padding, the radius, the hover fill and the focus ring are all the component's —
+   `.ctxmenu button.danger`'s colour is `intent="danger"`.
+
+   ⚠️ These had to go rather than be left alone: `.ctxmenu button` is an ELEMENT selector and
+   a `Button` renders a `<button>`, so every one of them would still have matched and
+   outranked the component (`app.css` is unlayered, Tailwind's utilities are not).
+   (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
+   `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
 .ctxmenu button {
-  background: none;
-  border: 0;
-  color: var(--color-content-primary);
-  font: inherit;
+  justify-content: flex-start;
+  width: 100%;
   text-align: left;
-  padding: 7px 10px;
-  border-radius: 7px;
-  cursor: pointer;
-}
-.ctxmenu button:hover {
-  background: var(--color-intent-neutral-surface-hover);
-}
-.ctxmenu button:focus-visible {
-  outline: 2px solid var(--color-intent-accent-solid);
-  outline-offset: -2px;
-}
-.ctxmenu button.danger {
-  color: var(--color-intent-danger-content);
 }
 
 /* The colour half of this block is GONE: `Badge intent=` supplies it now, and a
@@ -3256,30 +3251,11 @@ ul.grid.posters .tile .badges .epstag {
 /* Full-size targets, deliberately. The whole reason the poster opens this sheet instead
    of playing is that the tile's 26px ▶ was fiddly, so a play button here that repeated
    the mistake would defeat the change. */
-#entrymodal .entryactions > .primary {
-  background: var(--color-intent-accent-solid);
-  border: none;
-  border-radius: 9px;
-  color: var(--color-intent-accent-on-solid);
-  cursor: pointer;
-  font: inherit;
-  font-weight: 600;
-  padding: 9px 14px;
-  text-decoration: none;
-  white-space: nowrap;
-}
-#entrymodal .entryactions > .danger {
-  background: transparent;
-  border: 1px solid var(--color-border-default);
-  border-radius: 9px;
-  color: var(--color-intent-danger-content);
-  cursor: pointer;
-  font: inherit;
-  padding: 9px 14px;
-}
-#entrymodal .entryactions > .danger:hover {
-  border-color: var(--color-intent-danger-border);
-}
+/* The row's two controls are Charcuterie components now. `.primary`'s solid accent is
+   `intent="accent"`; `.danger`'s transparent background with a neutral border and
+   danger-coloured text is `appearance="outline" intent="danger"` — outline rather than
+   solid, so Remove does not shout louder than the panel's own primary action.
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
 
 #entrymodal .entryfields {
   display: grid;
