@@ -18,6 +18,7 @@ import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import {
   isCompleted,
   progressLabel,
+  runtimeLabel,
   tileFace,
 } from "../lib/tileFace"
 import type {
@@ -91,7 +92,7 @@ function Shelf({
    *  while the registry is still loading, which reads as push — the pre-existing default. */
   set: Pick<
     RegistrySet,
-    "id" | "delivery" | "vocabulary"
+    "id" | "delivery" | "episodes" | "vocabulary"
   > | null
 }) {
   const stripRef = useRef<HTMLUListElement>(null)
@@ -378,6 +379,12 @@ function Shelf({
                     removeQueueItem(setId, item)
                   }
                   posterCover={item.cover}
+                  // The runtime line, the same as the queue grid's — the shelf shows the
+                  // same entries and answers the same question about them.
+                  runtime={runtimeLabel(
+                    item.nextEp?.duration || item.duration,
+                    item.episodes ?? set?.episodes ?? 1,
+                  )}
                   posterRatingKey={
                     item.resolved ? face.ratingKey : null
                   }

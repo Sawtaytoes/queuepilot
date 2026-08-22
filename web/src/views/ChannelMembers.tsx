@@ -24,6 +24,7 @@ import {
 import {
   byTitle,
   isStartable,
+  runtimeLabel,
   startLabel,
   tileFace,
 } from "../lib/tileFace"
@@ -551,6 +552,12 @@ export function ChannelMembers({
               }}
               onRemove={() => removeMember(m)}
               posterCover={m.cover}
+              // The same runtime line the queue grid carries. A member's batch is its own
+              // `episodes` (1 = the channel default), so there is no set-level fallback here.
+              runtime={runtimeLabel(
+                m.nextEp?.duration,
+                m.episodes ?? 1,
+              )}
               posterRatingKey={
                 m.resolved ? face.ratingKey : null
               }

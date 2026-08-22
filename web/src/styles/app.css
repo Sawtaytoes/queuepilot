@@ -1034,6 +1034,21 @@ ul.grid {
 .tile .next:empty {
   display: none;
 }
+/* The runtime, on its own quiet line under the next-up line (decision
+   2026-08-22-a-tile-names-the-runtime-on-its-own-line). Muted and a size down: it is a fact
+   about the next episode, not a second heading, and it must not compete with the accent
+   next-up line directly above it. It renders only when there IS a runtime, so a reading
+   tile keeps its old geometry exactly. */
+.tile .runtime {
+  display: block;
+  font-size: 0.76rem;
+  color: var(--color-content-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tile .badges {
   display: flex;
   gap: 6px;

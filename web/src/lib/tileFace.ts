@@ -139,6 +139,46 @@ export function progressLabel(
   return `${clock(off)} of ${clock(dur)} (${pct}%)`
 }
 
+/** "24 min" / "1 h 47 min" from milliseconds. Null below a minute — a runtime Plex does
+ *  not know is not a runtime worth a line. */
+function minutes(ms: number): string | null {
+  const total = Math.round(ms / 60000)
+
+  if (total < 1) return null
+  if (total < 60) return `${total} min`
+
+  const h = Math.floor(total / 60)
+  const m = total % 60
+
+  return m ? `${h} h ${m} min` : `${h} h`
+}
+
+/**
+ * How long the thing that plays next runs, for the tile's own line.
+ *
+ * `count` is the entry's effective batch — its own `episodes` override, else the queue's
+ * default. Only the NEXT episode's runtime is known (it is the only leaf `nextEp` carries),
+ * so a batch multiplies it and says **about**: episodes in a series are near-uniform, and a
+ * total presented as exact would be a number nothing measured
+ * (decision `2026-08-22-a-tile-names-the-runtime-on-its-own-line`).
+ *
+ * Null when there is no runtime at all — every Kavita and board-game tile, and any Plex item
+ * whose next-up lookup came back empty. The line then does not render.
+ */
+export function runtimeLabel(
+  ms: number | null | undefined,
+  count = 1,
+): string | null {
+  const one = minutes(Number(ms) || 0)
+
+  if (!one) return null
+  if (count <= 1) return one
+
+  const total = minutes((Number(ms) || 0) * count)
+
+  return total ? `${count} x ${one} · about ${total}` : one
+}
+
 export type TileFace = {
   ratingKey: string | null
   title: string
