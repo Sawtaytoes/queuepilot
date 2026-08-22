@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react"
 import { useNavigate } from "react-router"
 
 import { Header } from "./components/Header"
+import { NowPlayingBar } from "./components/NowPlayingBar"
 import { PlayMenu } from "./components/PlayMenu"
 import { SelectionBar } from "./components/SelectionBar"
 import { Toolbar } from "./components/Toolbar"
@@ -250,6 +251,12 @@ export function App() {
       >
         {isNarrow ? null : toolbar}
       </Header>
+
+      {/* Directly under the header, and only while something is on
+          screen: the owner asked for the controls "at the top". It
+          renders null when nothing is playing, so it costs no space the
+          rest of the time. */}
+      <NowPlayingBar />
 
       <PlayView
         groupId={route.view === "play" ? route.group : null}

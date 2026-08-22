@@ -3687,3 +3687,88 @@ body.rowdragging {
    220px-min menu off the left of the page — off the viewport entirely on the first tile.
    Charcuterie's `Menu` is placed by floating-ui's `flip` + `shift`, which reads the real
    viewport, so the case that needed an app override is handled by the component. */
+
+/* ---- The Now-playing bar (`components/NowPlayingBar.tsx`) ----------------------------
+
+   Layout only. Every control in it is a Charcuterie component that owns its own paint —
+   no `.npbar button {…}` skin rule, for the reason `#selbar`'s removal above spells out:
+   this file is unlayered, Tailwind's utilities are in `@layer utilities`, so a class
+   rule here would outrank the component and repaint the `Slider` and both `IconButton`s
+   at once.
+
+   It sits directly under the header rather than fixed to the bottom like `#selbar`.
+   Those are different jobs: the selection bar is a transient action tray for a selection
+   you are holding, and this is the state of the room. The owner asked for it "at the
+   top".
+
+   A GRID, not a flex row with three children (workspace rule: a repeating card-shaped
+   list is a grid). The three areas are named because the Narrow View reflows them into
+   two rows rather than shrinking them — a scrubber and its two timestamps stop being
+   usable long before the title does. */
+.npbar {
+  display: grid;
+  grid-template-areas: "what controls seek";
+  /* The TITLE takes the spare width, not the scrubber. A scrubber past about 400px buys
+     nothing — the thumb is already pixel-addressable — while an episode title is real text
+     that ellipsises the moment it is short of room. The first pass had these the other way
+     round (`1fr` title, `2fr` seek) and truncated "Bob's Long-Running Cartoon — The Cave of
+     Two L…" at 1420px with 300px of empty track beside it. */
+  grid-template-columns: minmax(0, 2fr) auto minmax(
+      16rem,
+      1fr
+    );
+  gap: 12px 16px;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--color-surface-raised);
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+
+.npbar-what {
+  grid-area: what;
+  /* `min-width: 0` is the half that does the work: a grid item refuses to shrink below
+     min-content without it, so one long unbroken episode title would push the controls
+     off the end rather than ellipsising. Same trap `SelectListbox` hit above. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-content-secondary);
+}
+
+.npbar-controls {
+  grid-area: controls;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.npbar-seek {
+  grid-area: seek;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* The Slider is the only thing in the row that should absorb the spare width. */
+.npbar-seek > :not(.npbar-time) {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.npbar-time {
+  flex: 0 0 auto;
+  color: var(--color-content-muted);
+  font-size: var(--text-sm);
+}
+
+/* Narrow View — named for the WIDTH, which is what the query asks about. The scrubber
+   takes a full row of its own; the title and the controls share the one above it. */
+@media (max-width: 735px) {
+  .npbar {
+    grid-template-areas:
+      "what controls"
+      "seek seek";
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+}
