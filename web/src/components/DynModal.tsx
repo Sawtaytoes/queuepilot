@@ -686,13 +686,12 @@ export function DynModal() {
           never got the flex column, the gap or the margin it was asking for.
           (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`)
 
-          ⚠️ `className="dyn-lineup"`, not `id="dyn-lineup"`, and that is not a preference.
-          `FieldGroupProps` is a closed six-key type with no rest spread, so `id`,
-          `data-testid` and `hidden` cannot reach the `<fieldset>` at all — the one prop it
-          does forward is `className`. Reported upstream; `e2e/shot-lineup.ts` and
-          `e2e/shot-playback-length.ts` take the class instead. The class carries no rule and
-          is a DOM handle only. */}
-      <FieldGroup className="dyn-lineup" label="Playback">
+          `id`, not a `className` DOM handle: `FieldGroupProps` was a closed six-key type
+          that forwarded nothing but `className`, so this box wore `dyn-lineup` as a class
+          carrying no rule and the shot scripts took the class. `@charcuterie/ui@3.7.0`
+          spreads the rest props onto the `<fieldset>` it owns, so the id reaches the element
+          and the fake class is gone. */}
+      <FieldGroup id="dyn-lineup" label="Playback">
         {/* A <div>+<span>, not a <label>: CountPicker is a group of BUTTONS, not an input, so
             a <label> would have no control to name. Same shape the set editor uses. */}
         <div className="field">
@@ -802,21 +801,29 @@ export function DynModal() {
           filtered-pool editor. Hidden on a rewatch pool for the same reason the Lineup box
           is — a rewatch pool draws from watch history, not from members, so the control
           would do nothing. */}
-      <fieldset
-        className="field"
+      {/* A Charcuterie `FieldGroup`, configured by props — the `<fieldset>` + `<legend>` this
+          box hand-rolled, minus the `.field` class it borrowed. `#dynmodal .field` sets
+          `display: block`, which cancels the component's own flex column; the 14px block
+          rhythm comes from `#dynmodal fieldset`, an ELEMENT rule, so nothing is lost.
+          (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`)
+
+          `FieldGroup` and not `Field`, and the old comment here got the reason wrong twice.
+          It said a `Field` would print the name a second time — it would not, because
+          converting takes the `<legend>` with it — and it said `FieldProps` could not carry
+          `hidden`, which `@charcuterie/ui@3.7.0` fixed. The real reason is the one the
+          component's own docs give: `Field` CLONES onto one child, and this box holds two
+          (the picker and its hint), so `hidden` and `id` would land on the picker instead of
+          the box. `FieldGroup` wraps, so its props are the `<fieldset>`'s.
+
+          No `className="fieldselect"` either. Its one rule is `#setmodal .fieldselect`, so on
+          this modal it was decoration — and there is nothing to restore, because a trigger
+          that starts a block-level line after a `<legend>` never wanted a 10px inline-start
+          gutter in the first place. */}
+      <FieldGroup
         hidden={behavior === "rewatch"}
         id="dyn-collections"
+        label="Preferred queued items"
       >
-        <legend>Preferred queued items</legend>
-        {/* No `className="fieldselect"` any more. Its one rule is `#setmodal .fieldselect`,
-            so on this modal it was decoration — and there is nothing to restore, because a
-            trigger that starts a block-level line after a `<legend>` never wanted a 10px
-            inline-start gutter in the first place. The `Field` treatment its sibling above
-            gets does not fit here twice over: the `<legend>` already names the control, so a
-            `Field` label would print it a second time, and this box needs `hidden`, which
-            `FieldProps` cannot carry (same closed-type gap as `FieldGroup`, reported
-            upstream).
-            (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
         <SelectListbox
           id="dyn-collection-members"
           key={modalKey}
@@ -842,7 +849,7 @@ export function DynModal() {
             ? "A collection you add as a member comes in as its individual shows, each taking its own turn in the rotation — the same way a show you added by hand does."
             : "A collection you add as a member plays through in its own order, one item per turn, and its shows stop coming up separately. Pick the other option to have them take their own turns instead."}
         </p>
-      </fieldset>
+      </FieldGroup>
 
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>

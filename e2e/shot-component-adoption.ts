@@ -1,9 +1,10 @@
 // Before/after shots for the "a Charcuterie component, configured by props" pass.
 //
-// Four frames, one per place a class name was doing nothing:
+// Five frames, one per place a class name was doing nothing:
 //   channels-toolbar  — `.chhead`, where `＋ Filtered pool` / `＋ Curated pool` wore `accent`
 //   channels-filters  — `#chfilters`, where the all-libraries hint wore `subhint`
 //   dyn-lineup        — the pool editor's Playback box, which wore `flags`
+//   dyn-collections   — the "Preferred queued items" box, a hand-rolled fieldset+legend
 //   selbar            — the selection bar, where Apply wore `primary`
 //
 // EVERY byte on screen is FIXTURE data. The repo is public, so the `libraries` half of
@@ -116,11 +117,23 @@ try {
   await page.waitForTimeout(1400);
   await page.evaluate(() => {
     document
-      .querySelector('#dyn-lineup, .dyn-lineup')
+      .querySelector('#dyn-lineup')
       ?.scrollIntoView({ block: 'center' });
   });
   await page.waitForTimeout(400);
-  await shot('dyn-lineup', '#dyn-lineup, .dyn-lineup');
+  await shot('dyn-lineup', '#dyn-lineup');
+
+  // 3b — the "Preferred queued items" box in the same editor. It hand-rolled the
+  //      `<fieldset>` + `<legend>` a `FieldGroup` renders, and wore `.field` while doing
+  //      it — a class whose `display: block` is exactly what cancels the component's own
+  //      column. Same modal, so no re-open.
+  await page.evaluate(() => {
+    document
+      .querySelector('#dyn-collections')
+      ?.scrollIntoView({ block: 'center' });
+  });
+  await page.waitForTimeout(400);
+  await shot('dyn-collections', '#dyn-collections');
   await page.keyboard.press('Escape');
   await page.waitForTimeout(400);
 

@@ -13,6 +13,10 @@
 //   3. THE WRITER NEVER EMITS ONE. `addItem` normalizes a bare title/rating key/collection into
 //      a mapping, and clearing an entry's last override no longer collapses it back to a
 //      scalar — which is how the file would have drifted back one edit at a time.
+//   4. UNDO REACHES ACROSS THE MIGRATION. The stack holds raw text, so a snapshot older than
+//      the change holds the scalar form; restoring it verbatim would take the queue off the
+//      air entirely. A restore reshapes, keeps every line key, and still restores a modern
+//      snapshot byte-for-byte.
 //
 // Hermetic and offline: the Plex lookup is an INJECTED resolver, which is the only reason the
 // backfill half can be tested at all without a library.
@@ -25,6 +29,8 @@ const QUEUES_PATH = nodePath.join(SCRATCH, 'queues.yaml');
 const SETS_PATH = nodePath.join(SCRATCH, 'sets.yaml');
 process.env.QUEUES_PATH = QUEUES_PATH;
 process.env.SETS_PATH = SETS_PATH;
+// Section 6 drives the real undo stack, and `history.ts` reads this at import time.
+process.env.HISTORY_PATH = nodePath.join(SCRATCH, '.history.json');
 
 let failures = 0;
 const ok = (name: string, cond: boolean, extra = ''): void => {
@@ -225,6 +231,52 @@ const legacyTile = tiles.unresolvedTile('A Bare String');
 ok('a legacy scalar gets an UNRESOLVED tile — the grid paints that red',
   legacyTile.resolved === false && legacyTile.ratingKey === null && legacyTile.title === 'A Bare String',
   JSON.stringify(legacyTile));
+
+// --- 6. UNDO REACHES ACROSS THE MIGRATION -------------------------------------- //
+//
+// The undo stack holds RAW TEXT, so a snapshot taken before 2026-08-21 holds the scalar form.
+// Restoring it byte-for-byte is what the module promises and is exactly wrong here: every
+// entry in it is refused by `loadEntries()`, so the restored queue resolves to ZERO
+// descriptors and plays nothing. Not a crash — a silent, total outage on the one file the
+// household TV reads.
+//
+// So a restore reshapes, and the two properties that make it safe are asserted here rather
+// than assumed: the LINE KEYS do not move (`entryKey(toEntryObject(v)) === entryKey(v)`), and
+// a snapshot with nothing to repair is written back byte-for-byte.
+const history = await import('../server/src/history.js');
+
+const LEGACY_SNAPSHOT = `bob:
+- "Duel (1971)"        # a bare title
+- 459608               # a bare rating key
+- "Collection: Godzilla Collection"
+`;
+const legacyKeys = ['Duel (1971)', 459608, 'Collection: Godzilla Collection'].map(queues.entryKey);
+
+writeFileSync(QUEUES_PATH, 'bob:\n- {title: "something else"}\n');
+await history.snapshot();                    // pushes the CURRENT (modern) file
+writeFileSync(QUEUES_PATH, LEGACY_SNAPSHOT); // pretend the stack's top is pre-migration
+await history.snapshot();                    // …by snapshotting it, then undoing past it
+writeFileSync(QUEUES_PATH, 'bob:\n- {title: "the live file"}\n');
+await history.undo();
+
+ok('an undo across the migration writes no scalar entry', !hasScalarEntry(), readQueues());
+ok('…and the restored queue actually resolves',
+  resolve.loadEntries('bob').length === 3, String(resolve.loadEntries('bob').length));
+ok('…addressed by the SAME keys the legacy file used',
+  JSON.stringify(resolve.loadEntries('bob').map((d) => d.key)) === JSON.stringify(legacyKeys),
+  `${JSON.stringify(resolve.loadEntries('bob').map((d) => d.key))} vs ${JSON.stringify(legacyKeys)}`);
+
+// …and the byte-for-byte contract survives for every snapshot that needs no repair. `changes`
+// is the WRONG test for that: with no resolver every already-object title reports `unresolved`
+// (85 of them on the real fixture) while rewriting nothing, and `doc.toString()` still respells
+// `{title: "X"}` as `{ title: "X" }` across the whole file.
+const MODERN_SNAPSHOT = '# a comment that must survive\nbob:\n- {title: "Kept Exactly"}   # and this one\n';
+writeFileSync(QUEUES_PATH, MODERN_SNAPSHOT);
+await history.snapshot();
+writeFileSync(QUEUES_PATH, 'bob: []\n');
+await history.undo();
+ok('a modern snapshot restores byte-for-byte', readQueues() === MODERN_SNAPSHOT,
+  JSON.stringify(readQueues()));
 
 rmSync(SCRATCH, { recursive: true, force: true });
 console.log(failures ? `\n${failures} entry-format assertion(s) failed` : '\nall entry-format assertions passed');
