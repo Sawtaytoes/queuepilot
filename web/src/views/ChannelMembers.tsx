@@ -558,6 +558,9 @@ export function ChannelMembers({
                 face.title +
                 (face.year ? ` (${face.year})` : "")
               }
+              // The member's own page in Plex / Kavita — the same link the queue grid's
+              // tiles carry, because it is the same tile component and the same entry.
+              titleHref={m.webUrl}
               titleTooltip={
                 face.from
                   ? `${face.fullTitle || face.title} — from the “${face.from}” collection`

@@ -999,6 +999,26 @@ ul.grid {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* The title is the LINK to the item's own page in Plex / Kavita (decision
+   2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita). It inherits the caption's colour
+   and carries a quiet underline: an accent-coloured title would compete with the next-up
+   line, which is the accent on this tile and is a control. The anchor is inside `.title`,
+   so every density rule that selects `.title` is untouched. */
+.tile .title a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(
+    in srgb,
+    currentColor 40%,
+    transparent
+  );
+  text-underline-offset: 3px;
+}
+.tile .title a:hover,
+.tile .title a:focus-visible {
+  text-decoration-color: currentColor;
+}
+
 .tile .next {
   display: block;
   font-size: 0.82rem;

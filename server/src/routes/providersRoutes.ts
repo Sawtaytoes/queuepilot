@@ -106,6 +106,30 @@ export function providersRoutes(): Hono {
   });
 
   /**
+   * Open this item in the provider's own UI — a 302, never the URL itself.
+   *
+   * A pull tile's title links HERE. Kavita's base URL is credential-adjacent (its image
+   * endpoint takes the API key as a query parameter) and must not appear in a JSON body,
+   * which `e2e/kavita-covers-test.ts` gates on; the browser gets a same-origin path and
+   * learns the address only at the moment it navigates, exactly as `/go/<set>` already does.
+   *
+   * 404 — and no navigation — for a provider with no web UI and for an item it cannot
+   * address. A dead link is worse than no link.
+   */
+  app.get('/providers/:id/open/:itemId', async (c) => {
+    try {
+      const p = providerFor(c.req.param('id'));
+      if (typeof p.webUrl !== 'function') return c.body(null, 404);
+      const url = await p.webUrl(c.req.param('itemId'));
+      if (!url) return c.body(null, 404);
+
+      return c.redirect(url, 302);
+    } catch {
+      return c.body(null, 404);
+    }
+  });
+
+  /**
    * Record one unit consumed on the provider's side — "we played this" without opening the
    * picker. POST, because it WRITES.
    *

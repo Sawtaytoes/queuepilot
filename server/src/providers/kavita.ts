@@ -437,6 +437,21 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
     },
 
     /**
+     * The series page in Kavita's own UI — the same address `handoff()` builds its reader
+     * link from, minus the chapter.
+     *
+     * Resolved here, on the click, rather than carried on every tile: this string contains
+     * Kavita's base URL, which must not appear in a JSON body (see the provider interface's
+     * note and `e2e/kavita-covers-test.ts`). One series read per click.
+     */
+    async webUrl(itemId: string): Promise<string | null> {
+      const s = await c.series(itemId);
+      if (!s || s.libraryId == null) return null;
+
+      return `${c._base}/library/${s.libraryId}/series/${s.id ?? itemId}`;
+    },
+
+    /**
      * Every chapter (or volume) of a series, for the "Start from…" picker.
      *
      * One season: a webtoon has no seasons and a volume-based manga presents each
