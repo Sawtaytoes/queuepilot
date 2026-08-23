@@ -187,11 +187,18 @@ Four things to know before touching it:
   `{collection: X}` entry. A MOVIE entry is its own leaf and is deliberately NOT skippable —
   Remove is its answer, and `resolveMember`'s movie branch says so at the top. Do not
   "finish the feature" by making it skippable.
-- **A skip must never mark an entry done.** Empty `items` is the FINISHED test, and finished
-  is persisted by `markDone` and can then be TTL-swept — so an entry emptied only by skipping
-  would be retired and the line the skip was meant to be undone from would be deleted.
-  `ResolvedMember.emptiedBySkip` withholds the WRITE and not the report;
-  `e2e/skipped-items-test.ts` gates both halves.
+- **A skipped item COUNTS as dealt with, so the entry can complete.** Watch a show's first
+  nine episodes and skip the tenth and the show is over; the entry is marked done. The rule is
+  "nothing left", not "something was skipped" — an entry with E3/E4 still to play is not
+  completed by skipping E2. The first cut of this feature carved an exception here and it was
+  **reversed the next day**
+  ([decision](docs/decisions/2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete.md)):
+  it protected an undo that `nextQueue`'s stale-done revival already provided, and in exchange
+  created an entry that could never complete and never leave the queue. Do not reintroduce it.
+  ⚠️ On a queue with `remove_completed_after` the line IS deleted once the window passes, and
+  Restore then has nothing to bring back — the same thing that TTL already means for every
+  other completion there. `e2e/skipped-items-test.ts` gates the rule, the control and the
+  Restore round trip.
 - **The filter runs BEFORE `applyBatch`**, so an `episodes: 2` entry with E2 skipped queues
   E3 + E4 rather than E3 alone. Also gated.
 - **The keys are the PROVIDER's**, not universally Plex ratingKeys — safe only because a queue
