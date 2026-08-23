@@ -325,13 +325,13 @@ function computeChrome(
 
   if (route.view === "queues") {
     return {
-      back: { label: "‹ Play", target: "/" }, // Ordered Queues is a top-level configurator
+      back: { label: "‹ Play", target: "/" }, // Picks is a top-level configurator
       bodyClasses: [],
-      documentTitle: "Ordered Queues — QueuePilot",
+      documentTitle: "Picks — QueuePilot",
       editableSetId: null,
-      heading: "Ordered Queues",
+      heading: "Picks",
       isSubHidden: false,
-      sub: "Top plays next. Tap a queue to open it, reorder, or move titles between queues.",
+      sub: "Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues.",
     }
   }
 
@@ -345,13 +345,13 @@ function computeChrome(
       bodyClasses: isMovies
         ? ["queue-view", "movies-channel"]
         : ["queue-view"], // reuse: hides the queues toolbar
-      documentTitle: "Pools — QueuePilot",
+      documentTitle: "Rules — QueuePilot",
       editableSetId: null,
-      heading: "Pools",
+      heading: "Rules",
       isSubHidden: false,
       sub: isMovies
-        ? "The Movies pool: a weighted rewatch of films this account has seen — least-watched most likely."
-        : "A filtered pool, not an ordered queue: these filters shape what it can draw from.",
+        ? "The Movies rules queue: a weighted rewatch of films this account has seen — least-watched most likely."
+        : "A rules queue: these filters shape what it can draw from the library.",
     }
   }
 

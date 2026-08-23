@@ -26,20 +26,23 @@ page.on('request', (r) => { if (r.url().includes('/api/') && r.method() !== 'GET
 
 await page.goto(BASE, { waitUntil: 'domcontentloaded' });
 
-// 0. Landing = the Play list, grouped Filtered Pools (2 generic) / Curated Pools (3 anime)
-// / Ordered Queues (3),
-// no posters.
+// 0. Landing = the Play list: Rules (2 generic) + Picks (3 anime + 3 movie wishlists).
+// no posters. (decision `2026-08-23-kind-is-picks-or-rules` — Ordered and Curated share Picks.)
 await page.waitForSelector('.playcard', { timeout: 30000 });
-const dynRows = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent));
-const curRows = await page.$$eval('#playgrid li[data-kind="curated"] .rowname', (els) => els.map((e) => e.textContent));
-const qRows = await page.$$eval('#playgrid li[data-kind="ordered"] .rowname', (els) => els.map((e) => e.textContent));
-ok('landing: 2 filtered-pool rows (Shows & Shorts + Movies)',
-  dynRows.length === 2 && dynRows[0] === 'Shows & Shorts' && dynRows[1] === 'Movies');
-ok('landing: 3 curated-pool (anime) rows', curRows.length === 3);
-ok('landing: 3 queue rows', qRows.length === 3);
+const rulesRows = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
+const picksRows = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));
+ok('landing: 2 rules rows (Shows & Shorts + Movies)',
+  rulesRows.length === 2 && rulesRows[0] === 'Shows & Shorts' && rulesRows[1] === 'Movies');
+ok('landing: 6 picks rows (anime + movie wishlists)', picksRows.length === 6);
 ok('landing: no posters', !(await page.$('#play .tile')));
+const kindWords0 = await page.$$eval('#playgrid .cardkind', (els) =>
+  [...new Set(els.map((e) => (e.textContent ?? '').trim()))]);
+ok('landing: cards named Picks + Rules only',
+  kindWords0.includes('Picks') && kindWords0.includes('Rules')
+  && !kindWords0.includes('Ordered Queue') && !kindWords0.includes('Curated Pool')
+  && !kindWords0.includes('Filtered Pool'));
 
-// 1. Ordered Queues configurator: only the ORDERED queues shelve here (pools live elsewhere).
+// 1. Picks configurator: only hand-picked shelves here (rules live elsewhere).
 await page.click('#goqueues');
 await page.waitForSelector('.shelf', { timeout: 30000 });
 const shelves = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
@@ -186,46 +189,45 @@ ok('K: toast present right after action', (await page.textContent('#status') ?? 
 await page.waitForFunction(() => (document.querySelector('#status')?.textContent || '') === '', undefined, { timeout: 8000 });
 ok('K: toast auto-dismissed', (await page.textContent('#status')) === '');
 
-// F. Play landing groups into Filtered Pools / Curated Pools / Ordered Queues.
+// F. Play landing: Rules + Picks (Ordered and Curated share the Picks badge).
 // Routing is real paths now, so an in-page `location.hash = …` is no longer a
 // navigation — `page.goto` is. The reload is harmless here: everything asserted
 // below is re-fetched from the server, and the rename above already persisted.
 await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('#playgrid li[data-kind="filtered"]', { timeout: 20000 });
-const dyn = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent));
-const cur = await page.$$eval('#playgrid li[data-kind="curated"] .rowname', (els) => els.map((e) => e.textContent));
-ok('F: Filtered Pools group = Shows & Shorts + Movies', dyn.length === 2 && dyn[0] === 'Shows & Shorts' && dyn[1] === 'Movies');
-ok('F: Curated Pools group holds the anime sets', cur.length >= 1);
-// The three names the taxonomy decision settled. They were three shelf HEADINGS until the
-// landing became one grid (2026-08-19); each card carries its own kind badge now, so the same
-// words are asserted where they actually live.
+await page.waitForSelector('#playgrid li[data-kind="rules"]', { timeout: 20000 });
+const dyn = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
+const picks = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));
+ok('F: Rules = Shows & Shorts + Movies', dyn.length === 2 && dyn[0] === 'Shows & Shorts' && dyn[1] === 'Movies');
+ok('F: Picks holds the hand-picked sets', picks.length >= 1);
 const kindWords = await page.$$eval('#playgrid .cardkind', (els) =>
   [...new Set(els.map((e) => (e.textContent ?? '').trim()))]);
-ok('F: cards named Filtered/Curated Pool + Ordered Queue',
-  kindWords.includes('Filtered Pool') && kindWords.includes('Curated Pool')
-  && kindWords.includes('Ordered Queue'));
-// The Pools picker lists the same pools — now a flat SelectListbox, NOT a native
-// <select> with optgroups (Listbox has no option groups; filtered pools come first,
-// then curated). 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
+ok('F: cards named Picks + Rules',
+  kindWords.includes('Picks') && kindWords.includes('Rules')
+  && !kindWords.includes('Ordered Queue') && !kindWords.includes('Curated Pool')
+  && !kindWords.includes('Filtered Pool'));
+// The Rules picker lists the same sets — now a flat SelectListbox, NOT a native
+// <select> with optgroups (Listbox has no option groups; rules first, then picks).
+// 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
 await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('[data-testid="chchannel"]', { state: 'attached', timeout: 20000 });
 const chanOpts = await readOptions(page, '[data-testid="chchannel"]');
-ok('F: channel picker lists dynamic-then-curated (flat)',
+ok('F: channel picker lists rules-then-picks (flat)',
   chanOpts[0] === 'Shows & Shorts' && chanOpts[1] === 'Movies' && chanOpts.length >= 3);
-// Noun: open a curated POOL's grid → its add box says "pool", not "queue".
+// Noun: open a random-default Picks grid → its add box says "pool", not "queue".
 //
 // This assertion asked for "channel" until 2026-08-17, which the app stopped saying when
 // the 2026-08-16 Pools rename landed ("Add — search this pool's libraries…"). It had been
 // unreachable rather than passing: the `#set-libs` check above it crashed the whole suite
 // on every run, so nothing here executed. Fixing that selector exposed this one.
-const animeId = cur.length ? await page.evaluate((label) =>
+const animeLabel = picks.find((l) => /anime/i.test(l ?? '')) ?? picks[0];
+const animeId = animeLabel ? await page.evaluate((label) =>
   fetch('/api/queues').then((r) => r.json()).then((j: QueuesResponse) => Object.keys(j.sets).find((id) => j.sets[id]?.label === label)),
-cur[0]) : null;
+animeLabel) : null;
 if (animeId) {
   await page.goto(`${BASE}/q/${animeId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#queue:not([hidden])', { timeout: 20000 });
   const ph = await page.$eval<string, HTMLInputElement>('#search', (e) => e.placeholder);
-  ok(`F: curated-pool add box says "pool" not "queue" (${ph})`, /pool/.test(ph) && !/queue/.test(ph));
+  ok(`F: picks add box says "pool" not "queue" (${ph})`, /pool/.test(ph) && !/queue/.test(ph));
 } else {
   ok('F: curated-pool add box says "pool" not "queue"', true); // no anime set in fixture
 }

@@ -4,7 +4,8 @@
 - **Date:** 2026-08-16
 - **Type:** preference / naming / UX
 - **Supersedes:** [dynamic-vs-curated-channel-categories](2026-07-21-dynamic-vs-curated-channel-categories.md)
-- **Superseded by:** —
+- **Superseded by:** [kind-is-picks-or-rules](2026-08-23-kind-is-picks-or-rules.md)
+  — Ordered Queues fold into Picks; stored `kind` becomes `picks` / `rules` (UI badges land first)
 - **Builds on:** [queues-have-orthogonal-mode-knobs-not-named-types](2026-08-12-queues-have-orthogonal-mode-knobs-not-named-types.md)
 
 ## Decision
