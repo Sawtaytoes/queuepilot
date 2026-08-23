@@ -233,6 +233,8 @@ function shelvesAsQueues(
         year: null,
       })),
       kind: s.kind,
+      // Lane default — without it every picks set looks random until /api/queues lands.
+      ...(s.add_as ? { add_as: s.add_as } : {}),
       label: s.label,
       sections: s.sections,
       source: s.source,

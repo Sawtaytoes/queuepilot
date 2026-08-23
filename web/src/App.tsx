@@ -359,7 +359,9 @@ function computeChrome(
   if (route.view === "queue") {
     const q = data?.sets[route.id]
     const label = q?.label ?? "QueuePilot"
-    const isChannel = isRandomOrder(q)
+    const isChannel = isRandomOrder(
+      reg?.sets.find((s) => s.id === route.id) ?? q,
+    )
     // Plex's words unless the registry says otherwise, so a response that predates
     // `vocabulary` renders exactly as it always did.
     const vocab = reg?.sets.find((s) => s.id === route.id)

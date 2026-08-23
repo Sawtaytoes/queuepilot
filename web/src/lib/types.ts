@@ -285,6 +285,7 @@ export type ShelfItem = {
 export type ShelfSet = {
   label: string
   kind: string
+  add_as?: "priority" | "random"
   source: "queue" | "rotation" | string
   sections: number[]
   count: number

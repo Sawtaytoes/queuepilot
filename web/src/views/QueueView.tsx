@@ -193,7 +193,9 @@ export function QueueView({
   const regSet = setId
     ? reg?.sets.find((x) => x.id === setId)
     : undefined
-  const isChannel = isRandomOrder(q)
+  // Prefer the registry row when present — it always carries effective add_as.
+  // The queues payload may still be the shelves skeleton for a beat.
+  const isChannel = isRandomOrder(regSet ?? q)
   // Pushed at a device, or opened by a link. Decides the whole start affordance — the
   // queue-level button AND every tile's ▶.
   const isPull = isPullSet(regSet)
