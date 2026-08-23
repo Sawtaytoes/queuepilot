@@ -183,9 +183,8 @@ export function ChannelsView({
               else navigate(`/channels/${v}`)
             }}
             // Flat list: `Listbox` has no option groups, so the Play landing's
-            // "Filtered Pools" / "Curated Pools" headings are dropped — filtered pools
-            // first, then the curated ones (the `q:` prefix still routes them to the
-            // grid editor).
+            // "Rules" / "Picks" headings are dropped — rules queues first, then the
+            // picks ones (the `q:` prefix still routes them to the grid editor).
             options={[
               ...all.map((s) => ({
                 label: s.label,
@@ -294,18 +293,18 @@ export function ChannelsView({
           intent="accent"
           onClick={() => openDynModal(null)}
         >
-          ＋ Filtered pool
+          ＋ Rules queue
         </Button>
-        {/* "New pool" splits by how membership is decided: a Curated pool is a
-            hand-picked member set (the set modal, kind=anime); a Filtered pool
-            derives its members from rules. */}
+        {/* "New queue" splits by how membership is decided: a Picks queue is a
+            hand-picked member set (the set modal); a Rules queue derives its
+            members from filters. */}
         <Button
           appearance="outline"
           id="newcurated"
           intent="accent"
           onClick={() => openSetModal(null, "anime")}
         >
-          ＋ Curated pool
+          ＋ Picks queue
         </Button>
         <span className="chnote">
           A sample of what could play — the real rotation

@@ -112,7 +112,7 @@ try {
     (els) => els.every((e) => getComputedStyle(e).display === 'none'))));
   ok('every card says which kind it is',
     (await page.$$eval('#playgrid li[data-set]', (els) =>
-      els.map((e) => (e as HTMLElement).dataset.kind))).join(',') === 'ordered,filtered,ordered,ordered');
+      els.map((e) => (e as HTMLElement).dataset.kind))).join(',') === 'picks,rules,picks,picks');
 
   // All four cards share one grid row at this width — so this is the SIDEWAYS drag, and the
   // one a Y-midpoint test cannot resolve: alpha, pool_mid, beta and gamma all have the same

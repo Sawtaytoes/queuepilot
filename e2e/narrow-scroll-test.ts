@@ -213,10 +213,10 @@ for (const width of WIDTHS) {
     // PR, so a landing that quietly loses its only create affordance again — which is how it
     // shipped for a month — would reach main unchallenged. The assertion is both halves at
     // once: the trigger exists on `/`, and the modal it opens lands inside the screen.
-    ['/', '#playnewqueue', 'setmodal', 'New queue (landing)'],
+    ['/', '#playnewqueue', 'setmodal', 'New picks queue (landing)'],
     ['/queues', '#newqueue', 'setmodal', 'New queue'],
-    ['/channels/shows', '#newcurated', 'setmodal', 'New curated pool'],
-    ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a filtered pool'],
+    ['/channels/shows', '#newcurated', 'setmodal', 'New picks queue'],
+    ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a rules queue'],
   ] as const;
 
   for (const [hash, trigger, boxId, label] of modals) {

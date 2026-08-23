@@ -8,17 +8,16 @@ await page.goto('https://plex-channels.example.com', { waitUntil: 'domcontentloa
 
 // Landing = the Play list.
 await page.waitForSelector('.playcard', { timeout: 60000 });
-// Post-v2 IA: Filtered Pools (rule-derived) + Curated Pools (anime) + Ordered Queues.
-const dynRows = await page.$$eval('#playgrid li[data-kind="filtered"] .rowname', (els) => els.map((e) => e.textContent));
-const curRows = await page.$$eval('#playgrid li[data-kind="curated"] .rowname', (els) => els.map((e) => e.textContent));
-const qRows = await page.$$eval('#playgrid li[data-kind="ordered"] .rowname', (els) => els.map((e) => e.textContent));
+// Post-v2 IA: Rules (rule-derived) + Picks (hand-picked; was Curated + Ordered).
+const dynRows = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
+const picksRows = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));
 // Structural, not exact counts: since first-class channels (2026-07-29) each rotation
 // channel is its own row (Shows & Shorts, Shows, Shorts, Movies, …) and Bob adds/removes
 // channels + queues over time, so all three groups are lower-bounded. The Movies rewatch
 // channel must be present — it is the one this smoke previews below.
-ok(`live landing: dynamic ${dynRows.length} / curated ${curRows.length} / queues ${qRows.length}`,
+ok(`live landing: rules ${dynRows.length} / picks ${picksRows.length}`,
   dynRows.length >= 2 && dynRows.includes('Movies') && dynRows.includes('Shows & Shorts')
-  && curRows.length >= 1 && qRows.length >= 1);
+  && picksRows.length >= 1);
 ok('undo/redo buttons present', Boolean(await page.$('#undo')) && Boolean(await page.$('#redo')));
 
 // Channels: live preview renders poster tiles

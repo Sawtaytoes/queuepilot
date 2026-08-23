@@ -8,7 +8,7 @@ await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.playcard', { timeout: 30000 });
 await page.waitForTimeout(2000);
 // Hover one row so its handle is showing — it is quiet until then.
-await page.locator('#playgrid li[data-kind="ordered"]').first().hover();
+await page.locator('#playgrid li[data-kind="picks"]').first().hover();
 await page.waitForTimeout(400);
 await page.screenshot({ path: '__screenshots__/play-reorder-handle.png' });
 await browser.close();

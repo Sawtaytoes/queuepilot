@@ -59,9 +59,9 @@ const heading = (want: string) =>
 // Each deep link boots straight into its own view — the router agreeing with the server.
 for (const [path, want] of [
   ['/', 'QueuePilot'],
-  ['/queues', 'Ordered Queues'],
+  ['/queues', 'Picks'],
   ['/q/bob', 'Bob — Movies'],
-  ['/channels/shows', 'Pools'],
+  ['/channels/shows', 'Rules'],
 ] as const) {
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
   ok(`deep link ${path} renders "${want}"`, await heading(want));
@@ -84,7 +84,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   page.on('load', () => { loads += 1; });
 
   await page.click('#goqueues');
-  ok('clicking "Configure ›" routes to /queues', await heading('Ordered Queues'));
+  ok('clicking "Configure ›" routes to /queues', await heading('Picks'));
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);
 
