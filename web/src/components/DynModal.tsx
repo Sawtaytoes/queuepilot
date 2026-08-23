@@ -549,7 +549,7 @@ export function DynModal() {
       title={
         editing
           ? `Configure “${editing.label}”`
-          : "New filtered pool"
+          : "New rules queue"
       }
       titleId="dynmodal-title"
     >
