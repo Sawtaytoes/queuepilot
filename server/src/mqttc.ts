@@ -28,6 +28,11 @@ interface StartCommand {
   profile?: string;
   /** An entry key — play THAT member of a curated set. Web-only; a card never sends it. */
   only?: string;
+  /**
+   * Auto-routing hint for `set: auto`: `rewatch` picks the Movies Rules channel.
+   * Product kind is picks|rules and cannot carry that distinction alone.
+   */
+  behavior?: string;
 }
 
 /** A device announcement as it comes back off the retained registry: unvalidated JSON, so
@@ -151,12 +156,16 @@ export function play(
   target?: string | null,
   profile?: string | null,
   only?: string | null,
+  behavior?: string | null,
 ): StartCommand {
   if (!connected()) throw new Error('MQTT not connected');
-  const payload: StartCommand = { set: setId, kind: kind || 'movie' };
+  // Default kind is picks (hand-picked) — the historical default create path. Callers that
+  // know the set should pass wireKindForSet(); auto passes 'rules'.
+  const payload: StartCommand = { set: setId, kind: kind || 'picks' };
   if (target) payload.target = target;
   if (profile) payload.profile = profile;
   if (only) payload.only = only;
+  if (behavior) payload.behavior = behavior;
   // `connected()` just proved client is non-null; it is a module-level `let`, so say so.
   client!.publish(T_CMD_START, JSON.stringify(payload), { qos: 1 });
   return payload;
