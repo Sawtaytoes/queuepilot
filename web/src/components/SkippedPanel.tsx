@@ -79,7 +79,11 @@ export function SkippedPanel({ setId }: { setId: string }) {
   return (
     <Accordion
       className="skippanel"
-      headingLevel={3}
+      // TWO, not three. The panel is a direct section of the queue page, whose only other
+      // heading is the `<h1>` in `Header.tsx` — nothing on this route sits at 2, so a 3 here
+      // would skip a level in the document outline. Charcuterie's own note on this prop says
+      // no gate can catch it, because the right answer depends entirely on the page.
+      headingLevel={2}
       items={[
         {
           content: (
