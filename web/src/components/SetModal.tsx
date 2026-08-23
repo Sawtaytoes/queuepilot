@@ -541,7 +541,8 @@ export function SetModal() {
             {
               // Both are Picks. The dash clause is the default lane until `add_as` is a
               // real field (decision `2026-08-23-kind-is-picks-or-rules`).
-              label: "Picks — priority by default (top plays next)",
+              label:
+                "Picks — priority by default (top plays next)",
               value: "movies",
             },
             {
