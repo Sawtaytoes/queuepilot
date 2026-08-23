@@ -5,16 +5,18 @@
 // have excludes, but only for filtered queues and not selected"). `skipped` is the curated
 // twin — a flat list of LEAF ratingKeys on the set, permanent until it is cleared.
 //
-// Five claims, and the third is the expensive one to get wrong:
+// Five claims, and the third is the one this suite got BACKWARDS on its first day:
 //   1. a skipped episode is dropped, and the entry moves on to the next one;
 //   2. the batch cap counts what SURVIVES the skip (skip E2 with `episodes: 2` -> E3 + E4,
 //      not E3 alone), which is why the filter runs before `applyBatch`;
-//   3. an entry emptied ONLY by skipping is never reported as `newlyDone` — that list is what
-//      `markDone` persists and the TTL sweep can then delete, so retiring an entry because its
-//      last unwatched episode is skipped would make the skip one-way, with nothing left to
-//      restore when it is cleared;
-//   4. a genuinely fully-watched entry is STILL reported as `newlyDone`, even on a set that
-//      skips something else — claim 3 must not switch retirement off wholesale;
+//   3. a skipped item COUNTS TOWARDS the entry being finished, exactly as a watched one does.
+//      Watch a show's first episodes and skip the last and the show is over; the entry is
+//      reported as `newlyDone` and marked complete. The first cut of this feature carved an
+//      exception here and was wrong: it left an entry that could never complete and never
+//      leave the queue (owner, 2026-08-23: "if you finish a show and the last episode is
+//      skipped, that will mark it complete, right? ... That's what I'd expect.");
+//   4. and the undo needs nothing special — RESTORING the skip makes the entry resolve to
+//      something playable again, which the stale-done recovery revives and un-flags;
 //   5. a skipped collection CHILD goes whole (a film, or a whole child show), because the
 //      collection is the member and its children are the items inside it.
 //
@@ -129,9 +131,16 @@ const cfg = (skipped: string[], episodes?: number) => ({
 
 // The fixture builds the identity fields the resolver reads and omits `weight`/`raw`, which
 // only `describe()` fills in off real YAML — widened once here rather than at each call site.
-const entry = (rk: string | number, episodes: number | null = null): EntryDescriptor => ({
+// `done` + a `doneAt` is what `markDone` writes; a hand-written `done: true` carries no stamp
+// and is a deliberate skip the resolver never revives on new content alone. The round-trip
+// case below needs the STAMPED form, because that is what completing an entry produces.
+const entry = (
+  rk: string | number,
+  episodes: number | null = null,
+  done = false,
+): EntryDescriptor => ({
   key: `rk:${rk}`, ratingKey: String(rk), title: null, year: null, guid: null,
-  collection: null, episodes, start: null, done: false, doneAt: null,
+  collection: null, episodes, start: null, done, doneAt: done ? 1786668576 : null,
 } as EntryDescriptor);
 
 const collectionEntry = (name: string): EntryDescriptor => ({
@@ -164,17 +173,41 @@ r = await resolve.resolveMember(client, entry('100000', 2), cfg(['100002']), WAT
 ok('batch of 2 fills past the skip (E3 + E4)', JSON.stringify(keys(r!.items)) === '["100003","100004"]',
   JSON.stringify(keys(r!.items)));
 
-// 3. + 4. The write side. `newlyDone` is what `queues.markDone` persists.
-const res = await resolve.nextQueue(
+// 3. The write side. `newlyDone` is what `queues.markDone` persists as `done: true`.
+//    Show B has one unwatched episode left and it is skipped: the show is OVER.
+let res = await resolve.nextQueue(
   client, 'q', cfg(['200002']), [entry('200000'), entry('300000')], WATCHED, null,
 );
-ok('an entry emptied ONLY by a skip is not marked done',
-  !(res.newlyDone || []).includes('rk:200000'), JSON.stringify(res.newlyDone));
-ok('a fully-watched entry is still marked done on the same set',
+ok('watched-then-skipped-the-last completes the entry',
+  (res.newlyDone || []).includes('rk:200000'), JSON.stringify(res.newlyDone));
+ok('a fully-watched entry completes on the same set',
   (res.newlyDone || []).includes('rk:300000'), JSON.stringify(res.newlyDone));
-// It still READS as having nothing to play — only the WRITE is withheld.
-ok('the skip-emptied entry still reports as having nothing left',
+ok('both report as having nothing left to play',
   res.done.length === 2, JSON.stringify(res.done));
+
+// An entry with something still to play is NOT completed by an unrelated skip — the rule is
+// "nothing left", not "something was skipped". Show A has E3/E4 after the skipped E2.
+res = await resolve.nextQueue(client, 'q', cfg(['100002']), [entry('100000')], WATCHED, null);
+ok('an entry with items left is not completed by a skip',
+  !(res.newlyDone || []).length, JSON.stringify(res.newlyDone));
+
+// 4. The ROUND TRIP, which is why claim 3 costs nothing to undo. `done: true` + a `done_at`
+//    (what markDone writes) plus a restored skip = an entry that resolves to something
+//    playable, which the stale-done recovery revives and reports for un-flagging.
+res = await resolve.nextQueue(
+  client, 'q', cfg([]), [entry('200000', null, true)], WATCHED, null,
+);
+ok('restoring the skip REVIVES the completed entry',
+  (res.revived || []).includes('rk:200000'), JSON.stringify(res.revived));
+ok('…and it plays the episode that was skipped',
+  JSON.stringify(res.play.map((i) => i.ratingKey)) === '["200002"]',
+  JSON.stringify(res.play.map((i) => i.ratingKey)));
+// Still skipped => still complete, and NOT revived. The control for the pair above.
+res = await resolve.nextQueue(
+  client, 'q', cfg(['200002']), [entry('200000', null, true)], WATCHED, null,
+);
+ok('while it stays skipped the entry stays complete',
+  !(res.revived || []).length, JSON.stringify(res.revived));
 
 // 5. A skipped collection CHILD goes whole — first the film, then the child show.
 r = await resolve.resolveMember(client, collectionEntry(COLLECTION_NAME), cfg([]), WATCHED, null, 9);
@@ -199,6 +232,16 @@ r = await resolve.resolveMember(
 );
 ok('a skipped episode INSIDE a collection child is dropped',
   JSON.stringify(keys(r!.items)) === '["420000"]', JSON.stringify(keys(r!.items)));
+
+// A three-film collection with the middle film skipped and the other two watched is OVER —
+// the owner's second example, and the collection twin of claim 3.
+res = await resolve.nextQueue(
+  client, 'q', cfg(['420000']), [collectionEntry(COLLECTION_NAME)],
+  new Set(['410001']), null,
+);
+ok('a collection whose children are all watched or skipped completes',
+  (res.newlyDone || []).includes(`title:Collection: ${COLLECTION_NAME}`),
+  JSON.stringify(res.newlyDone));
 
 // 6. A MOVIE entry is not skippable — the entry IS the leaf, and Remove is the answer there.
 //    Asserted so the rule is a decision the suite defends, not an omission nobody noticed.

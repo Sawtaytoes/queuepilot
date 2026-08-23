@@ -4,7 +4,7 @@
 - **Date:** 2026-08-22
 - **Type:** feature / data format
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** rule 4 only — [2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete](2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete.md). Rules 1, 2, 3 and 5 stand.
 
 ## Decision
 
@@ -30,7 +30,11 @@ Five rules.
    Remove there and Skip only where there is an item inside a member.
 3. **It is permanent until it is cleared**, from the queue's **Skipped** panel. There is no
    skip-once and no expiry.
-4. **A skip never marks an entry done.** `nextQueue` reports an empty member as `newlyDone`,
+4. **A skip never marks an entry done.** ⚠️ **REVERSED 2026-08-23** — a skipped item counts
+   towards an entry being finished exactly as a watched one does; see
+   [the superseding record](2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete.md).
+   The reasoning below is kept as written, because it is the argument that turned out to be
+   wrong: the undo it protects was already provided by the stale-done revival. `nextQueue` reports an empty member as `newlyDone`,
    `markDone` writes `done: true`, and the TTL sweep can then delete the line — so an entry
    retired because its last unwatched episode is skipped would make the skip one-way, with
    nothing left to restore. An entry emptied only by skipping still READS as having nothing to
