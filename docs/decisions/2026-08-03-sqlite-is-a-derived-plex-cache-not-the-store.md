@@ -4,7 +4,7 @@
 - **Date:** 2026-08-03
 - **Type:** architecture / storage
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** partially — the “do not migrate config into SQLite / YAML stays the long-term store” clause is superseded for the *destination* book of record by the household decision [QueuePilot absorbs Board Game Picker (Tonight + SQLite)](https://mkdocs.octen.dev/workspace/agentic/docs/decisions/2026-08-22-queuepilot-absorbs-board-game-picker-tonight-pick/) (private agentic tree). **This record still correctly describes today’s** deletable Plex `cache.sqlite`. A QueuePilot-repo implementation decision must land with the migration and answer the four costs under *Why* below.
 - **Clarifies:** [2026-07-21-real-webapp-sse-yaml-not-sqlite](2026-07-21-real-webapp-sse-yaml-not-sqlite.md)
 
 ## Decision
