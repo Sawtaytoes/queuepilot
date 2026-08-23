@@ -85,18 +85,3 @@ export function isRandomOrder(
     }) === "random"
   )
 }
-
-/** Create-UI / Type picker: map a product+lane choice to what POST /api/sets accepts. */
-export function createKindPayload(
-  choice: "priority-picks" | "random-picks" | "rules",
-): {
-  kind: ProductKind
-  add_as?: AddAs
-  source?: "rotation"
-} {
-  if (choice === "rules")
-    return { kind: "rules", source: "rotation" }
-  if (choice === "random-picks")
-    return { kind: "picks", add_as: "random" }
-  return { kind: "picks", add_as: "priority" }
-}

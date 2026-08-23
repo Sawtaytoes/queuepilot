@@ -11,7 +11,7 @@ import { connect, type MqttClient } from 'mqtt';
 // feed would have gone quiet with nothing logged.
 import {
   MQTT_HOST as HOST, MQTT_PORT as PORT, MQTT_USER as USER, MQTT_PASS as PASS,
-  T_CMD_START, T_DEVICES_BASE, T_STATE, T_NOW_PLAYING,
+  T_CMD_ACTIVITY_OFF, T_CMD_START, T_DEVICES_BASE, T_STATE, T_NOW_PLAYING,
 } from './env.js';
 import type { Device, NowPlaying, PublishedSessionState } from './types.js';
 
@@ -33,6 +33,16 @@ interface StartCommand {
    * Product kind is picks|rules and cannot carry that distinction alone.
    */
   behavior?: string;
+}
+
+/**
+ * The `cmd/activity/off` payload. `reason` exists so a future automatic sender (a sleep
+ * timer, an empty-room rule) is distinguishable from the button without a second topic.
+ */
+interface EndActivityCommand {
+  reason: 'manual'
+  set?: string
+  target?: string
 }
 
 /** A device announcement as it comes back off the retained registry: unvalidated JSON, so
@@ -168,6 +178,24 @@ export function play(
   if (behavior) payload.behavior = behavior;
   // `connected()` just proved client is non-null; it is a module-level `let`, so say so.
   client!.publish(T_CMD_START, JSON.stringify(payload), { qos: 1 });
+  return payload;
+}
+
+/**
+ * Publish "end the activity" — the room should go off now (T_CMD_ACTIVITY_OFF).
+ *
+ * The caller stops playback FIRST and passes what was playing, so the automation on the
+ * other end has the set and the device without having to read the retained state that this
+ * press is about to invalidate. `set` is null when nothing was attributed to a queue.
+ */
+export function endActivity(
+  { set = null, target = null }: { set?: string | null; target?: string | null } = {},
+): EndActivityCommand {
+  if (!connected()) throw new Error('MQTT not connected');
+  const payload: EndActivityCommand = { reason: 'manual' };
+  if (set) payload.set = set;
+  if (target) payload.target = target;
+  client!.publish(T_CMD_ACTIVITY_OFF, JSON.stringify(payload), { qos: 1 });
   return payload;
 }
 
