@@ -313,6 +313,15 @@ jobs:
       - name: Lineup knobs write side (offline)
         run: $TSX e2e/lineup-knobs-test.ts
 
+      # PRODUCT KIND (picks | rules) and the Picks lane default (add_as). Two halves: the
+      # read side tolerates every legacy spelling still on disk (movies / anime / cartoons /
+      # demo), and the WRITE side keeps the lane the editor asked for. The write half shipped
+      # broken — createSet dropped `add_as`, so every new Picks queue came back a Random pool
+      # with a 12-item default, and the Type control did nothing. This file was also never
+      # named in this workflow, which is why nothing caught it.
+      - name: Product kind + lane write side (offline)
+        run: $TSX e2e/kind-normalize-test.ts
+
       # PLAYBACK LENGTH — how many things a set plays before it stops, for every kind of set.
       # The claim this exists to hold is not "the number is read" but "no existing set moves on
       # deploy": three of the four paths hardcoded their length and two hardcoded it

@@ -286,7 +286,7 @@ export function Toolbar() {
         appearance="outline"
         id="newqueue"
         intent="accent"
-        onClick={() => openSetModal(null, "movies")}
+        onClick={() => openSetModal(null, "priority")}
       >
         ＋ New queue
       </Button>

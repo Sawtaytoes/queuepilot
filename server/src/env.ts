@@ -249,6 +249,18 @@ export const T_RESP_TOPUP = str('T_RESP_TOPUP', 'queuepilot/resp/topup');
 // may honour, ignore, or gate on who is in the room — none of which this app should decide.
 // Not retained: it describes one moment, not a current state.
 export const T_RESP_FINISHED = str('T_RESP_FINISHED', 'queuepilot/resp/finished');
+// END THE ACTIVITY — the owner pressed ⏻ in the Now-playing bar and wants the room off NOW.
+//
+// A command, not the `resp/finished` announcement above, and the difference is the whole
+// reason it is its own topic. `resp/finished` says "a sitting ended" and HA gates it on the
+// SET's opt-in, on `isComplete`, on a 45 second wait and on nothing having started since —
+// every one of those guards exists because that event fires on its own. This one is a person
+// pressing a button, so it carries no opt-in to check and no re-tap to wait out; the app has
+// already stopped playback by the time it publishes.
+//
+// Still an ANNOUNCEMENT of intent rather than an action: HA owns the things with power cables
+// (workspace rule). Not retained — it describes one press, not a current state.
+export const T_CMD_ACTIVITY_OFF = str('T_CMD_ACTIVITY_OFF', 'queuepilot/cmd/activity/off');
 // Cast sidecar command topic (decision 2026-08-03). The sidecar has always read this from
 // env (cast_sidecar/service.py:18); the publisher used to hardcode it in playback.js, so the
 // two halves could be re-pointed independently and silently diverge — the sidecar sitting on

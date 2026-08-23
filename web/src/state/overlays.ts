@@ -72,7 +72,12 @@ type Overlays = {
   playMenu: PlayMenuTarget | null
   setModal: {
     setId: string | null
-    presetKind?: string
+    /**
+     * Which lane a NEW Picks queue defaults to (`add_as`). Product kind is always
+     * `picks` here — the legacy `movies` / `anime` preset strings are retired
+     * (decision `2026-08-23-kind-is-picks-or-rules`).
+     */
+    presetAddAs?: "priority" | "random"
     /**
      * Libraries the FIRST provider block starts with, as Plex section ids.
      *
@@ -159,7 +164,7 @@ export const closePlayMenus = () => {
 
 export const openSetModal = (
   setId: string | null,
-  presetKind?: string,
+  presetAddAs?: "priority" | "random",
   opts?: {
     presetLibraries?: string[]
     onCreated?: (setId: string) => void
@@ -168,7 +173,7 @@ export const openSetModal = (
   set({
     setModal: {
       onCreated: opts?.onCreated,
-      presetKind,
+      presetAddAs,
       presetLibraries: opts?.presetLibraries,
       setId,
     },

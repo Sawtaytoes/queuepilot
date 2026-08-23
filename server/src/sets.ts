@@ -24,7 +24,7 @@ import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind 
 import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { isNodeError } from './errors.js';
-import { kindForWrite, normalizeAddAs, normalizeProductKind } from './kind.js';
+import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
 import type {
   BatchStop,
   Binding,
@@ -460,6 +460,22 @@ const isBatchStop = (v: unknown): v is 'member' | 'season' =>
 const normalizeBatchStop = (v: unknown): BatchStop => {
   const s = v == null ? '' : String(v).trim().toLowerCase();
   return isBatchStop(s) ? s : null;
+};
+
+// The two Picks-only set fields, normalized ONCE for both write paths. createSet dropped
+// `add_as` entirely before this existed, so the two paths must not re-derive the rule.
+// `null` means "the caller said nothing usable" — the key is then absent on disk (sparse).
+const normalizeAddAsForWrite = (v: unknown): AddAs | null => {
+  const s = v == null ? '' : String(v).trim().toLowerCase();
+  return s === 'priority' || s === 'random' ? s : null;
+};
+// A blank / off spelling clears the window; anything else is stored verbatim and parsed at
+// read time (promote.parsePromoteWindow), the same posture as remove_completed_after.
+const PROMOTE_WINDOW_OFF = ['0', 'never', 'off', 'none', 'disabled'];
+const normalizePromoteWindowForWrite = (v: unknown): string | null => {
+  const s = v == null ? '' : String(v).trim();
+  if (!s || PROMOTE_WINDOW_OFF.includes(s.toLowerCase())) return null;
+  return s;
 };
 
 const MODES = ['rewatch', 'episodic', 'both'] as const;
@@ -1012,7 +1028,16 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
         source: 'queue',
         sections: secs,
       };
-      if (written.add_as) curated.add_as = written.add_as;
+      // The lane the editor asked for wins over the one inferred from a legacy kind.
+      // `kindForWrite` only stamps add_as for the OLD create values (movies/anime); the
+      // editor now posts `kind: picks` + an explicit `add_as`, and without this line that
+      // choice was dropped and every new Picks queue read back as a Random pool with a
+      // 12-item default (decision 2026-08-23-kind-is-picks-or-rules).
+      const laneAsked = normalizeAddAsForWrite(body.add_as);
+      const lane = laneAsked ?? written.add_as;
+      if (lane) curated.add_as = lane;
+      const pw = normalizePromoteWindowForWrite(body.promote_window);
+      if (pw) curated.promote_window = pw;
       const mi = toPosIntOrNull(body.max_items);
       if (mi) curated.max_items = mi;
       // Optional profile gate (blank => ungated). Only curated queues carry it; rotation
@@ -1148,8 +1173,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       }
       if (k === 'add_as') {
         if (isRotation) throw new Error('add_as is only valid on picks queues');
-        const a = String(v ?? '').trim().toLowerCase();
-        if (a !== 'priority' && a !== 'random') {
+        const a = normalizeAddAsForWrite(v);
+        if (!a) {
           node.delete('add_as');
           continue;
         }
@@ -1158,8 +1183,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       }
       if (k === 'promote_window') {
         if (isRotation) throw new Error('promote_window is only valid on picks queues');
-        const s = v == null ? '' : String(v).trim();
-        if (!s || ['0', 'never', 'off', 'none', 'disabled'].includes(s.toLowerCase())) {
+        const s = normalizePromoteWindowForWrite(v);
+        if (!s) {
           node.delete('promote_window');
           continue;
         }

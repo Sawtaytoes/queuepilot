@@ -62,17 +62,23 @@ export function playbackRoutes(): Hono {
     }
   });
 
-  // Transport control for the Now-playing bar: stop / pause / resume / next / seek.
+  // Transport control for the Now-playing bar: stop / pause / resume / next / seek, plus
+  // `power_off` — end the activity and shut the room down.
   //
-  // One route rather than five, because the bar's buttons differ only by a word and every
+  // One route rather than six, because the bar's buttons differ only by a word and every
   // one of them resolves the same target device. `seek` is the odd one — it carries an
   // offset and goes through a different Companion call — so it branches here rather than
   // growing a second route that would duplicate the device lookup.
   //
-  // This does NOT go over MQTT. The `cmd/session/*` topics exist so Home Assistant can
-  // START a sitting; these verbs act on a player that is already playing, and routing them
-  // through the broker would buy nothing but a hop and a second failure mode. The workspace
-  // rule is about services talking to each other, and this is the app talking to Plex.
+  // The TRANSPORT verbs do NOT go over MQTT. The `cmd/session/*` topics exist so Home
+  // Assistant can START a sitting; these verbs act on a player that is already playing, and
+  // routing them through the broker would buy nothing but a hop and a second failure mode.
+  // The workspace rule is about services talking to each other, and this is the app talking
+  // to Plex (decision `2026-08-22-transport-control-is-http-not-mqtt`).
+  //
+  // `power_off` is the exception, and it is not one: powering a room down is the app asking
+  // ANOTHER SERVICE to touch the physical world, which is exactly what the workspace rule
+  // puts on MQTT. It stops Plex over HTTP like its neighbours, then publishes.
   app.post('/control', async (c) => {
     const { action, offset, target } = await readBody(c);
     const act = String(action || '');
@@ -84,6 +90,24 @@ export function playbackRoutes(): Hono {
       if (act === 'seek') {
         const r = await playback.seekTo(offset as number, { device: dev });
         return r.seeked ? c.json({ ok: true, offset: r.offset }) : c.json({ error: r.error }, 503);
+      }
+      // END THE ACTIVITY. Two halves, in this order, and the order is the contract: the app
+      // stops the player itself so nothing is left running behind a dark TV, THEN asks the
+      // house to power down over MQTT. Doing it the other way round leaves Plex playing to a
+      // receiver that is already off, which is how a session survives the evening and shows
+      // up as "resume" the next morning.
+      //
+      // A failed stop does NOT cancel the power-off: the owner pressed a button that says
+      // end this, and a Shield that has already dropped off the network is the common way
+      // the stop fails. The error is reported alongside so the toast can say what happened.
+      if (act === 'power_off') {
+        const stopped = await playback.transport('stop', dev);
+        const st = mqttc.lastState();
+        const sent = mqttc.endActivity({
+          set: st?.set || null,
+          target: target ? String(target) : null,
+        });
+        return c.json({ ok: true, sent, stopped: stopped.ok, stopError: stopped.error });
       }
       if (act !== 'stop' && act !== 'pause' && act !== 'resume' && act !== 'next') {
         return c.json({ error: `unknown action '${act}'` }, 400);
