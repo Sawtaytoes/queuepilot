@@ -158,22 +158,21 @@ ships with this file. Implementation is a follow-up (engine lead cooldown store,
 editor controls, migration of `sets.yaml`, Play landing group collapse).
 
 
-### 8. Home Assistant — two `kind`s, one break
+### 8. Home Assistant — one `kind` on the wire too
 
-MQTT / `script.control_plex` speak a **wire** vocabulary (`cartoons` | `movie` |
-`anime`) for AVR volume and kids routing. That is **not** the product `kind`
-(`picks` | `rules`).
+MQTT / `script.control_plex` use the **same** vocabulary: `picks` | `rules`.
+Do not keep a parallel `cartoons` | `movie` | `anime` wire kind.
 
-- **UI badge rename alone does not break HA.**
-- **Migrating stored product `kind` does**, if QueuePilot keeps deriving the wire
-  kind with `s.kind === 'anime' ? 'anime' : 'movie'` — every Picks queue would
-  publish `movie`, and Kevin's anime AVR level (-17 dB) would become the movie
-  level (-8 dB).
+- **UI badge rename alone does not break HA** (payloads unchanged until schema cutover).
+- **Schema + MQTT cutover is breaking** and must ship with HA: every
+  `tag_command_map` / voice / button `kind`, and `script.control_plex`'s selector,
+  moves to `picks`|`rules`.
+- **AVR volume can no longer key off `kind`.** Kevin's anime and movie queues are
+  both `picks`. HA chooses dB from **set-id lists** (quiet ≈ -17 dB, loud ≈ -8 dB),
+  same allowlist style as today's `kevin_sets`.
 
-Schema cutover must keep publishing the correct wire kind (dedicated field or
-equivalent). HA inventory:
-`agentic/home-assistant/docs/2026-08-23-queuepilot-picks-rules-ha-consumer-inventory.md`
-(workspace repo; not on the public GitHub tree).
+Workspace inventory (not on the public GitHub tree):
+`home-assistant/docs/2026-08-23-queuepilot-picks-rules-ha-consumer-inventory.md`.
 
 ## Context
 
