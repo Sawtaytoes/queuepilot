@@ -69,18 +69,20 @@ import {
  */
 
 /**
- * The three kinds, as the card says them out loud.
+ * The two kinds, as the card says them out loud.
  *
- * These are the words the taxonomy decision settled, and the badge is now the ONLY place
- * the page says them — there are no shelf headings left to carry them.
- * (decision `2026-08-16-filtered-pools-curated-pools-ordered-queues`)
+ * Ordered Queue and Curated Pool were the same object with different default playback —
+ * both are hand-picked titles — so they share one badge. Rules queues are the other kind
+ * (membership from library/ratings rules). The badge is the ONLY place the page says them;
+ * there are no shelf headings left to carry them.
+ * (decision `2026-08-23-kind-is-picks-or-rules`; supersedes the three-name split in
+ * `2026-08-16-filtered-pools-curated-pools-ordered-queues`)
  */
-type SetKind = "curated" | "filtered" | "ordered"
+type SetKind = "picks" | "rules"
 
 const KIND_WORD: Record<SetKind, string> = {
-  curated: "Curated Pool",
-  filtered: "Filtered Pool",
-  ordered: "Ordered Queue",
+  picks: "Picks",
+  rules: "Rules",
 }
 
 /** A tier-select value → `{set, profile?}` (JSON for a binding option, a bare id
@@ -277,7 +279,7 @@ function ChannelCard({
 
   return (
     <PlayCard
-      kind="filtered"
+      kind="rules"
       label={labelInGroup(channel.label, groupLabel)}
       set={channel}
       // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
@@ -319,8 +321,8 @@ function ChannelCard({
 
 /** What one card needs to render, in the order the grid lays them out. */
 type Entry =
-  | { kind: "filtered"; id: string; set: RegistrySet }
-  | { kind: "curated" | "ordered"; id: string }
+  | { kind: "rules"; id: string; set: RegistrySet }
+  | { kind: "picks"; id: string }
 
 /**
  * Every playable set, in ONE list, in file order.
@@ -328,10 +330,10 @@ type Entry =
  * The registry is what carries the order — it is `sets.yaml`'s own, and it is what
  * `PATCH /api/sets-order` reads and writes, so laying the grid out by anything else would
  * make a drag land somewhere other than where it was dropped. `data.order` is consulted
- * only for the sets the registry cannot classify on its own (a curated set's `kind` and its
- * member count live on the queues payload), and anything the registry does not name is
- * appended rather than dropped — a set that arrives in one payload before the other should
- * render late, not vanish.
+ * only for the sets the registry cannot classify on its own (a picks set's member count
+ * lives on the queues payload), and anything the registry does not name is appended rather
+ * than dropped — a set that arrives in one payload before the other should render late,
+ * not vanish.
  */
 function buildEntries(
   reg: SetsResponse | null,
@@ -347,18 +349,16 @@ function buildEntries(
     const set = reg?.sets.find((s) => s.id === id)
 
     if (set && rotations.has(id))
-      return { id, kind: "filtered", set }
+      return { id, kind: "rules", set }
 
     const q = data?.sets[id]
 
     if (q?.source !== "queue") return null
 
-    // kind 'movies' = an ordered QUEUE, 'anime' = a curated pool played as a rotation.
-    // The same split `queueIds` / `channelSetIds` made when these were separate shelves.
-    return {
-      id,
-      kind: q.kind === "anime" ? "curated" : "ordered",
-    }
+    // Hand-picked membership — formerly split into Ordered Queue (`movies`) and Curated
+    // Pool (`anime`). Both are Picks; stored kind still drives playback until placement
+    // lands (decision `2026-08-23-kind-is-picks-or-rules`).
+    return { id, kind: "picks" }
   }
 
   for (const id of [
@@ -532,16 +532,16 @@ export function PlayView({
           A local affordance rather than un-hiding the toolbar: the hide is what keeps the
           queue filter, Collapse all and the add-to-any-queue search out of this header,
           which is the same reason Pending sets the class. `ChannelsView` already solves it
-          this way with its own ＋ Filtered pool / ＋ Curated pool pair.
+          this way with its own ＋ Rules queue / ＋ Picks queue pair.
 
           Its own id, NOT a second `#newqueue`: `narrow-scroll-test` and `ui-test` both
           `click('#newqueue')` on /queues, PlayView renders BEFORE QueuesView, and a
           duplicate id would hand them this hidden button instead.
 
-          It seeds `movies` — an ORDERED QUEUE — because that is the thing that was asked
-          for, and because the modal's second field is a Type picker holding both kinds, so
-          the choice is asked rather than decided here. A FILTERED pool is a different
-          editor (`openDynModal`) and stays behind Configure pools ›.
+          It seeds `movies` — Priority-by-default Picks, still the stored value until
+          `add_as` lands — because the modal's Type picker still asks Priority vs Random.
+          A Rules queue is a different editor (`openDynModal`) and stays behind
+          Configure rules ›.
         */}
         {/* A Charcuterie `Button`. `.playlinks button.accent` is the second of the only two
             rules `.accent` ever had, and it says the same thing `#tools`' does: an accent
@@ -560,16 +560,16 @@ export function PlayView({
           onClick={() => openSetModal(null, "movies")}
           size="sm"
         >
-          ＋ New queue
+          ＋ New picks queue
         </Button>
         <Link id="gopending" to="/pending">
           What is new and unqueued ›
         </Link>
         <Link id="gochannels" to="/channels">
-          Configure pools ›
+          Configure rules ›
         </Link>
         <Link id="goqueues" to="/queues">
-          Configure ordered queues ›
+          Configure picks ›
         </Link>
       </p>
 
@@ -584,7 +584,7 @@ export function PlayView({
           description={
             active || only
               ? "Nothing in this group on this provider. Try All, or another group."
-              : "Configure a pool or an ordered queue to put something here."
+              : "Configure a picks or rules queue to put something here."
           }
           heading="Nothing to play"
           headingLevel={2}
@@ -595,7 +595,7 @@ export function PlayView({
         {isHidden
           ? null
           : entries.map((e) =>
-              e.kind === "filtered" ? (
+              e.kind === "rules" ? (
                 <ChannelCard
                   channel={e.set}
                   groupLabel={groupLabel}
@@ -604,19 +604,19 @@ export function PlayView({
               ) : (
                 <PlayCard
                   key={e.id}
-                  kind={e.kind}
+                  kind="picks"
                   label={labelInGroup(
                     data!.sets[e.id]!.label,
                     groupLabel,
                   )}
-                  // The registry entry, so a Plex QUEUE and a Plex POOL two cards apart
-                  // render in the same amber rather than one of them in the neutral accent.
+                  // The registry entry, so a Plex Picks card and a Plex Rules card two
+                  // cards apart render in the same amber rather than one of them in the
+                  // neutral accent.
                   set={reg?.sets.find((x) => x.id === e.id)}
-                  meta={
-                    e.kind === "curated"
-                      ? `${data!.sets[e.id]!.items.length} shows · rotation`
-                      : `${data!.sets[e.id]!.items.length} titles · top plays next`
-                  }
+                  // Same meta shape for every Picks card — Priority vs Random is playback,
+                  // not a second product kind on the badge.
+                  // (decision `2026-08-23-kind-is-picks-or-rules`)
+                  meta={`${data!.sets[e.id]!.items.length} entries`}
                   to={`/q/${e.id}`}
                   onPlay={(anchor) =>
                     openPlayMenu({ anchor, setId: e.id })
