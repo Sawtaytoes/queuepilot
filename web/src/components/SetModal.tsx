@@ -26,11 +26,10 @@ import { SelectListbox } from "./SelectListbox"
 /**
  * Create / edit a curated set. Create: empty; edit: prefilled + rename/delete.
  *
- * The two kinds are the taxonomy decision, not a cosmetic label: `movies` is an
- * ORDERED QUEUE (top plays next), `anime` is a CURATED POOL whose members play in
- * random order (decisions `2026-07-21-queues-vs-channels-taxonomy-play-first-ia` and
- * `2026-08-16-filtered-pools-curated-pools-ordered-queues`). The `kind` VALUES stay
- * `movies` / `anime` — internal identifiers are out of the rename's scope.
+ * Both options are a Picks queue. The stored values are still `movies` (Priority by
+ * default — top plays next) and `anime` (Random by default) until `add_as` /
+ * `placement` land (decision `2026-08-23-kind-is-picks-or-rules`). The labels name
+ * the default lane, not two product types.
  *
  * The id is immutable and NFC cards / HA reference it, so the note says so on both
  * paths — renaming the label never breaks a card.
@@ -364,7 +363,9 @@ export function SetModal() {
 
     try {
       const word =
-        kind === "anime" ? "Curated pool" : "Ordered queue"
+        kind === "anime"
+          ? "Picks queue (random)"
+          : "Picks queue (priority)"
 
       if (setId) {
         await api("PATCH", `/api/sets/${setId}`, body)
@@ -505,9 +506,7 @@ export function SetModal() {
       title={
         editing
           ? `Edit “${editing.label}”`
-          : setModal?.presetKind === "anime"
-            ? "New curated pool"
-            : "New ordered queue"
+          : "New picks queue"
       }
       titleId="setmodal-title"
     >
@@ -540,15 +539,13 @@ export function SetModal() {
           onChange={setKind}
           options={[
             {
-              // Not "Ordered Queue — ordered, …": the group name already carries the word,
-              // so the old suffix said it twice. The clause after the dash is what
-              // DISTINGUISHES the two, and for this one that is which end plays next.
-              label: "Ordered Queue — top plays next",
+              // Both are Picks. The dash clause is the default lane until `add_as` is a
+              // real field (decision `2026-08-23-kind-is-picks-or-rules`).
+              label: "Picks — priority by default (top plays next)",
               value: "movies",
             },
             {
-              label:
-                "Curated Pool — members play in random order",
+              label: "Picks — random by default",
               value: "anime",
             },
           ]}

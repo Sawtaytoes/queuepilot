@@ -75,8 +75,8 @@ export function parsePath(pathname: string): Route {
 
 /** What the back button should SAY, given where it goes. */
 export function labelForPath(p: string): string {
-  if (p.startsWith("/queues")) return "‹ Ordered Queues"
-  if (p.startsWith("/channels")) return "‹ Pools"
+  if (p.startsWith("/queues")) return "‹ Picks"
+  if (p.startsWith("/channels")) return "‹ Rules"
   if (p.startsWith("/q/")) return "‹ Back"
 
   return "‹ Play"

@@ -105,8 +105,8 @@ describe("parsePath", () => {
 
 describe("labelForPath", () => {
   test("names where back actually goes", () => {
-    expect(labelForPath("/queues")).toBe("‹ Ordered Queues")
-    expect(labelForPath("/channels/movies")).toBe("‹ Pools")
+    expect(labelForPath("/queues")).toBe("‹ Picks")
+    expect(labelForPath("/channels/movies")).toBe("‹ Rules")
     expect(labelForPath("/q/bob")).toBe("‹ Back")
     expect(labelForPath("/")).toBe("‹ Play")
   })
