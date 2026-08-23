@@ -75,9 +75,11 @@ tier, detected from the PMS debug log):
 - **Skipping** is per-item, not per-entry. A curated queue carries a `skipped:` list of the
   leaves it never plays — one episode of a show, one film inside a collection — so "not this
   one" no longer means dismantling the entry. It is the curated twin of a filtered pool's
-  `blocklist`, it is permanent until cleared from the queue's **Skipped** panel, and it never
-  retires the entry it skipped inside of
-  ([decision](docs/decisions/2026-08-22-a-curated-queue-skips-items-the-way-a-filtered-pool-blocks-them.md)).
+  `blocklist`, and it is permanent until cleared from the queue's **Skipped** panel. A skipped
+  item counts as dealt with, so an entry whose every remaining item is watched or skipped is
+  finished — and Restore revives it
+  ([decision](docs/decisions/2026-08-22-a-curated-queue-skips-items-the-way-a-filtered-pool-blocks-them.md),
+  [correction](docs/decisions/2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete.md)).
 
 ## Layout
 
