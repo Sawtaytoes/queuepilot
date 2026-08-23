@@ -4,8 +4,8 @@
 - **Date:** 2026-08-16
 - **Type:** preference / naming / UX
 - **Supersedes:** [dynamic-vs-curated-channel-categories](2026-07-21-dynamic-vs-curated-channel-categories.md)
-- **Superseded by:** [kind-is-curated-or-filtered-and-ordered-queues-merge-into-curated-pools](2026-08-23-kind-is-curated-or-filtered-and-ordered-queues-merge-into-curated-pools.md)
-  — Ordered Queues fold into Curated Pools; stored `kind` becomes `curated` / `filtered`
+- **Superseded by:** [kind-is-library-filtered-or-hand-picked](2026-08-23-kind-is-library-filtered-or-hand-picked.md)
+  — Ordered Queues fold into Hand-picked Pools; stored `kind` becomes `library_filtered` / `hand_picked`
 - **Builds on:** [queues-have-orthogonal-mode-knobs-not-named-types](2026-08-12-queues-have-orthogonal-mode-knobs-not-named-types.md)
 
 ## Decision
