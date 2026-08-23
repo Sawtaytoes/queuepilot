@@ -3693,3 +3693,32 @@ body.rowdragging {
     grid-template-columns: minmax(0, 1fr) auto;
   }
 }
+
+/* ---- the Skipped panel (`SkippedPanel.tsx`) ----
+   CONTAINER-INDEPENDENT on purpose. `.skiplist` is worn by a shared component, and the two
+   list rules it mirrors — `#ch-block` / `#ch-movieexcludes` — are ID selectors that only
+   work on the Pools screen. A descendant rule here would render the panel unstyled anywhere
+   the component is reused while looking styled in the diff
+   (decision `2026-08-21-a-class-name-is-not-a-style`).
+
+   The `Accordion` itself is Charcuterie's and keeps its own look; `.skippanel` sets nothing
+   but the gap that separates it from the toolbar above and the grid below, which is app
+   LAYOUT and is one of the three exceptions the component rule names. */
+.skippanel {
+  margin: 0 0 10px;
+}
+.skiplist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.skiplist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}

@@ -176,6 +176,34 @@ Three things follow, and each has cost something already:
 The one-shot upgrade is `server/src/tools/migrate-entry-objects.ts` — dry run by default, backup
 first, idempotent. **It runs BEFORE the new code deploys**, never after.
 
+## Skipping one item
+
+A **queue** set (`source: queue` — both pool kinds) carries `skipped:` in `sets.yaml`: a flat
+list of LEAF ids it never plays. It is the curated twin of a filtered pool's `blocklist`
+([decision](docs/decisions/2026-08-22-a-curated-queue-skips-items-the-way-a-filtered-pool-blocks-them.md)).
+Four things to know before touching it:
+
+- **It addresses the LEAF, never the member.** One episode of a show entry; one child of a
+  `{collection: X}` entry. A MOVIE entry is its own leaf and is deliberately NOT skippable —
+  Remove is its answer, and `resolveMember`'s movie branch says so at the top. Do not
+  "finish the feature" by making it skippable.
+- **A skip must never mark an entry done.** Empty `items` is the FINISHED test, and finished
+  is persisted by `markDone` and can then be TTL-swept — so an entry emptied only by skipping
+  would be retired and the line the skip was meant to be undone from would be deleted.
+  `ResolvedMember.emptiedBySkip` withholds the WRITE and not the report;
+  `e2e/skipped-items-test.ts` gates both halves.
+- **The filter runs BEFORE `applyBatch`**, so an `episodes: 2` entry with E2 skipped queues
+  E3 + E4 rather than E3 alone. Also gated.
+- **The keys are the PROVIDER's**, not universally Plex ratingKeys — safe only because a queue
+  draws from exactly one provider. This is why `GET /api/sets/:id/skipped` does not Plex-resolve
+  a PULL set's keys: the id spaces overlap, and that lookup would sometimes succeed and name a
+  completely unrelated film. Plex and Kavita both honour the list; board games, Steam and MiSTer
+  have no shared leaf id, so their tiles carry no `nextEp.ratingKey` and the menu row is
+  not offered.
+
+`PATCH /api/sets/:id` rejects `skipped` on a rotation channel: `blocklist` is the same feature
+there, and one set never carries two exclude lists.
+
 ## Gates
 
 Everything CI runs is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and it is
@@ -189,6 +217,7 @@ yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-web run
 yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck
 yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
+server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 ```
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
