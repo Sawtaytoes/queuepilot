@@ -18,6 +18,7 @@ import {
   useRowReorder,
 } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
+import { isRandomOrder } from "../lib/kind"
 import { labelInGroup } from "../lib/setLabel"
 import type {
   Group,
@@ -83,6 +84,30 @@ type SetKind = "picks" | "rules"
 const KIND_WORD: Record<SetKind, string> = {
   picks: "Picks",
   rules: "Rules",
+}
+
+/**
+ * A Picks card's meta line: how many entries, and which LANE they play in.
+ *
+ * The lane belongs here rather than on the badge — both lanes are Picks, and a second
+ * badge would read as a second product kind (decision `2026-08-23-kind-is-picks-or-rules`).
+ * It does have to be somewhere: with the badge alone every hand-picked card on this landing
+ * said `PICKS` and a count and nothing else, so sixteen cards were identical while a
+ * Priority queue and a Random pool play in completely different orders. The Rules cards
+ * beside them have always carried a meta clause ("rotation · ratings-filtered"), so this is
+ * a shape already on the page rather than a new one.
+ */
+function picksMeta(
+  count: number,
+  set:
+    | { kind?: unknown; source?: unknown; add_as?: unknown }
+    | undefined,
+): string {
+  const lane = isRandomOrder(set)
+    ? "random pool"
+    : "priority queue"
+
+  return `${count} entries · ${lane}`
 }
 
 /** A tier-select value → `{set, profile?}` (JSON for a binding option, a bare id
@@ -557,7 +582,7 @@ export function PlayView({
           appearance="outline"
           id="playnewqueue"
           intent="accent"
-          onClick={() => openSetModal(null, "movies")}
+          onClick={() => openSetModal(null, "priority")}
           size="sm"
         >
           ＋ New picks queue
@@ -613,10 +638,11 @@ export function PlayView({
                   // cards apart render in the same amber rather than one of them in the
                   // neutral accent.
                   set={reg?.sets.find((x) => x.id === e.id)}
-                  // Same meta shape for every Picks card — Priority vs Random is playback,
-                  // not a second product kind on the badge.
-                  // (decision `2026-08-23-kind-is-picks-or-rules`)
-                  meta={`${data!.sets[e.id]!.items.length} entries`}
+                  meta={picksMeta(
+                    data!.sets[e.id]!.items.length,
+                    reg?.sets.find((x) => x.id === e.id) ??
+                      data!.sets[e.id],
+                  )}
                   to={`/q/${e.id}`}
                   onPlay={(anchor) =>
                     openPlayMenu({ anchor, setId: e.id })
