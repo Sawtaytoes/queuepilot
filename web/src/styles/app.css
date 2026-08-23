@@ -2416,16 +2416,27 @@ html.modal-open {
   gap: 8px;
   min-width: 0;
 }
+/* THE ACTION ROW, and nothing else in it. The meta moved out to its own line (see
+   PlayCard): while it lived here, `flex-wrap` decided the card's shape from the LENGTH of
+   the meta string — a short one left the button beside it on the right, a long one pushed
+   the button onto a second line where, with nothing to push it over, it sat left. Cards in
+   the same row of the grid disagreed about where their own start button was.
+
+   `justify-content: flex-end` is what makes the answer unconditional: the action is on the
+   right, on every card, whether or not a tier picker is beside it. */
 .playcard .cardfoot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: flex-end;
   gap: 6px 10px;
   margin-top: auto; /* the button sits on the floor, so a row of cards agrees where that is */
 }
-.playcard .cardfoot .rowmeta {
-  flex: 1 1 auto;
-  min-width: 0;
+/* The legacy multi-binding picker (a pool that still carries two or more accounts) keeps the
+   left of the row, so it reads as a setting for the card rather than as part of the button
+   pair it would otherwise be pressed against. */
+.playcard .cardfoot .rowtier {
+  margin-right: auto;
 }
 .playcard .rowname {
   flex: 1 1 auto;
@@ -2443,7 +2454,12 @@ html.modal-open {
 .playcard .rowname:hover {
   color: var(--color-intent-accent-content);
 }
+/* Its own line under the name, on every card. `min-height` holds the line open when a card
+   has nothing to say there, so a metaless card still puts its button on the same floor as
+   its neighbours instead of riding one line higher. */
 .playcard .rowmeta {
+  margin: 0;
+  min-height: 1lh;
   color: var(--color-content-muted);
   font-size: 0.83rem;
 }
