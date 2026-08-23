@@ -204,8 +204,8 @@ try {
   await page.waitForFunction(
     () => (document.querySelector('#status')?.textContent || '').length > 0, undefined, { timeout: 15000 });
   await new Promise((r) => setTimeout(r, 500));
-  ok('play publish carries set=movies kind=movie profile=Older Kids',
-    fake.received.starts.some((p) => p.set === 'movies' && p.kind === 'movie' && p.profile === 'Older Kids'));
+  ok('play publish carries set=movies kind=rules profile=Older Kids',
+    fake.received.starts.some((p) => p.set === 'movies' && p.kind === 'rules' && p.profile === 'Older Kids'));
   await shot('pr4-play-landing.png');
 
   await browser.close();

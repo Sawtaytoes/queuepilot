@@ -258,7 +258,12 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
       let mode: string;
       if (cfg.behavior === 'rewatch') mode = 'rewatch';
       else if (cfg.behavior === 'progress') mode = 'episodic';
-      else mode = cfg.mode || (kind === 'movie' ? 'rewatch' : 'episodic');
+      else {
+        // Legacy: a start payload's wire kind `movie` meant rewatch. Product kind is
+        // picks|rules and cannot carry that; prefer cfg.mode, else treat legacy `movie`
+        // (and only that) as rewatch for one release.
+        mode = cfg.mode || (kind === 'movie' ? 'rewatch' : 'episodic');
+      }
 
       if (mode === 'rewatch') {
         const { counts, titles } = await select.rewatchCounts(

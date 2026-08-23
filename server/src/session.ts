@@ -12,6 +12,7 @@
 import * as routing from './engine/routing.js';
 import { playbackLength } from './engine/playbackLength.js';
 import * as finished from './finished.js';
+import { isAutoRewatch, wireKindForSet } from './kind.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as profiles from './profiles.js';
@@ -195,7 +196,6 @@ export async function startSession(
     }
   }
 
-  const kind = payload.kind || 'cartoons';
   let setName: string | null = payload.set || 'auto';
   const cardProfile = payload.profile || null;
   // "Play THIS entry" — an entry key from the web grid's per-tile ▶, narrowing the lineup to
@@ -204,6 +204,11 @@ export async function startSession(
   // card never sends it; it only ever arrives from the UI.
   const only = payload.only ? String(payload.only) : null;
   const isAuto = setName === 'auto' || setName === '' || setName == null;
+  const wantRewatch = isAutoRewatch({
+    kind: payload.kind,
+    behavior: payload.behavior,
+    mode: payload.mode,
+  });
   let profileTitle: string | null = null;
   let detectedProfile: string | null = null;
 
@@ -222,12 +227,15 @@ export async function startSession(
       return { error: 'no profile' };
     }
     profileTitle = detectedProfile = title;
-    setName = routing.channelFor(kind, title, reg!) || profiles.setForProfile(title);
+    setName = routing.channelFor(payload.kind, title, reg!, wantRewatch)
+      || profiles.setForProfile(title);
     if (!setName) {
       _publishState({ error: `profile '${title}' has no set mapped`, ...SESSION.asDict() });
       return { error: 'no set' };
     }
-    console.log(`[session] '${title}' + kind '${kind}' -> set '${setName}'`);
+    console.log(
+      `[session] '${title}' + auto(rewatch=${wantRewatch}) -> set '${setName}'`,
+    );
   } else {
     profileTitle = cardProfile;
   }
@@ -288,6 +296,8 @@ export async function startSession(
   if (typeof provider.profileBinding === 'function') {
     binding = await provider.profileBinding(binding, profileTitle);
   }
+  // Product kind on the session / retained state — never the legacy wire spellings.
+  const kind = wireKindForSet(cfg);
   SESSION.kind = kind;
   SESSION.set = setName;
   SESSION.profile = profileTitle;

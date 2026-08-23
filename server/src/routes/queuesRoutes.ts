@@ -208,6 +208,9 @@ export function queuesRoutes(): Hono {
         result[s.id] = {
           label: s.label,
           kind: s.kind,
+          // Effective lane default — without it the UI sees kind:picks for every hand-picked
+          // set and treats them all as random (drag off, alpha sort).
+          ...(s.source === 'queue' && 'add_as' in s ? { add_as: s.add_as } : {}),
           source: s.source,
           sections: s.sections,
           count: entries.length,
@@ -259,7 +262,10 @@ export function queuesRoutes(): Hono {
 
       const reg = await sets.getRegistry();
       const all = await queues.listAll();
-      const result: Record<string, { label: unknown; kind: unknown; source: unknown; sections: unknown; items: unknown[] }> = {};
+      const result: Record<string, {
+        label: unknown; kind: unknown; source: unknown; sections: unknown;
+        items: unknown[]; add_as?: unknown;
+      }> = {};
       // One flat work list across every set, so the concurrency budget is spent globally.
       const work: { s: typeof reg.sets[number]; e: QueueEntry }[] = [];
       // A PULL set resolves through ITS provider instead — per set, because the provider seam
@@ -268,7 +274,14 @@ export function queuesRoutes(): Hono {
       // heard of a Kavita seriesId: no poster, no next-up, just the stored title.
       const pull: { s: typeof reg.sets[number]; entries: QueueEntry[] }[] = [];
       for (const s of reg.sets) {
-        result[s.id] = { label: s.label, kind: s.kind, source: s.source, sections: s.sections, items: [] };
+        result[s.id] = {
+          label: s.label,
+          kind: s.kind,
+          source: s.source,
+          sections: s.sections,
+          items: [],
+          ...(s.source === 'queue' && 'add_as' in s ? { add_as: s.add_as } : {}),
+        };
         if (s.source !== 'queue') continue;
         const entries = all.get(s.id) || [];
         if (s.delivery === 'pull') {

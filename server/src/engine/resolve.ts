@@ -24,6 +24,7 @@ import {
 } from './select.js';
 import { isUnweighted, toWeight, weightedShuffle } from './weight.js';
 import { initialQueueSize, playbackLength } from './playbackLength.js';
+import { isRandomOrder } from '../kind.js';
 import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
@@ -951,9 +952,10 @@ export async function nextQueue(
 
   let playItems: ResolvedItem[];
   let leadBatch: Batch | null;
-  if (cfg.kind === 'anime') {
-    // Channel: member order is irrelevant AND shuffled — but an in-progress member LEADS so it
-    // resumes. Hoist in-progress batches (file order among them), shuffle the rest via `rng`.
+  if (isRandomOrder(cfg)) {
+    // Random-pool Picks (legacy kind: anime): member order is irrelevant AND shuffled — but
+    // an in-progress member LEADS so it resumes. Hoist in-progress batches (file order among
+    // them), shuffle the rest via `rng`.
     const lead = batches.filter(leadsInProgress);
     const rest = batches.filter((b) => !leadsInProgress(b));
     // A channel plays each member ONCE per scan and gets cut at ROTATION_LENGTH, so "comes up

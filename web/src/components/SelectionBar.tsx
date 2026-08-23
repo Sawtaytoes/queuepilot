@@ -1,6 +1,7 @@
 import { Button } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
+import { isRandomOrder } from "../lib/kind"
 import { openPlayMenu } from "../state/overlays"
 import {
   clearSelection,
@@ -75,7 +76,7 @@ export function SelectionBar({
       ? reg?.sets.find((s) => s.id === currentSet)?.episodes
       : null) ?? 1
   const family =
-    currentSet && data?.sets[currentSet]?.kind === "anime"
+    currentSet && isRandomOrder(data?.sets[currentSet])
       ? channelSetIds(data)
       : queueIds(data)
   const options = family.filter((id) => id !== currentSet)

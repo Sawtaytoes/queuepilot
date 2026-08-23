@@ -5,6 +5,7 @@ import { useLocation } from "react-router"
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
 import { SET_LENGTH_PRESETS } from "../lib/countPicker"
+import { normalizeAddAs } from "../lib/kind"
 import type {
   Profile,
   ProviderBlockValue,
@@ -26,10 +27,9 @@ import { SelectListbox } from "./SelectListbox"
 /**
  * Create / edit a curated set. Create: empty; edit: prefilled + rename/delete.
  *
- * Both options are a Picks queue. The stored values are still `movies` (Priority by
- * default — top plays next) and `anime` (Random by default) until `add_as` /
- * `placement` land (decision `2026-08-23-kind-is-picks-or-rules`). The labels name
- * the default lane, not two product types.
+ * Both options are a Picks queue. The Type control picks the default lane (`add_as`:
+ * priority vs random). Product `kind` is always `picks`
+ * (decision `2026-08-23-kind-is-picks-or-rules`).
  *
  * The id is immutable and NFC cards / HA reference it, so the note says so on both
  * paths — renaming the label never breaks a card.
@@ -96,7 +96,10 @@ export function SetModal() {
       )
 
   const [label, setLabel] = useState("")
-  const [kind, setKind] = useState("movies")
+  /** Default lane for new entries: priority | random. Product kind is always picks. */
+  const [addAs, setAddAs] = useState<"priority" | "random">(
+    "priority",
+  )
   const [requiresProfile, setRequiresProfile] = useState("")
   const [isKeepCompleted, setIsKeepCompleted] =
     useState(false)
@@ -142,10 +145,16 @@ export function SetModal() {
     if (!setModal) return
 
     setLabel(editing ? editing.label : "")
-    const nextKind = editing
-      ? editing.kind
-      : setModal.presetKind || "movies"
-    setKind(nextKind)
+    const nextAddAs = editing
+      ? normalizeAddAs(editing.add_as, {
+          kind: editing.kind,
+          source: editing.source,
+        })
+      : normalizeAddAs(undefined, {
+          kind: setModal.presetKind || "movies",
+          source: "queue",
+        })
+    setAddAs(nextAddAs)
     setRequiresProfile(
       editing ? editing.requires_profile || "" : "",
     )
@@ -164,15 +173,16 @@ export function SetModal() {
       editing?.length ?? editing?.length_default ?? 1,
     )
     setIsPoweringOff(Boolean(editing?.power_off_when_done))
-    // Prefill: edit uses the stored TTL; a new movie queue defaults to 24h (matches the
-    // seeded movie queues in sets.yaml). Anime stays blank = keep forever.
+    // Prefill: edit uses the stored TTL; a new priority picks queue defaults to 24h
+    // (matches the seeded movie queues in sets.yaml). Random-pool picks stay blank =
+    // keep forever (legacy anime).
     if (editing) {
       setRemoveCompletedAfter(
         editing.remove_completed_after || "",
       )
     } else {
       setRemoveCompletedAfter(
-        nextKind === "anime" ? "" : "24h",
+        nextAddAs === "random" ? "" : "24h",
       )
     }
     // Seed the blocks. An existing set always reports at least one (the implicit Plex block
@@ -320,7 +330,8 @@ export function SetModal() {
       blocks.length === 1 && blocks[0].provider === "plex"
 
     const body = {
-      kind,
+      kind: "picks" as const,
+      add_as: addAs,
       label: name,
       // `sections` stays in sync with the PLEX blocks' libraries even when blocks are
       // written, because the engine's curated/rotation readers still resolve Plex through
@@ -363,7 +374,7 @@ export function SetModal() {
 
     try {
       const word =
-        kind === "anime"
+        addAs === "random"
           ? "Picks queue (random)"
           : "Picks queue (priority)"
 
@@ -536,21 +547,23 @@ export function SetModal() {
           id="set-kind"
           key={modalKey}
           label="Type"
-          onChange={setKind}
+          onChange={(v) =>
+            setAddAs(v === "random" ? "random" : "priority")
+          }
           options={[
             {
-              // Both are Picks. The dash clause is the default lane until `add_as` is a
-              // real field (decision `2026-08-23-kind-is-picks-or-rules`).
+              // Both are Picks. The value is the default lane (`add_as`)
+              // (decision `2026-08-23-kind-is-picks-or-rules`).
               label:
                 "Picks — priority by default (top plays next)",
-              value: "movies",
+              value: "priority",
             },
             {
               label: "Picks — random by default",
-              value: "anime",
+              value: "random",
             },
           ]}
-          value={kind}
+          value={addAs}
         />
       </label>
       {/* WHERE IT LANDS, said out loud, so filing is never a thing you discover afterwards.
@@ -655,7 +668,7 @@ export function SetModal() {
           />
         </div>
         <p className="subhint" id="set-length-hint">
-          {`How many entries play before this ${kind === "anime" ? "pool" : "queue"} stops. One entry is
+          {`How many entries play before this ${addAs === "random" ? "pool" : "queue"} stops. One entry is
             the ${vocab.member} at the top — and if that ${vocab.member} is set to more than one
             ${vocab.unit} a visit, it still contributes all of them. Infinite plays the whole list.`}
         </p>

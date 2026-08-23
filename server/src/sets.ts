@@ -24,6 +24,7 @@ import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind 
 import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { isNodeError } from './errors.js';
+import { kindForWrite, normalizeAddAs, normalizeProductKind } from './kind.js';
 import type {
   BatchStop,
   Binding,
@@ -180,35 +181,41 @@ const DEFAULT_YAML = `# queuepilot set registry — the single source of truth f
 sets:
   - id: bob
     label: Bob — Movies
-    kind: movies
+    kind: picks
+    add_as: priority
     source: queue
     sections: [1, 14]
     remove_completed_after: 24h  # movie queues opt in; anime channels stay keep-forever
   - id: bob_alice
     label: Bob & Alice — Movies
-    kind: movies
+    kind: picks
+    add_as: priority
     source: queue
     sections: [1, 14]
     remove_completed_after: 24h
   - id: family
     label: Family — Movies
-    kind: movies
+    kind: picks
+    add_as: priority
     source: queue
     sections: [1, 14]
     remove_completed_after: 24h
   - id: bob_anime
     label: Bob — Anime
-    kind: anime
+    kind: picks
+    add_as: random
     source: queue
     sections: [11]
   - id: bob_alice_anime
     label: Bob & Alice — Anime
-    kind: anime
+    kind: picks
+    add_as: random
     source: queue
     sections: [11]
   - id: family_anime
     label: Family — Anime
-    kind: anime
+    kind: picks
+    add_as: random
     source: queue
     sections: [11]
   # The legacy per-tier sets (younger/older) are kept for the soak, marked superseded so
@@ -217,7 +224,7 @@ sets:
   # channels below. (Migration: 2026-07-23-live-tier-migration-to-function-channels.)
   - id: younger
     label: Younger Kids
-    kind: cartoons
+    kind: rules
     source: rotation
     sections: [5]
     item_sections: [15]
@@ -231,7 +238,7 @@ sets:
     superseded_by: shows_shorts,movies
   - id: older
     label: Older Kids
-    kind: cartoons
+    kind: rules
     source: rotation
     sections: [5]
     item_sections: [15]
@@ -247,7 +254,7 @@ sets:
   # tier binding). Named by FUNCTION, not by profile — each carries both tiers as profiles[].
   - id: shows_shorts
     label: Shows & Shorts
-    kind: cartoons
+    kind: rules
     source: rotation
     behavior: progress
     sections: [5]
@@ -271,7 +278,7 @@ sets:
   # anime films). Add Documentaries/Anime here to widen it.
   - id: movies
     label: Movies
-    kind: movies
+    kind: rules
     source: rotation
     behavior: rewatch
     sections: []
@@ -632,13 +639,15 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     length_default: defaultFor({
       behavior: ent.behavior,
       kind: ent.kind,
+      add_as: ent.add_as,
       mode: ent.mode,
       source: isRotation ? 'rotation' : 'queue',
     }) ?? 1,
     power_off_when_done: ent.power_off_when_done === true,
     id,
     label: String(ent.label || id),
-    kind: ent.kind || 'movies',
+    // Product kind on the API surface; legacy movies/anime/cartoons still accepted on disk.
+    kind: normalizeProductKind(ent.kind, source),
     sections: toInts(ent.sections),
     item_sections: toInts(ent.item_sections),
     allowed_ratings: def ? def.allowed_ratings : (Array.isArray(ent.allowed_ratings) ? ent.allowed_ratings.map(String) : null),
@@ -743,6 +752,13 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
   return {
     ...common,
     source: 'queue',
+    // Default lane for NEW entries. Effective value always reported so the editor does not
+    // re-derive legacy movies→priority / anime→random.
+    add_as: normalizeAddAs(ent.add_as, { kind: ent.kind, source: 'queue' }),
+    promote_window:
+      ent.promote_window != null && String(ent.promote_window).trim()
+        ? String(ent.promote_window).trim()
+        : null,
     keep_completed: Boolean(ent.keep_completed || ent.reel),
     reel: Boolean(ent.reel),
     remove_completed_after:
@@ -837,7 +853,7 @@ function rotationCreateObj(id: string, body: Record<string, unknown>): Record<st
   const obj: Record<string, unknown> = {
     id,
     label: String(body.label).trim(),
-    kind: body.kind ? String(body.kind) : 'cartoons',
+    kind: kindForWrite(body.kind, 'rotation').kind,
     source: 'rotation',
     sections: toInts(body.sections),
     item_sections: toInts(body.item_sections),
@@ -988,7 +1004,15 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
     // overwritten wholesale on the only branch that reads it.
     let curated: Record<string, unknown> = {};
     if (!isRotation) {
-      curated = { id, label: String(label).trim(), kind: kind === 'anime' ? 'anime' : 'movies', source: 'queue', sections: secs };
+      const written = kindForWrite(kind, 'queue');
+      curated = {
+        id,
+        label: String(label).trim(),
+        kind: written.kind,
+        source: 'queue',
+        sections: secs,
+      };
+      if (written.add_as) curated.add_as = written.add_as;
       const mi = toPosIntOrNull(body.max_items);
       if (mi) curated.max_items = mi;
       // Optional profile gate (blank => ungated). Only curated queues carry it; rotation
@@ -1052,6 +1076,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
     const isRotation = node.get('source') === 'rotation';
     const allow = [
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
+      // Picks-only lane default + lead cooldown (rejected below on rotation).
+      'add_as', 'promote_window',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
       'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at',
       // The items this queue never plays. Queue-only (rejected below on rotation, where
@@ -1106,6 +1132,40 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // narrow it per key exactly as the JS did; nothing here indexes `patch` by a typed key,
       // so no cast is needed to keep the runtime behaviour identical.
       let v: unknown = patch[k];
+      if (k === 'kind') {
+        // Product kind only on disk. Legacy create-UI values (movies/anime) still map via
+        // kindForWrite and may also stamp add_as when the caller did not send one.
+        const written = kindForWrite(v, isRotation ? 'rotation' : 'queue');
+        setKeepingComment(node, 'kind', doc.createNode(written.kind));
+        if (!isRotation && written.add_as && !('add_as' in patch)) {
+          setKeepingComment(node, 'add_as', doc.createNode(written.add_as));
+        }
+        if (isRotation) {
+          node.delete('add_as');
+          node.delete('promote_window');
+        }
+        continue;
+      }
+      if (k === 'add_as') {
+        if (isRotation) throw new Error('add_as is only valid on picks queues');
+        const a = String(v ?? '').trim().toLowerCase();
+        if (a !== 'priority' && a !== 'random') {
+          node.delete('add_as');
+          continue;
+        }
+        setKeepingComment(node, 'add_as', doc.createNode(a));
+        continue;
+      }
+      if (k === 'promote_window') {
+        if (isRotation) throw new Error('promote_window is only valid on picks queues');
+        const s = v == null ? '' : String(v).trim();
+        if (!s || ['0', 'never', 'off', 'none', 'disabled'].includes(s.toLowerCase())) {
+          node.delete('promote_window');
+          continue;
+        }
+        setKeepingComment(node, 'promote_window', doc.createNode(s));
+        continue;
+      }
       if (k === 'keep_completed' || k === 'reel') {
         // Queue-only booleans. false/absent drops the key so the file stays sparse.
         // Rotation channels have no consumption model here — reject rather than no-op so a
@@ -1390,7 +1450,7 @@ export async function migrateLegacyTiers(): Promise<
     const showsObj: Record<string, unknown> = {
       id: 'shows_shorts',
       label: 'Shows & Shorts',
-      kind: 'cartoons',
+      kind: 'rules',
       source: 'rotation',
       behavior: 'progress',
       sections: uniqInts(raw.map((e) => e.sections || [])),
@@ -1402,7 +1462,7 @@ export async function migrateLegacyTiers(): Promise<
     const moviesObj = {
       id: 'movies',
       label: 'Movies',
-      kind: 'movies',
+      kind: 'rules',
       source: 'rotation',
       behavior: 'rewatch',
       // The rewatch pool reads the whole Movies library (queue_builder scopes it by the

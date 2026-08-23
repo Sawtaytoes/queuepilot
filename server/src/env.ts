@@ -291,6 +291,11 @@ export const OLLAMA_MODEL = str('OLLAMA_MODEL', 'gemma3:4b');
 // Deletable, gitignored, never backed up. `rm` it and the app rebuilds it.
 export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
 
+// --- Priority-queue lead cooldowns (decision 2026-08-23-kind-is-picks-or-rules) //
+// DURABLE — not the derived cache. A wipe here forgets "this title already led today".
+// Lives beside sets.yaml / queues.yaml on the config mount.
+export const PROMOTE_PATH = str('PROMOTE_PATH', '/config/promote.sqlite');
+
 // --- providers (decision 2026-08-12-backends-are-providers-behind-a-media-neutral-seam) //
 // Definitions are plaintext and live beside sets.yaml / queues.yaml. TOKENS DO NOT: they get
 // their own 0600 file, holding nothing but id -> token, excluded from the YAML-editing,

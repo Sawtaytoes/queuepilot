@@ -256,6 +256,8 @@ export type TileEntry = QueueItem | ChannelMember
 export type QueueSet = {
   label: string
   kind: string
+  /** Effective lane default from the registry. Needed once kind is always `picks`. */
+  add_as?: "priority" | "random"
   source: "queue" | "rotation" | string
   sections: number[]
   items: QueueItem[]
@@ -283,6 +285,7 @@ export type ShelfItem = {
 export type ShelfSet = {
   label: string
   kind: string
+  add_as?: "priority" | "random"
   source: "queue" | "rotation" | string
   sections: number[]
   count: number
@@ -308,7 +311,15 @@ export type Binding = {
 export type RegistrySet = {
   id: string
   label: string
+  /** Product kind `picks` | `rules` after server normalize; legacy spellings may linger in cache. */
   kind: string
+  /**
+   * Default lane for NEW entries on a Picks queue: `priority` | `random`.
+   * Effective value from the server (legacy movies → priority, anime → random).
+   */
+  add_as?: "priority" | "random"
+  /** Default lead cooldown (`24h`, …). Picks only. */
+  promote_window?: string | null
   source: "queue" | "rotation" | string
   sections: number[]
   item_sections?: number[]

@@ -33,6 +33,7 @@
 // combination that could only ever be wrong: `infinite` with top-up off, which silently stops
 // at 12.
 import { ROTATION_LENGTH, ROTATION_LENGTH_MAX } from '../env.js';
+import { isRandomOrder } from '../kind.js';
 
 /** The named infinite form, on the wire and on disk. */
 export const INFINITE = 'infinite';
@@ -50,17 +51,18 @@ export type PlaybackTarget = number | null;
 export function defaultFor(cfg: {
   source?: unknown;
   kind?: unknown;
+  add_as?: unknown;
   behavior?: unknown;
   mode?: unknown;
 } | null | undefined): PlaybackTarget {
   const source = String(cfg?.source ?? '').toLowerCase();
-  const kind = String(cfg?.kind ?? '').toLowerCase();
   const isRewatch = String(cfg?.behavior ?? cfg?.mode ?? '').toLowerCase() === 'rewatch';
 
   // A rewatch pool has always returned exactly one film per scan.
   if (source === 'rotation' && isRewatch) return 1;
-  // A filtered pool on progress, and a curated pool, have always filled a window.
-  if (source === 'rotation' || kind === 'anime') return ROTATION_LENGTH;
+  // A filtered pool on progress, and a Random-pool Picks queue (legacy kind: anime),
+  // have always filled a window. isRandomOrder tolerates the pre-migration spelling.
+  if (source === 'rotation' || isRandomOrder(cfg)) return ROTATION_LENGTH;
 
   // An ORDERED queue has always played its head entry and nothing else, so its default is 1 —
   // and on that ONE path the unit is ENTRIES, not items.
