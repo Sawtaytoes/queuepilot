@@ -25,6 +25,7 @@ import { Poster } from "../components/Poster"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { SelectListbox } from "../components/SelectListbox"
+import { SkippedPanel } from "../components/SkippedPanel"
 import { Tip } from "../components/Tip"
 import { useFlipList } from "../hooks/useFlipList"
 import { useGridDrag } from "../hooks/useGridDrag"
@@ -829,6 +830,12 @@ export function QueueView({
           />
         </span>
       </div>
+
+      {/* SKIPPED — between the toolbar and the grid, because that is where it is ABOUT
+          something: it explains why a tile below names the episode it names. Collapsed, and
+          absent entirely on a queue that has never skipped anything, so the common case pays
+          nothing for it. */}
+      {setId ? <SkippedPanel setId={setId} /> : null}
 
       <ul
         className={`grid ${view.density}`}

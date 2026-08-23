@@ -444,19 +444,26 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      * someone's self-hosted Kavita. Index-aligned with `ids`; a vanished series resolves to
      * null rather than throwing, so one deleted entry cannot make a whole queue un-renderable.
      */
-    async tiles(ids) {
+    async tiles(ids, _entries, opts) {
+      // The queue's SKIP list, in Kavita chapter ids. Applied here as well as in `buckets`
+      // below, and for the same reason the Plex tile applies it: a caption naming the chapter
+      // the next launch will refuse to open reads as the feature not working.
+      const skipped = new Set((opts?.skipped || []).map(String));
       return mapLimit([...ids].map(String), PROBE_CONCURRENCY, async (id) => {
         try {
           const [s, detail] = await Promise.all([c.series(id), c.seriesDetail(id)]);
           if (!s) return null;
-          const unread = orderedUnread(detail);
+          const unread = orderedUnread(detail)
+            .filter((e) => !skipped.has(String(e.chapter.id)));
           return {
             id: String(s.id ?? id),
             title: s.name,
             libraryId: String(s.libraryId ?? ''),
             format: s.format ?? null,
-            // Chapters left, the same "how much is waiting" the pool tile means.
-            unreadCount: detail?.unreadCount ?? unread.length,
+            // Chapters left, the same "how much is waiting" the pool tile means. Kavita's own
+            // `unreadCount` cannot see the skip list, so it is only trusted when this queue
+            // skips nothing — otherwise the tile would count chapters it will never open.
+            unreadCount: skipped.size ? unread.length : (detail?.unreadCount ?? unread.length),
             // `unread.length` is the guard `noUncheckedIndexedAccess` cannot see — the same
             // assertion the pool branch below already writes for the same read.
             next: unread.length ? chapterItem(unread[0] as UnreadEntry, Number(id)) : null,
@@ -647,6 +654,9 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // nor `batch` is on RoutingSetCfg — both live on a provider BLOCK — so they are read
       // through an index view. Only `max_items` is a real set field.
       const cfgAny = cfg as Record<string, unknown>;
+      // The set's skip list. On `cfg` rather than a new context field because it is a SET
+      // property, exactly like `max_items` — the one other real set field read through here.
+      const skipped = new Set(((cfgAny.skipped as unknown[] | undefined) || []).map(String));
       const named = (libraries.length ? libraries : ((cfgAny.libraries as string[] | undefined) || [])).map(String);
       const curated = entries.filter((e) => e && e.id);
       // ENTRIES BEAT LIBRARIES (see this method's header), so the "every library" widening
@@ -735,7 +745,11 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         // mixed series could not apply the volumes-first order). series-detail is
         // the same call tiles/pool already pay for; the volume context is load-bearing.
         const detail = await c.seriesDetail(s.id as number | string);
-        const unread = orderedUnread(detail).filter((e) => atOrAfterStart(e, start));
+        const unread = orderedUnread(detail)
+          .filter((e) => atOrAfterStart(e, start))
+          // The queue's SKIP list — chapter ids it never opens, the reading twin of the Plex
+          // resolver's leaf filter. `cfg` already carries it, so no signature changes.
+          .filter((e) => !skipped.has(String(e.chapter.id)));
         if (!unread.length) return null;
         const head = chapterItem(unread[0] as UnreadEntry, s.id);
         // A volume-based manga must not inherit the chapter count — that is the live

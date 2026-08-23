@@ -54,6 +54,7 @@ type RawSetEntry = BindingSource & {
   weights?: unknown;
   on_complete_by_show?: unknown;
   blocklist?: unknown;
+  skipped?: unknown;
   members?: unknown;
   collection_members?: unknown;
   superseded_by?: unknown;
@@ -216,6 +217,12 @@ export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
         allowed_ratings: null,
         movie_ratings: null,
         movie_excludes: [],
+        // The items this queue never plays — the curated twin of a rotation's `blocklist`,
+        // read by engine/resolve.js on every path that resolves an entry. A passthrough this
+        // loader forgets does not throw: it reads `undefined` at the consumer and silently
+        // disables the feature (see the `on_complete_by_show` note above), which for this one
+        // would mean every skip in the file quietly playing again.
+        skipped: ((ent.skipped as unknown[] | null | undefined) || []).map(String),
         // A REEL replays in full every scan (build_reel); keep_completed marks a non-consuming
         // queue. reel implies keep_completed. Both gate next_queue's D4 mark-done persistence.
         reel: Boolean(ent.reel),

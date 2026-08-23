@@ -396,6 +396,13 @@ jobs:
       - name: Queue write-side (markDone/clearDone)
         run: $TSX e2e/mark-done-parity.ts
 
+      # A curated queue's `skipped` list — the item-level exclude a Filtered Pool has had as
+      # `blocklist` all along. The claim worth a gate is the WRITE side: an entry emptied only
+      # by a skip must never reach `newlyDone`, or `markDone` retires it and the TTL sweep can
+      # delete the line the skip was supposed to be undoable from.
+      - name: Curated queue skips (offline engine)
+        run: $TSX e2e/skipped-items-test.ts
+
       # THE ENTRY FORMAT (2026-08-21): a queues.yaml entry is an object. Three claims, and the
       # first is the expensive one to get wrong — the migration must not silently drop a
       # sibling field (`done_at`, `start`, `weight`, a field this code has never heard of),

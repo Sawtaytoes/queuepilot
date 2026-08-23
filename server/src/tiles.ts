@@ -59,6 +59,7 @@ export async function resolveTile(
   value: unknown,
   start: Start | null = null,
   opts: AccountScope = {},
+  skipped: ReadonlySet<string> = new Set<string>(),
 ): Promise<ResolvedTile> {
   let resolved: ResolvedItem | null = null;
   try {
@@ -69,6 +70,10 @@ export async function resolveTile(
 
   // `opts` ({token, account}) scopes the next-up "watched" state to a Plex Home profile for a
   // per-profile channel's member tiles; empty for queues/admin (Bob's view), unchanged.
+  //
+  // `skipped` is the curated set's own skip list. The tile has to apply it for the same reason
+  // the engine does: a caption naming the episode the next scan will refuse to play is worse
+  // than no caption, because it reads as the feature not working.
   let nextEp: NextEp | CollectionNextEp | null = null;
   // A null `nextEp` means two different things — "nothing left to play" and "the lookup
   // failed" — and the tile says something different for each ("All watched" vs the neutral
@@ -76,13 +81,13 @@ export async function resolveTile(
   let isNextEpFailed = false;
   if (resolved && resolved.type === 'show') {
     try {
-      nextEp = await plex.nextEpisode(resolved.ratingKey, start, opts);
+      nextEp = await plex.nextEpisode(resolved.ratingKey, start, opts, skipped);
     } catch {
       isNextEpFailed = true;
     }
   } else if (resolved && resolved.type === 'collection') {
     try {
-      nextEp = await plex.collectionNext(resolved.ratingKey, start, opts);
+      nextEp = await plex.collectionNext(resolved.ratingKey, start, opts, skipped);
     } catch {
       isNextEpFailed = true;
     }

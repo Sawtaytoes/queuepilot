@@ -835,6 +835,56 @@ export async function resolveValue(
   return null;
 }
 
+/**
+ * One LEAF, named well enough to recognise in a list — what the Skipped panel prints.
+ *
+ * Deliberately not `resolveValue`, which answers only for a movie or a show: the things a
+ * queue skips are mostly EPISODES, and `resolveValue` returns null for one. An episode also
+ * cannot name itself ("Episode 5" is every show's episode 5), so the show and the S/E ride
+ * along and the panel joins them.
+ */
+export interface ItemLabel {
+  ratingKey: string;
+  type: string | null;
+  title: string;
+  year: number | null;
+  /** Episodes only — the series this leaf belongs to. */
+  show: string | null;
+  season: number | null;
+  episode: number | null;
+}
+
+/**
+ * Read one ratingKey's display fields, whatever kind of item it is.
+ *
+ * Returns a placeholder rather than null for a dead id: a skip whose library item has since
+ * been deleted must still show up in the panel with a working ✕, or the only way to clear it
+ * is to hand-edit `sets.yaml`.
+ */
+export async function itemLabel(ratingKey: string | number): Promise<ItemLabel> {
+  const rk = String(ratingKey);
+  const missing: ItemLabel = {
+    ratingKey: rk, type: null, title: `#${rk}`, year: null, show: null, season: null, episode: null,
+  };
+  let md;
+  try {
+    md = (container(await plexGet(`/library/metadata/${rk}`)).Metadata || [])[0];
+  } catch {
+    return missing;
+  }
+  if (!md) return missing;
+  return {
+    ratingKey: rk,
+    type: md.type ?? null,
+    title: md.title || `#${rk}`,
+    year: md.year ?? null,
+    // `grandparentTitle` is the SERIES on an episode; absent on everything else.
+    show: md.grandparentTitle ?? null,
+    season: md.parentIndex ?? null,
+    episode: md.index ?? null,
+  };
+}
+
 /** One item's live watch state — the three fields a movie tile's badges are computed from. */
 export interface ViewState {
   viewCount: number;
@@ -961,16 +1011,28 @@ async function allLeaves(
   return eps;
 }
 
+/**
+ * "This set skips nothing" — the default for every caller that has no set in hand.
+ *
+ * A shared frozen empty set rather than a fresh `new Set()` per call: `collectionNext` asks
+ * `nextEpisode` once per member, and a rotation channel's member grid resolves hundreds of
+ * tiles per paint.
+ */
+const NO_SKIPS: ReadonlySet<string> = new Set<string>();
+
 // --- next unwatched episode for a series. Queues/admin read Bob's view; a per-profile channel
 // passes `opts` ({token, account}) so allLeaves' viewCount IS that profile's watched state — no
 // history API needed. Skips Season 0 specials and zero-duration items, matching the Python
 // _keep_episode rule. null = fully watched.
 // `start` (optional {season, episode}) floors the pick — the tile shows where a manual
 // start override will actually begin, mirroring the engine's resolve_member floor.
+// `skipped` is the SET's own skip list — the leaf keys it never plays (engine/resolve.ts owns
+// the same rule at scan time; this keeps the tile's caption honest about it).
 export async function nextEpisode(
   showRatingKey: string | number,
   start: Start | null = null,
   opts: AccountScope = {},
+  skipped: ReadonlySet<string> = NO_SKIPS,
 ): Promise<NextEp | null> {
   const eps = await allLeaves(showRatingKey, opts);
   if (!eps) return null;
@@ -997,11 +1059,16 @@ export async function nextEpisode(
     // viewCount is OMITTED by Plex at 0, so a missing count is unwatched here — never watched.
     if (e.viewCount && e.viewCount > 0) continue; // already watched by Bob
     if (!atOrAfterStart(e, start)) continue; // manual start floor
+    // On the set's SKIP list. Applied here as well as in the engine, or the tile would keep
+    // naming an episode the next scan is never going to play — the caption and the playback
+    // disagreeing is the whole failure this guards.
+    if (skipped.has(String(e.ratingKey))) continue;
     // This next-up leaf is unwatched; a viewOffset means it was STARTED (mid-episode resume
     // point), which the tile surfaces as its "In Progress" badge (same predicate as the
     // engine's resume_offset: viewOffset > 0 AND unwatched).
     const viewOffset = Number(e.viewOffset) || 0;
     return {
+      ratingKey: String(e.ratingKey),
       season: e.parentIndex ?? null, episode: e.index ?? null, title: e.title || '',
       multiSeason, viewOffset, duration: Number(e.duration) || 0, partiallyWatched: viewOffset > 0,
     };
@@ -1153,6 +1220,7 @@ export async function collectionNext(
   collectionRatingKey: string | number,
   start: Start | null = null,
   opts: AccountScope = {},
+  skipped: ReadonlySet<string> = NO_SKIPS,
 ): Promise<CollectionNextEp | null> {
   // Read as the SAME account the next-up below is resolved as. This used to be an admin read
   // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
@@ -1168,12 +1236,15 @@ export async function collectionNext(
     if (floorAt >= 0 && i < floorAt) continue; // member is before the manual start
     const ch = children[i];
     if (!ch) continue; // unreachable — `i < children.length`; index reads are unchecked
+    // A skipped CHILD goes whole, matching `resolve.collectionItems`: the collection is the
+    // member, its children are the items inside it.
+    if (skipped.has(String(ch.ratingKey))) continue;
     const where = { member: ch.title, memberRatingKey: ch.ratingKey, memberYear: ch.year, position: i + 1, startMember };
     if (ch.type === 'show') {
       let ep = null;
       try {
         // The episode floor applies only to the member the start names, not to later ones.
-        ep = await nextEpisode(ch.ratingKey, floorAt === i ? start : null, opts);
+        ep = await nextEpisode(ch.ratingKey, floorAt === i ? start : null, opts, skipped);
       } catch {
         /* skip a show we can't read; try the next member */
       }
@@ -1183,7 +1254,8 @@ export async function collectionNext(
       if (ch.watched) continue;
       const viewOffset = Number(ch.viewOffset) || 0;
       return {
-        ...where, kind: 'movie', title: ch.title,
+        // A movie child IS the leaf, so the skippable key and the member key are the same one.
+        ...where, kind: 'movie', ratingKey: ch.ratingKey, title: ch.title,
         viewOffset, duration: Number(ch.duration) || 0, partiallyWatched: viewOffset > 0,
       };
     }

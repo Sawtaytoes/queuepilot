@@ -19,7 +19,7 @@ import { commitStart } from "./startCommit"
 /**
  * The tile context menu (right-click / long-press): the per-entry actions that used
  * to sit inline on the tile — *Start from an episode… / Start automatically (clear
- * override) / Remove*.
+ * override) / Skip “<item>” / Remove*.
  * (decision `2026-07-31-start-episode-is-picked-in-a-modal`)
  *
  * `#tilemenu` is always in the document and toggles `hidden`, matching the vanilla
@@ -146,6 +146,25 @@ export function TileMenu() {
           }}
         >
           Start automatically (clear override)
+        </Button>
+      ) : null}
+      {/* SKIP — "not this one", which is a different ask from "not this show". It drops the
+          one item the entry is about to play (the episode, the collection child) and leaves
+          the entry where it is, so the next scan moves on to the following one. `neutral`,
+          not `danger`: nothing is deleted, and it is undone from the queue's Skipped panel.
+          Absent entirely on an entry with no item inside it to skip — a movie IS its own
+          item, and Remove is the answer there. */}
+      {entry?.skip ? (
+        <Button
+          appearance="ghost"
+          intent="neutral"
+          isFullWidth
+          onClick={() => {
+            closeTileMenu()
+            entry.skip?.()
+          }}
+        >
+          {entry.skipLabel || "Skip this one"}
         </Button>
       ) : null}
       {entry?.remove ? (

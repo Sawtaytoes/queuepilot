@@ -75,6 +75,7 @@ interface RawSet extends RawBinding {
   sections?: unknown[];
   item_sections?: unknown[];
   blocklist?: unknown[];
+  skipped?: unknown[];
   mode?: string;
   behavior?: string;
   profiles?: unknown[];
@@ -643,6 +644,9 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     allowed_ratings: def ? def.allowed_ratings : (Array.isArray(ent.allowed_ratings) ? ent.allowed_ratings.map(String) : null),
     movie_ratings: def ? def.movie_ratings : (Array.isArray(ent.movie_ratings) ? ent.movie_ratings.map(String) : null),
     blocklist: Array.isArray(ent.blocklist) ? ent.blocklist.map(String) : [],
+    // The curated queue's own exclude list. Read from the top level on every set, like
+    // `blocklist`: it is not a per-profile value, so it never joins a `profiles[]` binding.
+    skipped: Array.isArray(ent.skipped) ? ent.skipped.map(String) : [],
     // 'whole' | 'split'. Reported as the EFFECTIVE value, never as the absence the file
     // stores, so the editor's picker has something to select without duplicating the default.
     collection_members: String(ent.collection_members ?? '').trim().toLowerCase() === 'split'
@@ -1050,6 +1054,9 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
       'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at',
+      // The items this queue never plays. Queue-only (rejected below on rotation, where
+      // `blocklist` is the same feature under the name the pool editor already uses).
+      'skipped',
       // The queue's default batch — the COUNT to batch_stops_at's WHERE. Valid on both
       // sources: a rule-based reading channel wants "3 chapters per series" just as much as
       // a curated one, and unlike the consumption flags it describes the LINEUP, not how
@@ -1164,6 +1171,22 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         if (!ok) throw new Error(errors.join('; '));
         if (!blocks.length) { node.delete('providers'); continue; }
         node.set('providers', doc.createNode(writableBlocks(blocks)));
+        continue;
+      }
+      if (k === 'skipped') {
+        // Whole-array replace, like members: the grid sends the full desired list, and an
+        // empty one drops the key so the file stays sparse.
+        //
+        // Rejected on rotation rather than accepted-and-ignored: a filtered pool already has
+        // `blocklist`, and quietly storing a second exclude list beside it would give one set
+        // two answers to the same question, with only one of them read.
+        if (isRotation) throw new Error('skipped is only valid on curated queues (use blocklist)');
+        // Deduped and blank-stripped, because the writers are a tile action and a hand edit:
+        // skipping the same leaf twice must not grow the file, and `- ` must not become a
+        // ratingKey called "undefined" that matches nothing forever.
+        const list = [...new Set((Array.isArray(v) ? v : []).map(String).map((x) => x.trim()).filter(Boolean))];
+        if (!list.length) { node.delete('skipped'); continue; }
+        node.set('skipped', doc.createNode(list));
         continue;
       }
       if (k === 'members') {
