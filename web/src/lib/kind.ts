@@ -56,6 +56,9 @@ export function normalizeAddAs(
   )
     return "priority"
   if (legacy === "anime") return "random"
+  // No kind on disk used to mean movies (ordered). Explicit `picks` with no
+  // add_as means random (ADR curated default).
+  if (!legacy) return "priority"
   return "random"
 }
 
