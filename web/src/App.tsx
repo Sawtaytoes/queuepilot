@@ -7,6 +7,7 @@ import { PlayMenu } from "./components/PlayMenu"
 import { SelectionBar } from "./components/SelectionBar"
 import { Toolbar } from "./components/Toolbar"
 import { useMediaQuery } from "./hooks/useMediaQuery"
+import { isRandomOrder } from "./lib/kind"
 import { activeSet } from "./lib/nowPlaying"
 import type { RegistrySet } from "./lib/types"
 import {
@@ -358,7 +359,7 @@ function computeChrome(
   if (route.view === "queue") {
     const q = data?.sets[route.id]
     const label = q?.label ?? "QueuePilot"
-    const isChannel = q?.kind === "anime"
+    const isChannel = isRandomOrder(q)
     // Plex's words unless the registry says otherwise, so a response that predates
     // `vocabulary` renders exactly as it always did.
     const vocab = reg?.sets.find((s) => s.id === route.id)
