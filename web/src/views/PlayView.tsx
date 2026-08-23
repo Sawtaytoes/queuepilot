@@ -198,8 +198,19 @@ function PlayCard({
             pill's own line-height fights. */}
         <span className="cardkind">{KIND_WORD[kind]}</span>
       </div>
+      {/* THE META OWNS A LINE. It used to be the first child of `.cardfoot`, sharing the
+          row with the start button, and `.cardfoot` wraps — so whether the button ended up
+          beside the meta or on a line of its own was decided by how many characters that
+          card's meta happened to have. Three cards in one row of the live grid had three
+          different layouts: "17 entries · random pool" fit, so its button sat right;
+          "Younger Kids · rotation · ratings-filtered" did not, so its button dropped to a
+          second line and (with nothing pushing it over) sat LEFT; "Younger Kids · weighted
+          rewatch" fit again. Same component, same CSS, three shapes.
+
+          Out here the line is unconditional: name, then meta, then the action on the floor,
+          on every card at every width. */}
+      <p className="rowmeta">{meta}</p>
       <div className="cardfoot">
-        <span className="rowmeta">{meta}</span>
         {tier}
         {isPullSet(set) ? (
           // Nothing to cast to — the launcher URL is the whole affordance.
