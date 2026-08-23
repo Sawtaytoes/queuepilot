@@ -3,7 +3,13 @@ import type { QueueItem } from "../lib/types"
 import { refreshData } from "./live"
 import type { EntryActions } from "./overlays"
 import { deselect } from "./selection"
-import { bumpRevision, getState, setStatus } from "./store"
+import {
+  bumpRevision,
+  fetchAll,
+  getState,
+  setState,
+  setStatus,
+} from "./store"
 
 /**
  * ONE entry's write side, shared by every grid that renders that entry.
@@ -57,9 +63,113 @@ export function removeQueueItem(
 }
 
 /**
+ * The LEAF this tile is about to play — the episode, or the collection child — or null when
+ * there is not one.
+ *
+ * Null in three cases, and each of them means "there is nothing here to skip": an entry that
+ * is a MOVIE (the entry is the leaf, and the way to stop it is Remove); an entry with nothing
+ * left to play; and a provider that resolves no leaf key. The tile menu asks this before it
+ * offers Skip, so the action is never offered where it would do nothing.
+ */
+export const skippableLeaf = (
+  item: QueueItem,
+): string | null => {
+  const rk = item.nextEp?.ratingKey
+
+  return rk ? String(rk) : null
+}
+
+/** What the Skip row says it will drop — the episode label, else the leaf's own title. */
+export const skipTarget = (item: QueueItem): string =>
+  item.nextEp?.title || item.title
+
+/**
+ * Skip the item this entry is about to play — add its leaf key to the SET's `skipped` list.
+ *
+ * A set-level list rather than a per-entry field, matching a filtered pool's `blocklist`: the
+ * thing being skipped is an episode or a collection child, and neither of those has a line in
+ * `queues.yaml` to hang a flag on. Permanent until it is cleared from the Skipped panel.
+ *
+ * NOT optimistic, unlike `removeQueueItem`. The visible result of a skip is the tile's NEXT-UP
+ * moving on to the following episode, and only the server can work out what that is — so there
+ * is nothing honest to paint before the round-trip. The re-read is `fetchAll`, because the
+ * write lands on the registry (`/api/sets/:id`) and the tile is rebuilt from `/api/queues`;
+ * `PATCH /api/sets/:id` busts the server's resolve cache, so the second read sees the new
+ * "next".
+ */
+export async function skipQueueItem(
+  setId: string | null | undefined,
+  item: QueueItem,
+) {
+  const leaf = skippableLeaf(item)
+
+  if (!setId || !leaf) return
+
+  const set = getState().reg?.sets.find(
+    (s) => s.id === setId,
+  )
+  const current = set?.skipped || []
+  const label = skipTarget(item)
+
+  // Already there — the same guard the blocklist picker uses. A second PATCH would be
+  // harmless (the server dedupes) but the toast would lie about having done something.
+  if (current.includes(leaf)) {
+    setStatus(`Already skipped — “${label}”`, "ok")
+
+    return
+  }
+
+  setStatus(`Skipping ${label}…`)
+
+  try {
+    await api("PATCH", `/api/sets/${setId}`, {
+      skipped: [...current, leaf],
+    })
+
+    const [data, reg] = await fetchAll()
+
+    setState({ data, reg })
+    setStatus(`Skipped “${label}”`, "ok")
+  } catch (e) {
+    setStatus(`Skip failed: ${(e as Error).message}`, "err")
+  }
+}
+
+/** Put one leaf back — the Skipped panel's ✕, and the only way a skip ever ends. */
+export async function unskipItem(
+  setId: string,
+  ratingKey: string,
+  label: string,
+) {
+  const set = getState().reg?.sets.find(
+    (s) => s.id === setId,
+  )
+
+  setStatus(`Restoring ${label}…`)
+
+  try {
+    await api("PATCH", `/api/sets/${setId}`, {
+      skipped: (set?.skipped || []).filter(
+        (rk) => rk !== ratingKey,
+      ),
+    })
+
+    const [data, reg] = await fetchAll()
+
+    setState({ data, reg })
+    setStatus(`Restored “${label}”`, "ok")
+  } catch (e) {
+    setStatus(
+      `Restore failed: ${(e as Error).message}`,
+      "err",
+    )
+  }
+}
+
+/**
  * What the tile menu, the start picker and the entry sheet need from ONE queue
- * entry: the entry, how to persist a start point, how to repaint, and how to
- * remove it.
+ * entry: the entry, how to persist a start point, how to repaint, how to skip the
+ * one item it is about to play, and how to remove it.
  */
 export const queueEntryActions = (
   setId: string | null | undefined,
@@ -70,6 +180,12 @@ export const queueEntryActions = (
   remove: () => removeQueueItem(setId, item),
   removeLabel: "Remove from this queue",
   setId,
+  // Absent when there is no leaf to skip, so the menu row is not rendered at all rather than
+  // rendered and inert.
+  skip: skippableLeaf(item)
+    ? () => void skipQueueItem(setId, item)
+    : undefined,
+  skipLabel: `Skip “${skipTarget(item)}”`,
   save: (start) =>
     api(
       "PATCH",

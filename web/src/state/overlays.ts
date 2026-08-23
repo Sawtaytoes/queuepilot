@@ -23,6 +23,13 @@ export type EntryActions = {
   refresh: () => void
   remove?: () => void
   removeLabel?: string
+  /**
+   * Skip the one ITEM this entry is about to play, keeping the entry itself. Absent when
+   * there is nothing inside the entry to skip — a movie entry, or one with nothing left —
+   * so the menu row is omitted rather than shown and inert.
+   */
+  skip?: () => void
+  skipLabel?: string
   /** A Plex Home profile's `user_uuid`, set for a per-profile channel so the start
    * picker scopes its "watched" marks to THAT profile (not the admin account). Omitted
    * for queues/admin, which read Bob's view. */
