@@ -10,8 +10,8 @@ process.env.PROMOTE_PATH = path.join(SCRATCH, 'promote.sqlite');
 const {
   normalizeProductKind, normalizeAddAs, isRandomOrder, wireKindForSet,
   kindForWrite, isAutoRewatch,
-} = await import('../server/src/kind.ts');
-const promote = await import('../server/src/promote.ts');
+} = await import('../server/src/kind.js');
+const promote = await import('../server/src/promote.js');
 
 assert.equal(normalizeProductKind('movies', 'queue'), 'picks');
 assert.equal(normalizeProductKind('anime', 'queue'), 'picks');
