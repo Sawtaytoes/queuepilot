@@ -304,7 +304,7 @@ export function ChannelsView({
           appearance="outline"
           id="newcurated"
           intent="accent"
-          onClick={() => openSetModal(null, "anime")}
+          onClick={() => openSetModal(null, "random")}
         >
           ＋ Picks queue
         </Button>

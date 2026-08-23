@@ -150,10 +150,7 @@ export function SetModal() {
           kind: editing.kind,
           source: editing.source,
         })
-      : normalizeAddAs(undefined, {
-          kind: setModal.presetKind || "movies",
-          source: "queue",
-        })
+      : (setModal.presetAddAs ?? "priority")
     setAddAs(nextAddAs)
     setRequiresProfile(
       editing ? editing.requires_profile || "" : "",

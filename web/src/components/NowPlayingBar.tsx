@@ -1,9 +1,10 @@
-import { IconButton, Slider } from "@charcuterie/ui"
+import { Button, IconButton, Slider } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import { api } from "../lib/api"
 import { isNowLive } from "../lib/nowPlaying"
 import { setStatus, useStore } from "../state/store"
+import { Modal } from "./Modal"
 import { Tip } from "./Tip"
 
 /**
@@ -56,6 +57,7 @@ const toClock = (seconds: number): string => {
 type ControlAction =
   | "next"
   | "pause"
+  | "power_off"
   | "resume"
   | "seek"
   | "stop"
@@ -84,6 +86,13 @@ export function NowPlayingBar() {
   } | null>(null)
 
   const [isBusy, setIsBusy] = useState(false)
+
+  // Power-off asks first. Stop is recoverable in one tap — press ▶ again — and powering the
+  // room down is not: it takes the TV and the receiver with it, and everyone in the room
+  // finds out at once. It also sits next to Stop, which is exactly the kind of neighbour a
+  // misfire lands on.
+  const [isConfirmingOff, setIsConfirmingOff] =
+    useState(false)
 
   const seekTimer = useRef<number | null>(null)
 
@@ -238,6 +247,20 @@ export function NowPlayingBar() {
             ⏹
           </IconButton>
         </Tip>
+
+        <Tip label="End the activity and power off">
+          <IconButton
+            appearance="solid"
+            intent="danger"
+            isDisabled={isBusy}
+            label="End the activity and power off"
+            onClick={() => {
+              setIsConfirmingOff(true)
+            }}
+          >
+            ⏻
+          </IconButton>
+        </Tip>
       </div>
 
       <div className="npbar-seek">
@@ -265,6 +288,49 @@ export function NowPlayingBar() {
           {duration > 0 ? toClock(duration) : "--:--"}
         </span>
       </div>
+
+      {/* Named for what it takes with it, not for the button that opened it. "Power off?"
+          would be answerable without knowing the TV and the receiver are both in scope. */}
+      <Modal
+        footer={
+          <>
+            <span className="spacer" />
+            <Button
+              appearance="outline"
+              id="poweroff-cancel"
+              intent="neutral"
+              onClick={() => {
+                setIsConfirmingOff(false)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              id="poweroff-confirm"
+              intent="danger"
+              type="submit"
+            >
+              End and power off
+            </Button>
+          </>
+        }
+        id="poweroffmodal"
+        isOpen={isConfirmingOff}
+        onClose={() => {
+          setIsConfirmingOff(false)
+        }}
+        onSubmit={() => {
+          setIsConfirmingOff(false)
+          void control("power_off")
+        }}
+        title="End the activity?"
+        titleId="poweroffmodal-title"
+      >
+        <p className="subhint">
+          {what} stops, and the room powers off — the TV and
+          the receiver both.
+        </p>
+      </Modal>
     </section>
   )
 }
