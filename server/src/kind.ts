@@ -67,7 +67,10 @@ export function normalizeAddAs(
   const legacy = String(opts.kind ?? '').trim().toLowerCase();
   if (LEGACY_PRIORITY.has(legacy)) return 'priority';
   if (LEGACY_RANDOM.has(legacy)) return 'random';
-  // Product `picks` with no add_as and no legacy cue → random (curated default).
+  // No kind on disk used to mean movies (ordered) — see sets.normalize's old
+  // `ent.kind || 'movies'` default and the synthetic bobq corpus. Explicit product
+  // `picks` with no add_as means random (ADR curated default).
+  if (!legacy) return 'priority';
   return 'random';
 }
 

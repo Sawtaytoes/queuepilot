@@ -25,9 +25,12 @@ assert.equal(normalizeAddAs(undefined, { kind: 'movies', source: 'queue' }), 'pr
 assert.equal(normalizeAddAs(undefined, { kind: 'anime', source: 'queue' }), 'random');
 assert.equal(normalizeAddAs('priority', { kind: 'picks' }), 'priority');
 assert.equal(normalizeAddAs(undefined, { kind: 'picks', source: 'queue' }), 'random');
+assert.equal(normalizeAddAs(undefined, { kind: null, source: 'queue' }), 'priority');
+assert.equal(normalizeAddAs(undefined, { source: 'queue' }), 'priority');
 
 assert.equal(isRandomOrder({ kind: 'anime', source: 'queue' }), true);
 assert.equal(isRandomOrder({ kind: 'movies', source: 'queue' }), false);
+assert.equal(isRandomOrder({ kind: null, source: 'queue' }), false);
 assert.equal(isRandomOrder({ kind: 'picks', add_as: 'random', source: 'queue' }), true);
 assert.equal(isRandomOrder({ kind: 'picks', add_as: 'priority', source: 'queue' }), false);
 assert.equal(isRandomOrder({ kind: 'cartoons', source: 'rotation' }), false);
