@@ -256,6 +256,8 @@ export type TileEntry = QueueItem | ChannelMember
 export type QueueSet = {
   label: string
   kind: string
+  /** Effective lane default from the registry. Needed once kind is always `picks`. */
+  add_as?: "priority" | "random"
   source: "queue" | "rotation" | string
   sections: number[]
   items: QueueItem[]
