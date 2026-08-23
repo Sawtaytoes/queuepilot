@@ -1836,12 +1836,17 @@ body.queue-view #tools {
   }
 }
 
-/* ---- Modal chrome, shared by the three dialogs ---- */
+/* ---- Modal chrome, shared by the dialogs ---- */
+/* EVERY id a `<Modal>` is mounted with belongs in these lists. The chrome is keyed off the
+   box id rather than a class (see components/Modal.tsx), so a new modal that is not named
+   here renders as unstyled text on top of the page — no surface, no border, no padding.
+   That is exactly how #poweroffmodal first shipped in a screenshot. */
 #startmodal,
 #setmodal,
 #dynmodal,
 #entrymodal,
-#groupsmodal {
+#groupsmodal,
+#poweroffmodal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
   border: 1px solid var(--color-border-default);
@@ -1873,22 +1878,35 @@ body.queue-view #tools {
 #groupsmodal {
   width: min(780px, 95vw);
 }
+/* A question and two buttons — narrower than every form here, because making it form-width
+   would read as "there is something to fill in". */
+#poweroffmodal {
+  width: min(400px, 92vw);
+}
 /* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
    native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
 #startmodal form,
 #setmodal form,
 #dynmodal form,
 #entrymodal form,
-#groupsmodal form {
+#groupsmodal form,
+#poweroffmodal form {
   position: relative;
 }
 #startmodal h3,
 #setmodal h3,
 #dynmodal h3,
 #entrymodal h3,
-#groupsmodal h3 {
+#groupsmodal h3,
+#poweroffmodal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
+}
+/* The sentence that says what goes off with it. Same treatment as #startmodal's hint. */
+#poweroffmodal .subhint {
+  color: var(--color-content-muted);
+  font-size: 0.86rem;
+  margin: 0 0 18px;
 }
 #startmodal h3 {
   margin-bottom: 10px;
@@ -2110,7 +2128,8 @@ body.queue-view #tools {
 #setmodal .modalbtns,
 #dynmodal .modalbtns,
 #entrymodal .modalbtns,
-#groupsmodal .modalbtns {
+#groupsmodal .modalbtns,
+#poweroffmodal .modalbtns {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -2128,7 +2147,8 @@ body.queue-view #tools {
 }
 #startmodal .modalbtns .spacer,
 #setmodal .modalbtns .spacer,
-#dynmodal .modalbtns .spacer {
+#dynmodal .modalbtns .spacer,
+#poweroffmodal .modalbtns .spacer {
   flex: 1;
 }
 /* Delete stays hard left, Close + Save sit hard right — the same left/right split the other

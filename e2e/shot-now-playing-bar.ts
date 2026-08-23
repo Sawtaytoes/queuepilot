@@ -123,6 +123,27 @@ try {
   await settle(true);
   await page.screenshot({ path: `__screenshots__/npbar-${TAG}-narrow.png`, fullPage: false });
 
+  // THE CONFIRMATION. Power-off is the one control here that cannot be undone with a second
+  // tap, so it asks first — and the modal has to name what it takes with it, because "the
+  // room" is a TV and a receiver rather than the thing the viewer is looking at.
+  //
+  // The press is never let through to `/api/control`: this fixture has no Plex and no
+  // broker, and the shot is of the QUESTION, not of the answer.
+  state = 'playing';
+  await page.setViewportSize({ width: 1420, height: 900 });
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await settle(true);
+  await page.route('**/api/control', async (route) => {
+    await route.fulfill({ body: '{"ok":true}', contentType: 'application/json', status: 200 });
+  });
+  await page.getByRole('button', { name: 'End the activity and power off' }).click();
+  await page.waitForSelector('#poweroffmodal[data-open]', { timeout: 30000 });
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `__screenshots__/npbar-${TAG}-poweroff.png`, fullPage: false });
+  await page.locator('#poweroff-cancel').click();
+  await page.waitForTimeout(400);
+  await page.unroute('**/api/control');
+
   // The BEFORE case, and the one that proves the bar costs nothing when idle: with no
   // session the payload is null and the header sits straight on the content.
   await page.unroute('**/api/now');
@@ -134,7 +155,7 @@ try {
   }
   await page.screenshot({ path: `__screenshots__/npbar-${TAG}-idle.png`, fullPage: false });
 
-  console.log(`shot: __screenshots__/npbar-${TAG}-{wide,paused,narrow,idle}.png`);
+  console.log(`shot: __screenshots__/npbar-${TAG}-{wide,paused,narrow,poweroff,idle}.png`);
 } finally {
   await browser.close();
   if (server) killServer(server);
