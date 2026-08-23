@@ -298,7 +298,7 @@ function ChannelCard({
 
         openPlayMenu({
           anchor,
-          kind: isRewatch ? "movie" : undefined,
+          behavior: isRewatch ? "rewatch" : undefined,
           profile: t.profile,
           setId: t.set,
         })

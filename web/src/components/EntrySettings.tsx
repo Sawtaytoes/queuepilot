@@ -391,7 +391,6 @@ export function EntryEditor({
               openPlayMenu({
                 anchor:
                   clickEvent.currentTarget.getBoundingClientRect(),
-                kind: undefined,
                 only: item.key,
                 onlyLabel: face.title,
                 setId,
