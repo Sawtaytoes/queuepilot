@@ -71,8 +71,9 @@ export type ResolveCfg = {
    *
    * It addresses the LEAF — the thing that plays. On a show entry that is one episode; on a
    * `{collection: X}` entry it is one child (a movie, or a whole child show). It is NOT how a
-   * member is retired: an entry you no longer want is REMOVED, and `skipped` therefore never
-   * marks an entry done. See `emptiedBySkip` on `ResolvedMember`.
+   * member is retired — an entry you no longer want is REMOVED — but a skipped item DOES
+   * count towards the entry being finished, the same way a watched one does: skip the last
+   * episode a show has left and the show is over.
    */
   skipped?: readonly unknown[] | null;
   kind?: string | null;
@@ -180,17 +181,6 @@ export interface ResolvedMember {
   items: ResolvedItem[];
   multi_season?: boolean;
   weight: number;
-  /**
-   * The `skipped` list is what emptied `items` — the member had something to play and every
-   * bit of it is skipped.
-   *
-   * It exists because "empty" is the FINISHED test, and finished is persisted: `nextQueue`
-   * reports an empty member as `newlyDone`, `markDone` writes `done: true`, and the TTL sweep
-   * can then delete the line. A skip that retired the entry it skipped an episode of would
-   * therefore be one-way — clearing the skip would have nothing left to bring back. So an
-   * entry emptied this way reports as having nothing to play and is never written.
-   */
-  emptiedBySkip?: boolean;
 }
 
 /** One batch in flight inside `nextQueue`. */
@@ -613,16 +603,6 @@ function startMemberIndex(children: readonly PlexMetadata[], start: Start | null
   return -1;
 }
 
-/**
- * How many items a resolve dropped because they are on the set's `skipped` list.
- *
- * An OUT-parameter rather than a wider return type, because `[] = found but every child
- * watched` is a contract three e2e suites read directly off `collectionItems`, and widening
- * it to say one more thing would rewrite all of them to learn nothing new. The one caller
- * that needs the number passes its own tally; everybody else takes the default and ignores it.
- */
-export interface SkipTally { bySkip: number }
-
 // Ordered playable items for a `Collection: <name>` entry, across the set's sections. Port of
 // collection_items — None (null) = not found, [] = found but every child watched, [...] = items.
 export async function collectionItems(
@@ -633,7 +613,6 @@ export async function collectionItems(
   token: Token,
   start: Start | null = null,
   resume = false,
-  tally: SkipTally = { bySkip: 0 },
 ): Promise<ResolvedItem[] | null> {
   let collRk: string | null = null;
   let children: PlexMetadata[] = [];
@@ -656,13 +635,13 @@ export async function collectionItems(
     // A skipped CHILD goes whole — the film, or the whole child show. The collection is the
     // member here; its children are the items inside it, which is exactly what `skipped`
     // addresses. A child show's individual episodes are skippable too, in the loop below.
-    if (skipped.has(rk)) { tally.bySkip += 1; continue; }
+    if (skipped.has(rk)) continue;
     if (ch.type === 'show') {
       const epStart = i === floorAt ? start : null;
       const childEps: ResolvedItem[] = await showEpisodes(client, rk, token);
       const specialsOk = resume && !hasRealSeasons(childEps);
       for (const e of childEps) {
-        if (skipped.has(e.ratingKey)) { tally.bySkip += 1; continue; }
+        if (skipped.has(e.ratingKey)) continue;
         if ((!watched.has(e.ratingKey) || (resume && inProgress(e.viewOffset, e.viewCount)))
           && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, epStart)) {
           // Which collection CHILD this leaf came from, so a `batch_stops_at` cut can see the
@@ -777,8 +756,7 @@ export async function resolveMember(
   const skipped = skippedKeys(cfg);
   if (desc.collection) {
     const name = desc.collection;
-    const tally: SkipTally = { bySkip: 0 };
-    let items = await collectionItems(client, cfg, name, watched, token, desc.start, resume, tally);
+    let items = await collectionItems(client, cfg, name, watched, token, desc.start, resume);
     if (items == null) return null;
     // A collection is ONE member, so it contributes ONE batch — the same cap the show branch
     // applies below, honoring a per-entry `episodes:` override the same way. Without this a
@@ -792,10 +770,7 @@ export async function resolveMember(
     // `batch_stops_at` additionally forbids the batch from spanning a member (or season)
     // boundary, so a season finale isn't followed by ep 1 of the next member show.
     items = applyBatch(items, desc.episodes || defaultBatch, batchStop(desc, cfg));
-    return {
-      title: `Collection: ${name}`, type: 'collection', items, weight: toWeight(desc.weight),
-      emptiedBySkip: items.length === 0 && tally.bySkip > 0,
-    };
+    return { title: `Collection: ${name}`, type: 'collection', items, weight: toWeight(desc.weight) };
   }
   const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
   if (typ == null) return null;
@@ -823,16 +798,13 @@ export async function resolveMember(
     && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, start));
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE
   // the batch cap — so skipping E5 makes an `episodes: 2` entry queue E6 + E7, not E6 alone.
-  const playable = eps.length;
   eps = eps.filter((e) => !skipped.has(e.ratingKey));
-  const bySkip = playable - eps.length;
   // A `season` stop also cuts at a season boundary, so `episodes: 2` on a show sitting at its
   // finale queues S1E12 alone instead of S1E12 + S2E01.
   eps = applyBatch(eps, desc.episodes || defaultBatch, batchStop(desc, cfg));
   return {
     title: title as string, type: 'show', ratingKey: rk, items: eps, multi_season: multiSeason(allEps),
     weight: toWeight(desc.weight),
-    emptiedBySkip: eps.length === 0 && bySkip > 0,
   };
 }
 
@@ -952,13 +924,19 @@ export async function nextQueue(
       continue;
     }
     if (!res.items.length) {
-      // Empty is the FINISHED test — except when the `skipped` list is what emptied it.
-      // `newlyDone` is the list `markDone` persists as `done: true`, after which the TTL sweep
-      // may delete the line entirely; an entry retired because its last unwatched episode is
-      // skipped would make the skip one-way, with nothing left to restore when it is cleared.
-      // It still reports as having nothing to play (`done`, the read-side list), so the grid
-      // says so; only the WRITE is withheld.
-      if (!res.emptiedBySkip) newlyDone.push(desc.key as string);
+      // Empty is FINISHED, and a SKIPPED item counts towards it exactly as a watched one does.
+      // Watch a show's first nine episodes and skip the tenth and the show is over; watch two
+      // films of a three-film collection and skip the middle one and the collection is over.
+      // "Skipped" is a decision about that item, not a gap waiting to be filled — treating it
+      // as one left an entry that could never complete and never leave the queue
+      // (decision `2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete`).
+      //
+      // Undoing it needs nothing special: Restore puts the item back, the entry resolves to
+      // something playable again, and the stale-done recovery below REVIVES it and clears the
+      // flag — the same path a returning show takes. The one thing that is genuinely one-way
+      // is a queue with `remove_completed_after` set, where the line is deleted once the
+      // window passes. That is what the TTL means on every other completion too.
+      newlyDone.push(desc.key as string);
       doneFlagged.push(res.title);
       remaining -= 1;
       continue;
