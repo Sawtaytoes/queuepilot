@@ -308,7 +308,15 @@ export type Binding = {
 export type RegistrySet = {
   id: string
   label: string
+  /** Product kind `picks` | `rules` after server normalize; legacy spellings may linger in cache. */
   kind: string
+  /**
+   * Default lane for NEW entries on a Picks queue: `priority` | `random`.
+   * Effective value from the server (legacy movies → priority, anime → random).
+   */
+  add_as?: "priority" | "random"
+  /** Default lead cooldown (`24h`, …). Picks only. */
+  promote_window?: string | null
   source: "queue" | "rotation" | string
   sections: number[]
   item_sections?: number[]

@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react"
 
 import { api } from "../lib/api"
+import { isRandomOrder } from "../lib/kind"
 import type {
   GroupsResponse,
   NowState,
@@ -115,8 +116,9 @@ export function setStatus(
 }
 
 // --- derived selectors ------------------------------------------------------- //
-// Curated sets split by semantics: kind 'movies' = ordered QUEUE, 'anime' =
-// random-order CHANNEL with explicit members (the taxonomy decision).
+// Hand-picked (source: queue) sets, split by lane default: priority vs random.
+// Both are product kind `picks`; add_as (and legacy movies/anime) chooses the lane
+// (decision 2026-08-23-kind-is-picks-or-rules).
 export const curatedIds = (data: QueuesResponse | null) =>
   data
     ? data.order.filter(
@@ -126,14 +128,14 @@ export const curatedIds = (data: QueuesResponse | null) =>
 
 export const queueIds = (data: QueuesResponse | null) =>
   curatedIds(data).filter(
-    (id) => data!.sets[id]!.kind !== "anime",
+    (id) => !isRandomOrder(data!.sets[id]!),
   )
 
 export const channelSetIds = (
   data: QueuesResponse | null,
 ) =>
-  curatedIds(data).filter(
-    (id) => data!.sets[id]!.kind === "anime",
+  curatedIds(data).filter((id) =>
+    isRandomOrder(data!.sets[id]!),
   )
 
 /**
