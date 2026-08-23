@@ -305,7 +305,15 @@ export function queuesRoutes(): Hono {
         // unresolved tile is what the grid already paints red.
         const core = isLegacyScalarEntry(e.value)
           ? tiles.unresolvedTile(e.value)
-          : await tiles.resolveTile(s.sections, e.value, startOf(e), scopes.get(s.requires_profile || '') ?? {});
+          // The set's SKIP list, built per tile off the registry row the work item already
+          // carries. `new Set` per tile rather than per set because the fan-out is keyed on
+          // (set, entry) pairs and the lists are a handful of keys; the alternative is a
+          // second map to keep in step with `scopes`.
+          : await tiles.resolveTile(
+            s.sections, e.value, startOf(e),
+            scopes.get(s.requires_profile || '') ?? {},
+            new Set(s.skipped || []),
+          );
         return { setId: s.id, tile: queueTile(e, core) };
       });
       // What the next scan would call finished, said now — one pass over the flat list, so

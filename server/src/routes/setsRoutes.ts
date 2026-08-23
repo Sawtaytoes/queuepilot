@@ -126,6 +126,44 @@ export function setsRoutes(): Hono {
   // through the same resolvers the queue grid uses — so the member grid shows exactly what
   // the Python service will resolve at scan time (v3 PR 3). `raw` + `index` round-trip so
   // the grid can PATCH the whole members array back (whole-array replace, like profiles).
+  /**
+   * The SKIPPED list, named — one row per key on a curated queue's `skipped`.
+   *
+   * A route of its own rather than N calls to `/api/item/:ratingKey` (which is what the
+   * blocklist chips do): the things a queue skips are mostly EPISODES, and that route is
+   * `resolveValue`, which answers only for a movie or a show. It also keeps the panel to one
+   * round-trip instead of one per chip.
+   *
+   * Order is the file's, so a row does not move under the pointer between two skips.
+   */
+  app.get('/sets/:id/skipped', async (c) => {
+    try {
+      const s = await sets.getSet(c.req.param('id'));
+      if (!s) return c.json({ error: 'unknown set' }, 404);
+      const keys = s.skipped || [];
+      // A PULL set's keys are its own provider's (a Kavita chapter id), NOT Plex ratingKeys —
+      // and the two id spaces overlap, so a Plex lookup here would not merely fail, it would
+      // sometimes SUCCEED and name a completely unrelated film. The row degrades to the bare
+      // key instead, which still lists the skip and still clears it. Naming a chapter would
+      // mean walking every series in the queue (Kavita can look up a series, not a loose
+      // chapter id), which is a read per entry to label a handful of rows.
+      if (s.delivery === 'pull') {
+        return c.json({
+          items: keys.map((ratingKey) => ({
+            ratingKey, type: null, title: `#${ratingKey}`, year: null,
+            show: null, season: null, episode: null,
+          })),
+        });
+      }
+      // Bounded like every other Plex fan-out here. A dead key still yields a row (see
+      // `plex.itemLabel`), so a deleted library item can be cleared from the panel.
+      const items = await mapLimit(keys, 6, (rk) => plex.itemLabel(rk));
+      return c.json({ items });
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
   app.get('/sets/:id/members', async (c) => {
     try {
       const s = await sets.getSet(c.req.param('id'));

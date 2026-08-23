@@ -29,6 +29,8 @@ export type TileSetSource = {
   providers?: unknown;
   requires_profile?: string | null;
   sections?: unknown;
+  /** The set's skip list, in the provider's own id space — see `ProviderTileOpts.skipped`. */
+  skipped?: readonly string[];
 };
 
 /**
@@ -147,7 +149,10 @@ export async function resolveTiles(
   const refs = wanted.map((id) => entryRefOf(values[ids.indexOf(id)], id));
   let rows = [];
   try {
-    rows = await provider.tiles(wanted, refs);
+    // The skip list rides on the SET, so it is passed once rather than per item. A provider
+    // that ignores the third argument simply does not support skipping yet, and the tile menu
+    // never offers it there (no leaf id reaches `nextEp.ratingKey`).
+    rows = await provider.tiles(wanted, refs, { skipped: set.skipped || [] });
   } catch (e) {
     console.log(`[providers] tiles for set '${set.id}': ${errMessage(e)}`);
     return values.map(unresolvedTile);
@@ -184,6 +189,14 @@ export async function resolveTiles(
       childCount: null,
       nextEp: next
         ? {
+          // The LEAF's own id, which is what "Skip this one" writes. Only Kavita spells one
+          // today (`chapterId`); a board game play, a Steam title and a MiSTer ROM each have
+          // their own identity and no shared leaf key, so those tiles carry none and the
+          // menu row is not offered. Narrowed with `in` rather than cast: the union is four
+          // provider shapes and only one of them answers this.
+          ratingKey: 'chapterId' in next && next.chapterId != null
+            ? String(next.chapterId)
+            : null,
           title: next.title ?? null,
           // Chapters have no season, and `multiSeason: false` is what drops the "S1" that a
           // chapter must never wear.

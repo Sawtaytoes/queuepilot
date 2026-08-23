@@ -23,6 +23,13 @@ export type NextEp = {
   season?: number | null
   episode?: number | null
   title?: string | null
+  /**
+   * The LEAF's own ratingKey — the episode, or the collection child, that would actually
+   * play. Distinct from the tile's `ratingKey` (the show or collection the ENTRY names) and
+   * from `memberRatingKey` (which child it came from), and it is what "Skip this one" writes
+   * to the set's `skipped` list. Absent on a provider that resolves no leaf key.
+   */
+  ratingKey?: string | null
   /** The total this next-up counts towards: "Play 2 OF 3". Set only by a provider that
    * counts a finite per-entry batch (board games); absent for episodes and chapters. */
   of?: number | null
@@ -226,6 +233,23 @@ export type ChannelMember = {
   weight?: number
 }
 
+/**
+ * One row of `GET /api/sets/:id/skipped` — a skipped LEAF, named.
+ *
+ * `show` / `season` / `episode` are the episode fields and are null on a movie or a show;
+ * `title` is always something, falling back to `#<ratingKey>` for a library item that has
+ * since been deleted (which must still be clearable from the panel).
+ */
+export type SkippedItem = {
+  ratingKey: string
+  type: string | null
+  title: string
+  year: number | null
+  show: string | null
+  season: number | null
+  episode: number | null
+}
+
 /** Anything the poster tile can render. */
 export type TileEntry = QueueItem | ChannelMember
 
@@ -292,6 +316,12 @@ export type RegistrySet = {
   /** Legacy sets predate `behavior`; `mode: rewatch` is its ancestor. */
   mode?: string
   blocklist: string[]
+  /**
+   * The items a CURATED queue never plays — the queue-side twin of `blocklist`. Sent on
+   * every set for one response shape, but only writable on a queue set: a filtered pool
+   * uses `blocklist` for the same job, and `PATCH /api/sets/:id` rejects `skipped` there.
+   */
+  skipped: string[]
   /**
    * `"whole"` (the default) | `"split"` — what a `Collection:` MEMBER contributes to a
    * filtered pool: one ordered member, or one member per child show. Always sent as the

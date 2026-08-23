@@ -274,6 +274,13 @@ interface SetRegistryCommon {
   item_sections: number[];
   blocklist: string[];
   /**
+   * The items a CURATED queue skips — the queue-side twin of `blocklist`, which is the
+   * rotation-side one. Present on every set for one response shape (as `blocklist` is), but
+   * only a queue set can act on it: `updateSet` rejects the key on a rotation channel, where
+   * `blocklist` is already the answer.
+   */
+  skipped: string[];
+  /**
    * `'whole'` | `'split'` — how a `Collection:` member enters a filtered pool. Reported as
    * the EFFECTIVE value (never the absence the file stores for the default), so the pool
    * editor's picker has something to select without keeping its own copy of the default.
@@ -527,6 +534,13 @@ export interface RoutingQueueCfg extends RoutingSetCfgCommon {
   item_sections: [];
   reel: boolean;
   keep_completed: boolean;
+  /**
+   * The ratingKeys this queue never plays — a rotation's `blocklist`, for a curated set.
+   * Always a list (possibly empty), like `blocklist` and unlike the nullable ratings caps.
+   * Read by `engine/resolve.ts`, which drops a skipped LEAF: one episode of a show entry, or
+   * one child of a `{collection: X}` entry.
+   */
+  skipped: string[];
 }
 
 export interface RoutingRotationCfg extends RoutingSetCfgCommon {
@@ -795,6 +809,20 @@ export interface ProviderCover {
  * including `cover` and `unit`, which only the tile shape has — happens in one place above
  * the seam. A vanished item resolves to `null` rather than throwing.
  */
+/** Set-wide context for `Provider.tiles()` — things that are true of the QUEUE, not the item. */
+export interface ProviderTileOpts {
+  /**
+   * The set's `skipped` list — leaf ids this queue never plays, in the provider's OWN id
+   * space (a Plex ratingKey for Plex, a Kavita chapter id for Kavita). One namespace per set
+   * is safe because a queue draws from exactly one provider
+   * (decision `2026-08-13-a-queue-draws-from-exactly-one-provider`).
+   *
+   * A provider applies it for the same reason the engine does: the tile's next-up must not
+   * name something the next launch is going to refuse to play.
+   */
+  skipped?: readonly string[];
+}
+
 export interface ProviderTileRow {
   id: string;
   /** Optional for the same reason `ProviderSearchHit.title` is asserted: `name` is a remote
@@ -1251,7 +1279,11 @@ export interface Provider {
    * whole set to unresolved tiles), because a provider that cannot answer this is a grid
    * of bare titles, not a 500.
    */
-  tiles?(ids: Iterable<string>, entries?: CuratedEntryRef[]): Promise<(ProviderTileRow | null)[]>;
+  tiles?(
+    ids: Iterable<string>,
+    entries?: CuratedEntryRef[],
+    opts?: ProviderTileOpts,
+  ): Promise<(ProviderTileRow | null)[]>;
   /**
    * This item's page in the provider's own UI, resolved on demand.
    *
@@ -1320,6 +1352,15 @@ export interface NextEp {
   season?: number | null;
   episode?: number | null;
   title?: string | null;
+  /**
+   * The LEAF's own ratingKey — the episode, or the collection child, that would actually play.
+   *
+   * Distinct from the tile's `ratingKey` (the show / collection the ENTRY names) and from
+   * `memberRatingKey` (which collection child it came from). It is what "Skip this one" adds
+   * to the set's `skipped` list, so the grid can name the item it is about to drop rather than
+   * the container it lives in. Absent on a provider that does not resolve a leaf key.
+   */
+  ratingKey?: string | null;
   /** The total this next-up counts towards: "Play 2 OF 3". Only a provider that counts a
    * finite per-entry batch sets it; absent everywhere else. */
   of?: number | null;
