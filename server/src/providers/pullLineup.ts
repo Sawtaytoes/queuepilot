@@ -13,6 +13,7 @@
 // spelling.
 import * as queues from '../queues.js';
 import { splitEntry } from '../queues.js';
+import { isRandomOrder as setIsRandomOrder } from '../kind.js';
 import { resolveSingle } from './blocks.js';
 import type { BlockSourceCfg } from './blocks.js';
 import type { CuratedEntryRef, PlayItem, Provider, RoutingSetCfg } from '../types.js';
@@ -104,9 +105,9 @@ export async function pullLineup(
     // What the owner actually put in this queue. Without it a curated reading queue plays
     // the library shelf instead of its own ninety-three entries.
     entries: await curatedEntries(setId, only, { stampQueued: provider.stampsQueuedAt === true }),
-    // Same rule playbackRoutes uses to call a curated set random: `kind: anime` is the
-    // "members play in random order" channel the editor offers.
-    isRandomOrder: cfg.kind === 'anime',
+    // Same rule the engine uses for the curated shuffle: Random-pool Picks
+    // (legacy kind: anime still reads as random via kind.isRandomOrder).
+    isRandomOrder: setIsRandomOrder(cfg),
     // The queue's own per-visit batch, overridable per entry inside buckets(). Same
     // precedence the Plex resolver uses (entry > set > env): `cfg.episodes` is the SET's,
     // and the block's older `batch` is honoured beneath it so a hand-written providers.yaml

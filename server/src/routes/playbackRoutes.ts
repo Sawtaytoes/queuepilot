@@ -10,6 +10,7 @@ import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
 import { lastNow, withContext } from '../sse.js';
+import { isAutoRewatch, wireKindForSet } from '../kind.js';
 import { readBody } from './readBody.js';
 
 /** Playback + channels, over the MQTT bridge: devices, play, session state, now-playing. */
@@ -22,12 +23,13 @@ export function playbackRoutes(): Hono {
     return c.json({ devices: mqttc.devices() });
   });
 
-  // Start a queue/channel on a device. Body: {set, kind?, target?}. kind normally comes
-  // from the registry; the two overrides mirror the physical cards: set='auto' lets the
-  // Shield's signed-in profile pick the tier, and kind='movie' on a rotation set plays
-  // that tier's Movies channel (weighted rewatch) instead of the shows rotation.
+  // Start a queue/channel on a device. Body: {set, kind?, target?, behavior?}.
+  // Product kind on the wire is picks|rules (decision 2026-08-23-kind-is-picks-or-rules).
+  // set='auto' still lets the Shield's signed-in profile pick the tier; which Rules
+  // channel (shows vs Movies rewatch) is chosen by `behavior: rewatch` (legacy
+  // kind='movie' still accepted for one release).
   app.post('/play', async (c) => {
-    const { set: setId, kind: kindReq, target, profile, only } = await readBody(c);
+    const { set: setId, kind: kindReq, target, profile, only, behavior } = await readBody(c);
     const tgt = target ? String(target) : undefined;
     // PR 4: an explicit profile names the binding on a profiles[] function channel (the
     // Play-landing profile selector); the auto path keeps letting the Shield decide.
@@ -39,17 +41,22 @@ export function playbackRoutes(): Hono {
     try {
       if (setId === 'auto') {
         if (entryKey) return c.json({ error: 'set "auto" cannot play a single entry' }, 400);
-        return c.json({ sent: mqttc.play('auto', kindReq === 'movie' ? 'movie' : 'cartoons', tgt) });
+        const autoBehavior = isAutoRewatch({ kind: kindReq, behavior })
+          ? 'rewatch'
+          : undefined;
+        // kind is always rules for auto (both targets are rule-built channels).
+        return c.json({
+          sent: mqttc.play('auto', 'rules', tgt, undefined, undefined, autoBehavior),
+        });
       }
       const s = await sets.getSet(String(setId || ''));
       if (!s) return c.json({ error: 'unknown set' }, 400);
       if (entryKey && s.source !== 'queue') {
         return c.json({ error: `'${s.label || s.id}' is a rule-based channel — it has no entries to play one of` }, 400);
       }
-      const kind = s.source === 'rotation'
-        ? (kindReq === 'movie' ? 'movie' : 'cartoons')
-        : s.kind === 'anime' ? 'anime' : 'movie';
-      return c.json({ sent: mqttc.play(s.id, kind, tgt, prof, entryKey) });
+      return c.json({
+        sent: mqttc.play(s.id, wireKindForSet(s), tgt, prof, entryKey),
+      });
     } catch (e) {
       return c.json({ error: errMessage(e) }, 503);
     }

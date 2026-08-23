@@ -46,7 +46,11 @@ export type PlayMenuTarget = {
   /** The trigger's viewport box — the menu is `position: fixed` and clamps to it. */
   anchor: DOMRect
   setId: string
-  kind?: "movie"
+  /**
+   * Auto / Rules rewatch hint. Product kind on the wire is picks|rules; `rewatch` is how
+   * a Movies Rules card (and set:auto Movie button) picks the rewatch channel.
+   */
+  behavior?: "rewatch"
   profile?: string
   /**
    * Play ONE entry of a curated set (its entry key) rather than letting the set choose.

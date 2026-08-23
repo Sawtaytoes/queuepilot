@@ -76,7 +76,7 @@ export function PlayMenu() {
   // still fires after `closePlayMenus()` hides the menu.
   const playMutation = useMutation({
     mutationFn: (body: {
-      kind: "movie" | undefined
+      behavior: "rewatch" | undefined
       only: string | undefined
       profile: string | undefined
       set: string
@@ -111,8 +111,14 @@ export function PlayMenu() {
 
   if (!playMenu) return null
 
-  const { anchor, kind, only, onlyLabel, profile, setId } =
-    playMenu
+  const {
+    anchor,
+    behavior,
+    only,
+    onlyLabel,
+    profile,
+    setId,
+  } = playMenu
 
   return (
     <div
@@ -160,7 +166,7 @@ export function PlayMenu() {
               )
 
               playMutation.mutate({
-                kind,
+                behavior,
                 only,
                 profile,
                 set: setId,

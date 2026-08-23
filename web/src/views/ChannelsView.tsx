@@ -246,7 +246,9 @@ export function ChannelsView({
                 openPlayMenu({
                   anchor:
                     e.currentTarget.getBoundingClientRect(),
-                  kind: isMovies ? "movie" : undefined,
+                  behavior: isMovies
+                    ? "rewatch"
+                    : undefined,
                   profile: currentProfile || undefined,
                   setId: channel.id,
                 })

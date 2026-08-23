@@ -267,9 +267,19 @@ interface SetRegistryCommon {
   /** IMMUTABLE — HA automations / NFC cards / MQTT reference it. */
   id: string;
   label: string;
-  /** Free-form ('movies' | 'anime' | 'cartoons' | …); defaults to 'movies'. Not an enum
-   * on disk, and normalize() does not constrain it, so it is not one here. */
+  /**
+   * Product kind: `picks` | `rules` after normalize(). On disk the legacy spellings
+   * (`movies` / `anime` / `cartoons` / `demo`) are still accepted and mapped here
+   * (decision 2026-08-23-kind-is-picks-or-rules).
+   */
   kind: string;
+  /**
+   * Default lane for NEW entries on a Picks queue: `priority` | `random`. Absent on Rules
+   * queues. Reported as the EFFECTIVE value (legacy movies → priority, anime → random).
+   */
+  add_as?: 'priority' | 'random';
+  /** Default lead cooldown for Priority entries (`24h`, `7d`, …). Picks only; sparse. */
+  promote_window?: string | null;
   sections: number[];
   item_sections: number[];
   blocklist: string[];
@@ -1576,6 +1586,7 @@ export type PublishedStateExtra =
  */
 export interface SessionStartPayload {
   set?: string;
+  /** Product kind picks|rules (legacy anime|movie|cartoons still accepted on read). */
   kind?: string;
   profile?: string;
   target?: string | Device | null;
@@ -1584,6 +1595,13 @@ export interface SessionStartPayload {
    * sends it; it only ever arrives from the UI, via `mqttc.play()`'s 5th argument.
    */
   only?: string;
+  /**
+   * Auto-routing hint when `set` is `auto`: `rewatch` picks the Movies Rules channel.
+   * Product kind alone is `rules` for both shows and Movies auto buttons.
+   */
+  behavior?: string;
+  /** Alias some callers may send; treated like `behavior` for auto rewatch detection. */
+  mode?: string;
 }
 
 // --- SSE --------------------------------------------------------------------- //

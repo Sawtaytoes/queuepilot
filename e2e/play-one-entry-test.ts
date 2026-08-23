@@ -208,16 +208,16 @@ const payloadFor = (
   profile?: string,
   only?: string,
 ): PlayPayload => {
-  const payload: PlayPayload = { set: setId, kind: kind || 'movie' };
+  const payload: PlayPayload = { set: setId, kind: kind || 'picks' };
   if (target) payload.target = target;
   if (profile) payload.profile = profile;
   if (only) payload.only = only;
   return payload;
 };
-assert.deepEqual(payloadFor('bob', 'movie'), { set: 'bob', kind: 'movie' });
+assert.deepEqual(payloadFor('bob', 'picks'), { set: 'bob', kind: 'picks' });
 ok('an ordinary start\'s MQTT payload is unchanged (no `only` key)', true);
 ok('a one-entry start carries the key',
-  payloadFor('bob', 'movie', undefined, undefined, 'title:gamma').only === 'title:gamma');
+  payloadFor('bob', 'picks', undefined, undefined, 'title:gamma').only === 'title:gamma');
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall green');
 process.exit(FAILS.length ? 1 : 0);

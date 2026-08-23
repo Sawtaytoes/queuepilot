@@ -305,16 +305,23 @@ export function bindingFor(
   return profiles[0]!; // non-empty per the guard above
 }
 
-// Port of config.channel_for: route a set:"auto" scan (card kind + detected profile) to a
-// function-channel id, or null to fall back to PROFILE_SET_MAP. Only a channel that EXPLICITLY
-// binds the profile qualifies (has_explicit_profiles + exact plex_user match), is enabled and
-// not superseded, and whose rewatch-ness matches the kind. First match in file order wins.
+// Port of config.channel_for: route a set:"auto" scan to a function-channel id, or null to
+// fall back to PROFILE_SET_MAP. Only a channel that EXPLICITLY binds the profile qualifies
+// (has_explicit_profiles + exact plex_user match), is enabled and not superseded, and whose
+// rewatch-ness matches the request. First match in file order wins.
+//
+// After picks|rules, product kind alone cannot pick Movies vs shows for auto — both are
+// `rules`. Pass `wantRewatch` from isAutoRewatch({ kind, behavior }) instead. The `kind`
+// argument is kept for call-site compatibility but is ignored when `wantRewatch` is set.
 export function channelFor(
   kind: string | null | undefined,
   profileTitle: string | null | undefined,
   reg: RoutingRegistry,
+  wantRewatch?: boolean,
 ): string | null {
-  const isMovieKind = kind === 'movie';
+  const isMovieKind = wantRewatch !== undefined
+    ? wantRewatch
+    : kind === 'movie'; // legacy wire kind, one-release fallback
   for (const sid of reg.order) {
     // `!cfg` replaces the original `|| {}`: an id in `order` with no entry in `sets` failed the
     // `source !== 'rotation'` test there and is skipped here — same walk, same result.

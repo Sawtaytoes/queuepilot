@@ -31,6 +31,7 @@ import { useFlipList } from "../hooks/useFlipList"
 import { useGridDrag } from "../hooks/useGridDrag"
 import { api } from "../lib/api"
 import { flashTile } from "../lib/flip"
+import { isRandomOrder } from "../lib/kind"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { entryTitle } from "../lib/searchGroups"
 import {
@@ -192,7 +193,9 @@ export function QueueView({
   const regSet = setId
     ? reg?.sets.find((x) => x.id === setId)
     : undefined
-  const isChannel = q?.kind === "anime"
+  // Prefer the registry row when present — it always carries effective add_as.
+  // The queues payload may still be the shelves skeleton for a beat.
+  const isChannel = isRandomOrder(regSet ?? q)
   // Pushed at a device, or opened by a link. Decides the whole start affordance — the
   // queue-level button AND every tile's ▶.
   const isPull = isPullSet(regSet)
@@ -1005,7 +1008,6 @@ export function QueueView({
                     ? (anchor) =>
                         openPlayMenu({
                           anchor,
-                          kind: undefined,
                           only: item.key,
                           onlyLabel: face.title,
                           setId,
