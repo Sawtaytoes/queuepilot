@@ -8,10 +8,8 @@
 // onto it. `e2e/binding-parity.mjs` diffs every function against the Python oracle
 // (`python -m queue_builder.cli route` + `… sections`) over `e2e/fixtures/routing.sets.yaml`,
 // and CI runs that gate — so a drift from Python is a red build, not a wrong play on the TV.
-import { readFileSync } from 'node:fs';
-import { parse } from 'yaml';
 import { SEC_MOVIES } from '../env.js';
-import { SETS_PATH } from '../sets.js';
+import { store } from '../store/index.js';
 import { setForProfile } from '../profiles.js';
 import { errMessage, isNodeError } from '../errors.js';
 import type {
@@ -121,10 +119,12 @@ function bindingFrom(src: BindingSource = {}): EngineBinding {
 // { sets: {id: cfg}, order: [id…] }, or null to keep defaults (file absent / unreadable /
 // empty) — matching the Python "keep current sets" behavior. Only the fields the four
 // functions read are carried; the write side stays in sets.js.
-export function loadSets(path: string = SETS_PATH): RoutingRegistry | null {
+export function loadSets(path: string = store.sets.path): RoutingRegistry | null {
   let data: { sets?: unknown };
   try {
-    data = (parse(readFileSync(path, 'utf8')) as { sets?: unknown } | null) || {};
+    // The store reads the file and THROWS; the "keep current sets" policy below is this
+    // module's, and stays here.
+    data = (store.sets.readSync(path) as { sets?: unknown } | null) || {};
   } catch (e) {
     if (isNodeError(e) && e.code === 'ENOENT') return null; // FileNotFoundError → defaults
     console.log(`[routing] ${path} unreadable (${errMessage(e)}); keeping current sets`);
