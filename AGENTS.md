@@ -270,6 +270,24 @@ re-runs by hand before claiming a change is safe.
 
 - **Commit small, push often**, and never leave a dirty tree behind.
 - Work in your own `git worktree` — other agents share this checkout.
+- **`/config` has a LIVE WRITER, so never diff against a baseline you took earlier.** The
+  production app appends to `queues.yaml` on its own — a top-up, a completion sweep, a
+  `done:` flag — with nobody at a keyboard. So "copy the App-Configs files, run the app over
+  the copies, diff against the originals" reports a change the app under test never made, as
+  soon as the real one writes in between. It cost an hour during WP-1 and read exactly like a
+  regression: a queue entry that appeared from nowhere, twice, and would not reproduce.
+  **Take the baseline and the working copy from the same `cp`, in one command**, and diff the
+  working copy against THAT — never against the live file, and never against a snapshot from
+  earlier in the session. If the two must be taken separately, `md5sum` the live file at both
+  ends and treat any difference as "start over", not as a finding.
+- **`kill $SRV` does not stop a server you started with `tsx`.** `tsx` is a wrapper: it spawns
+  the real `node` as a CHILD, so killing the wrapper leaves a live server holding your
+  `QUEUES_PATH` / `SETS_PATH` and still watching their directory. `ci.yml` and the e2e
+  harnesses use that pattern and are right to — a CI runner is thrown away after the job. A
+  shared agent sandbox is not: five orphaned `server/src/index.ts` processes from four
+  different worktrees were found running during WP-1, the oldest for 43 hours. Start with
+  `setsid` and stop with `kill -- -$SRV` (the whole process group), and kill only your OWN —
+  the rest belong to sessions that are still live.
 - Screenshots go in `__screenshots__/` (gitignored, scratch). Anything meant to survive a
   merge — a PR's before/after — is committed under `docs/images/` and linked by SHA-pinned
   raw URL.
