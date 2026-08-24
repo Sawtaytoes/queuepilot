@@ -270,7 +270,16 @@ ok('…addressed by the SAME keys the legacy file used',
 // is the WRONG test for that: with no resolver every already-object title reports `unresolved`
 // (85 of them on the real fixture) while rewriting nothing, and `doc.toString()` still respells
 // `{title: "X"}` as `{ title: "X" }` across the whole file.
-const MODERN_SNAPSHOT = '# a comment that must survive\nbob:\n- {title: "Kept Exactly"}   # and this one\n';
+//
+// ⚠️ THE FIXTURE IS SPELLED THE WAY THE WRITER SPELLS IT, and that changed with WP-2. The store
+// is rows now, so a snapshot is a SERIALIZATION of them rather than a copy of the file's text —
+// which means the assertion is byte-for-byte against `doc.toString()`'s own output, and the
+// respelling this comment already named is the one thing it cannot also prove. Everything that
+// carries meaning is still pinned exactly: the value, the comment above the file, the trailing
+// comment on the entry, and the FLOW form (a row records how it was written, so `- { … }` does
+// not come back as a block mapping). Measured on the live files, that is enough for both of
+// them to round-trip through the rows with `diff` reporting nothing.
+const MODERN_SNAPSHOT = '# a comment that must survive\nbob:\n- { title: "Kept Exactly" } # and this one\n';
 writeFileSync(QUEUES_PATH, MODERN_SNAPSHOT);
 await history.snapshot();
 writeFileSync(QUEUES_PATH, 'bob: []\n');

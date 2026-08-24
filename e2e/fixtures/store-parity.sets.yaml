@@ -1,0 +1,70 @@
+# SYNTHETIC store-parity sets.yaml — a COMMITTED fixture. Invented, never captured: this repo
+# is public and a fixture that was copied off the live store would put the household in it.
+# The cast is the one this repo already has (Bob, Alice, Carol, Dave, Erin).
+#
+# Every shape the SQLite store has to carry back out unchanged is in here ON PURPOSE:
+# a flow-style list, a block-style list, a nested `profiles:` list of mappings, a mapping
+# value (`starts:`), an inline comment on a set, a block comment above one, a `global:` key
+# that belongs to no row, and a set with no queue behind it.
+global:
+  excluded_sections: [2, 7]
+sets:
+- id: bob                                   # INLINE: a comment that must travel with this set
+  label: Bob — Movies
+  kind: picks
+  add_as: priority
+  source: queue
+  requires_profile: bob_plex
+  sections: [1, 14]
+  remove_completed_after: 24h
+- id: bob_alice
+  label: Bob & Alice — Movies
+  kind: picks
+  add_as: random
+  source: queue
+  sections:
+  - 1
+  - 14
+# BLOCK: the reel is non-consuming — nothing in it is ever marked done.
+- id: demo
+  label: Theater Demo Reel
+  kind: picks
+  source: queue
+  keep_completed: true
+  reel: true
+  sections: [1]
+- id: carol_reading
+  label: Carol — Reading
+  kind: picks
+  source: queue
+  providers: [kavita]
+  sections: []
+- id: empty_queue
+  label: Dave — Nothing Yet
+  kind: picks
+  source: queue
+  sections: [1]
+- id: kids
+  label: Kids
+  kind: rules
+  source: rotation
+  behavior: progress
+  sections: [5]
+  item_sections: [15]
+  blocklist: ["1006"]
+  starts:
+    "1004": { season: 1, episode: 2 }
+  profiles:
+  - plex_user: Erin
+    account_id: 700001
+    user_uuid: erin-uuid
+    allowed_ratings: [TV-Y, TV-Y7, TV-G, G]
+    movie_ratings: [G]
+    watch_count_accounts: [700001]
+  - plex_user: Dave
+    account_id: 700002
+    user_uuid: dave-uuid
+    allowed_ratings: [TV-PG, PG]
+    movie_ratings: [PG]
+    watch_count_accounts: [700002]
+# FOOT: order above = shelf order on the Home page.

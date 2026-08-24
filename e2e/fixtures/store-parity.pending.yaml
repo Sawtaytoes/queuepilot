@@ -1,0 +1,9 @@
+# SYNTHETIC store-parity pending.yaml — a COMMITTED fixture, invented and never captured.
+seen_through: 1755000000
+dismissed:
+  - "460465"
+  - "460345"
+  - "453001"
+libraries:
+  - 1
+  - 14
