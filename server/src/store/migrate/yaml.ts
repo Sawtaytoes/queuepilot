@@ -112,6 +112,11 @@ function fingerprint(): string {
 
 /** Copy the four files into `store-imports/<utc>/` beside them, before a row is written. */
 function copyAside(): string | null {
+  // Nothing on disk means nothing to copy, and making the directory anyway would log a failure
+  // on every CI runner — where `/config` does not exist, no YAML does either, and there was
+  // never anything to protect.
+  if (!SOURCES.some((source) => existsSync(pathFor(source)))) return null;
+
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dir = join(dirname(QUEUES_PATH), 'store-imports', stamp);
   try {
