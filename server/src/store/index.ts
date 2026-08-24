@@ -50,6 +50,13 @@
 //      it with `node:sqlite`'s synchronous API; an interface that were async-only would force
 //      those two call sites open, and they are in the hottest code in the app.
 //
+// ── `store/sqlite.ts` is not one of these ────────────────────────────────────────────────
+//
+// It arrived from WP-4a and is the better-sqlite3-shaped DRIVER shim over `node:sqlite` —
+// `prepare` / `exec` / `pragma` / `withTransaction`. It is what a SQLite implementation of the
+// interfaces below will be written ON; it does not implement them and it knows nothing about
+// sets, queues, groups or pending.
+//
 // ── One asymmetry, on purpose ────────────────────────────────────────────────────────────
 //
 // The three `Document` stores expose `readDoc`/`writeDoc`; `pending` exposes `read`/`write`
