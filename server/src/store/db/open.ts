@@ -37,8 +37,12 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * arrives, `migrate()` gets an `ALTER TABLE` branch keyed on the version it is upgrading FROM.
  *
  * Unlike `cache.ts`, a mismatch here never DROPs. This file holds the household's queues.
+ *
+ * 2 (WP-3): `people`, `person_accounts` and `group_people`. Three NEW tables and no changed
+ * column, so an existing file absorbs them by re-running `schema.sql` — the number moves
+ * anyway, because it is what a rollback reads to refuse to run against a newer file.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;

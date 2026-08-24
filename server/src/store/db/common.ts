@@ -31,8 +31,12 @@ import type { SqliteDatabase } from '../sqlite.js';
  * `indentSeq: false` puts block dashes at the key's indent, `lineWidth: 0` never wraps. */
 export const YAML_OUT = { indentSeq: false, lineWidth: 0 } as const;
 
-/** Which store a `store_meta` row belongs to. */
-export type StoreName = 'sets' | 'queues' | 'groups' | 'pending';
+/** Which store a `store_meta` row belongs to.
+ *
+ * `people` joined the four in WP-3 and is the one that has no YAML file behind it — it is
+ * here for the same bookkeeping the others use it for: the version counter, and the
+ * fingerprint of the mapping file the people import last consumed. */
+export type StoreName = 'sets' | 'queues' | 'groups' | 'pending' | 'people';
 
 /** The two comment slots the `yaml` Document API gives a node, as they are stored. */
 export interface RowComments {
