@@ -5,8 +5,12 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const SCRATCH = mkdtempSync(path.join(tmpdir(), 'qp-kind-'));
-// The lead cooldowns live in the book of record now (WP-2), and its path is derived from
-// QUEUES_PATH — so pointing that at SCRATCH already keeps this suite's cooldowns to itself.
+// The lead cooldowns live in the BOOK OF RECORD now (WP-2), not in a `promote.sqlite` of
+// their own, so `PROMOTE_PATH` is gone and this is what replaces it. It has to be set
+// explicitly rather than derived: `STORE_PATH`'s default is derived from whichever YAML path
+// the process was given, this suite gives none, and the fallback is `/config` — which is right
+// in production and is not writable on a CI runner.
+process.env.STORE_PATH = path.join(SCRATCH, 'queuepilot.sqlite');
 
 const {
   normalizeProductKind, normalizeAddAs, isRandomOrder, wireKindForSet,
