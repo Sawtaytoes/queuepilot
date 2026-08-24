@@ -84,7 +84,18 @@ And the same fact measured from the other side, in the running database:
 | Rows carrying an external listing id | 137 |
 
 **The rows already win.** The importer applies the owner's rows *before* the source table, so
-a row overrides a coded rule for the box it names, and 28 of the 150 do exactly that today.
+a row short-circuits the rule lookup for the box it names. Replaying all 22 source rules
+against all 150 rows says how much that matters:
+
+| For a box a row already names… | Rows |
+| --- | --- |
+| no source rule matches at all — the row is the only ruling | **103** |
+| a source rule matches and **disagrees** with the row | **19** |
+| a source rule matches and agrees — the row is redundant | 28 |
+
+So the two halves of this rule system **already disagree about 19 boxes**, silently, with the
+rows winning and nothing reporting it.
+
 Over the collection's 562 boxes the split is: **152 decided by rows, 116 more decided by the
 source table, and 294 decided by the generic algorithm with no rule at all.**
 
@@ -169,9 +180,11 @@ Stated rather than argued away.
 - The two source tables, counted: 18 merge rules and 4 kept-separate answers across 176 of
   718 lines; 30 collection titles named, 26 of them inside those tables.
 - The runtime table, counted: 150 owner rows over 150 distinct box labels, 137 carrying a
-  listing id, 28 of them overriding a source rule for the same box.
+  listing id.
 - Precedence read from the importer: the owner rows are applied first and short-circuit the
-  source lookup, so a row wins wherever both exist.
+  source lookup, so a row wins wherever both exist. Replaying every source rule against every
+  row: **103** rows no rule matches, **19** where a rule matches and disagrees, 28 where it
+  matches and agrees.
 - One source rule names a title id absent from the live collection; 35 owner rows have
   reformed that family under a different id.
 - The absorbed app's own comment on its kept-separate table says the source set "is the same
