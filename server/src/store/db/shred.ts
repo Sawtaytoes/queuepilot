@@ -330,9 +330,9 @@ export function shredMapOfListsDocument(doc: Document): {
         groups.push({
           name,
           position: index,
-          // Both nodes carry comments and they are different comments: `kevin:  # a note` and
-          // the block above `kevin:` hang off the KEY, while a comment on the line after
-          // `kevin:` and before the first entry hangs off the LIST.
+          // Both nodes carry comments and they are different comments: `bob:  # a note` and
+          // the block above `bob:` hang off the KEY, while a comment on the line after
+          // `bob:` and before the first entry hangs off the LIST.
           comments: commentsOf(pair.key),
           listComments: commentsOf(pair.value),
           presentation: queuePresentation(pair.key, pair.value),

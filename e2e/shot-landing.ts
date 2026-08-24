@@ -6,7 +6,7 @@
 // AFTER on the branch and the two are comparable frame for frame.
 //
 // **Fixture data, never live.** The landing renders the household's set NAMES, and those are
-// the household — "Kevin & Ashlee — Anime" in a screenshot committed to a public repo says
+// the household — a real "<person> & <person> — Anime" in a screenshot committed to a public repo says
 // something about the owner's life. Every name here is the repo's own anonymized cast
 // (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live`).
 //

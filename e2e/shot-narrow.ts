@@ -3,8 +3,8 @@
 //
 // Why a stub rather than the real server: the shots #119 needed are of the MODALS, and what
 // made those modals overflow was the length of real option labels — library names, profile
-// names, pool names. Shooting them against the household's Plex is what put "Kevin's Video
-// Projects" into a public repo. The stub below serves the same SHAPES (a long library name, a
+// names, pool names. Shooting them against the household's Plex is what put a real person's
+// named video library into a public repo. The stub below serves the same SHAPES (a long library name, a
 // long pool label) with none of the household in them, so the geometry the shots are about
 // still reproduces.
 // (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live` in the agentic root repo)
