@@ -1,7 +1,5 @@
 import { Hono } from 'hono';
-import { statSync } from 'node:fs';
 import * as cache from '../cache.js';
-import { QUEUES_PATH } from '../config.js';
 import { liveClient } from '../engine/plex-live.js';
 import { inProgress } from '../engine/resolve.js';
 import * as routing from '../engine/routing.js';
@@ -15,21 +13,12 @@ import * as providerTiles from '../providers/tiles.js';
 import type { ProviderTile } from '../providers/tiles.js';
 import * as queues from '../queues.js';
 import * as sets from '../sets.js';
+import { store } from '../store/index.js';
 import * as tiles from '../tiles.js';
 import type { ResolvedTile } from '../tiles.js';
 import type { QueueEntry, Start } from '../types.js';
 import { mapLimit } from './mapLimit.js';
 import { readBody } from './readBody.js';
-
-/** The (mtimeMs, size) of a config file, for the ETag — a stat, not a read. */
-function statPair(p: string): string {
-  try {
-    const st = statSync(p);
-    return `${Math.round(st.mtimeMs)}-${st.size}`;
-  } catch {
-    return '0-0';
-  }
-}
 
 /** A queue entry's manual start override ({season,episode}); null = automatic next-unwatched. */
 const startOf = (e: QueueEntry): Start | null => (
@@ -255,7 +244,7 @@ export function queuesRoutes(): Hono {
       //
       // Hand-rolled, and it STAYS hand-rolled: this is app logic over file mtimes and a cache
       // generation, nothing to do with the shared static handler's ETag on `web/dist`.
-      const tag = `W/"${statPair(QUEUES_PATH)}-${statPair(sets.SETS_PATH)}-${await cache.generation()}"`;
+      const tag = `W/"${store.queues.revision()}-${store.sets.revision()}-${await cache.generation()}"`;
       c.header('ETag', tag);
       c.header('Cache-Control', 'private, no-store');
       if (c.req.header('if-none-match') === tag) return c.body(null, 304);
