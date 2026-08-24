@@ -133,6 +133,18 @@ jobs:
       - name: Server typecheck
         run: $YARN workspace queuepilot-server run typecheck
 
+      # The server's first UNIT gate (added with the node:sqlite driver shim, WP-4a). Vitest,
+      # through @charcuterie/vitest-config — the same runner and the same factory `web/` below
+      # already uses, because a second runner in one repo is a second thing to learn for nothing.
+      #
+      # What lives here rather than in e2e/: a module whose contract is a RETURN SHAPE. The
+      # e2e harnesses each boot a server against a stubbed Plex, which is the right cost for
+      # "does the engine behave" and the wrong cost for "does this row come back as an ordinary
+      # object". Half of the first suite is characterization over `node:sqlite` itself, so a
+      # Node upgrade that changes a binding rule or an integer conversion fails HERE.
+      - name: Server unit tests
+        run: $YARN workspace queuepilot-server run test
+
       # The harnesses are TypeScript too, and they are the only consumer of several
       # server/src exports — a signature change that server/ typechecks against its own
       # callers still breaks them. e2e/ is a real workspace with its own `typescript` and

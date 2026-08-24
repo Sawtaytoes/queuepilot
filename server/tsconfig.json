@@ -38,5 +38,5 @@
     "noUncheckedIndexedAccess": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*", "migrate-tiers.mts"]
+  "include": ["src/**/*", "migrate-tiers.mts", "vitest.config.ts"]
 }
