@@ -14,6 +14,26 @@ are placeholders
 `e2e/fixtures/` is synthetic and is what a screenshot may show. Secrets live in the app env,
 never in the tree.
 
+**People, plays and known-how do not change that — they are SCHEMA AND CODE here, DATA in
+App-Configs.** The absorb gives this app a people table, a play log and per-person
+"knows the rules / knows how to play" claims, which reads like the first household data the
+repo has held. It is not: `groups.yaml` has had exactly this posture since groups shipped.
+`server/src/groups.ts` is the identity layer and lives here; the file that says who is in the
+household lives in `/config` and never enters the tree. The new tables inherit that split
+unchanged — `store/schema.sql`, the migration, the queries and the views are public; a name,
+a birth year, a Plex or Kavita account and a play row are not.
+
+Two things follow, and both have a cheap way to get wrong:
+
+- **A fixture is invented, never captured.** New people fixtures are **Ada, Grace and
+  Linus**; the existing group and queue fixtures keep the cast they already have (Bob, Alice,
+  Carol, Dave, Erin) and nothing needs renaming. What is banned is the shortcut of seeding a
+  test from the live database because the real data was already there.
+- **A screenshot is fixture data, and a PNG is opaque to every grep.** A before/after on a
+  people or Tonight PR is captured against fixtures, not against the running household app.
+  Nobody notices a real name in an image the way they notice one in a diff, and the repo's
+  own images live under `docs/images/` forever.
+
 ## UI / Charcuterie
 
 - **Every picker is a `Listbox`, never a native `Select`.** `Listbox` for a short list,
