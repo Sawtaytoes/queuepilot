@@ -452,6 +452,18 @@ jobs:
       - name: Store backends agree (offline)
         run: $TSX e2e/store-backend-parity-test.ts
 
+      # THE WP-3 GATE. Boots the server twice over the same fixture — once with an UNCONFIRMED
+      # people-mapping file in the config directory, once with the same file confirmed — and
+      # compares the set ids, the group ids, the `requires_profile` gate, the resolved group
+      # membership and the `/g/<id>` status codes as EXACT STRINGS across the two.
+      #
+      # Two things it pins that nothing else does: an unconfirmed mapping imports NOBODY (the
+      # identity match is manual, and a wrong match writes a "knows the rules" claim that is on
+      # no screen), and importing people disturbs no wire id — a count of five groups passes
+      # even if all five were replaced.
+      - name: People + the confirmation gate (offline)
+        run: $TSX e2e/people-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 
