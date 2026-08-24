@@ -4,13 +4,21 @@
 // writes (server.js withSnapshot); undo pushes the current state onto the redo stack and
 // restores the top of the undo stack. The stacks mirror to HISTORY_PATH (a dotfile beside
 // queues.yaml) so a container restart keeps history; a persist failure only logs — the
-// YAML files themselves are the durable state. The Python prune's writes aren't
+// YAML files themselves are the durable state.
+//
+// Both stores are reached THROUGH the seam — `store.<x>.readRawSnapshot()` /
+// `writeRawSnapshot()`, never a path and never `fs`. This module is an undo mirror OF the
+// store, not a second writer beside it, and before WP-1 it was the second writer.
+// ⚠️ Raw text is what makes a byte-for-byte restore possible and it is exactly what a SQLite
+// book of record will not have. See the warning on `LockedDocumentStore.readRawSnapshot` in
+// `store/index.ts`: undo/redo is a WP-2 redesign, not a data migration.
+// The Python prune's writes aren't
 // snapshotted: undoing "watched entries pruned" would only re-prune next scan, so nothing
 // breaks — user-facing edits are what the buttons are for.
 import { promises as fs } from 'node:fs';
-import { HISTORY_PATH, QUEUES_PATH } from './config.js';
+import { HISTORY_PATH } from './config.js';
 import { errMessage } from './errors.js';
-import { SETS_PATH } from './sets.js';
+import { store } from './store/index.js';
 import { migrateText } from './tools/entryObjects.js';
 
 /**
@@ -64,8 +72,8 @@ async function persist() {
 }
 
 async function readBoth(): Promise<Snapshot> {
-  const read = (p: string) => fs.readFile(p, 'utf8').catch(() => null); // null = file absent
-  return { q: await read(QUEUES_PATH), s: await read(SETS_PATH) };
+  // null = nothing stored yet, which `writeBoth` then skips rather than restoring an empty file.
+  return { q: await store.queues.readRawSnapshot(), s: await store.sets.readRawSnapshot() };
 }
 
 /**
@@ -117,20 +125,9 @@ async function reshapeQueues(text: string): Promise<string> {
 }
 
 async function writeBoth(snap: Snapshot) {
-  const write = async (p: string, text: string | null) => {
-    if (text == null) return;
-    const tmp = p + '.tmp';
-    await fs.writeFile(tmp, text, 'utf8');
-    try {
-      await fs.rename(tmp, p);
-    } catch {
-      await fs.writeFile(p, text, 'utf8');
-      await fs.rm(tmp, { force: true }).catch(() => {});
-    }
-  };
   // `sets.yaml` holds no entries, so only the queues half is reshaped.
-  await write(QUEUES_PATH, snap.q == null ? null : await reshapeQueues(snap.q));
-  await write(SETS_PATH, snap.s);
+  if (snap.q != null) await store.queues.writeRawSnapshot(await reshapeQueues(snap.q));
+  if (snap.s != null) await store.sets.writeRawSnapshot(snap.s);
 }
 
 // Call BEFORE a mutation. Clears the redo stack (a new edit forks history).
