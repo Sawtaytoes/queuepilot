@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 const SCRATCH = mkdtempSync(path.join(tmpdir(), 'qp-kind-'));
-process.env.PROMOTE_PATH = path.join(SCRATCH, 'promote.sqlite');
+// The lead cooldowns live in the book of record now (WP-2), and its path is derived from
+// QUEUES_PATH — so pointing that at SCRATCH already keeps this suite's cooldowns to itself.
 
 const {
   normalizeProductKind, normalizeAddAs, isRandomOrder, wireKindForSet,
