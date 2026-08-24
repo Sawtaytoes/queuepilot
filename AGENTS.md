@@ -357,6 +357,40 @@ Three of them — `drag-stability`, `shelf-remove` and `group-create` — were m
 list while running in CI the whole time. A gate this file does not name is a gate nobody
 re-runs by hand before claiming a change is safe.
 
+> ### The browser gates will not launch in an agent sandbox — that is the container
+>
+> Every gate in the table above launches a real chromium through `e2e/playwright.ts`. The
+> agent container ships browsers for its **own** globally-installed Playwright at a root-owned
+> `/opt/pw-browsers` and points `PLAYWRIGHT_BROWSERS_PATH` there. `e2e/package.json` pins its
+> own Playwright, which wants a **different** revision, and that directory is not writable by
+> the agent user. The launch dies naming a build number that is not there.
+>
+> Install this repo's build somewhere writable and point the run at it:
+>
+> ```sh
+> PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers yarn workspace queuepilot-e2e run playwright install chromium
+> PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers server/node_modules/.bin/tsx e2e/narrow-scroll-test.ts
+> ```
+>
+> Full `chromium`, not `chromium-headless-shell` — these harnesses drive a real browser.
+> `--dry-run` on the install prints the exact revision and path without downloading.
+>
+> ⚠️ **Do not run `yarn install-playwright-browser` in the container.** It passes
+> `--with-deps`, which needs root to apt-install system libraries, and the agent has no
+> `sudo` — it stalls rather than failing. That is the same `--with-deps` call that stalled CI
+> for six hours on 2026-08-19. It is for CI; run `playwright install` directly, as above.
+>
+> ⚠️ **Never fix this by changing the repo.** Bumping `playwright` in `e2e/package.json` to
+> match the container changes what this repo tests against for a reason that has nothing to do
+> with the product — and that pin exists precisely so the version stops moving on its own.
+>
+> ⚠️ **Never report a browser gate as unrunnable because of it.** A gate that passed under the
+> override is a passing gate — say that you used the override. A gate nobody can run is worse
+> than a gate this file does not name.
+>
+> Long version: `docs/runbooks/agent-sandbox-runtime.md` in the `agentic` workspace, and the
+> decision `docs/decisions/2026-08-24-a-playwright-browser-mismatch-is-an-environment-override-never-a-version-bump.md`.
+
 ## Working here
 
 - **Commit small, push often**, and never leave a dirty tree behind.
