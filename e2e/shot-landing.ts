@@ -87,12 +87,21 @@ try {
   await settle();
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-group.png`, fullPage: true });
 
+  // A group whose NAME is also the account its rule pools are bound to — the case
+  // `accountInGroup` exists for. `bob` above cannot show it: it holds only Picks queues, and
+  // the account only ever appears in a rule pool's meta. Here "Younger Kids" is the page
+  // title, the lit chip, the name `labelInGroup` already stripped off each card, and (before
+  // this shot was added) the first two words of two of the three metas.
+  await page.goto(`http://localhost:${PORT}/g/younger-kids`, { waitUntil: 'domcontentloaded' });
+  await settle();
+  await page.screenshot({ path: `__screenshots__/landing-${TAG}-account-group.png`, fullPage: true });
+
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-narrow.png`, fullPage: true });
 
-  console.log(`shot: __screenshots__/landing-${TAG}-{wide,group,narrow}.png`);
+  console.log(`shot: __screenshots__/landing-${TAG}-{wide,group,account-group,narrow}.png`);
 } finally {
   await browser.close();
   if (server) killServer(server);
