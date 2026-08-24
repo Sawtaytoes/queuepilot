@@ -13,7 +13,7 @@
     "build": "yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build",
     "install-playwright-browser": "yarn workspace queuepilot-e2e run playwright install chromium --with-deps",
     "lint": "yarn workspace queuepilot-web run lint",
-    "test": "yarn workspace queuepilot-web run test",
+    "test": "yarn workspace queuepilot-web run test && yarn workspace queuepilot-server run test",
     "typecheck": "yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck"
   }
 }
