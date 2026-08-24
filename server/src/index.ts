@@ -17,6 +17,7 @@ import * as finished from './finished.js';
 import * as mqttd from './mqttd.js';
 import { seedIfMissing } from './groups.js';
 import * as sets from './sets.js';
+import { ensurePeopleImported } from './store/migrate/people.js';
 import { startLiveUpdates } from './sse.js';
 import * as warm from './warm.js';
 
@@ -59,6 +60,16 @@ try {
   await seedIfMissing(registrySets);
 } catch (e) {
   console.log(`[groups] seed skipped: ${e instanceof Error ? e.message : String(e)}`);
+}
+
+// The people import, if and only if the owner has confirmed the mapping file that says which
+// Board Game Picker player is which human here. It stats two paths and returns when neither
+// exists, which is every CI runner and every offline harness; it writes nothing at all without
+// an explicit `confirmed: true`. Identity match is manual — see `store/migrate/people.ts`.
+try {
+  ensurePeopleImported();
+} catch (e) {
+  console.log(`[people] import skipped: ${e instanceof Error ? e.message : String(e)}`);
 }
 
 // The file watcher + the two MQTT subscriptions that push over SSE. Kept out of

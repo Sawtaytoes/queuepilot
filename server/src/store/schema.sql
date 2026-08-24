@@ -68,7 +68,9 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 
 -- Per-store bookkeeping: the document-level YAML comments, the top-level keys that belong to
 -- no row (`sets.yaml`'s `global:`), the write counter behind `revision()`, and the YAML
--- importer's fingerprint. `store` is one of 'sets' | 'queues' | 'groups' | 'pending'.
+-- importer's fingerprint. `store` is one of 'sets' | 'queues' | 'groups' | 'pending' |
+-- 'people' — the last of which has no YAML file and uses this only for the version counter
+-- and the people-mapping fingerprint.
 CREATE TABLE IF NOT EXISTS store_meta (
   store TEXT NOT NULL,
   key   TEXT NOT NULL,
@@ -226,3 +228,102 @@ CREATE TABLE IF NOT EXISTS lead_cooldown (
 );
 
 CREATE INDEX IF NOT EXISTS lead_cooldown_led_at ON lead_cooldown (led_at);
+
+-- ── People — the household, and the identity the absorb needs ────────────────────────────
+--
+-- WP-3. The decision (2026-08-22-queuepilot-absorbs-board-game-picker-tonight-pick §6) says to
+-- EXTEND groups rather than invent a second identity system, so this is not a parallel model:
+-- a PERSON is the human, and a GROUP becomes a SAVED SET OF PEOPLE — a one-tap shortcut on the
+-- Tonight form. The group keeps its wire id, its label and its `sets:` claim list; what it
+-- gains is `group_people`.
+--
+-- ── Why real columns here, and JSON above ────────────────────────────────────────────────
+--
+-- `sets` and `groups` keep their whole mapping in `data` because they are projections of a
+-- HAND-EDITED YAML file, where a key nobody thought to promote must survive the round trip.
+-- People have no file and no hand-edited source — they arrive from Board Game Picker's
+-- `players` table and from this app's own editor — so there is nothing to lose and a column is
+-- the honest shape. This is the promotion the `sets` header says WP-3 would do.
+--
+-- ── The rule that outranks the rest of this section ──────────────────────────────────────
+--
+-- IDENTITY MATCH IS MANUAL, NEVER FUZZY. Board Game Picker knows a player by display name;
+-- this app knows the same human by a Plex account and a Kavita account that spell him
+-- differently. A name-matching heuristic that gets that wrong writes the wrong person's
+-- "knows the rules" claim, which is a per-person fact a play may RENEW and must never INVENT
+-- (board-games 2026-08-17-knowing-the-rules-is-a-per-person-fact-not-a-play-count). So the
+-- import reads an owner-confirmed mapping file and refuses to run without one —
+-- `store/migrate/people.ts`.
+
+CREATE TABLE IF NOT EXISTS people (
+  -- A WIRE ID, like `sets.id` and `groups.id`, and for the same reason: it is a URL. Immutable
+  -- once created; the display name is what a rename changes.
+  id           TEXT PRIMARY KEY,
+  -- Roster order, the way `sets.position` is shelf order. Not an identity.
+  position     INTEGER NOT NULL DEFAULT 0,
+  display_name TEXT NOT NULL DEFAULT '',
+  -- Board Game Picker's three per-person picker fields, ported with their own names.
+  -- `birth_year` rather than an age, because an age is wrong within a year of being written.
+  birth_year   INTEGER CHECK (birth_year IS NULL OR birth_year BETWEEN 1900 AND 2200),
+  -- The heaviest game this person will sit down to, on BoardGameGeek's 1–5 weight scale.
+  -- NULL is "no ceiling stated", which is NOT the same as 5 — the picker treats the two
+  -- differently, so the column keeps them different.
+  max_weight   REAL CHECK (max_weight IS NULL OR (max_weight > 0 AND max_weight <= 5)),
+  -- `is_beginner`, not `beginner`: a boolean carries an `is`/`has` prefix (house rule).
+  is_beginner  INTEGER NOT NULL DEFAULT 0 CHECK (is_beginner IN (0, 1)),
+  -- Provenance, and the reason the import is idempotent. `source` is 'board-game-picker' for a
+  -- migrated player and NULL for a person created here; `source_id` is that player's uuid. A
+  -- second run of the import finds the row by (source, source_id) and updates it rather than
+  -- writing a twin under a different id.
+  source       TEXT,
+  source_id    TEXT,
+  -- ISO 8601. Nullable because a person created before this column existed has no honest
+  -- answer, and inventing `now` would make an old row look new.
+  created_at   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS people_position ON people (position);
+-- Partial, so the many rows with no provenance do not collide on (NULL, NULL).
+CREATE UNIQUE INDEX IF NOT EXISTS people_source_id ON people (source, source_id)
+  WHERE source_id IS NOT NULL;
+
+-- The provider account map — exactly what `groups.yaml`'s `accounts:` holds, one row per
+-- (person, provider kind, account name). A child table rather than a JSON column because this
+-- is the join the whole feature exists for: Plex knows a person by one handle, Kavita knows the
+-- same human by another, and "show me everything of theirs" is a lookup BY ACCOUNT.
+--
+-- N-to-M in both directions, and both directions are real: one person may hold two Plex
+-- accounts, and two people may share one.
+CREATE TABLE IF NOT EXISTS person_accounts (
+  person_id   TEXT NOT NULL REFERENCES people (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  -- Lower-cased provider kind: 'plex', 'kavita', …
+  kind        TEXT NOT NULL,
+  -- The account name as the PROVIDER spells it, verbatim. Never normalised on the way in —
+  -- it is shown back to the person who typed it.
+  account     TEXT NOT NULL,
+  position    INTEGER NOT NULL DEFAULT 0,
+  -- The match key. `groups.ts` has always compared account names case-insensitively, because a
+  -- Plex handle and a Kavita display name are typed by hand into a YAML file and a capital
+  -- letter is not a different person. Generated rather than stored so it cannot drift.
+  account_key TEXT GENERATED ALWAYS AS (lower(trim(account))) VIRTUAL,
+  PRIMARY KEY (person_id, kind, account)
+);
+
+CREATE INDEX IF NOT EXISTS person_accounts_lookup ON person_accounts (kind, account_key);
+
+-- Which people a group stands for — the "saved set of people" half of the decision.
+--
+-- ⚠️ NO FOREIGN KEY ON `group_id`, and this one is not a bridge-release compromise like
+-- `lead_cooldown`'s. `store/db/groups.ts writeDoc()` and the YAML importer both replace the
+-- whole `groups` table with DELETE + INSERT on EVERY write, so an `ON DELETE CASCADE` here
+-- would silently empty every group's roster the next time anybody renamed a group. The
+-- membership is repaired by the importer and reported by `store/db/people.ts orphanGroupIds()`,
+-- never enforced by a constraint that deletes household data as a side effect.
+CREATE TABLE IF NOT EXISTS group_people (
+  group_id  TEXT NOT NULL,
+  person_id TEXT NOT NULL REFERENCES people (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  position  INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (group_id, person_id)
+);
+
+CREATE INDEX IF NOT EXISTS group_people_person ON group_people (person_id);
