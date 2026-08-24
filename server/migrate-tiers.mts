@@ -9,8 +9,9 @@
 // nothing there for this to import. It was already a run-once-by-hand tool — the deploy
 // runbook copies sets.yaml to sets.yaml.bak-pr4-<date> first — so this costs nothing
 // beyond running it next to the repo instead of next to the app.
-import { migrateLegacyTiers, SETS_PATH } from './src/sets.js';
+import { migrateLegacyTiers } from './src/sets.js';
+import { store } from './src/store/index.js';
 
 const res = await migrateLegacyTiers();
-console.log(`[migrate-tiers] ${SETS_PATH}:`, JSON.stringify(res));
+console.log(`[migrate-tiers] ${store.sets.path}:`, JSON.stringify(res));
 if (!res.migrated && res.reason === 'no legacy tier sets to migrate') process.exitCode = 1;

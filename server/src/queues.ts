@@ -3,13 +3,14 @@
 // takes. Both writers (this Node editor + queue_builder.queues.prune) run in the same
 // container but as separate processes, so the Python threading lock can't cover us — a
 // mkdir-based advisory lock on `<queues.yaml>.lock` does (see queue_builder/queues.py).
-import { promises as fs } from 'node:fs';
-import { parseDocument, YAMLSeq, isCollection, isNode, isPair, isScalar } from 'yaml';
+//
+// The FILE half of that — path, lock, parse, write — is `store/queues.ts`'s now. What is left
+// here is the entry vocabulary and every mutation over the parsed document.
+import { YAMLSeq, isCollection, isNode, isPair, isScalar } from 'yaml';
 import type { Document, Node } from 'yaml';
-import { QUEUES_PATH } from './config.js';
+import { store } from './store/index.js';
 import { QUEUE_SERIES_LENGTH } from './env.js';
 import { toWeight } from './engine/weight.js';
-import { isNodeError } from './errors.js';
 import * as sets from './sets.js';
 import { toEntryObject } from './entryFormat.js';
 import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
@@ -42,47 +43,10 @@ function plain(node: unknown): unknown {
   return isNode(node) ? node.toJSON() : node;
 }
 
-const LOCK_DIR = QUEUES_PATH + '.lock';
-const LOCK_STALE_MS = 15000; // a holder older than this is presumed dead; steal the lock
-const LOCK_WAIT_MS = 10000; // give up acquiring after this
-const sleep = (ms: number) => new Promise<void>((r) => { setTimeout(r, ms); });
-
-async function acquireLock(): Promise<void> {
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      await fs.mkdir(LOCK_DIR);
-      return;
-    } catch (e) {
-      if (!isNodeError(e) || e.code !== 'EEXIST') throw e;
-      // Steal a stale lock (a crashed holder that never rmdir'd).
-      try {
-        const st = await fs.stat(LOCK_DIR);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await fs.rmdir(LOCK_DIR).catch(() => {});
-          continue;
-        }
-      } catch {
-        /* lock vanished between mkdir and stat — retry */
-      }
-      if (Date.now() > deadline) throw new Error('timed out acquiring queues.yaml lock');
-      await sleep(50);
-    }
-  }
-}
-
-async function releaseLock(): Promise<void> {
-  await fs.rmdir(LOCK_DIR).catch(() => {});
-}
-
-async function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  await acquireLock();
-  try {
-    return await fn();
-  } finally {
-    await releaseLock();
-  }
-}
+// Persistence lives in `store/queues.ts` now — the path, the cross-process mkdir lock the
+// Python prune also takes, and the comment-preserving round-trip. Aliased rather than
+// re-wrapped so every call site below reads exactly as it did.
+const { readDoc, withLock } = store.queues;
 
 // Stable identity for an entry — MUST match queue_builder.queues.entry_key so the two
 // writers address the same lines. `value` is a plain-JS entry (scalar or {ratingKey,title}).
@@ -153,18 +117,6 @@ export function parseDuration(value: unknown): number | null {
   return n * (DURATION_UNITS[m[2] ?? ''] ?? 1);
 }
 
-async function readDoc(): Promise<Document> {
-  let text = '';
-  try {
-    text = await fs.readFile(QUEUES_PATH, 'utf8');
-  } catch (e) {
-    if (!isNodeError(e) || e.code !== 'ENOENT') throw e;
-  }
-  const doc: Document = parseDocument(text);
-  if (!doc.contents || typeof doc.get !== 'function') doc.contents = doc.createNode({});
-  return doc;
-}
-
 function seqFor(doc: Document, setName: string): YAMLSeq {
   const seq = doc.get(setName);
   if (seq instanceof YAMLSeq) return seq;
@@ -173,23 +125,9 @@ function seqFor(doc: Document, setName: string): YAMLSeq {
   return fresh;
 }
 
-// Match the Python/ruamel writer's style so the file doesn't churn as the two writers
-// alternate: `indentSeq: false` puts block dashes at the key's indent (ruamel offset=0),
-// `lineWidth: 0` disables wrapping so long titles/comments stay on one line.
-const YAML_OUT = { indentSeq: false, lineWidth: 0 };
-
 async function writeDoc(doc: Document): Promise<void> {
   _allCache = null; // see listAll(): stat-keyed memo, busted explicitly on our own writes
-  const text = doc.toString(YAML_OUT);
-  const tmp = QUEUES_PATH + '.tmp';
-  await fs.writeFile(tmp, text, 'utf8');
-  try {
-    await fs.rename(tmp, QUEUES_PATH); // atomic on the same filesystem
-  } catch {
-    // A single-file bind-mount rejects rename-over (EBUSY); fall back to in-place write.
-    await fs.writeFile(QUEUES_PATH, text, 'utf8');
-    await fs.rm(tmp, { force: true }).catch(() => {});
-  }
+  await store.queues.writeDoc(doc);
 }
 
 function entriesOf(doc: Document, setName: string): QueueEntry[] {
@@ -227,12 +165,8 @@ interface AllCache {
 let _allCache: AllCache | null = null;
 
 export async function listAll(): Promise<Map<string, QueueEntry[]>> {
-  let st = null;
-  try {
-    st = await fs.stat(QUEUES_PATH);
-  } catch {
-    st = null; // no file yet: parse the empty document, don't memoize
-  }
+  // null = no file yet: parse the empty document, don't memoize.
+  const st = await store.queues.stat();
   if (st && _allCache && _allCache.mtimeMs === st.mtimeMs && _allCache.size === st.size) {
     return _allCache.map;
   }

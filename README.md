@@ -94,7 +94,8 @@ tier, detected from the PMS debug log):
 | `server/src/driver.js` | the playback state machine (`PLAYBACK_FSM`): verified, retried transitions to playing |
 | `server/src/adb.js` | the Shield's Plex profile picker over ADB (profile-gated cards) |
 | `server/src/profiles.js` | detect the Shield's signed-in profile from the PMS debug log (`set=auto`) |
-| `server/src/queues.js` / `sets.js` | the YAML stores: curated queues + channel definitions (comment-preserving writers) |
+| `server/src/queues.js` / `sets.js` | the queue + set MODEL: entry vocabulary, normalization, the mutations |
+| `server/src/store/` | the store seam — where the durable state lives and how it is read and written. Four YAML files today (`sets`, `queues`, `groups`, `pending`); nothing outside it names a `.yaml` path |
 | `cast_sidecar/` | the ONLY Python left: a pychromecast bridge for `PLAYBACK_MODE=cast` |
 | `web/` | React + TypeScript + Vite web editor for the curated movie/anime queues (Tailwind on `@charcuterie/ui`) |
 | `docs/why-queues-not-plex-playlists.md` | 💬 RATIONALE: why "queues" are a watched-state-aware recipe, not native Plex Playlists |
