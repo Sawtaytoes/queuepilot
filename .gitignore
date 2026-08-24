@@ -29,6 +29,20 @@ server/dist/
 cache.sqlite
 cache.sqlite-wal
 cache.sqlite-shm
+# The BOOK OF RECORD (decision 2026-08-23-sqlite-is-the-book-of-record-and-cache-sqlite-stays-derived).
+# The opposite of the cache above — it is backed up and it is never deleted — but it is just as
+# much not a tracked artifact, and ~50 e2e harnesses each create one beside their scratch YAML.
+*.queuepilot.sqlite
+*.queuepilot.sqlite-wal
+*.queuepilot.sqlite-shm
+queuepilot.sqlite
+queuepilot.sqlite-wal
+queuepilot.sqlite-shm
+# The importer's copy-aside.
+store-imports/
+# Agent scratch: a frozen copy of the live YAML, taken in one `cp` so nothing is diffed
+# against a file the production app is still writing to.
+.scratch/
 
 # D3 engine-parity corpus (docs/d3-engine-parity-corpus.md): real library data, never committed.
 __corpus__/
