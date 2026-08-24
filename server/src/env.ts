@@ -303,10 +303,12 @@ export const OLLAMA_MODEL = str('OLLAMA_MODEL', 'gemma3:4b');
 // Deletable, gitignored, never backed up. `rm` it and the app rebuilds it.
 export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
 
-// --- Priority-queue lead cooldowns (decision 2026-08-23-kind-is-picks-or-rules) //
-// DURABLE — not the derived cache. A wipe here forgets "this title already led today".
-// Lives beside sets.yaml / queues.yaml on the config mount.
-export const PROMOTE_PATH = str('PROMOTE_PATH', '/config/promote.sqlite');
+// --- Priority-queue lead cooldowns --- //
+// `PROMOTE_PATH` is GONE. The `lead_cooldown` table folded into the book of record
+// (`/config/queuepilot.sqlite`, `STORE_PATH` in config.ts) on 2026-08-23 — decision
+// 2026-08-23-promote-sqlite-folds-into-the-book-of-record. Do not reintroduce it: a third
+// durable SQLite file is a third file to remember to back up, and this one had never been
+// created on disk, which is what made the fold free.
 
 // --- providers (decision 2026-08-12-backends-are-providers-behind-a-media-neutral-seam) //
 // Definitions are plaintext and live beside sets.yaml / queues.yaml. TOKENS DO NOT: they get

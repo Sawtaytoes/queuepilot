@@ -1,10 +1,12 @@
 # Lead cooldowns live in durable `promote.sqlite`, not `cache.sqlite`
 
-- **Status:** Accepted
+- **Status:** Superseded in part
 - **Date:** 2026-08-23
 - **Type:** storage / playback semantics
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-08-23-promote-sqlite-folds-into-the-book-of-record](2026-08-23-promote-sqlite-folds-into-the-book-of-record.md)
+  — **only** the choice of file. The reasoning below about `cache.sqlite` is unchanged and is
+  what the later record carries forward.
 - **Builds on:** [kind-is-picks-or-rules](2026-08-23-kind-is-picks-or-rules.md),
   [sqlite-is-a-derived-plex-cache-not-the-store](2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store.md)
 
