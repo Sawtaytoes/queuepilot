@@ -34,6 +34,46 @@ Two things follow, and both have a cheap way to get wrong:
   Nobody notices a real name in an image the way they notice one in a diff, and the repo's
   own images live under `docs/images/` forever.
 
+## People
+
+A **person** is a human. A **group** is a SAVED SET OF PEOPLE — a one-tap shortcut, not a
+second kind of thing. The group keeps its wire id, its `/g/<id>` URL, its label and its
+`sets:` claim list; what it gained in WP-3 is `group_people`
+([decision](docs/decisions/2026-08-23-a-group-is-a-saved-set-of-people-and-the-identity-match-is-manual.md)).
+Four things bite here, and three of them bite silently.
+
+- **IDENTITY MATCH IS MANUAL, AND THE IMPORT IS GATED.** `store/migrate/people.ts` writes
+  nothing until a mapping file in the config directory carries an explicit `confirmed: true`,
+  which the generator (`server/src/tools/people-mapping.ts propose`) writes COMMENTED OUT. A
+  confirmed file that fails validation also writes nothing — there is **no partial import**.
+  Do not add a flag that skips the gate, and do not add name matching anywhere: every match
+  the tool proposes is an EXACT, case-insensitive equality between a Board Game Picker display
+  name (or its first word) and a group's label or one of its provider account names. The thing
+  a fuzzy match corrupts is `player_known_games` — "can this person start this game without the
+  rulebook" — which is a fact a person STATES, which a play may renew and must never invent,
+  and which **appears on no screen attached to a name**. The play log it would also corrupt is
+  two rows.
+- **`group_people` has NO foreign key on `group_id`, and that is not an oversight.**
+  `store/db/groups.ts writeDoc()` and the YAML importer both replace the whole `groups` table
+  with `DELETE` + `INSERT` on EVERY write, so an `ON DELETE CASCADE` would empty every roster
+  the next time anybody renamed a group. Do not "fix" it by adding the constraint.
+  `orphanGroupIds()` reports the dangling ids; under `STORE_BACKEND=yaml` the `groups` table is
+  empty by design, so every id looks orphaned there and the answer is a thing to look at, never
+  a thing to delete. The FK to `people` stays — nothing ever replaces that table wholesale.
+- **A group's own `accounts:` is not retired by a person's.** They are UNIONED. A group may
+  stand for a provider account no household member holds, and a person may hold one no group
+  listed; dropping either half loses sets out of a group with no error.
+- **`max_weight: null` is "no ceiling stated", which is NOT 5.** The picker treats them
+  differently. Same discipline as `pending.libraries`, where `[]` and absent are different
+  answers.
+
+The mapping file's format is documented by example at
+`server/src/store/migrate/people-mapping.example.yaml` — the cast there is Ada, Grace and
+Linus, and the real file lives in `/config` and never enters this repo. `e2e/people-test.ts`
+is the gate: it boots twice over one fixture, once unconfirmed and once confirmed, and compares
+the set ids, the group ids, the `requires_profile` membership and the `/g/<id>` status codes as
+EXACT STRINGS. A count passes even when every id was replaced.
+
 ## UI / Charcuterie
 
 - **Every picker is a `Listbox`, never a native `Select`.** `Listbox` for a short list,
@@ -295,6 +335,7 @@ yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run 
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
+server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
 ```
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every

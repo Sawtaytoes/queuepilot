@@ -1,0 +1,154 @@
+# QueuePilot — the people mapping file, documented by example.
+#
+# ⚠️ THIS FILE IS THE FORMAT, NOT THE DATA. The real one lives beside the store in `/config`
+# and holds real names; this repo is public, so the cast here is Ada, Grace and Linus and the
+# ids are invented. Never copy a real mapping into the repo, and never copy this file into
+# `/config` expecting it to do anything.
+#
+# ── What it is for ──────────────────────────────────────────────────────────────────────
+#
+# Board Game Picker knows a player by display name. QueuePilot knows the same human by the
+# Plex and Kavita accounts they sign in as, inside a group whose label is a third spelling.
+# Those strings do not match each other, so nothing here is matched by name: this file is a
+# human's decision, written down once, and the import refuses to run without it.
+#
+# ── How to use it ───────────────────────────────────────────────────────────────────────
+#
+# 1. The tool writes a PROPOSAL:
+#        server/node_modules/.bin/tsx server/src/tools/people-mapping.ts propose \
+#          --bgp <board-game-picker.sqlite> --out /config/people-mapping-proposal.yaml --write
+#    Every proposal carries its evidence and a confidence. Anything the tool could not settle
+#    is in `unmatched:` rather than guessed into place.
+# 2. READ IT. Fix anything wrong. Move any `unmatched:` block you can answer up into
+#    `people:` or `groups:`; leave the rest where it is.
+# 3. Uncomment `confirmed: true` at the top.
+# 4. The app imports it the NEXT TIME IT STARTS. Nothing watches the file. To do it by hand
+#    and see the report first:
+#        server/node_modules/.bin/tsx server/src/tools/people-mapping.ts import          # dry run
+#        server/node_modules/.bin/tsx server/src/tools/people-mapping.ts import --apply
+#
+# ── The rules the import enforces ───────────────────────────────────────────────────────
+#
+#   * No `confirmed: true` → nothing is written. The key is absent by default and that is the
+#     whole gate.
+#   * A file that does not validate writes NOTHING. There is no partial import: a file that is
+#     half right is a file to look at, not half a household.
+#   * The file OWNS the rows it names and nothing else. A person already in the database that
+#     this file never mentions is left alone, so a re-run after a hand edit is safe.
+#   * It is IDEMPOTENT. `board_game_picker_id` is what a second run finds the row by, so
+#     running it twice updates rather than writing a twin.
+#   * `unmatched:` is never read.
+
+# confirmed: true
+
+version: 1
+
+# ── people ──────────────────────────────────────────────────────────────────────────────
+#
+# One entry per human. `id` is IMMUTABLE and is a URL, so it is lower-case letters, digits and
+# hyphens. `display_name` is what the app shows and may be changed whenever.
+#
+# `accounts:` is provider kind -> the account names that provider knows this person by. It is
+# exactly the shape `groups.yaml` already holds, and it is the join that makes "everything of
+# theirs" answerable across two backends that agree about nothing.
+#
+# `birth_year`, `max_weight` and `is_beginner` come straight from Board Game Picker's
+# `players`. `max_weight` is BoardGameGeek's 1–5 weight scale, and **null is "no ceiling
+# stated", which is not the same as 5**.
+people:
+- id: ada
+  display_name: Ada
+  board_game_picker_id: 11111111-1111-4111-8111-111111111111
+  accounts:
+    plex: [ada-on-plex]
+    kavita: [Ada]
+  birth_year: null
+  max_weight: 4.2
+  is_beginner: false
+  # How many `player_known_games` rows this player carries. READ-ONLY — the import ignores it —
+  # and the field to look at first. A wrong match on a player with zero costs nothing; a wrong
+  # match on a player with claims says somebody knows a game they do not, on no screen.
+  known_how_claims: 2
+  # WHY this player is this human. State the fact, not the impression: a matching account
+  # name, a matching birth year, the only candidate left. "The names look alike" is not
+  # evidence and belongs in `unmatched:`.
+  evidence:
+  - the group 'ada' is labelled with this player's given name
+  - that group's kavita account is spelled the same way
+  confidence: high
+
+- id: grace
+  display_name: Grace
+  board_game_picker_id: 22222222-2222-4222-8222-222222222222
+  accounts: {}
+  birth_year: 1990
+  max_weight: 3.0
+  is_beginner: false
+  known_how_claims: 0
+  evidence:
+  - no QueuePilot group names this player, so nothing is being merged
+  confidence: high
+
+- id: linus
+  display_name: Linus
+  # A person created here rather than migrated has no source id. Leave it out.
+  accounts:
+    plex: [linus-on-plex]
+  birth_year: null
+  max_weight: null
+  is_beginner: true
+  evidence:
+  - added by hand
+  confidence: high
+
+# ── groups ──────────────────────────────────────────────────────────────────────────────
+#
+# A group is now a SAVED SET OF PEOPLE — a one-tap shortcut on the Tonight form, not a second
+# kind of thing. It keeps its wire id, its `/g/<id>` URL, its label and its `sets:` list; what
+# it gains is this roster.
+#
+# `id` must be a group that ALREADY EXISTS. This file never creates one: a group id is a
+# bookmarked URL and inventing one is the owner's decision, not a migration's. `label` is here
+# for the reader and is never written back.
+#
+# The order of `people:` is the roster order.
+groups:
+- id: ada
+  label: Ada
+  people: [ada]
+  evidence:
+  - a group of one, and the person it is one of
+  confidence: high
+
+- id: ada-linus
+  label: Ada & Linus
+  people: [ada, linus]
+  evidence:
+  - Board Game Picker's `group_players` names both by primary key — no name matching involved
+  confidence: high
+
+# ── unmatched ───────────────────────────────────────────────────────────────────────────
+#
+# NEVER IMPORTED. This is where the proposal says "I could not tell", so the question is
+# written down in the same file as the answers instead of being dropped.
+#
+# To answer one: move the block up into `people:` or `groups:` and give it the fields those
+# sections want. To leave it for later: leave it here. Neither costs anything.
+unmatched:
+  people:
+  - board_game_picker_id: 33333333-3333-4333-8333-333333333333
+    display_name: A player with no obvious home
+    question: >-
+      Is this somebody QueuePilot already knows under a different name, or a new person?
+      Importing them as new is safe; merging them into the wrong person is not.
+    candidates: [ada, grace]
+    confidence: low
+
+  groups:
+  - id: everyone
+    label: Everyone
+    question: >-
+      Which people is this group? Its label names no one and it holds no provider account,
+      so there is nothing to read it off.
+    candidates: [ada, grace, linus]
+    confidence: low
