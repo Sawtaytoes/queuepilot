@@ -437,6 +437,21 @@ jobs:
       - name: YAML comment round-trip
         run: $TSX e2e/yaml-roundtrip-test.ts
 
+      # THE WP-2 GATE. Boots the server twice over identical copies of one committed fixture —
+      # once with STORE_BACKEND=yaml, once with sqlite — and compares /api/queues, /api/sets,
+      # /api/groups and /api/pending. NOTHING IS MASKED: Plex is unreachable in both runs, so
+      # every field left in those bodies comes out of the store, and running the comparison
+      # with the mask removed was the check that no mask was needed.
+      #
+      # It is not a comparison against a RECORDED body, and that is deliberate. `/config` has
+      # a live writer, so a recorded response goes stale between the capture and the run for
+      # reasons that have nothing to do with the store.
+      #
+      # It also asserts the wire ids BY NAME rather than by count — a count of six passes even
+      # if all six were replaced, and a set id is what an NFC card carries.
+      - name: Store backends agree (offline)
+        run: $TSX e2e/store-backend-parity-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 

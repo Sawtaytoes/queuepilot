@@ -1,0 +1,24 @@
+# SYNTHETIC store-parity queues.yaml — a COMMITTED fixture, invented and never captured.
+#
+# The shapes that matter to the shredder: a numeric ratingKey beside a string one, a
+# collection entry, a title-only entry, every per-entry override (`episodes`, `weight`,
+# `start`, `batch_stops_at`), a `done` + `done_at` pair, an inline comment on an entry, a
+# comment block above a queue key, and a queue with NO entries at all — which is the one a
+# design that inferred queues from their entries would delete.
+bob:
+- {ratingKey: "265786", title: "Movie A (2009)"}   # INLINE: this comment rides on the entry
+- {ratingKey: 361504, title: "Movie B (1999)"}
+- {collection: "A Collection"}
+- {title: "Movie With No Key Yet (1999)"}
+- {ratingKey: "453078", title: "Show Alpha", episodes: 3, weight: 4, batch_stops_at: season}
+- {ratingKey: "357744", title: "Show Beta", start: {season: 2, episode: 5}}
+- {ratingKey: "226343", title: "Movie D (1976)", done: true, done_at: 1755900000}
+bob_alice:
+- {title: "Movie E (1985)"}
+# BLOCK: the reel plays the same lineup every night.
+demo:
+- {ratingKey: "192289", title: "Logo Sting"}
+- {ratingKey: "456907", title: "Atmos Ambience"}
+carol_reading:
+- {ratingKey: "9001", title: "Volume One"}
+empty_queue: []

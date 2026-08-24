@@ -29,14 +29,21 @@
 // into them line by line would conflict with all of them. Behind a seam it is a second
 // implementation of the interfaces below instead.
 //
-// ── What WP-2 does to it ─────────────────────────────────────────────────────────────────
+// ── WP-2 landed, and this is what it did ─────────────────────────────────────────────────
 //
-// It adds `store/schema.sql` and a SQLite implementation of these interfaces, plus
-// `store/migrate/yaml.ts` — a one-shot, idempotent import of the four files that copies each
-// one aside before it runs. The seam is then cut over one store at a time, with YAML kept as
-// a write-through rollback path for one release and as an import bridge after that. Three
-// things must survive the swap, and they are stated here because they are why the interfaces
-// have the shape they do:
+// There are now TWO implementations of every interface below, and `STORE_BACKEND` picks one:
+//
+//   sqlite  (default)  `store/db/*` over `/config/queuepilot.sqlite`, the book of record.
+//   yaml               `store/{sets,queues,groups,pending}.ts` — WP-1's, unchanged. THE
+//                      ROLLBACK. One env var and a restart puts the four files back in charge.
+//
+// The SQLite store keeps WRITING the YAML files for this release (`STORE_YAML_MIRROR`), which
+// is what makes that rollback real rather than theoretical. After this release the files are
+// an import bridge and nothing else. `store/migrate/yaml.ts` is that bridge: one-shot,
+// idempotent, and it copies all four files aside before it writes a row.
+//
+// Three things had to survive the swap, and they are why the interfaces have the shape they
+// do. All three did:
 //
 //   1. **Wire ids do not change.** A set id is the primary key TEXT, migrated verbatim. NFC
 //      cards and Home Assistant's MQTT `{"set": "<id>"}` payloads reference it, so a re-keyed
@@ -46,16 +53,28 @@
 //      supported read path, `readDoc`/`writeDoc` go through the `yaml` `Document` API and
 //      never `parse` + `stringify`; `e2e/yaml-roundtrip-test.ts` gates it.
 //   3. **`readSync` stays.** The engine's read side is synchronous on the scan path
-//      (`engine/routing.ts loadSets`, `engine/resolve.ts loadEntries`). A SQLite store answers
-//      it with `node:sqlite`'s synchronous API; an interface that were async-only would force
-//      those two call sites open, and they are in the hottest code in the app.
+//      (`engine/routing.ts loadSets`, `engine/resolve.ts loadEntries`). The SQLite store
+//      answers it with `node:sqlite`'s synchronous API, exactly as this note predicted; an
+//      interface that were async-only would have forced those two call sites open.
+//
+// ── The one interface that could not be answered by a query ──────────────────────────────
+//
+// `readRawSnapshot` / `writeRawSnapshot`, called out below and in `history.ts`. The SQLite
+// store answers them with a SERIALIZED EXPORT OF ITS OWN ROWS — the document it would have
+// written, stringified — which is the option the warning names and the only one that leaves
+// `history.ts` untouched. Undo/redo therefore survives at the store's fidelity rather than the
+// file's: everything a row can hold restores exactly, and a comment that belongs to no row was
+// already gone at the cutover rather than lost at the undo. The 1.6 MB of existing
+// `.history.json` is undo DEPTH, not user data, and starting the stacks empty costs nothing.
 //
 // ── `store/sqlite.ts` is not one of these ────────────────────────────────────────────────
 //
 // It arrived from WP-4a and is the better-sqlite3-shaped DRIVER shim over `node:sqlite` —
-// `prepare` / `exec` / `pragma` / `withTransaction`. It is what a SQLite implementation of the
-// interfaces below will be written ON; it does not implement them and it knows nothing about
-// sets, queues, groups or pending.
+// `prepare` / `exec` / `pragma` / `withTransaction`. It is what the SQLite implementation in
+// `store/db/` is written ON; it does not implement these interfaces and it knows nothing about
+// sets, queues, groups or pending. `store/db/open.ts` adds the one guard the shim's own header
+// says it cannot: a named parameter the caller FORGOT binds NULL in node:sqlite instead of
+// throwing, so every write in `store/db/` goes through `prepareChecked`.
 //
 // ── One asymmetry, on purpose ────────────────────────────────────────────────────────────
 //
@@ -65,10 +84,17 @@
 // requirement WP-2 then has to keep.
 import type { Document } from 'yaml';
 
+import { STORE_BACKEND } from '../config.js';
 import * as groupsStore from './groups.js';
 import * as pendingStore from './pending.js';
 import * as queuesStore from './queues.js';
 import * as setsStore from './sets.js';
+// The SQLite implementations. They import the interfaces below with `import type`, so the
+// cycle this reads like is erased at compile time and there is no runtime one.
+import { store as sqliteGroups } from './db/groups.js';
+import { store as sqlitePending } from './db/pending.js';
+import { store as sqliteQueues } from './db/queues.js';
+import { store as sqliteSets } from './db/sets.js';
 
 export type { PendingState } from './pending.js';
 
@@ -168,13 +194,35 @@ export interface Store {
 }
 
 function watchTargets(): string[] {
+  // Still the three YAML paths under either backend. The SQLite store mirrors them, so a
+  // change on disk is still what an open tab has to hear about — and under the `yaml` backend
+  // they are the state itself. When the mirror is switched off this list becomes the empty
+  // set and `sse.ts`'s watcher goes with it; that is a change for the release that removes the
+  // bridge, not for this one.
   return [queuesStore.path, setsStore.path, groupsStore.path];
 }
 
-export const store: Store = {
-  sets: setsStore,
-  queues: queuesStore,
-  groups: groupsStore,
-  pending: pendingStore,
-  watchTargets,
-};
+/**
+ * The seam, bound to whichever implementation `STORE_BACKEND` names.
+ *
+ * The import of `./db/*` is STATIC rather than conditional. A dynamic import would make every
+ * method async at the seam and would hide a broken SQLite store from `tsc`; the cost of
+ * loading it under `STORE_BACKEND=yaml` is a module that opens no database, because
+ * `bookOfRecord()` is lazy and nothing calls it.
+ */
+export const store: Store =
+  STORE_BACKEND === 'yaml'
+    ? {
+        sets: setsStore,
+        queues: queuesStore,
+        groups: groupsStore,
+        pending: pendingStore,
+        watchTargets,
+      }
+    : {
+        sets: sqliteSets,
+        queues: sqliteQueues,
+        groups: sqliteGroups,
+        pending: sqlitePending,
+        watchTargets,
+      };

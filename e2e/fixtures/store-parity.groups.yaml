@@ -1,0 +1,21 @@
+# SYNTHETIC store-parity groups.yaml — a COMMITTED fixture, invented and never captured.
+#
+# A group with `accounts:` only, a group with `sets:` only, and one with both — the three
+# membership shapes `groups.ts` resolves.
+groups:
+- id: bob
+  label: Bob                                # INLINE: the label is free, the id is not
+  accounts:
+    plex: [bob_plex]
+    kavita: [Bob]
+  sets:
+  - carol_reading
+- id: bob-and-others
+  label: Bob & Others
+  sets:
+  - bob_alice
+  - demo
+- id: kids
+  label: Kids
+  accounts:
+    plex: [Erin, Dave]
