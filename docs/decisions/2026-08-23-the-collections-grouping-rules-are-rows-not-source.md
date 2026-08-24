@@ -84,7 +84,7 @@ And the same fact measured from the other side, in the running database:
 | Rows carrying an external listing id | 137 |
 
 **The rows already win.** The importer applies the owner's rows *before* the source table, so
-a row short-circuits the rule lookup for the box it names. Replaying all 22 source rules
+a row short-circuits the rule lookup for the box it names. Replaying all 18 merge rules
 against all 150 rows says how much that matters:
 
 | For a box a row already names… | Rows |
@@ -182,7 +182,7 @@ Stated rather than argued away.
 - The runtime table, counted: 150 owner rows over 150 distinct box labels, 137 carrying a
   listing id.
 - Precedence read from the importer: the owner rows are applied first and short-circuit the
-  source lookup, so a row wins wherever both exist. Replaying every source rule against every
+  source lookup, so a row wins wherever both exist. Replaying every merge rule against every
   row: **103** rows no rule matches, **19** where a rule matches and disagrees, 28 where it
   matches and agrees.
 - One source rule names a title id absent from the live collection; 35 owner rows have
