@@ -16,8 +16,6 @@
 // as a SIDE EFFECT (queues.mark_done / clear_done / sweep_completed). nextQueue returns the same
 // dict next_queue returns — the persistence lands with D4. The anime-channel branch shuffles with
 // an injected rng (like build_rotation), so parity covers the deterministic non-anime queue only.
-import { readFileSync } from 'node:fs';
-import { parse } from 'yaml';
 import { setSections } from './routing.js';
 import {
   int0, atOrAfterStart, multiSeason, showEpisodes, findCollection, collectionChildren,
@@ -28,7 +26,7 @@ import { isRandomOrder } from '../kind.js';
 import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
-import { QUEUES_PATH } from '../config.js';
+import { store } from '../store/index.js';
 import { legacyEntryMessage } from '../entryFormat.js';
 import { isNodeError } from '../errors.js';
 import type { Rng } from './weight.js';
@@ -341,7 +339,9 @@ const complained = new Set<string>();
 export function loadEntries(setName: string): EntryDescriptor[] {
   let data: Record<string, unknown>;
   try {
-    data = (parse(readFileSync(QUEUES_PATH, 'utf8')) as Record<string, unknown> | null) || {};
+    // The store reads the file and THROWS; "an absent file means no entries" is this
+    // module's policy, and stays here.
+    data = (store.queues.readSync() as Record<string, unknown> | null) || {};
   } catch (e) {
     if (isNodeError(e) && e.code === 'ENOENT') return [];
     throw e;
