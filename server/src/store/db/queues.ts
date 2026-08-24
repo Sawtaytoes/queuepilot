@@ -33,7 +33,8 @@ import {
 } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
 import {
-  applyInnerComments,
+  applyPresentation,
+  applyQueuePresentation,
   assemble,
   documentFrom,
   shredMapOfListsDocument,
@@ -46,7 +47,7 @@ export const path = yamlQueues.path;
 const EMPTY_LEFTOVERS: DocumentLeftovers = {
   order: [],
   values: {},
-  keyComments: {},
+  keyPresentation: {},
   commentBefore: null,
   comment: null,
 };
@@ -58,6 +59,7 @@ interface QueueRow {
   comment: string | null;
   list_comment_before: string | null;
   list_comment: string | null;
+  presentation: string | null;
 }
 
 interface EntryRow {
@@ -66,20 +68,20 @@ interface EntryRow {
   data: string;
   comment_before: string | null;
   comment: string | null;
-  inner_comments: string | null;
+  presentation: string | null;
 }
 
 const queueRows = (): QueueRow[] =>
   prepareChecked<QueueRow>(
     bookOfRecord(),
-    'SELECT set_id, position, comment_before, comment, list_comment_before, list_comment ' +
+    'SELECT set_id, position, comment_before, comment, list_comment_before, list_comment, presentation ' +
       'FROM queues ORDER BY position',
   ).all();
 
 const entryRows = (): EntryRow[] =>
   prepareChecked<EntryRow>(
     bookOfRecord(),
-    'SELECT set_id, position, data, comment_before, comment, inner_comments FROM queue_entries ' +
+    'SELECT set_id, position, data, comment_before, comment, presentation FROM queue_entries ' +
       'ORDER BY set_id, position',
   ).all();
 
@@ -135,12 +137,13 @@ export async function readDoc(): Promise<Document> {
         comment_before: queue.list_comment_before,
         comment: queue.list_comment,
       });
+      applyQueuePresentation(pair.key, pair.value, queue.presentation);
     }
 
     (grouped.get(queue.set_id) ?? []).forEach((row, index) => {
       const node = nodeAt(doc, [queue.set_id, index]);
       applyComments(node, row);
-      applyInnerComments(node, row.inner_comments);
+      applyPresentation(node, row.presentation);
     });
   }
 
@@ -157,13 +160,13 @@ export async function writeDoc(doc: Document): Promise<void> {
     prepareChecked(db, 'DELETE FROM queues').run();
     const insertQueue = prepareChecked(
       db,
-      'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment) ' +
-        'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment)',
+      'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment, presentation) ' +
+        'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment, :presentation)',
     );
     const insertEntry = prepareChecked(
       db,
-      'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, inner_comments) ' +
-        'VALUES (:set_id, :position, :data, :comment_before, :comment, :inner_comments)',
+      'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, presentation) ' +
+        'VALUES (:set_id, :position, :data, :comment_before, :comment, :presentation)',
     );
 
     for (const group of groups) {
@@ -174,6 +177,7 @@ export async function writeDoc(doc: Document): Promise<void> {
         comment: group.comments.comment,
         list_comment_before: group.listComments.comment_before,
         list_comment: group.listComments.comment,
+        presentation: group.presentation,
       });
       for (const row of group.rows) {
         insertEntry.run({
@@ -182,7 +186,7 @@ export async function writeDoc(doc: Document): Promise<void> {
           data: row.data,
           comment_before: row.comment_before,
           comment: row.comment,
-          inner_comments: row.inner_comments,
+          presentation: row.presentation,
         });
       }
     }

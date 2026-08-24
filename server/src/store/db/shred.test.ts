@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyComments, nodeAt } from './common.js';
 import {
-  applyInnerComments,
+  applyPresentation,
   assemble,
   documentFrom,
   shredListDocument,
@@ -40,6 +40,7 @@ bob:
 - {ratingKey: 361504, title: "Movie B (1999)"}
 - {collection: "A Collection"}
 - {ratingKey: "453078", title: "Show Alpha", episodes: 3, weight: 4, start: {season: 2, episode: 5}}
+
 # BLOCK: the reel.
 demo:
 - {ratingKey: "192289", title: "Logo Sting"}
@@ -67,7 +68,20 @@ describe('shredListDocument', () => {
     // in and 34 out, queues.yaml 45 in and 45 out. Without it the count was 30 and 44.
     const { rows } = shredListDocument(parseDocument(SETS), 'sets');
     expect(rows[0]?.comment).toBeNull();
-    expect(rows[0]?.inner_comments).toContain('INNER');
+    expect(rows[0]?.presentation).toContain('INNER');
+  });
+
+  it('records HOW a node was written, not only what it holds', () => {
+    // Style is in the same column as the inner comments, because it is the same kind of thing:
+    // everything about the row that is not its value. Without it every hand-typed
+    // `- {title: "X"}` in queues.yaml would be rewritten as a block mapping on the first save,
+    // and `history.ts`'s byte-for-byte restore would be nearly-byte-for-byte.
+    const { groups } = shredMapOfListsDocument(parseDocument(QUEUES));
+    // `- {ratingKey: "265786", …}` is a FLOW mapping, and `f` at the row's own root is what
+    // brings it back as one.
+    expect(groups[0]?.rows[0]?.presentation).toContain('"f":true');
+    // …and a blank line above a queue key is not a comment, so it has its own flag.
+    expect(groups.find((group) => group.name === 'demo')?.presentation).toContain('"s":true');
   });
 
   it('keeps the FILE HEADER, which lives on the first key and not on the document', () => {
@@ -77,7 +91,7 @@ describe('shredListDocument', () => {
     // document-level pair dropped the whole header on the first write, silently, and the
     // projection still looked right.
     const { leftovers } = shredListDocument(parseDocument(SETS), 'sets');
-    expect(leftovers.keyComments.global?.key?.comment_before).toContain('HEAD');
+    expect(leftovers.keyPresentation.global?.k?.b).toContain('HEAD');
   });
 
   it('round-trips to a document that parses back to the same value', () => {
@@ -103,7 +117,7 @@ describe('shredListDocument', () => {
     rows.forEach((row, index) => {
       const node = nodeAt(rebuilt, ['sets', index]);
       applyComments(node, row);
-      applyInnerComments(node, row.inner_comments);
+      applyPresentation(node, row.presentation);
     });
 
     expect(rebuilt.toString({ indentSeq: false, lineWidth: 0 })).toMatch(/id: bob\s+# INNER/);
@@ -178,7 +192,7 @@ describe('assemble', () => {
     const leftovers = {
       order: ['global', 'sets'],
       values: { global: { excluded_sections: [] } },
-      keyComments: {},
+      keyPresentation: {},
       commentBefore: null,
       comment: null,
     };
@@ -186,7 +200,7 @@ describe('assemble', () => {
   });
 
   it('appends a key the recorded order has never seen rather than losing it', () => {
-    const leftovers = { order: ['sets'], values: {}, keyComments: {}, commentBefore: null, comment: null };
+    const leftovers = { order: ['sets'], values: {}, keyPresentation: {}, commentBefore: null, comment: null };
     expect(Object.keys(assemble(leftovers, { sets: [], newcomer: [] }))).toEqual(['sets', 'newcomer']);
   });
 });

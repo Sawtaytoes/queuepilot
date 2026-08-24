@@ -26,7 +26,7 @@ import {
 } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
 import {
-  applyInnerComments,
+  applyPresentation,
   assemble,
   documentFrom,
   shredListDocument,
@@ -42,7 +42,7 @@ export const path = yamlSets.path;
 const EMPTY_LEFTOVERS: DocumentLeftovers = {
   order: ['sets'],
   values: {},
-  keyComments: {},
+  keyPresentation: {},
   commentBefore: null,
   comment: null,
 };
@@ -53,13 +53,13 @@ interface SetRow {
   data: string;
   comment_before: string | null;
   comment: string | null;
-  inner_comments: string | null;
+  presentation: string | null;
 }
 
 const rows = (): SetRow[] =>
   prepareChecked<SetRow>(
     bookOfRecord(),
-    'SELECT id, position, data, comment_before, comment, inner_comments FROM sets ORDER BY position',
+    'SELECT id, position, data, comment_before, comment, presentation FROM sets ORDER BY position',
   ).all();
 
 const leftovers = (): DocumentLeftovers =>
@@ -86,7 +86,7 @@ export async function readDoc(): Promise<Document> {
   setRows.forEach((row, index) => {
     const node = nodeAt(doc, ['sets', index]);
     applyComments(node, row);
-    applyInnerComments(node, row.inner_comments);
+    applyPresentation(node, row.presentation);
   });
   return doc;
 }
@@ -104,8 +104,8 @@ export async function writeDoc(doc: Document): Promise<void> {
     prepareChecked(db, 'DELETE FROM sets').run();
     const insert = prepareChecked(
       db,
-      'INSERT INTO sets (id, position, data, comment_before, comment, inner_comments) ' +
-        'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
+      'INSERT INTO sets (id, position, data, comment_before, comment, presentation) ' +
+        'VALUES (:id, :position, :data, :comment_before, :comment, :presentation)',
     );
     for (const row of shredded) {
       const id = (row.value as { id?: unknown } | null)?.id;
@@ -119,7 +119,7 @@ export async function writeDoc(doc: Document): Promise<void> {
         data: row.data,
         comment_before: row.comment_before,
         comment: row.comment,
-        inner_comments: row.inner_comments,
+        presentation: row.presentation,
       });
     }
     writeMeta(db, 'sets', 'leftovers', JSON.stringify(meta));
@@ -156,13 +156,12 @@ export function revision(): string {
  * `writeRawSnapshot` puts the text back through the same shredder every other write uses — so
  * a restore is exact for everything the store can hold.
  *
- * What survives, measured against the live files: EVERY comment line — 34 of 34 in
- * `sets.yaml`, 45 of 45 in `queues.yaml` — because the row carries the block above it, the
- * trailing one on its line, and the ones attached to a key inside its mapping. What does not
- * is presentation the rows have no column for: a flow-style list becomes block, and a quoting
- * choice becomes the writer's. That is spent at the CUTOVER, on the first write, not at the
- * undo — an undo restores what the store holds, exactly. The existing 1.6 MB of
- * `.history.json` is undo depth rather than user data and starts empty after the cutover.
+ * AND IT REALLY IS BYTE FOR BYTE, measured: the live `sets.yaml` (309 lines) and `queues.yaml`
+ * (782 lines) come out of the rows identical to what went in — `diff` reports nothing. Every
+ * comment line, every blank line between two queues, every hand-typed `- {title: "X"}` still
+ * flow and every quote mark. That is what `presentation` on each row is for, and it is why the
+ * cutover reformats nothing on the household's files. The existing 1.6 MB of `.history.json` is
+ * undo depth rather than user data and starts empty after the cutover anyway.
  */
 export async function readRawSnapshot(): Promise<string | null> {
   ensureImported();

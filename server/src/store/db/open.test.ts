@@ -97,7 +97,7 @@ describe('migrate', () => {
     migrate(db);
 
     const columns = (db.pragma('table_xinfo(sets)') as { name: string }[]).map((row) => row.name);
-    expect(columns).toContain('inner_comments');
+    expect(columns).toContain('presentation');
     expect(columns).toContain('label');
 
     // …TWICE. `table_info` omits a GENERATED column, so reading the column list with it makes

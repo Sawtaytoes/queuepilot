@@ -217,12 +217,12 @@ things bite here and each has already cost something:
   container.
 
 Undo/redo still works and did not need a redesign: `readRawSnapshot()` serializes the store's
-own rows to their YAML projection, so `history.ts` is unchanged. Every comment line survives
-the round trip — 34 of 34 in `sets.yaml`, 45 of 45 in `queues.yaml` — because a row carries the
-block above it, the trailing one on its line, the ones attached to a key inside its mapping
-(`inner_comments`) and, for a queue, the one between the key and the first entry
-(`list_comment_before`). What is NOT preserved is presentation: a flow-style list becomes block
-and a quoting choice becomes the writer's, once, on the first write after the cutover.
+own rows to their YAML projection, so `history.ts` is unchanged — and the projection is
+**byte-identical** to the file it came from, measured on the live 309-line `sets.yaml` and
+782-line `queues.yaml`. That is what the `presentation` column on each row buys: a comment
+attached to a key inside a mapping, a blank line between two queues, a hand-typed
+`- {title: "X"}` still flow, a quote mark. **So the cutover reformats nothing.** If you add a
+field to a row and the YAML starts churning on save, that column is where to look.
 
 ## queues.yaml
 

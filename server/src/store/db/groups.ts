@@ -32,7 +32,7 @@ import {
 } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
 import {
-  applyInnerComments,
+  applyPresentation,
   assemble,
   documentFrom,
   shredListDocument,
@@ -45,7 +45,7 @@ export const path = yamlGroups.path;
 const EMPTY_LEFTOVERS: DocumentLeftovers = {
   order: ['groups'],
   values: {},
-  keyComments: {},
+  keyPresentation: {},
   commentBefore: null,
   comment: null,
 };
@@ -56,13 +56,13 @@ interface GroupRow {
   data: string;
   comment_before: string | null;
   comment: string | null;
-  inner_comments: string | null;
+  presentation: string | null;
 }
 
 const rows = (): GroupRow[] =>
   prepareChecked<GroupRow>(
     bookOfRecord(),
-    'SELECT id, position, data, comment_before, comment, inner_comments FROM groups ORDER BY position',
+    'SELECT id, position, data, comment_before, comment, presentation FROM groups ORDER BY position',
   ).all();
 
 const leftovers = (): DocumentLeftovers =>
@@ -113,7 +113,7 @@ export async function readDoc(): Promise<Document> {
   groupRows.forEach((row, index) => {
     const node = nodeAt(doc, ['groups', index]);
     applyComments(node, row);
-    applyInnerComments(node, row.inner_comments);
+    applyPresentation(node, row.presentation);
   });
   return doc;
 }
@@ -126,8 +126,8 @@ export async function writeDoc(doc: Document): Promise<void> {
     prepareChecked(db, 'DELETE FROM groups').run();
     const insert = prepareChecked(
       db,
-      'INSERT INTO groups (id, position, data, comment_before, comment, inner_comments) ' +
-        'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
+      'INSERT INTO groups (id, position, data, comment_before, comment, presentation) ' +
+        'VALUES (:id, :position, :data, :comment_before, :comment, :presentation)',
     );
     for (const row of shredded) {
       const id = (row.value as { id?: unknown } | null)?.id;
@@ -138,7 +138,7 @@ export async function writeDoc(doc: Document): Promise<void> {
         data: row.data,
         comment_before: row.comment_before,
         comment: row.comment,
-        inner_comments: row.inner_comments,
+        presentation: row.presentation,
       });
     }
     writeMeta(db, 'groups', 'leftovers', JSON.stringify(meta));

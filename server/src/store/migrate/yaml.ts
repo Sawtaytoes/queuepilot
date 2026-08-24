@@ -148,8 +148,8 @@ function importSets(db: SqliteDatabase): string[] {
   prepareChecked(db, 'DELETE FROM sets').run();
   const insert = prepareChecked(
     db,
-    'INSERT INTO sets (id, position, data, comment_before, comment, inner_comments) ' +
-      'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
+    'INSERT INTO sets (id, position, data, comment_before, comment, presentation) ' +
+      'VALUES (:id, :position, :data, :comment_before, :comment, :presentation)',
   );
   for (const row of rows) {
     const id = (row.value as { id?: unknown } | null)?.id;
@@ -160,7 +160,7 @@ function importSets(db: SqliteDatabase): string[] {
       data: row.data,
       comment_before: row.comment_before,
       comment: row.comment,
-      inner_comments: row.inner_comments,
+      presentation: row.presentation,
     });
     ids.push(String(id));
   }
@@ -177,13 +177,13 @@ function importQueues(db: SqliteDatabase): { ids: string[]; entries: number } {
   prepareChecked(db, 'DELETE FROM queues').run();
   const insertQueue = prepareChecked(
     db,
-    'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment) ' +
-      'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment)',
+    'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment, presentation) ' +
+      'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment, :presentation)',
   );
   const insertEntry = prepareChecked(
     db,
-    'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, inner_comments) ' +
-      'VALUES (:set_id, :position, :data, :comment_before, :comment, :inner_comments)',
+    'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, presentation) ' +
+      'VALUES (:set_id, :position, :data, :comment_before, :comment, :presentation)',
   );
 
   for (const group of groups) {
@@ -194,6 +194,7 @@ function importQueues(db: SqliteDatabase): { ids: string[]; entries: number } {
       comment: group.comments.comment,
       list_comment_before: group.listComments.comment_before,
       list_comment: group.listComments.comment,
+      presentation: group.presentation,
     });
     ids.push(group.name);
     for (const row of group.rows) {
@@ -203,7 +204,7 @@ function importQueues(db: SqliteDatabase): { ids: string[]; entries: number } {
         data: row.data,
         comment_before: row.comment_before,
         comment: row.comment,
-        inner_comments: row.inner_comments,
+        presentation: row.presentation,
       });
       entries += 1;
     }
@@ -227,8 +228,8 @@ function importGroups(db: SqliteDatabase): string[] {
   const { rows, leftovers } = shredListDocument(parseDocument(text), 'groups');
   const insert = prepareChecked(
     db,
-    'INSERT INTO groups (id, position, data, comment_before, comment, inner_comments) ' +
-      'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
+    'INSERT INTO groups (id, position, data, comment_before, comment, presentation) ' +
+      'VALUES (:id, :position, :data, :comment_before, :comment, :presentation)',
   );
   for (const row of rows) {
     const id = (row.value as { id?: unknown } | null)?.id;
@@ -239,7 +240,7 @@ function importGroups(db: SqliteDatabase): string[] {
       data: row.data,
       comment_before: row.comment_before,
       comment: row.comment,
-      inner_comments: row.inner_comments,
+      presentation: row.presentation,
     });
     ids.push(String(id));
   }

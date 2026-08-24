@@ -15,28 +15,49 @@
 // key order, which `toJSON()` and `JSON.stringify` both preserve. That is the reconstruction
 // source: a field this schema never heard of survives a full round trip, which is the property
 // a column-per-field design does not have.
-import { Document, isMap, isNode, isSeq, type Node } from 'yaml';
+import { Document, isMap, isNode, isScalar, isSeq, type Node, type Scalar } from 'yaml';
 
-import { applyComments, commentsOf, type RowComments } from './common.js';
+import { commentsOf, type RowComments } from './common.js';
 
-const hasAny = (comments: RowComments): boolean =>
-  comments.comment_before != null || comments.comment != null;
+/** The key-and-list presentation for one queue, comments EXCLUDED — those have columns of
+ * their own on the `queues` table. Null when there is nothing to record. */
+export function queuePresentation(pairKey: unknown, pairValue: unknown): string | null {
+  const onKey = slot(pairKey, false);
+  const onValue = slot(pairValue, false);
+  if (!onKey && !onValue) return null;
+  return JSON.stringify({ ...(onKey ? { k: onKey } : {}), ...(onValue ? { v: onValue } : {}) });
+}
 
-/** A top-level pair's comments, kept only when it has any — an empty pair per key would
+/** Apply it back. */
+export function applyQueuePresentation(
+  pairKey: unknown,
+  pairValue: unknown,
+  stored: string | null,
+): void {
+  if (stored == null) return;
+  try {
+    const parsed = JSON.parse(stored) as { k?: Presentation; v?: Presentation };
+    unslot(pairKey, parsed.k);
+    unslot(pairValue, parsed.v);
+  } catch {
+    /* a corrupt blob must not take a read down over a blank line */
+  }
+}
+
+/** A top-level pair's presentation, kept only when it has any — an empty pair per key would
  * triple the size of the meta row for nothing. */
-const recordKeyComments = (
-  into: Record<string, { key?: RowComments; value?: RowComments }>,
+const recordKeyPresentation = (
+  into: Record<string, { k?: Presentation; v?: PresentationTable }>,
   name: string,
   pairKey: unknown,
   pairValue: unknown,
 ): void => {
-  const onKey = commentsOf(pairKey);
-  const onValue = commentsOf(pairValue);
-  if (!hasAny(onKey) && !hasAny(onValue)) return;
-  into[name] = {
-    ...(hasAny(onKey) ? { key: onKey } : {}),
-    ...(hasAny(onValue) ? { value: onValue } : {}),
-  };
+  const onKey = slot(pairKey);
+  const onValue: PresentationTable = {};
+  collectInner(pairValue, [], onValue, true);
+  const hasValue = Object.keys(onValue).length > 0;
+  if (!onKey && !hasValue) return;
+  into[name] = { ...(onKey ? { k: onKey } : {}), ...(hasValue ? { v: onValue } : {}) };
 };
 
 /** One row on its way to or from a table: its ordinal, its JSON payload, its comments. */
@@ -47,49 +68,85 @@ export interface ShreddedRow extends RowComments {
   /** The plain value, so a caller can read its `id` without parsing the string it just made. */
   value: unknown;
   /**
-   * The comments INSIDE the row's mapping, as JSON, or null when it has none.
+   * Everything about the row that is not its VALUE: the comments inside its mapping, and how
+   * each node was written. JSON, keyed by the path from the row's own node, or null when there
+   * is nothing to say.
    *
-   * `comment_before` and `comment` cover the block above the row and the trailing one on its
-   * own line. They do not cover a comment attached to a key WITHIN the mapping — and those are
-   * the ones that carry the operational knowledge, because they explain a field:
+   * TWO KINDS OF THING, and the column is named for what they have in common rather than for
+   * either one, because a name that said "comments" would be a trap for whoever adds the third.
+   *
+   * COMMENTS. `comment_before` and `comment` cover the block above the row and the trailing one
+   * on its own line. They do not cover a comment attached to a key WITHIN the mapping — and
+   * those are the ones that carry the operational knowledge, because they explain a field:
    *
    *     requires_profile: sawtaytoes
    *     # The owner signs in as the plex.tv USERNAME, not the Plex Home title.
    *
-   * Without this the live registry lost four such lines and `queues.yaml` one, and `history.ts`
-   * lost its byte-for-byte restore with them. Keyed by the path from the row's own node, so a
-   * comment reattaches to the field it explains even after the mapping is rebuilt.
+   * Without this the live registry lost four such lines and `queues.yaml` one.
+   *
+   * STYLE. Whether a collection was written FLOW (`- {title: "X"}`) or block, and how a scalar
+   * was quoted. Without it every entry in `queues.yaml` would be rewritten from the flow form
+   * the household hand-typed into the block form the writer prefers, on the first save — a
+   * 23 KB file reformatted end to end for no reason anybody asked for. It is also what makes
+   * `history.ts`'s byte-for-byte restore true rather than nearly true;
+   * `e2e/entry-objects-test.ts` is the gate that says so.
    */
-  inner_comments: string | null;
+  presentation: string | null;
 }
 
-/** The two comment slots on one node, in their short stored form. */
-interface StoredComments {
+/** One node's presentation. Short keys because this is stored per row: `b`/`c` are the two
+ * comments, `f` is flow, `t` is a scalar's quoting style, `s` is a blank line above it. */
+export interface Presentation {
   b?: string;
   c?: string;
+  f?: true;
+  t?: string;
+  s?: true;
 }
 
-/** Every commented node inside a row, keyed by `JSON.stringify(path)`. `k` is the pair's KEY
- * node (where a comment above a field lands) and `v` its VALUE node. */
-type InnerComments = Record<string, { k?: StoredComments; v?: StoredComments }>;
+/** Every node inside a row that has something to say about itself, keyed by
+ * `JSON.stringify(path)`. `k` is the pair's KEY node (where a comment above a field lands) and
+ * `v` its VALUE node. */
+type PresentationTable = Record<string, { k?: Presentation; v?: Presentation }>;
 
-const slot = (node: unknown): StoredComments | undefined => {
+export const slot = (node: unknown, withComments = true): Presentation | undefined => {
   if (!isNode(node)) return undefined;
-  const stored: StoredComments = {};
-  if (node.commentBefore != null) stored.b = node.commentBefore;
-  if (node.comment != null) stored.c = node.comment;
-  return stored.b === undefined && stored.c === undefined ? undefined : stored;
+  const stored: Presentation = {};
+  if (withComments && node.commentBefore != null) stored.b = node.commentBefore;
+  if (withComments && node.comment != null) stored.c = node.comment;
+  // A blank line above a node. It is how the household separates one queue from the next in a
+  // 782-line file, and it is not a comment — the `yaml` API keeps it on its own flag.
+  if (node.spaceBefore) stored.s = true;
+  if ((isMap(node) || isSeq(node)) && node.flow) stored.f = true;
+  // A PLAIN scalar is the writer's own default, so recording it would double the size of this
+  // blob to say nothing.
+  if (isScalar(node) && node.type != null && node.type !== 'PLAIN') stored.t = node.type;
+  return Object.keys(stored).length === 0 ? undefined : stored;
 };
 
-const unslot = (node: unknown, stored: StoredComments | undefined): void => {
+export const unslot = (node: unknown, stored: Presentation | undefined): void => {
   if (!stored || !isNode(node)) return;
   if (stored.b != null) node.commentBefore = stored.b;
   if (stored.c != null) node.comment = stored.c;
+  if (stored.s) node.spaceBefore = true;
+  if (stored.f && (isMap(node) || isSeq(node))) node.flow = true;
+  if (stored.t != null && isScalar(node)) node.type = stored.t as Scalar['type'];
 };
 
-/** Walk a row's node and record every comment below its root. The root's own comments are the
- * row's `comment_before` / `comment` and are deliberately not repeated here. */
-function collectInner(node: unknown, path: (string | number)[], into: InnerComments): void {
+/** Walk a row's node and record everything below its root — plus the ROOT's own style, which
+ * is how a flow-written entry stays flow. Its comments are the row's own two columns and are
+ * deliberately not repeated. */
+export function collectInner(
+  node: unknown,
+  path: (string | number)[],
+  into: PresentationTable,
+  rootComments = false,
+): void {
+  if (path.length === 0) {
+    const root = slot(node, rootComments);
+    if (root) into['[]'] = { v: root };
+  }
+
   if (isMap(node)) {
     for (const pair of node.items) {
       const name = String((pair.key as Node | undefined)?.toJSON?.() ?? pair.key);
@@ -111,7 +168,9 @@ function collectInner(node: unknown, path: (string | number)[], into: InnerComme
 }
 
 /** The same walk, putting them back. */
-function restoreInner(node: unknown, path: (string | number)[], from: InnerComments): void {
+export function restoreInner(node: unknown, path: (string | number)[], from: PresentationTable): void {
+  if (path.length === 0) unslot(node, from['[]']?.v);
+
   if (isMap(node)) {
     for (const pair of node.items) {
       const name = String((pair.key as Node | undefined)?.toJSON?.() ?? pair.key);
@@ -134,13 +193,13 @@ function restoreInner(node: unknown, path: (string | number)[], from: InnerComme
   }
 }
 
-/** Put a row's inner comments back on the node rebuilt from its `data`. */
-export function applyInnerComments(node: unknown, stored: string | null): void {
+/** Put a row's presentation back on the node rebuilt from its `data`. */
+export function applyPresentation(node: unknown, stored: string | null): void {
   if (stored == null) return;
   try {
-    restoreInner(node, [], JSON.parse(stored) as InnerComments);
+    restoreInner(node, [], JSON.parse(stored) as PresentationTable);
   } catch {
-    // A corrupt meta blob must not take a read down over a comment.
+    // A corrupt blob must not take a read down over a comment or a quote mark.
   }
 }
 
@@ -164,21 +223,25 @@ export interface DocumentLeftovers {
    *     demo:
    *     # --- Lights down: logos & Atmos ambience ---
    *     - { ratingKey: 230859, … }
+   *
+   * The value's side is the RECURSIVE table, not one slot:
+   * `global: {excluded_sections: [ 2, 7, 8 ]}` puts the flow list one level DOWN from the
+   * top-level value, and recording only the value node brings it back as a block list.
    */
-  keyComments: Record<string, { key?: RowComments; value?: RowComments }>;
+  keyPresentation: Record<string, { k?: Presentation; v?: PresentationTable }>;
   commentBefore: string | null;
   comment: string | null;
 }
 
 const asRow = (item: unknown, position: number): ShreddedRow => {
   const value = (item as Node | undefined)?.toJSON?.() ?? item;
-  const inner: InnerComments = {};
-  collectInner(item, [], inner);
+  const presentation: PresentationTable = {};
+  collectInner(item, [], presentation);
   return {
     position,
     data: JSON.stringify(value ?? null),
     value,
-    inner_comments: Object.keys(inner).length === 0 ? null : JSON.stringify(inner),
+    presentation: Object.keys(presentation).length === 0 ? null : JSON.stringify(presentation),
     ...commentsOf(item),
   };
 };
@@ -197,14 +260,14 @@ export function shredListDocument(doc: Document, key: string): {
   const contents = doc.contents;
   const order: string[] = [];
   const values: Record<string, unknown> = {};
-  const keyComments: Record<string, { key?: RowComments; value?: RowComments }> = {};
+  const keyPresentation: Record<string, { k?: Presentation; v?: PresentationTable }> = {};
   let rows: ShreddedRow[] = [];
 
   if (isMap(contents)) {
     for (const pair of contents.items) {
       const name = String((pair.key as Node | undefined)?.toJSON?.() ?? pair.key);
       order.push(name);
-      recordKeyComments(keyComments, name, pair.key, pair.value);
+      recordKeyPresentation(keyPresentation, name, pair.key, pair.value);
       if (name === key && isSeq(pair.value)) {
         rows = pair.value.items.map(asRow);
       } else {
@@ -218,7 +281,7 @@ export function shredListDocument(doc: Document, key: string): {
     leftovers: {
       order,
       values,
-      keyComments,
+      keyPresentation,
       commentBefore: doc.commentBefore ?? null,
       comment: doc.comment ?? null,
     },
@@ -239,6 +302,9 @@ export function shredMapOfListsDocument(doc: Document): {
     comments: RowComments;
     /** On the LIST node — a comment between `demo:` and its first entry. */
     listComments: RowComments;
+    /** Everything about those two nodes that is not a comment — chiefly the BLANK LINE above
+     * `demo:`, which is how a 782-line file separates one queue from the next. */
+    presentation: string | null;
     rows: ShreddedRow[];
   }[];
   leftovers: DocumentLeftovers;
@@ -246,12 +312,13 @@ export function shredMapOfListsDocument(doc: Document): {
   const contents = doc.contents;
   const order: string[] = [];
   const values: Record<string, unknown> = {};
-  const keyComments: Record<string, { key?: RowComments; value?: RowComments }> = {};
+  const keyPresentation: Record<string, { k?: Presentation; v?: PresentationTable }> = {};
   const groups: {
     name: string;
     position: number;
     comments: RowComments;
     listComments: RowComments;
+    presentation: string | null;
     rows: ShreddedRow[];
   }[] = [];
 
@@ -268,12 +335,13 @@ export function shredMapOfListsDocument(doc: Document): {
           // `kevin:` and before the first entry hangs off the LIST.
           comments: commentsOf(pair.key),
           listComments: commentsOf(pair.value),
+          presentation: queuePresentation(pair.key, pair.value),
           rows: pair.value.items.map(asRow),
         });
       } else {
         values[name] = (pair.value as Node | undefined)?.toJSON?.() ?? pair.value;
         // A queue's comments ride on its own row; only a leftover key needs them here.
-        recordKeyComments(keyComments, name, pair.key, pair.value);
+        recordKeyPresentation(keyPresentation, name, pair.key, pair.value);
       }
     });
   }
@@ -283,7 +351,7 @@ export function shredMapOfListsDocument(doc: Document): {
     leftovers: {
       order,
       values,
-      keyComments,
+      keyPresentation,
       commentBefore: doc.commentBefore ?? null,
       comment: doc.comment ?? null,
     },
@@ -325,9 +393,9 @@ export function documentFrom(
   if (isMap(contents)) {
     for (const pair of contents.items) {
       const name = String((pair.key as Node | undefined)?.toJSON?.() ?? pair.key);
-      const comments = leftovers.keyComments?.[name];
-      if (comments?.key) applyComments(pair.key, comments.key);
-      if (comments?.value) applyComments(pair.value, comments.value);
+      const presentation = leftovers.keyPresentation?.[name];
+      unslot(pair.key, presentation?.k);
+      if (presentation?.v) restoreInner(pair.value, [], presentation.v);
     }
   }
 
