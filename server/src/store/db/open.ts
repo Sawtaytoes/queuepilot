@@ -20,7 +20,8 @@
 // runs at prepare time rather than in a query planner, and it fails closed. `store/db/open.test.ts`
 // pins the limitation it does have — a `:name` inside a string literal would be read as a
 // placeholder, and none of our statements contain one.
-import { readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 
 import { STORE_PATH } from '../../config.js';
 import { errMessage } from '../../errors.js';
@@ -99,12 +100,89 @@ export function prepareChecked<Result = unknown>(
 }
 
 /**
+ * Every column `schema.sql` declares, by table, as the raw definition text.
+ *
+ * Parsed rather than duplicated, so a column added to `schema.sql` is added to an existing
+ * database by that edit alone. The parser only has to cope with the SQL in this repo: one
+ * column per line, table-level constraints on their own lines, comment lines starting with
+ * `--`. It is not a SQL parser and must not become one.
+ */
+function declaredColumns(): Map<string, { name: string; definition: string }[]> {
+  const tables = new Map<string, { name: string; definition: string }[]>();
+
+  for (const match of SCHEMA_SQL.matchAll(
+    /CREATE TABLE IF NOT EXISTS (\w+) \(\n([\s\S]*?)\n\)/g,
+  )) {
+    const [, table, body] = match;
+    const columns: { name: string; definition: string }[] = [];
+
+    for (const raw of (body ?? '').split('\n')) {
+      const line = raw.trim().replace(/,$/, '');
+      if (line === '' || line.startsWith('--')) continue;
+      // Table-level constraints, not columns.
+      if (/^(PRIMARY KEY|CHECK|FOREIGN KEY|UNIQUE)\b/i.test(line)) continue;
+      const name = /^(\w+)/.exec(line)?.[1];
+      if (name) columns.push({ name, definition: line });
+    }
+
+    tables.set(table as string, columns);
+  }
+
+  return tables;
+}
+
+/**
+ * ALTER in any column `schema.sql` declares that the open database does not have.
+ *
+ * `CREATE TABLE IF NOT EXISTS` adds a missing TABLE and says nothing about a missing COLUMN,
+ * so without this an older file survives the open and then throws `no such column` on the
+ * first read — which is how a stale scratch database from a previous run breaks a suite that
+ * passes on fresh CI.
+ *
+ * ⚠️ TWO TRAPS, and both of them fail by adding a column that is already there.
+ *
+ * 1. `PRAGMA table_info(<t>)` RETURNS ROWS, so it goes through `pragma()` (which is
+ *    `prepare().all()`) and never `exec()` — `exec()` hands back `undefined` and throws
+ *    nothing, and this function would then read an empty column list and try to add every
+ *    column it knows about. That is WP-0's correction 1 to the absorb plan, and this is the
+ *    exact function it was written about.
+ * 2. `table_info` **omits GENERATED columns**. It is `table_xinfo` that lists them. Every
+ *    queryable column on `sets`, `queue_entries` and `groups` is generated, so `table_info`
+ *    reports them missing on every open, re-adds them, and throws `duplicate column name` the
+ *    SECOND time — which is a container that starts once and then will not restart. Caught by
+ *    `open.test.ts`, which runs `migrate()` twice on purpose.
+ *
+ * A PRIMARY KEY or UNIQUE column cannot be added by `ALTER TABLE`, and neither can a STORED
+ * generated one. Nothing here needs to be: the keys are in the CREATE, and every generated
+ * column is VIRTUAL.
+ */
+function addMissingColumns(db: SqliteDatabase): void {
+  for (const [table, columns] of declaredColumns()) {
+    const present = new Set(
+      (db.pragma(`table_xinfo(${table})`) as { name: string }[]).map((row) => row.name),
+    );
+    if (present.size === 0) continue; // the table is not there at all — the CREATE owns that
+
+    for (const column of columns) {
+      if (present.has(column.name)) continue;
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column.definition}`);
+      console.log(`[store] added ${table}.${column.name}`);
+    }
+  }
+}
+
+/**
  * Create the schema on a new file, and bring an old one forward.
  *
  * Exported so a test can drive it against a `:memory:` database without going near
  * `STORE_PATH`.
  */
 export function migrate(db: SqliteDatabase): void {
+  // COLUMNS FIRST, and the order is load-bearing. `schema.sql` ends with the indexes, and an
+  // index over a column an older file does not have yet fails the whole `exec`. So an existing
+  // table is brought up to date before the schema runs; on a fresh file this finds no tables
+  // and does nothing.
+  addMissingColumns(db);
   // The whole schema is idempotent, so it runs on every open rather than only on a version
   // bump — that is what makes "add a table" a one-file change with no migration step.
   db.exec(SCHEMA_SQL);
@@ -133,6 +211,9 @@ export function migrate(db: SqliteDatabase): void {
 
 /** Open a database at `path`, set the pragmas, and put the schema on it. */
 export function openBookOfRecord(path: string): SqliteDatabase {
+  // `/config` exists in production, but a harness's scratch directory may not exist yet and
+  // node:sqlite's error for a missing parent is a bare "unable to open database file".
+  mkdirSync(dirname(path), { recursive: true });
   const db = openSqlite(path);
 
   // WAL for the same reason `promote.ts` and `cache.ts` use it: a reader is never blocked by

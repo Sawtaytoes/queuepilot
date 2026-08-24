@@ -1,5 +1,8 @@
 // Runtime config for the queuepilot-web queue editor. Mirrors the Python
 // queue_builder/config.py env names so ONE TrueNAS app env feeds both processes.
+import { createHash } from 'node:crypto';
+import { statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { hostval } from './hostConfig.js';
 
@@ -17,8 +20,7 @@ export const PLEX_CLIENT_IDENTIFIER = process.env.PLEX_CLIENT_IDENTIFIER || 'ple
 // The shared curated-queue store — the SAME file the Python prune rewrites. Default matches
 // config.py so a single /config mount serves both. Writes from here and the Python prune are
 // coordinated by a cross-process lock (see queues.js withLock / queue_builder.queues).
-const DEFAULT_QUEUES_PATH = '/config/queues.yaml';
-export const QUEUES_PATH = process.env.QUEUES_PATH || DEFAULT_QUEUES_PATH;
+export const QUEUES_PATH = process.env.QUEUES_PATH || '/config/queues.yaml';
 
 /**
  * THE BOOK OF RECORD — sets, queues, entries, groups, pending, lead cooldowns (WP-2).
@@ -27,23 +29,51 @@ export const QUEUES_PATH = process.env.QUEUES_PATH || DEFAULT_QUEUES_PATH;
  * files and never one
  * (decision 2026-08-23-sqlite-is-the-book-of-record-and-cache-sqlite-stays-derived).
  *
- * The default is DERIVED FROM WHICHEVER YAML PATH THE PROCESS WAS GIVEN, and that is not a
- * nicety — it is what lets ~59 offline e2e harnesses keep working with no edit. Each one
- * points its YAML at a scratch file and expects a clean store; a fixed
- * `/config/queuepilot.sqlite` would have every one of them read and write the same database,
- * and `live-client-adapter-test.ts` proved it by reading another suite's leftovers.
+ * ── Why the default is derived and not a constant ────────────────────────────────────────
  *
- * `SETS_PATH` is checked FIRST because a harness may override only that one — the registry is
- * what the engine reads, and several suites never touch queues at all. Derived from the FILE
- * and not from its directory, because a dozen harnesses put their scratch YAML straight in
- * `/tmp` and would otherwise still collide with each other.
+ * In production this is `/config/queuepilot.sqlite` and nothing else. The derivation exists
+ * for the ~59 offline e2e harnesses: each one points its YAML at a scratch file and expects a
+ * clean store, and a fixed path would have every one of them read and write the SAME database.
+ * That is not hypothetical — `live-client-adapter-test.ts` read a store another suite had
+ * seeded, and passed nothing.
+ *
+ * Derived from the FILE rather than its directory, because a dozen harnesses put their scratch
+ * YAML straight in `/tmp` and would otherwise still collide with each other.
+ *
+ * ── Why it walks a list ──────────────────────────────────────────────────────────────────
+ *
+ * A harness overrides whichever paths it needs and no more, and it is allowed to point one at
+ * a deliberate dead end: `batch-stops-at-test.ts` sets
+ * `SETS_PATH=/nonexistent-so-loadSets-is-never-consulted.yaml`, whose directory is `/` and is
+ * not writable. So the candidates are tried in order and the first one in an EXISTING
+ * directory wins; if none is, the store goes to a hash of them under the temp directory, which
+ * is deterministic per harness and always writable.
  */
-const CONFIGURED_YAML = process.env.SETS_PATH || process.env.QUEUES_PATH || '';
-export const STORE_PATH =
-  process.env.STORE_PATH ||
-  (CONFIGURED_YAML === ''
-    ? '/config/queuepilot.sqlite'
-    : `${CONFIGURED_YAML.replace(/\.ya?ml$/i, '')}.queuepilot.sqlite`);
+const STORE_CANDIDATES = [
+  process.env.QUEUES_PATH,
+  process.env.SETS_PATH,
+  process.env.GROUPS_PATH,
+  process.env.PENDING_PATH,
+].filter((candidate): candidate is string => Boolean(candidate));
+
+const beside = (file: string): string => `${file.replace(/\.ya?ml$/i, '')}.queuepilot.sqlite`;
+
+function defaultStorePath(): string {
+  if (STORE_CANDIDATES.length === 0) return '/config/queuepilot.sqlite';
+
+  for (const candidate of STORE_CANDIDATES) {
+    try {
+      if (statSync(path.dirname(candidate)).isDirectory()) return beside(candidate);
+    } catch {
+      /* not a directory we can put a database in — try the next one */
+    }
+  }
+
+  const digest = createHash('sha256').update(STORE_CANDIDATES.join('|')).digest('hex').slice(0, 16);
+  return path.join(tmpdir(), `queuepilot-${digest}.sqlite`);
+}
+
+export const STORE_PATH = process.env.STORE_PATH || defaultStorePath();
 
 /**
  * Which implementation of the store seam serves reads — `sqlite` (the book of record) or

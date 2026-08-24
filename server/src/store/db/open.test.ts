@@ -89,6 +89,24 @@ describe('prepareChecked', () => {
 });
 
 describe('migrate', () => {
+  it('brings an older file forward by ALTERing in the columns it is missing', () => {
+    // The stale-scratch-database case, which is how this was found: a suite that passes on a
+    // fresh CI runner throws `no such column` locally, against a file an earlier run left.
+    const db = openSqlite(':memory:');
+    db.exec('CREATE TABLE sets (id TEXT PRIMARY KEY, position INTEGER NOT NULL, data TEXT NOT NULL)');
+    migrate(db);
+
+    const columns = (db.pragma('table_xinfo(sets)') as { name: string }[]).map((row) => row.name);
+    expect(columns).toContain('inner_comments');
+    expect(columns).toContain('label');
+
+    // …TWICE. `table_info` omits a GENERATED column, so reading the column list with it makes
+    // every generated column look missing on the second open and throws `duplicate column
+    // name` — a container that starts once and then will not restart.
+    expect(() => migrate(db)).not.toThrow();
+    db.close();
+  });
+
   it('records the schema version and is safe to run again', () => {
     const db = fresh();
     migrate(db);
