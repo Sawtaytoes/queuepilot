@@ -12,6 +12,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
     "start:prod": "node --enable-source-maps dist/index.js",
+    "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -25,9 +26,11 @@
   },
   "devDependencies": {
     "@charcuterie/tsconfig": "^1.0.0",
+    "@charcuterie/vitest-config": "^1.0.1",
     "@types/node": "^25.6.2",
     "esbuild": "^0.25.0",
     "tsx": "^4.20.3",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   }
 }
