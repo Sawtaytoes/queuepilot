@@ -31,8 +31,14 @@ import {
   writeMeta,
 } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
-import { assemble, documentFrom, shredListDocument, type DocumentLeftovers } from './shred.js';
-import { ensureImported } from '../migrate/yaml.js';
+import {
+  applyInnerComments,
+  assemble,
+  documentFrom,
+  shredListDocument,
+  type DocumentLeftovers,
+} from './shred.js';
+import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
 
 export const path = yamlGroups.path;
 
@@ -50,12 +56,13 @@ interface GroupRow {
   data: string;
   comment_before: string | null;
   comment: string | null;
+  inner_comments: string | null;
 }
 
 const rows = (): GroupRow[] =>
   prepareChecked<GroupRow>(
     bookOfRecord(),
-    'SELECT id, position, data, comment_before, comment FROM groups ORDER BY position',
+    'SELECT id, position, data, comment_before, comment, inner_comments FROM groups ORDER BY position',
   ).all();
 
 const leftovers = (): DocumentLeftovers =>
@@ -104,7 +111,9 @@ export async function readDoc(): Promise<Document> {
     meta,
   );
   groupRows.forEach((row, index) => {
-    applyComments(nodeAt(doc, ['groups', index]), row);
+    const node = nodeAt(doc, ['groups', index]);
+    applyComments(node, row);
+    applyInnerComments(node, row.inner_comments);
   });
   return doc;
 }
@@ -117,8 +126,8 @@ export async function writeDoc(doc: Document): Promise<void> {
     prepareChecked(db, 'DELETE FROM groups').run();
     const insert = prepareChecked(
       db,
-      'INSERT INTO groups (id, position, data, comment_before, comment) ' +
-        'VALUES (:id, :position, :data, :comment_before, :comment)',
+      'INSERT INTO groups (id, position, data, comment_before, comment, inner_comments) ' +
+        'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
     );
     for (const row of shredded) {
       const id = (row.value as { id?: unknown } | null)?.id;
@@ -129,13 +138,19 @@ export async function writeDoc(doc: Document): Promise<void> {
         data: row.data,
         comment_before: row.comment_before,
         comment: row.comment,
+        inner_comments: row.inner_comments,
       });
     }
     writeMeta(db, 'groups', 'leftovers', JSON.stringify(meta));
     bumpVersion(db, 'groups');
   });
 
-  if (STORE_YAML_MIRROR) await yamlGroups.writeDoc(doc);
+  if (STORE_YAML_MIRROR) {
+    await yamlGroups.writeDoc(doc);
+    // The files now hold what the rows hold. Recording that here is what stops the next
+    // read treating our own mirror write as somebody else's hand-edit.
+    noteMirrorWrite();
+  }
 }
 
 export const store: GroupsStore = {

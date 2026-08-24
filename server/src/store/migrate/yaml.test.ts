@@ -119,29 +119,26 @@ describe('importYaml', () => {
     expect(third.setIds).toEqual(['bob', 'bob_alice', 'carol']);
   });
 
-  it('REFUSES to re-read the YAML once the store itself has been written', () => {
-    // The rule that makes the mirror safe. Every store write also writes YAML, so the
-    // fingerprint changes constantly; only this check stops an endless re-import — and, more
-    // importantly, stops a stale file overwriting an edit the app has already made.
-    return (async () => {
-      const doc = await store.sets.readDoc();
-      await store.sets.writeDoc(doc);
+  it('ensureImported does NOT re-read once the mirror is off, even on a changed file', async () => {
+    // The rule on the far side of the bridge. With `STORE_YAML_MIRROR=0` the files are frozen
+    // relics of the last write, and re-reading one would revert the store to it. This suite
+    // runs with the mirror off, so `ensureImported` is the once-only path.
+    const { ensureImported } = await import('./yaml.js');
+    ensureImported();
 
-      writeFileSync(join(dir, 'sets.yaml'), `${SETS}- id: dave\n  label: Dave\n  kind: picks\n  source: queue\n`);
-      const fourth = importYaml();
+    writeFileSync(join(dir, 'sets.yaml'), `${SETS}- id: dave\n  label: Dave\n  kind: picks\n  source: queue\n`);
+    ensureImported();
 
-      expect(fourth.imported).toBe(false);
-      expect(fourth.reason).toMatch(/has been written since the import/);
-      expect((store.sets.readSync() as { sets: { id: string }[] }).sets.map((set) => set.id)).not.toContain(
-        'dave',
-      );
-    })();
+    expect((store.sets.readSync() as { sets: { id: string }[] }).sets.map((set) => set.id)).not.toContain(
+      'dave',
+    );
   });
 
   it('imports anyway when it is told to, and still copies aside first', () => {
     const forced = importYaml({ force: true });
     expect(forced.imported).toBe(true);
     expect(forced.setIds).toContain('dave');
+    expect(forced.reason).toBe('forced');
     expect(forced.backupDir).not.toBeNull();
   });
 

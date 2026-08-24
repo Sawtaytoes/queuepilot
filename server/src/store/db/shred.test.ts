@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { applyComments, nodeAt } from './common.js';
 import {
+  applyInnerComments,
   assemble,
   documentFrom,
   shredListDocument,
@@ -55,19 +56,18 @@ describe('shredListDocument', () => {
     expect(leftovers.values).toEqual({ global: { excluded_sections: [2, 7] } });
   });
 
-  it('CHARACTERIZES the residual comment loss: a comment INSIDE a mapping has no row', () => {
-    // Two rows carry two comments each — the block above the node and the trailing one on the
-    // same line. A comment attached to a key WITHIN the mapping (`requires_profile:  # …`, or
+  it('carries a comment attached to a key INSIDE the mapping, which no row owns', () => {
+    // `comment_before` and `comment` are the block above the row and the trailing one on its
+    // own line. Neither covers a comment on a FIELD — `requires_profile: x  # …`, or (as here)
     // the trailing comment on a block item's first line, which the parser gives to that key's
-    // VALUE) belongs to neither, and is the one thing the store does not carry across.
+    // VALUE node. Those are the comments that carry the operational knowledge, so they get
+    // their own column keyed by the path from the row's node.
     //
-    // Measured against the live files on 2026-08-23: sets.yaml keeps 30 of 34 comment lines
-    // and queues.yaml 44 of 45. All five losses are this shape. The storage decision accepts
-    // it in as many words — "a comment that explains one set or one queue should migrate into
-    // a `note` column on that row" is the fix, and it is WP-5's, not this package's.
+    // Measured on the live files on 2026-08-23 with this in place: sets.yaml 34 comment lines
+    // in and 34 out, queues.yaml 45 in and 45 out. Without it the count was 30 and 44.
     const { rows } = shredListDocument(parseDocument(SETS), 'sets');
     expect(rows[0]?.comment).toBeNull();
-    expect(rows[0]?.comment_before).toBeNull();
+    expect(rows[0]?.inner_comments).toContain('INNER');
   });
 
   it('keeps the FILE HEADER, which lives on the first key and not on the document', () => {
@@ -77,7 +77,7 @@ describe('shredListDocument', () => {
     // document-level pair dropped the whole header on the first write, silently, and the
     // projection still looked right.
     const { leftovers } = shredListDocument(parseDocument(SETS), 'sets');
-    expect(leftovers.keyComments.global?.comment_before).toContain('HEAD');
+    expect(leftovers.keyComments.global?.key?.comment_before).toContain('HEAD');
   });
 
   it('round-trips to a document that parses back to the same value', () => {
@@ -94,6 +94,19 @@ describe('shredListDocument', () => {
     const text = rebuilt.toString({ indentSeq: false, lineWidth: 0 });
     expect(text).toContain('# HEAD');
     expect(text).toContain('# BLOCK');
+  });
+
+  it('restores an inner comment onto the field it explains', () => {
+    const original = parseDocument(SETS);
+    const { rows, leftovers } = shredListDocument(original, 'sets');
+    const rebuilt = documentFrom(assemble(leftovers, { sets: rows.map((row) => row.value) }), leftovers);
+    rows.forEach((row, index) => {
+      const node = nodeAt(rebuilt, ['sets', index]);
+      applyComments(node, row);
+      applyInnerComments(node, row.inner_comments);
+    });
+
+    expect(rebuilt.toString({ indentSeq: false, lineWidth: 0 })).toMatch(/id: bob\s+# INNER/);
   });
 
   it('keeps a nested mapping and a nested list of mappings intact', () => {

@@ -25,8 +25,14 @@ import {
   YAML_OUT,
 } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
-import { assemble, documentFrom, shredListDocument, type DocumentLeftovers } from './shred.js';
-import { ensureImported } from '../migrate/yaml.js';
+import {
+  applyInnerComments,
+  assemble,
+  documentFrom,
+  shredListDocument,
+  type DocumentLeftovers,
+} from './shred.js';
+import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
 
 /** The YAML file's path. Still the store's `path`: `sse.ts` watches its directory, log lines
  * name it, and `engine/routing.ts` passes it back into `readSync` as the "no fixture" default.
@@ -47,12 +53,13 @@ interface SetRow {
   data: string;
   comment_before: string | null;
   comment: string | null;
+  inner_comments: string | null;
 }
 
 const rows = (): SetRow[] =>
   prepareChecked<SetRow>(
     bookOfRecord(),
-    'SELECT id, position, data, comment_before, comment FROM sets ORDER BY position',
+    'SELECT id, position, data, comment_before, comment, inner_comments FROM sets ORDER BY position',
   ).all();
 
 const leftovers = (): DocumentLeftovers =>
@@ -77,7 +84,9 @@ export async function readDoc(): Promise<Document> {
     meta,
   );
   setRows.forEach((row, index) => {
-    applyComments(nodeAt(doc, ['sets', index]), row);
+    const node = nodeAt(doc, ['sets', index]);
+    applyComments(node, row);
+    applyInnerComments(node, row.inner_comments);
   });
   return doc;
 }
@@ -95,8 +104,8 @@ export async function writeDoc(doc: Document): Promise<void> {
     prepareChecked(db, 'DELETE FROM sets').run();
     const insert = prepareChecked(
       db,
-      'INSERT INTO sets (id, position, data, comment_before, comment) ' +
-        'VALUES (:id, :position, :data, :comment_before, :comment)',
+      'INSERT INTO sets (id, position, data, comment_before, comment, inner_comments) ' +
+        'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
     );
     for (const row of shredded) {
       const id = (row.value as { id?: unknown } | null)?.id;
@@ -110,13 +119,19 @@ export async function writeDoc(doc: Document): Promise<void> {
         data: row.data,
         comment_before: row.comment_before,
         comment: row.comment,
+        inner_comments: row.inner_comments,
       });
     }
     writeMeta(db, 'sets', 'leftovers', JSON.stringify(meta));
     bumpVersion(db, 'sets');
   });
 
-  if (STORE_YAML_MIRROR) await yamlSets.writeDoc(doc);
+  if (STORE_YAML_MIRROR) {
+    await yamlSets.writeDoc(doc);
+    // The files now hold what the rows hold. Recording that here is what stops the next
+    // read treating our own mirror write as somebody else's hand-edit.
+    noteMirrorWrite();
+  }
 }
 
 export async function stat(): Promise<StoreStat | null> {
@@ -141,9 +156,12 @@ export function revision(): string {
  * `writeRawSnapshot` puts the text back through the same shredder every other write uses — so
  * a restore is exact for everything the store can hold.
  *
- * What it is NOT is byte-for-byte against a HAND-WRITTEN file. A comment that belongs to no
- * row, a flow-style list, a quoting choice: those are gone at the cutover, not at the undo.
- * Undo/redo restores the STORE, and the store no longer holds them. The existing 1.6 MB of
+ * What survives, measured against the live files: EVERY comment line — 34 of 34 in
+ * `sets.yaml`, 45 of 45 in `queues.yaml` — because the row carries the block above it, the
+ * trailing one on its line, and the ones attached to a key inside its mapping. What does not
+ * is presentation the rows have no column for: a flow-style list becomes block, and a quoting
+ * choice becomes the writer's. That is spent at the CUTOVER, on the first write, not at the
+ * undo — an undo restores what the store holds, exactly. The existing 1.6 MB of
  * `.history.json` is undo depth rather than user data and starts empty after the cutover.
  */
 export async function readRawSnapshot(): Promise<string | null> {

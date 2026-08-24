@@ -37,11 +37,21 @@
 -- ── Comments ─────────────────────────────────────────────────────────────────────────────
 --
 -- `sets.yaml` and `queues.yaml` are hand-edited over SMB and carry 79 comment lines between
--- them. The decision record accepts the loss of a comment that belongs to no row. A comment
--- that DOES belong to a row is kept: `comment_before` is the block above the node and
--- `comment` is the trailing one on the same line, exactly as the `yaml` Document API names
--- them, so a comment travels with its entry through a reorder or a move between queues.
--- Whole-document comments (the file header, the footer) live in `store_meta`.
+-- them. The storage decision accepts losing a comment that belongs to no row; in the event
+-- none of them do, and all 79 survive. Four slots, because a comment can hang off four
+-- different nodes and only the first two are obvious:
+--
+--   comment_before / comment       the block above the row, and the trailing one on its line
+--   inner_comments                 the ones on a key INSIDE the mapping — `requires_profile:
+--                                  x` and the note under it. These carry the operational
+--                                  knowledge, and they were the four lines the first cut lost.
+--   queues.list_comment_before     a comment between `demo:` and its first entry, which belongs
+--                                  to the LIST and to neither the key nor the entry. One line
+--                                  in the live file, and it was the last one still being lost.
+--   store_meta                     whole-document comments, and the ones on a top-level key —
+--                                  including the FILE HEADER, which `yaml` hands to the first
+--                                  key rather than to the document when no blank line splits
+--                                  them. sets.yaml's 1,733-character header is exactly that.
 
 PRAGMA foreign_keys = ON;
 
@@ -75,6 +85,12 @@ CREATE TABLE IF NOT EXISTS sets (
   data           TEXT NOT NULL CHECK (json_valid(data)),
   comment_before TEXT,
   comment        TEXT,
+  -- The comments INSIDE the mapping, keyed by their path from this row's node. `comment_before`
+  -- and `comment` cover the block above the row and the trailing one on its line; this covers
+  -- the ones that explain a FIELD, which is where the operational knowledge in these files
+  -- actually lives. Without it the live registry lost four comment lines and undo/redo lost its
+  -- byte-for-byte restore.
+  inner_comments TEXT CHECK (inner_comments IS NULL OR json_valid(inner_comments)),
   -- Derived, never written. `id` and `data.id` disagreeing is a corrupt row, so the CHECK
   -- below refuses it at the INSERT rather than letting a wire id drift from its payload.
   label          TEXT    GENERATED ALWAYS AS (json_extract(data, '$.label'))            VIRTUAL,
@@ -103,8 +119,13 @@ CREATE TABLE IF NOT EXISTS queues (
   -- makes the orphan visible first.
   set_id         TEXT PRIMARY KEY,
   position       INTEGER NOT NULL,
+  -- On the KEY node: the block above `demo:` and the trailing comment on that line.
   comment_before TEXT,
-  comment        TEXT
+  comment        TEXT,
+  -- On the LIST node: a comment between `demo:` and its first entry, which belongs to neither
+  -- the key nor the first entry and was the last comment line the projection was losing.
+  list_comment_before TEXT,
+  list_comment        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS queue_entries (
@@ -119,6 +140,8 @@ CREATE TABLE IF NOT EXISTS queue_entries (
   data           TEXT NOT NULL CHECK (json_valid(data)),
   comment_before TEXT,
   comment        TEXT,
+  -- See `sets.inner_comments`.
+  inner_comments TEXT CHECK (inner_comments IS NULL OR json_valid(inner_comments)),
   -- Derived. `rating_key` is TEXT on purpose: a Plex ratingKey is a numeric STRING, and
   -- node:sqlite THROWS RangeError on an INTEGER past 2^53 where better-sqlite3 quietly lost
   -- the precision (driver difference #5). Keeping the column TEXT means that difference can
@@ -150,6 +173,8 @@ CREATE TABLE IF NOT EXISTS groups (
   data           TEXT NOT NULL CHECK (json_valid(data)),
   comment_before TEXT,
   comment        TEXT,
+  -- See `sets.inner_comments`.
+  inner_comments TEXT CHECK (inner_comments IS NULL OR json_valid(inner_comments)),
   label          TEXT GENERATED ALWAYS AS (json_extract(data, '$.label')) VIRTUAL,
   CHECK (id = json_extract(data, '$.id'))
 );

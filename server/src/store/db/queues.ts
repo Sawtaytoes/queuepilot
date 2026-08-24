@@ -32,8 +32,14 @@ import {
   YAML_OUT,
 } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
-import { assemble, documentFrom, shredMapOfListsDocument, type DocumentLeftovers } from './shred.js';
-import { ensureImported } from '../migrate/yaml.js';
+import {
+  applyInnerComments,
+  assemble,
+  documentFrom,
+  shredMapOfListsDocument,
+  type DocumentLeftovers,
+} from './shred.js';
+import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
 
 export const path = yamlQueues.path;
 
@@ -50,6 +56,8 @@ interface QueueRow {
   position: number;
   comment_before: string | null;
   comment: string | null;
+  list_comment_before: string | null;
+  list_comment: string | null;
 }
 
 interface EntryRow {
@@ -58,18 +66,20 @@ interface EntryRow {
   data: string;
   comment_before: string | null;
   comment: string | null;
+  inner_comments: string | null;
 }
 
 const queueRows = (): QueueRow[] =>
   prepareChecked<QueueRow>(
     bookOfRecord(),
-    'SELECT set_id, position, comment_before, comment FROM queues ORDER BY position',
+    'SELECT set_id, position, comment_before, comment, list_comment_before, list_comment ' +
+      'FROM queues ORDER BY position',
   ).all();
 
 const entryRows = (): EntryRow[] =>
   prepareChecked<EntryRow>(
     bookOfRecord(),
-    'SELECT set_id, position, data, comment_before, comment FROM queue_entries ' +
+    'SELECT set_id, position, data, comment_before, comment, inner_comments FROM queue_entries ' +
       'ORDER BY set_id, position',
   ).all();
 
@@ -119,10 +129,18 @@ export async function readDoc(): Promise<Document> {
           (item) => String((item.key as { toJSON?: () => unknown })?.toJSON?.() ?? item.key) === queue.set_id,
         )
       : undefined;
-    if (pair) applyComments(pair.key, queue);
+    if (pair) {
+      applyComments(pair.key, queue);
+      applyComments(pair.value, {
+        comment_before: queue.list_comment_before,
+        comment: queue.list_comment,
+      });
+    }
 
     (grouped.get(queue.set_id) ?? []).forEach((row, index) => {
-      applyComments(nodeAt(doc, [queue.set_id, index]), row);
+      const node = nodeAt(doc, [queue.set_id, index]);
+      applyComments(node, row);
+      applyInnerComments(node, row.inner_comments);
     });
   }
 
@@ -139,13 +157,13 @@ export async function writeDoc(doc: Document): Promise<void> {
     prepareChecked(db, 'DELETE FROM queues').run();
     const insertQueue = prepareChecked(
       db,
-      'INSERT INTO queues (set_id, position, comment_before, comment) ' +
-        'VALUES (:set_id, :position, :comment_before, :comment)',
+      'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment) ' +
+        'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment)',
     );
     const insertEntry = prepareChecked(
       db,
-      'INSERT INTO queue_entries (set_id, position, data, comment_before, comment) ' +
-        'VALUES (:set_id, :position, :data, :comment_before, :comment)',
+      'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, inner_comments) ' +
+        'VALUES (:set_id, :position, :data, :comment_before, :comment, :inner_comments)',
     );
 
     for (const group of groups) {
@@ -154,6 +172,8 @@ export async function writeDoc(doc: Document): Promise<void> {
         position: group.position,
         comment_before: group.comments.comment_before,
         comment: group.comments.comment,
+        list_comment_before: group.listComments.comment_before,
+        list_comment: group.listComments.comment,
       });
       for (const row of group.rows) {
         insertEntry.run({
@@ -162,6 +182,7 @@ export async function writeDoc(doc: Document): Promise<void> {
           data: row.data,
           comment_before: row.comment_before,
           comment: row.comment,
+          inner_comments: row.inner_comments,
         });
       }
     }
@@ -170,7 +191,12 @@ export async function writeDoc(doc: Document): Promise<void> {
     bumpVersion(db, 'queues');
   });
 
-  if (STORE_YAML_MIRROR) await yamlQueues.writeDoc(doc);
+  if (STORE_YAML_MIRROR) {
+    await yamlQueues.writeDoc(doc);
+    // The files now hold what the rows hold. Recording that here is what stops the next
+    // read treating our own mirror write as somebody else's hand-edit.
+    noteMirrorWrite();
+  }
 }
 
 export async function stat(): Promise<StoreStat | null> {

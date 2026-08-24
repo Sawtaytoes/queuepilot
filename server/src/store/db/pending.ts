@@ -16,7 +16,7 @@ import type { PendingState } from '../pending.js';
 import type { PendingStore } from '../index.js';
 import { bumpVersion } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
-import { ensureImported } from '../migrate/yaml.js';
+import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
 
 export const path = yamlPending.path;
 
@@ -81,7 +81,12 @@ export async function write(next: PendingState): Promise<void> {
     bumpVersion(db, 'pending');
   });
 
-  if (STORE_YAML_MIRROR) await yamlPending.write(next);
+  if (STORE_YAML_MIRROR) {
+    await yamlPending.write(next);
+    // The files now hold what the rows hold. Recording that here is what stops the next
+    // read treating our own mirror write as somebody else's hand-edit.
+    noteMirrorWrite();
+  }
 }
 
 export const store: PendingStore = { path, read, write };

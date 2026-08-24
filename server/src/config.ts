@@ -27,18 +27,23 @@ export const QUEUES_PATH = process.env.QUEUES_PATH || DEFAULT_QUEUES_PATH;
  * files and never one
  * (decision 2026-08-23-sqlite-is-the-book-of-record-and-cache-sqlite-stays-derived).
  *
- * The default is DERIVED FROM `QUEUES_PATH`, and that is not a nicety — it is what lets ~50
- * offline e2e harnesses keep working with no edit. Each one points `QUEUES_PATH` at its own
- * scratch file and expects a clean store; a fixed `/config/queuepilot.sqlite` would have every
- * one of them read and write the same database. Derived from the FILE and not from its
- * directory, because a dozen harnesses put their scratch queues straight in `/tmp` and would
- * otherwise still collide with each other.
+ * The default is DERIVED FROM WHICHEVER YAML PATH THE PROCESS WAS GIVEN, and that is not a
+ * nicety — it is what lets ~59 offline e2e harnesses keep working with no edit. Each one
+ * points its YAML at a scratch file and expects a clean store; a fixed
+ * `/config/queuepilot.sqlite` would have every one of them read and write the same database,
+ * and `live-client-adapter-test.ts` proved it by reading another suite's leftovers.
+ *
+ * `SETS_PATH` is checked FIRST because a harness may override only that one — the registry is
+ * what the engine reads, and several suites never touch queues at all. Derived from the FILE
+ * and not from its directory, because a dozen harnesses put their scratch YAML straight in
+ * `/tmp` and would otherwise still collide with each other.
  */
+const CONFIGURED_YAML = process.env.SETS_PATH || process.env.QUEUES_PATH || '';
 export const STORE_PATH =
   process.env.STORE_PATH ||
-  (QUEUES_PATH === DEFAULT_QUEUES_PATH
+  (CONFIGURED_YAML === ''
     ? '/config/queuepilot.sqlite'
-    : `${QUEUES_PATH.replace(/\.ya?ml$/i, '')}.queuepilot.sqlite`);
+    : `${CONFIGURED_YAML.replace(/\.ya?ml$/i, '')}.queuepilot.sqlite`);
 
 /**
  * Which implementation of the store seam serves reads — `sqlite` (the book of record) or

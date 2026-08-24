@@ -11,21 +11,33 @@
 //
 // ── Idempotency, and why it is not "run once and set a flag" ──────────────────────────────
 //
-// The rule has to answer two situations at once. A container restart must NOT re-import over
-// rows the app has since edited. A hand-edit of `queues.yaml` over SMB, during the bridge
-// release, SHOULD still be picked up — the file is still a supported way in until the mirror
-// is switched off. So:
+// The rule has to answer two situations at once, and the answer is different on each side of
+// the bridge.
 //
-//   1. Fingerprint the four files (sha256 of the bytes; an absent file has its own marker).
-//   2. Same fingerprint as the recorded import? Nothing to do.
-//   3. Different, but a store's `version` has moved since its import? The STORE is
-//      authoritative — the app has written since — so the YAML is stale and is left alone.
-//      Logged loudly, because during the bridge release that means somebody hand-edited a file
-//      the app had already moved past.
-//   4. Otherwise: copy aside, replace the rows, record the new fingerprint and versions.
+// WHILE THE MIRROR IS ON (this release), the rows and the files are kept in step by every
+// write, so a file whose CONTENT has changed can only mean somebody changed it from outside —
+// a hand-edit over SMB, which the storage decision says is still supported until the reader
+// moves. So the rule is simply: import when the content differs.
 //
-// Rule 3 is what makes the mirror safe: every store write also writes YAML, so the fingerprint
-// changes constantly and only the version check stops an endless re-import.
+//   1. Cheap gate: `stat` the four files. Nothing moved → return, no hashing at all. This is
+//      on the scan path (`loadEntries` calls it per set) and must not read 30 KB per call.
+//   2. Something moved → sha256 the bytes. Same fingerprint as the recorded import → nothing
+//      to do; an mtime moved without the content moving is the common case, because OUR OWN
+//      mirror write is what moved it.
+//   3. Different → copy aside, replace the rows, record the new fingerprint.
+//
+// `noteMirrorWrite()` is what keeps step 2 from firing on every write: after a successful
+// mirror the files and the rows agree by construction, so the fingerprint is re-recorded
+// there rather than being re-discovered here.
+//
+// ⚠️ IF THE MIRROR WRITE FAILS the fingerprint is NOT updated, `writeDoc` throws, and the next
+// boot re-reads the YAML — so a store write whose rollback copy could not be written is
+// reported as a failed write and is then undone. That is the conservative direction on
+// purpose: through the bridge release the two must not be allowed to drift silently.
+//
+// ONCE THE MIRROR IS OFF (`STORE_YAML_MIRROR=0`) the files are frozen relics of the last
+// write, and re-reading one would revert the store to it. So the import runs ONCE per process
+// and never re-checks.
 //
 // ── The wire ids ─────────────────────────────────────────────────────────────────────────
 //
@@ -33,11 +45,11 @@
 // returns every id it wrote so a caller — the tool, the test, the PR — can prove that the 20
 // sets, 16 queues and 5 groups that went in are the 20, 16 and 5 that came out, by name.
 import { createHash } from 'node:crypto';
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { parse, parseDocument } from 'yaml';
 
-import { QUEUES_PATH } from '../../config.js';
+import { QUEUES_PATH, STORE_YAML_MIRROR } from '../../config.js';
 import { errMessage } from '../../errors.js';
 import * as yamlGroups from '../groups.js';
 import * as yamlPending from '../pending.js';
@@ -74,6 +86,18 @@ const pathFor = (source: (typeof SOURCES)[number]): string =>
         ? yamlGroups.path
         : yamlPending.path;
 
+/** `(mtimeMs, size)` for the four files — the CHEAP gate, so the scan path does not hash. */
+function sourceStamp(): string {
+  return SOURCES.map((source) => {
+    try {
+      const stat = statSync(pathFor(source));
+      return `${source}:${stat.mtimeMs}:${stat.size}`;
+    } catch {
+      return `${source}:absent`;
+    }
+  }).join('|');
+}
+
 /** sha256 of each file's bytes, or `absent` — the four together are the import fingerprint. */
 function fingerprint(): string {
   const parts = SOURCES.map((source) => {
@@ -84,17 +108,6 @@ function fingerprint(): string {
     }
   });
   return parts.join('|');
-}
-
-/** True when any store has been written since its import — the test that makes the rows, not
- * the files, authoritative once the app has started editing. */
-function storeHasMoved(db: SqliteDatabase): StoreName | null {
-  for (const store of SOURCES as readonly StoreName[]) {
-    const current = Number(readMeta(db, store, 'version') ?? 0);
-    const atImport = Number(readMeta(db, store, 'imported_version') ?? -1);
-    if (atImport >= 0 && current > atImport) return store;
-  }
-  return null;
 }
 
 /** Copy the four files into `store-imports/<utc>/` beside them, before a row is written. */
@@ -135,8 +148,8 @@ function importSets(db: SqliteDatabase): string[] {
   prepareChecked(db, 'DELETE FROM sets').run();
   const insert = prepareChecked(
     db,
-    'INSERT INTO sets (id, position, data, comment_before, comment) ' +
-      'VALUES (:id, :position, :data, :comment_before, :comment)',
+    'INSERT INTO sets (id, position, data, comment_before, comment, inner_comments) ' +
+      'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
   );
   for (const row of rows) {
     const id = (row.value as { id?: unknown } | null)?.id;
@@ -147,6 +160,7 @@ function importSets(db: SqliteDatabase): string[] {
       data: row.data,
       comment_before: row.comment_before,
       comment: row.comment,
+      inner_comments: row.inner_comments,
     });
     ids.push(String(id));
   }
@@ -163,13 +177,13 @@ function importQueues(db: SqliteDatabase): { ids: string[]; entries: number } {
   prepareChecked(db, 'DELETE FROM queues').run();
   const insertQueue = prepareChecked(
     db,
-    'INSERT INTO queues (set_id, position, comment_before, comment) ' +
-      'VALUES (:set_id, :position, :comment_before, :comment)',
+    'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment) ' +
+      'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment)',
   );
   const insertEntry = prepareChecked(
     db,
-    'INSERT INTO queue_entries (set_id, position, data, comment_before, comment) ' +
-      'VALUES (:set_id, :position, :data, :comment_before, :comment)',
+    'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, inner_comments) ' +
+      'VALUES (:set_id, :position, :data, :comment_before, :comment, :inner_comments)',
   );
 
   for (const group of groups) {
@@ -178,6 +192,8 @@ function importQueues(db: SqliteDatabase): { ids: string[]; entries: number } {
       position: group.position,
       comment_before: group.comments.comment_before,
       comment: group.comments.comment,
+      list_comment_before: group.listComments.comment_before,
+      list_comment: group.listComments.comment,
     });
     ids.push(group.name);
     for (const row of group.rows) {
@@ -187,6 +203,7 @@ function importQueues(db: SqliteDatabase): { ids: string[]; entries: number } {
         data: row.data,
         comment_before: row.comment_before,
         comment: row.comment,
+        inner_comments: row.inner_comments,
       });
       entries += 1;
     }
@@ -210,8 +227,8 @@ function importGroups(db: SqliteDatabase): string[] {
   const { rows, leftovers } = shredListDocument(parseDocument(text), 'groups');
   const insert = prepareChecked(
     db,
-    'INSERT INTO groups (id, position, data, comment_before, comment) ' +
-      'VALUES (:id, :position, :data, :comment_before, :comment)',
+    'INSERT INTO groups (id, position, data, comment_before, comment, inner_comments) ' +
+      'VALUES (:id, :position, :data, :comment_before, :comment, :inner_comments)',
   );
   for (const row of rows) {
     const id = (row.value as { id?: unknown } | null)?.id;
@@ -222,6 +239,7 @@ function importGroups(db: SqliteDatabase): string[] {
       data: row.data,
       comment_before: row.comment_before,
       comment: row.comment,
+      inner_comments: row.inner_comments,
     });
     ids.push(String(id));
   }
@@ -288,17 +306,6 @@ export function importYaml({ force = false }: { force?: boolean } = {}): ImportR
     return { imported: false, reason: 'the YAML has not changed since the last import', backupDir: null, ...EMPTY_REPORT };
   }
 
-  if (!force) {
-    const moved = storeHasMoved(db);
-    if (moved) {
-      console.log(
-        `[store] the YAML files changed, but the ${moved} store has been written since the last ` +
-          'import — the rows are authoritative and the files were NOT re-read',
-      );
-      return { imported: false, reason: `the ${moved} store has been written since the import`, backupDir: null, ...EMPTY_REPORT };
-    }
-  }
-
   const backupDir = copyAside();
 
   const report = db.withTransaction(() => {
@@ -307,11 +314,8 @@ export function importYaml({ force = false }: { force?: boolean } = {}): ImportR
     const groupIds = importGroups(db);
     const pending = importPending(db);
 
-    for (const store of SOURCES as readonly StoreName[]) {
-      bumpVersion(db, store);
-      writeMeta(db, store, 'imported_version', readMeta(db, store, 'version'));
-      writeMeta(db, store, 'yaml_fingerprint', current);
-    }
+    for (const store of SOURCES as readonly StoreName[]) bumpVersion(db, store);
+    writeMeta(db, 'sets', 'yaml_fingerprint', current);
     writeMeta(db, 'sets', 'yaml_imported_at', new Date().toISOString());
 
     return {
@@ -338,18 +342,27 @@ export function importYaml({ force = false }: { force?: boolean } = {}): ImportR
 }
 
 let done = false;
+let lastStamp: string | null = null;
 
 /**
- * The boot-time hook every SQLite store calls before its first read or write.
+ * The hook every SQLite store calls before a read or a write.
  *
- * Synchronous on purpose: `readSync` is on the scan path and cannot await, and the import is
- * four small files read once per process. A failure LOGS and gives up rather than throwing —
- * an unreadable `groups.yaml` must not stop the container, which is the policy the file store
- * already had.
+ * Synchronous on purpose: `readSync` is on the scan path and cannot await. The cost of the
+ * common call is four `stat`s and a string compare; it only reads and hashes when one of the
+ * four files has actually moved.
+ *
+ * A failure LOGS and gives up rather than throwing — an unreadable `groups.yaml` must not stop
+ * the container, which is the policy the file store already had.
  */
 export function ensureImported(): void {
-  if (done) return;
+  // With the mirror off the files are relics; import once and never look again.
+  if (done && !STORE_YAML_MIRROR) return;
+
+  const stamp = sourceStamp();
+  if (done && stamp === lastStamp) return;
   done = true;
+  lastStamp = stamp;
+
   try {
     importYaml();
   } catch (e) {
@@ -357,7 +370,18 @@ export function ensureImported(): void {
   }
 }
 
-/** Let a test drive a second import in the same process. */
-export function resetImportedFlagForTests(): void {
-  done = false;
+/**
+ * Called after a SUCCESSFUL mirror write: the files now hold what the rows hold, so record
+ * that rather than letting the next read discover a "change" it made itself.
+ *
+ * Not called when the mirror write threw — see the ⚠️ in the header.
+ */
+export function noteMirrorWrite(): void {
+  try {
+    writeMeta(bookOfRecord(), 'sets', 'yaml_fingerprint', fingerprint());
+    lastStamp = sourceStamp();
+    done = true;
+  } catch (e) {
+    console.log(`[store] could not record the mirror write: ${errMessage(e)}`);
+  }
 }
