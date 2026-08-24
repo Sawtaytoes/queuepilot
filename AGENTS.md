@@ -175,6 +175,55 @@ Two things follow, and both have a cheap way to get wrong:
   `charcuterie/prefer-listbox-over-select`) still do not run here, and do not need to:
   this repo lints with Biome and the ban is expressed natively.
 
+## The store
+
+**`/config/queuepilot.sqlite` is the book of record.** Sets, queues, entries, groups, pending
+and the lead cooldowns are ROWS as of WP-2
+([storage](docs/decisions/2026-08-23-sqlite-is-the-book-of-record-and-cache-sqlite-stays-derived.md),
+[driver](docs/decisions/2026-08-23-the-data-layer-is-node-sqlite-not-better-sqlite3.md),
+[the fold](docs/decisions/2026-08-23-promote-sqlite-folds-into-the-book-of-record.md)). Six
+things bite here and each has already cost something:
+
+- **`/config/cache.sqlite` is a DIFFERENT FILE and stays deletable.** Two files, never one.
+  Merging them makes the deletable file undeletable — a schema bump would delete the
+  household's queues without asking. `server/src/cache.ts` is untouched by WP-2 and should stay
+  that way. `/config/promote.sqlite` no longer exists; do not reintroduce a third durable file.
+- **A wire id is the primary key TEXT and is migrated verbatim.** `sets.id`, `queues.set_id`
+  and `groups.id` are what an NFC card carries and what Home Assistant puts in
+  `{"set": "<id>"}`. A surrogate INTEGER key would put a translation table between a piece of
+  cardboard and the queue it plays. Never rename, trim, case-fold or re-slug one, and prove a
+  migration by asserting the EXACT strings — a count of twenty passes even if all twenty were
+  replaced.
+- **YAML is a bridge for one release.** `STORE_BACKEND=sqlite` (default) reads rows;
+  `STORE_BACKEND=yaml` is the rollback and is WP-1's implementation, untouched.
+  `STORE_YAML_MIRROR` (default on) is what makes that rollback real — the SQLite store writes
+  the four files on every mutation. When the mirror goes, so does the rollback, `sse.ts`'s
+  watcher and the SMB hand-edit path.
+- **A row keeps its whole mapping as JSON in `data`; the queryable columns are
+  `GENERATED ALWAYS … VIRTUAL` over it.** They are real columns — index them, filter on them —
+  and they cannot drift from the payload. Do NOT add a hand-maintained duplicate column, and do
+  not promote a field into a stored column until its shape is settled (that is WP-3's and
+  WP-5's job). ⚠️ `PRAGMA table_info` **omits** a generated column; it is `table_xinfo` that
+  lists them, and reading the wrong one makes `addMissingColumns()` re-add every generated
+  column and throw `duplicate column name` on the second boot.
+- **Every write goes through `prepareChecked`.** node:sqlite binds NULL for a named parameter
+  the caller FORGOT, where better-sqlite3 throws (WP-4a driver difference #6). An UNKNOWN key
+  still throws, so a typo is caught; an omission is silent data loss. Do not call
+  `db.prepare(...)` directly for a write under `store/db/`.
+- **`store/schema.sql` is the reviewable artifact and `schema.generated.ts` is its compiled
+  twin.** Run `node server/scripts/generate-schema.mjs` after every schema edit;
+  `store/schema.test.ts` fails when it is stale. The production image ships only
+  `server/dist/index.js`, so a schema read off disk at boot works everywhere except the
+  container.
+
+Undo/redo still works and did not need a redesign: `readRawSnapshot()` serializes the store's
+own rows to their YAML projection, so `history.ts` is unchanged. Every comment line survives
+the round trip — 34 of 34 in `sets.yaml`, 45 of 45 in `queues.yaml` — because a row carries the
+block above it, the trailing one on its line, the ones attached to a key inside its mapping
+(`inner_comments`) and, for a queue, the one between the key and the first entry
+(`list_comment_before`). What is NOT preserved is presentation: a flow-style list becomes block
+and a quoting choice becomes the writer's, once, on the first write after the cutover.
+
 ## queues.yaml
 
 **Every entry is a MAPPING** — `{ratingKey, title}` for an item, `{collection: "<name>"}` for a
@@ -245,6 +294,7 @@ yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e 
 yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
+server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 ```
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
