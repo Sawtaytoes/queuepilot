@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 
-import { labelInGroup } from "./setLabel"
+import { accountInGroup, labelInGroup } from "./setLabel"
 
 /**
  * The rule that lets `Bob & Alice — Anime` render as `Anime` inside Bob & Alice.
@@ -64,5 +64,47 @@ describe("labelInGroup", () => {
     // A queue literally called "Bob" inside the Bob group keeps its name rather than
     // becoming blank.
     expect(labelInGroup("Bob", "Bob")).toBe("Bob")
+  })
+})
+
+/**
+ * The meta-line twin. Same failure mode as `labelInGroup`: a near-miss silently leaves the
+ * redundant name, which reads as the feature never shipping.
+ */
+describe("accountInGroup", () => {
+  test("drops the account while inside that account's own group", () => {
+    expect(
+      accountInGroup("Younger Kids", "Younger Kids"),
+    ).toBeNull()
+  })
+
+  test("keeps the account on the All view", () => {
+    expect(accountInGroup("Younger Kids", null)).toBe(
+      "Younger Kids",
+    )
+  })
+
+  test("keeps an account that is not the group", () => {
+    // The case the exact match exists for: a group holding pools bound to two different
+    // accounts must still name the one that is not the group, because that IS the
+    // distinction between those two cards.
+    expect(
+      accountInGroup("Older Kids", "Younger Kids"),
+    ).toBe("Older Kids")
+    // A substring is not a match, exactly as in labelInGroup.
+    expect(accountInGroup("Younger Kids", "Younger")).toBe(
+      "Younger Kids",
+    )
+  })
+
+  test("ignores case and surrounding space, as a person would", () => {
+    expect(
+      accountInGroup(" younger kids ", "Younger Kids"),
+    ).toBeNull()
+  })
+
+  test("a pool with no bound account says nothing", () => {
+    expect(accountInGroup(null, "Younger Kids")).toBeNull()
+    expect(accountInGroup("", null)).toBeNull()
   })
 })

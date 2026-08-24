@@ -25,15 +25,22 @@ sets:
     plex_user: Older Kids
     account_id: 22222222
     user_uuid: "2222222222222222"
+  # A profiles[] pool, like every live one since PR 4 — the flat `plex_user` sets above are
+  # the LEGACY shape. This is the only one in the fixture with a real binding, which is what
+  # makes the account appear in its meta and what lets the harness prove `accountInGroup`
+  # takes it back off inside the Younger Kids group.
   - id: shorts
     label: Shorts
     kind: cartoons
     source: rotation
+    behavior: progress
     sections: [15]
     item_sections: [15]
-    plex_user: Younger Kids
-    account_id: 11111111
-    user_uuid: "1111111111111111"
+    profiles:
+      - plex_user: Younger Kids
+        account_id: 11111111
+        user_uuid: "1111111111111111"
+        allowed_ratings: [TV-Y, TV-G, G]
   - id: movies_rewatch
     label: Movies
     kind: movies

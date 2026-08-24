@@ -19,7 +19,10 @@ import {
 } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
 import { isRandomOrder } from "../lib/kind"
-import { labelInGroup } from "../lib/setLabel"
+import {
+  accountInGroup,
+  labelInGroup,
+} from "../lib/setLabel"
 import type {
   Group,
   QueuesResponse,
@@ -304,11 +307,19 @@ function ChannelCard({
   // The account this pool is locked to, for the meta line. `has_explicit_profiles` is what
   // separates a real binding from the synthesized one a legacy flat set reports, whose
   // `plex_user` is the channel's own label and would read as "Shows · Shows".
-  const onlyAccount = hasChoice
+  const boundAccount = hasChoice
     ? null
     : channel.has_explicit_profiles
       ? (channel.profiles || [])[0]?.plex_user || null
       : null
+  // ...and dropped again while you are standing INSIDE that account's group, where it is the
+  // heading said a third time: the chip is lit, the page title says it, and `labelInGroup`
+  // has already taken it off this card's own name. Same rule, same module, other half of
+  // the card.
+  const onlyAccount = accountInGroup(
+    boundAccount,
+    groupLabel,
+  )
   const behaviour = isRewatch
     ? "weighted rewatch"
     : "rotation · ratings-filtered"
