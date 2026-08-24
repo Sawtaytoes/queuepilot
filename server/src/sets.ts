@@ -1,9 +1,9 @@
 // The set REGISTRY: sets.yaml is the single source of truth for every set — the curated
 // queues (source: queue) and the dynamic kid channels (source: rotation). The Node editor
 // is the only WRITER; the Python service re-reads it before every command (config.reload_sets).
-// Round-trips with the comment-preserving `yaml` Document API + the same mkdir lock
-// convention as queues.js, and seeds itself from DEFAULT_YAML on first boot so the file
-// always exists once the web app has run.
+// The FILE is `store/sets.ts`'s — the path, the mkdir lock convention queues.js shares, the
+// first-boot seed and the comment-preserving `yaml` Document round-trip all moved there. What
+// is left here is everything that reads or edits the parsed document.
 //
 // Registry rules (mirrored in queue_builder/config.py):
 //   * `id` is IMMUTABLE — HA automations / NFC cards / MQTT payloads reference it
@@ -11,8 +11,7 @@
 //   * File order of `sets:` = shelf order on the web Home page.
 //   * Library membership is purely opt-in: a set draws only from the `sections` it lists.
 //     There is no global hide list — every video library shows in every picker.
-import { promises as fs } from 'node:fs';
-import { parseDocument, isMap, isNode, isScalar, isSeq } from 'yaml';
+import { isMap, isNode, isScalar, isSeq } from 'yaml';
 import type { Document, Node, YAMLMap, YAMLSeq } from 'yaml';
 import { validateBlocks, blocksForSet } from './providers/blocks.js';
 import { toWeight } from './engine/weight.js';
@@ -23,7 +22,7 @@ import { definitions as providerDefinitions, deliveryForKind, vocabularyForKind 
 // what makes a lineup length store SPARSELY — see toLineupLength().
 import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { INFINITE, defaultFor } from './engine/playbackLength.js';
-import { isNodeError } from './errors.js';
+import { store } from './store/index.js';
 import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
 import type {
   BatchStop,
@@ -42,11 +41,6 @@ import type {
   Start,
   WritableProviderBlock,
 } from './types.js';
-
-// Read straight off `process.env` rather than through env.ts, deliberately unchanged: the e2e
-// harnesses set `process.env.SETS_PATH` and then import this module, and engine/routing.js
-// imports SETS_PATH from HERE. (env.ts has no SETS_PATH equivalent today — see the report.)
-export const SETS_PATH = process.env.SETS_PATH || '/config/sets.yaml';
 
 /**
  * One binding AS READ OFF THE YAML — what `normalizeBinding()` accepts, from either a
@@ -112,215 +106,10 @@ function setKeepingComment(map: YAMLMap, key: string, newNode: Node): void {
   map.set(key, newNode);
 }
 
-const LOCK_DIR = SETS_PATH + '.lock';
-const LOCK_STALE_MS = 15000;
-const LOCK_WAIT_MS = 10000;
-const sleep = (ms: number) => new Promise<void>((r) => { setTimeout(r, ms); });
-
-async function acquireLock(): Promise<void> {
-  const deadline = Date.now() + LOCK_WAIT_MS;
-  for (;;) {
-    try {
-      await fs.mkdir(LOCK_DIR);
-      return;
-    } catch (e) {
-      if (!isNodeError(e) || e.code !== 'EEXIST') throw e;
-      try {
-        const st = await fs.stat(LOCK_DIR);
-        if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await fs.rmdir(LOCK_DIR).catch(() => {});
-          continue;
-        }
-      } catch {
-        /* lock vanished — retry */
-      }
-      if (Date.now() > deadline) throw new Error('timed out acquiring sets.yaml lock');
-      await sleep(50);
-    }
-  }
-}
-
-async function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  await acquireLock();
-  try {
-    return await fn();
-  } finally {
-    await fs.rmdir(LOCK_DIR).catch(() => {});
-  }
-}
-
-// The pre-registry state, verbatim: the six curated queues + the two kid rotation tiers
-// that used to live hardcoded in queue_builder/config.py + web/src/config.js. Seeded to
-// disk on first boot; from then on the FILE is the truth and this constant is only a
-// disaster-recovery template.
-const DEFAULT_YAML = `# queuepilot set registry — the single source of truth for every set (curated queue
-# or dynamic channel). Edited by the web UI at plex-channels.example.com; hand-edits are
-# fine too (the web app and the Python service both re-read it).
-#
-#   * id      IMMUTABLE — HA automations / NFC cards / MQTT reference it ({"set": "<id>"}).
-#             Rename the label freely; NEVER change an id.
-#   * order   of the entries below = shelf order on the web Home page.
-#   * source  queue    = hand-curated wishlist in queues.yaml (orderable, prunes as watched)
-#             rotation = rule-based kid channel (computed fresh each scan; filters below)
-#   * sections / item_sections  which Plex libraries the set draws from / searches.
-#   * keep_completed  (queue sets) true = a NON-CONSUMING / playlist queue: entries are
-#             never marked done and never removed when played, so the whole lineup can be
-#             re-shown every scan (e.g. the Theater Demo Reel). reel: true implies this.
-#   * remove_completed_after  OPT-IN auto-removal of finished entries. Default (absent) =
-#             KEEP FOREVER — a finished entry stays, tagged done, until cleared by hand. Set
-#             a duration ("24h"/"7d"/"90m") to have finished entries auto-remove that long
-#             after they finish; "0"/"never" is the explicit keep-forever. MOVIE queues opt
-#             in (24h below); ANIME channels intentionally stay default (kept) — an anime
-#             series has no "Season 2", so the finished series is the anchor a hand-added
-#             sequel lands next to. keep_completed: true also exempts a set.
-#
-# Library membership is purely opt-in: a set draws only from the sections it lists, and
-# every video library is available in the pickers. Non-video libraries (Music, Photos)
-# are never eligible (filtered structurally, not by any hide list).
-
-sets:
-  - id: bob
-    label: Bob — Movies
-    kind: picks
-    add_as: priority
-    source: queue
-    sections: [1, 14]
-    remove_completed_after: 24h  # movie queues opt in; anime channels stay keep-forever
-  - id: bob_alice
-    label: Bob & Alice — Movies
-    kind: picks
-    add_as: priority
-    source: queue
-    sections: [1, 14]
-    remove_completed_after: 24h
-  - id: family
-    label: Family — Movies
-    kind: picks
-    add_as: priority
-    source: queue
-    sections: [1, 14]
-    remove_completed_after: 24h
-  - id: bob_anime
-    label: Bob — Anime
-    kind: picks
-    add_as: random
-    source: queue
-    sections: [11]
-  - id: bob_alice_anime
-    label: Bob & Alice — Anime
-    kind: picks
-    add_as: random
-    source: queue
-    sections: [11]
-  - id: family_anime
-    label: Family — Anime
-    kind: picks
-    add_as: random
-    source: queue
-    sections: [11]
-  # The legacy per-tier sets (younger/older) are kept for the soak, marked superseded so
-  # they stay readable ({set:"younger"} still plays) but are hidden from every picker and
-  # skipped by the set:"auto" router. New installs land already-migrated to the function
-  # channels below. (Migration: 2026-07-23-live-tier-migration-to-function-channels.)
-  - id: younger
-    label: Younger Kids
-    kind: rules
-    source: rotation
-    sections: [5]
-    item_sections: [15]
-    allowed_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
-    movie_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
-    blocklist: []
-    plex_user: Younger Kids
-    account_id: 11111111
-    user_uuid: 1111111111111111
-    watch_count_accounts: [11111111]
-    superseded_by: shows_shorts,movies
-  - id: older
-    label: Older Kids
-    kind: rules
-    source: rotation
-    sections: [5]
-    item_sections: [15]
-    allowed_ratings: [TV-PG, PG]
-    movie_ratings: [TV-PG, PG]
-    blocklist: []
-    plex_user: Older Kids
-    account_id: 22222222
-    user_uuid: 2222222222222222
-    watch_count_accounts: [22222222]
-    superseded_by: shows_shorts,movies
-  # The function channels (cards send set:"auto"; the Shield's signed-in profile picks the
-  # tier binding). Named by FUNCTION, not by profile — each carries both tiers as profiles[].
-  - id: shows_shorts
-    label: Shows & Shorts
-    kind: rules
-    source: rotation
-    behavior: progress
-    sections: [5]
-    item_sections: [15]
-    blocklist: []
-    profiles:
-      - plex_user: Younger Kids
-        account_id: 11111111
-        user_uuid: 1111111111111111
-        allowed_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
-        movie_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
-        watch_count_accounts: [11111111]
-      - plex_user: Older Kids
-        account_id: 22222222
-        user_uuid: 2222222222222222
-        allowed_ratings: [TV-PG, PG]
-        movie_ratings: [TV-PG, PG]
-        watch_count_accounts: [22222222]
-  # A rewatch channel pools from the libraries it names, like any other channel: movie
-  # libraries in item_sections, show libraries in sections (their one-episode entries —
-  # anime films). Add Documentaries/Anime here to widen it.
-  - id: movies
-    label: Movies
-    kind: rules
-    source: rotation
-    behavior: rewatch
-    sections: []
-    item_sections: [1]
-    blocklist: []
-    profiles:
-      - plex_user: Younger Kids
-        account_id: 11111111
-        user_uuid: 1111111111111111
-        allowed_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
-        movie_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
-        watch_count_accounts: [11111111]
-      - plex_user: Older Kids
-        account_id: 22222222
-        user_uuid: 2222222222222222
-        allowed_ratings: [TV-PG, PG]
-        movie_ratings: [TV-PG, PG]
-        watch_count_accounts: [22222222]
-`;
-
-async function ensureFile(): Promise<void> {
-  // Seed via an EXCLUSIVE create (wx), not the mkdir lock: readDoc runs inside
-  // withLock() from every mutation, and the lock is not reentrant — taking it here
-  // deadlocked the first mutation whenever the file didn't exist yet.
-  try {
-    await fs.access(SETS_PATH);
-  } catch {
-    try {
-      await fs.writeFile(SETS_PATH, DEFAULT_YAML, { flag: 'wx' });
-      console.log(`[sets] seeded ${SETS_PATH} from built-in defaults`);
-    } catch (e) {
-      if (!isNodeError(e) || e.code !== 'EEXIST') throw e; // a concurrent seeder won the race — fine
-    }
-  }
-}
-
-async function readDoc(): Promise<Document> {
-  await ensureFile();
-  const doc: Document = parseDocument(await fs.readFile(SETS_PATH, 'utf8'));
-  if (!isSeq(doc.get('sets'))) throw new Error('sets.yaml has no sets list');
-  return doc;
-}
+// Persistence lives in `store/sets.ts` now — the path, the cross-process mkdir lock, the
+// first-boot seed from the built-in defaults, and the comment-preserving round-trip. These two
+// are aliased rather than re-wrapped so every call site below reads exactly as it did.
+const { readDoc, withLock } = store.sets;
 
 /**
  * The `sets:` sequence of a document readDoc() has already vetted. The re-check is
@@ -333,19 +122,9 @@ function setsSeq(doc: Document): YAMLSeq {
   return seq;
 }
 
-const YAML_OUT = { indentSeq: false, lineWidth: 0 };
-
 async function writeDoc(doc: Document): Promise<void> {
   _regCache = null; // see registryCache(): stat-keyed memo, busted on our own writes
-  const text = doc.toString(YAML_OUT);
-  const tmp = SETS_PATH + '.tmp';
-  await fs.writeFile(tmp, text, 'utf8');
-  try {
-    await fs.rename(tmp, SETS_PATH);
-  } catch {
-    await fs.writeFile(SETS_PATH, text, 'utf8');
-    await fs.rm(tmp, { force: true }).catch(() => {});
-  }
+  await store.sets.writeDoc(doc);
 }
 
 const toInts = (a: unknown): number[] => (Array.isArray(a) ? a.map((x) => parseInt(String(x), 10)).filter((x) => !Number.isNaN(x)) : []);
@@ -811,12 +590,8 @@ interface RegistryCache {
 let _regCache: RegistryCache | null = null;
 
 async function registryCache(): Promise<RegistryCache> {
-  let st = null;
-  try {
-    st = await fs.stat(SETS_PATH);
-  } catch {
-    st = null; // not seeded yet — readDoc() creates it, then the next call memoizes
-  }
+  // null = not seeded yet — readDoc() creates it, then the next call memoizes.
+  const st = await store.sets.stat();
   if (st && _regCache && _regCache.mtimeMs === st.mtimeMs && _regCache.size === st.size) {
     return _regCache;
   }

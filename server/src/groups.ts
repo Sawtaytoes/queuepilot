@@ -34,16 +34,12 @@
 // A set may belong to MANY profiles, and a profile with neither `accounts:` nor `sets:` is
 // legal (it is just empty). Nothing here can hide a set from the app: the `all` pseudo-
 // profile is synthesized below and is not user-editable.
-import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import path from 'node:path';
-import { isSeq, parse, parseDocument, stringify } from 'yaml';
+import { isSeq } from 'yaml';
 import type { Document, YAMLSeq } from 'yaml';
 
 import type { SetRegistryEntry } from './types.js';
 
-import { isNodeError, errMessage } from './errors.js';
-import { GROUPS_PATH } from './env.js';
+import { store } from './store/index.js';
 
 /** The provider accounts one group stands for, keyed by provider KIND. */
 export type ProfileAccounts = Record<string, string[]>;
@@ -80,19 +76,10 @@ export const ALL_ID = 'all';
 
 // --- reading ------------------------------------------------------------------ //
 
-function readYaml(): Record<string, unknown> {
-  try {
-    return (parse(fs.readFileSync(GROUPS_PATH, 'utf8')) as Record<string, unknown> | null) || {};
-  } catch (e) {
-    // Missing is the normal cold-start case — `seedIfMissing()` handles it. Anything else
-    // is worth a line but must never crash boot: this process also serves the web UI, and
-    // losing the whole app to a stray comma in an OPTIONAL config file is the worse failure.
-    if (!isNodeError(e) || e.code !== 'ENOENT') {
-      console.log(`[groups] could not read ${GROUPS_PATH}: ${errMessage(e)}`);
-    }
-    return {};
-  }
-}
+// Persistence lives in `store/groups.ts` now — the path, the sync read, the seed header and
+// its exclusive create, and the comment-preserving round-trip. Aliased rather than re-wrapped
+// so every call site below reads exactly as it did.
+const { readDoc, readSync: readYaml, writeDoc } = store.groups;
 
 /** Lower-cased and trimmed. Account names are matched case-insensitively because
  * `sawtaytoes` (plex.tv username) and `Bob` (Kavita display name) are typed by hand into
@@ -256,24 +243,6 @@ export function unassignedSetIds(sets: SetRegistryEntry[]): string[] {
 
 // --- seeding ------------------------------------------------------------------ //
 
-const SEED_HEADER = `# QueuePilot groups — who is watching, and what is theirs.
-#
-# A group is what you pick at the top of the app; its id is its URL (/g/<id>), so ids are
-# IMMUTABLE and labels are free — rename a label whenever, never change an id.
-#
-# NOT a Plex profile. Plex's profiles are the accounts on the Shield; a group is ours, and
-# may be a person (Bob), an audience (Bob & Alice) or neither (Demo).
-#
-# Membership, in order:
-#   1. sets:      this group claims these set ids outright.
-#   2. accounts:  provider kind -> account names. Used ONLY for a set no group listed —
-#                 so a set you file by hand stays where you filed it.
-#
-# accounts is also the identity map: Plex calls Bob 'sawtaytoes', Kavita calls him 'Bob'.
-# A group with no accounts is membership by hand (Bob & Alice); a set can be in several.
-# 'all' is built in and cannot be defined here.
-`;
-
 /**
  * Write a starter `groups.yaml` derived from the registry, if none exists.
  *
@@ -283,12 +252,7 @@ const SEED_HEADER = `# QueuePilot groups — who is watching, and what is theirs
  * exists so a fresh install has a working picker on first paint, not so nobody ever edits it.
  */
 export async function seedIfMissing(sets: SetRegistryEntry[]): Promise<boolean> {
-  try {
-    await fsp.access(GROUPS_PATH);
-    return false;
-  } catch {
-    /* absent — seed below */
-  }
+  if (await store.groups.exists()) return false;
 
   const seen = new Map<string, { kind: string; name: string }>();
   for (const s of sets) {
@@ -307,21 +271,8 @@ export async function seedIfMissing(sets: SetRegistryEntry[]): Promise<boolean> 
     accounts: { [kind]: [name] },
   }));
 
-  try {
-    await fsp.mkdir(path.dirname(GROUPS_PATH), { recursive: true });
-    // `wx`: another process (or another worker) may have won the race between the access()
-    // above and here, and its file is as good as ours. Losing is not an error.
-    await fsp.writeFile(GROUPS_PATH, `${SEED_HEADER}\n${stringify({ groups })}`, { flag: 'wx' });
-    console.log(`[groups] seeded ${GROUPS_PATH} with ${groups.length} group(s) from the registry`);
-    return true;
-  } catch (e) {
-    if (isNodeError(e) && e.code === 'EEXIST') return false;
-    console.log(`[groups] could not seed ${GROUPS_PATH}: ${errMessage(e)}`);
-    return false;
-  }
+  return store.groups.seed(groups);
 }
-
-export const GROUPS_FILE = GROUPS_PATH;
 
 // --- writing ------------------------------------------------------------------ //
 //
@@ -330,7 +281,8 @@ export const GROUPS_FILE = GROUPS_PATH;
 // app, and a round-trip that drops the header comment (or the `# ── People ──` dividers
 // someone wrote) silently punishes the person who wrote them. Every mutation below edits
 // nodes in place and leaves everything it did not touch — comments, blank lines, key order —
-// exactly as it found it.
+// exactly as it found it. `readDoc`/`writeDoc` are `store/groups.ts`'s; that rule is the
+// store's contract now, and `e2e/groups-test.ts` is what holds it.
 
 /** Turn a label into a URL-safe id. Ids are IMMUTABLE once created, so this runs on create
  * only — a rename never touches it, which is the contract every bookmark depends on. */
@@ -343,40 +295,10 @@ export function slugify(label: string): string {
     .slice(0, 60);
 }
 
-async function readDoc(): Promise<Document> {
-  let text = '';
-  try {
-    text = await fsp.readFile(GROUPS_PATH, 'utf8');
-  } catch (e) {
-    if (!isNodeError(e) || e.code !== 'ENOENT') throw e;
-    text = `${SEED_HEADER}\ngroups: []\n`;
-  }
-  const doc = parseDocument(text);
-  if (!isSeq(doc.get('groups'))) doc.set('groups', doc.createNode([]));
-  return doc;
-}
-
 function groupsSeq(doc: Document): YAMLSeq {
   const seq = doc.get('groups');
   if (!isSeq(seq)) throw new Error('groups.yaml has no groups list');
   return seq;
-}
-
-async function writeDoc(doc: Document): Promise<void> {
-  // `indentSeq: false` + `lineWidth: 0` match sets.yaml's shape, so the two config files in
-  // the same directory do not disagree about how a list looks.
-  const text = doc.toString({ indentSeq: false, lineWidth: 0 });
-  const tmp = `${GROUPS_PATH}.tmp`;
-  await fsp.mkdir(path.dirname(GROUPS_PATH), { recursive: true });
-  await fsp.writeFile(tmp, text, 'utf8');
-  try {
-    await fsp.rename(tmp, GROUPS_PATH);
-  } catch {
-    // Same fallback sets.ts keeps: a rename across a bind-mount boundary can fail where a
-    // plain write succeeds. Losing atomicity beats losing the save.
-    await fsp.writeFile(GROUPS_PATH, text, 'utf8');
-    await fsp.rm(tmp, { force: true }).catch(() => {});
-  }
 }
 
 /** Locate one group's mapping node by id. */
