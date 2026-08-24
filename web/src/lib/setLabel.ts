@@ -66,3 +66,34 @@ export function labelInGroup(
 
   return label
 }
+
+/**
+ * The account a card names in its META, given where you are looking at it from.
+ *
+ * The twin of `labelInGroup`, for the other half of the card. A filtered pool is locked to
+ * one Plex account, and the meta leads with it because "Shows" and "Shows & Shorts" are the
+ * same words until you know one is Younger Kids and the other Older Kids.
+ *
+ * Inside the group of that same name it is the heading said a third time — the chip is lit,
+ * the page title says it, and `labelInGroup` has already taken it off the card's name:
+ *
+ *     Younger Kids                                  Younger Kids
+ *     ├─ Shorts  Younger Kids · rotation  →         ├─ Shorts  rotation · ratings-filtered
+ *     └─ Movies  Younger Kids · rewatch             └─ Movies  weighted rewatch
+ *
+ * Returns null when it should not be said, so the caller composes the meta rather than
+ * trimming a string it already built.
+ *
+ * It drops ONLY on an exact match, which is what keeps the case it exists for working: a
+ * group holding pools bound to two different accounts still names the one that is not the
+ * group, because that is the whole distinction between those two cards.
+ */
+export function accountInGroup(
+  account: string | null | undefined,
+  groupLabel: string | null | undefined,
+): string | null {
+  if (!account) return null
+  if (groupLabel && same(account, groupLabel)) return null
+
+  return account
+}
