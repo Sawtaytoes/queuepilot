@@ -6,17 +6,14 @@ import {
   RadioGroup,
   SegmentedControl,
 } from "@charcuterie/ui"
-import { useEffect, useState } from "react"
-import { useNavigate } from "react-router"
+import { useEffect, useRef, useState } from "react"
+import { useLocation, useNavigate } from "react-router"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
 import { GuestStepper } from "../components/GuestStepper"
 import { SelectListbox } from "../components/SelectListbox"
 import { api } from "../lib/api"
-import {
-  criteriaFromTonight,
-  tableSize,
-} from "../lib/boardGames"
+import { tableSize } from "../lib/boardGames"
 import { writePickSession } from "../lib/pickSession"
 import {
   ACTIVITIES,
@@ -34,13 +31,13 @@ import {
   type TonightQueue,
   tonightQueues,
 } from "../lib/tonight"
+import { drawTonight } from "../lib/tonightDraw"
+import { parseTonightPreset } from "../lib/tonightPreset"
 import { routeFor } from "../lib/tonightRouting"
 import type {
   GroupWithRoster,
   PeopleResponse,
   Person,
-  PickResponse,
-  TonightPickResponse,
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
 import { usePeople } from "../state/people"
@@ -99,7 +96,7 @@ export function TonightView({
   step,
 }: {
   isHidden: boolean
-  step: "surprise" | null
+  step: "go" | "surprise" | null
 }) {
   const navigate = useNavigate()
   const { reg } = useStore()
@@ -154,7 +151,21 @@ export function TonightView({
     null,
   )
 
+  /**
+   * What a PRESET CARD could not do, held on the screen rather than in a toast.
+   *
+   * A toast is the wrong surface for this: the refusal is the answer to a tap that has
+   * already happened, the form under it is mid-load and publishes its own status, and the
+   * last writer wins. So the sentence lives in the view, beside the control that can fix it,
+   * until the person changes something.
+   */
+  const [presetNote, setPresetNote] = useState<
+    string | null
+  >(null)
+
   const chooseActivity = (id: ActivityId) => {
+    // Touching the form answers whatever a preset card could not.
+    setPresetNote(null)
     setSession({
       activity: id,
       filters: defaultFilterValues(id),
@@ -239,8 +250,116 @@ export function TonightView({
   const isSurpriseStep = step === "surprise"
   const isQueues = session.mode === "queues"
 
+  /**
+   * A PRESET CARD ARRIVING (`/tonight/go?…`).
+   *
+   * The absorb decision's NFC table says a Pick preset — people and filters baked in — is a
+   * card the household may have, and that it must *"land on result card, not an empty
+   * form"*. A card is a fixed string on plastic and cannot ask who walked in, so the address
+   * carries the answers the form would have collected and this runs the SAME draw the Go
+   * button runs (`lib/tonightDraw.ts`).
+   *
+   * Two things it never does:
+   *
+   *   * **It never lands on an empty form.** A valid preset draws and replaces itself with
+   *     `/result`. A refused one lands on `/tonight` with what the card DID say already
+   *     filled in, plus the one sentence saying what is missing.
+   *   * **It never guesses who is here.** A card that names nobody is refused by
+   *     `parseTonightPreset`, which is brief §5's fourth row — *"bare board games needing
+   *     live who's-here: use the app"* — made machine-enforced rather than written down.
+   *     Defaulting to "everybody" would pick for a table whose size nobody stated.
+   *
+   * `replace: true` on both exits: a card's address is a one-shot instruction, and leaving it
+   * in the history means Back re-draws it.
+   *
+   * Keyed on the search string through a ref rather than on the effect's own deps. The view
+   * is permanently mounted and toggles `hidden`, StrictMode double-invokes effects in
+   * development, and a draw is a POST — running it twice for one tap would burn a reroll's
+   * worth of exclusions before the card was ever on screen.
+   */
+  const presetSearch = useLocation().search
+  const drawnPreset = useRef<string | null>(null)
+
+  useEffect(() => {
+    if (isHidden || step !== "go") return
+    if (drawnPreset.current === presetSearch) return
+    drawnPreset.current = presetSearch
+
+    const parsed = parseTonightPreset(presetSearch)
+
+    // Whatever the card DID say is applied either way, so a refusal is one answer short
+    // rather than a blank screen.
+    if (parsed.preset) {
+      setSelectedPeople([...parsed.preset.personIds])
+      setGuestCount(parsed.preset.guestCount)
+      setSession({
+        activity: parsed.preset.activity,
+        filters: parsed.preset.filters,
+        mode: defaultModeFor(parsed.preset.activity),
+      })
+      setQueueId(null)
+    }
+
+    if (!parsed.isAccepted) {
+      setPresetNote(parsed.reason)
+      navigate(
+        parsed.preset?.activity === "surprise"
+          ? "/tonight/surprise"
+          : "/tonight",
+        { replace: true },
+      )
+      return
+    }
+
+    const preset = parsed.preset
+
+    void drawTonight(preset)
+      .then((outcome) => {
+        if (!outcome.isDrawn) {
+          setPresetNote(outcome.reason)
+          navigate("/tonight", { replace: true })
+          return
+        }
+        writePickSession(outcome.session)
+        navigate("/result", { replace: true })
+      })
+      .catch((e: unknown) => {
+        setPresetNote(
+          `Could not pick: ${e instanceof Error ? e.message : String(e)}`,
+        )
+        navigate("/tonight", { replace: true })
+      })
+  }, [isHidden, navigate, presetSearch, step])
+
+  // A PRESET CARD IS NOT A FORM. While the draw is in flight the screen says what it is
+  // doing rather than painting the form the card exists to skip — a flash of Who's here
+  // under a finger that just tapped plastic reads as "it did not work", and a refused
+  // preset navigates to `/tonight` a moment later and renders it properly anyway.
+  if (step === "go") {
+    return (
+      <main className="view" hidden={isHidden} id="tonight">
+        <EmptyState
+          description="Reading the card, then drawing tonight's pick."
+          heading="Setting up tonight…"
+        />
+      </main>
+    )
+  }
+
   return (
     <main className="view" hidden={isHidden} id="tonight">
+      {/* 0 — WHAT A PRESET CARD COULD NOT DO. Only ever present after a card sent somebody
+          here, and it names the one answer that is missing. */}
+      {presetNote ? (
+        <p
+          className="subhint"
+          id="tonight-preset-note"
+          role="alert"
+        >
+          {presetNote}
+        </p>
+      ) : null}
+
       {/* 1 — WHO'S HERE. A filter, and the copy says so: this screen knows nothing about
           who is in the room and must never pretend to. */}
       <section className="tsection" id="tonight-people">
@@ -260,13 +379,14 @@ export function TonightView({
             <CheckboxGroup
               checked={selectedPeople}
               id="tonight-roster"
-              onToggle={(value, isChecked) =>
+              onToggle={(value, isChecked) => {
+                setPresetNote(null)
                 setSelectedPeople((prev) =>
                   isChecked
                     ? [...prev, value]
                     : prev.filter((id) => id !== value),
                 )
-              }
+              }}
               options={people.map((person) => ({
                 label: person.displayName,
                 value: person.id,
@@ -618,6 +738,41 @@ function GoButton({
   // The one map: which backend this activity reaches, and how Pick draws for it.
   const route = routeFor(activity)
 
+  /**
+   * ONE handler for both Pick engines, and it is the SAME function a preset card's address
+   * runs (`lib/tonightDraw.ts`). The two used to be written out here, once each, which is
+   * exactly where a second caller could not reach them — and a copy would be two places for
+   * "which engine does this activity use" to drift apart.
+   */
+  const draw = async () => {
+    setIsDrawing(true)
+    try {
+      const outcome = await drawTonight({
+        activity,
+        filters,
+        guestCount,
+        personIds: [...selectedPeople],
+      })
+
+      if (!outcome.isDrawn) {
+        setStatus(outcome.reason, "err")
+        return
+      }
+
+      // WRITTEN DOWN BEFORE WE NAVIGATE. The pick and reroll's memory used to be plain
+      // component state, so leaving the card lost both.
+      writePickSession(outcome.session)
+      navigate("/result")
+    } catch (e) {
+      setStatus(
+        `Could not pick: ${(e as Error).message}`,
+        "err",
+      )
+    } finally {
+      setIsDrawing(false)
+    }
+  }
+
   if (!isQueues && route.engine === "board-games") {
     const size = tableSize(selectedPeople, guestCount)
 
@@ -641,54 +796,6 @@ function GoButton({
           </p>
         </>
       )
-    }
-
-    const draw = async () => {
-      setIsDrawing(true)
-      try {
-        const criteria = criteriaFromTonight({
-          filters,
-          guestCount,
-          personIds: selectedPeople,
-        })
-        const answer = await api<PickResponse>(
-          "POST",
-          "/api/board-games/pick",
-          criteria,
-        )
-
-        if (answer.shortlist.length === 0) {
-          const reason =
-            answer.result?.outcome === "empty"
-              ? (answer.result.suggestion ??
-                "Nothing on the shelf fits that.")
-              : "Nothing on the shelf fits that."
-          setStatus(reason, "err")
-          return
-        }
-
-        // WRITTEN DOWN BEFORE WE NAVIGATE. The pick and reroll's memory used to be plain
-        // component state, so leaving the card lost both.
-        writePickSession({
-          activity,
-          candidates: answer.shortlist,
-          criteria,
-          excludedGameIds: [],
-          guestCount,
-          kind: "board-game",
-          origin: "pick",
-          personIds: [...selectedPeople],
-          savedAt: new Date().toISOString(),
-        })
-        navigate("/result")
-      } catch (e) {
-        setStatus(
-          `Could not pick: ${(e as Error).message}`,
-          "err",
-        )
-      } finally {
-        setIsDrawing(false)
-      }
     }
 
     return (
@@ -731,60 +838,12 @@ function GoButton({
   // of three drawn at the same time. The queue's own engine chooses the ITEM when it starts —
   // it is the only thing that already knows what is left.
   if (!isQueues) {
-    const drawQueue = async () => {
-      setIsDrawing(true)
-      try {
-        const answer = await api<TonightPickResponse>(
-          "POST",
-          "/api/tonight/pick",
-          {
-            activity,
-            excludedSetIds: [],
-            guestCount,
-            personIds: selectedPeople,
-          },
-        )
-
-        if (!answer.pick || answer.shortlist.length === 0) {
-          setStatus(
-            answer.reason ??
-              "Nothing matches that tonight.",
-            "err",
-          )
-          return
-        }
-
-        // WRITTEN DOWN BEFORE WE NAVIGATE, for the same reason the board-game draw is:
-        // leaving the card used to lose it and the reroll's memory with it.
-        writePickSession({
-          activity,
-          backend: answer.backend,
-          excludedSetIds: [],
-          guestCount,
-          kind: "queue",
-          notes: answer.notes ?? [],
-          origin: "pick",
-          personIds: [...selectedPeople],
-          picks: answer.shortlist,
-          savedAt: new Date().toISOString(),
-        })
-        navigate("/result")
-      } catch (e) {
-        setStatus(
-          `Could not pick: ${(e as Error).message}`,
-          "err",
-        )
-      } finally {
-        setIsDrawing(false)
-      }
-    }
-
     return (
       <Button
         id="tonight-go"
         intent="accent"
         isDisabled={isDrawing}
-        onClick={() => void drawQueue()}
+        onClick={() => void draw()}
         size="lg"
       >
         {label}
