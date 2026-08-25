@@ -1,0 +1,252 @@
+# THE WIRE CONTRACT FIXTURE — twenty set ids, shaped like the live registry, named like the
+# repo (`2026-08-17-the-repo-is-public-so-people-hosts-and-ips-are-placeholders`).
+#
+# ## What this file is for
+#
+# A set id is what a piece of cardboard carries. `automation.plex_nfc_scanner` maps a tag to
+# `{plex_action, kind, set, profile}`, `script.control_plex` publishes `{"set": "<id>", …}` on
+# `queuepilot/cmd/session/start`, and the app looks that id up in the registry. Rename one and
+# the card is a no-op on the wall — no error anybody sees, no log anybody reads.
+#
+# Since 2026-08-23 that lookup has moved house: the registry is SQLite rows now, migrated out
+# of YAML, and eight work packages have edited the path between the broker and the row. This
+# fixture is what `e2e/nfc-wire-contract-test.ts` drives so the move is provable rather than
+# assumed. It is a MIRROR of the live registry's SHAPE — twenty ids, the same mix of curated
+# queues and rules pools, the same profile gates, the same odd characters (an underscore, a
+# trailing digit, a three-word id) — with every household name replaced.
+#
+# ## Why twenty and not six
+#
+# The live registry holds exactly twenty. `store-backend-parity-test.ts` already pins six ids
+# by name through the store; this one pins twenty through the BROKER, which is the half of the
+# path that store test never touches. The count matters on its own: a gate over six ids cannot
+# notice that the twenty-first was dropped.
+#
+# ## The public ↔ live mapping is NOT here
+#
+# The key lives in the private workspace
+# (`agentic/queuepilot-private/docs/2026-08-17-public-repo-placeholder-mapping.md`). Writing
+# the live ids into this repo would publish five household first names, which is the exact
+# thing the 2026-08-17 history rewrite existed to remove. The gate proves the CONTRACT — that
+# twenty ids survive verbatim and each one still reaches its set over MQTT. Proving it about
+# the live twenty is a run against the live book of record, and that run is recorded privately.
+global:
+  excluded_sections: []
+
+sets:
+  # ---- The owner's own curated queues. `requires_profile` is the plex.tv USERNAME, which is
+  # a handle rather than a name, so it stays as-is.
+  - id: bob
+    label: Bob — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [14, 1, 15]
+    length: 1
+  - id: bob_kids
+    label: Family — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [14, 1, 15]
+  - id: bob_carol_movies
+    label: Bob & Carol — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    sections: [1, 11, 5]
+    requires_profile: sawtaytoes
+    remove_completed_after: 24h
+  - id: bob_alice
+    label: Bob & Alice — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [14, 1, 15, 5]
+  - id: bob_dave_movies
+    label: Bob & Dave — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [1]
+
+  # ---- The theater reel. The first set that ever carried `requires_profile`, and the one
+  # whose card stalls rather than failing silently when the Shield is on the wrong profile.
+  - id: demo
+    label: Theater Demo Reel
+    kind: picks
+    add_as: priority
+    source: queue
+    reel: true
+    requires_profile: Demo
+    sections: [2, 7]
+
+  - id: bob_erin_movies
+    label: Bob & Erin — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    sections: [1]
+    remove_completed_after: 24h
+    requires_profile: sawtaytoes
+
+  # ---- A trailing digit, and a queue gated to a KID rather than to the owner. Both shapes
+  # are in the live registry and both are easy to lose to a re-slug.
+  - id: carol_1
+    label: Carol's Random Queue
+    kind: picks
+    add_as: priority
+    source: queue
+    sections: [11, 15, 5]
+    keep_completed: true
+    remove_completed_after: 24h
+    requires_profile: Older Kids
+
+  - id: bob_frank_movies
+    label: Bob & Frank — Movies
+    kind: picks
+    add_as: priority
+    source: queue
+    sections: [1]
+    requires_profile: sawtaytoes
+    remove_completed_after: 24h
+
+  # ---- The anime lane. `add_as: random` rather than `priority`.
+  - id: bob_anime
+    label: Bob — Anime
+    kind: picks
+    add_as: random
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [11, 5]
+  - id: bob_alice_anime
+    label: Bob & Alice — Anime
+    kind: picks
+    add_as: random
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [11, 5]
+  # ⚠️ The id says "kids" and the label says two people, and that is CORRECT rather than a
+  # typo to tidy. A queue's label is authoritative and its id is only where it started
+  # (root decision `2026-08-25-a-queues-label-is-authoritative-its-id-is-historical`). The
+  # live registry carries the same disagreement on the same two ids. Renaming an id to agree
+  # with a label breaks the cardboard.
+  - id: bob_kids_anime
+    label: Bob & Carol — Anime
+    kind: picks
+    add_as: random
+    source: queue
+    requires_profile: sawtaytoes
+    sections: [11, 5]
+  - id: family_anime
+    label: Family — Anime
+    kind: picks
+    add_as: random
+    source: queue
+    sections: [11, 15, 5]
+    requires_profile: sawtaytoes
+
+  # ---- The one NON-PLEX queue. A reading card is a `/go/<id>` launcher rather than a push,
+  # so this is the id behind brief §5's "solo Reading / Kavita queue card".
+  - id: manga_webtoons
+    label: Manga & Webtoons
+    kind: picks
+    add_as: random
+    source: queue
+    sections: []
+    providers:
+      - provider: kavita
+        libraries: ["2", "5"]
+    episodes: 2
+
+  # ---- The two kid SHOWS cards. Curated queues since 2026-08-17, each gated to its tier.
+  - id: older_kids_shorts_shows
+    label: Older Kids — Shorts & Shows
+    kind: picks
+    add_as: random
+    source: queue
+    sections: [5, 15, 11]
+    requires_profile: Older Kids
+  - id: younger_kids_shows
+    label: Younger Kids — Shows
+    kind: picks
+    add_as: random
+    source: queue
+    sections: [5, 11]
+    requires_profile: Younger Kids
+
+  # ---- The four RULES pools. `younger` and `older` are the `set: "auto"` fallbacks that
+  # PROFILE_SET_MAP names; both carry `superseded_by`, which is what keeps `channelFor` from
+  # routing an auto scan to them directly.
+  - id: younger
+    label: Younger Kids
+    kind: rules
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [G, TV-Y, TV-G]
+    movie_ratings: [TV-G, TV-Y, G]
+    blocklist: ["457087"]
+    plex_user: Younger Kids
+    account_id: 200000001
+    user_uuid: aaaaaaaaaaaaaaaa
+    watch_count_accounts: [200000001]
+    audio_language: null
+    superseded_by: shorts,movies
+  - id: older
+    label: Older Kids
+    kind: rules
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-Y7, TV-Y7-FV, PG, TV-PG]
+    movie_ratings: [PG, TV-PG, TV-Y7]
+    blocklist: ["226337"]
+    plex_user: Older Kids
+    account_id: 200000002
+    user_uuid: bbbbbbbbbbbbbbbb
+    watch_count_accounts: [200000002]
+    audio_language: null
+    superseded_by: shorts,movies
+
+  # ---- The two function channels a `set: "auto"` scan actually routes to. `shorts` is
+  # progress and `movies` is rewatch, which is the pair `channelFor` tells apart.
+  - id: shorts
+    label: Shorts
+    kind: rules
+    source: rotation
+    behavior: progress
+    sections: []
+    item_sections: [15]
+    blocklist: []
+    profiles:
+      - plex_user: Younger Kids
+        account_id: 200000001
+        user_uuid: aaaaaaaaaaaaaaaa
+        allowed_ratings: [G, TV-Y, TV-G, TV-Y7]
+        movie_ratings: [TV-G, TV-Y, G]
+        watch_count_accounts: [200000001]
+    audio_language: null
+    length: 12
+    refill: true
+    on_complete: restart
+  - id: movies
+    label: Movies
+    kind: rules
+    source: rotation
+    behavior: rewatch
+    sections: [1]
+    item_sections: [1]
+    blocklist: []
+    profiles:
+      - plex_user: Younger Kids
+        account_id: 200000001
+        user_uuid: aaaaaaaaaaaaaaaa
+        allowed_ratings: [G, TV-Y, TV-G]
+        movie_ratings: [TV-G, TV-Y, G]
+        watch_count_accounts: [200000001]
+    audio_language: null

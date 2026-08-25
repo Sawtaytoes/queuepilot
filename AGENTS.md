@@ -522,6 +522,9 @@ server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection abs
 server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
 server/node_modules/.bin/tsx e2e/board-game-transport-parity-test.ts  # both board-game transports agree
 server/node_modules/.bin/tsx e2e/board-game-sync-mqtt-test.ts  # the nightly's MQTT topic contract
+server/node_modules/.bin/tsx e2e/nfc-wire-contract-test.ts  # the cards' set ids, over a real broker
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/tonight-preset-test.ts  # a preset card lands on the result card
 ```
 
 The three browser gates that need a SHARED SERVER (`narrow-scroll`, `drag-stability`,
@@ -628,6 +631,47 @@ second opinion here could disagree with it. Board Games is the exception and kee
 (`POST /api/board-games/pick`), because a board game is on a shelf and not in a queue.
 **Surprise Me is REFUSED by name** — it narrows before it picks and the narrowings are not
 settled ([decision](docs/decisions/2026-08-25-pick-draws-a-queue-not-an-item.md)).
+
+## The cardboard: NFC cards and the MQTT wire
+
+**A set id is a piece of plastic on a wall.** `automation.plex_nfc_scanner` maps a tag to
+`{plex_action, kind, set, profile}`, `script.control_plex` publishes
+`{"set": "<id>", "kind": …, "profile": …, "via": "ha"}` on `queuepilot/cmd/session/start`, and
+this app looks the id up in the registry. **Nothing in that chain reports a miss to a person.**
+The card is tapped, the theater does not start, and the only evidence is a container log line
+nobody is reading. Four rules:
+
+- **`e2e/nfc-wire-contract-test.ts` is the gate, and it drives a REAL broker.** Calling
+  `session.startSession()` directly would skip the subscribe, the payload parse, the topic
+  constants and the discovery publish — which is most of what a card depends on. The topics are
+  read off the broker's own `subscribe` event, not off `env.ts`: reading the constant back
+  would be the app agreeing with itself, and a renamed topic constant typechecks perfectly
+  while taking every card with it.
+- **The fixture does NOT name the live ids, and that is deliberate.**
+  `e2e/fixtures/wire-contract.sets.yaml` mirrors the live registry's SHAPE — twenty ids,
+  sixteen queues, the same profile gates, an underscore, a trailing digit, a three-word id —
+  under the placeholder cast. Five of the live twenty carry household first names and the
+  2026-08-17 history rewrite exists because they were once here. Verifying the live twenty is a
+  run against the live book of record, and its result belongs in the private workspace
+  ([decision](docs/decisions/2026-08-25-the-wire-ids-are-a-contract-and-the-gate-drives-the-broker.md)).
+- **A queue's LABEL is authoritative; its id is only where it started.** The live registry has
+  two ids whose words disagree with their labels, and the fixture reproduces the disagreement
+  on purpose. **Never rename an id to agree with a label** — that breaks the cardboard, and it
+  is settled in the workspace root's
+  `2026-08-25-a-queues-label-is-authoritative-its-id-is-historical`.
+- **`set: "auto"` is still a live path.** The UC remote's screen buttons send it, and the
+  profile-driven branch resolves an id the card does not carry — `channelFor()` first, then
+  `PROFILE_SET_MAP`. A rotation set carrying `superseded_by` is skipped by `channelFor`, which
+  is why the two tier pools are reachable by name and not by an auto scan.
+
+**A preset card is an ADDRESS**, not a form: `/tonight/go?activity=…&people=…&guests=…`. It
+runs the same draw the Go button runs (`web/src/lib/tonightDraw.ts` — one function, two
+callers) and replaces itself with `/result`. Two things there are rules rather than gaps:
+**a card that names nobody is REFUSED** (a card cannot see who walked in, and a shelf pick is
+chosen by table size, so the helpful default would pick for a table nobody stated), and
+**nothing invents a filter value** — an unknown one falls back to that filter's own default,
+because a card is written once and read for years
+([decision](docs/decisions/2026-08-25-a-preset-card-is-an-address-and-a-card-that-names-nobody-is-refused.md)).
 
 ## Working here
 
