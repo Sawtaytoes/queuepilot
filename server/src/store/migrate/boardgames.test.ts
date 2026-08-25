@@ -526,6 +526,38 @@ describe('the grouping-rule seed', () => {
 });
 
 describe('the two tables keyed on a person', () => {
+  // ⚠️ THE LIVE COLLECTION'S ACTUAL SHAPE, as of the absorb: several plays and ZERO
+  // participant rows. Every play in the source arrived through the anonymous landing, which
+  // posts no participants, so `play_players` is empty while `plays` is not.
+  //
+  // The tempting repair is to give each play the people who "must" have been there — from the
+  // known-how table, from a group roster, from the last play. Every one of those INVENTS a
+  // fact. A play may renew a known-how claim and must never create one, and a claim attached
+  // to the wrong person appears on no screen beside a name, so nobody would ever catch it.
+  //
+  // This test pins the empty table as the CORRECT result. It fails if some later change
+  // decides an empty participant list is a gap worth filling.
+  it('carries a play with NOBODY at the table across as exactly that', () => {
+    const source = new DatabaseSync(SOURCE);
+    source.exec("DELETE FROM play_players");
+    source.exec(
+      "INSERT INTO plays (id, game_id, played_at, notes) VALUES ('play-3', 'tidewright', '2026-01-05T20:00:00.000Z', NULL)",
+    );
+    source.close();
+
+    const result = importBoardGames({ force: true });
+    expect(result.imported).toBe(true);
+
+    // Three plays in, three plays out — and not one participant row invented for any of them.
+    expect(boardGameCounts().board_game_plays).toBe(3);
+    expect(boardGameCounts().board_game_play_people).toBe(0);
+    for (const play of listBoardGamePlays()) expect(play.playerIds).toEqual([]);
+
+    // And the known-how table is untouched by all of it: it still holds exactly the claims the
+    // source stated, and gained nothing from three plays with no people on them.
+    expect(listBoardGameKnownHow()).toHaveLength(3);
+  });
+
   it('holds the SOURCE app’s player ids until the gated people import re-keys them', () => {
     importBoardGames();
     expect(listBoardGameKnownHow().map((row) => row.playerId).sort()).toEqual([

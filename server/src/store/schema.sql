@@ -635,9 +635,24 @@ CREATE INDEX IF NOT EXISTS board_game_grouping_reviews_open
 
 -- ── The play log, and the two tables keyed on a PERSON ───────────────────────────────────
 
--- ONE SITTING. Two rows exist, and both came in through the deliberately anonymous door — the
--- landing another app hands you when you are already standing at a table, which posts no
--- participants on purpose.
+-- ONE SITTING.
+--
+-- ⚠️ A PLAY WITH NOBODY AT THE TABLE IS NORMAL HERE, AND THE MIGRATION CARRIES IT ACROSS AS IT
+-- FOUND IT. Every play in the source arrived through the deliberately anonymous door — the
+-- landing another app hands you when you are already standing at a table — so
+-- `board_game_play_people` is EMPTY while this table is not. Whether every one of those is the
+-- door working as designed or a writer that should have recorded participants is an open
+-- question about the SOURCE app, being answered elsewhere; it is not this migration's to
+-- settle.
+--
+-- What IS this migration's, and is absolute: **do not invent a participant row to make the
+-- data look consistent, and never back-fill one from another table.** A play must not create a
+-- known-how claim. `board_game_known_how` below says why — the claim is a thing a person
+-- states, and the two facts are separate on purpose.
+--
+-- No row count is written down here on purpose. The source app is still live and still logging
+-- plays, so a number in this comment is wrong within a week; the counts that matter are the
+-- ones the migration asserts against the source at run time.
 CREATE TABLE IF NOT EXISTS board_game_plays (
   id        TEXT PRIMARY KEY,
   game_id   TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
@@ -678,9 +693,11 @@ CREATE INDEX IF NOT EXISTS board_game_play_people_person ON board_game_play_peop
 -- refresh on logging a play is an UPDATE, guarded so a backdated play cannot make a claim look
 -- fresher than it is, and there is no INSERT on that path.
 --
--- Four rows, over two people, and they are the rows a wrong identity match would actually
--- damage. Named for board games rather than made activity-agnostic on purpose: the same fact
--- is coming for video games, and designing that table now would be guessing from four rows.
+-- These are the rows a wrong identity match would actually damage, and there are very few of
+-- them — which is the argument for the manual gate, not against it: a handful of rows is
+-- exactly the size at which nobody notices one is attached to the wrong person. Named for
+-- board games rather than made activity-agnostic on purpose. The same fact is coming for video
+-- games, and designing that table now would be generalising from a table this small.
 CREATE TABLE IF NOT EXISTS board_game_known_how (
   person_id    TEXT NOT NULL,
   game_id      TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
