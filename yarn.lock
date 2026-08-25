@@ -170,23 +170,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/server@npm:^0.2.0":
-  version: 0.2.0
-  resolution: "@charcuterie/server@npm:0.2.0"
-  peerDependencies:
-    "@hono/node-server": ">=1.13"
-    hono: ">=4"
-    vite: ">=5"
-  peerDependenciesMeta:
-    vite:
-      optional: true
-  checksum: 10c0/27919c25fa3c0cc7b4f9c3b167015cacd5e19fee463cc69ab208d00b458ea8554fd0f39231a336ed90efd578df6580a729ac436da6fccacf62dbbccd08149876
-  languageName: node
-  linkType: hard
-
-"@charcuterie/server@npm:^0.3.0":
-  version: 0.3.0
-  resolution: "@charcuterie/server@npm:0.3.0"
+"@charcuterie/server@npm:^0.4.0":
+  version: 0.4.0
+  resolution: "@charcuterie/server@npm:0.4.0"
   peerDependencies:
     "@hono/node-server": ">=1.13"
     hono: ">=4"
@@ -197,7 +183,7 @@ __metadata:
       optional: true
     vite:
       optional: true
-  checksum: 10c0/8e37f869c0d3195099a43f20ec8602f4d07608841be23a7853eff2a20134ee6e68cbbe7ebdf73d4d5db6450ab1289c4945f312a60284510d609338817f281129
+  checksum: 10c0/1b00ebecdf623bc48840c2d59f2af585baa8f76aac7b8ea846ac32ada75e1c2326331da6ed2c0c84256e8b2193e3a3fd7577f8e2a1d5f43f325d30512e750375
   languageName: node
   linkType: hard
 
@@ -2821,7 +2807,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "queuepilot-server@workspace:server"
   dependencies:
-    "@charcuterie/server": "npm:^0.3.0"
+    "@charcuterie/server": "npm:^0.4.0"
     "@charcuterie/tsconfig": "npm:^1.0.0"
     "@charcuterie/vitest-config": "npm:^1.0.1"
     "@hono/node-server": "npm:^2.0.2"
@@ -2846,7 +2832,7 @@ __metadata:
     "@biomejs/biome": "npm:^2.5.7"
     "@charcuterie/biome-config": "npm:^1.2.0"
     "@charcuterie/logic": "npm:^2.3.0"
-    "@charcuterie/server": "npm:^0.2.0"
+    "@charcuterie/server": "npm:^0.4.0"
     "@charcuterie/tokens": "npm:^1.6.0"
     "@charcuterie/tsconfig": "npm:^1.0.0"
     "@charcuterie/ui": "npm:^3.16.0"
