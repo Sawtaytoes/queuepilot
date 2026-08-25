@@ -5,6 +5,7 @@
  *   `/g/<group>`         PLAY, filtered to one QueuePilot group
  *   `/tonight`           TONIGHT — who's here, an activity, and Go
  *   `/tonight/surprise`  TONIGHT, on Surprise Me's narrowing step
+ *   `/tonight/go?…`      TONIGHT with the answers baked in — a PRESET CARD's address
  *   `/result`            RESULT — tonight's pick: one card, reroll, confirm
  *   `/result/<gameId>`   RESULT for one named game — a queue arrival, and it has NO reroll
  *   `/collection`        COLLECTION — the board-game shelf, and "we played this"
@@ -16,6 +17,15 @@
  * opens a second screen where you narrow down before anything is chosen, and the who's-here
  * answer above it is still the same answer. It carries a path anyway because it is a place
  * you can be, and a place you can be is a URL you can reload and share.
+ *
+ * `/tonight/go` is the same kind of thing pointed the other way: not a place you sit but an
+ * ADDRESS A CARD CARRIES. The query string holds the answers the form would have collected —
+ * who is here, the activity, the filters — so the tap draws and lands on `/result` instead of
+ * opening a form and asking again (absorb decision §5: *"Pick-preset NFC → land on result
+ * card, not an empty form"*). The grammar and the rule that a card which names NOBODY is
+ * refused are both in `lib/tonightPreset.ts`. It parses to a STEP for the same reason
+ * `surprise` does: the view is Tonight either way, and a refused preset has to land on that
+ * form with what the card did say already filled in.
  *
  * `/g/<group>` is the same VIEW as `/`, not a new one — it is the landing with a filter
  * applied, which is why it parses to `{view: "play"}` carrying a group rather than to a
@@ -39,7 +49,10 @@ export type Route =
   | { view: "play"; group: string | null }
   | { view: "collection" }
   | { view: "result"; gameId: string | null }
-  | { view: "tonight"; step: "surprise" | null }
+  | {
+      view: "tonight"
+      step: "go" | "surprise" | null
+    }
   | { view: "queues" }
   | { view: "pending" }
   | { view: "queue"; id: string }
@@ -93,9 +106,11 @@ export function parsePath(pathname: string): Route {
   if (path.startsWith("/collection"))
     return { view: "collection" }
 
-  // Longest first: `/tonight/surprise` must not be swallowed by the bare `/tonight`.
+  // Longest first: neither step may be swallowed by the bare `/tonight`.
   if (path === "/tonight/surprise")
     return { step: "surprise", view: "tonight" }
+  if (path === "/tonight/go")
+    return { step: "go", view: "tonight" }
   if (path.startsWith("/tonight"))
     return { step: null, view: "tonight" }
 

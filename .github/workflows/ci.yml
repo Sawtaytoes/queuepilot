@@ -543,6 +543,20 @@ jobs:
       - name: The board-game sync's MQTT contract (offline)
         run: $TSX e2e/board-game-sync-mqtt-test.ts
 
+      # THE WP-9 GATE. A physical NFC card carries a SET ID, and a card whose id stopped
+      # resolving is silent — the theater does not start and the only evidence is a container
+      # log line nobody reads. Eight work packages have rebuilt the path between the broker
+      # and the row, so this drives the real `mqttd` against a real broker with the exact
+      # payload `script.control_plex` publishes.
+      #
+      # It pins the ids BY NAME in both directions (a count of twenty passes even if all
+      # twenty were replaced), the four command topics read off the BROKER's subscribe event
+      # rather than off `env.ts`, the discovery config the top-up automation's sensor comes
+      # from, and that an unknown id is still refused by name — without which the whole suite
+      # would pass just as happily against a server that had stopped answering.
+      - name: NFC + MQTT wire contract (offline, real broker)
+        run: $TSX e2e/nfc-wire-contract-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 
@@ -730,6 +744,18 @@ jobs:
       # `onChange`, so a control can paint one answer while the view believes another.
       - name: Tonight surface (browser, no Plex needed)
         run: $TSX e2e/tonight-test.ts
+
+      # THE WP-9 PRESET GATE. The absorb decision's NFC table says a Pick preset — people and
+      # filters baked into the card — must *"land on result card, not an empty form"*. That is
+      # a claim about a LANDING, so it can only be answered in a browser: the parse can be
+      # perfect and the draw can succeed while the screen still paints the Who's-here form,
+      # which from the couch reads as "the card did not work".
+      #
+      # It also pins the row of that table which is a RULE rather than a gap: a card cannot
+      # see who walked in, so a preset naming NOBODY is refused. The tempting "fix" is to
+      # default it to everybody, which picks for a table whose size nobody stated.
+      - name: A preset card lands on the result card (browser, no Plex needed)
+        run: $TSX e2e/tonight-preset-test.ts
 
       # THE WP-8 GATE, and it exists because of a defect in the LIVE data rather than a
       # design review. The absorbed app logged three plays and attached nobody to any of
