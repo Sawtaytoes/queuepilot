@@ -35,8 +35,10 @@ export const YAML_OUT = { indentSeq: false, lineWidth: 0 } as const;
  *
  * `people` joined the four in WP-3 and is the one that has no YAML file behind it — it is
  * here for the same bookkeeping the others use it for: the version counter, and the
- * fingerprint of the mapping file the people import last consumed. */
-export type StoreName = 'sets' | 'queues' | 'groups' | 'pending' | 'people';
+ * fingerprint of the mapping file the people import last consumed. `boardgames` joined in
+ * WP-4b and uses it the same way: the version counter, and the fingerprint of the source
+ * database and seed file the collection absorb last consumed. */
+export type StoreName = 'sets' | 'queues' | 'groups' | 'pending' | 'people' | 'boardgames';
 
 /** The two comment slots the `yaml` Document API gives a node, as they are stored. */
 export interface RowComments {

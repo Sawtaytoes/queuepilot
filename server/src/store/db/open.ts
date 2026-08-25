@@ -41,8 +41,14 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * 2 (WP-3): `people`, `person_accounts` and `group_people`. Three NEW tables and no changed
  * column, so an existing file absorbs them by re-running `schema.sql` — the number moves
  * anyway, because it is what a rollback reads to refuse to run against a newer file.
+ *
+ * 3 (WP-4b): the twelve `board_game_*` tables. Twelve NEW tables, no changed column, and the
+ * same reasoning as 2 — an existing file absorbs them, and the number moves so a rollback to a
+ * pre-WP-4b image refuses the file rather than writing rows a newer schema will misread. The
+ * rollback cost is the one WP-3 already recorded: an image rollback past this point needs
+ * `STORE_BACKEND=yaml` or the file restored from a backup taken before the upgrade.
  */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;
