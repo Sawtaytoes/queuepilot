@@ -491,6 +491,22 @@ jobs:
       - name: Queues keyed by people (offline)
         run: $TSX e2e/queue-people-test.ts
 
+      # THE WP-4e GATE. The board-game provider stopped speaking HTTP; this is what says the
+      # same queue still produces the same lineup. One invented shelf is expressed TWICE — as
+      # hand-written objects behind a real http server running the sibling app's transcribed
+      # endpoint bodies, and as rows in that app's own schema, absorbed and read back — and
+      # every answer is compared value for value, including the cover BYTES.
+      #
+      # The HTTP side is transcribed rather than imported, on purpose: a stub serving rows out
+      # of our own store would be the store agreeing with itself.
+      #
+      # It also pins the three things the swap could quietly cost: a read makes ZERO HTTP
+      # requests (counted at the server), a play still carries three keys and never a person,
+      # and the play WRITE is still a POST to the sibling app — two books of record are open
+      # until WP-4d retires the source file, so nothing here may write a collection row.
+      - name: Both board-game transports agree (offline)
+        run: $TSX e2e/board-game-transport-parity-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 
