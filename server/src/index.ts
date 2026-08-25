@@ -17,6 +17,7 @@ import * as finished from './finished.js';
 import * as mqttd from './mqttd.js';
 import { seedIfMissing } from './groups.js';
 import * as sets from './sets.js';
+import { ensureBoardGamesImported } from './store/migrate/boardgames.js';
 import { ensurePeopleImported } from './store/migrate/people.js';
 import { startLiveUpdates } from './sse.js';
 import * as warm from './warm.js';
@@ -66,6 +67,18 @@ try {
 // Board Game Picker player is which human here. It stats two paths and returns when neither
 // exists, which is every CI runner and every offline harness; it writes nothing at all without
 // an explicit `confirmed: true`. Identity match is manual — see `store/migrate/people.ts`.
+// The collection absorb, BEFORE the people import, and the order matters. It writes the two
+// people-keyed board-game tables holding the source app's own player ids; the people import
+// then re-keys them onto the people it creates, in its own transaction, behind its own gate.
+// Absorbing first also means a confirmed mapping and a fresh collection landing in one start.
+// Two `stat`s and a return when there is no collection file — every CI runner and every
+// offline harness.
+try {
+  ensureBoardGamesImported();
+} catch (e) {
+  console.log(`[boardgames] absorb skipped: ${e instanceof Error ? e.message : String(e)}`);
+}
+
 try {
   ensurePeopleImported();
 } catch (e) {
