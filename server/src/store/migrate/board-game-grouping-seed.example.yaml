@@ -1,0 +1,103 @@
+# The grouping-rule seed, BY EXAMPLE. Every title here is invented.
+#
+# WHAT THIS FILE IS FOR
+#
+# A collection is a shelf of physical boxes and a queue wants a list of playable TITLES. Most
+# of the collapse is an algorithm — normalise a title, find the franchise prefix, recognise an
+# edition marker — and the algorithm is in this repo and public. What is not is the set of
+# calls the algorithm cannot make on its own: "every box of this franchise is one game to me",
+# "no, that expansion really is its own game". Those are answers about ONE household's shelf.
+#
+# So they are DATA
+# (decision 2026-08-23-the-collections-grouping-rules-are-rows-not-source): rows in
+# `/config/queuepilot.sqlite`, seeded once from a file like this one and edited from a screen
+# after that. The real file is `<config>/board-game-grouping-seed.yaml`, it holds real titles,
+# and it never enters this repo. This example holds its SHAPE and nothing else.
+#
+# A FRESH CONTAINER WITH NO SUCH FILE IS EMPTY, NOT BROKEN. The algorithm still groups a
+# collection with no rules at all, and the boxes it cannot decide are REPORTED rather than
+# guessed. What a contributor sees is a working picker holding a review list, which is exactly
+# what an unreviewed collection looks like — not a table describing somebody else's shelf.
+#
+# WHEN IT IS READ
+#
+# Once, by `store/migrate/boardgames.ts`, alongside the collection database. Every insert is
+# `ON CONFLICT DO NOTHING`, so a re-run is a no-op and a rule the owner has since changed from
+# a screen is never reversed by a re-seed. A row carries `source: migration`; a row a screen
+# wrote carries `source: owner`. That column is the one thing here that cannot be added later
+# without guessing which existing rows were which.
+
+version: 1
+
+# ── Merge rules ─────────────────────────────────────────────────────────────────────────────
+#
+# "Every box whose title starts with this prefix is one title."
+#
+# `prefix` is a LITERAL in COMPARISON FORM — lower case, with punctuation and dashes folded to
+# single spaces. It is NOT a pattern, and the store never compiles one out of a text column: a
+# prefix carrying regular-expression punctuation is refused when the file is read. The match is
+# a word boundary (`name === prefix` or `name` starts with `prefix + " "`), so a one-word rule
+# does not swallow a longer word that merely starts the same way.
+#
+# ORDER MATTERS. The first matching rule wins, so a more specific prefix goes above the general
+# one it sits inside. The file's order is stored as the row's `position`.
+#
+# THE REASON FOR A RULE IS NOT A FIELD, on purpose. Each ruling has a dated decision record
+# where the argument belongs. A `reason` column would be a second, worse copy of it. The row is
+# the ruling; the record is why.
+groupings:
+  # The specific one first: this is its own title even though it starts with the prefix below.
+  - prefix: harbour lantern voyages
+    game_id: harbour-lantern-voyages
+    game_name: "Harbour Lantern: Voyages"
+    # Every box that matched is flagged as an expansion upstream, and it is a separate game
+    # here anyway. Without this the rule would produce no title at all.
+    is_game_from_expansions: true
+
+  - prefix: harbour lantern
+    game_id: harbour-lantern
+    game_name: Harbour Lantern
+    # The external listing for the FRANCHISE, used because no owned box is that listing — every
+    # box on the shelf is a season, and the card should not name whichever one sorts first.
+    listing_bgg_id: 100001
+
+  # One title, two spellings. A second edition renamed the game and the collection export
+  # carries both, so the rule is two rows producing one `game_id`.
+  - prefix: tidewright reborn
+    game_id: tidewright
+    game_name: Tidewright
+  - prefix: tidewright rise of the tide
+    game_id: tidewright
+    game_name: Tidewright
+
+  # The one shape that needs an escape hatch: a box that matches the prefix and is NOT part of
+  # the family. `except_contains` is a single literal, checked against the same comparison form.
+  # A box it matches falls through to the next rule instead.
+  - prefix: quarry duel amber
+    game_id: quarry-duel-amber
+    game_name: "Quarry Duel: Amber"
+    except_contains: solo challenger
+
+  # The catch-all for the same franchise, below the two specific rules above: the base system,
+  # the seasons nobody separated, and every loose solo box.
+  - prefix: quarry duel
+    game_id: quarry-duel
+    game_name: Quarry Duel
+
+# ── "Yes, that really is its own title" ─────────────────────────────────────────────────────
+#
+# These titles SHARE A PREFIX with something else on the shelf, so the grouping pass flags them
+# every time it runs — and a review list that never shrinks is a review list nobody reads. A
+# row here is the answer, and the answer is permanent.
+#
+# `box_label` is the COMPARISON FORM of the title, because that is what the pass matched on. It
+# is the same column an owner's answer from the screen writes, so an answer already given wins
+# and this seed skips it.
+#
+# `reviewed_at` is optional: absent means "answered when the absorb ran", which is true — the
+# ruling itself is older, and its date lives in the decision record rather than here.
+reviews:
+  - box_label: quarry duel skirmish
+    reason: Different player counts and a different box. Two games, not two editions.
+  - box_label: tidewright expeditions
+    reason: A separate campaign game that happens to share the name.

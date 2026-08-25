@@ -464,6 +464,21 @@ jobs:
       - name: People + the confirmation gate (offline)
         run: $TSX e2e/people-test.ts
 
+      # THE WP-4b GATE. Boots the server twice over the same fixture — once with NO collection
+      # file beside it, once with a synthetic collection and a grouping seed — and compares the
+      # set ids, group ids, queue ids, entry count, `requires_profile` and `/g/<id>` status
+      # codes as EXACT STRINGS across the two. Absorbing a collection must disturb nothing.
+      #
+      # Then the lineup half, which is the one worth having: for each of the four calls the
+      # board-game provider makes, the answers off the MIGRATED rows are compared against
+      # answers computed straight off the SOURCE database with plain SQL, in the harness. A
+      # second implementation on purpose — comparing the read layer against itself proves
+      # nothing. It also pins the `since` bound that makes a queue count plays from `queued_at`
+      # rather than from the lifetime `playCount`, and that `is_excluded_source` survives, which
+      # is the difference between the owner taking a title off the shelf and a sync removing it.
+      - name: The board-game absorb (offline)
+        run: $TSX e2e/board-game-absorb-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 
