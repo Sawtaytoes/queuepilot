@@ -2,10 +2,11 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  type BoardGamePickSession,
   clearPickSession,
   PICK_SESSION_KEY,
   PICK_SESSION_MAX_AGE_MS,
-  type PickSession,
+  type QueuePickSession,
   readPickSession,
   writePickSession,
 } from "./pickSession"
@@ -31,9 +32,10 @@ function fakeStorage(
 const NOW = new Date("2026-08-25T21:00:00.000Z")
 
 const session = (
-  over: Partial<PickSession> = {},
-): PickSession => ({
+  over: Partial<BoardGamePickSession> = {},
+): BoardGamePickSession => ({
   activity: "board-games",
+  kind: "board-game",
   candidates: [
     {
       game: {
@@ -99,8 +101,10 @@ describe("the pick survives leaving the screen", () => {
       storage,
     )
 
+    const read = readPickSession(storage, NOW)
+    expect(read?.kind).toBe("board-game")
     expect(
-      readPickSession(storage, NOW)?.excludedGameIds,
+      (read as BoardGamePickSession).excludedGameIds,
     ).toEqual(["quarry-duel", "tidewright"])
   })
 
@@ -183,5 +187,101 @@ describe("where the card came from", () => {
     expect(readPickSession(storage, NOW)?.origin).toBe(
       "pick",
     )
+  })
+})
+
+/**
+ * ── WP-7: a session is one of TWO shapes ───────────────────────────────────────────────
+ *
+ * A board-game session drew a game off the shelf; a queue session drew a QUEUE for the
+ * evening. They share what an evening is and nothing else, and `kind` is what tells them
+ * apart — so a reader that guessed would hand the wrong card the wrong data.
+ */
+const queueSession = (
+  over: Partial<QueuePickSession> = {},
+): QueuePickSession => ({
+  activity: "reading",
+  backend: "kavita",
+  excludedSetIds: [],
+  guestCount: 0,
+  kind: "queue",
+  notes: [],
+  origin: "pick",
+  personIds: ["ada"],
+  picks: [
+    {
+      delivery: "pull",
+      launchUrl: "/go/reading-ada",
+      providerId: "kavita",
+      providerKind: "kavita",
+      providerLabel: "Kavita",
+      queueActivity: "reading",
+      setId: "reading-ada",
+      setLabel: "Reading",
+      source: "queue",
+      tile: "reading",
+      upNext: {
+        detail: "Ch 12",
+        title: "The Lantern Keeper",
+      },
+      upNextReason: null,
+    },
+  ],
+  savedAt: NOW.toISOString(),
+  ...over,
+})
+
+describe("a queue session is its own shape", () => {
+  test("writes and reads the whole session back", () => {
+    const storage = fakeStorage()
+    writePickSession(queueSession(), storage)
+
+    expect(readPickSession(storage, NOW)).toEqual(
+      queueSession(),
+    )
+  })
+
+  test("keeps the reroll's memory and the bound backend", () => {
+    const storage = fakeStorage()
+    writePickSession(
+      queueSession({
+        backend: "steam",
+        excludedSetIds: ["reading-grace"],
+      }),
+      storage,
+    )
+
+    const read = readPickSession(storage, NOW)
+    expect(read?.kind).toBe("queue")
+    expect(
+      (read as QueuePickSession).excludedSetIds,
+    ).toEqual(["reading-grace"])
+    // One session talks to ONE backend. A reroll sends this back so the evening cannot walk
+    // from a Steam queue onto the MiSTer.
+    expect((read as QueuePickSession).backend).toBe("steam")
+  })
+
+  test("a draw with no queues in it is no session at all", () => {
+    const storage = fakeStorage()
+    storage.setItem(
+      PICK_SESSION_KEY,
+      JSON.stringify(queueSession({ picks: [] })),
+    )
+
+    expect(readPickSession(storage, NOW)).toBeNull()
+  })
+
+  test("expires on the same twelve hours as a game", () => {
+    const storage = fakeStorage()
+    writePickSession(queueSession(), storage)
+
+    expect(
+      readPickSession(
+        storage,
+        new Date(
+          NOW.getTime() + PICK_SESSION_MAX_AGE_MS + 1000,
+        ),
+      ),
+    ).toBeNull()
   })
 })

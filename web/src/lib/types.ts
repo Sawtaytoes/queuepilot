@@ -1,3 +1,5 @@
+import type { ActivityId } from "./tonight"
+
 /**
  * The wire shapes `server/src/server.js` actually sends. Hand-written rather than
  * generated, because the server is plain JS with no schema to generate from — and
@@ -1006,4 +1008,48 @@ export type PickResponse = {
   result: PickResultWire | null
   /** The first card and the two the shortlist control reveals. Drawn together on purpose. */
   shortlist: PickCandidateWire[]
+}
+
+// --- WP-7: activity → provider routing ------------------------------------------ //
+
+/**
+ * One queue, drawn for tonight. `POST /api/tonight/pick` answers with these.
+ *
+ * It is a QUEUE and not an item, deliberately: the queue's own engine chooses what plays
+ * when it starts, and it is the only thing that already knows what is left. `upNext` is what
+ * would come up, when that can be answered without starting anything, and a null one always
+ * carries an `upNextReason` — a blank space where a title should be is the failure the field
+ * exists to avoid.
+ */
+export type TonightPickWire = {
+  setId: string
+  setLabel: string
+  /** The TILE it was drawn for. */
+  tile: ActivityId
+  queueActivity: Activity
+  /** The backend's identity. A provider id, which is always present. */
+  providerId: string
+  /** The provider KIND — can be empty for a provider this build has not configured. */
+  providerKind: string
+  /** The provider's product name, for the one badge a provider brand belongs on. */
+  providerLabel: string
+  delivery: "pull" | "push"
+  source: "queue" | "rotation"
+  upNext: { title: string; detail: string | null } | null
+  upNextReason: string | null
+  /** Where Go goes for a PULL queue. `null` for push, which opens the device menu. */
+  launchUrl: string | null
+}
+
+export type TonightPickResponse = {
+  /** The one backend this session is bound to; null when nothing was drawn. */
+  backend: string | null
+  pick: TonightPickWire | null
+  /** The first card and the two the shortlist control reveals, drawn together. */
+  shortlist: TonightPickWire[]
+  /** Filters the form collected that no backend can act on yet, said out loud rather than
+   *  silently dropped. */
+  notes?: string[]
+  /** Why nothing was drawn. Present only when `pick` is null. */
+  reason?: string
 }
