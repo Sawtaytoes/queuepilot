@@ -6,10 +6,13 @@ import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
 import { SET_LENGTH_PRESETS } from "../lib/countPicker"
 import { normalizeAddAs } from "../lib/kind"
+import { ACTIVITY_LABELS } from "../lib/people"
 import type {
+  Activity,
   Profile,
   ProviderBlockValue,
   ProviderInfo,
+  QueueMember,
 } from "../lib/types"
 import { findGroup } from "../state/group"
 import {
@@ -17,10 +20,12 @@ import {
   useOverlays,
 } from "../state/overlays"
 import { parsePath } from "../state/parsePath"
+import { saveQueuePeople, usePeople } from "../state/people"
 import { load, setStatus, useStore } from "../state/store"
 import { CountPicker, type INFINITE } from "./CountPicker"
 import { EPISODES_MAX } from "./EntrySettings"
 import { Modal } from "./Modal"
+import { PeopleTrays } from "./PeopleTrays"
 import { ProviderBlock } from "./ProviderBlock"
 import { SelectListbox } from "./SelectListbox"
 
@@ -101,6 +106,13 @@ export function SetModal() {
     "priority",
   )
   const [requiresProfile, setRequiresProfile] = useState("")
+  /**
+   * WP-5. What you are DOING with this queue. Seeded from the EFFECTIVE value, so the control
+   * shows the provider's answer for a queue that has never overridden it and the person
+   * editing never has to know which of the two they are looking at.
+   */
+  const [activity, setActivity] =
+    useState<Activity>("watching")
   const [isKeepCompleted, setIsKeepCompleted] =
     useState(false)
   const [isReel, setIsReel] = useState(false)
@@ -141,6 +153,29 @@ export function SetModal() {
   // `2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`).
   const modalKey = setModal ? (setId ?? "new") : "closed"
 
+  // WP-5. The roster and this queue's two trays. Its own slice, so a tray drag re-renders
+  // the editor and not every shelf poster behind it.
+  const people = usePeople()
+  const members = setId ? (people.byQueue[setId] ?? []) : []
+
+  /** Save the trays as they move, rather than on Submit.
+   *
+   * Deliberately NOT folded into `onSubmit`: a drag that only takes effect on Save reads as a
+   * drag that failed, and the write is its own idempotent endpoint. `saveQueuePeople` is
+   * optimistic and snaps back on a refusal — an unknown member, or a group offering two
+   * provider profiles — so the screen never ends up disagreeing with the store. */
+  const onPeopleChange = async (next: QueueMember[]) => {
+    if (!setId) return
+    try {
+      await saveQueuePeople(setId, next)
+    } catch (e) {
+      setStatus(
+        `Could not move them: ${(e as Error).message}`,
+        "err",
+      )
+    }
+  }
+
   useEffect(() => {
     if (!setModal) return
 
@@ -155,6 +190,7 @@ export function SetModal() {
     setRequiresProfile(
       editing ? editing.requires_profile || "" : "",
     )
+    setActivity(editing?.activity ?? "watching")
     setIsKeepCompleted(
       editing
         ? Boolean(editing.keep_completed || editing.reel)
@@ -328,6 +364,11 @@ export function SetModal() {
 
     const body = {
       kind: "picks" as const,
+      // WP-5. Sent as the EFFECTIVE value and stored SPARSELY by the writer: a value equal
+      // to the provider's own answer drops the key rather than freezing today's
+      // provider→activity opinion into `sets.yaml`. So a plain rename still writes no
+      // `activity:` line.
+      activity,
       add_as: addAs,
       label: name,
       // `sections` stays in sync with the PLEX blocks' libraries even when blocks are
@@ -581,6 +622,61 @@ export function SetModal() {
           move it later.
         </p>
       ) : null}
+      {/* ── WHO IS THIS QUEUE FOR ────────────────────────────────────────────────────
+          Two trays plus the roster, the whole house visible at once
+          (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster`).
+
+          EDIT ONLY, and that is a real constraint rather than a shortcut: `queue_people` is
+          keyed on the set id, and a set being created has not got one yet. The two-write
+          alternative — POST the set, then PUT its people — half-fails exactly the way
+          `POST /api/sets`' own comment describes, leaving a queue that exists and belongs to
+          nobody. A new queue is created, then filed, which is one extra step on the rarest
+          path.
+
+          There is NO NAME CONTROL here. The mockup drew "Name it for me" / "I will name it",
+          a written-name preview and a revert control in all three options, and none of them
+          ship: the name is the activity and the people are the badges
+          (decision `2026-08-25-a-queue-is-people-plus-an-activity` §4). */}
+      {editing ? (
+        <div className="setpeople" id="set-people">
+          <p className="fieldlabel">
+            Who is this queue for
+          </p>
+          <PeopleTrays
+            groups={people.groups}
+            members={members}
+            onChange={(next) => {
+              void onPeopleChange(next)
+            }}
+            people={people.people}
+          />
+        </div>
+      ) : null}
+      <label className="field">
+        Activity
+        {/* WHAT YOU ARE DOING, and the queue's whole name. Four options — Movies & Shows is
+            ONE of them, because "Anime" and "Movies" are two queues under one activity, told
+            apart by what is in them (decision §1). Never a native `<select>`: this repo bans
+            one by lint and has never had a call site. */}
+        <SelectListbox
+          className="fieldselect"
+          id="set-activity"
+          key={modalKey}
+          label="Activity"
+          onChange={(v) => setActivity(v as Activity)}
+          options={(
+            Object.keys(ACTIVITY_LABELS) as Activity[]
+          ).map((value) => ({
+            label:
+              ACTIVITY_LABELS[value] +
+              (editing && value === editing.activity_default
+                ? " (default for this source)"
+                : ""),
+            value,
+          }))}
+          value={activity}
+        />
+      </label>
       {/* The repeating source blocks. Everyday fields first (source, profile, libraries);
           playlist/reel/TTL sit below as advanced options so a normal edit doesn't scroll
           past them. (decision `2026-08-13-provider-block-repeats-and-picks-its-control`) */}
