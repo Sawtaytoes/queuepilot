@@ -264,6 +264,70 @@ attached to a key inside a mapping, a blank line between two queues, a hand-type
 `- {title: "X"}` still flow, a quote mark. **So the cutover reformats nothing.** If you add a
 field to a row and the YAML starts churning on save, that column is where to look.
 
+## The collection
+
+Board Game Picker's fifteen tables absorbed into the book of record in WP-4b. **Twelve of them
+are here under a `board_game_` prefix; `players`, `groups` and `group_players` are not** — they
+merged into `people` / `groups` / `group_people` rather than arriving as a second identity
+system. There is exactly one people table and one groups table, and there is no
+`STORE_BACKEND=yaml` half of this: the absorb skips that backend entirely.
+
+Same public/private split as everywhere else in this file. The schema, the algorithm and the
+queries are here; the collection, the rulings and the play log are in App-Configs. Five things
+bite, and four of them bite silently.
+
+- **The grouping rules are ROWS, not source**
+  ([decision](docs/decisions/2026-08-23-the-collections-grouping-rules-are-rows-not-source.md)).
+  The absorbed app kept a hand-curated table of the owner's rulings about his own shelf inside
+  `import/grouping.ts`. They are answers about one household, so they are data: they seed from
+  `<config>/board-game-grouping-seed.yaml` and are edited from a screen after that. The shape
+  is documented by `server/src/store/migrate/board-game-grouping-seed.example.yaml`, whose
+  titles are invented. **Do not vendor the real table into this repo**, and do not add a
+  `reason` column — each ruling has a dated decision record in the private workspace repo, and
+  a column would be a second, worse copy of the argument.
+- **A `prefix` is a LITERAL and the store never compiles a pattern out of a text column.** The
+  seed reader REFUSES a prefix carrying regular-expression punctuation, because a rule that
+  looks like a pattern is a rule somebody expected to be executed. The match is a word boundary
+  so a one-word rule does not swallow a longer word that starts the same way.
+- **`is_excluded_source` is the column the whole migration was shaped around.** `'owner'` means
+  a human took the title off the shelf; `'sync'` means an upstream refresh removed it. A sync
+  may take back its own removal and must never take back the owner's. It is **present in the
+  live database and absent from the source repo's `schema.sql`**, so the copy was built from
+  `PRAGMA table_xinfo` rather than from the file — and every table was, because the class of
+  bug matters more than the one instance. Losing it merges 22 hand-excluded titles with 116
+  sync-removed ones and the next sync re-offers all 22.
+- **`board_game_known_how` and `board_game_play_people` hold the SOURCE app's player ids until
+  the gated people import re-keys them**, and that is deliberate. Neither has a foreign key,
+  for the reason `group_people.group_id` has none: a constraint would refuse every row until
+  the gate opens, turning "not yet re-keyed" into "lost". `unresolvedPersonIds()` reports them,
+  the way `orphanGroupIds()` does — a thing to look at, never a thing to delete. Absorb-first
+  and confirm-first both converge, because the absorb also resolves through `people.source_id`.
+  A known-how row is the one that must not be mis-attributed: it is a claim a person STATES,
+  which a play may renew and must never invent, and it **appears on no screen attached to a
+  name**, so a wrong one is never noticed.
+- **A play with NOBODY at the table is normal, and the migration carries it across as it found
+  it.** Every play in the live collection arrived through the anonymous landing — the one
+  another app hands you when you are already standing at a table — so `board_game_play_people`
+  is EMPTY while `board_game_plays` is not. **Do not invent a participant row to make the data
+  look consistent, and never back-fill one from the roster, the known-how table or the previous
+  play.** A play may RENEW a known-how claim and must never CREATE one; a claim on the wrong
+  person shows up beside no name and is therefore never caught. The empty table is the correct
+  result, and `boardgames.test.ts` pins it as one.
+- **⚠️ TWO BOOKS OF RECORD ARE OPEN RIGHT NOW.** The sibling app is still serving and still the
+  one being edited; the absorb REPLACES all twelve tables whenever the source file's
+  fingerprint changes. That is only safe while nothing here writes them. **The day the first
+  writer lands (WP-4d), the source file must be retired in the same change** — a re-syncing
+  importer between two live databases is how the owner's edit disappears on a restart.
+
+Staging the source file is `server/src/tools/stage-board-game-collection.ts`, dry run by
+default. **Use it rather than `cp`.** The sibling app runs in WAL mode, so copying the
+`.sqlite` alone leaves whatever happened most recently in a `-wal` beside it and produces a
+file that opens, queries and is quietly out of date — and plays and known-how are exactly the
+tables that get the newest writes. The tool copies the three files together, checkpoints the
+COPY (never the live file, which another process owns), leaves the copy out of WAL mode so the
+artifact is one file, and prints the row count of all fifteen tables on both sides. **A
+disagreement means the copy was torn and nothing is staged.**
+
 ## queues.yaml
 
 **Every entry is a MAPPING** — `{ratingKey, title}` for an item, `{collection: "<name>"}` for a
@@ -336,7 +400,14 @@ server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
+server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection absorb
 ```
+
+⚠️ **`yarn workspace queuepilot-web run build` is not optional before the offline e2e gates.**
+Without `web/dist` the server has no SPA fallback, so every deep link answers **404** — and a
+gate that compares a status code before against after passes on two 404s while proving nothing.
+`people-test.ts` pins the 200 and fails loudly; `board-game-absorb-test.ts` now pins it too, for
+exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong

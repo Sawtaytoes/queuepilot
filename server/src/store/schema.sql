@@ -327,3 +327,384 @@ CREATE TABLE IF NOT EXISTS group_people (
 );
 
 CREATE INDEX IF NOT EXISTS group_people_person ON group_people (person_id);
+
+-- ── Board games — the absorbed collection ────────────────────────────────────────────────
+--
+-- WP-4b. Twelve tables out of Board Game Picker's fifteen: `players`, `groups` and
+-- `group_players` do NOT appear here, because they merged into `people` / `groups` /
+-- `group_people` above rather than arriving as a second identity system.
+--
+-- ── Why every one of them carries a `board_game_` prefix ─────────────────────────────────
+--
+-- Exactly ONE of the fifteen literally collides with a table above: `groups`. The prefix is
+-- not about that collision, it is about the ones that have not happened yet. A bare `games`
+-- table meaning *board-game titles* is a name the Steam and MiSTer work will fight over inside
+-- this same file; `categories` is the most generic name in a schema that also has to hold Plex
+-- and Kavita content; and `plays` reads as "a play of anything" the first time somebody logs a
+-- film. Renaming was free at the copy and is never free again.
+--
+-- ── The shape came from the LIVE database, not from the source repo's schema file ────────
+--
+-- `PRAGMA table_xinfo` on the running collection, table by table — and that is not pedantry.
+-- `game_overrides.is_excluded_source` EXISTS in the live data and is absent from the source
+-- repo's `schema.sql`: it was added by an additive-column list and never written back. A copy
+-- built from the file would have dropped it and merged the rows an owner excluded BY HAND with
+-- the ones a scheduled sync removed — and the next sync would then silently re-offer every one
+-- of the hand-excluded titles. It is the only column that had drifted. The shape was read off
+-- the live file anyway, because the class of bug is what matters and not the one instance.
+--
+-- ── TEXT for an id, REAL for a measurement, INTEGER for arithmetic ───────────────────────
+--
+-- `bgg_id` and `listing_bgg_id` are TEXT. They are identifiers and are never added up, and
+-- `queue_entries.rating_key` set the precedent for exactly this reason: node:sqlite THROWS
+-- `RangeError` on an INTEGER past 2^53 where the old driver quietly lost the precision (WP-4a
+-- difference #5). Today's largest is six digits, so the difference cannot bite yet — there is
+-- simply no reason to hold two rules about the same kind of value. `store/db/boardgames.ts`
+-- converts to `number` at ONE boundary, because the ported engine's `Game.bggId` is a number.
+--
+-- `weight` and `rating` stay REAL — both are compared and averaged. Ages, playtimes and player
+-- counts stay INTEGER — all of them are arithmetic.
+--
+-- ── No `data` blob and no generated columns here ─────────────────────────────────────────
+--
+-- `sets`, `queues` and `groups` keep their whole mapping as JSON because they are projections
+-- of a HAND-EDITED file where a key nobody thought to promote must survive the round trip.
+-- These twelve are already normalised, with settled columns, and have never had a file behind
+-- them. Copying the JSON-blob pattern here would be cargo cult. Same answer `people` gave.
+--
+-- ── Nothing here is seeded by this file ──────────────────────────────────────────────────
+--
+-- The source repo seeds one `categories` row with an `INSERT OR IGNORE` inside its own schema
+-- file, and gets away with it only because nobody has ever deleted that row. `open.ts` runs
+-- this whole file on EVERY open, so a seeded row would resurrect itself on the first restart
+-- after the owner removed it. Seeding belongs to the one-shot migration
+-- (`store/migrate/boardgames.ts`) and to nothing else.
+
+-- A TITLE. Not a box — one title is often several physical boxes on a shelf, and collapsing
+-- the shelf into a list of playable things is the whole point of the app this came from.
+CREATE TABLE IF NOT EXISTS board_games (
+  id                       TEXT PRIMARY KEY,
+  name                     TEXT NOT NULL,
+  -- The box claim, recorded but never filtered on alone: a lid saying "2–5" is a
+  -- manufacturing statement. `best_with` / `recommended_with` are the community's verdict and
+  -- are what the picker actually reads.
+  min_players              INTEGER NOT NULL,
+  max_players              INTEGER NOT NULL,
+  -- JSON arrays of player counts. An empty array, never NULL.
+  best_with                TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(best_with)),
+  recommended_with         TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(recommended_with)),
+  -- 1.0–5.0 complexity. NULL is unknown and is NOT 0 — a 0 here would read as "trivial" and
+  -- win every complexity filter it should have failed.
+  weight                   REAL,
+  min_playtime             INTEGER,
+  max_playtime             INTEGER,
+  min_age                  INTEGER,
+  -- JSON array. A game is often several of these at once — a co-op box with a solo mode is
+  -- both — so a single column would have to pick a winner and hide the rest.
+  interaction_types        TEXT NOT NULL DEFAULT '["competitive"]' CHECK (json_valid(interaction_types)),
+  -- 'import' | 'owner' | 'derived'. A guess that cannot be told apart from a fact is how a
+  -- collection loses the owner's trust, so every derived value carries where it came from.
+  interaction_types_source TEXT NOT NULL DEFAULT 'derived',
+  -- The upstream's own auto tags: a palette, not the truth. The owner's own tags are rows in
+  -- `board_game_category_members`.
+  categories               TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(categories)),
+  publishers               TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(publishers)),
+  year_published           INTEGER,
+  -- TEXT — see the header. Nullable by design: a game need not exist on any external listing.
+  bgg_id                   TEXT,
+  rating                   REAL,
+  source                   TEXT NOT NULL DEFAULT 'import',
+  -- Served from this app's own origin, never hotlinked. The files live beside the book of
+  -- record in `/config/board-game-images/` and are NOT a cache — 32 of them are covers the
+  -- owner picked by hand, and the upstream has turned access off before.
+  image_path               TEXT,
+  created_at               TEXT NOT NULL,
+  updated_at               TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS board_games_name ON board_games (name COLLATE NOCASE);
+
+-- A PHYSICAL THING ON A SHELF. This is what you get up and fetch.
+CREATE TABLE IF NOT EXISTS board_game_boxes (
+  id                TEXT PRIMARY KEY,
+  game_id           TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  label             TEXT NOT NULL,
+  kind              TEXT NOT NULL DEFAULT 'standalone' CHECK (kind IN ('standalone', 'expansion')),
+  bgg_id            TEXT,
+  -- The inventory-app link the schema was designed around and which has never been used: 0 of
+  -- 562 rows carry either. Carried anyway, because the ported engine keeps the field name and
+  -- renaming it would be a schema change rather than a port.
+  homebox_entity_id TEXT,
+  location_text     TEXT,
+  image_path        TEXT,
+  version_nickname  TEXT,
+  version_year      INTEGER,
+  version_languages TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(version_languages)),
+  created_at        TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS board_game_boxes_game ON board_game_boxes (game_id);
+
+-- THE OWNER'S LAYER ON TOP OF AN IMPORTED TITLE. One row per game, and it is nearly empty:
+-- every scalar override is unset on all but a handful of rows. What it really holds is an
+-- exclusion flag and 32 hand-picked covers, so do not read it as "147 hand-tuned games".
+CREATE TABLE IF NOT EXISTS board_game_overrides (
+  game_id            TEXT PRIMARY KEY REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  min_players        INTEGER,
+  max_players        INTEGER,
+  best_with          TEXT CHECK (best_with IS NULL OR json_valid(best_with)),
+  recommended_with   TEXT CHECK (recommended_with IS NULL OR json_valid(recommended_with)),
+  weight             REAL,
+  min_age            INTEGER,
+  interaction_types  TEXT CHECK (interaction_types IS NULL OR json_valid(interaction_types)),
+  -- "Owned, but never offer it to me."
+  is_excluded        INTEGER CHECK (is_excluded IS NULL OR is_excluded IN (0, 1)),
+  -- ⚠️ THE COLUMN THIS WHOLE MIGRATION WAS SHAPED AROUND. 'owner' when a human took the game
+  -- off the shelf, 'sync' when an upstream refresh removed it. A sync may take back its OWN
+  -- removal and must NEVER take back the owner's, so losing this merges the two and the next
+  -- sync silently re-offers every title the owner excluded by hand. It is absent from the
+  -- source repo's schema file and present in the source repo's database; the copy was built
+  -- from `PRAGMA table_xinfo` for exactly this reason.
+  is_excluded_source TEXT CHECK (is_excluded_source IS NULL OR is_excluded_source IN ('owner', 'sync')),
+  notes              TEXT,
+  -- An owner-picked cover. Wins over the imported one and over the first box that has art.
+  image_path         TEXT,
+  updated_at         TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS board_game_overrides_excluded
+  ON board_game_overrides (is_excluded, is_excluded_source);
+
+-- A WAY OUT OF THE APP and into something that explains the game you were just handed.
+--
+-- Nothing here names a video site or a rulebook host. One deployment's rulebooks sit in a
+-- comics library and its how-to-play videos on a streaming site; the next has neither. So the
+-- app stores A URL, and a *linker* is an optional, replaceable thing that fills them in.
+CREATE TABLE IF NOT EXISTS board_game_links (
+  id         TEXT PRIMARY KEY,
+  game_id    TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  kind       TEXT NOT NULL CHECK (kind IN ('rulebook', 'howToPlay', 'reference')),
+  -- What the button says.
+  label      TEXT NOT NULL,
+  url        TEXT NOT NULL,
+  -- 'owner' is typed by hand and no linker ever touches it; 'derived' was written by one and
+  -- the same linker may replace it on its next run.
+  source     TEXT NOT NULL DEFAULT 'owner' CHECK (source IN ('owner', 'derived')),
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS board_game_links_game ON board_game_links (game_id);
+CREATE UNIQUE INDEX IF NOT EXISTS board_game_links_url ON board_game_links (game_id, url);
+
+-- ONE WAY TO PLAY a game — a module, a deck set, a campaign arc. Empty today, and not dead:
+-- the feature is complete and seeding it is opt-in per game, which nobody has switched on.
+--
+-- `is_hidden` from the source table is DELIBERATELY ABSENT. Its own comment there says it is
+-- vestigial, that nothing reads or writes it, and that it survives only because that app's
+-- column list is additive-only and dropping a column from a deployed database unattended at
+-- every startup is not a thing an app gets to do. This is a fresh CREATE in a different file,
+-- so that constraint does not follow it — and this was the one moment it could leave without
+-- an unattended ALTER. Confirmed before dropping: zero references in that app's source outside
+-- one test comment.
+CREATE TABLE IF NOT EXISTS board_game_modules (
+  id         TEXT PRIMARY KEY,
+  game_id    TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  name       TEXT NOT NULL,
+  -- 'derived' was seeded from an expansion box and a re-derive may rename it; 'owner' was
+  -- typed by hand and nothing automated touches it.
+  source     TEXT NOT NULL DEFAULT 'owner' CHECK (source IN ('owner', 'derived')),
+  -- The box it came from, when it came from one. No FOREIGN KEY: a box can leave the shelf
+  -- while the way of playing it taught stays true, and a cascade would delete the owner's row
+  -- as a side effect of a re-import.
+  box_id     TEXT,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS board_game_modules_game ON board_game_modules (game_id);
+CREATE UNIQUE INDEX IF NOT EXISTS board_game_modules_name ON board_game_modules (game_id, name);
+
+-- THE OWNER'S OWN CATEGORY VOCABULARY, separate from the upstream's auto tags on
+-- `board_games.categories`. One row today, and the membership table below is empty: a feature
+-- the owner asked for by name and then did not use. Not seeded here — see the header.
+CREATE TABLE IF NOT EXISTS board_game_categories (
+  name       TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS board_game_category_members (
+  game_id TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  name    TEXT NOT NULL REFERENCES board_game_categories (name) ON DELETE CASCADE ON UPDATE CASCADE,
+  PRIMARY KEY (game_id, name)
+);
+
+CREATE INDEX IF NOT EXISTS board_game_category_members_game ON board_game_category_members (game_id);
+
+-- ── The grouping rules — the largest hand-made artifact in the collection ────────────────
+--
+-- decision 2026-08-23-the-collections-grouping-rules-are-rows-not-source. The rules that
+-- collapse a shelf of boxes into a list of playable titles are DATA. This repo keeps the
+-- algorithm and this table shape; the CONTENTS live in `/config/queuepilot.sqlite` and in the
+-- seed file beside it, and never in git. A fresh container starts with this table EMPTY, which
+-- is not broken: the algorithm decides most of a collection with no rule at all, and reports
+-- the ones it cannot decide rather than guessing.
+--
+-- TWO KINDS OF ROW, and the CHECK is what keeps them apart:
+--
+--   `box_label`  an OWNER row. "This exact box is that title." Written by the Collection
+--                screen, one row per physical box label.
+--   `prefix`     a SEEDED row. "Every box whose title starts with this is one title." One row
+--                per prefix — a rule with two spellings of the same franchise is two rows.
+--
+-- `prefix` is a LITERAL, already in comparison form (lower case, punctuation and dashes folded
+-- to single spaces), and the store never compiles a pattern out of a text column. The match is
+-- `normalized === prefix || normalized.startsWith(prefix + ' ')` — a word boundary, so a rule
+-- for one word does not swallow a longer word that merely starts the same way.
+--
+-- `source` is the column that cannot be added later without guessing which existing rows were
+-- which. Without it a re-run doubles a merge, or an unattended re-seed reverses a correction —
+-- and neither is visible until a title quietly stops being offered.
+--
+-- THE REASON FOR A RULE IS NOT A COLUMN. Each of these rulings already has a dated decision
+-- record in the private workspace repo. A `reason` column would be a second, worse copy of an
+-- argument that already exists somewhere better. The row is the ruling; the record is why.
+CREATE TABLE IF NOT EXISTS board_game_groupings (
+  box_label               TEXT,
+  prefix                  TEXT,
+  -- The single literal a matching box must NOT contain to stay in the family. One rule in the
+  -- seed uses it. Owner rows never do — they name one box and have nothing to escape.
+  except_contains         TEXT,
+  game_id                 TEXT NOT NULL,
+  game_name               TEXT NOT NULL,
+  -- The external listing for the resulting title, used when no owned box IS that listing.
+  -- TEXT for the same reason as `board_games.bgg_id`.
+  listing_bgg_id          TEXT,
+  -- Create this title even though every box that matched is flagged as an expansion upstream.
+  -- Some things are an expansion by a taxonomy and a separate game on the owner's shelf.
+  is_game_from_expansions INTEGER NOT NULL DEFAULT 0 CHECK (is_game_from_expansions IN (0, 1)),
+  -- First match wins among the prefix rules, so the source order is part of the answer and not
+  -- a presentation detail. Owner rows name one box each and never compete.
+  position                INTEGER NOT NULL DEFAULT 0,
+  source                  TEXT NOT NULL DEFAULT 'owner' CHECK (source IN ('owner', 'migration')),
+  created_at              TEXT NOT NULL,
+  -- Exactly one of the two, never both and never neither.
+  CHECK ((box_label IS NULL) <> (prefix IS NULL))
+);
+
+-- Partial, because the other kind of row is NULL there and NULLs would all collide.
+CREATE UNIQUE INDEX IF NOT EXISTS board_game_groupings_box_label
+  ON board_game_groupings (box_label) WHERE box_label IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS board_game_groupings_prefix
+  ON board_game_groupings (prefix) WHERE prefix IS NOT NULL;
+CREATE INDEX IF NOT EXISTS board_game_groupings_source ON board_game_groupings (source, position);
+
+-- "IS THIS REALLY ITS OWN TITLE?" — the question the grouping pass raises, and the owner's
+-- answer to it. A row with a `reviewed_at` is answered and never asked again; a row without
+-- one is still on the review list.
+--
+-- The seeded rows are the same ruling made in source by an agent editing the importer, which
+-- the source app's own comment already said out loud. They arrive with `status =
+-- 'confirmedSeparate'` and `source = 'migration'`, and their `box_label` is the COMPARISON
+-- FORM of the title rather than a label off a lid — which is what the algorithm matched
+-- against, and which is stable under the same normalisation the owner rows go through.
+--
+-- ⚠️ SO THE TWO KINDS OF ROW DO NOT COLLIDE ON THIS PRIMARY KEY, and a seed must NOT rely on
+-- `ON CONFLICT` to leave an owner's answer alone: `Tidewright Expeditions` and
+-- `tidewright expeditions` are two different strings and one open question. `seedReviews()`
+-- compares the NORMALISED form of both in code before it inserts, and that is what actually
+-- stops a seed answering a question the owner deliberately left open.
+CREATE TABLE IF NOT EXISTS board_game_grouping_reviews (
+  box_label      TEXT PRIMARY KEY,
+  -- Where it landed anyway, if anywhere.
+  game_id        TEXT,
+  -- The title it was NEARLY filed under — the one whose prefix it shares. Carried because
+  -- answering "yes, one game" is a merge, and a merge needs a survivor: without it the screen
+  -- can only offer to merge into the NEW title, which keeps the wrong id and the wrong
+  -- listing.
+  parent_game_id TEXT,
+  -- One line, because `open.ts addMissingColumns()` parses this file one column per line and
+  -- would otherwise re-add the column without its CHECK.
+  status         TEXT NOT NULL CHECK (status IN ('orphan', 'ambiguous', 'possibleEdition', 'distinctAfterNormalizing', 'confirmedSeparate')),
+  -- The sentence shown to a person, written by the pass that raised the question.
+  reason         TEXT,
+  reviewed_at    TEXT,
+  source         TEXT NOT NULL DEFAULT 'owner' CHECK (source IN ('owner', 'migration'))
+);
+
+CREATE INDEX IF NOT EXISTS board_game_grouping_reviews_open
+  ON board_game_grouping_reviews (reviewed_at, status);
+
+-- ── The play log, and the two tables keyed on a PERSON ───────────────────────────────────
+
+-- ONE SITTING.
+--
+-- ⚠️ A PLAY WITH NOBODY AT THE TABLE IS NORMAL HERE, AND THE MIGRATION CARRIES IT ACROSS AS IT
+-- FOUND IT. Every play in the source arrived through the deliberately anonymous door — the
+-- landing another app hands you when you are already standing at a table — so
+-- `board_game_play_people` is EMPTY while this table is not. Whether every one of those is the
+-- door working as designed or a writer that should have recorded participants is an open
+-- question about the SOURCE app, being answered elsewhere; it is not this migration's to
+-- settle.
+--
+-- What IS this migration's, and is absolute: **do not invent a participant row to make the
+-- data look consistent, and never back-fill one from another table.** A play must not create a
+-- known-how claim. `board_game_known_how` below says why — the claim is a thing a person
+-- states, and the two facts are separate on purpose.
+--
+-- No row count is written down here on purpose. The source app is still live and still logging
+-- plays, so a number in this comment is wrong within a week; the counts that matter are the
+-- ones the migration asserts against the source at run time.
+CREATE TABLE IF NOT EXISTS board_game_plays (
+  id        TEXT PRIMARY KEY,
+  game_id   TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  -- ISO 8601.
+  played_at TEXT NOT NULL,
+  notes     TEXT
+);
+
+CREATE INDEX IF NOT EXISTS board_game_plays_game ON board_game_plays (game_id, played_at);
+
+-- ⚠️ `person_id` ON THE NEXT TWO TABLES HOLDS AN UNRESOLVED ID UNTIL THE PEOPLE IMPORT RUNS,
+-- and that is deliberate rather than a gap.
+--
+-- The people import is GATED on an owner-confirmed mapping file and has not been applied, so
+-- `people` is empty. A migration that waited for it would have to hold the collection hostage
+-- to a decision about identity; a migration that invented person ids would write the wrong
+-- person's claim, which is the one thing the whole people package exists to prevent. So the
+-- rows arrive holding the SOURCE APP'S OWN player ids, verbatim, and the same confirmed apply
+-- that creates the people re-keys them — `store/migrate/people.ts`, in the same transaction.
+--
+-- NO FOREIGN KEY, for the same reason `group_people.group_id` has none: a constraint here
+-- would refuse every row until the gate opens, which turns "not yet re-keyed" into "lost".
+-- `store/db/boardgames.ts unresolvedPersonIds()` REPORTS the ids that do not resolve, the way
+-- `orphanGroupIds()` does. A thing to look at, never a thing a cascade deletes.
+CREATE TABLE IF NOT EXISTS board_game_play_people (
+  play_id   TEXT NOT NULL REFERENCES board_game_plays (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  person_id TEXT NOT NULL,
+  PRIMARY KEY (play_id, person_id)
+);
+
+CREATE INDEX IF NOT EXISTS board_game_play_people_person ON board_game_play_people (person_id);
+
+-- ONE PERSON KNOWS ONE GAME well enough to sit down and play it without opening the rulebook.
+--
+-- A SEPARATE FACT FROM A PLAY, never a summary of one. Six plays of a heavy game and you may
+-- still reach for the book; a game learned at somebody else's table has no play row here at
+-- all. It is a claim a person STATES, which a play may RENEW and must never INVENT — the
+-- refresh on logging a play is an UPDATE, guarded so a backdated play cannot make a claim look
+-- fresher than it is, and there is no INSERT on that path.
+--
+-- These are the rows a wrong identity match would actually damage, and there are very few of
+-- them — which is the argument for the manual gate, not against it: a handful of rows is
+-- exactly the size at which nobody notices one is attached to the wrong person. Named for
+-- board games rather than made activity-agnostic on purpose. The same fact is coming for video
+-- games, and designing that table now would be generalising from a table this small.
+CREATE TABLE IF NOT EXISTS board_game_known_how (
+  person_id    TEXT NOT NULL,
+  game_id      TEXT NOT NULL REFERENCES board_games (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  -- ISO 8601 — when this was last known to be true. It never expires on its own; the screen
+  -- just says how long ago it was.
+  confirmed_at TEXT NOT NULL,
+  PRIMARY KEY (person_id, game_id)
+);
+
+CREATE INDEX IF NOT EXISTS board_game_known_how_game ON board_game_known_how (game_id);
