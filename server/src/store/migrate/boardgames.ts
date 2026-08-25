@@ -79,7 +79,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { parse } from 'yaml';
 
-import { QUEUES_PATH, STORE_BACKEND } from '../../config.js';
+import { QUEUES_PATH, STORE_BACKEND, STORE_PATH } from '../../config.js';
 import { errMessage } from '../../errors.js';
 import { bumpVersion, readMeta, writeMeta } from '../db/common.js';
 import {
@@ -1119,6 +1119,14 @@ export function ensureBoardGamesImported(): BoardGameImportReport {
     return report(false, 'the collection has not moved since the last check');
   }
   lastStamp = stamp;
+
+  // A container with NO STORE AT ALL cannot have retired anything, and this is the check that
+  // keeps the boot hook's promise: it returns before opening a database, which is every CI
+  // runner and every offline harness. Consulting the latch first would CREATE the file it was
+  // about to report as absent.
+  if (!existsSync(STORE_PATH) && !existsSync(sourcePath())) {
+    return report(false, 'no board-game collection to import');
+  }
 
   // Once retired, the only input still read is the seed — see the file header for why the two
   // are not the same kind of thing. This branch is what the live system takes on every start
