@@ -323,6 +323,7 @@ export function useGridDrag(
 
       if (
         target.closest(".remove") ||
+        target.closest(".editbtn") ||
         target.closest(".check") ||
         // `.tileplay` is the one control that lives INSIDE `.thumb`, so unlike ✓ and ✕
         // it is not excluded by the poster test below. It has to be named here and not
