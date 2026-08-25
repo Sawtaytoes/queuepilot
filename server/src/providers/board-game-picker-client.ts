@@ -53,10 +53,10 @@
 // implementation honest by keeping it running, and it is what lets the parity gate compare
 // the two forever rather than once.
 import { readFileSync } from 'node:fs';
-import { basename, dirname, extname, join } from 'node:path';
+import { basename, extname, join } from 'node:path';
 
+import { imagesDirectory } from '../boardgames/enrich/images.js';
 import type { Game } from '../boardgames/types.js';
-import { QUEUES_PATH } from '../config.js';
 import {
   getBoardGame,
   listBoardGameCategories,
@@ -153,12 +153,15 @@ export interface BoardGamesClientOptions {
 export const BOARD_GAME_TRANSPORT: 'repository' | 'http' =
   process.env.BOARD_GAME_TRANSPORT === 'http' ? 'http' : 'repository';
 
-/** Where the absorbed artwork was staged, beside the book of record.
- * `tools/stage-board-game-collection.ts` is what puts it there. Derived from `QUEUES_PATH`
- * rather than hard-coded to `/config`, exactly as `store/migrate/boardgames.ts` derives the
- * collection file, so an offline harness pointed at a scratch directory gets its own. */
-export const imagesPath = (): string =>
-  process.env.BOARD_GAME_IMAGES_PATH || join(dirname(QUEUES_PATH), 'board-game-images');
+/**
+ * Where the artwork lives, beside the book of record.
+ *
+ * ⚠️ RE-EXPORTED FROM THE MODULE THAT WRITES IT, not computed again here. WP-4d landed the
+ * enrichment, so this directory now has a WRITER as well as three readers, and three separate
+ * copies of one `||` expression is how a reader ends up 404ing every cover the writer just
+ * made. One definition, in `boardgames/enrich/images.ts`; the name stays for its callers.
+ */
+export const imagesPath = imagesDirectory;
 
 /** Content type off the file name. The staged art is `.webp`; the other two are what the
  * enrichment wrote before it was. */
