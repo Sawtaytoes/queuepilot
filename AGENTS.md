@@ -241,9 +241,11 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
     which does not exist yet.
 
   Everything pill-shaped and pressable is a **`BadgeButton`** (`@charcuterie/ui@3.10.0`),
-  built for this app's six chips — the setting tags, the Edit chip, two start chips and a
-  pool's Exclude. It shares `Badge`'s paint through one hook upstream, so a tag you can
-  press and a tag you cannot are now the same pill; they were different sizes before.
+  built for this app's setting tags, two start chips and a pool's Exclude. It shares
+  `Badge`'s paint through one hook upstream, so a tag you can press and a tag you cannot
+  are now the same pill; they were different sizes before. **Edit is not a chip any more**
+  — it is a pencil in the tile chrome beside ✕
+  ([decision](docs/decisions/2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome.md)).
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any
