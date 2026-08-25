@@ -1,3 +1,4 @@
+import { mergeRefs, useFlipList } from "@charcuterie/logic"
 import {
   Badge,
   BadgeButton,
@@ -27,7 +28,6 @@ import { SearchDropdown } from "../components/SearchDropdown"
 import { SelectListbox } from "../components/SelectListbox"
 import { SkippedPanel } from "../components/SkippedPanel"
 import { Tip } from "../components/Tip"
-import { useFlipList } from "../hooks/useFlipList"
 import { useGridDrag } from "../hooks/useGridDrag"
 import { api } from "../lib/api"
 import { flashTile } from "../lib/flip"
@@ -255,11 +255,31 @@ export function QueueView({
   // one.
   const isSamePaint = lastPaintedSet.current === setId
 
-  useFlipList(
-    gridRef,
-    `${setId}:${items.map((i) => i.key).join("|")}`,
-    !isHidden && isSamePaint,
-  )
+  /*
+   * FLIP is `@charcuterie/logic`'s now, not this repo's.
+   *
+   * There were two copies of this in the fleet — queuepilot's
+   * `hooks/useFlipList.ts` and the one Docket needed — so the shape
+   * moved to the library and this app adopts it. `lib/flip.ts` STAYS:
+   * `flipMove` wraps a DRAG's own DOM mutation, transforms existing
+   * nodes without re-rendering, and is what keeps the mid-drag
+   * duplication bug from coming back. The library has no equivalent
+   * and this is not that animation.
+   *
+   * `keyAttribute` points at the `data-key` these tiles have always
+   * carried rather than emitting a second attribute with the same
+   * value in it; `itemSelector` moves with it, because the library's
+   * default looks for `data-flip-key`.
+   *
+   * The ref is MERGED rather than replacing `gridRef`: `useGridDrag`
+   * claimed that ref first, and the drag needs the same element.
+   */
+  const flipRef = useFlipList<HTMLUListElement>({
+    isAnimating: !isHidden && isSamePaint,
+    itemSelector: "li.tile",
+    keyAttribute: "data-key",
+    signature: `${setId}:${items.map((i) => i.key).join("|")}`,
+  })
 
   if (!isHidden && setId) lastPaintedSet.current = setId
 
@@ -840,7 +860,7 @@ export function QueueView({
       <ul
         className={`grid ${view.density}`}
         id="grid"
-        ref={gridRef}
+        ref={mergeRefs(gridRef, flipRef)}
       >
         {isHidden || !q ? null : items.length === 0 ? (
           <li className="empty">
