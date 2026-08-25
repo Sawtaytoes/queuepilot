@@ -215,7 +215,15 @@ async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
       }
       return { ...candidate, launchUrl, upNext: playItemLabel(head), upNextReason: null };
     } catch (e) {
-      return { ...candidate, launchUrl, upNext: null, upNextReason: errMessage(e) };
+      // Named, and named as a REACH rather than as a crash. A provider that is down or NOT
+      // CONFIGURED still leaves a queue you can try to start; a bare `fetch failed` on a card
+      // says nothing a person can act on.
+      return {
+        ...candidate,
+        launchUrl,
+        upNext: null,
+        upNextReason: `Could not ask ${candidate.providerLabel || candidate.providerId} what is next: ${errMessage(e)}`,
+      };
     }
   }
 

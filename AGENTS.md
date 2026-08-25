@@ -472,6 +472,7 @@ server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
+server/node_modules/.bin/tsx e2e/tonight-routing-test.ts  # the activity → backend map
 server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection absorb
 server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
 server/node_modules/.bin/tsx e2e/board-game-transport-parity-test.ts  # both board-game transports agree
@@ -537,6 +538,44 @@ re-runs by hand before claiming a change is safe.
 >
 > Long version: `docs/runbooks/agent-sandbox-runtime.md` in the `agentic` workspace, and the
 > decision `docs/decisions/2026-08-24-a-playwright-browser-mismatch-is-an-environment-override-never-a-version-bump.md`.
+
+## Tonight: one activity, one backend
+
+The Tonight surface asks two different questions with the same word, and exactly one file on
+each side of the wire is allowed to know both answers:
+
+- A **tile** is a kind of evening. **Six** of them, the row is settled, Surprise Me is last.
+- A **queue activity** is what WP-5 stores on a set. **Four** of them, and "Movies & Shows" is
+  deliberately ONE.
+
+The map between them is `server/src/tonight/routing.ts` and `web/src/lib/tonightRouting.ts`.
+Four things about it are load-bearing:
+
+- **It is written TWICE and neither workspace can import the other.**
+  `e2e/tonight-routing-test.ts` compares the two tables field by field, and it is the only
+  thing that can notice the day they disagree. Change one and the gate fails until you change
+  the other.
+- **`watching` covers BOTH the Movies tile and the Shows tile, and that is the open question,
+  not a defect.** The queue model refuses a finer content list on the owner's own evidence —
+  *"the Older Kids queue would show up under both Shows and Shorts, but I don't think of it
+  like that in my head"* — while the tile row separates a film night from a series night.
+  `tileForSet()` holds the whole residue in one function and splits `watching` on
+  `behavior: "rewatch"`, the only marker a set carries. **Do not add a second guess elsewhere
+  to compensate.** Settle the content-type question and give that function a column to read.
+- **Nothing may derive an activity from a `provider_kind` again.** WP-6 had a browser-side
+  bridge that did, and it is deleted. A second derivation is a second opinion that can
+  disagree with the server's.
+- **One session talks to one backend.** An activity may be served by two (Video Games is Steam
+  and MiSTer), so the draw binds a backend FIRST and then draws inside it; a reroll sends
+  `boundBackend` back. A mixed queue is never a candidate — `launchDescriptor` refuses one with
+  a 501, so a card drawn off it would carry a Go that cannot work.
+
+**Pick draws a QUEUE, not an item**, for Movies, Shows, Reading and Video Games. The queue's own
+engine chooses the item when it starts and is the only thing that already knows what is left; a
+second opinion here could disagree with it. Board Games is the exception and keeps its own door
+(`POST /api/board-games/pick`), because a board game is on a shelf and not in a queue.
+**Surprise Me is REFUSED by name** — it narrows before it picks and the narrowings are not
+settled ([decision](docs/decisions/2026-08-25-pick-draws-a-queue-not-an-item.md)).
 
 ## Working here
 
