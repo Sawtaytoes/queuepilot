@@ -500,10 +500,11 @@ jobs:
       # The HTTP side is transcribed rather than imported, on purpose: a stub serving rows out
       # of our own store would be the store agreeing with itself.
       #
-      # It also pins the three things the swap could quietly cost: a read makes ZERO HTTP
-      # requests (counted at the server), a play still carries three keys and never a person,
-      # and the play WRITE is still a POST to the sibling app — two books of record are open
-      # until WP-4d retires the source file, so nothing here may write a collection row.
+      # It also pins what the swap could quietly cost: a read makes ZERO HTTP requests (counted
+      # at the server), a play carries three keys and never a person, and — since WP-4d — the
+      # in-process transport WRITES the play here while `BOARD_GAME_TRANSPORT=http` still posts
+      # it and writes nothing locally. That section was inverted rather than deleted when the
+      # write came home: a gate that passed unchanged after a write moved was never watching it.
       - name: Both board-game transports agree (offline)
         run: $TSX e2e/board-game-transport-parity-test.ts
 
@@ -518,6 +519,23 @@ jobs:
       # not settled and a plausible answer would read as settled and get built on.
       - name: Activity -> provider routing (offline)
         run: $TSX e2e/tonight-routing-test.ts
+
+      # THE TOPIC CONTRACT. WP-4d moved the nightly collection sync out of a sibling app and
+      # into this one, and left the MQTT topics exactly where they were — because Home Assistant
+      # is what publishes `board-game-picker/cmd/sync` on a schedule and what templates `isOk`
+      # off `board-game-picker/resp/sync` to decide whether to notify.
+      #
+      # Every part of that contract is a STRING or a KEY NAME and nothing else in this repo
+      # reads either. Rename the base because it reads better, or `isOk` while tidying a type,
+      # and typecheck passes, every unit test passes, the app starts and logs that it is
+      # listening — and the nightly silently stops running. The first sign is a collection that
+      # has not refreshed in a month.
+      #
+      # Runs against a real aedes broker, not a stub of our own MQTT layer, and its wait is
+      # BOUNDED: the failure it catches means nobody ever answers, and an unbounded await there
+      # would hang the job rather than fail it.
+      - name: The board-game sync's MQTT contract (offline)
+        run: $TSX e2e/board-game-sync-mqtt-test.ts
 
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts

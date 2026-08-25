@@ -35,7 +35,7 @@
 // Nothing here reaches the network: Plex is a closed port and there is no picker to call.
 //
 // Run:  server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts   (repo root; non-zero on failure)
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -318,6 +318,7 @@ interface Capture {
   groupPageStatus: Record<string, number>;
   storePath: string;
   sourcePath: string;
+  importPath: string;
 }
 
 async function boot(label: string, port: number, withCollection: boolean): Promise<Capture> {
@@ -327,8 +328,17 @@ async function boot(label: string, port: number, withCollection: boolean): Promi
   await fs.writeFile(path.join(dir, 'groups.yaml'), GROUPS);
   await fs.writeFile(path.join(dir, 'pending.yaml'), 'seen_through: 0\n');
 
-  const sourcePath = path.join(dir, 'board-game-picker-import.sqlite');
+  const importPath = path.join(dir, 'board-game-picker-import.sqlite');
+  // The REFERENCE copy, and it is deliberately not the file the app is given.
+  //
+  // WP-4d made the absorb a one-way door: the app retires its own input, renaming it to
+  // `<name>.retired-<timestamp>` so the next start cannot REPLACE a collection this app now
+  // writes. So a gate that read the app's input file afterwards would be reading a file whose
+  // lifecycle it does not own — and that is the weaker test anyway. Every reference answer
+  // below is computed from bytes THIS FILE wrote and nothing else ever touches.
+  const sourcePath = path.join(dir, 'reference-collection.sqlite');
   if (withCollection) {
+    writeSource(importPath);
     writeSource(sourcePath);
     await fs.writeFile(path.join(dir, 'board-game-grouping-seed.yaml'), SEED);
   }
@@ -391,6 +401,7 @@ async function boot(label: string, port: number, withCollection: boolean): Promi
         registry.sets.map((set) => [set.id, set.requires_profile ?? null]),
       ),
       setIds: registry.sets.map((set) => set.id),
+      importPath,
       sourcePath,
       storePath: path.join(dir, 'queues.queuepilot.sqlite'),
     };
@@ -450,6 +461,24 @@ const source = new DatabaseSync(after.sourcePath, { readOnly: true });
 
 const count = (db: DatabaseSync, sql: string): number =>
   (db.prepare(`SELECT COUNT(*) AS c FROM ${sql}`).get() as { c: number }).c;
+
+// ── the one-way door (WP-4d) ──────────────────────────────────────────────────────────── //
+//
+// A live server absorbed a collection and then retired its own input. Both halves are checked
+// here, on the real boot path, because the unit tests can only prove the functions and this is
+// the only place that proves the START does it.
+ok(
+  'the source file is RETIRED after a real boot absorbed it',
+  (store.prepare(
+    "SELECT value FROM store_meta WHERE store = 'boardgames' AND key = 'retired_at'",
+  ).get() as { value: string } | undefined)?.value != null,
+);
+ok(
+  'the app moved its own input aside rather than deleting it',
+  !existsSync(after.importPath)
+    && (await fs.readdir(path.dirname(after.importPath)))
+      .some((name) => name.startsWith('board-game-picker-import.sqlite.retired-')),
+);
 
 same('board_games == games', count(store, 'board_games'), count(source, 'games'));
 same('board_game_boxes == boxes', count(store, 'board_game_boxes'), count(source, 'boxes'));
