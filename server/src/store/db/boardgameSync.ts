@@ -92,23 +92,29 @@ export function applyBoardGameSync(
    * Every upstream id this title is known by — its own plus its boxes'. A merged title has one
    * id at the title level and many underneath, and it is still owned if ANY of them is.
    */
-  const ownedByAnyBox = (game: GameRow): boolean => {
+  const boxBggIds = (gameId: string): number[] =>
+    boxIds
+      .all({ game_id: gameId })
+      .map((row) => Number(row.bgg_id))
+      .filter((bggId) => Number.isFinite(bggId));
+
+  const ownedByAnyBox = (game: GameRow, boxes: readonly number[]): boolean => {
     const own = game.bgg_id === null ? null : Number(game.bgg_id);
     if (own !== null && Number.isFinite(own) && ownedBggIds.has(own)) return true;
-    return boxIds
-      .all({ game_id: game.id })
-      .map((row) => Number(row.bgg_id))
-      .some((bggId) => Number.isFinite(bggId) && ownedBggIds.has(bggId));
+    return boxes.some((bggId) => ownedBggIds.has(bggId));
   };
 
   for (const game of games) {
+    // Read ONCE per title. Both questions below need the same list, and this loop runs over the
+    // whole collection on every nightly.
+    const boxes = boxBggIds(game.id);
+
     // A title with no upstream id at any level was never going to appear in this collection —
     // typed in by hand, or a promo that is not listed anywhere. It is not "missing", and a sync
     // must not touch it.
-    const hasAnyBoxId = boxIds.all({ game_id: game.id }).length > 0;
-    if (game.bgg_id === null && !hasAnyBoxId) continue;
+    if (game.bgg_id === null && boxes.length === 0) continue;
 
-    const isOwned = ownedByAnyBox(game);
+    const isOwned = ownedByAnyBox(game, boxes);
     const isExcluded = game.is_excluded === 1;
     const isOwnersCall = game.is_excluded_source === 'owner';
 
