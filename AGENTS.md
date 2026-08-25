@@ -285,6 +285,17 @@ and the lead cooldowns are ROWS as of WP-2
 [the fold](docs/decisions/2026-08-23-promote-sqlite-folds-into-the-book-of-record.md)). Six
 things bite here and each has already cost something:
 
+- **The derived cache validates on Plex's `updatedAt`, NOT on a clock — do not "adopt" a TTL
+  over it.** `@charcuterie/server/http` (0.4.0) offers `createHttpCache` + `createThrottle`,
+  and four other apps in the fleet are candidates. This one is **partial at best**: the two
+  tables that cache a Plex read — `leaves` and `collection_children` — prove a row current
+  with `LeavesValidator` / `CollectionValidator` — an identity test on `updatedAt` and `viewedLeafCount`, with `?? -1`
+  so an absent field fails instead of matching a 0. That is a stronger freshness signal than
+  any lifetime, because Plex tells us the item did not change. The library has **no validator
+  hook**, so adopting the lifetime policy here would trade a correct answer for a timer. Wait
+  for the hook. The smaller tables could adopt today, which is churn for very little.
+  Background and the measured numbers from the one app that did adopt:
+  `agentic/docs/runbooks/charcuterie-server-http-cache-adoption.md`.
 - **`/config/cache.sqlite` is a DIFFERENT FILE and stays deletable.** Two files, never one.
   Merging them makes the deletable file undeletable — a schema bump would delete the
   household's queues without asking. `server/src/cache.ts` is untouched by WP-2 and should stay
