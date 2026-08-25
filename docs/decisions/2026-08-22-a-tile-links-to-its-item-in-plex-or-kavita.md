@@ -1,10 +1,10 @@
 # A tile links to its item in Plex or Kavita, and the TITLE is the link
 
-- **Status:** Accepted
+- **Status:** Accepted (host choice partially superseded)
 - **Date:** 2026-08-22
 - **Type:** UI / wire shape
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** `2026-08-25-plex-tile-links-use-the-server-url-not-app-plex-tv` (the `app.plex.tv` host choice only — title-as-link, show-not-episode, and server-built URL still stand)
 
 ## Decision
 

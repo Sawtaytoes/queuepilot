@@ -1443,9 +1443,10 @@ export interface Tile {
   viewOffset: number;
   duration: number;
   /**
-   * Where this item lives in the app that owns it — a Plex `app.plex.tv` details page, a
-   * Kavita series page. The SHOW or the FILM, never the next episode
-   * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
+   * Where this item lives in the app that owns it — a Plex details page on
+   * `PLEX_API_SERVER_URL`, a Kavita series page. The SHOW or the FILM, never the next
+   * episode (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`; host choice
+   * `2026-08-25-plex-tile-links-use-the-server-url-not-app-plex-tv`).
    *
    * null on an unresolved entry, and on a resolved one whose owner could not be addressed
    * (no machineIdentifier read yet). The tile then renders its title as plain text.
