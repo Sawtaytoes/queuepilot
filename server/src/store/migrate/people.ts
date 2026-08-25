@@ -55,11 +55,14 @@ import { QUEUES_PATH, STORE_BACKEND } from '../../config.js';
 import { errMessage } from '../../errors.js';
 import type { ProfileAccounts } from '../../groups.js';
 import { normalizeAccounts } from '../../people.js';
+import type { GroupRosterMember } from '../../queuePeople.js';
 import { rekeyBoardGamePerson } from '../db/boardgames.js';
 import { bookOfRecord, prepareChecked } from '../db/open.js';
+
 import {
   bumpPeopleVersion,
   readPeopleMeta,
+  setGroupMinPresent,
   setGroupPeople,
   upsertPerson,
   writePeopleMeta,
@@ -89,7 +92,26 @@ export interface MappingGroup {
   id: string;
   /** For the reader only. The group's real label is in the groups store and is not rewritten. */
   label?: string;
+  /**
+   * The REQUIRED roster — the people `min_present` counts over. Before WP-5 this was the
+   * whole roster and meant "all of them", which is still what it means when `min_present` is
+   * absent, so a mapping file written for WP-3 imports unchanged.
+   */
   people: string[];
+  /**
+   * WP-5. The people who MAY join — "Marcus may join" on Older Kids. They are in the group
+   * and never hold it up.
+   */
+  optional_people?: string[];
+  /**
+   * WP-5. "At least N of `people:`". Absent = all of them.
+   *
+   * ⚠️ This is where the household's kids rules arrive, and it is deliberately NOT in this
+   * repo. `queuepilot` is public; the mapping file lives in `/config`, holds real names, and
+   * is confirmed by the owner. The committed example next door says the same thing with Ada,
+   * Grace and Linus.
+   */
+  min_present?: number | null;
   evidence?: string[];
   confidence?: MappingConfidence;
 }
@@ -246,9 +268,28 @@ export function validateMapping(
     if (!knownGroupIds.has(id)) {
       problems.push(`${where}: no such group — this file attaches people to existing groups only`);
     }
-    for (const personId of asStringList(group.people)) {
+    const required = asStringList(group.people);
+    const optional = asStringList(group.optional_people);
+    for (const personId of [...required, ...optional]) {
       if (!seenIds.has(personId)) {
         problems.push(`${where}: names '${personId}', who is not in \`people:\``);
+      }
+    }
+    for (const personId of optional) {
+      // One person, one role. A person in both lists is a rule with two readings, and
+      // choosing one of them silently is how "at least one of them" stops meaning what it
+      // says.
+      if (required.includes(personId)) {
+        problems.push(`${where}: '${personId}' is in both \`people:\` and \`optional_people:\``);
+      }
+    }
+    if (group.min_present != null) {
+      if (!Number.isInteger(group.min_present) || group.min_present < 1) {
+        problems.push(`${where}: min_present must be a whole number of 1 or more`);
+      } else if (group.min_present > required.length) {
+        problems.push(
+          `${where}: min_present is ${group.min_present} but \`people:\` names ${required.length}`,
+        );
       }
     }
   }
@@ -357,8 +398,25 @@ export function importPeople({ force = false }: { force?: boolean } = {}): Peopl
     });
 
     for (const group of groups) {
-      const roster = asStringList(group.people);
+      // Required first, then optional — `setGroupPeople` numbers positions from the list
+      // order, and the trays read Must be here before Nice to have.
+      const roster: GroupRosterMember[] = [
+        ...asStringList(group.people).map((personId, position) => ({
+          personId,
+          position,
+          role: 'required' as const,
+        })),
+        ...asStringList(group.optional_people).map((personId, position) => ({
+          personId,
+          position,
+          role: 'optional' as const,
+        })),
+      ];
       setGroupPeople(group.id, roster, db);
+      // The COUNT lives on the group row, not on the roster, so it goes through the groups
+      // store rather than through `group_people`. `null` clears it back to "all of them",
+      // which is what a WP-3-era mapping file that says nothing means.
+      setGroupMinPresent(group.id, group.min_present ?? null, db);
       rosterCount += roster.length;
     }
 

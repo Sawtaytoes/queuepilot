@@ -47,8 +47,15 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * pre-WP-4b image refuses the file rather than writing rows a newer schema will misread. The
  * rollback cost is the one WP-3 already recorded: an image rollback past this point needs
  * `STORE_BACKEND=yaml` or the file restored from a backup taken before the upgrade.
+ *
+ * 4 (WP-5): `queue_people` and `group_membership`, plus TWO ADDED COLUMNS —
+ * `group_people.role` and `sets.activity`. This is the first bump that needs
+ * `addMissingColumns()` to do real work rather than nothing, and it is why that function reads
+ * `table_xinfo`: `sets.activity` is a VIRTUAL generated column, which `table_info` does not
+ * list. `role` is a plain `NOT NULL DEFAULT 'required'`, so an existing roster row keeps the
+ * only meaning it had.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;

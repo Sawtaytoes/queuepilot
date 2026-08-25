@@ -23,6 +23,7 @@
 // must not be one — a fuzzy match writing the wrong person's known-how claim is the failure
 // this whole package is shaped around.
 import { normalizeAccounts, type Person, type PersonWrite } from '../../people.js';
+import { type GroupMembership, type GroupRosterMember, isMemberRole } from '../../queuePeople.js';
 import type { ProfileAccounts } from '../../groups.js';
 import { bumpVersion, readMeta, writeMeta } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
@@ -234,21 +235,86 @@ export function rostersByGroup(db: SqliteDatabase = bookOfRecord()): Map<string,
 }
 
 /**
+ * One group's roster WITH the WP-5 role on each member — the "at least N of them" half.
+ *
+ * `groupPersonIds()` above stays the ids-only read every pre-WP-5 caller uses; this is the one
+ * the trays and the filter need. Required members come back first, because the number in
+ * `groups.min_present` counts over exactly them.
+ */
+export function groupRoster(
+  groupId: string,
+  db: SqliteDatabase = bookOfRecord(),
+): GroupRosterMember[] {
+  return prepareChecked<{ person_id: string; role: string; position: number }>(
+    db,
+    "SELECT person_id, role, position FROM group_people WHERE group_id = :group_id " +
+      "ORDER BY CASE role WHEN 'required' THEN 0 ELSE 1 END, position, person_id",
+  )
+    .all({ group_id: groupId })
+    .map((row) => ({
+      personId: row.person_id,
+      position: row.position,
+      role: isMemberRole(row.role) ? row.role : 'required',
+    }));
+}
+
+/** Every group's roster with roles, keyed by group id. The whole-page read. */
+export function rosterMembersByGroup(
+  db: SqliteDatabase = bookOfRecord(),
+): Map<string, GroupRosterMember[]> {
+  const out = new Map<string, GroupRosterMember[]>();
+  for (const row of prepareChecked<{
+    group_id: string;
+    person_id: string;
+    position: number;
+    role: string;
+  }>(
+    db,
+    'SELECT group_id, person_id, role, position FROM group_people ' +
+      "ORDER BY group_id, CASE role WHEN 'required' THEN 0 ELSE 1 END, position, person_id",
+  ).all()) {
+    out.set(row.group_id, [
+      ...(out.get(row.group_id) ?? []),
+      {
+        personId: row.person_id,
+        position: row.position,
+        role: isMemberRole(row.role) ? row.role : 'required',
+      },
+    ]);
+  }
+  return out;
+}
+
+/**
  * Replace one group's roster. The list IS the order.
  *
  * A person id that names nobody is REFUSED rather than written — the foreign key would refuse
  * it anyway, and failing here names the id in the message instead of leaving the caller with
  * `FOREIGN KEY constraint failed`.
+ *
+ * Takes either the pre-WP-5 list of ids or a list of `{personId, role}`. A bare id means
+ * `required`, which is the only meaning a roster member had before the role column existed —
+ * so every caller written against the old signature keeps the behaviour it had.
  */
 export function setGroupPeople(
   groupId: string,
-  personIds: readonly string[],
+  members: readonly (string | GroupRosterMember)[],
   db: SqliteDatabase = bookOfRecord(),
 ): void {
+  const roster: GroupRosterMember[] = members.map((member, index) =>
+    typeof member === 'string'
+      ? { personId: member, position: index, role: 'required' }
+      : {
+          personId: String(member.personId ?? '').trim(),
+          position: index,
+          role: isMemberRole(member.role) ? member.role : 'required',
+        },
+  );
+
   const known = new Set(
     prepareChecked<{ id: string }>(db, 'SELECT id FROM people').all().map((row) => row.id),
   );
-  const missing = personIds.filter((id) => !known.has(id));
+  const missing = roster.map((member) => member.personId).filter((id) => !known.has(id));
   if (missing.length) {
     throw new Error(`group '${groupId}' names ${missing.length} unknown person id(s): ${missing.join(', ')}`);
   }
@@ -258,12 +324,83 @@ export function setGroupPeople(
   });
   const insert = prepareChecked(
     db,
-    'INSERT OR REPLACE INTO group_people (group_id, person_id, position) ' +
-      'VALUES (:group_id, :person_id, :position)',
+    'INSERT OR REPLACE INTO group_people (group_id, person_id, position, role) ' +
+      'VALUES (:group_id, :person_id, :position, :role)',
   );
-  personIds.forEach((personId, position) => {
-    insert.run({ group_id: groupId, person_id: personId, position });
+  roster.forEach((member, position) => {
+    insert.run({
+      group_id: groupId,
+      person_id: member.personId,
+      position,
+      role: member.role,
+    });
   });
+}
+
+/**
+ * WP-5. How many of one group's REQUIRED roster are enough, or `null` for "all of them".
+ *
+ * `null` is the absence of a row, not a stored zero, and the difference is the whole point: a
+ * group written before WP-5 meant "all of them" and still does. Defaulting the absence to 1
+ * would quietly loosen every existing group.
+ */
+export function groupMinPresent(
+  groupId: string,
+  db: SqliteDatabase = bookOfRecord(),
+): number | null {
+  const row = prepareChecked<{ min_present: number }>(
+    db,
+    'SELECT min_present FROM group_membership WHERE group_id = :group_id',
+  ).get({ group_id: groupId });
+  return row ? Number(row.min_present) : null;
+}
+
+/** Every group's rule at once, keyed by group id. Only groups that HAVE one appear. */
+export function minPresentByGroup(db: SqliteDatabase = bookOfRecord()): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const row of prepareChecked<{ group_id: string; min_present: number }>(
+    db,
+    'SELECT group_id, min_present FROM group_membership',
+  ).all()) {
+    out.set(row.group_id, Number(row.min_present));
+  }
+  return out;
+}
+
+/** Set (or with `null`, clear) one group's rule. Clearing DELETES the row rather than storing
+ *  a number equal to the roster size — a stored duplicate of a derivable value goes stale the
+ *  moment somebody adds a person, and then says "all of them" while meaning three. */
+export function setGroupMinPresent(
+  groupId: string,
+  minPresent: number | null,
+  db: SqliteDatabase = bookOfRecord(),
+): void {
+  if (minPresent == null) {
+    prepareChecked(db, 'DELETE FROM group_membership WHERE group_id = :group_id').run({
+      group_id: groupId,
+    });
+    return;
+  }
+  const value = Number(minPresent);
+  if (!Number.isInteger(value) || value < 1) {
+    throw new Error('"at least N" must be a whole number of 1 or more');
+  }
+  prepareChecked(
+    db,
+    'INSERT OR REPLACE INTO group_membership (group_id, min_present) VALUES (:group_id, :min_present)',
+  ).run({ group_id: groupId, min_present: value });
+}
+
+/** One group's whole WP-5 rule: the roster with roles, and the number over it. */
+export function groupMembership(
+  groupId: string,
+  db: SqliteDatabase = bookOfRecord(),
+): GroupMembership {
+  return {
+    groupId,
+    minPresent: groupMinPresent(groupId, db),
+    roster: groupRoster(groupId, db),
+  };
 }
 
 /**

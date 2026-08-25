@@ -24,6 +24,7 @@ import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { store } from './store/index.js';
 import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
+import { activityForProviderKind, activityForSet, isActivity } from './activity.js';
 import type {
   BatchStop,
   Binding,
@@ -66,6 +67,9 @@ interface RawSet extends RawBinding {
   id?: string;
   label?: unknown;
   kind?: string;
+  /** WP-5. The stored ACTIVITY override; absent is the normal state and means "the
+   *  provider's". See `activity.ts`. */
+  activity?: unknown;
   source?: string;
   sections?: unknown[];
   item_sections?: unknown[];
@@ -494,6 +498,15 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     vocabulary: vocabularyForSet(ent),
     // …and the KIND, which is what the stylesheet scopes the accent on.
     provider_kind: providerKindForSet(ent),
+    // WP-5: WHAT YOU ARE DOING. Derived from the provider unless the file overrode it, so
+    // migrating sixteen queues to "a queue has an activity" wrote no bytes at all — every
+    // provider this app has serves exactly one activity, which makes the derivation a lookup
+    // rather than a guess. `activity_default` rides along so the editor can chip "Default"
+    // without shipping the provider table to the browser (same trick as `length_default`).
+    // The ACTIVITY and never a finer content list: Anime and Movies are two `watching`
+    // queues (decision `2026-08-25-a-queue-is-people-plus-an-activity` §1).
+    activity: activityForSet({ activity: ent.activity, provider_kind: providerKindForSet(ent) }),
+    activity_default: activityForProviderKind(providerKindForSet(ent)),
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
     enabled: ent.enabled !== false,
@@ -876,6 +889,10 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
     const isRotation = node.get('source') === 'rotation';
     const allow = [
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
+      // WP-5's activity OVERRIDE. Editable on both sources — a reading channel is as much a
+      // `reading` thing as a reading queue — and stored sparsely: clearing it puts the queue
+      // back under its provider's activity rather than under a blank heading.
+      'activity',
       // Picks-only lane default + lead cooldown (rejected below on rotation).
       'add_as', 'promote_window',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
@@ -1110,6 +1127,22 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const s = v == null ? '' : String(v).trim();
         if (!s) { node.delete('default_profile'); continue; }
         node.set('default_profile', doc.createNode(s));
+        continue;
+      }
+      if (k === 'activity') {
+        // Sparse, like `max_items` and `length`: blank / the provider's own answer DROPS the
+        // key rather than writing it. Two reasons, and the second is the load-bearing one.
+        // A stored value that equals the derivation is noise in a hand-edited file; and it
+        // would FREEZE today's provider→activity opinion into `sets.yaml`, so a later change
+        // to that table would disagree with sixteen files it can no longer see.
+        const s = v == null ? '' : String(v).trim().toLowerCase();
+        if (!s) { node.delete('activity'); continue; }
+        if (!isActivity(s)) throw new Error(`unknown activity '${s}'`);
+        if (s === activityForProviderKind(providerKindForSet(node.toJSON() as RawSet))) {
+          node.delete('activity');
+          continue;
+        }
+        node.set('activity', doc.createNode(s));
         continue;
       }
       if (k === 'requires_profile') {

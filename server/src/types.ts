@@ -14,6 +14,7 @@
  * for their consumer and neither may be "unified" without a behaviour change, so both
  * are declared here with a comment saying who reads which.
  */
+import type { Activity } from './activity.js';
 
 // --- small vocabularies ------------------------------------------------------ //
 
@@ -328,6 +329,20 @@ interface SetRegistryCommon {
    * stylesheet on ids would silently drop such a queue back to the neutral accent.
    */
   provider_kind: string;
+  /**
+   * WP-5. WHAT YOU ARE DOING with this queue — the EFFECTIVE value, so the UI never
+   * re-derives it: the stored override if there is one, otherwise the provider's.
+   *
+   * The activity and NOT a finer content list. "Anime" and "Movies" are two `watching`
+   * queues, told apart by what is in them and by whose faces are on them
+   * (decision `2026-08-25-a-queue-is-people-plus-an-activity`). Reported on every set,
+   * because a rotation channel is as much a `watching` thing as a curated queue is.
+   */
+  activity: Activity;
+  /** What `activity` would be with nothing stored — the provider's own answer. Sent so the
+   *  editor's picker can chip "Default" without shipping the provider table to the browser,
+   *  the same way `length_default` does. */
+  activity_default: Activity;
   /** Per-scan cap; blank/<=0 = no limit. Applies to queues AND channels. */
   max_items: number | null;
   /** `enabled: false` is the only falsy form — absent reads as enabled. */
