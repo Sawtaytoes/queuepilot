@@ -195,7 +195,7 @@ for (const width of WIDTHS) {
     // which is the right thing to walk here anyway: the page chrome, the search row and
     // the `EmptyState` are what would push a 320px viewport sideways, and the populated
     // grids are measured by `board-game-play-test.ts` against its own fixture.
-    ['/collection', '#collection:not([hidden]) #collection-find'],
+    ['/board-game-collection', '#collection:not([hidden]) #collection-find'],
     ['/result', '#result:not([hidden]) #result-none'],
     ...(queueId ? [[`/q/${queueId}`, '#queue:not([hidden]) .add']] : []),
   ] as const;
