@@ -19,7 +19,9 @@ import {
 } from "./boardGames"
 import type { BoardGameCard } from "./types"
 
-const card = (over: Partial<BoardGameCard> = {}): BoardGameCard => ({
+const card = (
+  over: Partial<BoardGameCard> = {},
+): BoardGameCard => ({
   bestWith: [3, 4],
   id: "harbour-lantern",
   imagePath: null,
@@ -52,7 +54,11 @@ describe("criteriaFromTonight", () => {
   test("maps the three board-game filters, one field each", () => {
     expect(
       criteriaFromTonight({
-        filters: { fit: "best", knows: "someone", light: "on" },
+        filters: {
+          fit: "best",
+          knows: "someone",
+          light: "on",
+        },
         guestCount: 1,
         personIds: ["ada", "grace"],
       }),
@@ -105,20 +111,37 @@ describe("criteriaFromTonight", () => {
 
 describe("known-how", () => {
   test("is called something different per activity", () => {
-    expect(knownHowLabel("board-games")).toBe("Knows the rules")
-    expect(knownHowLabel("video-games")).toBe("Knows how to play")
+    expect(knownHowLabel("board-games")).toBe(
+      "Knows the rules",
+    )
+    expect(knownHowLabel("video-games")).toBe(
+      "Knows how to play",
+    )
   })
 
   test("proposes everybody who was at the table", () => {
-    expect(knownHowProposal(["ada", "grace"])).toEqual(["ada", "grace"])
+    expect(knownHowProposal(["ada", "grace"])).toEqual([
+      "ada",
+      "grace",
+    ])
   })
 
   test("reads the existing claims for one game and no other", () => {
     const claims = [
-      { confirmedAt: "2026-01-01T00:00:00.000Z", gameId: "harbour-lantern", personId: "ada" },
-      { confirmedAt: "2026-01-01T00:00:00.000Z", gameId: "quarry-duel", personId: "grace" },
+      {
+        confirmedAt: "2026-01-01T00:00:00.000Z",
+        gameId: "harbour-lantern",
+        personId: "ada",
+      },
+      {
+        confirmedAt: "2026-01-01T00:00:00.000Z",
+        gameId: "quarry-duel",
+        personId: "grace",
+      },
     ]
-    expect(knownHowFor(claims, "harbour-lantern")).toEqual(["ada"])
+    expect(knownHowFor(claims, "harbour-lantern")).toEqual([
+      "ada",
+    ])
   })
 })
 
@@ -131,21 +154,43 @@ describe("what a card says", () => {
   })
 
   test("the player-count line", () => {
-    expect(playerCountLine(card())).toBe("2–5 players · best with 3–4")
-    expect(playerCountLine(card({ bestWith: [] }))).toBe("2–5 players")
+    expect(playerCountLine(card())).toBe(
+      "2–5 players · best with 3–4",
+    )
+    expect(playerCountLine(card({ bestWith: [] }))).toBe(
+      "2–5 players",
+    )
     expect(
-      playerCountLine(card({ bestWith: [2, 5], maxPlayers: 5, minPlayers: 2 })),
+      playerCountLine(
+        card({
+          bestWith: [2, 5],
+          maxPlayers: 5,
+          minPlayers: 2,
+        }),
+      ),
     ).toBe("2–5 players · best with 2, 5")
     expect(
-      playerCountLine(card({ bestWith: [], maxPlayers: 1, minPlayers: 1 })),
+      playerCountLine(
+        card({
+          bestWith: [],
+          maxPlayers: 1,
+          minPlayers: 1,
+        }),
+      ),
     ).toBe("1 player")
   })
 
   test("the playtime, or nothing when the box never said", () => {
     expect(playtimeLabel(card())).toBe("30–60 min")
-    expect(playtimeLabel(card({ maxPlaytime: 45, minPlaytime: 45 }))).toBe("45 min")
     expect(
-      playtimeLabel(card({ maxPlaytime: null, minPlaytime: null })),
+      playtimeLabel(
+        card({ maxPlaytime: 45, minPlaytime: 45 }),
+      ),
+    ).toBe("45 min")
+    expect(
+      playtimeLabel(
+        card({ maxPlaytime: null, minPlaytime: null }),
+      ),
     ).toBeNull()
   })
 
@@ -176,25 +221,32 @@ describe("the shelf, filtered", () => {
   const shelf = [
     card(),
     card({ id: "quarry-duel", name: "Quarry Duel" }),
-    card({ id: "tidewright", isExcluded: true, name: "Tidewright" }),
+    card({
+      id: "tidewright",
+      isExcluded: true,
+      name: "Tidewright",
+    }),
   ]
 
   test("an empty term is the whole shelf — this screen IS the shelf", () => {
-    expect(filterCollection(shelf, {}).map((g) => g.id)).toEqual([
-      "harbour-lantern",
-      "quarry-duel",
-    ])
+    expect(
+      filterCollection(shelf, {}).map((g) => g.id),
+    ).toEqual(["harbour-lantern", "quarry-duel"])
   })
 
   test("a game taken off the shelf is hidden until it is asked for", () => {
     expect(
-      filterCollection(shelf, { isExcludedShown: true }).map((g) => g.id),
+      filterCollection(shelf, {
+        isExcludedShown: true,
+      }).map((g) => g.id),
     ).toContain("tidewright")
   })
 
   test("matches part of a name, ignoring case", () => {
-    expect(filterCollection(shelf, { query: "quarry" }).map((g) => g.id)).toEqual([
-      "quarry-duel",
-    ])
+    expect(
+      filterCollection(shelf, { query: "quarry" }).map(
+        (g) => g.id,
+      ),
+    ).toEqual(["quarry-duel"])
   })
 })

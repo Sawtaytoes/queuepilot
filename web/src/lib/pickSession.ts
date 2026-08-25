@@ -31,7 +31,10 @@
  */
 
 import type { ActivityId } from "./tonight"
-import type { PickCandidateWire, PickCriteriaWire } from "./types"
+import type {
+  PickCandidateWire,
+  PickCriteriaWire,
+} from "./types"
 
 /** The key, versioned. A shape change bumps this rather than trying to migrate a scratchpad. */
 export const PICK_SESSION_KEY = "queuepilot.pick.v1"
@@ -75,7 +78,10 @@ export function writePickSession(
   storage: Storage | null = defaultStorage(),
 ): void {
   try {
-    storage?.setItem(PICK_SESSION_KEY, JSON.stringify(session))
+    storage?.setItem(
+      PICK_SESSION_KEY,
+      JSON.stringify(session),
+    )
   } catch {
     // A full or denied quota loses the durability and nothing else. The card on screen is
     // still the card on screen.

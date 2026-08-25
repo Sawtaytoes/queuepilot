@@ -5,6 +5,9 @@
  *   `/g/<group>`         PLAY, filtered to one QueuePilot group
  *   `/tonight`           TONIGHT — who's here, an activity, and Go
  *   `/tonight/surprise`  TONIGHT, on Surprise Me's narrowing step
+ *   `/result`            RESULT — tonight's pick: one card, reroll, confirm
+ *   `/result/<gameId>`   RESULT for one named game — a queue arrival, and it has NO reroll
+ *   `/collection`        COLLECTION — the board-game shelf, and "we played this"
  *   `/queues`            QUEUES configurator (poster shelves)
  *   `/q/<id>`            one curated queue / channel as a grid
  *   `/channels[/<id>]`   the rule-based rotation channels
@@ -34,6 +37,8 @@
 
 export type Route =
   | { view: "play"; group: string | null }
+  | { view: "collection" }
+  | { view: "result"; gameId: string | null }
   | { view: "tonight"; step: "surprise" | null }
   | { view: "queues" }
   | { view: "pending" }
@@ -71,6 +76,23 @@ export function parsePath(pathname: string): Route {
       view: "channels",
     }
 
+  // `/result/<gameId>` is a QUEUE ARRIVAL and `/result` is tonight's own pick. They are
+  // one view with one card; the difference is that the queue already chose, so the first
+  // has no reroll. Matched before the bare `/result` for the same reason
+  // `/tonight/surprise` is matched before `/tonight`.
+  const r = path.match(/^\/result\/(.+)$/)
+
+  if (r?.[1])
+    return {
+      gameId: decodeURIComponent(r[1]),
+      view: "result",
+    }
+  if (path === "/result")
+    return { gameId: null, view: "result" }
+
+  if (path.startsWith("/collection"))
+    return { view: "collection" }
+
   // Longest first: `/tonight/surprise` must not be swallowed by the bare `/tonight`.
   if (path === "/tonight/surprise")
     return { step: "surprise", view: "tonight" }
@@ -90,6 +112,8 @@ export function parsePath(pathname: string): Route {
 /** What the back button should SAY, given where it goes. */
 export function labelForPath(p: string): string {
   if (p.startsWith("/tonight")) return "‹ Tonight"
+  if (p.startsWith("/collection")) return "‹ Collection"
+  if (p.startsWith("/result")) return "‹ Tonight's pick"
   if (p.startsWith("/queues")) return "‹ Picks"
   if (p.startsWith("/channels")) return "‹ Rules"
   if (p.startsWith("/q/")) return "‹ Back"

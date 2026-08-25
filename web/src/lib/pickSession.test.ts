@@ -11,7 +11,9 @@ import {
 } from "./pickSession"
 
 /** A `Storage` that is a plain object — this suite runs in a Node environment. */
-function fakeStorage(seed: Record<string, string> = {}): Storage {
+function fakeStorage(
+  seed: Record<string, string> = {},
+): Storage {
   const map = new Map(Object.entries(seed))
   return {
     clear: () => map.clear(),
@@ -21,13 +23,16 @@ function fakeStorage(seed: Record<string, string> = {}): Storage {
       return map.size
     },
     removeItem: (key: string) => map.delete(key),
-    setItem: (key: string, value: string) => map.set(key, value),
+    setItem: (key: string, value: string) =>
+      map.set(key, value),
   } as Storage
 }
 
 const NOW = new Date("2026-08-25T21:00:00.000Z")
 
-const session = (over: Partial<PickSession> = {}): PickSession => ({
+const session = (
+  over: Partial<PickSession> = {},
+): PickSession => ({
   activity: "board-games",
   candidates: [
     {
@@ -88,14 +93,15 @@ describe("the pick survives leaving the screen", () => {
   test("keeps reroll's memory, which is the half that was lost", () => {
     const storage = fakeStorage()
     writePickSession(
-      session({ excludedGameIds: ["quarry-duel", "tidewright"] }),
+      session({
+        excludedGameIds: ["quarry-duel", "tidewright"],
+      }),
       storage,
     )
 
-    expect(readPickSession(storage, NOW)?.excludedGameIds).toEqual([
-      "quarry-duel",
-      "tidewright",
-    ])
+    expect(
+      readPickSession(storage, NOW)?.excludedGameIds,
+    ).toEqual(["quarry-duel", "tidewright"])
   })
 
   test("clearing removes it", () => {
@@ -115,12 +121,17 @@ describe("what counts as no pick at all", () => {
   test("no storage at all — a browser that denies it", () => {
     expect(readPickSession(null, NOW)).toBeNull()
     // And writing to one that is not there is not an error either.
-    expect(() => writePickSession(session(), null)).not.toThrow()
+    expect(() =>
+      writePickSession(session(), null),
+    ).not.toThrow()
   })
 
   test("a value that is not JSON", () => {
     expect(
-      readPickSession(fakeStorage({ [PICK_SESSION_KEY]: "{{{" }), NOW),
+      readPickSession(
+        fakeStorage({ [PICK_SESSION_KEY]: "{{{" }),
+        NOW,
+      ),
     ).toBeNull()
   })
 
@@ -142,9 +153,13 @@ describe("what counts as no pick at all", () => {
 
     // Still tonight, an hour before the cut-off.
     const stillTonight = new Date(
-      NOW.getTime() + PICK_SESSION_MAX_AGE_MS - 60 * 60 * 1000,
+      NOW.getTime() +
+        PICK_SESSION_MAX_AGE_MS -
+        60 * 60 * 1000,
     )
-    expect(readPickSession(storage, stillTonight)).not.toBeNull()
+    expect(
+      readPickSession(storage, stillTonight),
+    ).not.toBeNull()
   })
 })
 
@@ -153,7 +168,9 @@ describe("where the card came from", () => {
     const storage = fakeStorage()
     writePickSession(session({ origin: "queue" }), storage)
 
-    expect(readPickSession(storage, NOW)?.origin).toBe("queue")
+    expect(readPickSession(storage, NOW)?.origin).toBe(
+      "queue",
+    )
   })
 
   test("anything unrecognised reads as a pick, which is the one with a reroll", () => {
@@ -163,6 +180,8 @@ describe("where the card came from", () => {
       storage,
     )
 
-    expect(readPickSession(storage, NOW)?.origin).toBe("pick")
+    expect(readPickSession(storage, NOW)?.origin).toBe(
+      "pick",
+    )
   })
 })

@@ -6,9 +6,7 @@
  * in a Node environment. The API shapes live in `lib/types.ts` beside every other wire type.
  */
 
-import type {
-  ActivityId,
-} from "./tonight"
+import type { ActivityId } from "./tonight"
 import type {
   BoardGame,
   BoardGameCard,
@@ -67,7 +65,9 @@ export function criteriaFromTonight({
   return {
     excludedGameIds: [],
     fitness:
-      filters.fit === "ok" ? "bestOrRecommended" : "bestOnly",
+      filters.fit === "ok"
+        ? "bestOrRecommended"
+        : "bestOnly",
     maxWeight:
       filters.light === "on" ? LIGHT_MAX_WEIGHT : null,
     personIds: [...personIds],
@@ -87,7 +87,9 @@ export function criteriaFromTonight({
  * A board game has rules you read; a video game has controls you learn. The fact is the same
  * shape — one person, one title, "I can start this without help" — and the words are not.
  */
-export const knownHowLabel = (activity: ActivityId): string =>
+export const knownHowLabel = (
+  activity: ActivityId,
+): string =>
   activity === "video-games"
     ? "Knows how to play"
     : "Knows the rules"
@@ -150,7 +152,9 @@ export function playerCountLine(
   const first = best[0]
   const last = best[best.length - 1]
   const bestText =
-    first === last || first === undefined || last === undefined
+    first === last ||
+    first === undefined ||
+    last === undefined
       ? `${first ?? ""}`
       : best.length === last - first + 1
         ? `${first}–${last}`
@@ -221,5 +225,6 @@ export function filterCollection(
 }
 
 /** The links a card shows, rulebook first — the ordering is the server's and is kept. */
-export const linksOf = (game: BoardGame): BoardGame["links"] =>
-  game.links ?? []
+export const linksOf = (
+  game: BoardGame,
+): BoardGame["links"] => game.links ?? []

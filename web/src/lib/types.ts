@@ -977,7 +977,11 @@ export type PickCriteriaWire = {
 
 export type PickCandidateWire = {
   game: BoardGame
-  verdict: "best" | "notRecommended" | "recommended" | "unknown"
+  verdict:
+    | "best"
+    | "notRecommended"
+    | "recommended"
+    | "unknown"
   playCount: number
 }
 
