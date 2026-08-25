@@ -26,6 +26,44 @@ export interface TonightServer {
   base: string;
 }
 
+/**
+ * WHO EACH QUEUE IS FOR — the fixture's `queue_people` rows, written over the API once the
+ * server is up.
+ *
+ * Written rather than seeded from a group CLAIM, because a claim can only put ONE group on a
+ * queue and this fixture needs a person, a person plus an optional person, and a whole group
+ * carrying its own count. It is also readable: the audience of every queue is this one table
+ * rather than a derivation two files away.
+ *
+ * Three of the eight branches live here, and each one is a rule somebody could undo:
+ *
+ *   * `after_dinner` has NOBODY on it, on purpose. A queue no group claimed comes up empty by
+ *     design, and it must stay offered to everybody — hiding it makes it unreachable.
+ *   * `arcade` carries an OPTIONAL member. Ticking Linus must not remove it, and Linus alone
+ *     must not be enough to bring it up.
+ *   * `game_night` carries the GROUP, which is "at least one of Ada and Grace, and Linus may
+ *     join". Flattened to its people that becomes "both of them" — the rule inverted.
+ */
+export const TONIGHT_TRAYS: Record<
+  string,
+  { kind: 'person' | 'group'; id: string; role: 'required' | 'optional' }[]
+> = {
+  after_dinner: [],
+  arcade: [
+    { id: 'ada', kind: 'person', role: 'required' },
+    { id: 'linus', kind: 'person', role: 'optional' },
+  ],
+  game_night: [{ id: 'family', kind: 'group', role: 'required' }],
+  grace_comics: [{ id: 'grace', kind: 'person', role: 'required' }],
+  linus_shows: [{ id: 'linus', kind: 'person', role: 'required' }],
+  manga_webtoons: [{ id: 'ada', kind: 'person', role: 'required' }],
+  movie_night: [
+    { id: 'ada', kind: 'person', role: 'required' },
+    { id: 'grace', kind: 'person', role: 'required' },
+  ],
+  steam_night: [{ id: 'linus', kind: 'person', role: 'required' }],
+};
+
 /** Copy the fixtures into a scratch config directory and start the server over them. */
 export async function startTonightServer(port: number): Promise<TonightServer> {
   const dir = await fs.mkdtemp(path.join(tmpdir(), 'qp-tonight-'));
@@ -38,7 +76,13 @@ export async function startTonightServer(port: number): Promise<TonightServer> {
     'e2e/fixtures/tonight.people.yaml',
     path.join(dir, 'people-mapping-proposal.yaml'),
   );
-  await fs.writeFile(path.join(dir, 'groups.yaml'), 'groups: []\n');
+  // ONE group, so the fixture can prove "at least one of them". It names no accounts, so it
+  // resolves to no provider profile and the tray write is accepted — the ambiguity that IS
+  // refused is pinned in `queue-people-test.ts`, which is where it belongs.
+  await fs.writeFile(
+    path.join(dir, 'groups.yaml'),
+    'groups:\n- id: family\n  label: Family\n  sets: []\n',
+  );
   await fs.writeFile(path.join(dir, 'pending.yaml'), 'seen_through: 0\n');
 
   const child = spawnServer({
@@ -78,6 +122,22 @@ export async function startTonightServer(port: number): Promise<TonightServer> {
       /* not up yet */
     }
     await new Promise((resolve) => setTimeout(resolve, 200));
+  }
+
+  // The trays, over the API the editor writes through. A refusal is THROWN rather than
+  // logged: a harness that boots with half its audience written would fail its callers
+  // somewhere else entirely, and the message would be about a queue count.
+  for (const [setId, members] of Object.entries(TONIGHT_TRAYS)) {
+    const res = await fetch(`${base}/api/sets/${setId}/people`, {
+      body: JSON.stringify({ members }),
+      headers: { 'content-type': 'application/json' },
+      method: 'PUT',
+    });
+    if (!res.ok) {
+      throw new Error(
+        `tonight harness: could not file ${setId} — ${res.status} ${await res.text()}`,
+      );
+    }
   }
 
   return { base, child, dir };

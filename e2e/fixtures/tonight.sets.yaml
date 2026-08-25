@@ -3,8 +3,12 @@
 #
 # Nothing here is real data. The cast is the repo's own: Ada, Grace and Linus for people
 # (`tonight.people.yaml`), and the queue labels name them because that is what a queue's
-# label holds TODAY. WP-5 replaces a label with the activity plus the people as badges;
-# until then a screenshot of this file is what the Which queue? step actually renders.
+# label holds TODAY.
+#
+# WHO each queue is for is NOT here — it is `tonight-harness.ts TONIGHT_TRAYS`, written over
+# the API on boot, because a tray is a person, a role and sometimes a whole group and a YAML
+# label cannot carry any of that. The labels below still spell the names out, so a card in a
+# screenshot says the same thing twice; that is today's data beside WP-5's, not a duplicate.
 global:
   excluded_sections: []
 
@@ -20,8 +24,10 @@ sets:
     item_sections: [1]
 
   # ---- Shows. Two of them, so Shows is a real choice as well as Reading.
+  # `after_dinner` is the fixture's PEOPLELESS queue — nobody is filed on it, which is a
+  # real state and not missing data. It must stay offered whoever is ticked.
   - id: after_dinner
-    label: Ada & Grace — Shows
+    label: Anybody — Shows
     kind: cartoons
     source: rotation
     behavior: progress

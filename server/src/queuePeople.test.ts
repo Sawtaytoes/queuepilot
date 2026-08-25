@@ -153,6 +153,20 @@ describe('choosing people is a FILTER, not a claim about who is in the room', ()
     expect(queueMatchesSelection(solo, [])).toBe(true);
   });
 
+  /**
+   * ⚠️ THE OTHER EMPTY, and it is not the same one.
+   *
+   * A queue nobody is filed on is offered to everybody. Several live queues legitimately have
+   * no members — a queue no group claimed comes up empty by design — and "every selected
+   * person is on the queue" is false against an empty roster, so without this branch one tick
+   * makes every one of them unreachable from Pick and from the Which queue? list alike.
+   */
+  it('shows a queue NOBODY is filed on, whoever is selected', () => {
+    expect(queueMatchesSelection([], [])).toBe(true);
+    expect(queueMatchesSelection([], ['ada'])).toBe(true);
+    expect(queueMatchesSelection([], ['ada', 'grace', 'linus'])).toBe(true);
+  });
+
   it('hides a queue a selected person is not on', () => {
     // "Picking [two people] … hides the one-person queue — because the second is not on it."
     expect(queueMatchesSelection(solo, ['ada', 'grace'])).toBe(false);
