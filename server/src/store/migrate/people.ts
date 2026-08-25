@@ -55,6 +55,7 @@ import { QUEUES_PATH, STORE_BACKEND } from '../../config.js';
 import { errMessage } from '../../errors.js';
 import type { ProfileAccounts } from '../../groups.js';
 import { normalizeAccounts } from '../../people.js';
+import { rekeyBoardGamePerson } from '../db/boardgames.js';
 import { bookOfRecord, prepareChecked } from '../db/open.js';
 import {
   bumpPeopleVersion,
@@ -112,6 +113,8 @@ export interface PeopleImportReport {
   groupIds: string[];
   accountCount: number;
   rosterCount: number;
+  /** How many board-game rows were re-keyed off a source player id onto a person. */
+  rekeyedBoardGameRows: number;
   /** Every validation failure, in the order found. Non-empty means nothing was written. */
   problems: string[];
 }
@@ -121,6 +124,7 @@ const EMPTY = {
   groupIds: [] as string[],
   personIds: [] as string[],
   problems: [] as string[],
+  rekeyedBoardGameRows: 0,
   rosterCount: 0,
 };
 
@@ -308,6 +312,7 @@ export function importPeople({ force = false }: { force?: boolean } = {}): Peopl
   const groups = asList(mapping.groups) as MappingGroup[];
   let accountCount = 0;
   let rosterCount = 0;
+  let rekeyedBoardGameRows = 0;
 
   db.withTransaction(() => {
     people.forEach((person, position) => {
@@ -328,6 +333,27 @@ export function importPeople({ force = false }: { force?: boolean } = {}): Peopl
         },
         db,
       );
+
+      // ── THE BOARD-GAME RE-KEY (WP-4b) ──────────────────────────────────────────────────
+      //
+      // The collection absorb ran before this and could not name a person: `people` was empty,
+      // because it is gated on the very file being read right now. So its two people-keyed
+      // tables hold the SOURCE APP'S own player ids, verbatim, and this is where they become
+      // this app's ids — inside the same transaction as the person they belong to, behind the
+      // same `confirmed: true`, and with no second gate to keep true.
+      //
+      // `board_game_known_how` is the record that actually matters here. Losing or
+      // mis-attributing one of those rows is worse than losing a play: it is a claim a person
+      // STATED, a play may renew it and must never invent it, and it appears on no screen
+      // attached to a name — so a wrong one is never noticed. That is the whole reason this
+      // import refuses to guess.
+      if (person.board_game_picker_id) {
+        rekeyedBoardGameRows += rekeyBoardGamePerson(
+          String(person.board_game_picker_id).trim(),
+          person.id,
+          db,
+        );
+      }
     });
 
     for (const group of groups) {
@@ -346,6 +372,7 @@ export function importPeople({ force = false }: { force?: boolean } = {}): Peopl
     accountCount,
     groupIds: groups.map((group) => group.id),
     personIds: people.map((person) => person.id),
+    rekeyedBoardGameRows,
     rosterCount,
   });
 }
@@ -382,7 +409,8 @@ export function ensurePeopleImported(): PeopleImportReport {
   if (result.imported) {
     console.log(
       `[people] imported ${result.personIds.length} person(s), ${result.accountCount} account(s), ` +
-        `${result.rosterCount} roster place(s) across ${result.groupIds.length} group(s) — from ${result.file}`,
+        `${result.rosterCount} roster place(s) across ${result.groupIds.length} group(s), ` +
+        `${result.rekeyedBoardGameRows} board-game row(s) re-keyed — from ${result.file}`,
     );
   } else if (result.problems.length) {
     console.log(`[people] ${result.reason}:`);
