@@ -35,6 +35,7 @@
 // happens on the way in, the way `toBggId` is the one place on the way out. A `NaN` written as
 // text would compare false against everything and be invisible.
 import type { InteractionType } from '../../boardgames/types.js';
+import type { SourceRow } from '../../boardgames/import/bgg.js';
 import {
   type GroupingReview,
   type GroupingRules,
@@ -60,26 +61,11 @@ export interface ImportStats {
   gamesWithUntaggedInteraction: number;
 }
 
-/** One physical box as an upstream row describes it. The shared shape of CSV and XML API. */
-export interface SourceRow {
-  name: string;
-  kind: 'standalone' | 'expansion';
-  bggId: number | null;
-  minPlayers: number;
-  maxPlayers: number;
-  bestWith: number[];
-  recommendedWith: number[];
-  weight: number | null;
-  minPlaytime: number | null;
-  maxPlaytime: number | null;
-  minAge: number | null;
-  yearPublished: number | null;
-  rating: number | null;
-  publishers: string[];
-  versionNickname: string | null;
-  versionYear: number | null;
-  versionLanguages: string[];
-}
+// `SourceRow` is declared ONCE, in `boardgames/import/bgg.ts`, and imported here as a TYPE so
+// nothing in the store layer's runtime graph reaches the fetch module. Two copies of this shape
+// would drift a field at a time, and a field that drifts is a column that silently stops being
+// written.
+export type { SourceRow };
 
 /** A listing id as the TEXT column holds it. Non-finite becomes NULL, never the string `NaN`. */
 export const asBggText = (value: number | null | undefined): string | null =>
@@ -98,14 +84,18 @@ const parseStringList = (json: string | null): string[] => {
 };
 
 /**
- * The one thing a collection export cannot tell us. It carries no mechanics and no categories,
- * so "co-op / versus / teams" has to come from the enrichment pass or from somebody tagging it.
+ * A PLACEHOLDER, and named so it cannot be mistaken for the real thing.
  *
- * Everything untagged is `['competitive']` with `interaction_types_source = 'derived'`, and the
- * screen shows that as a GUESS rather than as a fact. The enrichment pass replaces it with the
- * real set the moment it runs.
+ * A collection export carries no mechanics and no categories, so "co-op / versus / teams"
+ * cannot be worked out from it. Everything untagged becomes `['competitive']` with
+ * `interaction_types_source = 'derived'`, and the screen paints that as a GUESS rather than as
+ * a fact.
+ *
+ * ⚠️ `boardgames/enrich/geekdo.ts` exports a `deriveInteractionTypes` that is the REAL
+ * derivation, off an upstream item's mechanics. This one is what stands in until that pass
+ * runs. Two different answers to one question, so they do not share a name.
  */
-const deriveInteractionTypes = (row: SourceRow | undefined): InteractionType[] =>
+const guessInteractionTypes = (row: SourceRow | undefined): InteractionType[] =>
   row?.maxPlayers === 1 ? ['solo'] : ['competitive'];
 
 const merge = (rows: SourceRow[]) => {
@@ -284,7 +274,7 @@ export function importBoardGameRows(
       // of them rather than merging an empty list into 1–1 players.
       const statRows = standaloneRows.length > 0 ? standaloneRows : gameRows;
       const merged = merge(statRows);
-      const interactionTypes = deriveInteractionTypes(statRows[0] ?? gameRows[0]);
+      const interactionTypes = guessInteractionTypes(statRows[0] ?? gameRows[0]);
 
       upsertGame.run({
         best_with: JSON.stringify(merged.bestWith),

@@ -33,9 +33,22 @@ const result = await build({
   banner: {
     js: "import{createRequire}from'node:module';const require=createRequire(import.meta.url);",
   },
-  // Nothing. Deliberately.
+  // ONE entry, and it is the case this comment always described.
   //
-  // Every runtime dep here is pure JS with no native addon and no
+  // `sharp` is a NATIVE ADDON: its real work is a `.node` binary shipped in a
+  // platform-specific optional dependency (`@img/sharp-linux-x64`), which esbuild
+  // cannot inline. Bundling its JavaScript anyway "works" — the banner's
+  // `createRequire` still finds the binary in `node_modules` — but it grows the
+  // bundle by ~3 MB of code that then loads its addon from outside the bundle
+  // anyway, which is the worst of both. It stays out, and the Dockerfile's
+  // `yarn workspaces focus queuepilot-server --production` layer is what installs
+  // it in the runtime image. That layer already exists; this is the entry it was
+  // described as being a safety net for.
+  //
+  // The board-game enrichment is the only thing that needs it — it pads box art to
+  // a square before storing it, so the tile's `object-cover` is a no-op.
+  //
+  // Every OTHER runtime dep is pure JS with no native addon and no
   // resolved-at-runtime asset path: `hono`, `@hono/node-server`,
   // `@charcuterie/server`, `undici`, `yaml` and `mqtt` all bundle clean.
   //
@@ -51,7 +64,7 @@ const result = await build({
   // If a dep ever DOES need to stay out (a native addon, or something that
   // resolves a file from `import.meta.url`), add it here AND make sure the
   // Dockerfile's production `npm ci --omit=dev` layer still installs it.
-  external: [],
+  external: ['sharp'],
 })
 
 for (const warning of result.warnings) {
