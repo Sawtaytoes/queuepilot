@@ -3758,3 +3758,176 @@ body.rowdragging {
   justify-content: space-between;
   font-size: 0.9rem;
 }
+
+/* ===================================================================
+   TONIGHT (`views/TonightView.tsx`)
+
+   Who's here -> activity -> filters -> Pick | Queues -> which queue -> Go.
+
+   Everything below is app LAYOUT — the page's sections, three grids and the gaps
+   between them. Nothing here paints a control: the checkboxes, the radios, the
+   segments, the badges and both buttons are Charcuterie components configured by
+   props, which is the rule this app broke three times in one screen before
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+
+   ⚠️ `.subhint` is DEFINED HERE and is not borrowed. Every other rule for it in this
+   file is scoped under a modal id (`#setmodal`, `#dynmodal`, `#startmodal`), so the
+   same class on this page would render unstyled while looking styled in the diff —
+   exactly the failure `borrowed-class-audit.ts` exists to report
+   (decision `2026-08-21-a-class-name-is-not-a-style`).
+   =================================================================== */
+
+/* A form is a reading surface, so it takes a measure rather than a 2560px window.
+   The GRIDS inside it still take their column count from THIS box's width, which is
+   the standing rule — a list of cards gains columns as its container widens, and the
+   container is what is capped, never the item. */
+#tonight {
+  max-width: 1180px;
+}
+.tsection {
+  margin: 0 0 24px;
+}
+.tlabel {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-content-muted);
+}
+#tonight .subhint {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--color-content-muted);
+}
+
+/* ---- 1. Who's here ----
+   `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own
+   scope — the same note `.groupform .libs` and `.pendinglibs .libs` carry. */
+.peoplebox .libs {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(170px, 100%), 1fr)
+    );
+  gap: 8px;
+}
+/* The guests row: a number field between its two steppers. `align-items: end` puts the
+   buttons on the input's baseline rather than on the label's. */
+.gueststep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin-top: 14px;
+}
+.gueststepbtns {
+  display: flex;
+  gap: 6px;
+}
+/* WIDTH only, and only because a number input defaults to a text field's measure — a
+   two-digit guest count in a 20rem box reads as a name field. Layout, which is one of
+   the three things the component rule leaves to the app. */
+#tonight .gueststep input[type="number"] {
+  inline-size: 6.5rem;
+}
+
+/* ---- 2. Activity, and 5. Which queue ----
+   Both are one choice out of several, so both are a `RadioGroup` — a real
+   `radiogroup` of `radio`s, announced as "3 of 6", rather than a row of pressed
+   buttons that says nothing about being exclusive.
+
+   The class makes the group a GRID. `RadioGroup` lays its options out as
+   `flex flex-col`; `app.css` is unlayered and Tailwind's utilities are in
+   `@layer utilities`, so `display: grid` here wins deterministically rather than by
+   source order. `auto-fill` and not `auto-fit`: with six tiles and a wide container,
+   `auto-fit` would stretch them to a quarter of the page each, which is the
+   full-width-row problem in a new costume. */
+.actgrid {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(200px, 100%), 1fr)
+    );
+  gap: 8px;
+}
+/* A two-line label wants its radio at the TOP of the tile, not centred against both
+   lines. Alignment only. */
+.actgrid > [role="radio"],
+.queuegrid > [role="radio"] {
+  align-items: start;
+}
+.actlbl,
+.qcard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.actname,
+.qcardname {
+  font-weight: 600;
+  color: var(--color-content-primary);
+}
+.acthint {
+  font-size: 0.82rem;
+  color: var(--color-content-muted);
+}
+.queuegrid {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(260px, 100%), 1fr)
+    );
+  gap: 8px;
+}
+.qcardmeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* Exactly one queue matches, so it is SHOWN rather than asked about — a question with
+   one answer is not a question. It reads as a card and not as a control, which is the
+   difference the decision's "the sole/selected row or a quiet label" is drawing. */
+.qimplied {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface-raised);
+}
+#tonight .qimplied .subhint {
+  margin: 0;
+}
+
+/* ---- 3. Activity filters (Pick only) ---- */
+.tfilters {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(250px, 100%), 1fr)
+    );
+  gap: 12px;
+}
+.tfilter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.tfilterlbl {
+  font-size: 0.9rem;
+  color: var(--color-content-secondary);
+}
+
+/* ---- 6. Go ---- */
+.tgo {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+}
+#tonight .tgo .subhint {
+  margin: 0;
+  max-width: 46ch;
+}

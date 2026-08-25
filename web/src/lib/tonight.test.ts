@@ -1,6 +1,4 @@
 import { describe, expect, test } from "vitest"
-
-import type { RegistrySet } from "./types"
 import {
   ACTIVITIES,
   activityForSet,
@@ -14,6 +12,7 @@ import {
   type TonightQueue,
   tonightQueues,
 } from "./tonight"
+import type { RegistrySet } from "./types"
 
 /**
  * The Tonight surface's two rules and its one settled list.
@@ -56,9 +55,9 @@ describe("the activity tiles", () => {
   })
 
   test("there is no Retro Games tile — MiSTer is Video Games", () => {
-    expect(
-      ACTIVITIES.map((a) => a.label),
-    ).not.toContain("Retro Games")
+    expect(ACTIVITIES.map((a) => a.label)).not.toContain(
+      "Retro Games",
+    )
     expect(
       activityForSet({
         behavior: undefined,
@@ -183,9 +182,9 @@ describe("the people filter", () => {
     })
 
     expect(queueMatchesPeople(both, ["ada"])).toBe(false)
-    expect(
-      queueMatchesPeople(both, ["ada", "grace"]),
-    ).toBe(true)
+    expect(queueMatchesPeople(both, ["ada", "grace"])).toBe(
+      true,
+    )
     // Nobody ticked is the unfiltered list, not the empty one — a filter with nothing in
     // it matches everything, and the strict reading of the rule gets this backwards.
     expect(queueMatchesPeople(both, [])).toBe(true)

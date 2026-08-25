@@ -42,6 +42,7 @@ import { PendingView } from "./views/PendingView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
 import { QueueView } from "./views/QueueView"
+import { TonightView } from "./views/TonightView"
 
 /**
  * The four overlays are code-split and hung off overlay state — they are ~1,400
@@ -264,6 +265,10 @@ export function App() {
         isHidden={route.view !== "play"}
       />
       <PendingView isHidden={route.view !== "pending"} />
+      <TonightView
+        isHidden={route.view !== "tonight"}
+        step={route.view === "tonight" ? route.step : null}
+      />
       <QueuesView
         isHidden={route.view !== "queues"}
         toolbar={isNarrow ? toolbar : null}
@@ -321,6 +326,21 @@ function computeChrome(
       heading: "Pending",
       isSubHidden: false,
       sub: "New in your libraries, and not picked up by any pool or queue yet.",
+    }
+  }
+
+  if (route.view === "tonight") {
+    return {
+      back: { label: "‹ Play", target: "/" },
+      // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending makes of it.
+      // Without it the landing's search, queue filter and "New queue" all leak into this
+      // page's header.
+      bodyClasses: ["queue-view"],
+      documentTitle: "Tonight — QueuePilot",
+      editableSetId: null,
+      heading: "Tonight",
+      isSubHidden: false,
+      sub: "Who's here, what you're doing, and Go.",
     }
   }
 

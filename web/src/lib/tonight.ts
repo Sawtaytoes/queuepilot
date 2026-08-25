@@ -242,9 +242,7 @@ export function queueMatchesPeople(
     ...queue.optionalPeople,
   ])
 
-  if (
-    !selectedPersonIds.every((id) => onQueue.has(id))
-  ) {
+  if (!selectedPersonIds.every((id) => onQueue.has(id))) {
     return false
   }
 
@@ -351,5 +349,124 @@ export function queuesForSurpriseScope(
     (queue) =>
       scope.activities.includes(queue.activity) &&
       queueMatchesPeople(queue, selectedPersonIds),
+  )
+}
+
+/**
+ * ── The activity filters ─────────────────────────────────────────────────────────────
+ *
+ * Step 3 of the form, and **only when the segment is on Pick**. There is never a second
+ * "Mode" row: Pick | Queues IS how the session runs, and a filter that repeated it would be
+ * the thing the decision spends a clause forbidding
+ * (`2026-08-22-…-tonight-pick` §5).
+ *
+ * The set per activity, and each default, come from the settled mockup rather than from
+ * taste. Two are worth knowing because they are not the neutral answer: board games and
+ * video games open with **Keep it light: On**, and both open with **knows-how: Someone**
+ * rather than Any. Reading opens with Keep it light Off.
+ *
+ * ⚠️ **These are collected but not yet acted on.** The pick engine is WP-7 and WP-8; until
+ * one of them lands, a filter's value goes nowhere and the screen says so under Go rather
+ * than implying a pick it cannot make.
+ */
+export type ActivityFilter = {
+  id: string
+  label: string
+  /** `segment` for two or three short answers; `picker` once the list wants a panel. */
+  control: "picker" | "segment"
+  options: readonly { value: string; label: string }[]
+  defaultValue: string
+}
+
+const KNOWS_HOW = (label: string): ActivityFilter => ({
+  control: "segment",
+  defaultValue: "someone",
+  id: "knows",
+  label,
+  options: [
+    { label: "Any", value: "any" },
+    { label: "Someone", value: "someone" },
+    { label: "All", value: "all" },
+  ],
+})
+
+const KEEP_IT_LIGHT = (
+  defaultValue: string,
+): ActivityFilter => ({
+  control: "segment",
+  defaultValue,
+  id: "light",
+  label: "Keep it light",
+  options: [
+    { label: "Off", value: "off" },
+    { label: "On", value: "on" },
+  ],
+})
+
+export const ACTIVITY_FILTERS: Record<
+  ActivityId,
+  readonly ActivityFilter[]
+> = {
+  "board-games": [
+    {
+      control: "segment",
+      defaultValue: "best",
+      id: "fit",
+      label: "Player-count fit",
+      options: [
+        { label: "OK", value: "ok" },
+        { label: "Best", value: "best" },
+      ],
+    },
+    KNOWS_HOW("Knows the rules"),
+    KEEP_IT_LIGHT("on"),
+  ],
+  movies: [
+    {
+      control: "picker",
+      defaultValue: "120",
+      id: "runtime",
+      label: "Runtime",
+      options: [
+        { label: "Any length", value: "any" },
+        { label: "90 minutes or less", value: "90" },
+        { label: "2 hours or less", value: "120" },
+        { label: "3 hours or less", value: "180" },
+      ],
+    },
+    {
+      control: "segment",
+      defaultValue: "any",
+      id: "seen",
+      label: "Seen before",
+      options: [
+        { label: "Any", value: "any" },
+        { label: "Rewatch", value: "rewatch" },
+      ],
+    },
+  ],
+  reading: [KEEP_IT_LIGHT("off")],
+  // A shows evening runs the rotation. Nothing to narrow, and an empty row is better than
+  // an invented control.
+  shows: [],
+  // Surprise Me narrows on its OWN screen — see `SURPRISE_SCOPES`.
+  surprise: [],
+  "video-games": [
+    KNOWS_HOW("Knows how to play"),
+    KEEP_IT_LIGHT("on"),
+  ],
+}
+
+/** Every filter for an activity at its default — what the form opens with. */
+export function defaultFilterValues(
+  activity: ActivityId | null,
+): Record<string, string> {
+  if (!activity) return {}
+
+  return Object.fromEntries(
+    ACTIVITY_FILTERS[activity].map((filter) => [
+      filter.id,
+      filter.defaultValue,
+    ]),
   )
 }
