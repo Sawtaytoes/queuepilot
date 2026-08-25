@@ -1,0 +1,88 @@
+# The Tonight surface's harness fixture — one queue per ACTIVITY, across four providers,
+# with two Reading queues so the "two or more force a choice" branch has something to draw.
+#
+# Nothing here is real data. The cast is the repo's own: Ada, Grace and Linus for people
+# (`tonight.people.yaml`), and the queue labels name them because that is what a queue's
+# label holds TODAY. WP-5 replaces a label with the activity plus the people as badges;
+# until then a screenshot of this file is what the Which queue? step actually renders.
+global:
+  excluded_sections: []
+
+sets:
+  # ---- Movies. A Plex REWATCH rotation, which is what `activityForSet` reads to tell a
+  # Plex movies queue from a Plex shows one until WP-5 stores the activity on the queue.
+  - id: movie_night
+    label: Ada & Grace — Movies
+    kind: movies
+    source: rotation
+    behavior: rewatch
+    sections: [1]
+    item_sections: [1]
+
+  # ---- Shows. Two of them, so Shows is a real choice as well as Reading.
+  - id: after_dinner
+    label: Ada & Grace — Shows
+    kind: cartoons
+    source: rotation
+    behavior: progress
+    sections: [5]
+    item_sections: [5]
+  - id: linus_shows
+    label: Linus — Shows
+    kind: cartoons
+    source: queue
+    sections: [5]
+
+  # ---- Reading. Kavita, and TWO of them: this is the pair the "two or more force a
+  # choice" branch is shot against.
+  - id: manga_webtoons
+    label: Ada — Manga & Webtoons
+    kind: manga
+    source: queue
+    sections: []
+    providers:
+      - provider: kavita
+        profile: ""
+        libraries: ["2"]
+  - id: grace_comics
+    label: Grace — Comics
+    kind: manga
+    source: queue
+    sections: []
+    providers:
+      - provider: kavita
+        profile: ""
+        libraries: ["5"]
+
+  # ---- Board Games. The absorbed picker, over its HTTP seam.
+  - id: game_night
+    label: Family — Board Games
+    kind: movies
+    source: queue
+    sections: []
+    providers:
+      - provider: board-game-picker
+        profile: ""
+        libraries: []
+
+  # ---- Video Games. Steam and MiSTer BOTH, because they are one activity and not two —
+  # this is the pair that proves "Video Games" covers a device without naming it, and the
+  # pair that makes the provider badge appear on a queue card at all.
+  - id: steam_night
+    label: Linus — PC Games
+    kind: movies
+    source: queue
+    sections: []
+    providers:
+      - provider: steam
+        profile: ""
+        libraries: []
+  - id: arcade
+    label: Ada & Linus — Arcade
+    kind: movies
+    source: queue
+    sections: []
+    providers:
+      - provider: mister
+        profile: ""
+        libraries: []

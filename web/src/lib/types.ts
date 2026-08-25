@@ -721,6 +721,27 @@ export type ProviderBlockValue = {
  * pool editor already has a control labelled Profile. A group is ours, and may be a person
  * (Bob), an audience (Bob & Alice) or neither (Demo). See `server/src/groups.ts`.
  */
+/**
+ * One human, as `GET /api/people` serves one.
+ *
+ * Deliberately the three fields a SCREEN needs and nothing else. The store's `Person`
+ * carries provider accounts, a birth year, a maximum game weight and a beginner flag; a
+ * person's birth year is household data with no business crossing the wire to paint a
+ * checklist, so the route projects it away. Widening this is a deliberate act, not a
+ * convenience.
+ */
+export type Person = {
+  /** IMMUTABLE — the same promise a group id and a set id make. */
+  id: string
+  displayName: string
+  /** Roster order. Not an identity: a reorder must never change who somebody is. */
+  position: number
+}
+
+export type PeopleResponse = {
+  people: Person[]
+}
+
 export type Group = {
   /** IMMUTABLE — it is the URL (`/g/<id>`), so it is a promise to every bookmark. */
   id: string

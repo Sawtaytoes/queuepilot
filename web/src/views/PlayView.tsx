@@ -609,6 +609,12 @@ export function PlayView({
         >
           ＋ New picks queue
         </Button>
+        {/* TONIGHT, first among the links because it is where an EVENING starts — the rest
+            of this row configures the app. A new route beside this landing rather than a
+            replacement for it, so the landing keeps working while the absorb is built. */}
+        <Link id="gotonight" to="/tonight">
+          Tonight &rsaquo;
+        </Link>
         <Link id="gopending" to="/pending">
           What is new and unqueued ›
         </Link>

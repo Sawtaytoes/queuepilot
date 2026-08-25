@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/queues', '/q/bob', '/channels/shows', '/channels']) {
+for (const path of ['/', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -62,9 +62,30 @@ for (const [path, want] of [
   ['/queues', 'Picks'],
   ['/q/bob', 'Bob — Movies'],
   ['/channels/shows', 'Rules'],
+  // Tonight, and its Surprise Me STEP. The step is a second path on one view, so it is the
+  // case a `startsWith` router gets wrong in the direction that never fails loudly: match
+  // `/tonight` first and `/tonight/surprise` silently becomes the bare form.
+  ['/tonight', 'Tonight'],
+  ['/tonight/surprise', 'Tonight'],
 ] as const) {
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
   ok(`deep link ${path} renders "${want}"`, await heading(want));
+}
+
+// The Surprise Me step really is the STEP and not the bare route — the heading is the same
+// on both, so the heading alone cannot tell them apart.
+{
+  await page.goto(`${BASE}/tonight/surprise`, { waitUntil: 'domcontentloaded' });
+  const isStep = await page
+    .waitForSelector('#tonight-surprise', { timeout: 30000 })
+    .then(() => true, () => false);
+  ok('/tonight/surprise renders the narrowing step, not the bare form', isStep);
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const survives = await page
+    .waitForSelector('#tonight-surprise', { timeout: 30000 })
+    .then(() => true, () => false);
+  ok('…and survives a reload, so the SPA fallback answers a nested path too', survives);
 }
 
 // A reload has to survive, which is the entire point of the fallback.
