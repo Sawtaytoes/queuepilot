@@ -94,6 +94,28 @@ describe("the whole house is one pool of cards", () => {
       describeRule({ ...kids, minPresent: null }, nameOf),
     ).toBe("All of Ada, Grace Hopper. Linus may join.")
   })
+
+  it('does not say "All of Ada" about a group of one', () => {
+    // One person is not a quantity, and a group of one is most of them. It was on every card
+    // in the roster tray before this.
+    expect(
+      describeRule(
+        {
+          id: "solo",
+          label: "Solo",
+          minPresent: null,
+          roster: [
+            {
+              personId: "ada",
+              position: 0,
+              role: "required",
+            },
+          ],
+        },
+        (id) => id,
+      ),
+    ).toBe("ada")
+  })
 })
 
 describe("three trays, and Everyone else is the absence of a row", () => {
@@ -282,9 +304,21 @@ describe("there is no queue name — the activity is the name", () => {
   it("numbers the second of two identical cards and not the first", () => {
     const numbers = queueNumbers(
       [
-        { activity: "watching", id: "a" },
-        { activity: "watching", id: "b" },
-        { activity: "reading", id: "c" },
+        {
+          activity: "watching",
+          id: "a",
+          source: "queue" as const,
+        },
+        {
+          activity: "watching",
+          id: "b",
+          source: "queue" as const,
+        },
+        {
+          activity: "reading",
+          id: "c",
+          source: "queue" as const,
+        },
       ],
       {
         a: [
@@ -321,11 +355,41 @@ describe("there is no queue name — the activity is the name", () => {
     ).toBe("Movies & Shows 2")
   })
 
+  it("does not let a filtered POOL eat a curated queue's number", () => {
+    // They are two different things on two different pages and never sit beside each other.
+    // Before this, the landing fixture's first three curated Movies queues came out 3, 4, 5.
+    const numbers = queueNumbers(
+      [
+        {
+          activity: "watching",
+          id: "pool",
+          source: "rotation" as const,
+        },
+        {
+          activity: "watching",
+          id: "a",
+          source: "queue" as const,
+        },
+      ],
+      { a: [], pool: [] },
+    )
+    expect(numbers.get("pool")).toBeNull()
+    expect(numbers.get("a")).toBeNull()
+  })
+
   it("does not collide two queues with different people", () => {
     const numbers = queueNumbers(
       [
-        { activity: "watching", id: "a" },
-        { activity: "watching", id: "b" },
+        {
+          activity: "watching",
+          id: "a",
+          source: "queue" as const,
+        },
+        {
+          activity: "watching",
+          id: "b",
+          source: "queue" as const,
+        },
       ],
       {
         a: [

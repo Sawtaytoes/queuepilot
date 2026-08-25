@@ -523,11 +523,17 @@ export function QueuesView({
 
   const playingSet = activeSet(now, data)
 
-  // WP-5. Two queues may share people and activity — "Allow, and add a number." Computed over
-  // the REGISTRY order so the number is stable: the first Movies & Shows queue is unnumbered
-  // forever, and creating a second one never renumbers the first.
+  // WP-5. Two queues may share people and activity — "Allow, and add a number."
+  //
+  // Over the shelves THIS PAGE DRAWS, in the order it draws them, and not over the registry.
+  // A number is how you tell two cards apart, so it only means anything among cards somebody
+  // can see at once: numbering the registry made this page open at "Movies & Shows 3",
+  // because two filtered pools on the Pools page had taken 1 and 2.
+  const shelfIds = queueIds(data)
   const numbers = queueNumbers(
-    reg?.sets ?? [],
+    shelfIds
+      .map((id) => reg?.sets.find((s) => s.id === id))
+      .filter((s): s is NonNullable<typeof s> => s != null),
     people.byQueue,
   )
 
@@ -537,7 +543,7 @@ export function QueuesView({
       <div id="shelves" ref={shelvesRef}>
         {isHidden
           ? null
-          : queueIds(data).map((id) => {
+          : shelfIds.map((id) => {
               const q = data!.sets[id]!
               const registrySet = reg?.sets.find(
                 (s) => s.id === id,

@@ -1864,8 +1864,16 @@ body.queue-view #tools {
 #startmodal {
   width: min(460px, 92vw);
 }
+/* WIDER SINCE WP-5, and the number is not a taste call.
+   The editor now holds the three trays, which are a Charcuterie `Board`. That component
+   chooses three-lanes-across versus one-lane-plus-a-segmented-control from a CONTAINER query
+   at `cq-lg` (48rem / 768px) on its own box — so at the old 440px the board is permanently in
+   its narrow form and the "whole house at once" the editor exists for is never on screen at
+   any window width. 920px minus this padding clears 768px, which is the smallest width that
+   shows all three trays side by side. `92vw` still wins on a narrow window, and the board
+   drops back to one lane there on its own, which is the Narrow View this is meant to have. */
 #setmodal {
-  width: min(440px, 92vw);
+  width: min(920px, 92vw);
 }
 #dynmodal {
   width: min(520px, 94vw);

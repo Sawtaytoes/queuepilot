@@ -144,6 +144,9 @@ export function describeMembership(membership: GroupMembership, nameOf: (id: str
 
   let sentence: string;
   if (required.length === 0) sentence = 'Anybody in this group';
+  // One person is not a quantity. "All of Ada" reads as a mistake, and it is what a group of
+  // one — which is most of them — would otherwise say on every card.
+  else if (required.length === 1) sentence = String(names[0]);
   else if (minimum >= required.length) sentence = `All of ${names.join(', ')}`;
   else if (minimum === 1) sentence = `At least one of ${names.join(', ')}`;
   else sentence = `At least ${minimum} of ${names.join(', ')}`;

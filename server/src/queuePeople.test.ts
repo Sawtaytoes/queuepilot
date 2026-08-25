@@ -87,6 +87,16 @@ describe('a group carries its own membership rule', () => {
       'All of ADA, GRACE',
     );
   });
+
+  it('does not say "All of Ada" about a group of one', () => {
+    // One person is not a quantity, and a group of one is most of them.
+    expect(
+      describeMembership(
+        { groupId: 'solo', minPresent: null, roster: [{ personId: 'ada', position: 0, role: 'required' }] },
+        (id) => id,
+      ),
+    ).toBe('ada');
+  });
 });
 
 describe('a group still resolves to exactly ONE provider profile', () => {

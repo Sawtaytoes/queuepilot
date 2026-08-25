@@ -559,6 +559,14 @@ export function SetModal() {
       }
       titleId="setmodal-title"
     >
+      {/* THE NAME IS NOT WHAT THE LIST SHOWS ANY MORE, and the hint says so rather than
+          leaving the editor contradicting the page behind it. Since WP-5 a queue card reads
+          its ACTIVITY and its people; this string stays because it is still the queue's
+          searchable name, still what `sets.yaml` carries and still what the delete
+          confirmation quotes — and because the owner kept the right to type one:
+          *"If I want to customize queue names, I can. And in this case, I've already
+          customized my one Kavita queue."* What is gone is the GENERATED name and its
+          override switch (decision `2026-08-25-a-queue-is-people-plus-an-activity` §4). */}
       <label className="field">
         Name
         <input
@@ -571,6 +579,11 @@ export function SetModal() {
           value={label}
         />
       </label>
+      <p className="subhint" id="set-label-hint">
+        The queue list shows the activity and the people.
+        This name stays searchable and is what the config
+        file carries.
+      </p>
       <label className="field">
         Type
         {/* Keyed on OPENNESS, because this modal never unmounts — `<SetModal />`

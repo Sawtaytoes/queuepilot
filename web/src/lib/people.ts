@@ -117,6 +117,10 @@ export function describeRule(
   let sentence: string
   if (required.length === 0)
     sentence = "Anybody in this group"
+  // One person is not a quantity. "All of Ada" reads as a mistake, and it is what a group of
+  // one — which is most of them — would otherwise say on every card.
+  else if (required.length === 1)
+    sentence = String(names[0])
   else if (minimum >= required.length)
     sentence = `All of ${names.join(", ")}`
   else if (minimum === 1)
@@ -268,7 +272,10 @@ function renumber(
  * queue never renumbers the first.
  */
 export function queueNumbers(
-  sets: readonly Pick<RegistrySet, "id" | "activity">[],
+  sets: readonly Pick<
+    RegistrySet,
+    "id" | "activity" | "source"
+  >[],
   membersBySet: Readonly<Record<string, QueueMember[]>>,
 ): Map<string, number | null> {
   const seen = new Map<string, number>()
@@ -276,6 +283,12 @@ export function queueNumbers(
 
   for (const set of sets) {
     const signature = [
+      // SOURCE is in the signature, and it has to be. A curated queue and a filtered pool are
+      // two different things on two different pages and never sit beside each other, so a
+      // pool eating number 1 makes the Ordered Queues page start at 3 — which reads as a bug
+      // rather than as a disambiguation. Measured, not guessed: the landing fixture's first
+      // three curated Movies queues came out 3, 4 and 5.
+      set.source,
       set.activity,
       ...(membersBySet[set.id] ?? [])
         .map((m) => `${m.role}:${m.kind}:${m.id}`)
