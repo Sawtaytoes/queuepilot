@@ -10,10 +10,8 @@
 // those are the household. The cast is the repo's own — Ada, Grace and Linus
 // (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live`).
 //
-// ⚠️ The card in frame 1 says `guests=2` rather than naming a person, and that is the
-// FIXTURE's constraint rather than the feature's: none of the Tonight fixture's queues
-// carries a roster, so ticking a name filters every queue out. Guests are the other half of
-// "who's here" and satisfy the same rule.
+// Frame 1's card is "Ada · Reading" — the example the absorb brief §2 gives for a preset
+// somebody would actually use.
 //
 //   PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
 //     server/node_modules/.bin/tsx e2e/shot-tonight-preset.ts --tag=after
@@ -61,8 +59,8 @@ try {
 
   // ── 1. A VALID PRESET CARD ──────────────────────────────────────────────────────── //
   // BEFORE: the Who's-here form, because the address means nothing yet.
-  // AFTER:  the result card, with the queue that was drawn and a reroll.
-  await tap('/tonight/go?activity=movies&guests=2');
+  // AFTER:  the result card, with the queue the card's people resolved to, and a reroll.
+  await tap('/tonight/go?activity=reading&people=ada');
   await shot('valid-card');
 
   // ── 2. A CARD THAT NAMES NOBODY ─────────────────────────────────────────────────── //

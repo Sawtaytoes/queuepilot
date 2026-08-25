@@ -60,17 +60,12 @@ try {
 
   // ── 1. A VALID PRESET LANDS ON THE RESULT CARD ──────────────────────────────────── //
   //
-  // Movies is queue-first: the draw picks one queue for the activity and the people at the
-  // table, and the card names it. `movie_night` is the fixture's Plex movies rotation.
-  //
-  // ⚠️ The card says `guests=2` rather than naming a person, and that is the FIXTURE's
-  // constraint rather than the feature's. None of the Tonight fixture's queues carries a
-  // roster (WP-5's `queue_people` rows are seeded from groups, and the fixture has none), so
-  // ticking a name filters every queue out — which case 6 pins as its own behaviour. Guests
-  // are the other half of "who's here" and they satisfy the same rule: an anonymous seat is
-  // still somebody at the table.
+  // "Ada · Reading" — the example the absorb brief §2 gives for a preset somebody would
+  // actually use. Reading is queue-first, so the draw picks one queue for the activity and
+  // the people the card names; `manga_webtoons` is the fixture's Kavita queue and Ada is the
+  // one person filed on it.
   {
-    await tap('/tonight/go?activity=movies&guests=2');
+    await tap('/tonight/go?activity=reading&people=ada');
 
     ok('a valid preset card lands on /result', path() === '/result', page.url());
     ok('…and a result CARD is on the screen', await isVisible('#result-card'));
@@ -85,8 +80,8 @@ try {
 
     const card = (await page.locator('#result-card').textContent()) ?? '';
     ok(
-      '…naming the queue that was drawn',
-      card.includes('Movies'),
+      '…naming the queue the CARD’s people resolved to',
+      card.includes('Manga'),
       card.replace(/\s+/g, ' ').slice(0, 120),
     );
 
@@ -94,6 +89,19 @@ try {
     // a queue arrival — and that one has no reroll because the queue already chose.)
     ok('…with a reroll, because a preset picked and a queue did not', await isVisible('#result-reroll'));
   }
+
+  // ── 1b. GUESTS ALONE ARE ALSO "WHO'S HERE" ──────────────────────────────────────── //
+  //
+  // An anonymous seat is somebody at the table. A card for a room whose occupants have no
+  // roster rows still draws — which is what stops the who's-here rule from meaning "only
+  // people the app already knows about".
+  {
+    await tap('/tonight/go?activity=movies&guests=2');
+
+    ok('a card carrying only guests still draws', path() === '/result', page.url());
+    ok('…and lands on a card', await isVisible('#result-card'));
+  }
+
 
   // ── 2. THE CARD'S ADDRESS DOES NOT SURVIVE IN THE HISTORY ───────────────────────── //
   //
