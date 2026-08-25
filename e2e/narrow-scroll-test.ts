@@ -187,7 +187,9 @@ for (const width of WIDTHS) {
     // every one of them is a `repeat(auto-fill, minmax(min(Xpx, 100%), 1fr))` — the
     // `min()` is what lets the last column collapse below its own floor on a screen
     // narrower than one card, and dropping it is how a grid pushes the page sideways.
-    ['/tonight', '#tonight:not([hidden]) .actgrid'],
+    // Two of the three are Charcuterie's now (`RadioGroup itemShape="tile"`), which is
+    // where that `min()` moved to rather than where it went.
+    ['/tonight', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]'],
     ...(queueId ? [[`/q/${queueId}`, '#queue:not([hidden]) .add']] : []),
   ] as const;
 

@@ -3856,93 +3856,32 @@ body.rowdragging {
 }
 
 /* ---- 2. Activity, and 5. Which queue ----
-   Both are one choice out of several, so both are a `RadioGroup` — a real
-   `radiogroup` of `radio`s, announced as "3 of 6", rather than a row of pressed
-   buttons that says nothing about being exclusive.
+   Both are one choice out of several, so both are a Charcuterie `RadioGroup` with
+   `itemShape="tile"` — the grid, the card, the name, the hint and the selected edge are
+   all the library's.
 
-   The class makes the group a GRID. `RadioGroup` lays its options out as
-   `flex flex-col`; `app.css` is unlayered and Tailwind's utilities are in
-   `@layer utilities`, so `display: grid` here wins deterministically rather than by
-   source order. `auto-fill` and not `auto-fit`: with six tiles and a wide container,
-   `auto-fit` would stretch them to a quarter of the page each, which is the
-   full-width-row problem in a new costume. */
-.actgrid {
-  display: grid;
-  grid-template-columns: repeat(
-      auto-fill,
-      minmax(min(200px, 100%), 1fr)
-    );
-  gap: 8px;
-}
-/* ⚠️ THE ONE PLACE THIS FILE PAINTS A LIBRARY CONTROL, and it is the "shape the library
-   cannot express yet" exception rather than a tweak
-   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+   WP-6 painted that box here, in a `.actgrid > [role="radio"]` rule, and wrote that the
+   rule would be DELETED rather than adjusted once `@charcuterie/ui` had the shape. It
+   has one (`ui@3.16.0`), so this is where the rule used to be. Nothing in this file
+   paints a library control any more.
 
-   A CHOICE TILE — a bordered card carrying a name, a line of help and a selected state —
-   is the shape the owner settled on in the Tonight mockup, and `@charcuterie/ui` has no
-   prop for it: `RadioGroup` draws a form-length list of prose rows, and `MediaTile` is
-   built around artwork this screen has none of. Rather than hand-roll a `<div>` of
-   `<button aria-pressed>` — the toolbar-of-toggles pattern that says nothing about being
-   exclusive, and which is exactly what `RadioGroup` exists to replace — the semantics stay
-   the library's and only the BOX is the app's.
-
-   The real fix is a Charcuterie `ChoiceTile` (or an `appearance="tile"` on `RadioGroup`),
-   at which point every rule in this block is deleted rather than adjusted. It is a
-   library change with a publish cycle, and it does not block the surface.
-
-   `align-items: start` is the part that is only alignment: a two-line label wants its
-   radio at the top of the tile, not centred between both lines. */
-.actgrid > [role="radio"],
-.queuegrid > [role="radio"] {
-  align-items: start;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-  background: var(--color-surface-raised);
-  transition:
-    border-color var(--duration-fast) var(--ease-standard),
-    background-color var(--duration-fast)
-    var(--ease-standard);
+   What survives is the badge row inside a queue's hint, which is app CONTENT rather than
+   any part of the control around it. */
+.qcardmeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
 }
-.actgrid > [role="radio"]:hover,
-.queuegrid > [role="radio"]:hover {
-  border-color: var(--color-border-strong);
-}
-/* The selected tile is a BORDER and a surface, never colour alone — the same reason
-   `Stepper` refuses to say "done" with a hue. The radio dot inside it is still the thing
-   a screen reader reads. */
-.actgrid > [role="radio"][aria-checked="true"],
-.queuegrid > [role="radio"][aria-checked="true"] {
-  border-color: var(--color-intent-accent-solid);
-  background: var(--color-surface-overlay);
-}
-.actlbl,
+/* The implied queue keeps its own small card, because it is not a control: there is one
+   match, so there is nothing to choose and no radio to draw. */
 .qcard {
   display: flex;
   flex-direction: column;
   gap: 3px;
 }
-.actname,
 .qcardname {
   font-weight: 600;
   color: var(--color-content-primary);
-}
-.acthint {
-  font-size: 0.82rem;
-  color: var(--color-content-muted);
-}
-.queuegrid {
-  display: grid;
-  grid-template-columns: repeat(
-      auto-fill,
-      minmax(min(260px, 100%), 1fr)
-    );
-  gap: 8px;
-}
-.qcardmeta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
 }
 /* Exactly one queue matches, so it is SHOWN rather than asked about — a question with
    one answer is not a question. It reads as a card and not as a control, which is the

@@ -37,11 +37,19 @@ try {
 
   const open = async (path = '/tonight') => {
     await page.goto(`${server.base}${path}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#tonight:not([hidden]) .actgrid', { timeout: 30000 });
+    await page.waitForSelector('#tonight-activity [role="radiogroup"]', { timeout: 30000 });
     await page.waitForTimeout(900);
   };
 
   const tile = (label: string) => `#tonight-activity [role="radio"]:has-text("${label}")`;
+
+  /** A choice tile's NAME, without its hint.
+   *
+   * Charcuterie draws a tile as the radio's ring and then a label column, with the name at
+   * the top of that column — so this is a structural query rather than the `.actname` the
+   * app used to paint, which went with the CSS block the library replaced. What it asserts
+   * is unchanged: six names, in order. */
+  const TILE_NAME = ':scope > span:nth-child(2) > span:first-child';
   const mode = (label: string) => `#tonight-mode [role="radio"]:has-text("${label}")`;
 
   /** Which option a radiogroup PAINTS as chosen — the answer that has to agree with the
@@ -73,8 +81,10 @@ try {
 
   // ── 2. The tiles: SIX, in order, Surprise Me last, no brand anywhere ─────────────── //
   {
-    const labels = await page.$$eval('#tonight-activity [role="radio"] .actname', (els) =>
-      els.map((el) => el.textContent?.trim() ?? ''),
+    const labels = await page.$$eval(
+      '#tonight-activity [role="radio"]',
+      (els, sel) => els.map((el) => el.querySelector(sel)?.textContent?.trim() ?? ''),
+      TILE_NAME,
     );
     ok(
       'six activity tiles, in the settled order',
@@ -113,8 +123,10 @@ try {
   // ── 4. Which queue?: zero / one / two or more ────────────────────────────────────── //
   {
     // TWO reading queues in the fixture, so the host has to choose.
-    const readingCards = await page.$$eval('#tonight-queue .queuegrid [role="radio"]', (els) =>
-      els.map((el) => el.querySelector('.qcardname')?.textContent?.trim() ?? ''),
+    const readingCards = await page.$$eval(
+      '#tonight-queue [role="radiogroup"] [role="radio"]',
+      (els, sel) => els.map((el) => el.querySelector(sel)?.textContent?.trim() ?? ''),
+      TILE_NAME,
     );
     ok('two matches force a choice', readingCards.length === 2, JSON.stringify(readingCards));
 
@@ -123,7 +135,7 @@ try {
     await page.click(mode('Queues'));
     await page.waitForTimeout(400);
     ok('one match is implied rather than asked', Boolean(await page.$('#tonight-queue-only')));
-    ok('…and is not a chooser', !(await page.$('#tonight-queue .queuegrid')));
+    ok('…and is not a chooser', !(await page.$('#tonight-queue [role="radiogroup"]')));
 
     // The provider badge, which is the ONE place a brand belongs on this screen: two
     // backends serving one activity is exactly the condition the decision names.
