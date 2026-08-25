@@ -377,6 +377,19 @@ bite, and four of them bite silently.
   fingerprint changes. That is only safe while nothing here writes them. **The day the first
   writer lands (WP-4d), the source file must be retired in the same change** — a re-syncing
   importer between two live databases is how the owner's edit disappears on a restart.
+- **The provider READS these rows and still POSTS a play over HTTP, and the split is the point.**
+  WP-4e swapped `providers/board-game-picker-client.ts` onto `store/db/boardgames.ts`;
+  `providers/board-game-picker.ts` did not change, which is the proof the seam was in the right
+  place. `logPlay()` is the ONE call left on the wire, because it is a WRITE and the bullet above
+  binds it — do not "finish the swap" by pointing it at the store. Two consequences: a play
+  logged through `POST /api/providers/:id/progress/:itemId` lands in the sibling app and is
+  invisible here until the collection is staged and absorbed again, and it still records NO
+  PEOPLE (`agentic:docs/research/2026-08-25-a-logged-play-records-no-players.md`; WP-8 owns the
+  fix). Covers come off the staged `board-game-images/` directory rather than the LAN host.
+  `BOARD_GAME_TRANSPORT=http` puts every read back on the wire the way `STORE_BACKEND=yaml`
+  puts the store back on the files, and keeping the HTTP client runnable is what lets
+  `e2e/board-game-transport-parity-test.ts` compare the two on every CI run rather than once
+  ([decision](docs/decisions/2026-08-25-the-board-game-provider-reads-rows-and-still-posts-a-play-over-http.md)).
 
 Staging the source file is `server/src/tools/stage-board-game-collection.ts`, dry run by
 default. **Use it rather than `cp`.** The sibling app runs in WAL mode, so copying the
@@ -461,6 +474,7 @@ server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store back
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
 server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection absorb
 server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
+server/node_modules/.bin/tsx e2e/board-game-transport-parity-test.ts  # both board-game transports agree
 ```
 
 ⚠️ **`yarn workspace queuepilot-web run build` is not optional before the offline e2e gates.**

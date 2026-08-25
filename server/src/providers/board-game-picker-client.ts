@@ -1,28 +1,76 @@
-// Board Game Picker HTTP client. Thin, and shaped like the endpoints rather than like the
-// engine — the media-neutral shape is board-game-picker.ts's job, not this file's.
+// Board Game Picker as a QueuePilot data source — IN PROCESS since WP-4e, over HTTP before it.
 //
-// The picker exposes a DELIBERATELY NARROW integration surface: games and play timestamps,
-// and nothing carrying a person (board-game-picker decision
-// 2026-08-16-the-integration-api-is-games-only-never-the-collection). Its `/api/collection`
-// endpoint holds players, groups and who was at the table.
+// ── What changed, and what deliberately did not ──────────────────────────────────────────
 //
-//   THIS FILE MUST NEVER CALL `/api/collection`.
+// WP-4b absorbed the collection into this app's book of record. This file used to reach the
+// sibling app over HTTP for every read; it now answers the same four questions out of
+// `store/db/boardgames.ts`, and `providers/board-game-picker.ts` IS UNCHANGED. That is the
+// proof the seam was drawn in the right place: the provider was written against a client
+// interface, not against a URL, so swapping the transport is this file and nothing else.
 //
-// QueuePilot is a public repo; a convenience fetch of that URL would put the household's
-// people into this app's cache, logs and error reports. The offline suite asserts on it.
+// The wire shape is kept byte-for-byte rather than improved. `game()` returns exactly what
+// `GET /api/games/:id` returned — the sibling app's own `Game`, which is what our absorbed
+// `Game` is a port of — and `plays()` returns the same THREE KEYS its integration endpoint
+// wrote out by hand. So the two transports are comparable object-for-object, which is what
+// `e2e/board-game-transport-parity-test.ts` compares.
 //
-// Auth is an OPTIONAL bearer token. The picker only demands one when its own
-// BOARD_GAME_PICKER_API_TOKEN is set, so an unset token here is the normal deployment and
-// not the "unconfigured" failure Plex and Kavita treat it as.
+// ── ⚠️ ONE CALL IS STILL HTTP, AND IT IS THE WRITE ───────────────────────────────────────
+//
+// `logPlay()` still POSTs to the sibling app, on purpose. TWO BOOKS OF RECORD ARE OPEN: the
+// absorb REPLACES all twelve `board_game_*` tables whenever the source file's fingerprint
+// changes, so a play written here would be erased by the next start. `AGENTS.md` states the
+// rule — the day the first writer lands (WP-4d), the source file is retired in the SAME
+// change — and WP-4e is not that day. Do not "finish the swap" by pointing this at the store.
+//
+// Two consequences to know before you trust it:
+//
+//   1. A play logged through this route lands in the SIBLING app and is invisible to the
+//      reads above until the collection is staged and absorbed again. Nothing in this app's
+//      UI calls it — only `POST /api/providers/:id/progress/:itemId` does.
+//   2. It records NO PEOPLE, and that is a confirmed live defect, not a design choice:
+//      `board_game_play_people` holds 0 rows against 3 plays.
+//      `agentic:docs/research/2026-08-25-a-logged-play-records-no-players.md` has the
+//      evidence and WP-8 owns the fix. This package leaves it exactly as visible as it found
+//      it.
+//
+// ── The privacy rule survives the transport swap ─────────────────────────────────────────
+//
+// The old file's loudest line was THIS FILE MUST NEVER CALL `/api/collection`, because that
+// payload carries people, groups and who was at the table, and this repo is public. Reading
+// rows instead does not retire the rule, it relocates it: `plays()` maps to the same three
+// keys the sibling app's integration endpoint hand-wrote, so `playerIds` and `notes` are
+// dropped HERE rather than trusted not to arrive. `listBoardGamePlays()` returns both.
+//
+// ── The rollback ─────────────────────────────────────────────────────────────────────────
+//
+// `BOARD_GAME_TRANSPORT=http` puts every read back on the wire, the way `STORE_BACKEND=yaml`
+// puts the store back on the files. It is one env var and one restart, it keeps the HTTP
+// implementation honest by keeping it running, and it is what lets the parity gate compare
+// the two forever rather than once.
+import { readFileSync } from 'node:fs';
+import { basename, dirname, extname, join } from 'node:path';
+
+import type { Game } from '../boardgames/types.js';
+import { QUEUES_PATH } from '../config.js';
+import {
+  listBoardGameCategories,
+  listBoardGamePlays,
+  listBoardGames,
+  searchBoardGames,
+} from '../store/db/boardgames.js';
+import { bookOfRecord } from '../store/db/open.js';
+import type { SqliteDatabase } from '../store/sqlite.js';
 import type { ProviderCover } from '../types.js';
 
-// --- the DTOs, as loosely as the picker actually returns them ----------------- //
+// --- the DTOs, as loosely as the wire actually carried them ------------------- //
 //
-// Not in types.ts, for the same reason the Kavita DTOs are not: these are a REMOTE API's
-// response shapes. Every field is optional — a required field here would be a claim about
-// someone else's server that nothing in this repo can hold it to.
+// Not in types.ts, for the same reason the Kavita DTOs are not: these were a REMOTE API's
+// response shapes, and every field is optional because a required one would have been a claim
+// about someone else's server. They are kept optional now that the rows are local — the
+// provider reads them defensively either way, and narrowing them would be a change to the
+// contract `board-game-picker.ts` was written against.
 
-/** One physical box of a game. The picker's shelf location lives here. */
+/** One physical box of a game. The shelf location lives here. */
 export interface BoardGamesBoxDto {
   id?: string;
   label?: string;
@@ -31,7 +79,7 @@ export interface BoardGamesBoxDto {
   [field: string]: unknown;
 }
 
-/** A game, as `/api/games` and `/api/games/:id` return it. */
+/** A game. The same object `GET /api/games/:id` used to return. */
 export interface BoardGamesGameDto {
   id?: string;
   name?: string;
@@ -44,7 +92,7 @@ export interface BoardGamesGameDto {
   [field: string]: unknown;
 }
 
-/** A play row. Three keys, by the picker's own design — no players, no notes. */
+/** A play row. Three keys, and the two it does NOT carry are the point — see the header. */
 export interface BoardGamesPlayDto {
   id?: string;
   gameId?: string;
@@ -52,10 +100,14 @@ export interface BoardGamesPlayDto {
   [field: string]: unknown;
 }
 
-/** The `fetch` seam. Same shape as the Kavita client's, for the same offline-test reason. */
+/** The `fetch` seam. Still here: `logPlay` is still a POST, and so is a remote cover URL. */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
-export interface BoardGamesHttpClient {
+/**
+ * What `board-game-picker.ts` is written against. Both transports satisfy it, and the offline
+ * suites hand it a stub.
+ */
+export interface BoardGamesCollectionClient {
   _base: string;
   games(query: string, categories?: string[]): Promise<BoardGamesGameDto[]>;
   game(id: string): Promise<BoardGamesGameDto | null>;
@@ -65,16 +117,86 @@ export interface BoardGamesHttpClient {
   cover(gameId: string): Promise<ProviderCover>;
 }
 
+/**
+ * The name the provider imports.
+ *
+ * Kept as an alias rather than renamed at the call site, because `board-game-picker.ts` not
+ * changing IS this package's proof. It is no longer an accurate name — most of this client
+ * speaks to a table.
+ */
+export type BoardGamesHttpClient = BoardGamesCollectionClient;
+
 export interface BoardGamesClientOptions {
   baseUrl?: string;
-  /** Optional — see this file's header. Sent as `Authorization: Bearer` when present. */
+  /**
+   * Optional. The sibling app only demands one when its own `BOARD_GAME_PICKER_API_TOKEN` is
+   * set, so an unset token is the normal deployment and not the "unconfigured" failure Plex
+   * and Kavita treat it as. Still sent on `logPlay`.
+   */
   token?: string | null;
   fetchImpl?: FetchLike | null;
+  /** The book of record. Defaults to the process-wide handle, opened on FIRST READ. */
+  db?: SqliteDatabase | null;
 }
 
-export function boardGamesClient({
+/**
+ * `http` puts every read back on the wire. See the header — this is the rollback, and it is
+ * also what keeps the parity gate able to compare the two.
+ */
+export const BOARD_GAME_TRANSPORT: 'repository' | 'http' =
+  process.env.BOARD_GAME_TRANSPORT === 'http' ? 'http' : 'repository';
+
+/** Where the absorbed artwork was staged, beside the book of record.
+ * `tools/stage-board-game-collection.ts` is what puts it there. Derived from `QUEUES_PATH`
+ * rather than hard-coded to `/config`, exactly as `store/migrate/boardgames.ts` derives the
+ * collection file, so an offline harness pointed at a scratch directory gets its own. */
+export const imagesPath = (): string =>
+  process.env.BOARD_GAME_IMAGES_PATH || join(dirname(QUEUES_PATH), 'board-game-images');
+
+/** Content type off the file name. The staged art is `.webp`; the other two are what the
+ * enrichment wrote before it was. */
+const CONTENT_TYPES: Record<string, string> = {
+  '.avif': 'image/avif',
+  '.gif': 'image/gif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
+/**
+ * The play bound, as the sibling app's `parseSince()` computed it.
+ *
+ * Epoch SECONDS in, milliseconds out. A value that is not a finite number is NO BOUND rather
+ * than a bound of zero plays — the old endpoint says why, and it is worth repeating: silently
+ * returning nothing would read as "already played" and skip a game the owner queued.
+ */
+const playBound = (since: number | null | undefined): number | null =>
+  since == null || !Number.isFinite(since) ? null : since * 1000;
+
+/** The three keys, written out. Spreading the row would ship `playerIds` and `notes`. */
+const toPlayDto = (play: { gameId: string; id: string; playedAt: string }): BoardGamesPlayDto => ({
+  gameId: play.gameId,
+  id: play.id,
+  playedAt: play.playedAt,
+});
+
+// --- the HTTP transport ------------------------------------------------------- //
+
+/**
+ * The pre-WP-4e client, unchanged in behaviour and now reachable only through
+ * `BOARD_GAME_TRANSPORT=http`.
+ *
+ * It is not dead code. It is the rollback, it is the other half of the parity gate, and it is
+ * still the transport `logPlay` uses in BOTH modes.
+ *
+ *   THIS FILE MUST NEVER CALL `/api/collection`.
+ *
+ * That payload carries players, groups and who was at the table, and this repo is public.
+ */
+export function boardGamesHttpClient({
   baseUrl, token = null, fetchImpl = null,
-}: BoardGamesClientOptions = {}): BoardGamesHttpClient {
+}: BoardGamesClientOptions = {}): BoardGamesCollectionClient {
   if (!baseUrl) throw new Error('boardGamesClient needs a baseUrl');
   const base = String(baseUrl).replace(/\/+$/, '');
   const doFetch: FetchLike = fetchImpl || globalThis.fetch;
@@ -111,7 +233,7 @@ export function boardGamesClient({
     /**
      * Plays for one game, optionally only those since a moment.
      *
-     * `since` is EPOCH SECONDS here because that is what the entry stamp is; the picker
+     * `since` is EPOCH SECONDS here because that is what the entry stamp is; the endpoint
      * accepts both that and an ISO string.
      */
     plays(gameId: string, since: number | null = null): Promise<BoardGamesPlayDto[]> {
@@ -155,4 +277,143 @@ export function boardGamesClient({
       };
     },
   };
+}
+
+// --- the in-process transport ------------------------------------------------- //
+
+/**
+ * The same six answers, out of the book of record.
+ *
+ * Each read re-assembles from rows rather than caching. That is deliberate for the moment:
+ * WP-4d brings the first writers of these tables, and a cache with no invalidation hook would
+ * turn "the owner just edited a game" into "the owner just edited a game, restart the app".
+ * The whole collection is five queries; the shelf is a few hundred rows.
+ *
+ * The database handle is resolved PER CALL, never at construction. `providers/index.ts` builds
+ * a client for every board-game route on a server that may have no collection at all, and an
+ * eager `bookOfRecord()` would create `/config/queuepilot.sqlite` for a harness that never
+ * asked a board-game question.
+ */
+export function boardGamesRepositoryClient({
+  baseUrl, token = null, fetchImpl = null, db = null,
+}: BoardGamesClientOptions = {}): BoardGamesCollectionClient {
+  // Required even though nothing is fetched: `_base` is what `materialize()` builds
+  // `/play/<gameId>` out of, and that card is still a screen in the sibling app. WP-10 owns
+  // retiring it; this package ends at the transport.
+  if (!baseUrl) throw new Error('boardGamesClient needs a baseUrl');
+  const base = String(baseUrl).replace(/\/+$/, '');
+  const handle = (): SqliteDatabase => db ?? bookOfRecord();
+
+  // The one call that is still a POST, and one shared implementation of it.
+  const wire = boardGamesHttpClient({ baseUrl, fetchImpl, token });
+
+  /** A `Game` IS the DTO — this app's `Game` is a port of the one the endpoint serialised. */
+  const toDto = (game: Game): BoardGamesGameDto => game as unknown as BoardGamesGameDto;
+
+  return {
+    _base: base,
+
+    /**
+     * Search the shelf. `searchBoardGames` is the ported endpoint body, so the empty-term
+     * rule, the category scope, the publisher and year matching and the excluded-game rule
+     * are all the same code that answered over HTTP.
+     */
+    games(query: string, categories: string[] = []): Promise<BoardGamesGameDto[]> {
+      const database = handle();
+      return Promise.resolve(
+        searchBoardGames(listBoardGames(database), { categories, query }).map(toDto),
+      );
+    },
+
+    /** One title, or null — which is what the endpoint's 404 already meant. */
+    game(id: string): Promise<BoardGamesGameDto | null> {
+      const found = listBoardGames(handle()).find((game) => game.id === id);
+      return Promise.resolve(found ? toDto(found) : null);
+    },
+
+    /**
+     * Plays for one game, optionally only those since a moment.
+     *
+     * `since` is EPOCH SECONDS, because that is what the entry stamp is. Newest first, the
+     * ordering `listBoardGamePlays()` already guarantees — the provider only counts them, but
+     * an order that changes between transports is a difference waiting to matter.
+     */
+    plays(gameId: string, since: number | null = null): Promise<BoardGamesPlayDto[]> {
+      const after = playBound(since);
+      return Promise.resolve(
+        listBoardGamePlays(handle())
+          .filter((play) => play.gameId === gameId)
+          .filter((play) => {
+            if (after === null) return true;
+            const playedAt = Date.parse(play.playedAt);
+            return !Number.isNaN(playedAt) && playedAt >= after;
+          })
+          .map(toPlayDto),
+      );
+    },
+
+    categories(): Promise<string[]> {
+      return Promise.resolve(listBoardGameCategories(handle()));
+    },
+
+    /** ⚠️ STILL A POST TO THE SIBLING APP. The header says why, at length. */
+    logPlay(gameId: string): Promise<BoardGamesPlayDto | null> {
+      return wire.logPlay(gameId);
+    },
+
+    /**
+     * The box art, as BYTES, off the staged `board-game-images/` directory.
+     *
+     * The covers are NOT a cache — 32 of them the owner chose by hand, and the upstream that
+     * served the rest has turned access off — so they were copied across with the collection
+     * and this reads the copy. A path that is an absolute URL still goes over the network,
+     * because that was never the sibling app's host: it is an upstream image server, and the
+     * HTTP client fetched it directly too.
+     */
+    async cover(gameId: string): Promise<ProviderCover> {
+      const game = await this.game(gameId);
+      const imagePath = typeof game?.imagePath === 'string' ? game.imagePath : '';
+      if (!imagePath) throw new Error(`board-game-picker: game '${gameId}' has no box art`);
+
+      if (imagePath.startsWith('http')) {
+        const doFetch: FetchLike = fetchImpl || globalThis.fetch;
+        const res = await doFetch(imagePath, {});
+        if (!res.ok) throw new Error(`board-game-picker cover ${gameId} -> ${res.status}`);
+        return {
+          buffer: Buffer.from(await res.arrayBuffer()),
+          contentType: res.headers.get('content-type') || 'image/jpeg',
+        };
+      }
+
+      // `basename` and nothing else. The stored value is `/images/<hash>-600.webp` written by
+      // the sibling app's own enrichment, but it is still a TEXT COLUMN in a database this app
+      // no longer owns the writers of — joining it onto a directory with `join()` alone would
+      // let `../` out of that directory.
+      const file = join(imagesPath(), basename(imagePath));
+      let buffer: Buffer;
+      try {
+        buffer = readFileSync(file);
+      } catch {
+        throw new Error(`board-game-picker: box art for '${gameId}' is not staged at ${file}`);
+      }
+
+      return {
+        buffer,
+        contentType: CONTENT_TYPES[extname(file).toLowerCase()] || 'image/jpeg',
+      };
+    },
+  };
+}
+
+/**
+ * The client `board-game-picker.ts` gets when nothing hands it one.
+ *
+ * In process by default since WP-4e; `BOARD_GAME_TRANSPORT=http` is the rollback.
+ */
+export function boardGamesClient(
+  options: BoardGamesClientOptions = {},
+): BoardGamesCollectionClient {
+  return BOARD_GAME_TRANSPORT === 'http'
+    ? boardGamesHttpClient(options)
+    : boardGamesRepositoryClient(options);
 }
