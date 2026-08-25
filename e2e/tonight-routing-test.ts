@@ -21,8 +21,32 @@
 //
 // Run:  server/node_modules/.bin/tsx e2e/tonight-routing-test.ts   (repo root)
 import { TILE_ROUTES, TONIGHT_TILES } from '../server/src/tonight/routing.js';
-import { ACTIVITY_ROUTES } from '../web/src/lib/tonightRouting.js';
 import { startTonightServer, stopTonightServer } from './tonight-harness.js';
+
+/**
+ * The BROWSER's copy of the map, loaded at runtime rather than imported.
+ *
+ * `web/` compiles under bundler module resolution and writes extensionless relative imports;
+ * this workspace is `nodenext` and refuses them. A static import would therefore fail
+ * `yarn workspace queuepilot-e2e run typecheck` on the WEB file's own style, which is correct
+ * for the web and is not this suite's to change. Building the specifier at runtime keeps
+ * TypeScript out of it while `tsx` still loads the file — and it loads cleanly, because every
+ * import in that module is `import type` and is erased.
+ */
+const webRouting = (await import(
+  new URL('../web/src/lib/tonightRouting.ts', import.meta.url).href
+)) as {
+  ACTIVITY_ROUTES: Record<
+    string,
+    {
+      queueActivity: string | null;
+      engine: string;
+      providerKinds: readonly string[];
+      plannedProviderKinds: readonly string[];
+    }
+  >;
+};
+const { ACTIVITY_ROUTES } = webRouting;
 
 const PORT = 18847;
 
@@ -64,13 +88,14 @@ ok(
 
 for (const tile of TONIGHT_TILES) {
   const server = TILE_ROUTES[tile];
-  const web = ACTIVITY_ROUTES[tile];
+  const web = ACTIVITY_ROUTES[tile] ?? null;
   ok(
     `${tile}: the server's row and the browser's row are the same row`,
-    same(
-      [server.queueActivity, server.engine, server.providerKinds, server.plannedProviderKinds],
-      [web.queueActivity, web.engine, web.providerKinds, web.plannedProviderKinds],
-    ),
+    web !== null
+      && same(
+        [server.queueActivity, server.engine, server.providerKinds, server.plannedProviderKinds],
+        [web.queueActivity, web.engine, web.providerKinds, web.plannedProviderKinds],
+      ),
     JSON.stringify({ server, web }),
   );
 }
