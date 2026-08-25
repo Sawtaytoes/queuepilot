@@ -1,12 +1,12 @@
 import { readFile } from 'node:fs/promises';
-import { dirname, extname, join } from 'node:path';
+import { extname, join } from 'node:path';
 
 import { Hono } from 'hono';
 
 import { parsePickCriteria, SHORTLIST_SIZE } from '../boardgames/criteria.js';
+import { imagesDirectory } from '../boardgames/enrich/images.js';
 import { pick } from '../boardgames/pick.js';
 import type { PickCandidate, PickResult, Player } from '../boardgames/types.js';
-import { QUEUES_PATH } from '../config.js';
 import { errMessage } from '../errors.js';
 import { binaryResponse } from './binaryResponse.js';
 import {
@@ -113,9 +113,15 @@ export function boardGameRoutes(): Hono {
    * The box art, off the disk beside the book of record.
    *
    * NOT a cache and never hotlinked: some of these are covers the owner chose by hand, and the
-   * upstream they came from has turned access off before. `store/db/boardgames.ts` stores the
-   * path the source app used (`/images/<file>`) and this serves the file the staging tool put
-   * in `board-game-images/` — the rename is the whole difference between the two.
+   * upstream they came from has turned access off before. The stored path is
+   * `/images/<file>` and this serves `<images dir>/<file>` — the rename is the whole
+   * difference between the two.
+   *
+   * ⚠️ THE DIRECTORY COMES FROM `imagesDirectory()`, WHICH IS ALSO WHAT WRITES IT. This used
+   * to recompute `dirname(QUEUES_PATH) + '/board-game-images'` inline, which was the same
+   * answer only for as long as nothing honoured `BOARD_GAME_IMAGES_PATH`. WP-4d landed the
+   * enrichment, so that variable now moves where the art is WRITTEN — and a reader that
+   * ignored it would 404 every new cover while serving the stale ones perfectly.
    *
    * One path segment, and a name that is a bare file name or nothing. A game's `imagePath` is
    * data out of an absorbed database, so it is user input as far as this handler is concerned.
@@ -131,7 +137,7 @@ export function boardGameRoutes(): Hono {
 
     try {
       return binaryResponse({
-        buffer: await readFile(join(dirname(QUEUES_PATH), 'board-game-images', file)),
+        buffer: await readFile(join(imagesDirectory(), file)),
         // Content-addressed by the enrichment that wrote it — the file name changes when the
         // picture does, so a long immutable cache is safe and the shelf paints once.
         cacheControl: 'public, max-age=604800, immutable',
