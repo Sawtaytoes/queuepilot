@@ -51,7 +51,7 @@ try {
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 
   const openCollection = async () => {
-    await page.goto(`${server.base}/collection`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${server.base}/board-game-collection`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#collection:not([hidden]) #collection-grid', {
       timeout: 30000,
     });
@@ -241,7 +241,7 @@ try {
   {
     const before = await page.$eval('#result-card h2', (el) => el.textContent?.trim() ?? '');
 
-    await page.goto(`${server.base}/collection`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${server.base}/board-game-collection`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#collection:not([hidden])', { timeout: 20000 });
     await page.goto(`${server.base}/result`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#result:not([hidden]) #result-card', { timeout: 20000 });
