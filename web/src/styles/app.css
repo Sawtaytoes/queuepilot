@@ -1206,22 +1206,22 @@ ul.grid {
 
 /* tile chrome.
    The ✓ is the queue grid's multi-select and exists nowhere else, so it stays gated on
-   `.editable`. The pencil and the ✕ are NOT gated on anything: `PosterTile` renders each
-   only when a call site passes `onEdit` / `onRemove`, so PRESENCE in the DOM already says
-   the control belongs, and a second gate is a second thing to forget. Forgetting the ✕ is
-   exactly what happened — the Home shelf passed no `onRemove` AND sat outside `.editable`,
-   so the page that reorders a title and moves it between queues could not remove one
+   `.editable`. The ✕ is NOT gated on anything: `PosterTile` renders it only when a call
+   site passes `onRemove`, so PRESENCE in the DOM already says the control belongs, and a
+   second gate is a second thing to forget. Forgetting the ✕ is exactly what happened —
+   the Home shelf passed no `onRemove` AND sat outside `.editable`, so the page that
+   reorders a title and moves it between queues could not remove one
    (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`).
-   The pencil used to be a text "Edit" chip in the badge row; it is chrome now, same corner
-   as Mail Sifter's archive glyph
-   (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`). */
+   ✕ and ✓ share ONE stack (`.tilechrome`) at the trailing edge — ✕ on top, ✓ under it —
+   so a reach for select does not land on remove. Edit is an outline pencil pill in the
+   badge row, away from that stack
+   (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`). */
 .tile .check {
   display: none;
 }
-/* The tile is the positioning context for the chrome now that `.check`/`.editbtn`/`.remove`
-   are siblings of `.thumb` rather than children of it (see PosterTile). Only the `posters`
-   density (and the shelf, which has none) actually overlays them; `cards`/`rows` place
-   them in real grid columns. */
+/* The tile is the positioning context for `.tilechrome` (see PosterTile). Only the
+   `posters` density (and the shelf, which has none) actually overlays it; `cards`/`rows`
+   place the stack in a real grid column. */
 .tile {
   position: relative;
 }
@@ -1232,16 +1232,13 @@ ul.grid {
    visible whatever the pointer is doing — that check is state, not an affordance.
    (decision `2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster`) */
 .editable .tile .check,
-.tile .editbtn,
 .tile .remove {
   opacity: 0;
   transition: opacity 0.12s;
 }
 .editable .tile:hover .check,
-.tile:hover .editbtn,
 .tile:hover .remove,
 .editable .tile:focus-within .check,
-.tile:focus-within .editbtn,
 .tile:focus-within .remove,
 .editable .tile.selected .check {
   opacity: 1;
@@ -1250,7 +1247,6 @@ ul.grid {
    controller, and a hover-capable stylus should still get the quiet treatment. */
 @media (hover: none) {
   .editable .tile .check,
-  .tile .editbtn,
   .tile .remove {
     opacity: 1;
   }
@@ -1320,13 +1316,22 @@ ul.grid.cards .tile .tileplay {
 .editable .tile.dragging .thumb {
   cursor: grabbing;
 }
-.tile .editbtn,
-.tile .remove {
+/* One trailing stack: ✕ on top, ✓ under it. Overlay on posters; in-flow on cards/list. */
+.tile .tilechrome {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  z-index: 2;
+}
+.tile .tilechrome .remove {
   display: flex;
   align-items: center;
   justify-content: center;
-  position: absolute;
-  top: 6px;
+  position: static;
   background: var(--color-scrim);
   border: none;
   border-radius: 999px;
@@ -1334,37 +1339,18 @@ ul.grid.cards .tile .tileplay {
   height: 28px;
   padding: 0;
   cursor: pointer;
-}
-/* Pencil sits left of ✕ when both are present; alone it takes the same corner ✕ owns.
-   `:has(.remove)` keeps a lone pencil from floating one control-width off the edge. */
-.tile .editbtn {
-  right: 6px;
-  color: var(--color-content-primary);
-}
-.tile:has(.remove) .editbtn {
-  right: 40px;
-}
-.tile .remove {
-  right: 6px;
   color: var(--color-intent-danger-on-solid);
 }
-/* SVG glyphs, not text: font glyphs drift off-center at fractional zoom (150%). */
-.tile .editbtn svg,
-.tile .remove svg {
+/* SVG glyph, not a text ×: font glyphs drift off-center at fractional zoom (150%). */
+.tile .tilechrome .remove svg {
   display: block;
 }
-.tile .editbtn:hover {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-}
-.tile .remove:hover {
+.tile .tilechrome .remove:hover {
   background: var(--color-intent-danger-solid);
 }
-.editable .tile .check {
+.editable .tile .tilechrome .check {
   display: flex;
-  position: absolute;
-  left: 6px;
-  top: 6px;
+  position: static;
   cursor: pointer;
   width: 28px;
   height: 28px;
@@ -1377,7 +1363,7 @@ ul.grid.cards .tile .tileplay {
   font-size: 1rem;
   border: 2px solid var(--color-border-strong);
 }
-.editable .tile .check:hover {
+.editable .tile .tilechrome .check:hover {
   border-color: var(--color-intent-accent-solid);
 }
 /* In move mode the whole poster is a select target, so show the select cursor, not grab. */
@@ -2955,8 +2941,8 @@ header h1 input {
    The queue toolbar, the three densities, and the entry-settings tags + panel
    (2026-08-14). The DOM is the SAME `li.tile` in every density — only this
    stylesheet reshapes it — so the e2e selectors (`li.tile`, `.thumb`, `.poster`,
-   `.check`, `.editbtn`, `.remove`, `.cap`, `.title`, `.next`, `.badges`) hold
-   everywhere and a density switch can never be a markup regression.
+   `.check`, `.remove`, `.tilechrome`, `.cap`, `.title`, `.next`, `.badges`,
+   `.editbtn`) hold everywhere and a density switch can never be a markup regression.
    ================================================================================ */
 
 .qtoolbar {
@@ -3001,16 +2987,14 @@ ul.grid.cards {
   gap: 12px;
   align-items: start;
 }
-/* Five columns: poster | text | ✓ | pencil | ✕. The controls are LAID OUT rather than
-   overlaid, which is the whole point — none of them sits on the artwork — but they all ride
-   the trailing edge. An earlier cut put ✓ in a LEADING gutter, which meant every card
-   carried a permanently empty column before the poster and the artwork never touched the
-   card's left edge. The reserved space still exists, it just lives where the card already
-   had slack. The pencil joined in 2026-08-25
-   (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`). */
+/* Three columns: poster | text | chrome stack (✕ over ✓). The stack is LAID OUT rather
+   than overlaid — none of it sits on the artwork — and rides the trailing edge. An earlier
+   cut put ✓ in a LEADING gutter, which meant every card carried a permanently empty column
+   before the poster. Edit lives in the badge row inside `.cap`, not in this column
+   (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`). */
 ul.grid.cards .tile {
   display: grid;
-  grid-template-columns: 76px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: 76px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
   background: var(--color-surface-raised);
@@ -3046,7 +3030,7 @@ ul.grid.rows {
 }
 ul.grid.rows .tile {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr) auto auto auto;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
   gap: 10px;
   align-items: center;
   background: var(--color-surface-raised);
@@ -3093,33 +3077,31 @@ ul.grid.rows .tile .badges {
   justify-content: flex-end;
   max-width: 46vw;
 }
-/* CARDS + ROWS: the chrome is IN FLOW, in its own gutter column, so `position: absolute`
-   (which the poster wall still wants) has to be undone here. Without this the controls
-   would keep stacking on the artwork in the two densities this change exists to fix. */
-ul.grid.cards .tile .check,
-ul.grid.cards .tile .editbtn,
-ul.grid.cards .tile .remove,
-ul.grid.rows .tile .check,
-ul.grid.rows .tile .editbtn,
-ul.grid.rows .tile .remove {
+/* CARDS + ROWS: the chrome stack is IN FLOW, in its own gutter column, so
+   `position: absolute` (which the poster wall still wants) has to be undone here. */
+ul.grid.cards .tile .tilechrome,
+ul.grid.rows .tile .tilechrome {
   position: static;
-  width: 24px;
-  height: 24px;
   align-self: center;
 }
+ul.grid.cards .tile .tilechrome .check,
+ul.grid.cards .tile .tilechrome .remove,
+ul.grid.rows .tile .tilechrome .check,
+ul.grid.rows .tile .tilechrome .remove {
+  width: 24px;
+  height: 24px;
+}
 /* EVERY child is pinned to row 1 explicitly, and that is load-bearing rather than tidy.
-   The pencil and ✕ come BEFORE `.cap` in the DOM (tab order: select, then edit, then
-   remove, then the entry's text) but sit in LATER columns, and grid auto-placement only
-   ever moves forward — so with the row left implicit, `.cap` could not go back to row 1
-   and dropped underneath the poster, which is exactly what the first cut of this looked
-   like. */
+   `.tilechrome` comes BEFORE `.cap` in the DOM but sits in a LATER column, and grid
+   auto-placement only ever moves forward — so with the row left implicit, `.cap` could
+   not go back to row 1 and dropped underneath the poster. */
 ul.grid.cards .tile > *,
 ul.grid.rows .tile > * {
   grid-row: 1;
 }
 /* The poster and the text keep their columns whether or not this grid is editable — a
-   read-only pool tile renders no ✓/pencil/✕ at all, and auto-placement would otherwise
-   slide everything around. The three controls sit together at the trailing edge. */
+   read-only pool tile renders no chrome stack at all, and auto-placement would otherwise
+   slide everything around. The stack sits at the trailing edge. */
 ul.grid.cards .tile .thumb,
 ul.grid.rows .tile .thumb {
   grid-column: 1;
@@ -3128,31 +3110,19 @@ ul.grid.cards .tile .cap,
 ul.grid.rows .tile .cap {
   grid-column: 2;
 }
-ul.grid.cards .tile .check,
-ul.grid.rows .tile .check {
+ul.grid.cards .tile .tilechrome,
+ul.grid.rows .tile .tilechrome {
   grid-column: 3;
 }
-ul.grid.cards .tile .editbtn,
-ul.grid.rows .tile .editbtn {
-  grid-column: 4;
-}
-ul.grid.cards .tile .remove,
-ul.grid.rows .tile .remove {
-  grid-column: 5;
-}
-/* A card's poster is tall, so its controls read better pinned to the top of the card than
+/* A card's poster is tall, so the stack reads better pinned to the top of the card than
    floating at its vertical centre. A row is one line — centred is the only option there. */
-ul.grid.cards .tile .check,
-ul.grid.cards .tile .editbtn,
-ul.grid.cards .tile .remove {
+ul.grid.cards .tile .tilechrome {
   align-self: start;
   margin-top: 2px;
 }
 /* POSTERS (and the member grid, which has no density class) keep the overlay: those tiles
    carry a full-size poster that can afford it. They need no rule here — the base
-   `.editable .tile .check` / `.tile .editbtn` / `.tile .remove` insets still apply, and
-   now resolve against the TILE instead of `.thumb`. `.thumb` is the tile's full-width
-   first row, so the artwork's top corners are the same two points they always were. */
+   `.tile .tilechrome` insets still apply against the TILE. */
 
 /* ---- Density: POSTERS. Today's wall — the tags ride ON the poster so the caption
    stays two lines whatever an entry is carrying. ---- */
@@ -3172,11 +3142,10 @@ ul.grid.posters .tile .badges .epstag {
    `.tagbtn` is GONE. Every one of these chips is a `BadgeButton` now — the pill, the
    border, the hover and the focus ring come from the component, and the colour comes from
    the `intent` the call site was already passing to the non-pressable branch beside it.
-   `.weighttag` / `.startbadge` survive as SELECTORS only (the e2e suites read them) and
-   carry no paint, exactly as `.badge.movie` and `.badge.show` already do.
-   `.editbtn` used to be in that list as the text Edit chip; it is tile chrome now and
-   carries its own paint with `.remove` above
-   (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`).
+   `.weighttag` / `.startbadge` / `.editbtn` survive as SELECTORS only (the e2e suites
+   read them) and carry no paint, exactly as `.badge.movie` and `.badge.show` already do.
+   `.editbtn` is the outline pencil pill in this row again — away from ✕
+   (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`).
    (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
 
 /* ---- The 1 / 2 / Custom… count control ---- */
