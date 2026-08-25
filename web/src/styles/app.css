@@ -3758,3 +3758,235 @@ body.rowdragging {
   justify-content: space-between;
   font-size: 0.9rem;
 }
+
+/* ===================================================================
+   TONIGHT (`views/TonightView.tsx`)
+
+   Who's here -> activity -> filters -> Pick | Queues -> which queue -> Go.
+
+   Everything below is app LAYOUT — the page's sections, three grids and the gaps
+   between them. Nothing here paints a control: the checkboxes, the radios, the
+   segments, the badges and both buttons are Charcuterie components configured by
+   props, which is the rule this app broke three times in one screen before
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+
+   ⚠️ `.subhint` is DEFINED HERE and is not borrowed. Every other rule for it in this
+   file is scoped under a modal id (`#setmodal`, `#dynmodal`, `#startmodal`), so the
+   same class on this page would render unstyled while looking styled in the diff —
+   exactly the failure `borrowed-class-audit.ts` exists to report
+   (decision `2026-08-21-a-class-name-is-not-a-style`).
+   =================================================================== */
+
+/* A form is a reading surface, so it takes a measure rather than a 2560px window.
+   The GRIDS inside it still take their column count from THIS box's width, which is
+   the standing rule — a list of cards gains columns as its container widens, and the
+   container is what is capped, never the item. */
+#tonight {
+  max-width: 1180px;
+}
+.tsection {
+  margin: 0 0 24px;
+}
+.tlabel {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-content-muted);
+}
+#tonight .subhint {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--color-content-muted);
+}
+
+/* ---- 1. Who's here ----
+   `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own
+   scope — the same note `.groupform .libs` and `.pendinglibs .libs` carry. */
+.peoplebox .libs {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(170px, 100%), 1fr)
+    );
+  gap: 8px;
+}
+/* The guests row: a number field with its two steppers beside it. `align-items: end`
+   puts the buttons on the INPUT's baseline, which only works because the hint moved out
+   of `Field`'s description slot and under the whole row — see `GuestStepper.tsx`. */
+.guestrow {
+  margin-top: 16px;
+}
+.gueststep {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+}
+.gueststepbtns {
+  display: flex;
+  gap: 6px;
+}
+#tonight .guestrow .subhint {
+  margin: 6px 0 0;
+}
+/* `@charcuterie/ui` ships no text or number INPUT — `Field` wraps whatever control you
+   give it and paints none of them — so this is not an override of a library control, it
+   is the app painting its own, exactly as `#setmodal .field input[type="text"]` does two
+   thousand lines up. Kept to that rule's values so the two boxes are the same box. */
+#tonight .gueststep input[type="number"] {
+  display: block;
+  inline-size: 6.5rem;
+  margin-top: 5px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  font: inherit;
+}
+
+/* ---- 2. Activity, and 5. Which queue ----
+   Both are one choice out of several, so both are a `RadioGroup` — a real
+   `radiogroup` of `radio`s, announced as "3 of 6", rather than a row of pressed
+   buttons that says nothing about being exclusive.
+
+   The class makes the group a GRID. `RadioGroup` lays its options out as
+   `flex flex-col`; `app.css` is unlayered and Tailwind's utilities are in
+   `@layer utilities`, so `display: grid` here wins deterministically rather than by
+   source order. `auto-fill` and not `auto-fit`: with six tiles and a wide container,
+   `auto-fit` would stretch them to a quarter of the page each, which is the
+   full-width-row problem in a new costume. */
+.actgrid {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(200px, 100%), 1fr)
+    );
+  gap: 8px;
+}
+/* ⚠️ THE ONE PLACE THIS FILE PAINTS A LIBRARY CONTROL, and it is the "shape the library
+   cannot express yet" exception rather than a tweak
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+
+   A CHOICE TILE — a bordered card carrying a name, a line of help and a selected state —
+   is the shape the owner settled on in the Tonight mockup, and `@charcuterie/ui` has no
+   prop for it: `RadioGroup` draws a form-length list of prose rows, and `MediaTile` is
+   built around artwork this screen has none of. Rather than hand-roll a `<div>` of
+   `<button aria-pressed>` — the toolbar-of-toggles pattern that says nothing about being
+   exclusive, and which is exactly what `RadioGroup` exists to replace — the semantics stay
+   the library's and only the BOX is the app's.
+
+   The real fix is a Charcuterie `ChoiceTile` (or an `appearance="tile"` on `RadioGroup`),
+   at which point every rule in this block is deleted rather than adjusted. It is a
+   library change with a publish cycle, and it does not block the surface.
+
+   `align-items: start` is the part that is only alignment: a two-line label wants its
+   radio at the top of the tile, not centred between both lines. */
+.actgrid > [role="radio"],
+.queuegrid > [role="radio"] {
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface-raised);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast)
+    var(--ease-standard);
+}
+.actgrid > [role="radio"]:hover,
+.queuegrid > [role="radio"]:hover {
+  border-color: var(--color-border-strong);
+}
+/* The selected tile is a BORDER and a surface, never colour alone — the same reason
+   `Stepper` refuses to say "done" with a hue. The radio dot inside it is still the thing
+   a screen reader reads. */
+.actgrid > [role="radio"][aria-checked="true"],
+.queuegrid > [role="radio"][aria-checked="true"] {
+  border-color: var(--color-intent-accent-solid);
+  background: var(--color-surface-overlay);
+}
+.actlbl,
+.qcard {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.actname,
+.qcardname {
+  font-weight: 600;
+  color: var(--color-content-primary);
+}
+.acthint {
+  font-size: 0.82rem;
+  color: var(--color-content-muted);
+}
+.queuegrid {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(260px, 100%), 1fr)
+    );
+  gap: 8px;
+}
+.qcardmeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+/* Exactly one queue matches, so it is SHOWN rather than asked about — a question with
+   one answer is not a question. It reads as a card and not as a control, which is the
+   difference the decision's "the sole/selected row or a quiet label" is drawing. */
+.qimplied {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  /* One card's width, not the page's. A single implied queue stretched edge to edge is
+     the full-width-row shape the grid rule exists to stop — it just happens to be a list
+     of one. */
+  max-inline-size: min(420px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface-raised);
+}
+#tonight .qimplied .subhint {
+  margin: 0;
+}
+
+/* ---- 3. Activity filters (Pick only) ---- */
+.tfilters {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(250px, 100%), 1fr)
+    );
+  gap: 12px;
+}
+/* `align-items: start` so a two-option segment hugs its own strip. Stretched to the
+   grid track it trails 200px of empty control, which reads as a third option nobody
+   drew. */
+.tfilter {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 6px;
+}
+.tfilterlbl {
+  font-size: 0.9rem;
+  color: var(--color-content-secondary);
+}
+
+/* ---- 6. Go ---- */
+.tgo {
+  display: flex;
+  flex-direction: column;
+  align-items: start;
+  gap: 8px;
+}
+#tonight .tgo .subhint {
+  margin: 0;
+  max-width: 46ch;
+}

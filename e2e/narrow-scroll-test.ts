@@ -183,6 +183,11 @@ for (const width of WIDTHS) {
   const routes = [
     ['/queues', '.playcard, #newqueue, .shelf'],
     ['/channels/shows', '#chbody'],
+    // Tonight, added with the route (WP-6). It carries three grids and a stepper row, and
+    // every one of them is a `repeat(auto-fill, minmax(min(Xpx, 100%), 1fr))` — the
+    // `min()` is what lets the last column collapse below its own floor on a screen
+    // narrower than one card, and dropping it is how a grid pushes the page sideways.
+    ['/tonight', '#tonight:not([hidden]) .actgrid'],
     ...(queueId ? [[`/q/${queueId}`, '#queue:not([hidden]) .add']] : []),
   ] as const;
 
