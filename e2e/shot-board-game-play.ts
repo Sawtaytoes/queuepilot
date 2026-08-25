@@ -78,7 +78,7 @@ try {
   await page.setViewportSize({ width: 1420, height: 1100 });
 
   // ── 6. Tonight, on Board Games, with a table ────────────────────────────────────── //
-  await goto('/tonight', '#tonight:not([hidden]) .actgrid');
+  await goto('/tonight', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]');
   await page.click('#tonight-activity [role="radio"]:has-text("Board Games")');
   await page.waitForTimeout(400);
   for (const id of ['ada', 'grace', 'linus']) {

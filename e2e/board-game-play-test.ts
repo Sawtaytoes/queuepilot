@@ -192,7 +192,7 @@ try {
   // ── 4. The pick: Tonight → one card, a shortlist behind a control ───────────────── //
   {
     await page.goto(`${server.base}/tonight`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('#tonight:not([hidden]) .actgrid', { timeout: 30000 });
+    await page.waitForSelector('#tonight:not([hidden]) #tonight-activity [role="radiogroup"]', { timeout: 30000 });
     await page.waitForTimeout(600);
 
     await page.click('#tonight-activity [role="radio"]:has-text("Board Games")');
