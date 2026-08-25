@@ -134,6 +134,42 @@ try {
     );
   }
 
+  // ── 2b. A CURATED queue names its head, off our own store and with no Plex call ───── //
+  // Forced rather than drawn: `shows` has a rotation channel and a curated queue in the
+  // fixture, and which one comes up is a real draw. Excluding the rotation leaves one answer.
+  {
+    const { body } = await post({
+      activity: 'shows',
+      excludedSetIds: ['after_dinner'],
+      personIds: [],
+    });
+    ok(
+      'a curated queue names its first unfinished entry',
+      body.pick?.setId === 'linus_shows'
+        && body.pick.upNext?.title === 'A Series (2019)'
+        && body.pick.upNext.detail === 'First in the queue',
+      JSON.stringify(body.pick?.upNext),
+    );
+  }
+
+  // ── 2c. A finished queue is SKIPPED, not offered ─────────────────────────────────── //
+  // `game_night` is the board-game queue and holds no entries, so it is the one set in the
+  // fixture that reports itself finished. Board games do not come through this door, so the
+  // rule is asserted on the closest thing that does: a queue whose provider says there is
+  // nothing left never becomes the answer, because its Start would 409.
+  {
+    const { body } = await post({
+      activity: 'shows',
+      excludedSetIds: ['after_dinner', 'linus_shows'],
+      personIds: [],
+    });
+    ok(
+      'with every shows queue turned down there is no pick, and it says which empty this is',
+      body.pick === null && String(body.reason).includes('turned down'),
+      `${JSON.stringify(body.pick)} ${body.reason}`,
+    );
+  }
+
   // ── 3. ONE SESSION TALKS TO ONE BACKEND ──────────────────────────────────────────── //
   // The fixture has a Steam queue AND a MiSTer queue under Video Games, which is exactly the
   // condition this rule exists for.

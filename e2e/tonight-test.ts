@@ -215,9 +215,12 @@ try {
       (await page.$eval('#result-queue', (el) => el.textContent ?? '')).includes('Shows'),
       await page.$eval('#result-queue', (el) => (el.textContent ?? '').slice(0, 120)),
     );
+    // Either a title or a stated reason, never a blank line. WHICH of the two shows queues
+    // it drew is a real draw, so the gate asserts the invariant rather than the outcome; the
+    // outcome is pinned deterministically in `tonight-routing-test.ts`.
     ok(
-      '…and says what would come up next',
-      (await page.$eval('#result-upnext', (el) => el.textContent ?? '')).includes('Up next'),
+      '…and always says what would come up next, or why it cannot',
+      (await page.$eval('#result-upnext', (el) => (el.textContent ?? '').trim())).length > 0,
       await page.$eval('#result-upnext', (el) => el.textContent ?? ''),
     );
     // A queue card has NO Mark played. A queue records its own progress when it plays, and a

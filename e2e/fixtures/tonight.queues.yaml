@@ -7,5 +7,11 @@ manga_webtoons:
 grace_comics:
 - {title: "A Comic Run"}
 game_night: []
-steam_night: []
-arcade: []
+# Two video-game queues with something in them, so a Video Games pick has a lineup to name
+# rather than a queue its provider reports finished. The ids are the PROVIDER's own — an
+# appid for Steam, a ROM path for MiSTer — which is safe because a queue draws from exactly
+# one provider.
+steam_night:
+- {ratingKey: "400", title: "A Puzzle Game"}
+arcade:
+- {ratingKey: "/games/SNES/A Platformer.sfc", title: "A Platformer"}

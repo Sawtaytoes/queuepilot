@@ -125,11 +125,29 @@ export function tonightRoutes(): Hono {
         });
       }
 
-      // Only the three that are going to be SHOWN are resolved. One provider round trip per
-      // queue in the house is what resolving every candidate would cost.
+      // Resolved LAZILY, in offer order, and only until three are in hand. Resolving every
+      // candidate would cost one provider round trip per queue in the house.
+      //
+      // A queue its provider says is FINISHED is skipped rather than offered — a card that
+      // names a queue and then says "nothing left in it" is an answer nobody asked for, and
+      // its Start would 409. A queue we could not REACH is different and is still offered:
+      // a provider being down is not a queue being over.
       const shortlist: TonightPick[] = [];
-      for (const candidate of ordered.slice(0, 3)) {
-        shortlist.push(await withUpNext(candidate));
+      for (const candidate of ordered) {
+        if (shortlist.length >= 3) break;
+        const { isExhausted, ...resolved } = await withUpNext(candidate);
+        if (isExhausted) continue;
+        shortlist.push(resolved);
+      }
+
+      if (shortlist.length === 0) {
+        return c.json({
+          backend,
+          notes: notesFor(tile),
+          pick: null,
+          reason: 'Every queue that matches is finished — there is nothing left in any of them.',
+          shortlist: [],
+        });
       }
 
       return c.json({
@@ -186,7 +204,9 @@ const notesFor = (tile: Parameters<typeof routeForTile>[0]): string[] => {
  * A failure is the fourth answer and it is also named: a provider that is NOT CONFIGURED
  * reports itself here rather than producing a card whose Go dies later.
  */
-async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
+async function withUpNext(
+  candidate: TonightCandidate,
+): Promise<TonightPick & { isExhausted: boolean }> {
   const launchUrl = candidate.delivery === 'pull'
     ? `/go/${encodeURIComponent(candidate.setId)}`
     : null;
@@ -197,6 +217,7 @@ async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
       if (!cfg) {
         return {
           ...candidate,
+          isExhausted: false,
           launchUrl,
           upNext: null,
           upNextReason: 'This queue is not in the engine registry.',
@@ -208,18 +229,28 @@ async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
       if (!head) {
         return {
           ...candidate,
+          isExhausted: true,
           launchUrl,
           upNext: null,
           upNextReason: `Nothing left in this queue — ${provider.label} says it is finished.`,
         };
       }
-      return { ...candidate, launchUrl, upNext: playItemLabel(head), upNextReason: null };
+      return {
+        ...candidate,
+        isExhausted: false,
+        launchUrl,
+        upNext: playItemLabel(head),
+        upNextReason: null,
+      };
     } catch (e) {
       // Named, and named as a REACH rather than as a crash. A provider that is down or NOT
       // CONFIGURED still leaves a queue you can try to start; a bare `fetch failed` on a card
       // says nothing a person can act on.
       return {
         ...candidate,
+        // NOT exhausted. A provider we could not reach has not told us the queue is over,
+        // and dropping it here would hide every reading queue whenever Kavita restarts.
+        isExhausted: false,
         launchUrl,
         upNext: null,
         upNextReason: `Could not ask ${candidate.providerLabel || candidate.providerId} what is next: ${errMessage(e)}`,
@@ -230,6 +261,9 @@ async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
   if (candidate.source === 'rotation') {
     return {
       ...candidate,
+      // A rules pool has no lineup until it is drawn, so it can never be reported finished
+      // from here. Whether it comes up empty is Plex's answer at launch, not ours.
+      isExhausted: false,
       launchUrl,
       upNext: null,
       upNextReason: 'This queue draws from the library when it starts, so there is no lineup yet.',
@@ -244,6 +278,7 @@ async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
     if (!display) {
       return {
         ...candidate,
+        isExhausted: true,
         launchUrl,
         upNext: null,
         upNextReason: 'Every entry in this queue is finished.',
@@ -253,11 +288,18 @@ async function withUpNext(candidate: TonightCandidate): Promise<TonightPick> {
     // resolver decides which episode of it plays.
     return {
       ...candidate,
+      isExhausted: false,
       launchUrl,
       upNext: { detail: 'First in the queue', title: display },
       upNextReason: null,
     };
   } catch (e) {
-    return { ...candidate, launchUrl, upNext: null, upNextReason: errMessage(e) };
+    return {
+      ...candidate,
+      isExhausted: false,
+      launchUrl,
+      upNext: null,
+      upNextReason: `Could not read this queue: ${errMessage(e)}`,
+    };
   }
 }
