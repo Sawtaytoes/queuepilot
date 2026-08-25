@@ -248,6 +248,11 @@ try {
   await visit('/pending');
   await visit('/tonight');
   await visit('/channels');
+  // The two WP-8 routes. `.subhint` is the class this audit is about on both of them: every
+  // other rule for it in `app.css` is scoped under a view or modal id, so a new page wearing
+  // it renders unstyled while looking styled in the diff.
+  await visit('/collection');
+  await visit('/result');
   await visit('/', async () => {
     await page.click('#playnewqueue');
     await page.waitForTimeout(900);

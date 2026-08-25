@@ -4038,3 +4038,189 @@ body.rowdragging {
   font-size: 0.78rem;
   opacity: 0.75;
 }
+
+/* ===================================================================
+   WP-8 — THE COLLECTION SHELF AND TONIGHT'S RESULT CARD
+
+   Two screens and one card. `/collection` is the shelf, with "we played this" on
+   every title; `/result` is the pick — one card, a reroll, and a shortlist of three
+   behind a control.
+
+   ⚠️ `.subhint` IS SCOPED IN THIS FILE, so it is re-scoped here rather than borrowed.
+   Every rule for it lives under a view or modal id (`#tonight .subhint`,
+   `#setmodal .subhint`, …), so the same class on a NEW page renders unstyled while
+   looking styled in the diff — the exact failure `borrowed-class-audit.ts` reports
+   (decision `2026-08-21-a-class-name-is-not-a-style`). `.tsection`, `.tlabel`,
+   `.tfilterlbl` and `.tgo` are genuinely unscoped and are reused as they stand.
+
+   THE CARD ITSELF IS A CHARCUTERIE `Card`, not a box painted here. `.bgcard` sets
+   layout INSIDE it and nothing else — no border, no surface, no radius. The library
+   owns the shape; this file owns where the poster, the two meta lines and the play
+   control sit within it.
+   =================================================================== */
+
+/* A reading measure on the result, the full width on the shelf. The shelf is a GRID
+   whose column count comes from THIS box's width, so capping it would take columns
+   away on a wide monitor for no reason; the result is ONE card and a 2560px-wide card
+   is the full-width-row shape in a different costume. */
+#collection {
+  max-width: 1600px;
+}
+#result {
+  max-width: 900px;
+}
+#collection .subhint,
+#result .subhint {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--color-content-muted);
+  max-width: 68ch;
+}
+
+/* ---- Find a game ---- */
+.cfind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+}
+.cfindlbl {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: min(320px, 100%);
+}
+/* A search box, not a picker: it holds free text rather than one of a closed list, so
+   the native input is the right control and the Listbox rule does not reach it. */
+.cfindbox {
+  padding: 8px 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+  color: var(--color-content-primary);
+  font: inherit;
+}
+.cfindbox:focus-visible {
+  outline: 2px solid var(--color-intent-accent-solid);
+  outline-offset: 1px;
+}
+.cloading {
+  display: flex;
+  justify-content: center;
+  padding: 48px 0;
+}
+
+/* ---- The shelf ----
+
+   `auto-fill`, never `auto-fit`: with two games left after a search, `auto-fit` stretches
+   both to half the page, which is the full-width row this rule exists to stop. The
+   `min(300px, 100%)` floor lets the last track collapse below the card width on a 320px
+   screen rather than overflowing it — `narrow-scroll-test.ts` walks every route and fails
+   on any inline overflow. */
+.bggrid {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(300px, 100%), 1fr)
+    );
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  align-items: start;
+}
+/* `min-width: 0` and the wrap: a forty-character unbroken title in a grid track blows out
+   `scrollWidth` and takes the Narrow View gate with it. */
+.bgcard {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.bgart {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  /* CAPPED, and the cap is what a card with no art looks like.
+
+     `aspect-ratio` alone gives a 300px track a 300px-tall box, which is right for a cover
+     and absurd for the words "No box photo yet" — and the result card, on a wider measure,
+     was drawing an 800px empty square above two lines of text. The cap bounds the height
+     and `object-fit: contain` still shows the whole cover inside it. */
+  max-block-size: 240px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+}
+#result .bgart {
+  max-block-size: 340px;
+}
+/* The covers are padded to 1:1 already, so `contain` shows the whole box rather than
+   cropping the title off a wide one. */
+.bgartimg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.bgartnone {
+  padding: 0 12px;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--color-content-muted);
+}
+.bgmeta {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-content-secondary);
+}
+.bgbadges,
+.bglinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+/* ---- "We played this" ---- */
+.markplayed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface-overlay);
+}
+.mplabel {
+  margin: 0;
+  font-weight: 600;
+  color: var(--color-content-primary);
+}
+#collection .markplayed .subhint,
+#result .markplayed .subhint {
+  margin: 0;
+}
+/* `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own
+   scope — the same note `.peoplebox .libs` and `.groupform .libs` carry. Narrower tracks
+   here than the roster's: this grid sits inside a card, not across a form. */
+.mppeople .libs {
+  display: grid;
+  grid-template-columns: repeat(
+      auto-fill,
+      minmax(min(130px, 100%), 1fr)
+    );
+  gap: 6px;
+}
+.mpactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* ---- The result's own row of actions ---- */
+#result .tgo {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+}

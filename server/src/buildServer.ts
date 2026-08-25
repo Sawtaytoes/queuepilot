@@ -2,6 +2,7 @@ import { createStaticHandler } from '@charcuterie/server';
 import { Hono } from 'hono';
 import { errMessage } from './errors.js';
 import { launcherRoutes } from './providers/launcher.js';
+import { boardGameRoutes } from './routes/boardGameRoutes.js';
 import { historyRoutes } from './routes/historyRoutes.js';
 import { playbackRoutes } from './routes/playbackRoutes.js';
 import { plexMetadataRoutes } from './routes/plexMetadataRoutes.js';
@@ -57,6 +58,7 @@ export function buildServer({ publicDir }: BuildServerOptions): Hono {
   api.route('/', groupRoutes());
   api.route('/', peopleRoutes());
   api.route('/', pendingRoutes());
+  api.route('/', boardGameRoutes());
   api.route('/', playbackRoutes());
   api.route('/', sseRoutes());
   root.route(API_PREFIX, api);

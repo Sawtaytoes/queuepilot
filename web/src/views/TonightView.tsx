@@ -14,6 +14,11 @@ import { GuestStepper } from "../components/GuestStepper"
 import { SelectListbox } from "../components/SelectListbox"
 import { api } from "../lib/api"
 import {
+  criteriaFromTonight,
+  tableSize,
+} from "../lib/boardGames"
+import { writePickSession } from "../lib/pickSession"
+import {
   ACTIVITIES,
   ACTIVITY_FILTERS,
   type ActivityId,
@@ -29,9 +34,13 @@ import {
   type TonightQueue,
   tonightQueues,
 } from "../lib/tonight"
-import type { PeopleResponse, Person } from "../lib/types"
+import type {
+  PeopleResponse,
+  Person,
+  PickResponse,
+} from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
-import { useStore } from "../state/store"
+import { setStatus, useStore } from "../state/store"
 
 /**
  * TONIGHT — who's here, what you are doing, and Go.
@@ -400,7 +409,9 @@ export function TonightView({
             id="tonight-launch"
           >
             <GoButton
+              activity={session.activity}
               chosenQueue={isQueues ? chosenQueue : null}
+              filters={session.filters}
               guestCount={guestCount}
               isQueues={isQueues}
               selectedPeople={selectedPeople}
@@ -530,17 +541,108 @@ function WhichQueue({
  * cannot: this screen collects the answer, and the half that acts on it is not built.
  */
 function GoButton({
+  activity,
   chosenQueue,
+  filters,
   guestCount,
   isQueues,
   selectedPeople,
 }: {
+  activity: ActivityId
   chosenQueue: TonightQueue | null
+  filters: Record<string, string>
   guestCount: number
   isQueues: boolean
   selectedPeople: readonly string[]
 }) {
+  const navigate = useNavigate()
+  const [isDrawing, setIsDrawing] = useState(false)
   const label = goLabel(selectedPeople, guestCount)
+
+  if (!isQueues && activity === "board-games") {
+    const size = tableSize(selectedPeople, guestCount)
+
+    // A pick needs to know how many are playing, and this screen's people are a FILTER —
+    // so an empty answer is not "nought players", it is "you have not said". Guests count,
+    // which is how a table of people with no roster rows still gets a pick.
+    if (size === 0) {
+      return (
+        <>
+          <Button
+            id="tonight-go"
+            intent="accent"
+            isDisabled
+            size="lg"
+          >
+            {label}
+          </Button>
+          <p className="subhint">
+            Tick who is playing, or add a guest — a pick
+            needs to know how many are at the table.
+          </p>
+        </>
+      )
+    }
+
+    const draw = async () => {
+      setIsDrawing(true)
+      try {
+        const criteria = criteriaFromTonight({
+          filters,
+          guestCount,
+          personIds: selectedPeople,
+        })
+        const answer = await api<PickResponse>(
+          "POST",
+          "/api/board-games/pick",
+          criteria,
+        )
+
+        if (answer.shortlist.length === 0) {
+          const reason =
+            answer.result?.outcome === "empty"
+              ? (answer.result.suggestion ??
+                "Nothing on the shelf fits that.")
+              : "Nothing on the shelf fits that."
+          setStatus(reason, "err")
+          return
+        }
+
+        // WRITTEN DOWN BEFORE WE NAVIGATE. The pick and reroll's memory used to be plain
+        // component state, so leaving the card lost both.
+        writePickSession({
+          activity,
+          candidates: answer.shortlist,
+          criteria,
+          excludedGameIds: [],
+          guestCount,
+          origin: "pick",
+          personIds: [...selectedPeople],
+          savedAt: new Date().toISOString(),
+        })
+        navigate("/result")
+      } catch (e) {
+        setStatus(
+          `Could not pick: ${(e as Error).message}`,
+          "err",
+        )
+      } finally {
+        setIsDrawing(false)
+      }
+    }
+
+    return (
+      <Button
+        id="tonight-go"
+        intent="accent"
+        isDisabled={isDrawing}
+        onClick={() => void draw()}
+        size="lg"
+      >
+        {label}
+      </Button>
+    )
+  }
 
   if (!isQueues) {
     return (
@@ -554,9 +656,9 @@ function GoButton({
           {label}
         </Button>
         <p className="subhint">
-          Pick chooses one thing and offers a reroll. That
-          engine is not connected yet — switch to Queues to
-          start something now.
+          Pick chooses one thing and offers a reroll. Board
+          games are connected; the other activities are not
+          yet — switch to Queues to start one now.
         </p>
       </>
     )
