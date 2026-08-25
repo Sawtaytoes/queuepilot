@@ -190,6 +190,13 @@ for (const width of WIDTHS) {
     // Two of the three are Charcuterie's now (`RadioGroup itemShape="tile"`), which is
     // where that `min()` moved to rather than where it went.
     ['/tonight', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]'],
+    // The collection shelf and the result card, added with their routes (WP-8). This
+    // server has no board-game collection beside it, so both land on their EMPTY state —
+    // which is the right thing to walk here anyway: the page chrome, the search row and
+    // the `EmptyState` are what would push a 320px viewport sideways, and the populated
+    // grids are measured by `board-game-play-test.ts` against its own fixture.
+    ['/collection', '#collection:not([hidden]) #collection-find'],
+    ['/result', '#result:not([hidden]) #result-none'],
     ...(queueId ? [[`/q/${queueId}`, '#queue:not([hidden]) .add']] : []),
   ] as const;
 

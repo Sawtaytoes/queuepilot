@@ -485,7 +485,7 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All nine of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All ten of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
@@ -498,6 +498,7 @@ there rather than in the gated block. All nine of them, in the order `ci.yml` ru
 | `group-create-test.ts` | a new queue joins the group on screen |
 | `play-reorder-test.ts` | the play landing's reorder |
 | `tonight-test.ts` | the Tonight surface — the settled tiles, defaults and steps |
+| `board-game-play-test.ts` | a logged play records WHO played, and never invents a known-how claim |
 
 Three of them — `drag-stability`, `shelf-remove` and `group-create` — were missing from this
 list while running in CI the whole time. A gate this file does not name is a gate nobody
