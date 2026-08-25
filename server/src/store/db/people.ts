@@ -27,6 +27,7 @@ import { type GroupMembership, type GroupRosterMember, isMemberRole } from '../.
 import type { ProfileAccounts } from '../../groups.js';
 import { bumpVersion, readMeta, writeMeta } from './common.js';
 import { bookOfRecord, prepareChecked } from './open.js';
+import { forgetMember } from './queuePeople.js';
 import type { SqliteDatabase } from '../sqlite.js';
 
 interface PersonRow {
@@ -200,9 +201,16 @@ export function setPersonAccounts(
   }
 }
 
-/** Remove a person. `person_accounts` and `group_people` cascade; nothing else references one
- * yet, and WP-5's queue keying will need its own answer here rather than a cascade. */
+/**
+ * Remove a person. `person_accounts` and `group_people` cascade.
+ *
+ * `queue_people` does NOT cascade and cannot — the column names a row in `people` OR in
+ * `groups`, so it carries no foreign key at all — so this is WP-5's own answer, and it is an
+ * explicit delete rather than a constraint. Leaving the rows would put a stranger in a queue's
+ * Must-be-here tray, which changes which queues come up.
+ */
 export function deletePerson(id: string, db: SqliteDatabase = bookOfRecord()): boolean {
+  forgetMember('person', id, db);
   const result = prepareChecked(db, 'DELETE FROM people WHERE id = :id').run({ id });
   return Number(result.changes) > 0;
 }

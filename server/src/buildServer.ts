@@ -6,6 +6,7 @@ import { historyRoutes } from './routes/historyRoutes.js';
 import { playbackRoutes } from './routes/playbackRoutes.js';
 import { plexMetadataRoutes } from './routes/plexMetadataRoutes.js';
 import { groupRoutes } from './routes/groupRoutes.js';
+import { peopleRoutes } from './routes/peopleRoutes.js';
 import { pendingRoutes } from './routes/pendingRoutes.js';
 import { peopleRoutes } from './routes/peopleRoutes.js';
 import { providersRoutes } from './routes/providersRoutes.js';
@@ -55,6 +56,7 @@ export function buildServer({ publicDir }: BuildServerOptions): Hono {
   api.route('/', plexMetadataRoutes());
   api.route('/', providersRoutes());
   api.route('/', groupRoutes());
+  api.route('/', peopleRoutes());
   api.route('/', pendingRoutes());
   api.route('/', peopleRoutes());
   api.route('/', playbackRoutes());

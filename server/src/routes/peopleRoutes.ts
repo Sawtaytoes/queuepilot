@@ -1,58 +1,64 @@
+// The PEOPLE surface — the roster, a group's membership rule, and a queue's trays.
+//
+// WP-3 landed people as rows and served none of them. WP-5 is what puts them on a screen, so
+// this is the first route file that reads the `people` table.
+//
+// ── Two things it refuses, and why each one is a refusal rather than a repair ────────────
+//
+//   1. **A member that names nobody.** A person id or group id that is not in the store is a
+//      400, not a silently dropped row. The trays send back what they were given; an id the
+//      server has never heard of means the two disagree about the household, and writing the
+//      rest of the list would hide that.
+//   2. **A group that cannot resolve to ONE provider profile.** This is the constraint the
+//      whole group model exists to protect: a queue keyed on Older Kids signs into the Older
+//      Kids Plex profile no matter which of the kids turned up. A group whose accounts offer
+//      two answers would sign into whichever sorted first, so it is refused at the edge with
+//      both candidates named — `queuePeople.ts groupPlayProfile()`.
+//
+// ── Personal data ────────────────────────────────────────────────────────────────────────
+//
+// Code here, names in `/config/queuepilot.sqlite`. Nothing in this file spells a household
+// member.
+//
+// ⚠️ **`/people` PROJECTS, and widening it is a deliberate act.** The stored `Person` also
+// carries provider accounts, a birth year, a maximum game weight and a beginner flag. None of
+// those paints a checklist or a tray, and a birth year is household data with no business
+// crossing the wire to do it. Three fields go out — id, display name, roster position — which
+// is WP-6's rule and is kept here unchanged rather than relaxed because a second screen turned
+// up. The trays need a NAME and a FACE, and the face is hashed from the id.
 import { Hono } from 'hono';
 
 import { errMessage } from '../errors.js';
-import { listPeople } from '../store/db/people.js';
+import { storedGroups } from '../groups.js';
+import * as sets from '../sets.js';
+import {
+  isMemberKind,
+  isMemberRole,
+  membershipProblems,
+  groupPlayProfile,
+  type GroupMembership,
+  type GroupRosterMember,
+  type MemberRole,
+  type QueueMember,
+} from '../queuePeople.js';
+import { bookOfRecord } from '../store/db/open.js';
+import {
+  bumpPeopleVersion,
+  groupMembership,
+  listPeople,
+  minPresentByGroup,
+  rosterMembersByGroup,
+  setGroupMinPresent,
+  setGroupPeople,
+} from '../store/db/people.js';
+import {
+  bumpQueuePeopleVersion,
+  membersByQueue,
+  orphanQueueMembers,
+  queueMembers,
+  setQueueMembers,
+} from '../store/db/queuePeople.js';
+import { readBody } from './readBody.js';
 
-/**
- * `GET /api/people` — the roster, as a SCREEN needs it.
- *
- * WP-3 landed people as rows and nothing has read them over HTTP until now. The Tonight
- * surface's first step is a checklist of the household, so this is the smallest thing that
- * makes that step real rather than a stub.
- *
- * ## It projects, deliberately
- *
- * The stored `Person` also carries provider accounts, a birth year, a maximum game weight
- * and a beginner flag. None of those paints a checklist, and a birth year is household data
- * with no business crossing the wire to do it — this repo is public and the split it lives
- * by is "schema and code here, data in App-Configs". Three fields go out: the id, the
- * display name and the roster position. Widening that is a deliberate act with a reason,
- * not a convenience for the next caller.
- *
- * ## Read-only, on purpose
- *
- * There is no POST and no PATCH here. People arrive through the owner-confirmed mapping
- * file (`store/migrate/people.ts`), which writes nothing until a human sets
- * `confirmed: true`, and a create endpoint would be a second door into the same table with
- * none of that gate. People ADMIN is its own screen and its own change.
- *
- * ## Ordering
- *
- * `listPeople()` already answers in `position, id` order and the array order IS the
- * contract — a roster order is somebody's decision, and re-sorting it alphabetically in the
- * browser would silently throw that away.
- *
- * Under `STORE_BACKEND=yaml` the table is empty by design (people arrived after the SQLite
- * cutover and have never had a file), so this answers `{people: []}` there rather than
- * failing. An empty roster is a real state on a fresh install too — the import is gated and
- * may simply not have been run.
- */
-export function peopleRoutes(): Hono {
-  const app = new Hono();
-
-  app.get('/people', (c) => {
-    try {
-      return c.json({
-        people: listPeople().map((person) => ({
-          displayName: person.displayName,
-          id: person.id,
-          position: person.position,
-        })),
-      });
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500);
-    }
-  });
-
-  return app;
-}
+/** The roster and every group's rule, in one call — what the queue editor's three trays are
+ *  built from. Two round trips would let the trays paint a person the rules no longer know. */
