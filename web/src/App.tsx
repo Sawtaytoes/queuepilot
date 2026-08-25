@@ -38,10 +38,12 @@ import {
   useStore,
 } from "./state/store"
 import { ChannelsView } from "./views/ChannelsView"
+import { CollectionView } from "./views/CollectionView"
 import { PendingView } from "./views/PendingView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
 import { QueueView } from "./views/QueueView"
+import { ResultView } from "./views/ResultView"
 import { TonightView } from "./views/TonightView"
 
 /**
@@ -265,6 +267,15 @@ export function App() {
         isHidden={route.view !== "play"}
       />
       <PendingView isHidden={route.view !== "pending"} />
+      <CollectionView
+        isHidden={route.view !== "collection"}
+      />
+      <ResultView
+        gameId={
+          route.view === "result" ? route.gameId : null
+        }
+        isHidden={route.view !== "result"}
+      />
       <TonightView
         isHidden={route.view !== "tonight"}
         step={route.view === "tonight" ? route.step : null}
@@ -341,6 +352,34 @@ function computeChrome(
       heading: "Tonight",
       isSubHidden: false,
       sub: "Who's here, what you're doing, and Go.",
+    }
+  }
+
+  if (route.view === "collection") {
+    return {
+      back: { label: "‹ Play", target: "/" },
+      // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending and Tonight
+      // make of it. Without it the landing's search, queue filter and "New queue" leak in.
+      bodyClasses: ["queue-view"],
+      documentTitle: "Collection — QueuePilot",
+      editableSetId: null,
+      heading: "Collection",
+      isSubHidden: false,
+      sub: "Every board game on the shelf. Mark one played, and say who was at the table.",
+    }
+  }
+
+  if (route.view === "result") {
+    return {
+      // BACK GOES TO TONIGHT, not to the landing: this card is the end of that form, and
+      // "change the answers" is the thing somebody wants next when the pick is wrong.
+      back: { label: "‹ Tonight", target: "/tonight" },
+      bodyClasses: ["queue-view"],
+      documentTitle: "Tonight's pick — QueuePilot",
+      editableSetId: null,
+      heading: "Tonight's pick",
+      isSubHidden: false,
+      sub: "One game. Reroll it, or say you played it.",
     }
   }
 
