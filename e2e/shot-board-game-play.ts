@@ -2,8 +2,9 @@
 //
 // Self-contained: its own server, its own synthetic collection, its own confirmed people
 // mapping, an unroutable Plex. `--tag=` names the output, so the same script shoots BEFORE
-// on main and AFTER on the branch — except that on main there is no `/collection` and no
-// `/result` at all, which is the point and which the BEFORE frames show.
+// on main and AFTER on the branch — except that on main there is no
+// `/board-game-collection` and no `/result` at all, which is the point and which the
+// BEFORE frames show.
 //
 // **Fixture data, never live.** Ada, Grace and Linus, four invented titles
 // (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live`).
@@ -56,7 +57,7 @@ try {
   await shot('landing');
 
   // ── 2. The shelf ────────────────────────────────────────────────────────────────── //
-  await goto('/collection', '#collection:not([hidden]) #collection-grid');
+  await goto('/board-game-collection', '#collection:not([hidden]) #collection-grid');
   await shot('collection');
 
   // ── 3. Marking a game played, and choosing the people ───────────────────────────── //
@@ -73,7 +74,7 @@ try {
 
   // ── 5. The Narrow View of the shelf ─────────────────────────────────────────────── //
   await page.setViewportSize({ width: 390, height: 900 });
-  await goto('/collection', '#collection:not([hidden]) #collection-grid');
+  await goto('/board-game-collection', '#collection:not([hidden]) #collection-grid');
   await shot('collection-narrow');
   await page.setViewportSize({ width: 1420, height: 1100 });
 

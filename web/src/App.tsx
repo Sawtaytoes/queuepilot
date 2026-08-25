@@ -26,6 +26,7 @@ import {
   useOverlays,
 } from "./state/overlays"
 import {
+  canonicalPath,
   getRouteOrigin,
   labelForPath,
   parsePath,
@@ -124,6 +125,32 @@ export function App() {
 
   // A route change closes any floating device menu, as the vanilla `route()` did.
   useEffect(closePlayMenus, [path])
+
+  /**
+   * A path that MOVED is rewritten to its new address — `/collection` →
+   * `/board-game-collection`, and whatever joins it later (`state/parsePath.ts`,
+   * `MOVED_PATHS`).
+   *
+   * REPLACES the entry rather than pushing one, for the reason the group rule below does:
+   * a pushed redirect makes Back land on the old path, which redirects forward again and
+   * the button reads as dead.
+   *
+   * `parsePath` still resolves the old path to its view, so this changes the ADDRESS under
+   * an already-painted screen. Search and hash are carried across — neither route uses one
+   * today, and dropping them silently is the kind of thing a later route would inherit.
+   */
+  useEffect(() => {
+    const canonical = canonicalPath(path)
+
+    if (!canonical) return
+
+    navigate(
+      canonical +
+        window.location.search +
+        window.location.hash,
+      { replace: true },
+    )
+  }, [navigate, path])
 
   /**
    * The group rule, both halves, in one place: **the URL wins; storage only answers a URL
@@ -268,7 +295,7 @@ export function App() {
       />
       <PendingView isHidden={route.view !== "pending"} />
       <CollectionView
-        isHidden={route.view !== "collection"}
+        isHidden={route.view !== "boardGameCollection"}
       />
       <ResultView
         gameId={
@@ -355,7 +382,7 @@ function computeChrome(
     }
   }
 
-  if (route.view === "collection") {
+  if (route.view === "boardGameCollection") {
     return {
       back: { label: "‹ Play", target: "/" },
       // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending and Tonight

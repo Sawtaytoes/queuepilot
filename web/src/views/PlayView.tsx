@@ -617,7 +617,7 @@ export function PlayView({
         </Link>
         {/* THE COLLECTION, beside Tonight rather than under Configure: marking a game
             played is a thing you do during an evening, not a setting you change. */}
-        <Link id="gocollection" to="/collection">
+        <Link id="gocollection" to="/board-game-collection">
           Board game collection &rsaquo;
         </Link>
         <Link id="gopending" to="/pending">

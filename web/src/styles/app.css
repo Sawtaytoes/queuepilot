@@ -4061,7 +4061,7 @@ body.rowdragging {
 /* ===================================================================
    WP-8 — THE COLLECTION SHELF AND TONIGHT'S RESULT CARD
 
-   Two screens and one card. `/collection` is the shelf, with "we played this" on
+   Two screens and one card. `/board-game-collection` is the shelf, with "we played this" on
    every title; `/result` is the pick — one card, a reroll, and a shortlist of three
    behind a control.
 
