@@ -18,6 +18,7 @@ import * as mqttd from './mqttd.js';
 import { seedIfMissing } from './groups.js';
 import * as sets from './sets.js';
 import { ensureBoardGamesImported } from './store/migrate/boardgames.js';
+import { startBoardGameMqtt } from './boardgames/mqtt.js';
 import { ensurePeopleImported } from './store/migrate/people.js';
 import { ensureQueuePeopleSeeded } from './store/migrate/queuePeople.js';
 import { startLiveUpdates } from './sse.js';
@@ -109,4 +110,13 @@ serve({ fetch: app.fetch, port: WEB_PORT }, () => {
   console.log(`[queuepilot-web] listening on :${WEB_PORT}`);
   mqttd.start();
   warm.start();
+
+  // The collection sync's own MQTT subscription, on the `board-game-picker/…` base it inherited
+  // — the topics did not move when the handler did, because Home Assistant is what publishes
+  // the nightly tick and listens for the result. HA owns the schedule; there is no cron here.
+  // Fire-and-forget for the same reason `mqttd.start()` is: a broker that is down must not stop
+  // the app from serving.
+  startBoardGameMqtt().catch((e: unknown) => {
+    console.log(`[boardgames] MQTT not started: ${e instanceof Error ? e.message : String(e)}`);
+  });
 });

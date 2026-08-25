@@ -576,6 +576,9 @@ ok(
   `plays ${absorb.counts.board_game_plays}, people ${absorb.counts.board_game_play_people}`,
 );
 
+/** Known-how claims before any play is logged, so §5 can prove none were invented. */
+const KNOWN_HOW_BEFORE = absorb.counts.board_game_known_how;
+
 const { boardGamesHttpClient, boardGamesRepositoryClient } =
   await import('../server/src/providers/board-game-picker-client.js');
 const { boardGamesProvider } = await import('../server/src/providers/board-game-picker.js');
@@ -799,46 +802,70 @@ ok(
   leaked.join(', '),
 );
 
-// ── 5. the write is STILL HTTP, and this pins it rather than hiding it ───────────────────── //
+// ── 5. THE WRITE CAME HOME (WP-4d), and the two transports now DIFFER on purpose ────────── //
 //
-// Two books of record are open: the absorb REPLACES all twelve tables when the source file's
-// fingerprint changes, so a play written locally would be erased by the next start. WP-4d
-// lands the writers and retires the source file in the same change. Until then the POST goes
-// to the sibling app, and the local store stays untouched by it.
+// This section used to pin "neither transport wrote a play row here". That was the correct
+// assertion while two books of record were open: the absorb REPLACED all twelve tables on a
+// fingerprint change, so a play written locally was erased by the next start.
+//
+// WP-4d retires the source file in the same change as the first writers, so the erasing cannot
+// happen and the write belongs where the reads are. The assertion is not weakened, it is
+// INVERTED and made specific — the in-process transport writes exactly one row and the HTTP one
+// writes none HERE. A gate that still passed unchanged after a write came home would be a gate
+// that was never watching the write.
 
 const { bookOfRecord } = await import('../server/src/store/db/open.js');
-const playsBefore = (bookOfRecord()
-  .prepare('SELECT COUNT(*) AS c FROM board_game_plays')
-  .get() as { c: number }).c;
+const countPlays = (): number =>
+  (bookOfRecord().prepare('SELECT COUNT(*) AS c FROM board_game_plays').get() as { c: number }).c;
 
-const postsBefore = POSTED.length;
-same(
-  'logProgress() answers the same on both transports',
-  await viaHttp.logProgress?.('orchard-run'),
-  await viaRepo.logProgress?.('orchard-run'),
+// ── the HTTP transport: still a POST, still nothing local ──
+const httpPlaysBefore = countPlays();
+const httpPostsBefore = POSTED.length;
+const httpAnswer = await viaHttp.logProgress?.('orchard-run');
+ok(
+  'BOARD_GAME_TRANSPORT=http still POSTs the play to the sibling app',
+  POSTED.length - httpPostsBefore === 1 && POSTED[POSTED.length - 1] === 'orchard-run',
+  POSTED.slice(httpPostsBefore).join(', '),
 );
 ok(
-  'both transports POSTed the play to the sibling app',
-  POSTED.length - postsBefore === 2 && POSTED.slice(postsBefore).every((id) => id === 'orchard-run'),
-  POSTED.slice(postsBefore).join(', '),
+  'and the HTTP transport writes NO row here — it is the rollback, and it stays remote',
+  countPlays() === httpPlaysBefore,
+  `${httpPlaysBefore} -> ${countPlays()}`,
 );
 
-const playsAfter = (bookOfRecord()
-  .prepare('SELECT COUNT(*) AS c FROM board_game_plays')
-  .get() as { c: number }).c;
+// ── the in-process transport: the write is local now ──
+const repoPlaysBefore = countPlays();
+const repoPostsBefore = POSTED.length;
+const repoAnswer = await viaRepo.logProgress?.('orchard-run');
+same('logProgress() answers the same shape on both transports', httpAnswer, repoAnswer);
 ok(
-  'and NEITHER wrote a play row here — WP-4e is not the package that opens a writer',
-  playsAfter === playsBefore,
-  `${playsBefore} -> ${playsAfter}`,
+  '🐞 THE IN-PROCESS TRANSPORT WRITES THE PLAY HERE, and touches the network zero times',
+  countPlays() === repoPlaysBefore + 1 && POSTED.length === repoPostsBefore,
+  `plays ${repoPlaysBefore} -> ${countPlays()}, posts ${POSTED.length - repoPostsBefore}`,
 );
 
+// ── and it still records nobody, which is the CORRECT answer on this path ──
+//
+// Not the WP-8 defect. Whoever pressed "we played this" on a tile is not filling in a form, and
+// a play may RENEW a known-how claim but must never INVENT one — so guessing the roster here
+// would write a claim against a name that appears on no screen. The screen that asks who was at
+// the table is the Collection screen, and it posts somewhere else.
 const people = (bookOfRecord()
   .prepare('SELECT COUNT(*) AS c FROM board_game_play_people')
   .get() as { c: number }).c;
 ok(
-  'a logged play still records NO PEOPLE — the live defect WP-8 owns, left visible',
+  'a play logged from a TILE names nobody, and invents nobody',
   people === 0,
   `board_game_play_people has ${people} rows`,
+);
+
+const claims = (bookOfRecord()
+  .prepare('SELECT COUNT(*) AS c FROM board_game_known_how')
+  .get() as { c: number }).c;
+ok(
+  'and it created no known-how claim out of a counter',
+  claims === KNOWN_HOW_BEFORE,
+  `${KNOWN_HOW_BEFORE} -> ${claims}`,
 );
 
 server.close();
