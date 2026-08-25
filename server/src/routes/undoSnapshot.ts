@@ -13,6 +13,14 @@ import * as history from '../history.js';
  * 2026-08-12-provider-tokens-live-in-a-separate-config-file forbids. The token file is
  * written only by providers/config.js writeSecret(), which is outside this machinery.
  *
+ * THE BOARD-GAME ROUTES ARE EXCLUDED, for two separate reasons and both matter. `POST
+ * /board-games/pick` MUTATES NOTHING — it is a read with a body, and every reroll would push
+ * an identical copy of the managed files onto the stack and bury whatever the owner actually
+ * wanted back. And a play or a known-how claim is a row in the BOOK OF RECORD, not in any file
+ * this snapshots, so an undo would restore YAML that never changed and leave the write in
+ * place: a control that appears to take back the thing you just did and does not. The finish
+ * panel carries its own Undo, scoped to exactly the claims it created.
+ *
  * THE PREFIX IS STRIPPED BY HAND, and that is the whole reason this is a factory taking
  * `mountPrefix`. Express mounted the original on a path prefix (`app.use('/api', ...)`), so
  * `req.path` inside it had already lost the `/api`, which is why the exclusion list reads
@@ -23,7 +31,7 @@ import * as history from '../history.js';
  */
 export function undoSnapshot(mountPrefix: string): MiddlewareHandler {
   const MUTATING = ['POST', 'PATCH', 'PUT', 'DELETE'];
-  const MANAGED = ['/play', '/undo', '/redo'];
+  const MANAGED = ['/play', '/undo', '/redo', '/board-games'];
   const TOKEN_PATH = /^\/providers\/[^/]+\/token$/;
 
   return async (c, next) => {
