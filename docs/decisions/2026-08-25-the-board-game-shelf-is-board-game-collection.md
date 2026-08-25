@@ -78,6 +78,19 @@ on the way to the right one, which reads as a broken bookmark.
   tree, 8 were this route; the rest are Plex's `/library/collections/<rk>/children`, the
   picker's `/api/collection` privacy rule, and BoardGameGeek's own `/collection` endpoint.
 
+## Related
+
+- The workspace record that generalises this one:
+  `agentic/docs/decisions/2026-08-25-a-route-names-the-specific-thing-not-the-generic-one.md`
+  — a page route is named for the specific product or process, never for the category it
+  happens to be the first member of. The test it states is the owner's own: **would a second
+  one of these want the same word?**
+- `agentic/docs/decisions/2026-07-16-apps-get-product-name-subdomains.md` — the same rule for
+  hosts, which the above extends to paths.
+- [The wire ids are a CONTRACT, and the gate drives the broker](2026-08-25-the-wire-ids-are-a-contract-and-the-gate-drives-the-broker.md)
+  — why a name that reaches an NFC card can never be corrected. A path is one step away from
+  that, which is why one day old was the moment to move it.
+
 ## What did NOT change
 
 - **The DOM ids.** `#collection`, `#collection-grid`, `#collection-find` and the
