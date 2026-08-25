@@ -23,7 +23,7 @@
 // EVERY TITLE AND EVERY PERSON HERE IS INVENTED. This repo is public, and a fixture seeded
 // from the live collection is exactly the shortcut the absorb's own rules forbid. The cast is
 // Ada, Grace and Linus.
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { DatabaseSync } from 'node:sqlite';
 import { join } from 'node:path';
@@ -48,7 +48,14 @@ const SEED = join(dir, 'seed.yaml');
 process.env.BOARD_GAME_IMPORT_PATH = SOURCE;
 process.env.BOARD_GAME_GROUPING_SEED_PATH = SEED;
 
-const { importBoardGames } = await import('./boardgames.js');
+const {
+  ensureBoardGamesImported,
+  importBoardGames,
+  isBoardGameSourceRetired,
+  resetBoardGameImportState,
+  retireBoardGameSource,
+  seedGroupingRules,
+} = await import('./boardgames.js');
 const {
   boardGameCounts,
   getBoardGame,
@@ -286,8 +293,12 @@ const clearStore = (): void => {
 
 beforeEach(() => {
   rmSync(SEED, { force: true });
+  for (const name of readdirSync(dir)) {
+    if (name.includes('.retired-')) rmSync(join(dir, name), { force: true });
+  }
   writeSource();
   clearStore();
+  resetBoardGameImportState();
 });
 
 afterAll(() => {
@@ -632,5 +643,136 @@ describe('the two tables keyed on a person', () => {
     expect(rekeyBoardGamePerson('player-grace', 'merged')).toBe(1);
     const claim = listBoardGameKnownHow().find((row) => row.gameId === 'quarry-duel');
     expect(claim?.confirmedAt).toBe('2026-01-04T20:00:00.000Z');
+  });
+});
+
+// ── THE SOURCE FILE IS RETIRED IN THE SAME CHANGE AS THE FIRST WRITER (WP-4d) ───────────── //
+//
+// Until WP-4d this app read these twelve tables and wrote none of them, and the absorb could
+// safely REPLACE all twelve whenever the source file changed. WP-4d lands the BGG sync, the art
+// and the two linkers, so that REPLACE is now the thing that would delete the owner's work.
+//
+// These tests are the proof that it cannot happen any more. The one that matters is the last
+// one: write a row the way a sync writes it, change the source file the way a re-stage would,
+// restart, and find the row still there.
+describe('the retirement of the source file', () => {
+  it('latches after the first absorb and moves the source file aside', () => {
+    expect(isBoardGameSourceRetired()).toBe(false);
+    ensureBoardGamesImported();
+
+    expect(isBoardGameSourceRetired()).toBe(true);
+    expect(existsSync(SOURCE)).toBe(false);
+    const asideNames = readdirSync(dir).filter((name) => name.includes('.retired-'));
+    expect(asideNames.length).toBe(1);
+    // Moved aside, never deleted — getting back is meant to be awkward, not impossible.
+    expect(asideNames[0]?.startsWith('source.sqlite.retired-')).toBe(true);
+  });
+
+  it('refuses a re-absorb once retired — INCLUDING under `force`', () => {
+    ensureBoardGamesImported();
+    writeSource();
+
+    // `force` exists to re-run an absorb that a fingerprint check would skip. It must not be a
+    // way to re-run a whole-table REPLACE over a collection this app now writes.
+    const forced = importBoardGames({ force: true });
+    expect(forced.imported).toBe(false);
+    expect(forced.reason).toContain('retired');
+  });
+
+  it('does NOT latch a container that has no collection yet', () => {
+    rmSync(SOURCE, { force: true });
+    ensureBoardGamesImported();
+
+    // A fresh container must still be able to receive a collection later. Latching on an empty
+    // store would lock it out of ever getting one.
+    expect(isBoardGameSourceRetired()).toBe(false);
+    expect(boardGameCounts().board_games).toBe(0);
+
+    writeSource();
+    resetBoardGameImportState();
+    ensureBoardGamesImported();
+    expect(boardGameCounts().board_games).toBe(3);
+    expect(isBoardGameSourceRetired()).toBe(true);
+  });
+
+  it('leaves the door open when the absorb rolled back', () => {
+    // A rolled-back absorb left the tables as they were. Retiring then would freeze a
+    // collection nobody meant to keep.
+    writeFileSync(SEED, 'version: 2\n');
+    const result = ensureBoardGamesImported();
+    expect(result.problems.length).toBeGreaterThan(0);
+    expect(isBoardGameSourceRetired()).toBe(false);
+  });
+
+  it('🐞 A SYNC’S ROWS SURVIVE A RESTART', () => {
+    ensureBoardGamesImported();
+    const db = bookOfRecord();
+
+    // A writer does what the BGG sync does: adds a title the source file has never heard of,
+    // and excludes another one with `is_excluded_source = 'sync'`.
+    db.exec(
+      `INSERT INTO board_games (id, name, min_players, max_players, created_at, updated_at)
+       VALUES ('tidewright-tides', 'Tidewright: Tides', 2, 4, '2026-08-25T00:00:00.000Z',
+               '2026-08-25T00:00:00.000Z')`,
+    );
+    db.exec(
+      `INSERT INTO board_game_links (id, game_id, kind, label, url, source, created_at)
+       VALUES ('link-new', 'tidewright-tides', 'rulebook', 'Rulebook',
+               'https://example.invalid/rulebook.pdf', 'derived', '2026-08-25T00:00:00.000Z')`,
+    );
+
+    // Now the exact event this whole latch exists to survive: the source file comes back,
+    // with DIFFERENT content, and the app restarts. Before WP-4d this re-absorbed and the two
+    // rows above stopped existing, with no error and nobody watching.
+    writeSource({ excludedSource: 'sync' });
+    resetBoardGameImportState();
+    ensureBoardGamesImported();
+
+    expect(getBoardGame('tidewright-tides')?.name).toBe('Tidewright: Tides');
+    expect(
+      db
+        .prepare<{ c: number }>(
+          "SELECT COUNT(*) AS c FROM board_game_links WHERE id = 'link-new'",
+        )
+        .get()?.c,
+    ).toBe(1);
+    // And the absorbed rows are still the ones the absorb wrote, not a second copy of them.
+    expect(boardGameCounts().board_games).toBe(4);
+  });
+
+  it('keeps reading the grouping seed after retirement, because a seed can only ADD', () => {
+    ensureBoardGamesImported();
+    expect(isBoardGameSourceRetired()).toBe(true);
+    const before = boardGameCounts().board_game_groupings;
+
+    // The source file is a second BOOK OF RECORD and is retired. The seed is not: every insert
+    // is `ON CONFLICT DO NOTHING`, so it can never take a rule back — and it is the only way to
+    // add one until the editing screen exists.
+    writeFileSync(
+      SEED,
+      [
+        'version: 1',
+        'groupings:',
+        '  - prefix: tidewright tides',
+        '    game_id: tidewright-tides',
+        '    game_name: "Tidewright: Tides"',
+        '',
+      ].join('\n'),
+    );
+    expect(seedGroupingRules().seededGroupings).toBe(1);
+    expect(boardGameCounts().board_game_groupings).toBe(before + 1);
+
+    // Fingerprinted on its own, so an unchanged seed does no work on the next start.
+    expect(seedGroupingRules().seededGroupings).toBe(0);
+  });
+
+  it('sets the latch even when the file cannot be moved aside', () => {
+    // `/config` can be read-only and another process can hold the file. Neither is a reason to
+    // leave the door open and let the next start REPLACE a collection this app is writing.
+    rmSync(SOURCE, { force: true });
+    const outcome = retireBoardGameSource();
+    expect(outcome.retired).toBe(true);
+    expect(outcome.movedTo).toBeNull();
+    expect(isBoardGameSourceRetired()).toBe(true);
   });
 });

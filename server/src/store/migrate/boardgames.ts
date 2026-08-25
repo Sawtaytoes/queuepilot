@@ -25,11 +25,35 @@
 // the twelve tables are REPLACED from the source, in one transaction, and the seed is inserted
 // on top with `ON CONFLICT DO NOTHING` so it can never overwrite a rule the owner made.
 //
-// ⚠️ A REPLACE is the right answer only while the sibling app is still the one being edited,
-// which is the overlap this package opens and WP-10 closes. There are no writers for these
-// tables in this app yet — WP-4d brings them — and the day the first one lands, THE SOURCE
-// FILE MUST BE RETIRED in the same change. Two books of record with a re-syncing importer
-// between them is how the owner's edit disappears on a restart.
+// ── ⚠️ THE ABSORB IS RETIRED, AND THIS IS THE CHANGE THAT RETIRED IT (WP-4d) ─────────────
+//
+// A REPLACE was the right answer only while the sibling app was the one being edited. WP-4d
+// lands the first writers — the BGG sync, the art, the rulebook and video linkers — so the
+// overlap is over and the REPLACE is now the thing that would destroy the owner's work.
+//
+// So the absorb is a ONE-WAY DOOR. `retire()` writes `store_meta('boardgames','retired_at')`
+// and renames the source file to `board-game-picker-import.sqlite.retired-<timestamp>`, and
+// from that moment `importBoardGames()` refuses — INCLUDING under `force: true`, because a
+// flag that re-runs a whole-table REPLACE over a live collection is not a debugging
+// convenience, it is a delete button with a innocent name.
+//
+// WHEN IT FIRES. At the end of the boot hook, whenever the store holds a collection — whether
+// this boot absorbed it or a previous one did. On the live system the fingerprint already
+// matches, so nothing is absorbed and the latch is set on the first start after this deploys.
+// On a fresh container somebody stages a collection into: absorb once, retire immediately.
+//
+// THE SEED IS NOT RETIRED WITH IT, and that distinction is the point. The source file is a
+// second BOOK OF RECORD — it carries rows that replace ours. `board-game-grouping-seed.yaml`
+// is not: every insert it makes is `ON CONFLICT DO NOTHING`, so it can only ever ADD a rule
+// and can never take one back. Retiring it too would leave the owner with no way at all to
+// add a grouping rule, because the screen that WP-4b's decision promises does not exist yet.
+// So after retirement the boot hook runs `seedGroupingRules()` — the seed half alone, gated on
+// its own fingerprint, touching none of the twelve tables' contents.
+//
+// GETTING BACK. Deliberately awkward, because it means discarding everything this app has
+// recorded about the collection since the cutover. Rename the `.retired-*` file back AND
+// `DELETE FROM store_meta WHERE store = 'boardgames' AND key = 'retired_at'`. Two steps, by
+// hand, with the app stopped. There is no flag and there must not be one.
 //
 // ── Every write goes through `prepareChecked` ────────────────────────────────────────────
 //
@@ -50,7 +74,7 @@
 // start this game without the rulebook" is a claim a person STATES, which a play may renew and
 // must never invent, and it appears on no screen attached to a name — so nobody would notice.
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, renameSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { dirname, join } from 'node:path';
 import { parse } from 'yaml';
@@ -168,6 +192,91 @@ const sha256 = (file: string): string => {
 
 const fingerprint = (): string => `source:${sha256(sourcePath())}|seed:${sha256(seedPath())}`;
 
+// ── The retirement latch ──────────────────────────────────────────────────────────────── //
+
+/** `store_meta` key. Present ⇒ this app owns the collection and the absorb is closed. */
+const RETIRED_KEY = 'retired_at';
+
+/** Has the source file been retired? Once true, never false again — see the file header. */
+export const isBoardGameSourceRetired = (db: SqliteDatabase = bookOfRecord()): boolean =>
+  readMeta(db, 'boardgames', RETIRED_KEY) !== null;
+
+/**
+ * Close the door: latch the meta row, then move the source file aside.
+ *
+ * The LATCH is what makes the retirement true — a renamed file could be renamed back, and a
+ * `BOARD_GAME_IMPORT_PATH` pointing somewhere else would walk straight past a rename. The
+ * rename is what makes it VISIBLE: a human looking in `/config` can see that the import file
+ * is spent, and can see the timestamp it stopped being read.
+ *
+ * The rename is best-effort on purpose. `/config` can be read-only, the file can already be
+ * gone, another process can hold it — and none of those is a reason to leave the latch unset
+ * and let the next start REPLACE a collection this app is now writing to. The latch first,
+ * then the file, and a failure on the second half is logged rather than thrown.
+ */
+export function retireBoardGameSource(
+  db: SqliteDatabase = bookOfRecord(),
+): { retired: boolean; movedTo: string | null } {
+  if (isBoardGameSourceRetired(db)) return { movedTo: null, retired: false };
+
+  const at = new Date().toISOString();
+  writeMeta(db, 'boardgames', RETIRED_KEY, at);
+  bumpVersion(db, 'boardgames');
+
+  const source = sourcePath();
+  if (!existsSync(source)) return { movedTo: null, retired: true };
+
+  // Colons are legal in a POSIX filename but make the name miserable to type in a shell.
+  const movedTo = `${source}.retired-${at.replace(/[:.]/g, '')}`;
+  try {
+    renameSync(source, movedTo);
+    return { movedTo, retired: true };
+  } catch (error) {
+    console.log(
+      `[boardgames] the collection is retired, but ${source} could not be moved aside: ` +
+        `${errMessage(error)} — the latch is set, so it will not be read again`,
+    );
+    return { movedTo: null, retired: true };
+  }
+}
+
+/**
+ * The seed half, on its own, for a store whose source file is already retired.
+ *
+ * Adds grouping rules and answers reviews; it can never remove or replace either, and it never
+ * touches the ten tables that hold the collection itself. Gated on the seed's own sha256 so a
+ * start that changed nothing does no work.
+ */
+export function seedGroupingRules(): { seededGroupings: number; seededReviews: number } {
+  const none = { seededGroupings: 0, seededReviews: 0 };
+  const file = seedPath();
+  if (!existsSync(file)) return none;
+
+  const db = bookOfRecord();
+  const current = sha256(file);
+  if (readMeta(db, 'boardgames', 'seed_fingerprint') === current) return none;
+
+  const { seed, problems } = readSeed(file);
+  if (problems.length) {
+    // Same rule as the absorb's: a half-read rule file silently stops grouping some boxes,
+    // which shows up as a title going missing from the pool and nowhere else.
+    console.log(`[boardgames] the grouping seed does not validate — nothing was written:`);
+    for (const problem of problems) console.log(`[boardgames]   - ${problem}`);
+    return none;
+  }
+
+  let seededGroupings = 0;
+  let seededReviews = 0;
+  db.withTransaction(() => {
+    seededGroupings = seedGroupings(seed, db);
+    seededReviews = seedReviews(seed, db);
+    writeMeta(db, 'boardgames', 'seed_fingerprint', current);
+    writeMeta(db, 'boardgames', 'seed_file', file);
+    if (seededGroupings || seededReviews) bumpVersion(db, 'boardgames');
+  });
+  return { seededGroupings, seededReviews };
+}
+
 /** A boolean out of a hand-edited file. `undefined` is false; anything else has to say `true`. */
 const asFlag = (value: unknown): number => (value === true ? 1 : 0);
 
@@ -264,6 +373,17 @@ export function importBoardGames({ force = false }: { force?: boolean } = {}): B
   const hasSeed = existsSync(seedFile);
   const current = fingerprint();
   const db = bookOfRecord();
+
+  // THE ONE-WAY DOOR, and `force` does not open it. See the file header: this app writes these
+  // tables now, so a REPLACE from a file the sibling app used to own is data loss, and a
+  // deliberate re-run is exactly the request that would cause it.
+  if (isBoardGameSourceRetired(db)) {
+    return report(false, 'the collection is this app’s own — the source file is retired', {
+      counts: boardGameCounts(db),
+      seed: hasSeed ? seedFile : null,
+      source,
+    });
+  }
 
   if (!force && readMeta(db, 'boardgames', 'source_fingerprint') === current) {
     return report(false, 'the collection has not changed since the last import', {
@@ -999,6 +1119,25 @@ export function ensureBoardGamesImported(): BoardGameImportReport {
     return report(false, 'the collection has not moved since the last check');
   }
   lastStamp = stamp;
+
+  // Once retired, the only input still read is the seed — see the file header for why the two
+  // are not the same kind of thing. This branch is what the live system takes on every start
+  // after the WP-4d deploy, so it must not open the source file or even ask whether it exists.
+  if (isBoardGameSourceRetired()) {
+    const seeded = seedGroupingRules();
+    if (seeded.seededGroupings || seeded.seededReviews) {
+      console.log(
+        `[boardgames] the collection is this app’s own; the seed added ` +
+          `${seeded.seededGroupings} grouping rule(s) and ${seeded.seededReviews} review answer(s)`,
+      );
+    }
+    return report(false, 'the collection is this app’s own — the source file is retired', {
+      counts: boardGameCounts(bookOfRecord()),
+      seededGroupings: seeded.seededGroupings,
+      seededReviews: seeded.seededReviews,
+    });
+  }
+
   if (!existsSync(sourcePath())) return report(false, 'no board-game collection to import');
 
   const result = importBoardGames();
@@ -1019,6 +1158,29 @@ export function ensureBoardGamesImported(): BoardGameImportReport {
   } else if (result.problems.length) {
     console.log(`[boardgames] ${result.reason}:`);
     for (const problem of result.problems) console.log(`[boardgames]   - ${problem}`);
+    // A rolled-back absorb left the tables as they were. Retiring now would freeze a collection
+    // nobody meant to keep, so the door stays open for the start that fixes the input.
+    return result;
+  }
+
+  // ── The cutover ─────────────────────────────────────────────────────────────────────── //
+  //
+  // The store holds a collection, and as of WP-4d this app is what writes it. Close the door
+  // BEFORE the first sync can run: the hazard is not a slow leak, it is one restart between a
+  // sync and a fingerprint change erasing everything the sync wrote.
+  //
+  // Guarded on there being rows at all, so a container whose absorb found an empty source file
+  // does not latch itself out of ever receiving a real one.
+  const db = bookOfRecord();
+  if (!isBoardGameSourceRetired(db) && boardGameCounts(db).board_games > 0) {
+    const { movedTo } = retireBoardGameSource(db);
+    console.log(
+      '[boardgames] the collection is now this app’s own — the source file is retired and ' +
+        'will not be read again' +
+        (movedTo === null ? '' : `; moved aside to ${movedTo}`),
+    );
+    // The seed keeps working after the door shuts, and this is the start that proves it.
+    seedGroupingRules();
   }
 
   return result;
