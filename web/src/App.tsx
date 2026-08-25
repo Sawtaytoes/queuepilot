@@ -379,7 +379,11 @@ function computeChrome(
       editableSetId: null,
       heading: "Tonight's pick",
       isSubHidden: false,
-      sub: "One game. Reroll it, or say you played it.",
+      // WP-7: this card is now one of TWO answers — a game off the shelf, or a queue for
+      // the evening — so the sentence says the half they share. It used to promise "say you
+      // played it", which a queue card does not offer at all: a queue records its own
+      // progress when it plays.
+      sub: "One answer. Reroll it, or start it.",
     }
   }
 

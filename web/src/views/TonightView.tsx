@@ -34,10 +34,12 @@ import {
   type TonightQueue,
   tonightQueues,
 } from "../lib/tonight"
+import { routeFor } from "../lib/tonightRouting"
 import type {
   PeopleResponse,
   Person,
   PickResponse,
+  TonightPickResponse,
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
 import { setStatus, useStore } from "../state/store"
@@ -558,8 +560,10 @@ function GoButton({
   const navigate = useNavigate()
   const [isDrawing, setIsDrawing] = useState(false)
   const label = goLabel(selectedPeople, guestCount)
+  // The one map: which backend this activity reaches, and how Pick draws for it.
+  const route = routeFor(activity)
 
-  if (!isQueues && activity === "board-games") {
+  if (!isQueues && route.engine === "board-games") {
     const size = tableSize(selectedPeople, guestCount)
 
     // A pick needs to know how many are playing, and this screen's people are a FILTER —
@@ -616,6 +620,7 @@ function GoButton({
           criteria,
           excludedGameIds: [],
           guestCount,
+          kind: "board-game",
           origin: "pick",
           personIds: [...selectedPeople],
           savedAt: new Date().toISOString(),
@@ -644,7 +649,10 @@ function GoButton({
     )
   }
 
-  if (!isQueues) {
+  // SURPRISE ME narrows before it picks, and the narrowings are not settled. The tile routes
+  // to its own screen, so this is only reachable by a stale state; it still says the true
+  // thing rather than offering a draw that cannot be made.
+  if (!isQueues && route.engine === "narrow-first") {
     return (
       <>
         <Button
@@ -656,11 +664,76 @@ function GoButton({
           {label}
         </Button>
         <p className="subhint">
-          Pick chooses one thing and offers a reroll. Board
-          games are connected; the other activities are not
-          yet — switch to Queues to start one now.
+          Surprise Me narrows down first. What it narrows by
+          is still being settled.
         </p>
       </>
+    )
+  }
+
+  // EVERY OTHER TILE IS QUEUE-FIRST (WP-7). The draw chooses one queue for this activity and
+  // these people, binds the session to that queue's backend, and hands the card a shortlist
+  // of three drawn at the same time. The queue's own engine chooses the ITEM when it starts —
+  // it is the only thing that already knows what is left.
+  if (!isQueues) {
+    const drawQueue = async () => {
+      setIsDrawing(true)
+      try {
+        const answer = await api<TonightPickResponse>(
+          "POST",
+          "/api/tonight/pick",
+          {
+            activity,
+            excludedSetIds: [],
+            guestCount,
+            personIds: selectedPeople,
+          },
+        )
+
+        if (!answer.pick || answer.shortlist.length === 0) {
+          setStatus(
+            answer.reason ??
+              "Nothing matches that tonight.",
+            "err",
+          )
+          return
+        }
+
+        // WRITTEN DOWN BEFORE WE NAVIGATE, for the same reason the board-game draw is:
+        // leaving the card used to lose it and the reroll's memory with it.
+        writePickSession({
+          activity,
+          backend: answer.backend,
+          excludedSetIds: [],
+          guestCount,
+          kind: "queue",
+          notes: answer.notes ?? [],
+          origin: "pick",
+          personIds: [...selectedPeople],
+          picks: answer.shortlist,
+          savedAt: new Date().toISOString(),
+        })
+        navigate("/result")
+      } catch (e) {
+        setStatus(
+          `Could not pick: ${(e as Error).message}`,
+          "err",
+        )
+      } finally {
+        setIsDrawing(false)
+      }
+    }
+
+    return (
+      <Button
+        id="tonight-go"
+        intent="accent"
+        isDisabled={isDrawing}
+        onClick={() => void drawQueue()}
+        size="lg"
+      >
+        {label}
+      </Button>
     )
   }
 
