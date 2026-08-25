@@ -95,6 +95,46 @@ describe("parsePath", () => {
     })
   })
 
+  /**
+   * The three Tonight addresses. `/tonight/go` is a PRESET CARD's — the answers the form
+   * would have collected, in the query string — and it must not be swallowed by the bare
+   * `/tonight`, or a tapped card opens the empty form it exists to skip.
+   */
+  test("/tonight and its two steps", () => {
+    expect(parsePath("/tonight")).toEqual({
+      step: null,
+      view: "tonight",
+    })
+    expect(parsePath("/tonight/surprise")).toEqual({
+      step: "surprise",
+      view: "tonight",
+    })
+    expect(parsePath("/tonight/go")).toEqual({
+      step: "go",
+      view: "tonight",
+    })
+    // The query string is not part of the path, and the step survives it.
+    expect(parsePath("/tonight/go")).toEqual({
+      step: "go",
+      view: "tonight",
+    })
+    expect(parsePath("/tonight/go/")).toEqual({
+      step: "go",
+      view: "tonight",
+    })
+  })
+
+  test("/result is tonight's pick, and /result/<id> is a queue arrival", () => {
+    expect(parsePath("/result")).toEqual({
+      gameId: null,
+      view: "result",
+    })
+    expect(parsePath("/result/catan")).toEqual({
+      gameId: "catan",
+      view: "result",
+    })
+  })
+
   test("an unknown path falls back to PLAY rather than a blank page", () => {
     expect(parsePath("/nope")).toEqual({
       group: null,
