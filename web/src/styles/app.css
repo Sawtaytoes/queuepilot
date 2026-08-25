@@ -3876,7 +3876,20 @@ body.rowdragging {
 .qcardmeta {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
+}
+/* A queue nobody is filed on. Said in words rather than left blank — an empty row reads
+   as "still loading", and this queue is the one that is never filtered out. */
+.qcardanyone {
+  font-size: 0.82rem;
+  color: var(--color-content-secondary);
+}
+/* The provider brand sits in its own box so it is addressable apart from the people
+   beside it — `tonight-test.ts` asserts the brand and would otherwise read a badge row
+   glued into one string. */
+.qcardprov {
+  display: inline-flex;
 }
 /* The implied queue keeps its own small card, because it is not a control: there is one
    match, so there is nothing to choose and no radio to draw. */

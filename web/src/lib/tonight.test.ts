@@ -6,13 +6,19 @@ import {
   isProviderWorthNaming,
   queueMatchesPeople,
   queuesForTonight,
+  resolveMembers,
   rosterOrder,
   SURPRISE_SCOPES,
+  type TonightMember,
   type TonightQueue,
   tonightQueues,
 } from "./tonight"
 import { tilesForQueueActivity } from "./tonightRouting"
-import type { RegistrySet } from "./types"
+import type {
+  GroupWithRoster,
+  QueueMember,
+  RegistrySet,
+} from "./types"
 
 /**
  * The Tonight surface's two rules and its one settled list.
@@ -30,13 +36,47 @@ const queue = (
   activity: "movies",
   delivery: "push",
   hasRoster: true,
+  members: [],
   name: "Movies",
-  optionalPeople: [],
-  peopleNames: [],
   providerLabel: "",
-  requiredPeople: [],
   ...over,
 })
+
+/** One person on a queue. A person is only ever themself, and counts as one. */
+const person = (
+  id: string,
+  role: "optional" | "required" = "required",
+): TonightMember => ({
+  id,
+  kind: "person",
+  label: id,
+  minPresent: 1,
+  people: [id],
+  role,
+})
+
+/** A whole saved group, carrying its own count. NOT flattened to its people. */
+const group = (
+  id: string,
+  people: readonly string[],
+  minPresent: number,
+  role: "optional" | "required" = "required",
+): TonightMember => ({
+  id,
+  kind: "group",
+  label: id,
+  minPresent,
+  people,
+  role,
+})
+
+/** A queue with people on it, which is what `hasRoster` means. */
+const withPeople = (
+  id: string,
+  members: readonly TonightMember[],
+  over: Partial<TonightQueue> = {},
+): TonightQueue =>
+  queue({ hasRoster: true, id, members, ...over })
 
 describe("the activity tiles", () => {
   test("are the settled six, in the settled order", () => {
@@ -127,11 +167,25 @@ describe("the people filter", () => {
     ).toBe(true)
   })
 
+  /**
+   * The same rule stated the other way round, and the one that bites on the LIVE data:
+   * several queues legitimately have nobody filed on them, and hiding those would make
+   * them unreachable from this screen.
+   */
+  test("never hides a queue nobody is filed on", () => {
+    const anybody = withPeople("anybody", [])
+
+    expect(queueMatchesPeople(anybody, [])).toBe(true)
+    expect(queueMatchesPeople(anybody, ["ada"])).toBe(true)
+    expect(
+      queueMatchesPeople(anybody, ["ada", "grace"]),
+    ).toBe(true)
+  })
+
   test("every selected person must be on the queue", () => {
-    const adaOnly = queue({
-      id: "ada-movies",
-      requiredPeople: ["ada"],
-    })
+    const adaOnly = withPeople("ada-movies", [
+      person("ada"),
+    ])
 
     expect(queueMatchesPeople(adaOnly, ["ada"])).toBe(true)
     // Grace is not on it, so ticking Grace hides it — the decision's own example.
@@ -141,10 +195,10 @@ describe("the people filter", () => {
   })
 
   test("every required person must be selected", () => {
-    const both = queue({
-      id: "ada-grace",
-      requiredPeople: ["ada", "grace"],
-    })
+    const both = withPeople("ada-grace", [
+      person("ada"),
+      person("grace"),
+    ])
 
     expect(queueMatchesPeople(both, ["ada"])).toBe(false)
     expect(queueMatchesPeople(both, ["ada", "grace"])).toBe(
@@ -156,11 +210,10 @@ describe("the people filter", () => {
   })
 
   test("an optional person is the hatch — being there does not remove the queue", () => {
-    const withGuest = queue({
-      id: "ada-plus",
-      optionalPeople: ["linus"],
-      requiredPeople: ["ada"],
-    })
+    const withGuest = withPeople("ada-plus", [
+      person("ada"),
+      person("linus", "optional"),
+    ])
 
     expect(
       queueMatchesPeople(withGuest, ["ada", "linus"]),
@@ -170,25 +223,182 @@ describe("the people filter", () => {
       true,
     )
   })
+
+  /**
+   * ⚠️ THE GROUP RULE, and the reason a group may not be flattened into its people.
+   *
+   * "Younger Kids" is at least ONE of three. Flattened into three person ids it becomes
+   * "all three of them", which is the rule inverted — and the queue would then never come
+   * up, because the kids are hardly ever all in one room.
+   */
+  test("a group counts by its own number, not by all of its people", () => {
+    const kids = withPeople("kids-movies", [
+      group("younger-kids", ["ada", "grace", "linus"], 1),
+    ])
+
+    expect(queueMatchesPeople(kids, ["ada"])).toBe(true)
+    expect(queueMatchesPeople(kids, ["grace"])).toBe(true)
+    expect(queueMatchesPeople(kids, ["ada", "grace"])).toBe(
+      true,
+    )
+
+    // …and "at least two of them" is a different answer to the same selection.
+    const pair = withPeople("kids-pair", [
+      group("younger-kids", ["ada", "grace", "linus"], 2),
+    ])
+
+    expect(queueMatchesPeople(pair, ["ada"])).toBe(false)
+    expect(queueMatchesPeople(pair, ["ada", "grace"])).toBe(
+      true,
+    )
+  })
+
+  test("a person beside a group has to be there as well", () => {
+    const family = withPeople("family-movies", [
+      person("ada"),
+      group("kids", ["grace", "linus"], 1),
+    ])
+
+    expect(
+      queueMatchesPeople(family, ["ada", "grace"]),
+    ).toBe(true)
+    // Ada is required and is not ticked, so the group being satisfied is not enough.
+    expect(queueMatchesPeople(family, ["grace"])).toBe(
+      false,
+    )
+    // …and somebody the queue never names still hides it.
+    expect(
+      queueMatchesPeople(family, ["ada", "grace", "zoe"]),
+    ).toBe(false)
+  })
+})
+
+describe("resolveMembers", () => {
+  const people = [
+    { displayName: "Ada", id: "ada", position: 0 },
+    { displayName: "Grace", id: "grace", position: 1 },
+    { displayName: "Linus", id: "linus", position: 2 },
+  ]
+  const groups: GroupWithRoster[] = [
+    {
+      id: "kids",
+      label: "Kids",
+      minPresent: 1,
+      roster: [
+        { personId: "ada", position: 0, role: "required" },
+        {
+          personId: "grace",
+          position: 1,
+          role: "required",
+        },
+        {
+          personId: "linus",
+          position: 2,
+          role: "optional",
+        },
+      ],
+    },
+    {
+      id: "all-of-them",
+      label: "All Of Them",
+      minPresent: null,
+      roster: [
+        { personId: "ada", position: 0, role: "required" },
+        {
+          personId: "grace",
+          position: 1,
+          role: "required",
+        },
+      ],
+    },
+  ]
+
+  const member = (
+    kind: "group" | "person",
+    id: string,
+  ): QueueMember => ({
+    id,
+    kind,
+    position: 0,
+    role: "required",
+  })
+
+  test("a person is themself, and counts as one", () => {
+    expect(
+      resolveMembers(
+        [member("person", "ada")],
+        people,
+        groups,
+      ),
+    ).toEqual([
+      {
+        id: "ada",
+        kind: "person",
+        label: "Ada",
+        minPresent: 1,
+        people: ["ada"],
+        role: "required",
+      },
+    ])
+  })
+
+  test("a group is its REQUIRED roster, carrying its own count", () => {
+    const [resolved] = resolveMembers(
+      [member("group", "kids")],
+      people,
+      groups,
+    )
+
+    expect(resolved?.label).toBe("Kids")
+    expect(resolved?.minPresent).toBe(1)
+    // The optional half is not on the queue — that is the server's own answer, and the two
+    // have to agree.
+    expect(resolved?.people).toEqual(["ada", "grace"])
+  })
+
+  test("no number means ALL of them, never one", () => {
+    const [resolved] = resolveMembers(
+      [member("group", "all-of-them")],
+      people,
+      groups,
+    )
+
+    expect(resolved?.minPresent).toBe(2)
+  })
+
+  /**
+   * The safe direction, and the server's. A queue that should have been offered and was
+   * not is visible on the screen; a queue offered to people it is not for is not.
+   */
+  test("a group nothing knows about takes the queue out of the list", () => {
+    const ghost = queue({
+      hasRoster: true,
+      id: "ghost",
+      members: resolveMembers(
+        [member("group", "gone")],
+        people,
+        groups,
+      ),
+    })
+
+    expect(queueMatchesPeople(ghost, ["ada"])).toBe(false)
+    // …but nobody ticked is still no filter at all.
+    expect(queueMatchesPeople(ghost, [])).toBe(true)
+  })
 })
 
 describe("queuesForTonight", () => {
   const all = [
-    queue({
+    withPeople("movies-1", [person("ada")], {
       activity: "movies",
-      id: "movies-1",
-      requiredPeople: ["ada"],
     }),
-    queue({
-      activity: "shows",
-      id: "shows-1",
-      optionalPeople: ["grace"],
-      requiredPeople: ["ada"],
-    }),
-    queue({
+    withPeople(
+      "shows-1",
+      [person("ada"), person("grace", "optional")],
+      { activity: "shows" },
+    ),
+    withPeople("reading-1", [person("linus")], {
       activity: "reading",
-      id: "reading-1",
-      requiredPeople: ["linus"],
     }),
   ]
 
@@ -242,14 +452,69 @@ describe("tonightQueues — the registry projection", () => {
       ...over,
     }) as RegistrySet
 
-  test("reports every queue rosterless until WP-5 fills them in", () => {
+  test("reports a queue nobody is filed on as rosterless, so it is never filtered", () => {
     const [projected] = tonightQueues(
       [set({ id: "a", label: "A" })],
       new Map(),
     )
 
     expect(projected?.hasRoster).toBe(false)
-    expect(projected?.requiredPeople).toEqual([])
+    expect(projected?.members).toEqual([])
+  })
+
+  test("carries the queue's own trays, people and groups alike", () => {
+    const [projected] = tonightQueues(
+      [set({ id: "a", label: "A" })],
+      new Map(),
+      {
+        a: [
+          {
+            id: "ada",
+            kind: "person",
+            position: 0,
+            role: "required",
+          },
+          {
+            id: "kids",
+            kind: "group",
+            position: 1,
+            role: "required",
+          },
+        ],
+      },
+      [{ displayName: "Ada", id: "ada", position: 0 }],
+      [
+        {
+          id: "kids",
+          label: "Kids",
+          minPresent: 1,
+          roster: [
+            {
+              personId: "grace",
+              position: 0,
+              role: "required",
+            },
+            {
+              personId: "linus",
+              position: 1,
+              role: "required",
+            },
+          ],
+        },
+      ],
+    )
+
+    expect(projected?.hasRoster).toBe(true)
+    expect(projected?.members.map((m) => m.label)).toEqual([
+      "Ada",
+      "Kids",
+    ])
+    // The group is ONE member with a count, never two people.
+    expect(projected?.members[1]?.minPresent).toBe(1)
+    expect(projected?.members[1]?.people).toEqual([
+      "grace",
+      "linus",
+    ])
   })
 
   test("falls back to the id when a set has no label", () => {
