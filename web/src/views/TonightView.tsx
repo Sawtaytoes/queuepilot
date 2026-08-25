@@ -262,21 +262,20 @@ export function TonightView({
           tile names a device.
 
           A `RadioGroup`, because that is exactly what this is — one choice out of six, all
-          on screen, mutually exclusive, announced as "3 of 6". `.actgrid` is app LAYOUT and
-          paints nothing: it makes the group a grid whose column count comes from the
-          CONTAINER's width rather than the window's, which is the standing rule for any
-          list of cards. */}
+          on screen, mutually exclusive, announced as "3 of 6".
+
+          `itemShape="tile"` is the whole box now. WP-6 painted it here — a `.actgrid >
+          [role="radio"]` rule giving each option its border, padding and selected surface —
+          and said in the same breath that the rule got DELETED rather than adjusted once
+          the library had the shape. It does. The grid, the card, the name, the hint and the
+          selected edge are all Charcuterie's; what is left in this file is the list. */}
       <section className="tsection" id="tonight-activity">
         <h2 className="tlabel">Activity</h2>
         <RadioGroup
-          className="actgrid"
+          itemShape="tile"
           items={ACTIVITIES.map((one) => ({
-            label: (
-              <span className="actlbl">
-                <span className="actname">{one.label}</span>
-                <span className="acthint">{one.hint}</span>
-              </span>
-            ),
+            hint: one.hint,
+            label: one.label,
             value: one.id,
           }))}
           label="Activity"
@@ -437,27 +436,35 @@ function WhichQueue({
   // same activity, which one a queue runs on is the thing that tells them apart.
   const isProviderShown = isProviderWorthNaming(matches)
 
+  /* The badge row a queue card carries under its name. It is the `hint` of a choice tile
+     when the host is choosing, and the second line of the implied card when there is
+     nothing to choose — one definition, so the two can never say different things. */
+  const meta = (queue: TonightQueue) => (
+    <span className="qcardmeta">
+      {/* The people are the badges that tell two otherwise identical queues apart. */}
+      {queue.peopleNames.map((name) => (
+        <Badge intent="neutral" key={name} size="sm">
+          {name}
+        </Badge>
+      ))}
+      {isProviderShown && queue.providerLabel ? (
+        <Badge
+          appearance="outline"
+          intent="neutral"
+          size="sm"
+        >
+          {queue.providerLabel}
+        </Badge>
+      ) : null}
+    </span>
+  )
+
+  /* The IMPLIED queue, which is not a control at all — so it keeps its own small card
+     rather than borrowing a radio's. */
   const card = (queue: TonightQueue) => (
     <span className="qcard">
       <span className="qcardname">{queue.name}</span>
-      <span className="qcardmeta">
-        {/* The people are the badges that tell two otherwise identical queues apart.
-            Empty until WP-5 stores them; the row simply does not paint until then. */}
-        {queue.peopleNames.map((name) => (
-          <Badge intent="neutral" key={name} size="sm">
-            {name}
-          </Badge>
-        ))}
-        {isProviderShown && queue.providerLabel ? (
-          <Badge
-            appearance="outline"
-            intent="neutral"
-            size="sm"
-          >
-            {queue.providerLabel}
-          </Badge>
-        ) : null}
-      </span>
+      {meta(queue)}
     </span>
   )
 
@@ -483,11 +490,15 @@ function WhichQueue({
         </div>
       ) : (
         <RadioGroup
-          className="queuegrid"
+          itemShape="tile"
           items={matches.map((queue) => ({
-            label: card(queue),
+            hint: meta(queue),
+            label: queue.name,
             value: queue.id,
           }))}
+          // A queue name is a whole title, so its tiles want more room across than an
+          // activity's two words do.
+          minTileInlineSize={260}
           // The MATCH LIST is the second writer: changing the activity or the ticked
           // people rebuilds it, and the control seeds on mount only.
           key={seedKey}
@@ -625,14 +636,10 @@ function SurpriseStep() {
     <section className="tsection" id="tonight-surprise">
       <h2 className="tlabel">Narrow it down</h2>
       <RadioGroup
-        className="actgrid"
+        itemShape="tile"
         items={SURPRISE_SCOPES.map((scope) => ({
-          label: (
-            <span className="actlbl">
-              <span className="actname">{scope.label}</span>
-              <span className="acthint">{scope.hint}</span>
-            </span>
-          ),
+          hint: scope.hint,
+          label: scope.label,
           value: scope.id,
         }))}
         label="Narrow it down"

@@ -110,9 +110,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/logic@npm:2.1.0":
-  version: 2.1.0
-  resolution: "@charcuterie/logic@npm:2.1.0"
+"@charcuterie/logic@npm:2.2.0":
+  version: 2.2.0
+  resolution: "@charcuterie/logic@npm:2.2.0"
   peerDependencies:
     "@preact/signals-core": ">=1.8"
     "@tanstack/react-query": ">=5"
@@ -136,7 +136,7 @@ __metadata:
       optional: true
     react:
       optional: true
-  checksum: 10c0/44b7c0d958e8d32b5448e24ddccadb6e28ffd531bac3e8fb49122cef1594d29196a71b80aa656a431a136e3e7e5a0c2482a91ca5591247caa15ecda2faac74a6
+  checksum: 10c0/168d0187968a99ce6b68fee24db53d8dd6d0e6bc00bde379d54ae80a719ddda1b345d543215d1f9e674f8d79eb8ddbe78af62f05ceaad88f94931c9b50f61b03
   languageName: node
   linkType: hard
 
@@ -198,11 +198,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/ui@npm:^3.10.0":
-  version: 3.10.0
-  resolution: "@charcuterie/ui@npm:3.10.0"
+"@charcuterie/ui@npm:^3.16.0":
+  version: 3.16.0
+  resolution: "@charcuterie/ui@npm:3.16.0"
   dependencies:
-    "@charcuterie/logic": "npm:2.1.0"
+    "@charcuterie/logic": "npm:2.2.0"
     "@charcuterie/tokens": "npm:1.6.0"
     "@floating-ui/react": "npm:^0.27.20"
     "@tanstack/react-virtual": "npm:^3.13.12"
@@ -232,7 +232,7 @@ __metadata:
       optional: true
     react-router:
       optional: true
-  checksum: 10c0/3b9fb945cdbd7673024dbe4ef0f3ea181a5a26b4efc647f8cb4e6e449ec60ba0cf0e79901cd13dd805d3373a3b40830ec70a584fbd54188b48384bd910bcd96c
+  checksum: 10c0/6bccb328ddfdd636bd297b215852ade9e066fed27aa92363e557c9b3718c53520e2dd790b33cafc467fab4360a12a0442069ab3f2bb25118032803c0f4ef2cc9
   languageName: node
   linkType: hard
 
@@ -2604,7 +2604,7 @@ __metadata:
     "@charcuterie/server": "npm:^0.2.0"
     "@charcuterie/tokens": "npm:^1.6.0"
     "@charcuterie/tsconfig": "npm:^1.0.0"
-    "@charcuterie/ui": "npm:^3.10.0"
+    "@charcuterie/ui": "npm:^3.16.0"
     "@charcuterie/vite-config": "npm:^1.0.2"
     "@charcuterie/vitest-config": "npm:^1.0.1"
     "@tailwindcss/vite": "npm:^4.3.0"
