@@ -1,3 +1,4 @@
+import { mergeRefs, useFlipList } from "@charcuterie/logic"
 import { BadgeButton } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
@@ -12,7 +13,6 @@ import { Poster } from "../components/Poster"
 import { PosterTile } from "../components/PosterTile"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { Tip } from "../components/Tip"
-import { useFlipList } from "../hooks/useFlipList"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {
@@ -96,11 +96,18 @@ export function ChannelMembers({
 
   const isSamePaint = paintedRef.current === channel.id
 
-  useFlipList(
-    gridRef,
-    `${channel.id}:${members.map((m) => m.ratingKey ?? m.title).join("|")}`,
-    isShown && isSamePaint,
-  )
+  /*
+   * FLIP is `@charcuterie/logic`'s now — see the longer note in
+   * `QueueView`. `keyAttribute` points at the `data-key` PosterTile
+   * already renders, and the ref is merged because `gridRef` is
+   * read elsewhere in this view.
+   */
+  const flipRef = useFlipList<HTMLUListElement>({
+    isAnimating: isShown && isSamePaint,
+    itemSelector: "li.tile",
+    keyAttribute: "data-key",
+    signature: `${channel.id}:${members.map((m) => m.ratingKey ?? m.title).join("|")}`,
+  })
 
   const rawMembers = () =>
     (getState().reg?.sets.find((s) => s.id === channel.id)
@@ -472,7 +479,7 @@ export function ChannelMembers({
         className="grid editable"
         hidden={!members.length}
         id="chmembers"
-        ref={gridRef}
+        ref={mergeRefs(gridRef, flipRef)}
       >
         {members.map((m) => {
           const face = tileFace(m)

@@ -140,9 +140,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/logic@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "@charcuterie/logic@npm:2.0.0"
+"@charcuterie/logic@npm:^2.3.0":
+  version: 2.3.0
+  resolution: "@charcuterie/logic@npm:2.3.0"
   peerDependencies:
     "@preact/signals-core": ">=1.8"
     "@tanstack/react-query": ">=5"
@@ -166,7 +166,7 @@ __metadata:
       optional: true
     react:
       optional: true
-  checksum: 10c0/dff58bccec6d90526a5189ab660c087b321bb26e92ee198e43389bfe4f755fe2c56ff063dc6d18bfd66432137ed10e1371e168d6daf6f7d78461f2cbf050f4b1
+  checksum: 10c0/02ed11b8df7be5a08e56970fc4d28b49f322ac2e4ca6914111208fc3a3eac6006d7f361a29b893738acc6d5761ecb2c349d82a61f6ee9679efdd4e6cc144f65a
   languageName: node
   linkType: hard
 
@@ -2600,7 +2600,7 @@ __metadata:
   dependencies:
     "@biomejs/biome": "npm:^2.5.7"
     "@charcuterie/biome-config": "npm:^1.2.0"
-    "@charcuterie/logic": "npm:^2.0.0"
+    "@charcuterie/logic": "npm:^2.3.0"
     "@charcuterie/server": "npm:^0.2.0"
     "@charcuterie/tokens": "npm:^1.6.0"
     "@charcuterie/tsconfig": "npm:^1.0.0"
