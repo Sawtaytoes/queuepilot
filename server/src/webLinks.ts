@@ -10,18 +10,20 @@
 //     line already names the episode, and the line is a control (tap to set the start
 //     point) — a second meaning on it is a second thing to explain.
 //     (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`)
-//   * `app.plex.tv` is Plex's own hosted client, and it is a HASH url. That is Plex's
-//     shape, not ours — the "no `#/` routing" rule binds the apps we own, and this string
-//     is an external address we are quoting.
+//   * The Plex URL is a HASH url (`/web/index.html#!/server/…`). That is Plex's shape, not
+//     ours — the "no `#/` routing" rule binds the apps we own, and this string is an
+//     external address we are quoting.
+import { PLEX_URL } from './config.js';
 import { machineIdentifier } from './playback.js';
 
 /**
- * The item's page in Plex's hosted web client.
+ * The item's page in the household's Plex web client (`PLEX_API_SERVER_URL`).
  *
- * `app.plex.tv` rather than `PLEX_URL/web`: the server URL is reachable on the LAN and
- * from the reverse proxy, and the household opens this from phones and tablets on
- * networks where neither answers. app.plex.tv resolves the server by machineIdentifier,
- * so one URL works everywhere the account is signed in.
+ * Built from `PLEX_URL` rather than `app.plex.tv`: the owner wants the tile to open the
+ * reverse-proxied server he already runs, not Plex's hosted client
+ * (decision `2026-08-25-plex-tile-links-use-the-server-url-not-app-plex-tv`). The
+ * `machineIdentifier` still belongs in the hash — that is how Plex's own web client
+ * addresses a library item on a named server.
  *
  * Returns null — and the tile then renders no link at all — when the id is missing or the
  * machine id could not be read. A dead link is worse than no link.
@@ -35,5 +37,5 @@ export async function plexWebUrl(
   if (!machineId) return null;
 
   const key = encodeURIComponent(`/library/metadata/${ratingKey}`);
-  return `https://app.plex.tv/desktop/#!/server/${machineId}/details?key=${key}`;
+  return `${PLEX_URL}/web/index.html#!/server/${machineId}/details?key=${key}`;
 }

@@ -256,6 +256,12 @@ jobs:
       - name: Provider seam (offline)
         run: $TSX e2e/provider-seam-test.ts
 
+      # A Plex tile's title link must open the configured server web UI, not app.plex.tv.
+      # Hard-coded once for off-LAN reachability; the owner asked for PLEX_API_SERVER_URL
+      # instead (2026-08-25). Offline: stubs playback.machineIdentifier, no token.
+      - name: Plex tile webUrl host (offline)
+        run: $TSX e2e/plex-web-url-test.ts
+
       # The Kavita provider and the 302 launcher, with HTTP fully stubbed. Pins the details
       # that are invisible until a real card fails: continue-point returns a NULL seriesId
       # (so the provider must thread it back in or every deep link points at series `null`),
