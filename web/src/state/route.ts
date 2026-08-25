@@ -26,7 +26,11 @@ import { useLocation } from "react-router"
  */
 
 export type { Route } from "./parsePath"
-export { labelForPath, parsePath } from "./parsePath"
+export {
+  canonicalPath,
+  labelForPath,
+  parsePath,
+} from "./parsePath"
 
 let currentPath = "/"
 let routeOrigin = "/"
