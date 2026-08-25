@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest"
 
-import { labelForPath, parsePath } from "./parsePath"
+import {
+  canonicalPath,
+  labelForPath,
+  parsePath,
+} from "./parsePath"
 
 /**
  * The routes are a settled IA — Play is the landing and the two configurators
@@ -135,6 +139,35 @@ describe("parsePath", () => {
     })
   })
 
+  /**
+   * The board-game shelf. It is `/board-game-collection` and not `/collection` because
+   * "collection" is ALREADY Plex's word here — `type: "collection"` is a row of films —
+   * and because a Steam or Kavita shelf would want the same generic path
+   * (decision `2026-08-25-the-board-game-shelf-is-board-game-collection`).
+   */
+  test("/board-game-collection is the board-game shelf", () => {
+    expect(parsePath("/board-game-collection")).toEqual({
+      view: "boardGameCollection",
+    })
+    expect(parsePath("/board-game-collection/")).toEqual({
+      view: "boardGameCollection",
+    })
+  })
+
+  /**
+   * The old address still RENDERS the shelf. `canonicalPath` rewrites the URL, and that
+   * takes a frame — if this fell through to the PLAY fallback instead, an old link would
+   * flash the landing on the way, which reads as a broken bookmark.
+   */
+  test("the legacy /collection still resolves to the same view", () => {
+    expect(parsePath("/collection")).toEqual({
+      view: "boardGameCollection",
+    })
+    expect(parsePath("/collection/")).toEqual({
+      view: "boardGameCollection",
+    })
+  })
+
   test("an unknown path falls back to PLAY rather than a blank page", () => {
     expect(parsePath("/nope")).toEqual({
       group: null,
@@ -143,11 +176,47 @@ describe("parsePath", () => {
   })
 })
 
+/**
+ * The REDIRECT half of the rename. `/collection` was live for a few hours on 2026-08-25,
+ * so it is rewritten rather than 404'd — and a path that never moved must answer `null`,
+ * or `App` would navigate on every render.
+ */
+describe("canonicalPath", () => {
+  test("a moved path names where it lives now", () => {
+    expect(canonicalPath("/collection")).toBe(
+      "/board-game-collection",
+    )
+    expect(canonicalPath("/collection/")).toBe(
+      "/board-game-collection",
+    )
+  })
+
+  test("the new path is already canonical", () => {
+    expect(
+      canonicalPath("/board-game-collection"),
+    ).toBeNull()
+  })
+
+  test("every other route is left alone", () => {
+    expect(canonicalPath("/")).toBeNull()
+    expect(canonicalPath("/queues")).toBeNull()
+    expect(canonicalPath("/tonight")).toBeNull()
+    expect(canonicalPath("/q/bob")).toBeNull()
+    expect(canonicalPath("/collections")).toBeNull()
+  })
+})
+
 describe("labelForPath", () => {
   test("names where back actually goes", () => {
     expect(labelForPath("/queues")).toBe("‹ Picks")
     expect(labelForPath("/channels/movies")).toBe("‹ Rules")
     expect(labelForPath("/q/bob")).toBe("‹ Back")
+    expect(labelForPath("/board-game-collection")).toBe(
+      "‹ Collection",
+    )
+    // The legacy path keeps the same label, so a redirect in flight never
+    // paints "‹ Play" for a frame.
+    expect(labelForPath("/collection")).toBe("‹ Collection")
     expect(labelForPath("/")).toBe("‹ Play")
   })
 })
