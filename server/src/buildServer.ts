@@ -12,6 +12,7 @@ import { pendingRoutes } from './routes/pendingRoutes.js';
 import { providersRoutes } from './routes/providersRoutes.js';
 import { queuesRoutes } from './routes/queuesRoutes.js';
 import { setsRoutes } from './routes/setsRoutes.js';
+import { tonightRoutes } from './routes/tonightRoutes.js';
 import { undoSnapshot } from './routes/undoSnapshot.js';
 import { sseRoutes } from './sse.js';
 
@@ -59,6 +60,7 @@ export function buildServer({ publicDir }: BuildServerOptions): Hono {
   api.route('/', peopleRoutes());
   api.route('/', pendingRoutes());
   api.route('/', boardGameRoutes());
+  api.route('/', tonightRoutes());
   api.route('/', playbackRoutes());
   api.route('/', sseRoutes());
   root.route(API_PREFIX, api);

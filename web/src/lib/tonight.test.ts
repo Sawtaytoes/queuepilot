@@ -1,7 +1,6 @@
 import { describe, expect, test } from "vitest"
 import {
   ACTIVITIES,
-  activityForSet,
   defaultModeFor,
   goLabel,
   isProviderWorthNaming,
@@ -12,6 +11,7 @@ import {
   type TonightQueue,
   tonightQueues,
 } from "./tonight"
+import { tilesForQueueActivity } from "./tonightRouting"
 import type { RegistrySet } from "./types"
 
 /**
@@ -58,12 +58,12 @@ describe("the activity tiles", () => {
     expect(ACTIVITIES.map((a) => a.label)).not.toContain(
       "Retro Games",
     )
-    expect(
-      activityForSet({
-        behavior: undefined,
-        provider_kind: "mister",
-      }),
-    ).toBe("video-games")
+    // The MiSTer half of the rule, asked of the routing map rather than of a provider
+    // kind: everything under the `video-games` queue activity — Steam, MiSTer and the
+    // three launchers that are not built — lands on exactly ONE tile.
+    expect(tilesForQueueActivity("video-games")).toEqual([
+      "video-games",
+    ])
   })
 
   /**
@@ -108,41 +108,6 @@ describe("the segment's default", () => {
 
   test("no activity chosen falls back to Pick", () => {
     expect(defaultModeFor(null)).toBe("pick")
-  })
-})
-
-describe("activityForSet — the pre-WP-5 bridge", () => {
-  test("maps each backend onto an activity", () => {
-    const cases: [string, string][] = [
-      ["board-game-picker", "board-games"],
-      ["kavita", "reading"],
-      ["mister", "video-games"],
-      ["steam", "video-games"],
-    ]
-
-    for (const [kind, want] of cases) {
-      expect(
-        activityForSet({
-          behavior: undefined,
-          provider_kind: kind,
-        }),
-      ).toBe(want)
-    }
-  })
-
-  test("a Plex rewatch rotation is Movies; everything else Plex is Shows", () => {
-    expect(
-      activityForSet({
-        behavior: "rewatch",
-        provider_kind: "plex",
-      }),
-    ).toBe("movies")
-    expect(
-      activityForSet({
-        behavior: "progress",
-        provider_kind: "plex",
-      }),
-    ).toBe("shows")
   })
 })
 

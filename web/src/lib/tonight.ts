@@ -1,3 +1,4 @@
+import { tileForSet } from "./tonightRouting"
 import type { Person, RegistrySet } from "./types"
 
 /**
@@ -154,49 +155,24 @@ export type TonightQueue = {
 }
 
 /**
- * Which activity a queue belongs to, derived from the provider it draws from.
- *
- * **This is a bridge, not the model.** WP-5 stores the activity ON the queue, at which
- * point this function is deleted rather than corrected. Until then the provider kind is
- * the only thing the registry knows that maps onto an activity at all, and it maps
- * cleanly for four of the five backends.
- *
- * Plex is the one that does not: it serves both Movies and Shows, and nothing on a set
- * says which. `behavior: "rewatch"` is the Movies rotation's own marker and is the best
- * evidence available today; everything else Plex-shaped reads as Shows.
- */
-export function activityForSet(
-  set: Pick<RegistrySet, "behavior" | "provider_kind">,
-): ActivityId {
-  switch (set.provider_kind) {
-    case "board-game-picker":
-      return "board-games"
-    case "kavita":
-      return "reading"
-    // MiSTer is one of the things Video Games covers. It is deliberately NOT a tile of
-    // its own — no tile names a device.
-    case "mister":
-    case "steam":
-      return "video-games"
-    default:
-      return set.behavior === "rewatch" ? "movies" : "shows"
-  }
-}
-
-/**
  * Project the registry onto the Tonight contract.
  *
  * `providerLabels` maps a provider KIND to its product name, so the card can say which
  * backend a queue runs on once two of them serve the same activity — the one place a
  * provider brand is allowed on this screen
  * (`2026-08-25-a-queue-is-people-plus-an-activity` §1).
+ *
+ * ⚠️ A set's TILE comes from `tonightRouting.tileForSet()`, which reads the activity WP-5
+ * stores on the set. It used to be derived here from the set's provider kind, which was a
+ * bridge written before a queue stored anything; that function is deleted rather than
+ * corrected, because a second derivation in the browser can disagree with the server's.
  */
 export function tonightQueues(
   sets: readonly RegistrySet[],
   providerLabels: ReadonlyMap<string, string>,
 ): TonightQueue[] {
   return sets.map((set) => ({
-    activity: activityForSet(set),
+    activity: tileForSet(set),
     delivery: set.delivery === "pull" ? "pull" : "push",
     // ⚠️ WP-5: a queue's people live on the queue. Nothing in the registry carries them
     // today, so every queue reports itself rosterless and the filter lets it through.
