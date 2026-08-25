@@ -336,7 +336,7 @@ CREATE TABLE IF NOT EXISTS group_people (
   position  INTEGER NOT NULL DEFAULT 0,
   -- WP-5. 'required' | 'optional', and it is what `groups.min_present` counts.
   --
-  -- The rule the owner asked for is "at least one of Xander or Darius; Marcus may join", and
+  -- The rule the owner asked for is "at least one of these two, and this third may join", and
   -- that is TWO facts about one roster, not one: which people the count is over, and how many
   -- of them are enough. So the roster carries the role and the group carries the number. A
   -- group with three required people and `min_present` NULL means all three, which is what
@@ -388,10 +388,10 @@ CREATE TABLE IF NOT EXISTS group_membership (
 --
 -- ── Why a member may be a GROUP and not only a person ────────────────────────────────────
 --
--- Because "Older Kids" is one card in a tray and carries its own count. Flattening it to its
--- people at write time would lose the rule — the queue would then say "Xander and Darius",
--- and the whole point is that EITHER of them is enough. So the queue points at the group and
--- inherits `min_present`.
+-- Because a kids group is one card in a tray and carries its own count. Flattening it to its
+-- people at write time would lose the rule — the queue would then say "both of them", and the
+-- whole point is that EITHER of them is enough. So the queue points at the group and inherits
+-- `min_present`.
 --
 -- ⚠️ A group used this way must still resolve to EXACTLY ONE provider profile at play time,
 -- or the two `requires_profile` queues break: a queue gated on the Older Kids Plex profile

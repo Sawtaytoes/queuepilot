@@ -29,11 +29,11 @@
 //   "For those queues, none of the kids are required, but at least 1 is. There's no way right
 //    now in the system … where you can say 'at least one of these 3 is required'."
 //
-// Older Kids = at least one of two people, with a third who may join. That is a set (the
+// A kids group is "at least one of two people, and a third may join". That is a set (the
 // required roster), a number (`min_present`) and a spare (the optional roster) — three
 // things, and collapsing any two of them loses the rule. The roster carries the role and the
-// group carries the number, which is why `group_people.role` and `groups.min_present` landed
-// in the same migration.
+// group carries the number, which is why `group_people.role` and `group_membership` landed in
+// the same migration.
 //
 // ── Personal data ────────────────────────────────────────────────────────────────────────
 //
@@ -229,8 +229,8 @@ export interface ResolvedMember extends QueueMember {
  * (decision §5). Nothing detects presence and nothing here pretends to —
  *
  *   "These queues are hand-chosen. There's nothing saying who is or isn't in the room. I
- *    might be with Ashlee, but she says she just wants to lay down, so I'd click my own name
- *    … It helps you narrow down choices as a sort of filter/search field."
+ *    might be with [somebody], but she says she just wants to lay down, so I'd click my own
+ *    name … It helps you narrow down choices as a sort of filter/search field."
  *
  * Two halves, and BOTH have to hold:
  *
@@ -240,7 +240,7 @@ export interface ResolvedMember extends QueueMember {
  *      `minPresent` of its required roster are.
  *
  * Optional people are the hatch: somebody in Nice to have never removes the queue, which is
- * what makes "Kevin, and Ashlee is in the room not paying attention" a queue you can still
+ * what makes "Ada, and Grace is in the room not paying attention" a queue you can still
  * find.
  *
  * ⚠️ A FILTER IS NEVER THE ONLY WAY IN. Scanning an NFC card goes straight to its queue and
@@ -280,9 +280,9 @@ export interface NameableQueue {
  * The number a queue wears after its activity, or `null` for the first of its kind.
  *
  * "Allow, and add a number." Two queues may share people and activity, and with names gone
- * this is the only thing telling two otherwise identical cards apart. Keyed on the REGISTRY
- * ORDER so the number is stable: the first `watching` queue for Kevin is unnumbered forever,
- * and creating a second one never renumbers the first.
+ * this is the only thing telling two otherwise identical cards apart. Keyed on the order the
+ * caller hands over, so the number is stable: the first `watching` queue for Ada is unnumbered
+ * forever, and creating a second one never renumbers the first.
  *
  * The signature is the activity plus the SORTED member list, so two queues that list the same
  * people in a different tray order are the same card and do collide — which is right, because

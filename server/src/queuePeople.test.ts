@@ -154,7 +154,7 @@ describe('choosing people is a FILTER, not a claim about who is in the room', ()
   });
 
   it('hides a queue a selected person is not on', () => {
-    // "Picking Kevin and Ashlee … hides 'Kevin · Movies' — because Ashlee is not on it."
+    // "Picking [two people] … hides the one-person queue — because the second is not on it."
     expect(queueMatchesSelection(solo, ['ada', 'grace'])).toBe(false);
   });
 

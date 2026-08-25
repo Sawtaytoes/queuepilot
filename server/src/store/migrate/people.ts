@@ -99,8 +99,8 @@ export interface MappingGroup {
    */
   people: string[];
   /**
-   * WP-5. The people who MAY join — "Marcus may join" on Older Kids. They are in the group
-   * and never hold it up.
+   * WP-5. The people who MAY join — the third name in "at least one of these two, and this
+   * one may join". They are in the group and never hold it up.
    */
   optional_people?: string[];
   /**
