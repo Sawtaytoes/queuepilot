@@ -24,8 +24,11 @@
 //
 // Runs against a REAL broker (aedes, the same one the screenshot harness uses), not a stub of
 // our own MQTT layer — a stub agreeing with the code that built it would prove nothing.
+import { mkdtempSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { createServer } from 'node:net';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 // aedes and mqtt live in node_modules `e2e/` does not own, so there is no package for tsc to
 // read types from — the same problem `fake-mqtt.ts` solves, resolved the same way and for the
@@ -56,8 +59,12 @@ const ok = (name: string, isPass: boolean, detail = ''): void => {
   if (!isPass) failures += 1;
 };
 
-// A scratch config directory, so the jobs find no collection and write nothing.
-process.env.QUEUES_PATH = '/tmp/qp-mqtt-gate/queues.yaml';
+// A scratch config directory of its own, MADE rather than assumed: `defaultStorePath()` walks
+// its candidates and takes the first whose directory exists, so without this the store lands in
+// a hashed tmpdir path instead of here. Same answer either way on a throwaway runner, but a
+// harness that names its own scratch is one that cannot collide with another one's.
+const SCRATCH = mkdtempSync(join(tmpdir(), 'qp-mqtt-gate-'));
+process.env.QUEUES_PATH = join(SCRATCH, 'queues.yaml');
 process.env.MQTT_HOST = '127.0.0.1';
 process.env.MQTT_PORT = String(PORT);
 delete process.env.MQTT_USER;
@@ -126,6 +133,7 @@ if (answer === null) {
   watcher.end(true);
   server.close();
   broker.close();
+  rmSync(SCRATCH, { force: true, recursive: true });
   console.log(`\n${failures} FAILED`);
   process.exit(1);
 }
@@ -156,6 +164,7 @@ service?.close();
 watcher.end(true);
 server.close();
 broker.close();
+rmSync(SCRATCH, { force: true, recursive: true });
 
 console.log(failures ? `\n${failures} FAILED` : '\nall green');
 process.exit(failures ? 1 : 0);
