@@ -1,0 +1,45 @@
+# The curated half of the wire-contract fixture — one entry per `source: queue` set.
+#
+# Synthetic, invented, never captured. The titles are placeholders; what this file is for is
+# the KEY on the left of each colon. `queues.set_id` is the same wire id as `sets.id`, and the
+# two have to agree or a card resolves to a set with no lineup behind it.
+#
+# The four RULES pools (`younger`, `older`, `shorts`, `movies`) are absent on purpose: a
+# rotation set draws from the library at scan time and has no curated queue. That asymmetry —
+# twenty sets, sixteen queues — is the live registry's own, and a gate that expected twenty of
+# each would be asserting something untrue.
+bob:
+- {ratingKey: "265786", title: "Movie A (2009)"}
+bob_kids:
+- {ratingKey: "361504", title: "Movie B (1999)"}
+bob_carol_movies:
+- {title: "Movie C (2014)"}
+bob_alice:
+- {ratingKey: "453078", title: "Movie D (1985)"}
+bob_dave_movies:
+- {title: "Movie E (1976)"}
+# The reel replays in full every scan and nothing in it is ever marked done.
+demo:
+- {ratingKey: "192289", title: "Logo Sting"}
+- {ratingKey: "456907", title: "Atmos Ambience"}
+bob_erin_movies:
+- {title: "Movie F (1998)"}
+carol_1:
+- {ratingKey: "357744", title: "Show Alpha", episodes: 2}
+bob_frank_movies:
+- {title: "Movie G (2003)"}
+bob_anime:
+- {ratingKey: "226343", title: "Series Alpha (2021)"}
+bob_alice_anime:
+- {title: "Series Beta (2019)"}
+bob_kids_anime:
+- {title: "Series Gamma (2022)"}
+family_anime:
+- {title: "Series Delta (2018)"}
+# The one non-Plex queue. Its entries are Kavita series ids, not ratingKeys.
+manga_webtoons:
+- {ratingKey: "9001", title: "Volume One"}
+older_kids_shorts_shows:
+- {ratingKey: "190990", title: "Show Epsilon"}
+younger_kids_shows:
+- {ratingKey: "105964", title: "Show Zeta"}
