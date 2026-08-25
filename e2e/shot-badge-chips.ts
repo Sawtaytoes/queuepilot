@@ -1,7 +1,8 @@
 // Before/after shots for the badge-chip pass — the six pill-shaped controls that were a
 // hand-rolled `<button className="badge …">` because `Badge` is a `<span>`.
 //
-//   tiletags   — a queue tile's footer: the setting tags, and the Edit chip beside them
+//   tiletags   — a queue tile's footer: the setting tags (Edit moved to the pencil chrome
+//                in 2026-08-25; this frame still wants the tags themselves)
 //   poolchips  — a pool tile's footer: the start chip and the Exclude chip
 //
 // The entry is a SYNTHETIC one, patched into `/api/queues`, carrying every override at
@@ -126,7 +127,7 @@ try {
     console.log(`shot: chip-${slug}-${STAGE}  ${box ? `${Math.round(box.width)}x${Math.round(box.height)}` : '?'}`);
   };
 
-  // 1 — a queue tile, whose footer carries the setting tags and the Edit chip.
+  // 1 — a queue tile, whose footer carries the setting tags (pencil is chrome now).
   await page.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid .tile', { timeout: 30000 });
   await page.waitForTimeout(2000);

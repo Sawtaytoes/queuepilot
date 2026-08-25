@@ -189,7 +189,7 @@ try {
     await escape();
   }
 
-  // --- the per-entry settings panel: the quiet `Edit` chip on a tile ------------ //
+  // --- the per-entry settings panel: the quiet pencil on a tile ----------------- //
   await page.locator('#grid .tile .editbtn').first().click();
   await page.waitForSelector('#entrymodal', { timeout: 15000 });
   await page.waitForTimeout(900);
