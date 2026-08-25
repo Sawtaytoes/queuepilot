@@ -20,8 +20,10 @@ import {
   weightLabel,
 } from "../lib/boardGames"
 import {
+  type BoardGamePickSession,
   clearPickSession,
   type PickSession,
+  type QueuePickSession,
   readPickSession,
   writePickSession,
 } from "../lib/pickSession"
@@ -33,11 +35,14 @@ import type {
   Person,
   PickCandidateWire,
   PickResponse,
+  TonightPickResponse,
+  TonightPickWire,
 } from "../lib/types"
+import { openPlayMenu } from "../state/overlays"
 import { setStatus } from "../state/store"
 
 /**
- * THE RESULT — one game, and the two things you can do about it.
+ * THE RESULT — one answer, and the two things you can do about it.
  *
  * ## One card. Not three
  *
@@ -50,6 +55,17 @@ import { setStatus } from "../state/store"
  * The shortlist arrives WITH the first card rather than being fetched when the control is
  * tapped. A second request would re-draw, so the card already on screen could change under the
  * finger that asked to see more of them.
+ *
+ * ## TWO KINDS OF ANSWER, and the difference is real (WP-7)
+ *
+ * A **board-game** session drew a GAME off the shelf: a box, a player count, a complexity, a
+ * place to go and get it. A **queue** session drew a QUEUE for the evening — Movies, Shows,
+ * Reading or Video Games — and the queue's own engine chooses the item when it starts. That
+ * is why the queue card names what would come up next rather than claiming to have chosen it,
+ * and why it has no Mark played: a queue records its own progress when it plays.
+ *
+ * The two share the evening (who is here, the reroll, the shortlist, the twelve-hour life) and
+ * nothing else, so `session.kind` is a real discriminant and each card is its own component.
  *
  * ## A queue arrival has NO reroll
  *
@@ -126,6 +142,7 @@ export function ResultView({
           },
           excludedGameIds: [],
           guestCount: 0,
+          kind: "board-game",
           origin: "queue",
           personIds: [],
           savedAt: new Date().toISOString(),
@@ -153,49 +170,21 @@ export function ResultView({
     }
   }, [gameId, isHidden])
 
-  /** Draw again, remembering every game already turned down. That memory is the durable half. */
+  /** Draw again, remembering everything already turned down. That memory is the durable half. */
   const reroll = async () => {
     if (!session) return
     setIsDrawing(true)
     try {
-      const excluded = [
-        ...new Set([
-          ...session.excludedGameIds,
-          ...session.candidates.map(
-            (candidate) => candidate.game.id,
-          ),
-        ]),
-      ]
+      const next =
+        session.kind === "queue"
+          ? await rerollQueue(session)
+          : await rerollBoardGame(session)
 
-      const answer = await api<PickResponse>(
-        "POST",
-        "/api/board-games/pick",
-        { ...session.criteria, excludedGameIds: excluded },
-      )
-
-      const next: PickSession = {
-        ...session,
-        candidates: answer.shortlist,
-        excludedGameIds: excluded,
-        savedAt: new Date().toISOString(),
+      if (next) {
+        setSession(next)
+        setIsShortlistShown(false)
+        writePickSession(next)
       }
-
-      if (answer.shortlist.length === 0) {
-        // Nothing left that fits. The session stays as it was rather than being replaced by
-        // an empty one — the card on screen is still the answer, and the reason is said out
-        // loud instead of blanking the screen.
-        const reason =
-          answer.result?.outcome === "empty"
-            ? (answer.result.suggestion ??
-              "Nothing else fits tonight.")
-            : "Nothing else fits tonight."
-        setStatus(reason, "err")
-        return
-      }
-
-      setSession(next)
-      setIsShortlistShown(false)
-      writePickSession(next)
     } catch (e) {
       setStatus(
         `Could not reroll: ${(e as Error).message}`,
@@ -207,7 +196,8 @@ export function ResultView({
   }
 
   const refreshClaims = async () => {
-    const first = session?.candidates[0]
+    if (session?.kind !== "board-game") return
+    const first = session.candidates[0]
     if (!first) return
     const answer = await api<BoardGameResponse>(
       "GET",
@@ -216,8 +206,9 @@ export function ResultView({
     setKnownHow(answer.knownHow ?? [])
   }
 
-  const first = session?.candidates[0] ?? null
-  const rest = session?.candidates.slice(1) ?? []
+  const cards = cardsOf(session)
+  const first = cards.first
+  const rest = cards.rest
 
   return (
     <main className="view" hidden={isHidden} id="result">
@@ -229,7 +220,7 @@ export function ResultView({
         <div className="cloading">
           <Spinner label="Reading tonight's pick" />
         </div>
-      ) : !first ? (
+      ) : !first || !session ? (
         <section className="tsection" id="result-none">
           <EmptyState
             description="Nothing has been picked tonight — or the last pick was long enough ago that it was somebody else's evening. Start one from Tonight."
@@ -247,24 +238,45 @@ export function ResultView({
       ) : (
         <>
           <section className="tsection" id="result-card">
-            <ResultCard
-              activity={session?.activity ?? "board-games"}
-              candidate={first}
-              guestCount={session?.guestCount ?? 0}
-              idPrefix="result"
-              knownHow={knownHow}
-              onLogged={refreshClaims}
-              people={people}
-              personIds={session?.personIds ?? []}
-            />
+            {session.kind === "queue" ? (
+              <QueueCard
+                idPrefix="result"
+                pick={first as TonightPickWire}
+              />
+            ) : (
+              <ResultCard
+                activity={session.activity}
+                candidate={first as PickCandidateWire}
+                guestCount={session.guestCount}
+                idPrefix="result"
+                knownHow={knownHow}
+                onLogged={refreshClaims}
+                people={people}
+                personIds={session.personIds}
+              />
+            )}
           </section>
+
+          {/* The filters the form collected that no backend can act on yet. Said out loud on
+              the answer rather than dropped, because a filter that quietly does nothing is
+              worse than one that says it is waiting. */}
+          {session.kind === "queue" &&
+          session.notes.length > 0 ? (
+            <section className="tsection" id="result-notes">
+              {session.notes.map((note) => (
+                <p className="subhint" key={note}>
+                  {note}
+                </p>
+              ))}
+            </section>
+          ) : null}
 
           <section
             className="tsection tgo"
             id="result-actions"
           >
             {/* A QUEUE ARRIVAL HAS NO REROLL. The queue chose. */}
-            {session?.origin === "pick" ? (
+            {session.origin === "pick" ? (
               <Button
                 id="result-reroll"
                 isDisabled={isDrawing}
@@ -275,7 +287,7 @@ export function ResultView({
               </Button>
             ) : null}
 
-            {session?.origin === "pick" &&
+            {session.origin === "pick" &&
             rest.length > 0 ? (
               <Button
                 id="result-shortlist-toggle"
@@ -304,35 +316,50 @@ export function ResultView({
               className="tsection"
               id="result-shortlist"
             >
-              <h2 className="tlabel">The other two</h2>
+              <h2 className="tlabel">
+                {rest.length === 1
+                  ? "The other one"
+                  : "The other two"}
+              </h2>
               <p className="subhint">
                 Drawn with the first one, so looking at them
                 cannot change it.
               </p>
               <ul className="bggrid">
-                {rest.map((candidate) => (
-                  <li key={candidate.game.id}>
-                    <ResultCard
-                      activity={
-                        session?.activity ?? "board-games"
-                      }
-                      candidate={candidate}
-                      guestCount={session?.guestCount ?? 0}
-                      idPrefix={`shortlist-${candidate.game.id}`}
-                      knownHow={knownHow}
-                      onLogged={refreshClaims}
-                      people={people}
-                      personIds={session?.personIds ?? []}
-                    />
-                  </li>
-                ))}
+                {session.kind === "queue"
+                  ? (rest as TonightPickWire[]).map(
+                      (pick) => (
+                        <li key={pick.setId}>
+                          <QueueCard
+                            idPrefix={`shortlist-${pick.setId}`}
+                            pick={pick}
+                          />
+                        </li>
+                      ),
+                    )
+                  : (rest as PickCandidateWire[]).map(
+                      (candidate) => (
+                        <li key={candidate.game.id}>
+                          <ResultCard
+                            activity={session.activity}
+                            candidate={candidate}
+                            guestCount={session.guestCount}
+                            idPrefix={`shortlist-${candidate.game.id}`}
+                            knownHow={knownHow}
+                            onLogged={refreshClaims}
+                            people={people}
+                            personIds={session.personIds}
+                          />
+                        </li>
+                      ),
+                    )}
               </ul>
             </section>
           ) : null}
 
           {/* Only for a pick. A queue arrival has nothing remembered to forget — the card
               came out of the URL, and a button offering to clear it would be lying. */}
-          {session?.origin === "pick" ? (
+          {session.origin === "pick" ? (
             <section className="tsection" id="result-clear">
               <Button
                 id="result-forget"
@@ -349,6 +376,215 @@ export function ResultView({
         </>
       )}
     </main>
+  )
+}
+
+/**
+ * The first answer and the rest of the shortlist, whichever engine drew them.
+ *
+ * One function so the two branches cannot drift on what "the first one" means — the shortlist
+ * control's label counts off `rest.length + 1` and would be wrong by one the moment they did.
+ */
+function cardsOf(session: PickSession | null): {
+  first: PickCandidateWire | TonightPickWire | null
+  rest: (PickCandidateWire | TonightPickWire)[]
+} {
+  if (!session) return { first: null, rest: [] }
+  const all =
+    session.kind === "queue"
+      ? session.picks
+      : session.candidates
+  return { first: all[0] ?? null, rest: all.slice(1) }
+}
+
+/** Draw another game, remembering every one already turned down. */
+async function rerollBoardGame(
+  session: BoardGamePickSession,
+): Promise<BoardGamePickSession | null> {
+  const excluded = [
+    ...new Set([
+      ...session.excludedGameIds,
+      ...session.candidates.map(
+        (candidate) => candidate.game.id,
+      ),
+    ]),
+  ]
+
+  const answer = await api<PickResponse>(
+    "POST",
+    "/api/board-games/pick",
+    { ...session.criteria, excludedGameIds: excluded },
+  )
+
+  if (answer.shortlist.length === 0) {
+    // Nothing left that fits. The session stays as it was rather than being replaced by an
+    // empty one — the card on screen is still the answer, and the reason is said out loud
+    // instead of blanking the screen.
+    setStatus(
+      answer.result?.outcome === "empty"
+        ? (answer.result.suggestion ??
+            "Nothing else fits tonight.")
+        : "Nothing else fits tonight.",
+      "err",
+    )
+    return null
+  }
+
+  return {
+    ...session,
+    candidates: answer.shortlist,
+    excludedGameIds: excluded,
+    savedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * Draw another queue, remembering every one already turned down.
+ *
+ * `boundBackend` goes back with the request: one session talks to one backend, so a reroll on
+ * a Steam evening draws another Steam queue rather than wandering onto the MiSTer.
+ */
+async function rerollQueue(
+  session: QueuePickSession,
+): Promise<QueuePickSession | null> {
+  const excluded = [
+    ...new Set([
+      ...session.excludedSetIds,
+      ...session.picks.map((pick) => pick.setId),
+    ]),
+  ]
+
+  const answer = await api<TonightPickResponse>(
+    "POST",
+    "/api/tonight/pick",
+    {
+      activity: session.activity,
+      boundBackend: session.backend,
+      excludedSetIds: excluded,
+      guestCount: session.guestCount,
+      personIds: session.personIds,
+    },
+  )
+
+  if (!answer.pick || answer.shortlist.length === 0) {
+    setStatus(
+      answer.reason ?? "Nothing else for that tonight.",
+      "err",
+    )
+    return null
+  }
+
+  return {
+    ...session,
+    backend: answer.backend ?? session.backend,
+    excludedSetIds: excluded,
+    notes: answer.notes ?? session.notes,
+    picks: answer.shortlist,
+    savedAt: new Date().toISOString(),
+  }
+}
+
+/**
+ * ONE QUEUE, as a card.
+ *
+ * What it says and what it deliberately does not:
+ *
+ *   - The **queue** is the answer. It is named, and the provider it runs on is a badge
+ *     beside it — the one place a provider brand belongs on this surface.
+ *   - **Up next** is what would come up, when that could be answered without starting
+ *     anything. When it could not, the card says WHY in the same place, because a blank space
+ *     where a title should be reads as a bug.
+ *   - There is **no Mark played**. A queue records its own progress when it plays; a button
+ *     here would be a second writer of the same fact.
+ *
+ * Go is the queue's own launch, and it is the same two shapes the shelf and the Tonight form
+ * already use: a PULL queue is an anchor to `/go/<id>`, a PUSH queue opens the device menu.
+ *
+ * ⚠️ `.playbtn` is LOAD-BEARING and paints nothing — `PlayMenu`'s outside-click handler asks
+ * `t.closest(".playbtn")`, so a control that opens that menu without the class opens a menu
+ * that shuts on the same click.
+ */
+function QueueCard({
+  idPrefix,
+  pick,
+}: {
+  idPrefix: string
+  pick: TonightPickWire
+}) {
+  return (
+    <Card
+      className="bgcard"
+      heading={pick.setLabel}
+      headingLevel={2}
+      id={`${idPrefix}-queue`}
+      padding="lg"
+      surface="raised"
+    >
+      <div className="bgbadges">
+        {pick.providerLabel ? (
+          <Badge
+            appearance="outline"
+            intent="neutral"
+            size="sm"
+          >
+            {pick.providerLabel}
+          </Badge>
+        ) : null}
+        <Badge intent="neutral" size="sm">
+          {pick.delivery === "pull"
+            ? "Opens on the device you are holding"
+            : "Sent to a device"}
+        </Badge>
+      </div>
+
+      {pick.upNext ? (
+        <p className="bgmeta" id={`${idPrefix}-upnext`}>
+          Up next: {pick.upNext.title}
+          {pick.upNext.detail
+            ? ` · ${pick.upNext.detail}`
+            : ""}
+        </p>
+      ) : (
+        <p className="bgmeta" id={`${idPrefix}-upnext`}>
+          {pick.upNextReason ??
+            "This queue has not said what comes next."}
+        </p>
+      )}
+
+      <p className="bgmeta">
+        The queue chooses what plays when it starts.
+      </p>
+
+      <div className="bglinks">
+        {pick.launchUrl ? (
+          <ButtonLink
+            href={pick.launchUrl}
+            id={`${idPrefix}-go`}
+            intent="accent"
+            isExternal
+            size="lg"
+          >
+            Start it
+          </ButtonLink>
+        ) : (
+          <Button
+            className="playbtn"
+            id={`${idPrefix}-go`}
+            intent="accent"
+            onClick={(e) =>
+              openPlayMenu({
+                anchor:
+                  e.currentTarget.getBoundingClientRect(),
+                setId: pick.setId,
+              })
+            }
+            size="lg"
+          >
+            Start it
+          </Button>
+        )}
+      </div>
+    </Card>
   )
 }
 

@@ -180,12 +180,56 @@ try {
     // click. Nothing else in the app can catch that.
     ok('…and wears .playbtn, or the device menu shuts on its own opening click', push.hasHandle);
 
-    // On PICK there is nowhere to go yet, and it says so rather than navigating somewhere
-    // plausible. Delete this assertion when WP-7/WP-8 land, do not "fix" it.
+    // ── PICK, since WP-7 ─────────────────────────────────────────────────────────── //
+    // Every tile except Surprise Me now reaches a backend. The one remaining disabled Go is
+    // Board Games with nobody at the table, and that is a HEAD COUNT and not a missing
+    // engine: this screen's people are a filter, so an empty answer is "you have not said"
+    // rather than "nought players".
     await page.click(tile('Board Games'));
     await page.waitForTimeout(400);
-    const isDisabled = await page.$eval('#tonight-go', (el) => el.hasAttribute('disabled'));
-    ok('Go is disabled on Pick, because the pick engine is not built', isDisabled);
+    ok(
+      'Go on a board-game pick waits for a head count, and says so',
+      await page.$eval('#tonight-go', (el) => el.hasAttribute('disabled')),
+    );
+
+    // The four queue-first tiles are LIVE. A disabled Go here is the WP-7 regression.
+    for (const label of ['Video Games', 'Movies', 'Shows', 'Reading']) {
+      await page.click(tile(label));
+      await page.click(mode('Pick'));
+      await page.waitForTimeout(400);
+      ok(
+        `Pick is connected for ${label}`,
+        !(await page.$eval('#tonight-go', (el) => el.hasAttribute('disabled'))),
+      );
+    }
+
+    // …and it goes somewhere real. Shows has a curated queue in the fixture, so its card can
+    // name what would come up next without a single Plex call.
+    await page.click(tile('Shows'));
+    await page.click(mode('Pick'));
+    await page.waitForTimeout(300);
+    await page.click('#tonight-go');
+    await page.waitForSelector('#result-queue', { timeout: 15000 });
+    ok(
+      'a shows pick lands on a result card naming the queue it drew',
+      (await page.$eval('#result-queue', (el) => el.textContent ?? '')).includes('Shows'),
+      await page.$eval('#result-queue', (el) => (el.textContent ?? '').slice(0, 120)),
+    );
+    // Either a title or a stated reason, never a blank line. WHICH of the two shows queues
+    // it drew is a real draw, so the gate asserts the invariant rather than the outcome; the
+    // outcome is pinned deterministically in `tonight-routing-test.ts`.
+    ok(
+      '…and always says what would come up next, or why it cannot',
+      (await page.$eval('#result-upnext', (el) => (el.textContent ?? '').trim())).length > 0,
+      await page.$eval('#result-upnext', (el) => el.textContent ?? ''),
+    );
+    // A queue card has NO Mark played. A queue records its own progress when it plays, and a
+    // button here would be a second writer of the same fact.
+    ok(
+      '…and offers no Mark played, because a queue logs itself',
+      (await page.$$('#result-log')).length === 0,
+    );
+    await open();
   }
 
   // ── 6. The guests stepper ────────────────────────────────────────────────────────── //
