@@ -72,7 +72,7 @@ try {
   // Reading starts on Queues — the second of the three fixed defaults — and the fixture
   // holds two reading queues, so the host has to choose.
   await page.click(tile('Reading'));
-  await page.waitForSelector('#tonight-queue .queuegrid', { timeout: 10000 });
+  await page.waitForSelector('#tonight-queue [role="radiogroup"]', { timeout: 10000 });
   await shot('queues-two-matches');
 
   // ── 4. ONE match, implied rather than asked ─────────────────────────────────────── //
@@ -87,7 +87,7 @@ try {
   // provider brand is allowed on this screen at all.
   await page.click(tile('Video Games'));
   await page.click(mode('Queues'));
-  await page.waitForSelector('#tonight-queue .queuegrid', { timeout: 10000 });
+  await page.waitForSelector('#tonight-queue [role="radiogroup"]', { timeout: 10000 });
   await shot('queues-provider-badge');
 
   // ── 6. Surprise Me's narrowing step ─────────────────────────────────────────────── //
