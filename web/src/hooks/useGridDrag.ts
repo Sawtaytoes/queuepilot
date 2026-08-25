@@ -322,9 +322,13 @@ export function useGridDrag(
       const target = e.target as HTMLElement
 
       if (
+        target.closest(".tilechrome") ||
         target.closest(".remove") ||
-        target.closest(".editbtn") ||
         target.closest(".check") ||
+        // `.editbtn` is in the badge row (inside `.cap`), so the thumb test below would
+        // already skip it — named anyway so a future move back onto the poster cannot
+        // open the sheet under the pencil.
+        target.closest(".editbtn") ||
         // `.tileplay` is the one control that lives INSIDE `.thumb`, so unlike ✓ and ✕
         // it is not excluded by the poster test below. It has to be named here and not
         // left to its own `stopPropagation`: that stops the CLICK, while this gesture is
