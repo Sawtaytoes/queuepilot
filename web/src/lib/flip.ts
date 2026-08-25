@@ -1,88 +1,29 @@
 /**
- * FLIP, twice — and they are not the same animation.
+ * FLIP for a DRAG, and only for a drag.
  *
- * `flipPaint` wraps a REPAINT (React committing a new list): persisting tiles,
- * matched by `data-key`, glide from their old box to the new one and fresh tiles
- * fade in, so add/remove/reorder reads as motion rather than a snap. It runs the
- * Web Animations API, which does not touch inline styles and therefore cannot leak
- * a transform onto a node React later reuses.
+ * There used to be two here. `flipPaint` wrapped a REPAINT — React committing a
+ * new list — and `hooks/useFlipList.ts` was its React half. Both are gone:
+ * `@charcuterie/logic` owns that shape now (`useFlipList`), because Docket needed
+ * the same animation and a second copy is how two implementations drift. This app
+ * adopts the library's, keyed off the same `data-key` these tiles have always
+ * carried. `flipPaint` itself had no callers at all by then.
  *
- * `flipMove` wraps a DRAG's own DOM mutation: it transforms EXISTING nodes only and
- * never re-renders, which is what keeps the mid-drag duplication bug from coming
- * back (the drag inserts a node imperatively — a React re-render underneath it
- * would leave two copies and save a duplicated order). Transform-only also keeps
- * scroll anchoring (`overflow-anchor: none` on the grid/strips) from reflowing the
- * page mid-gesture. See the Pitfall in `docs/web-ui-handoff.md` and decision
+ * `flipMove` stays, and is NOT the same animation. It wraps a drag's own DOM
+ * mutation: it transforms EXISTING nodes only and never re-renders, which is what
+ * keeps the mid-drag duplication bug from coming back (the drag inserts a node
+ * imperatively — a React re-render underneath it would leave two copies and save a
+ * duplicated order). Transform-only also keeps scroll anchoring
+ * (`overflow-anchor: none` on the grid/strips) from reflowing the page mid-gesture.
+ * See the Pitfall in `docs/web-ui-handoff.md` and decision
  * `2026-07-21-ui-interaction-states-standard`.
+ *
+ * The library hook cannot do this job: it animates what React re-rendered, and the
+ * whole point here is that React must not re-render.
  */
 
 export const prefersReducedMotion = () =>
   window.matchMedia?.("(prefers-reduced-motion: reduce)")
     ?.matches ?? false
-
-/**
- * Measure `container`'s tiles, run `build` (the DOM write), then animate each tile
- * from where it was to where it now is.
- */
-export function flipPaint(
-  container: HTMLElement | null,
-  build: () => void,
-  animate: boolean,
-): void {
-  if (!container || !animate || prefersReducedMotion()) {
-    build()
-
-    return
-  }
-
-  const before = new Map<string, DOMRect>()
-
-  for (const t of container.querySelectorAll<HTMLElement>(
-    "li.tile",
-  )) {
-    if (t.dataset.key)
-      before.set(t.dataset.key, t.getBoundingClientRect())
-  }
-
-  build()
-
-  for (const t of container.querySelectorAll<HTMLElement>(
-    "li.tile",
-  )) {
-    const a = t.getBoundingClientRect()
-    const b = t.dataset.key
-      ? before.get(t.dataset.key)
-      : undefined
-
-    if (!b) {
-      t.animate(
-        [
-          { opacity: 0, transform: "scale(0.92)" },
-          { opacity: 1, transform: "none" },
-        ],
-        { duration: 180, easing: "ease-out" },
-      )
-
-      continue
-    }
-
-    const dx = b.left - a.left
-    const dy = b.top - a.top
-
-    if (dx || dy) {
-      t.animate(
-        [
-          { transform: `translate(${dx}px, ${dy}px)` },
-          { transform: "none" },
-        ],
-        {
-          duration: 240,
-          easing: "cubic-bezier(.2,.7,.3,1)",
-        },
-      )
-    }
-  }
-}
 
 /**
  * Records each item's box BEFORE the DOM mutation, applies the inverse transform
@@ -102,6 +43,21 @@ export function flipMove(
   mutate: () => void,
   dragEl: HTMLElement | null,
 ): void {
+  /*
+   * `flipPaint` was the only reader of `prefersReducedMotion`, and deleting it
+   * would have deleted the only reduced-motion check in this file — while
+   * `flipMove` had never had one. So the guard lands here instead of leaving with
+   * the function that used to hold it.
+   *
+   * The mutation still runs. Reduced motion asks for no ANIMATION, not for no
+   * re-order: skipping `mutate()` would drop the drag itself.
+   */
+  if (prefersReducedMotion()) {
+    mutate()
+
+    return
+  }
+
   const first = new Map<HTMLElement, DOMRect>()
 
   for (const el of items)

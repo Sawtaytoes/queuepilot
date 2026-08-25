@@ -61,7 +61,7 @@ gate for the port rather than something to be rewritten alongside it.
 | `renderPlay` / `renderHome` / `renderQueue` / `renderChannels` | `views/PlayView` `QueuesView` `QueueView` `ChannelsView` + `App`'s `computeChrome` |
 | `DATA` / `REG` / `NOW` / `selected` module globals | `state/store.ts` + `state/selection.ts`, read through `useSyncExternalStore` |
 | `uiBusy()` reading six globals | `state/busy.ts`, still mutable module flags — see below |
-| `flipPaint()` (measure, mutate, measure) | `hooks/useFlipList.ts` — render-phase measure + layout-effect animate |
+| `flipPaint()` (measure, mutate, measure) | `useFlipList` from `@charcuterie/logic` — render-phase measure + layout-effect animate. Was `hooks/useFlipList.ts` here until 2026-08-25; Docket needed the same shape, so it moved to the library and this app adopts it. |
 | `flipMove()` + the three drag gestures | `hooks/useGridDrag.ts`, `hooks/useHomeDrags.ts` — still imperative |
 | `wireSearchInput` + `wireListNav`, four call sites | `components/SearchDropdown.tsx` |
 | `openSetModal` / `openDynModal` / `openStartModal` / `openTileMenu` / `openPlayMenu` | `state/overlays.ts` + five components on one `<dialog>`-based `Modal` |
@@ -109,6 +109,14 @@ into an empty queue. Removing a React-owned node makes React's next commit throw
 restored on drop — visually identical, tree intact.
 
 ### 4. FLIP's "First" is measured during render
+
+> **Since 2026-08-25 this lives in `@charcuterie/logic`, not here.** Docket's phase
+> list needed the same animation, and a second copy is how two implementations drift,
+> so `useFlipList` moved to the library and both apps call it. The reasoning below is
+> why it is shaped the way it is, and still applies — the library hook carries the
+> same note. What stayed in `lib/flip.ts` is `flipMove`, which is a DRAG's animation
+> and a different thing: it must not re-render, and the library hook animates exactly
+> what React re-rendered.
 
 `flipPaint` measured, mutated, then measured again inside one function. React splits
 those: the mutation *is* the commit. So the first measurement happens in the render
