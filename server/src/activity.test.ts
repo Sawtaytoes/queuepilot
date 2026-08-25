@@ -56,4 +56,17 @@ describe('a stored activity is an override, and a bad one is ignored', () => {
     // not under a heading that exists nowhere and hides it from every screen.
     expect(activityForSet({ activity: 'moovies', provider_kind: 'plex' })).toBe('watching');
   });
+
+  it('falls back to the provider ID when the KIND is blank', () => {
+    // `providerKindForSet()` answers '' for a provider this build has not configured —
+    // `providerDefinitions()` omits Kavita when `KAVITA_URL` is unset. Without the fallback,
+    // one unset environment variable moves every reading queue to Movies & Shows, which is a
+    // heading changing because a service is down. `e2e/queue-people-test.ts` caught it.
+    expect(activityForSet({ provider_id: 'kavita', provider_kind: '' })).toBe('reading');
+    expect(activityForSet({ provider_id: 'mister', provider_kind: '' })).toBe('video-games');
+  });
+
+  it('still prefers the KIND, so a second Kavita under its own id is Kavita', () => {
+    expect(activityForSet({ provider_id: 'my-kavita', provider_kind: 'kavita' })).toBe('reading');
+  });
 });

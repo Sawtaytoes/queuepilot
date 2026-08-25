@@ -80,12 +80,28 @@ export const activityForProviderKind = (kind: unknown): Activity =>
  * An override that is not one of the four is IGNORED rather than propagated — a typo in a
  * hand-edited `sets.yaml` should put the queue under its provider's activity, not under a
  * heading that exists nowhere and hides it from every screen.
+ *
+ * ⚠️ `provider_id` is the FALLBACK and it is load-bearing. `providerKindForSet()` answers `''`
+ * for a provider this BUILD does not have configured — `providerDefinitions()` omits Kavita
+ * when `KAVITA_URL` is unset — and a Kavita queue is a reading queue whether or not the
+ * connector is up. Without this, one unset environment variable silently moves four queues
+ * from Reading to Movies & Shows, which is a heading changing because a service is down. The
+ * five built-in providers spell their id and their kind the same way, so the fallback is
+ * exact for all of them; a second Kavita added under its own id (`my-kavita`) is the case it
+ * cannot answer, and it lands on `watching` only while its connector is down.
  */
 export function activityForSet(set: {
   activity?: unknown;
   provider_kind?: unknown;
+  provider_id?: unknown;
 }): Activity {
-  return isActivity(set.activity) ? set.activity : activityForProviderKind(set.provider_kind);
+  if (isActivity(set.activity)) return set.activity;
+
+  const kind = String(set.provider_kind ?? '').trim().toLowerCase();
+  if (kind) return activityForProviderKind(kind);
+
+  const id = String(set.provider_id ?? '').trim().toLowerCase();
+  return activityForProviderKind(id);
 }
 
 /** The label to put on a queue card. There is no name to fall back to and that is the point:

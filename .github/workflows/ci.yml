@@ -479,6 +479,18 @@ jobs:
       - name: The board-game absorb (offline)
         run: $TSX e2e/board-game-absorb-test.ts
 
+      # THE WP-5 GATE. A queue is required people + optional people + one activity, and it
+      # pins the four rules that can be undone without anybody noticing: the wire ids do not
+      # move, migration day recovers people from the group CLAIM and parses no label, a group
+      # that offers two provider profiles is REFUSED rather than resolved to the first, and the
+      # activity is derived so migrating sixteen queues writes no bytes to `sets.yaml`.
+      #
+      # It caught one real defect on its first run: `providerKindForSet()` answers '' for a
+      # provider this build has not configured, so a Kavita queue read as Movies & Shows
+      # whenever `KAVITA_URL` was unset.
+      - name: Queues keyed by people (offline)
+        run: $TSX e2e/queue-people-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 

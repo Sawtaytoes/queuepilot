@@ -24,7 +24,7 @@ import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { store } from './store/index.js';
 import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
-import { activityForProviderKind, activityForSet, isActivity } from './activity.js';
+import { activityForSet, isActivity } from './activity.js';
 import type {
   BatchStop,
   Binding,
@@ -505,8 +505,15 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     // without shipping the provider table to the browser (same trick as `length_default`).
     // The ACTIVITY and never a finer content list: Anime and Movies are two `watching`
     // queues (decision `2026-08-25-a-queue-is-people-plus-an-activity` §1).
-    activity: activityForSet({ activity: ent.activity, provider_kind: providerKindForSet(ent) }),
-    activity_default: activityForProviderKind(providerKindForSet(ent)),
+    activity: activityForSet({
+      activity: ent.activity,
+      provider_id: providerIdForSet(ent),
+      provider_kind: providerKindForSet(ent),
+    }),
+    activity_default: activityForSet({
+      provider_id: providerIdForSet(ent),
+      provider_kind: providerKindForSet(ent),
+    }),
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
     enabled: ent.enabled !== false,
@@ -786,6 +793,12 @@ function vocabularyForSet(ent: RawSet): ProviderVocabulary {
  * second answer to reconcile; if one somehow exists on disk, its first block's kind beats
  * reporting none.
  */
+/** The first block's provider ID, unfiltered by what this build has configured — see
+ *  `activityForSet`'s warning about why the KIND alone is not enough. */
+function providerIdForSet(ent: RawSet): string {
+  return blocksForSet(ent)[0]?.provider ?? '';
+}
+
 function providerKindForSet(ent: RawSet): string {
   const blocks: ProviderBlock[] = blocksForSet(ent);
   const defs = new Map<string, string>(providerDefinitions().map((d: { id: string; kind: string }) => [d.id, d.kind]));
@@ -1138,7 +1151,11 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const s = v == null ? '' : String(v).trim().toLowerCase();
         if (!s) { node.delete('activity'); continue; }
         if (!isActivity(s)) throw new Error(`unknown activity '${s}'`);
-        if (s === activityForProviderKind(providerKindForSet(node.toJSON() as RawSet))) {
+        const raw = node.toJSON() as RawSet;
+        if (
+          s ===
+          activityForSet({ provider_id: providerIdForSet(raw), provider_kind: providerKindForSet(raw) })
+        ) {
           node.delete('activity');
           continue;
         }

@@ -74,6 +74,58 @@ is the gate: it boots twice over one fixture, once unconfirmed and once confirme
 the set ids, the group ids, the `requires_profile` membership and the `/g/<id>` status codes as
 EXACT STRINGS. A count passes even when every id was replaced.
 
+## A queue is people plus an activity
+
+WP-5. A queue is **required people + optional people + one activity**. It is not a name
+([data model](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md),
+[editor](docs/decisions/2026-08-25-the-queue-editor-is-two-trays.md)). Five things bite here.
+
+- **THERE IS NO QUEUE NAME. Do not add one back.** Every movies queue is called "Movies"; the
+  faces on the card are what tell two of them apart. The mockup drew a "Name it for me" / "I
+  will name it" switch, a written-name preview and a revert control in all three of its
+  options, and none of them ship. `sets.label` is still on disk and is still what a hand-edit
+  writes — it is data WP-5 migrated **from**, and the only place it is still read is the
+  shelf FILTER, so that typing "manga" keeps finding the queue somebody named that.
+- **Type is the ACTIVITY, never a finer content list.** Four values — `watching`, `reading`,
+  `video-games`, `board-games` — and Movies & Shows is ONE of them. Anime is not a type: two
+  queues under `watching`, told apart by what is in them. A finer list was rejected on a
+  specific failure, not on taste: *"the Older Kids queue would show up under both Shows and
+  Shorts, but I don't think of it like that in my head."* The activity is DERIVED from the
+  provider (`server/src/activity.ts`) and stored only when overridden, so migrating sixteen
+  queues wrote no bytes. ⚠️ The derivation falls back to the provider **id** when the kind is
+  blank, because `providerKindForSet()` answers `''` for a provider this build has not
+  configured — without it, an unset `KAVITA_URL` moves every reading queue to Movies & Shows.
+- **A GROUP MUST RESOLVE TO EXACTLY ONE PROVIDER PROFILE.** This is the constraint the whole
+  group model protects. A queue keyed on a group signs into one Plex profile no matter which
+  of its people turned up, or `requires_profile` has nothing deterministic to gate on. The
+  group's **own** `accounts:` wins, because it does not vary with who is there; the roster
+  union is the fallback and answers only when it is unanimous. Anything else is `ambiguous`
+  and `PUT /api/sets/:id/people` **refuses** it with both candidates named. ⚠️ Do not merge
+  this with `people.ts accountsForGroup()` — that one is MEMBERSHIP (every account a group
+  stands for, unioned) and this one is IDENTITY (the one account a session signs in as). A
+  group legitimately stands for three and plays as one.
+- **The household's own rules arrive through the mapping file, never through this repo.**
+  "At least one of them" is `group_membership.min_present` plus `group_people.role`, and both
+  are written by the owner-confirmed file in `/config` — `min_present:` and
+  `optional_people:` are the two keys it gained. `min_present` ABSENT means **all of the
+  required roster**, which is what every group written before WP-5 meant; defaulting the
+  absence to 1 would quietly loosen all of them at once.
+- **The editor is a Charcuterie `Board`, and the tap fallback is the PRIMARY path.** Three
+  lanes — Must be here / Nice to have / Everyone else — and "Everyone else" is the ABSENCE of
+  a `queue_people` row, not a third role. The move handle is a button first and a drag second:
+  pressing it opens a menu of the other trays, which is the only path that works from a
+  tablet, from the keyboard, and in the Narrow View where the other trays are not on screen to
+  drop onto. Do not add a drag-and-drop dependency and do not "improve" the handle into a
+  drag-only affordance. `PersonFace` is the app's stand-in for an `Avatar`
+  `@charcuterie/ui@3.10.0` does not have — a real library gap, and small enough to delete in
+  one commit when it is filled.
+
+`queue_people` and `group_people` carry **no foreign key on the parent**, and `queue_people`
+cannot carry one at all — `member_id` names a row in `people` OR in `groups`. A person's
+deletion therefore calls `forgetMember()` explicitly, and everything else is REPORTED by
+`orphanQueueMembers()`. Under `STORE_BACKEND=yaml` those tables are empty by design, so every
+member looks orphaned there and the answer is a thing to look at, never a thing to delete.
+
 ## UI / Charcuterie
 
 - **Every picker is a `Listbox`, never a native `Select`.** `Listbox` for a short list,
@@ -401,6 +453,7 @@ server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
 server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection absorb
+server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
 ```
 
 ⚠️ **`yarn workspace queuepilot-web run build` is not optional before the offline e2e gates.**
