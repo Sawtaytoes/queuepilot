@@ -8,7 +8,6 @@
 
 import type { ActivityId } from "./tonight"
 import type {
-  BoardGame,
   BoardGameCard,
   KnownHowClaim,
   PickCriteriaWire,
@@ -223,8 +222,3 @@ export function filterCollection(
     return game.name.toLowerCase().includes(term)
   })
 }
-
-/** The links a card shows, rulebook first — the ordering is the server's and is kept. */
-export const linksOf = (
-  game: BoardGame,
-): BoardGame["links"] => game.links ?? []

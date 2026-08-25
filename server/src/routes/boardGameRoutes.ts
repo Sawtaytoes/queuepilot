@@ -5,7 +5,7 @@ import { Hono } from 'hono';
 
 import { parsePickCriteria, SHORTLIST_SIZE } from '../boardgames/criteria.js';
 import { pick } from '../boardgames/pick.js';
-import type { Game, PickCandidate, PickResult, Player } from '../boardgames/types.js';
+import type { PickCandidate, PickResult, Player } from '../boardgames/types.js';
 import { QUEUES_PATH } from '../config.js';
 import { errMessage } from '../errors.js';
 import { binaryResponse } from './binaryResponse.js';
@@ -299,20 +299,3 @@ const knownHowClaims = (
     personId: claim.playerId,
   }));
 
-export type BoardGameCard = {
-  bestWith: number[];
-  id: string;
-  imagePath: string | null;
-  interactionTypes: Game['interactionTypes'];
-  isExcluded: boolean;
-  lastPlayedAt: string | null;
-  maxPlayers: number;
-  maxPlaytime: number | null;
-  minPlayers: number;
-  minPlaytime: number | null;
-  name: string;
-  ownerCategories: string[];
-  playCount: number;
-  playedBy: string[];
-  weight: number | null;
-};
