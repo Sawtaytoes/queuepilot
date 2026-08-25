@@ -746,8 +746,22 @@ export type Person = {
   position: number
 }
 
+/**
+ * `GET /api/people` — everything the Tonight checklist and the three trays are built from, in
+ * one call.
+ *
+ * `groups` and `orphans` are WP-5's; `people` is WP-6's and keeps its shape, so both screens
+ * hold one contract. Two endpoints would let the trays paint a person the rules no longer
+ * know about.
+ */
 export type PeopleResponse = {
   people: Person[]
+  /** WP-5. A group is a SAVED SET OF PEOPLE, so it rides along here rather than in a second
+   *  call — the trays draw people and groups as one pool of cards. */
+  groups: GroupWithRoster[]
+  /** WP-5. Members naming somebody who is gone. Reported, never deleted: `queue_people`
+   *  carries no foreign key on its parent and this is the report that stands in for it. */
+  orphans: QueueMember[]
 }
 
 export type Group = {
@@ -792,21 +806,6 @@ export type MemberRole = "required" | "optional"
 /** A queue member is one person, or a whole saved group carrying its own count. */
 export type MemberKind = "person" | "group"
 
-/** One human. Names live in the store, never in this repo. */
-export type Person = {
-  /** IMMUTABLE — it is a URL. A rename changes `displayName`. */
-  id: string
-  displayName: string
-  position: number
-  accounts: Record<string, string[]>
-  birthYear: number | null
-  maxWeight: number | null
-  isBeginner: boolean
-  source: string | null
-  sourceId: string | null
-  createdAt: string | null
-}
-
 /** One place on a group's roster, and which half of the rule it is in. */
 export type GroupRosterMember = {
   personId: string
@@ -832,14 +831,6 @@ export type QueueMember = {
   id: string
   role: MemberRole
   position: number
-}
-
-/** `GET /api/people` — everything the three trays are built from, in one call. */
-export type PeopleResponse = {
-  people: Person[]
-  groups: GroupWithRoster[]
-  /** Members naming somebody who is gone. Reported, never deleted. */
-  orphans: QueueMember[]
 }
 
 /** `GET /api/queue-people` — every queue's trays, so the shelf list paints faces without

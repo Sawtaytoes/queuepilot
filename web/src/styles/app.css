@@ -3997,6 +3997,7 @@ body.rowdragging {
 #tonight .tgo .subhint {
   margin: 0;
   max-width: 46ch;
+}
 
 /* ---- WP-5: who a queue is for (`PersonFace.tsx`, `PeopleRow.tsx`, `PeopleTrays.tsx`) ----
 

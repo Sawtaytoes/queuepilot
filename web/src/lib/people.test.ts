@@ -21,18 +21,7 @@ import type {
 const person = (
   id: string,
   displayName: string,
-): Person => ({
-  accounts: {},
-  birthYear: null,
-  createdAt: null,
-  displayName,
-  id,
-  isBeginner: false,
-  maxWeight: null,
-  position: 0,
-  source: null,
-  sourceId: null,
-})
+): Person => ({ displayName, id, position: 0 })
 
 const people = [
   person("ada", "Ada"),
