@@ -507,6 +507,18 @@ jobs:
       - name: Both board-game transports agree (offline)
         run: $TSX e2e/board-game-transport-parity-test.ts
 
+      # THE WP-7 GATE. The activity -> backend map is written TWICE — once for the server and
+      # once for the browser — and neither workspace can import the other, so nothing but this
+      # can notice the day they disagree. It compares the two tables field by field and then
+      # drives `POST /api/tonight/pick` over the Tonight fixtures.
+      #
+      # The two live assertions it also pins: ONE SESSION TALKS TO ONE BACKEND (the fixture has
+      # a Steam queue and a MiSTer queue under Video Games, and a draw must not hand back one
+      # of each), and Surprise Me is REFUSED rather than answered, because the narrowings are
+      # not settled and a plausible answer would read as settled and get built on.
+      - name: Activity -> provider routing (offline)
+        run: $TSX e2e/tonight-routing-test.ts
+
       - name: adb pure helpers
         run: $TSX e2e/adb-unit-test.ts
 

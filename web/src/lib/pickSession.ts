@@ -34,10 +34,20 @@ import type { ActivityId } from "./tonight"
 import type {
   PickCandidateWire,
   PickCriteriaWire,
+  TonightPickWire,
 } from "./types"
 
-/** The key, versioned. A shape change bumps this rather than trying to migrate a scratchpad. */
-export const PICK_SESSION_KEY = "queuepilot.pick.v1"
+/**
+ * The key, versioned. A shape change bumps this rather than trying to migrate a scratchpad.
+ *
+ * **v2 (WP-7)** — a session is now one of TWO shapes, because Pick reaches more than one
+ * engine. A board-game session holds candidates off the shelf; a queue session holds queues
+ * drawn for an activity. They share what an evening is (who is here, when it was saved,
+ * where it came from) and nothing else, so `kind` is a real discriminant rather than a bag
+ * of optional fields. A v1 value left in a browser is simply not tonight's pick and is
+ * dropped — a scratchpad is not data to migrate.
+ */
+export const PICK_SESSION_KEY = "queuepilot.pick.v2"
 
 /** Twelve hours. One evening, with room for one that runs late. */
 export const PICK_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000
@@ -50,19 +60,45 @@ export const PICK_SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000
  */
 export type PickOrigin = "pick" | "queue"
 
-export type PickSession = {
+/** What every session carries, whichever engine drew it. */
+type PickSessionCommon = {
   activity: ActivityId
-  criteria: PickCriteriaWire
   /** Who is at the table. Carried so the finish step need not ask again. */
   personIds: string[]
   guestCount: number
-  /** Every game offered and turned down — reroll's memory, and the thing that was lost. */
-  excludedGameIds: string[]
-  candidates: PickCandidateWire[]
   origin: PickOrigin
   /** ISO 8601. Read back to decide whether this is still tonight. */
   savedAt: string
 }
+
+/** A draw off the SHELF — the absorbed Board Game Picker engine. */
+export type BoardGamePickSession = PickSessionCommon & {
+  kind: "board-game"
+  criteria: PickCriteriaWire
+  /** Every game offered and turned down — reroll's memory, and the thing that was lost. */
+  excludedGameIds: string[]
+  candidates: PickCandidateWire[]
+}
+
+/**
+ * A draw from the QUEUES — Movies, Shows, Reading and Video Games (WP-7).
+ *
+ * `backend` is the one provider this session is bound to. A reroll sends it back so the
+ * evening cannot walk from a Steam queue to a MiSTer one halfway through.
+ */
+export type QueuePickSession = PickSessionCommon & {
+  kind: "queue"
+  backend: string | null
+  /** Every queue offered and turned down — the same memory, one shape up. */
+  excludedSetIds: string[]
+  picks: TonightPickWire[]
+  /** Filters the form collected that no backend can act on yet. Shown on the card. */
+  notes: string[]
+}
+
+export type PickSession =
+  | BoardGamePickSession
+  | QueuePickSession
 
 /** The browser's own storage, or nothing when it is denied. Never throws. */
 export function defaultStorage(): Storage | null {
@@ -125,16 +161,9 @@ export function readPickSession(
   }
 
   if (!parsed || typeof parsed !== "object") return null
-  const session = parsed as Partial<PickSession>
+  const session = parsed as Record<string, unknown>
 
-  if (
-    typeof session.savedAt !== "string" ||
-    !Array.isArray(session.candidates) ||
-    session.candidates.length === 0 ||
-    !session.criteria
-  ) {
-    return null
-  }
+  if (typeof session.savedAt !== "string") return null
 
   const savedAt = Date.parse(session.savedAt)
   if (
@@ -144,14 +173,64 @@ export function readPickSession(
     return null
   }
 
-  return {
-    activity: session.activity ?? "board-games",
-    candidates: session.candidates,
-    criteria: session.criteria,
-    excludedGameIds: session.excludedGameIds ?? [],
-    guestCount: session.guestCount ?? 0,
-    origin: session.origin === "queue" ? "queue" : "pick",
-    personIds: session.personIds ?? [],
+  const common = {
+    activity:
+      (session.activity as ActivityId) ?? "board-games",
+    guestCount:
+      typeof session.guestCount === "number"
+        ? session.guestCount
+        : 0,
+    origin: (session.origin === "queue"
+      ? "queue"
+      : "pick") as PickOrigin,
+    personIds: Array.isArray(session.personIds)
+      ? (session.personIds as string[])
+      : [],
     savedAt: session.savedAt,
+  }
+
+  if (session.kind === "queue") {
+    const picks = session.picks
+    // An empty draw is not a session. The same rule the board-game branch has always had:
+    // there is no pick to show, and four empty states saying that would be four ways to say
+    // one sentence.
+    if (!Array.isArray(picks) || picks.length === 0) {
+      return null
+    }
+    return {
+      ...common,
+      backend:
+        typeof session.backend === "string"
+          ? session.backend
+          : null,
+      excludedSetIds: Array.isArray(session.excludedSetIds)
+        ? (session.excludedSetIds as string[])
+        : [],
+      kind: "queue",
+      notes: Array.isArray(session.notes)
+        ? (session.notes as string[])
+        : [],
+      picks: picks as QueuePickSession["picks"],
+    }
+  }
+
+  const candidates = session.candidates
+  if (
+    !Array.isArray(candidates) ||
+    candidates.length === 0 ||
+    !session.criteria
+  ) {
+    return null
+  }
+
+  return {
+    ...common,
+    candidates:
+      candidates as BoardGamePickSession["candidates"],
+    criteria: session.criteria as PickCriteriaWire,
+    excludedGameIds: Array.isArray(session.excludedGameIds)
+      ? (session.excludedGameIds as string[])
+      : [],
+    kind: "board-game",
   }
 }
