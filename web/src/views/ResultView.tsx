@@ -330,18 +330,22 @@ export function ResultView({
             </section>
           ) : null}
 
-          <section className="tsection" id="result-clear">
-            <Button
-              id="result-forget"
-              onClick={() => {
-                clearPickSession()
-                setSession(null)
-              }}
-              size="sm"
-            >
-              Forget this pick
-            </Button>
-          </section>
+          {/* Only for a pick. A queue arrival has nothing remembered to forget — the card
+              came out of the URL, and a button offering to clear it would be lying. */}
+          {session?.origin === "pick" ? (
+            <section className="tsection" id="result-clear">
+              <Button
+                id="result-forget"
+                onClick={() => {
+                  clearPickSession()
+                  setSession(null)
+                }}
+                size="sm"
+              >
+                Forget this pick
+              </Button>
+            </section>
+          ) : null}
         </>
       )}
     </main>

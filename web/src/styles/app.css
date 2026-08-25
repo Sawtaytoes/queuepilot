@@ -4143,9 +4143,19 @@ body.rowdragging {
   align-items: center;
   justify-content: center;
   aspect-ratio: 1 / 1;
+  /* CAPPED, and the cap is what a card with no art looks like.
+
+     `aspect-ratio` alone gives a 300px track a 300px-tall box, which is right for a cover
+     and absurd for the words "No box photo yet" — and the result card, on a wider measure,
+     was drawing an 800px empty square above two lines of text. The cap bounds the height
+     and `object-fit: contain` still shows the whole cover inside it. */
+  max-block-size: 240px;
   overflow: hidden;
   border-radius: 8px;
   background: var(--color-surface-sunken);
+}
+#result .bgart {
+  max-block-size: 340px;
 }
 /* The covers are padded to 1:1 already, so `contain` shows the whole box rather than
    cropping the title off a wide one. */
