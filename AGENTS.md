@@ -372,23 +372,48 @@ bite, and four of them bite silently.
   play.** A play may RENEW a known-how claim and must never CREATE one; a claim on the wrong
   person shows up beside no name and is therefore never caught. The empty table is the correct
   result, and `boardgames.test.ts` pins it as one.
-- **⚠️ TWO BOOKS OF RECORD ARE OPEN RIGHT NOW.** The sibling app is still serving and still the
-  one being edited; the absorb REPLACES all twelve tables whenever the source file's
-  fingerprint changes. That is only safe while nothing here writes them. **The day the first
-  writer lands (WP-4d), the source file must be retired in the same change** — a re-syncing
-  importer between two live databases is how the owner's edit disappears on a restart.
-- **The provider READS these rows and still POSTS a play over HTTP, and the split is the point.**
-  WP-4e swapped `providers/board-game-picker-client.ts` onto `store/db/boardgames.ts`;
+- **✅ THERE IS ONE BOOK OF RECORD, AND IT IS THIS ONE. The absorb is a ONE-WAY DOOR (WP-4d).**
+  It used to REPLACE all twelve tables whenever the source file's fingerprint changed, which was
+  safe only while nothing here wrote them. WP-4d landed the writers, so
+  `store_meta('boardgames','retired_at')` latches at the end of the boot hook once `board_games`
+  holds rows, `importBoardGames()` then refuses — **including under `force`** — and
+  `board-game-picker-import.sqlite` is renamed to `.retired-<timestamp>`. Do not add a flag that
+  re-opens it. Getting back is two manual steps with the app stopped: rename the file back AND
+  delete the meta row.
+  ([decision](docs/decisions/2026-08-25-the-collection-absorb-is-a-one-way-door-and-the-source-file-is-retired.md))
+- **The grouping SEED is NOT retired with the source file, and the two are not the same kind of
+  thing.** The source file carried rows that REPLACED ours; every seed insert is
+  `ON CONFLICT DO NOTHING` and can only ADD. `seedGroupingRules()` keeps reading
+  `board-game-grouping-seed.yaml` on every start, gated on its own fingerprint, because it is the
+  only way to add a grouping rule until the editing screen exists.
+- **⚠️ RETIRING THE SOURCE FILE IS NOT RETIRING THE APP.** The sibling app, its host, its
+  Homepage tile and its repo are all still running. That transfer is WP-10 and it is behind an
+  explicit owner gate. Nothing in this repo may redirect, archive or stop it.
+- **The writers are `store/db/boardgameImport.ts`, `boardgameSync.ts` and `boardgameEnrich.ts`,
+  and they run as four MQTT-triggered jobs.** `boardgames/jobs/` holds them —
+  `sync-bgg`, `enrich`, `link-rulebooks`, `link-videos`, in that order, and deliberately NOT
+  `&&`-chained so an upstream outage does not skip the night's rulebook links. Three judgements
+  in them are load-bearing: `sync-bgg` **refuses an empty collection** rather than marking every
+  title removed; `link-videos` writes an **explicit empty list** for a title with no teach video,
+  which is what removes a dead link; and `enrich` skips edition matching when the title's own
+  upstream id is not any owned box's, because a family listing is not a box and matching against
+  it picks art for a different game. A terminal runs one step through
+  `server/src/tools/board-game-sync.ts`.
+- **The provider is fully in process — the write came home in WP-4d.** WP-4e swapped
+  `providers/board-game-picker-client.ts` onto `store/db/boardgames.ts`;
   `providers/board-game-picker.ts` did not change, which is the proof the seam was in the right
-  place. `logPlay()` is the ONE call left on the wire, because it is a WRITE and the bullet above
-  binds it — do not "finish the swap" by pointing it at the store. Two consequences: a play
-  logged through `POST /api/providers/:id/progress/:itemId` lands in the sibling app and is
-  invisible here until the collection is staged and absorbed again, and it still records NO
-  PEOPLE (`agentic:docs/research/2026-08-25-a-logged-play-records-no-players.md`; WP-8 owns the
-  fix). Covers come off the staged `board-game-images/` directory rather than the LAN host.
-  `BOARD_GAME_TRANSPORT=http` puts every read back on the wire the way `STORE_BACKEND=yaml`
-  puts the store back on the files, and keeping the HTTP client runnable is what lets
-  `e2e/board-game-transport-parity-test.ts` compare the two on every CI run rather than once
+  place. `logPlay()` was the one call left on the wire and is not any more, because the bullet
+  above stopped being true; `boardGamesRepositoryClient` builds no HTTP client at all.
+  ⚠️ **A play logged from a TILE records `personIds: []`, stated rather than defaulted, and that
+  is correct** — whoever pressed it is not filling in a form, and a play may RENEW a known-how
+  claim but must never INVENT one. The screen that asks who was at the table is the Collection
+  screen, through `POST /api/board-games/plays`. Do not "improve" the tile path by guessing the
+  roster. Covers come off `board-game-images/`, whose directory is `imagesDirectory()` — ONE
+  definition, shared by the writer and all three readers, because the enrichment made
+  `BOARD_GAME_IMAGES_PATH` load-bearing. `BOARD_GAME_TRANSPORT=http` puts the reads AND the write
+  back on the wire the way `STORE_BACKEND=yaml` puts the store back on the files, and keeping the
+  HTTP client runnable is what lets `e2e/board-game-transport-parity-test.ts` compare the two on
+  every CI run rather than once
   ([decision](docs/decisions/2026-08-25-the-board-game-provider-reads-rows-and-still-posts-a-play-over-http.md)).
 
 Staging the source file is `server/src/tools/stage-board-game-collection.ts`, dry run by
@@ -399,6 +424,13 @@ tables that get the newest writes. The tool copies the three files together, che
 COPY (never the live file, which another process owns), leaves the copy out of WAL mode so the
 artifact is one file, and prints the row count of all fifteen tables on both sides. **A
 disagreement means the copy was torn and nothing is staged.**
+
+⚠️ **The staging tool is SPENT on the live system, and that is not a bug.** It writes
+`board-game-picker-import.sqlite`, which the absorb no longer reads once `retired_at` is
+latched — so a stage that "works" now changes nothing at all. It is still the right tool for a
+FRESH container that has never held a collection, and it is still how the one-time cutover was
+done. On a store that already holds the collection, staging again is a no-op and re-absorbing it
+is the data loss the latch exists to prevent.
 
 ## queues.yaml
 
@@ -477,6 +509,12 @@ server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection abs
 server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
 server/node_modules/.bin/tsx e2e/board-game-transport-parity-test.ts  # both board-game transports agree
 ```
+
+The three browser gates that need a SHARED SERVER (`narrow-scroll`, `drag-stability`,
+`routing`) start their own in `ci.yml` with their own `WEB_PORT` and fixture paths. Run them by
+hand the same way — a bare `tsx e2e/narrow-scroll-test.ts` answers `ERR_CONNECTION_REFUSED`,
+which reads exactly like a regression and is not one. Start the server with `setsid` and stop it
+with `kill -- -$SRV`; see "Working here" for why `kill $SRV` does not.
 
 ⚠️ **`yarn workspace queuepilot-web run build` is not optional before the offline e2e gates.**
 Without `web/dist` the server has no SPA fallback, so every deep link answers **404** — and a
