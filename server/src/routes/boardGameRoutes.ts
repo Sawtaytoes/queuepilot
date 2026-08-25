@@ -1,9 +1,14 @@
+import { readFile } from 'node:fs/promises';
+import { dirname, extname, join } from 'node:path';
+
 import { Hono } from 'hono';
 
 import { parsePickCriteria, SHORTLIST_SIZE } from '../boardgames/criteria.js';
 import { pick } from '../boardgames/pick.js';
 import type { Game, PickCandidate, PickResult, Player } from '../boardgames/types.js';
+import { QUEUES_PATH } from '../config.js';
 import { errMessage } from '../errors.js';
+import { binaryResponse } from './binaryResponse.js';
 import {
   knownHowForGame,
   logBoardGamePlay,
@@ -101,6 +106,39 @@ export function boardGameRoutes(): Hono {
       });
     } catch (e) {
       return c.json({ error: errMessage(e) }, 500);
+    }
+  });
+
+  /**
+   * The box art, off the disk beside the book of record.
+   *
+   * NOT a cache and never hotlinked: some of these are covers the owner chose by hand, and the
+   * upstream they came from has turned access off before. `store/db/boardgames.ts` stores the
+   * path the source app used (`/images/<file>`) and this serves the file the staging tool put
+   * in `board-game-images/` — the rename is the whole difference between the two.
+   *
+   * One path segment, and a name that is a bare file name or nothing. A game's `imagePath` is
+   * data out of an absorbed database, so it is user input as far as this handler is concerned.
+   */
+  app.get('/board-games/images/:file', async (c) => {
+    const file = c.req.param('file');
+    if (!/^[\w.-]+$/.test(file) || file.startsWith('.')) {
+      return c.json({ error: 'bad image name' }, 400);
+    }
+
+    const type = IMAGE_TYPES[extname(file).toLowerCase()];
+    if (!type) return c.json({ error: 'bad image name' }, 400);
+
+    try {
+      return binaryResponse({
+        buffer: await readFile(join(dirname(QUEUES_PATH), 'board-game-images', file)),
+        // Content-addressed by the enrichment that wrote it — the file name changes when the
+        // picture does, so a long immutable cache is safe and the shelf paints once.
+        cacheControl: 'public, max-age=604800, immutable',
+        contentType: type,
+      });
+    } catch {
+      return c.json({ error: 'no such image' }, 404);
     }
   });
 
@@ -241,6 +279,15 @@ export function boardGameRoutes(): Hono {
 
   return app;
 }
+
+/** What the absorbed enrichment writes. Anything else is not one of ours. */
+const IMAGE_TYPES: Record<string, string> = {
+  '.avif': 'image/avif',
+  '.jpeg': 'image/jpeg',
+  '.jpg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
 
 /** The claims about one game, in the wire's own vocabulary. */
 const knownHowClaims = (

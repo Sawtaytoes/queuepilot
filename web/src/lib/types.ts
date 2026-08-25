@@ -878,3 +878,128 @@ export type PendingItem = {
   /** Collections only: how many items are in it. */
   childCount?: number | null
 }
+
+/* ── Board games — the absorbed collection, the play log and the pick ─────────────────── */
+
+/**
+ * A GAME AS THE COLLECTION SCREEN NEEDS IT — `GET /api/board-games`'s projection.
+ *
+ * Boxes, links and modules are a detail screen's data and roughly quadruple the payload for
+ * a list that paints a name, a player count and a poster, so the route projects them away.
+ * The card that needs them asks for one game.
+ */
+export type BoardGameCard = {
+  id: string
+  name: string
+  /** The box claim. Recorded, never the thing filtered on alone. */
+  minPlayers: number
+  maxPlayers: number
+  /** Counts the community calls `best`. May be empty. */
+  bestWith: number[]
+  /** BGG-style 1.0–5.0. `null` is "nobody rated it" and is NOT 0. */
+  weight: number | null
+  minPlaytime: number | null
+  maxPlaytime: number | null
+  interactionTypes: string[]
+  ownerCategories: string[]
+  /** Owned, but never offer it. */
+  isExcluded: boolean
+  imagePath: string | null
+  playCount: number
+  lastPlayedAt: string | null
+  /**
+   * Everybody who has been at a table for this game, out of the play log — the question
+   * the log exists to answer, answered on the card. Empty for a play that named nobody.
+   */
+  playedBy: string[]
+}
+
+/** One title, whole. What the result card and the queue-arrival card read. */
+export type BoardGame = BoardGameCard & {
+  recommendedWith: number[]
+  minAge: number | null
+  publishers: string[]
+  yearPublished: number | null
+  rating: number | null
+  notes: string | null
+  boxes: {
+    id: string
+    label: string
+    kind: "expansion" | "standalone"
+    locationText: string | null
+  }[]
+  /** Rulebook first, then how-to-play, then the rest. The server's ordering, kept. */
+  links: {
+    id: string
+    kind: string
+    label: string
+    url: string
+  }[]
+  modules: { id: string; name: string }[]
+}
+
+/**
+ * ONE PERSON KNOWS ONE GAME well enough to start it without opening the rulebook.
+ *
+ * A separate fact from a play, never a summary of one. A play may RENEW it; nothing derives
+ * it from a play count.
+ */
+export type KnownHowClaim = {
+  personId: string
+  gameId: string
+  /** ISO 8601 — when it was last known to be true. It never expires on its own. */
+  confirmedAt: string
+}
+
+export type BoardGamesResponse = {
+  games: BoardGameCard[]
+  knownHow: KnownHowClaim[]
+}
+
+export type BoardGameResponse = {
+  game: BoardGame
+  knownHow: KnownHowClaim[]
+}
+
+/** What `POST /api/board-games/pick` is asked. The engine's own criteria, in this app's
+ * vocabulary — it says PERSON where the ported engine says player. */
+export type PickCriteriaWire = {
+  playerCount: number
+  fitness: "any" | "bestOnly" | "bestOrRecommended"
+  rulesKnown: "any" | "everyone" | "someone"
+  maxWeight: number | null
+  personIds: string[]
+  /** Reroll's memory — every game already offered and turned down. */
+  excludedGameIds: string[]
+  /** Omit for a real draw; set for a deterministic one. */
+  seed?: number
+}
+
+export type PickCandidateWire = {
+  game: BoardGame
+  verdict: "best" | "notRecommended" | "recommended" | "unknown"
+  playCount: number
+}
+
+/**
+ * A pick either produced a game or it produced an explanation. There is no third state, and
+ * "nothing fits" is never quietly widened into "here, have one anyway".
+ */
+export type PickResultWire =
+  | {
+      outcome: "picked"
+      candidate: PickCandidateWire
+      /** How many others fit — the difference between trusting a reroll and wondering. */
+      eligibleCount: number
+    }
+  | {
+      outcome: "empty"
+      reason: string
+      suggestion: string | null
+    }
+
+export type PickResponse = {
+  result: PickResultWire | null
+  /** The first card and the two the shortlist control reveals. Drawn together on purpose. */
+  shortlist: PickCandidateWire[]
+}
