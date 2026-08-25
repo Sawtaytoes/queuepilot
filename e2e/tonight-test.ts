@@ -142,7 +142,9 @@ try {
     await page.click(tile('Video Games'));
     await page.click(mode('Queues'));
     await page.waitForTimeout(400);
-    const badges = await page.$$eval('#tonight-queue .qcardmeta', (els) =>
+    // `.qcardprov` and not `.qcardmeta`: the meta row carries the queue's PEOPLE as well
+    // now, and reading the whole row back would compare "AdaLinusMiSTer" against "MiSTer".
+    const badges = await page.$$eval('#tonight-queue .qcardprov', (els) =>
       els.map((el) => el.textContent?.trim() ?? '').filter(Boolean),
     );
     ok(
@@ -150,6 +152,133 @@ try {
       badges.includes('Steam') && badges.includes('MiSTer'),
       JSON.stringify(badges),
     );
+  }
+
+  // ── 4b. THE PEOPLE FILTER, on the list and not only in the draw ──────────────────── //
+  //
+  // The defect this block exists for: Pick was people-aware server-side and the Which queue?
+  // list was not, so ticking two people narrowed the draw and left the list beside it
+  // offering queues those people are not on.
+  //
+  // Every assertion here moves a queue between the three branches of step 5 — one match is
+  // implied, two or more force a choice, zero is an empty state — so the branch is asserted
+  // alongside the count rather than instead of it.
+  {
+    await open();
+
+    const tick = async (id: string) => {
+      await page.click(`input[value="${id}"]`);
+      await page.waitForTimeout(250);
+    };
+
+    /** What the Which queue? step is showing: the branch, and the queues in it. */
+    const which = async (label: string) => {
+      await page.click(tile(label));
+      await page.click(mode('Queues'));
+      await page.waitForTimeout(400);
+
+      return {
+        cards: await page.$$eval(
+          '#tonight-queue [role="radiogroup"] [role="radio"]',
+          (els, sel) => els.map((el) => el.querySelector(sel)?.textContent?.trim() ?? ''),
+          TILE_NAME,
+        ),
+        isEmpty: Boolean(await page.$('#tonight-queue [role="alert"], #tonight-queue h3')),
+        isImplied: Boolean(await page.$('#tonight-queue-only')),
+      };
+    };
+
+    // NOBODY TICKED IS NO FILTER AT ALL. A filter with nothing in it matches everything, and
+    // the strict reading of the rule gets this backwards — an empty form would otherwise hide
+    // every queue that names anybody, which is nearly all of them.
+    {
+      const reading = await which('Reading');
+      ok(
+        'nobody ticked offers every queue for the activity',
+        reading.cards.length === 2,
+        JSON.stringify(reading.cards),
+      );
+      const games = await which('Video Games');
+      ok(
+        '…for every activity, not just the one that happens to open',
+        games.cards.length === 2,
+        JSON.stringify(games.cards),
+      );
+    }
+
+    // ONE PERSON: the list narrows, and drops to the branch that does not ask.
+    await tick('ada');
+    {
+      const reading = await which('Reading');
+      ok(
+        'ticking one person narrows two matches down to one',
+        reading.isImplied && reading.cards.length === 0,
+        `implied=${reading.isImplied} cards=${JSON.stringify(reading.cards)}`,
+      );
+      ok(
+        '…and the one it kept is the queue that person is on',
+        (await page.$eval('#tonight-queue-only', (el) => el.textContent ?? '')).includes('Manga'),
+        await page.$eval('#tonight-queue-only', (el) => (el.textContent ?? '').slice(0, 80)),
+      );
+    }
+
+    // A QUEUE NOBODY IS FILED ON IS NEVER FILTERED OUT. `after_dinner` has no members, and a
+    // queue no group claimed comes up empty by design — hiding it makes it unreachable.
+    {
+      const shows = await which('Shows');
+      ok(
+        'a queue nobody is filed on is still offered',
+        shows.isImplied
+          && (await page.$eval('#tonight-queue-only', (el) => el.textContent ?? '')).includes(
+            'Anybody',
+          ),
+        await page.$eval('#tonight-queue-only', (el) => (el.textContent ?? '').slice(0, 80)),
+      );
+    }
+
+    // TWO PEOPLE: the list narrows again, and this is the case the decision works through —
+    // "Ada — Manga" goes because Grace is not on it, and "Grace — Comics" goes because Ada is
+    // not on it. Nothing is left, and the empty state has to say something useful.
+    await tick('grace');
+    {
+      const reading = await which('Reading');
+      ok(
+        'ticking two people hides a queue only one of them is on',
+        reading.isEmpty && reading.cards.length === 0 && !reading.isImplied,
+        `empty=${reading.isEmpty} cards=${JSON.stringify(reading.cards)}`,
+      );
+      // A filter that silently drops to zero is worse than an over-inclusive list.
+      const words = await page.$eval('#tonight-queue', (el) => el.textContent ?? '');
+      ok(
+        '…and the empty state says what to do about it',
+        words.includes('Untick') && words.includes('Pick'),
+        words.slice(0, 200),
+      );
+
+      // …while the peopleless queue survives BOTH ticks, which is the whole of that rule.
+      const shows = await which('Shows');
+      ok(
+        'a queue nobody is filed on survives a two-person selection',
+        shows.isImplied,
+        JSON.stringify(shows.cards),
+      );
+    }
+
+    // A GROUP IS NOT FLATTENED TO ITS PEOPLE. `game_night` is "at least one of Ada and
+    // Grace", so Ada alone brings it up — a copy that unioned the group into two required
+    // people would need both, which is the rule inverted.
+    {
+      await open();
+      await tick('ada');
+      const board = await which('Board Games');
+      ok(
+        'a group counts by its own number — either of them is enough',
+        board.isImplied,
+        JSON.stringify(board.cards),
+      );
+    }
+
+    await open();
   }
 
   // ── 5. Go does the real thing, per delivery ──────────────────────────────────────── //
