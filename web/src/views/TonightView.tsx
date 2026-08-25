@@ -36,12 +36,14 @@ import {
 } from "../lib/tonight"
 import { routeFor } from "../lib/tonightRouting"
 import type {
+  GroupWithRoster,
   PeopleResponse,
   Person,
   PickResponse,
   TonightPickResponse,
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
+import { usePeople } from "../state/people"
 import { setStatus, useStore } from "../state/store"
 
 /**
@@ -75,19 +77,22 @@ import { setStatus, useStore } from "../state/store"
  * bugs and are not: an empty selection filters nothing, and **NFC bypasses this screen
  * entirely** — a card goes straight to its queue and always did.
  *
- * ## What is REAL here and what is waiting on WP-5
+ * ## Pick and Queues answer the same question, and they answer it the same way
  *
- * Real: the people (`GET /api/people`, WP-3's rows), the queues, their providers, the
- * segment, the Which queue? step and Go — which starts a pull queue through `/go/<id>` and
- * opens the device menu for a push one, exactly as the queue's own page does.
+ * Pick has been people-aware server-side since WP-7. The Which queue? list was not: it
+ * showed EVERY queue for an activity, so ticking two people narrowed the draw and left the
+ * list beside it untouched. Both halves now read the same rule over the same data — a
+ * queue's trays from `GET /api/queue-people`, and every group's own count from
+ * `GET /api/people` — so a queue offered here is a queue Pick would draw.
  *
- * Stubbed, in ONE place each and both named in `lib/tonight.ts`: a queue's ACTIVITY is
- * derived from its provider kind (`activityForSet`) instead of stored on it, and a queue
- * carries no PEOPLE (`TonightQueue.hasRoster` is false, so the people filter passes every
- * queue through). WP-5 fills both and the rule they feed does not change.
+ * Three consequences that look like bugs and are not:
  *
- * Not built, and deliberately not faked: the pick engine (WP-7/WP-8). Go is disabled on
- * Pick and says why.
+ *   1. **Nobody ticked shows everything.** A filter with nothing in it matches everything.
+ *   2. **A queue with NOBODY on it is always offered.** Several queues legitimately have no
+ *      people filed, and hiding them would make them unreachable.
+ *   3. **NFC bypasses this screen entirely** — a card goes straight to its queue.
+ *
+ * Not built, and deliberately not faked: Surprise Me's narrowings. Its own step says so.
  */
 export function TonightView({
   isHidden,
@@ -98,8 +103,18 @@ export function TonightView({
 }) {
   const navigate = useNavigate()
   const { reg } = useStore()
+  const { byQueue } = usePeople()
 
   const [people, setPeople] = useState<Person[]>([])
+  /**
+   * Every group's roster and its own count, off the SAME response as the roster.
+   *
+   * A group on a queue is NOT flattened to its people — "at least one of the kids" is a
+   * set, a number and a spare — so the filter needs the rule as well as the names.
+   */
+  const [groups, setGroups] = useState<GroupWithRoster[]>(
+    [],
+  )
   const [peopleError, setPeopleError] = useState<
     string | null
   >(null)
@@ -166,11 +181,13 @@ export function TonightView({
       .then((r) => {
         if (isCancelled) return
         setPeople(rosterOrder(r.people ?? []))
+        setGroups(r.groups ?? [])
         setPeopleError(null)
       })
       .catch((e: unknown) => {
         if (isCancelled) return
         setPeople([])
+        setGroups([])
         // Said out loud rather than rendered as an empty roster: "nobody is in the people
         // table yet" and "the request failed" look identical otherwise, and only one of
         // them is something to go and fix.
@@ -192,9 +209,14 @@ export function TonightView({
       set.vocabulary?.name ?? "",
     ]),
   )
+  // WHO EACH QUEUE IS FOR. One statement for the whole shelf, loaded at boot beside the
+  // registry — not one request per queue, and not a second copy of the roster.
   const queues = tonightQueues(
     reg?.sets ?? [],
     providerLabels,
+    byQueue,
+    people,
+    groups,
   )
   const matches = queuesForTonight(
     queues,
@@ -396,6 +418,7 @@ export function TonightView({
             <WhichQueue
               activityLabel={activity?.label ?? ""}
               chosenQueueId={chosenQueue?.id ?? null}
+              hasSelection={selectedPeople.length > 0}
               matches={matches}
               onChoose={setQueueId}
               seedKey={`${session.activity}:${selectedPeople.join(",")}`}
@@ -435,12 +458,15 @@ export function TonightView({
 function WhichQueue({
   activityLabel,
   chosenQueueId,
+  hasSelection,
   matches,
   onChoose,
   seedKey,
 }: {
   activityLabel: string
   chosenQueueId: string | null
+  /** Whether anybody is ticked — which of the two empty answers this is. */
+  hasSelection: boolean
   matches: readonly TonightQueue[]
   onChoose: (id: string) => void
   seedKey: string
@@ -454,20 +480,41 @@ function WhichQueue({
      nothing to choose — one definition, so the two can never say different things. */
   const meta = (queue: TonightQueue) => (
     <span className="qcardmeta">
-      {/* The people are the badges that tell two otherwise identical queues apart. */}
-      {queue.peopleNames.map((name) => (
-        <Badge intent="neutral" key={name} size="sm">
-          {name}
-        </Badge>
-      ))}
+      {/* The people are the badges that tell two otherwise identical queues apart, and
+          they are why a queue is or is not in this list. A "Nice to have" member is drawn
+          as an outline rather than a fill: being there never removes the queue, so it is
+          not the same claim as a "Must be here" one.
+
+          A queue nobody is filed on says so in words. An empty row reads as "still
+          loading", and this one is never filtered out — it is offered to everybody. */}
+      {queue.members.length === 0 ? (
+        <span className="qcardanyone">Anybody</span>
+      ) : (
+        queue.members.map((member) => (
+          <Badge
+            appearance={
+              member.role === "optional"
+                ? "outline"
+                : "solid"
+            }
+            intent="neutral"
+            key={`${member.kind}:${member.id}`}
+            size="sm"
+          >
+            {member.label}
+          </Badge>
+        ))
+      )}
       {isProviderShown && queue.providerLabel ? (
-        <Badge
-          appearance="outline"
-          intent="neutral"
-          size="sm"
-        >
-          {queue.providerLabel}
-        </Badge>
+        <span className="qcardprov">
+          <Badge
+            appearance="outline"
+            intent="accent"
+            size="sm"
+          >
+            {queue.providerLabel}
+          </Badge>
+        </span>
       ) : null}
     </span>
   )
@@ -486,8 +533,16 @@ function WhichQueue({
       <h2 className="tlabel">Which queue?</h2>
 
       {matches.length === 0 ? (
+        /* A filter that silently drops to nothing is worse than an over-inclusive list, so
+           the empty state says WHICH of the two empties this is. Nobody ticked and no
+           matches means the activity has no queue at all — untelling somebody would not
+           help, and saying so would send the host hunting for a tick that is not there. */
         <EmptyState
-          description={`Nothing matches ${activityLabel || "this activity"} and the people you ticked. Untick somebody, or switch to Pick.`}
+          description={
+            hasSelection
+              ? `No ${activityLabel || "queue"} queue lists everybody you ticked. Untick somebody, or switch to Pick and let it draw.`
+              : `There is no ${activityLabel || "queue"} queue yet. Switch to Pick, or make one on the Queues page.`
+          }
           headingLevel={3}
           heading="No queue for that"
           size="sm"

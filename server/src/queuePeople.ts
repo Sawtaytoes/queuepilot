@@ -243,6 +243,19 @@ export interface ResolvedMember extends QueueMember {
  * what makes "Ada, and Grace is in the room not paying attention" a queue you can still
  * find.
  *
+ * TWO empties are not the same empty, and both branches are load-bearing:
+ *
+ *   * **Nobody selected is NO FILTER AT ALL.** Read strictly, "every required member is
+ *     selected" is false against an empty selection, so an empty form would hide every queue
+ *     that names anybody — a search field showing no results before you have typed. (The
+ *     correction at the end of §5 of the decision.)
+ *   * **A queue NOBODY is filed on is never filtered out.** Several live queues legitimately
+ *     have nobody on them — a queue no group claimed comes up empty by design, which
+ *     `store/migrate/queuePeople.ts` calls the honest answer — and rule 1 above is false
+ *     against an empty roster, so one tick would make every one of them unreachable. Both
+ *     the draw and the Which queue? list read this function, so the branch has to be here
+ *     rather than at either caller.
+ *
  * ⚠️ A FILTER IS NEVER THE ONLY WAY IN. Scanning an NFC card goes straight to its queue and
  * never comes near this function.
  */
@@ -250,6 +263,8 @@ export function queueMatchesSelection(
   members: readonly ResolvedMember[],
   selectedPersonIds: readonly string[],
 ): boolean {
+  if (members.length === 0) return true;
+
   const selected = new Set(selectedPersonIds);
   if (selected.size === 0) return true;
 
