@@ -29,3 +29,15 @@ people:
   birth_year: null
   max_weight: null
   is_beginner: true
+# ── The one group, and its own count ──────────────────────────────────────────────────
+#
+# "At least one of Ada and Grace, and Linus may join." A group is a set (the required
+# roster), a NUMBER (`min_present`) and a spare (`optional_people`) — three things, and
+# collapsing any two of them loses the rule. `family` itself is declared in the harness's
+# `groups.yaml`; this file only attaches people to a group that already exists.
+groups:
+- id: family
+  label: Family
+  min_present: 1
+  people: [ada, grace]
+  optional_people: [linus]

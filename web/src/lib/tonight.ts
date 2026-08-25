@@ -1,5 +1,12 @@
 import { tileForSet } from "./tonightRouting"
-import type { Person, RegistrySet } from "./types"
+import type {
+  GroupWithRoster,
+  MemberKind,
+  MemberRole,
+  Person,
+  QueueMember,
+  RegistrySet,
+} from "./types"
 
 /**
  * The Tonight surface's vocabulary and its two rules, with no React and no DOM in the
@@ -120,13 +127,37 @@ export const defaultModeFor = (
 ): SessionMode => findActivity(id)?.defaultMode ?? "pick"
 
 /**
- * One queue as this screen needs it. **The contract WP-5 fills in.**
+ * One member of a queue's audience, resolved to what the FILTER needs.
+ *
+ * **Mirrors `server/src/tonight/pick.ts toResolvedMembers()` and its `ResolvedMember`.** Two
+ * implementations of one shape, for the same reason `lib/people.ts describeRule` mirrors
+ * `describeMembership`: the two workspaces cannot import each other, and
+ * `tonight-routing-test.ts` is what stops them drifting.
+ *
+ * ⚠️ **A GROUP IS NOT FLATTENED TO ITS PEOPLE.** "Younger Kids" is at least one of three, so
+ * flattening it into three person ids turns "either of them is enough" into "all of them" —
+ * which is the rule itself, inverted. The group stays ONE member carrying its own count.
+ */
+export type TonightMember = {
+  kind: MemberKind
+  id: string
+  role: MemberRole
+  /** The badge's text — a person's display name, or the group's label. */
+  label: string
+  /** For a GROUP: its required roster. For a PERSON: just themself. */
+  people: readonly string[]
+  /** How many of `people` count as this member being present. 1 for a person. */
+  minPresent: number
+}
+
+/**
+ * One queue as this screen needs it.
  *
  * `name` is a display string rather than the activity's label because today's queues carry
- * a hand-typed label and nothing else. Once WP-5 lands, a queue's name IS its activity
- * ("Movies") and the people are the badges that tell two of them apart
- * (`2026-08-25-a-queue-is-people-plus-an-activity` §4) — that is a change to what fills
- * this field, not to the field.
+ * a hand-typed label and nothing else. Once the shelf paints the activity everywhere, a
+ * queue's name IS its activity ("Movies") and the people are the badges that tell two of
+ * them apart (`2026-08-25-a-queue-is-people-plus-an-activity` §4) — that is a change to what
+ * fills this field, not to the field.
  */
 export type TonightQueue = {
   id: string
@@ -135,23 +166,80 @@ export type TonightQueue = {
   /**
    * Whether this queue carries people at all.
    *
-   * **This is the WP-5 seam and it is load-bearing.** A queue written before WP-5 has no
-   * roster, and applying the people filter to it would hide EVERY queue the moment one
-   * person is ticked — "every selected person is on the queue" is false against an empty
-   * roster. So a queue with no roster is never filtered out. WP-5 sets this true and fills
-   * the two lists; the rule below is already the rule and does not change with it.
+   * **This is load-bearing and it is not a leftover.** Several live queues legitimately have
+   * NOBODY on them — a queue no group claimed comes up empty by design — and applying the
+   * rule to an empty roster would hide them the moment one person is ticked ("every selected
+   * person is on the queue" is false against an empty roster). So a queue with no members is
+   * never filtered out, and stays reachable.
    */
   hasRoster: boolean
-  /** Person ids who must be ticked for this queue to show. */
-  requiredPeople: readonly string[]
-  /** Person ids who may be ticked without hiding it — the "Nice to have" hatch. */
-  optionalPeople: readonly string[]
-  /** Display names for the card's badges. Empty until WP-5. */
-  peopleNames: readonly string[]
+  /** Who this queue is for. The badges under its name, and the whole of the filter. */
+  members: readonly TonightMember[]
   /** The provider's product name, shown only when two providers serve one activity. */
   providerLabel: string
   /** `push` starts at a device; `pull` hands back a URL (`/go/<id>`). */
   delivery: "pull" | "push"
+}
+
+/**
+ * Turn a queue's stored trays into the shape the filter reads.
+ *
+ * A PERSON member is themself and counts as one. A GROUP member is its REQUIRED roster and
+ * counts as `minPresent` of them — a set, a number and a spare, and collapsing any two of
+ * them loses the rule.
+ *
+ * A group nothing knows about resolves to an EMPTY roster, and an empty required member can
+ * never be satisfied, so the queue drops out of the filter rather than passing it by
+ * accident. That is the safe direction, and it is the server's own — a queue that should
+ * have been offered and was not is visible on the screen; a queue offered to people it is
+ * not for is not.
+ */
+export function resolveMembers(
+  members: readonly QueueMember[],
+  people: readonly Person[],
+  groups: readonly GroupWithRoster[],
+): TonightMember[] {
+  return members.map((member): TonightMember => {
+    if (member.kind === "group") {
+      const group = groups.find(
+        (one) => one.id === member.id,
+      )
+      const required = (group?.roster ?? []).filter(
+        (row) => row.role === "required",
+      )
+
+      return {
+        id: member.id,
+        kind: "group",
+        label: group?.label ?? member.id,
+        // `null` is "all of them", which is what every group written before the rule meant —
+        // the absence is not silently 1.
+        minPresent:
+          group == null
+            ? 1
+            : Math.max(
+                0,
+                Math.min(
+                  group.minPresent ?? required.length,
+                  required.length,
+                ),
+              ),
+        people: required.map((row) => row.personId),
+        role: member.role,
+      }
+    }
+
+    return {
+      id: member.id,
+      kind: "person",
+      label:
+        people.find((one) => one.id === member.id)
+          ?.displayName ?? member.id,
+      minPresent: 1,
+      people: [member.id],
+      role: member.role,
+    }
+  })
 }
 
 /**
@@ -162,6 +250,9 @@ export type TonightQueue = {
  * provider brand is allowed on this screen
  * (`2026-08-25-a-queue-is-people-plus-an-activity` §1).
  *
+ * `membersByQueue` is `GET /api/queue-people`, keyed on set id. A set with no entry has
+ * nobody on it, which is legal and is what "Anybody" means on a card.
+ *
  * ⚠️ A set's TILE comes from `tonightRouting.tileForSet()`, which reads the activity WP-5
  * stores on the set. It used to be derived here from the set's provider kind, which was a
  * bridge written before a queue stored anything; that function is deleted rather than
@@ -170,21 +261,30 @@ export type TonightQueue = {
 export function tonightQueues(
   sets: readonly RegistrySet[],
   providerLabels: ReadonlyMap<string, string>,
+  membersByQueue: Readonly<
+    Record<string, QueueMember[]>
+  > = {},
+  people: readonly Person[] = [],
+  groups: readonly GroupWithRoster[] = [],
 ): TonightQueue[] {
-  return sets.map((set) => ({
-    activity: tileForSet(set),
-    delivery: set.delivery === "pull" ? "pull" : "push",
-    // ⚠️ WP-5: a queue's people live on the queue. Nothing in the registry carries them
-    // today, so every queue reports itself rosterless and the filter lets it through.
-    hasRoster: false,
-    id: set.id,
-    name: set.label || set.id,
-    optionalPeople: [],
-    peopleNames: [],
-    providerLabel:
-      providerLabels.get(set.provider_kind) ?? "",
-    requiredPeople: [],
-  }))
+  return sets.map((set) => {
+    const members = resolveMembers(
+      membersByQueue[set.id] ?? [],
+      people,
+      groups,
+    )
+
+    return {
+      activity: tileForSet(set),
+      delivery: set.delivery === "pull" ? "pull" : "push",
+      hasRoster: members.length > 0,
+      id: set.id,
+      members,
+      name: set.label || set.id,
+      providerLabel:
+        providerLabels.get(set.provider_kind) ?? "",
+    }
+  })
 }
 
 /**
@@ -197,8 +297,12 @@ export function tonightQueues(
  * Grace is not on it. Optional people are the hatch: somebody there does not remove the
  * queue.
  *
- * A queue with no roster (`hasRoster: false`) is pre-WP-5 data and is never filtered —
- * see `TonightQueue.hasRoster`.
+ * **Mirrors `server/src/queuePeople.ts queueMatchesSelection()`, statement for statement.**
+ * Pick is people-aware server-side and this list is the same question asked in the browser;
+ * `tonight-routing-test.ts` §5 is what stops the two answering differently.
+ *
+ * A queue with NOBODY on it (`hasRoster: false`) is never filtered — see
+ * `TonightQueue.hasRoster`.
  *
  * **Nobody ticked is no filter at all**, which is the half of the rule the sentence above
  * leaves implicit and which the strict reading gets backwards. Read strictly, "every
@@ -210,23 +314,29 @@ export function queueMatchesPeople(
   queue: TonightQueue,
   selectedPersonIds: readonly string[],
 ): boolean {
-  if (!queue.hasRoster) return true
-  if (selectedPersonIds.length === 0) return true
-
-  const onQueue = new Set([
-    ...queue.requiredPeople,
-    ...queue.optionalPeople,
-  ])
-
-  if (!selectedPersonIds.every((id) => onQueue.has(id))) {
-    return false
-  }
+  if (!queue.hasRoster || queue.members.length === 0)
+    return true
 
   const selected = new Set(selectedPersonIds)
+  if (selected.size === 0) return true
 
-  return queue.requiredPeople.every((id) =>
-    selected.has(id),
-  )
+  const onQueue = new Set<string>()
+  for (const member of queue.members)
+    for (const personId of member.people)
+      onQueue.add(personId)
+
+  for (const personId of selected)
+    if (!onQueue.has(personId)) return false
+
+  for (const member of queue.members) {
+    if (member.role !== "required") continue
+    const present = member.people.filter((personId) =>
+      selected.has(personId),
+    ).length
+    if (present < member.minPresent) return false
+  }
+
+  return true
 }
 
 /**

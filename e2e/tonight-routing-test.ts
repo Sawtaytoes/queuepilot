@@ -9,6 +9,10 @@
 //      import the other, so nothing but this file can notice the day they disagree. A drift
 //      routes an evening at a backend the other half has never heard of, and the screen
 //      looks fine.
+//   1b. **So is the PEOPLE FILTER** — `server/src/queuePeople.ts queueMatchesSelection()` and
+//      `web/src/lib/tonight.ts queueMatchesPeople()`. Pick draws through one and the Which
+//      queue? list is built with the other, so a drift offers a queue Pick would never draw,
+//      or hides one it would. §5b asks both the same questions over the same fixture.
 //   2. **A session must talk to ONE backend.** Video Games genuinely has Steam queues and
 //      MiSTer queues; a draw that hands back one of each produces a card whose reroll walks
 //      between two machines. That is an assertion about a live draw, not about a table.
@@ -47,6 +51,30 @@ const webRouting = (await import(
   >;
 };
 const { ACTIVITY_ROUTES } = webRouting;
+
+/** The BROWSER's copy of the people filter, loaded the same way and for the same reason. */
+const webTonight = (await import(
+  new URL('../web/src/lib/tonight.ts', import.meta.url).href
+)) as {
+  queuesForTonight: (
+    queues: readonly WebQueue[],
+    activity: string | null,
+    selectedPersonIds: readonly string[],
+  ) => WebQueue[];
+  tonightQueues: (
+    sets: readonly unknown[],
+    providerLabels: ReadonlyMap<string, string>,
+    membersByQueue?: Readonly<Record<string, unknown[]>>,
+    people?: readonly unknown[],
+    groups?: readonly unknown[],
+  ) => WebQueue[];
+};
+
+interface WebQueue {
+  id: string;
+  activity: string;
+  hasRoster: boolean;
+}
 
 const PORT = 18847;
 
@@ -217,8 +245,12 @@ try {
   }
 
   // ── 5. The people filter is the SERVER's, groups and all ─────────────────────────── //
-  // The browser's twin flattens a group away and cannot answer "at least one of them"; this
-  // draw goes through `queueMatchesSelection`, which can.
+  // `queueMatchesSelection` is what this draw goes through, and it is the only one of the two
+  // copies that can answer "at least one of them" — a group stays ONE member carrying its own
+  // count rather than being flattened into its people.
+  //
+  // The two PUTs restate what `TONIGHT_TRAYS` already filed, so this block reads on its own
+  // and stops depending on a table in another file for the assertions right under it.
   {
     const put = async (setId: string, members: unknown[]) =>
       fetch(`${server.base}/api/sets/${setId}/people`, {
@@ -258,6 +290,76 @@ try {
       nobody.body.shortlist.length === 2,
       JSON.stringify(nobody.body.shortlist.map((one) => one.setId)),
     );
+  }
+
+  // ── 5b. THE TWO COPIES OF THE FILTER ANSWER THE SAME ─────────────────────────────── //
+  //
+  // Pick has been people-aware server-side since WP-7; the Which queue? list was not, and
+  // that gap is what this block exists to stop coming back. Both are asked the same question
+  // over the same fixture: the server through a real draw, the browser through
+  // `queuesForTonight()` over `/api/sets` + `/api/queue-people` + `/api/people`.
+  //
+  // Two tiles, on purpose. `reading` is two Kavita queues and `shows` is two Plex queues, so
+  // every candidate is on one backend and the draw's own one-backend binding cannot remove a
+  // queue the browser kept — that would be a real disagreement about something else.
+  {
+    const registry = (await (await fetch(`${server.base}/api/sets`)).json()) as {
+      sets: { id: string; provider_kind: string; vocabulary?: { name?: string } }[];
+    };
+    const trays = (await (await fetch(`${server.base}/api/queue-people`)).json()) as {
+      queues: Record<string, unknown[]>;
+    };
+    const roster = (await (await fetch(`${server.base}/api/people`)).json()) as {
+      people: unknown[];
+      groups: unknown[];
+    };
+
+    const browserQueues = webTonight.tonightQueues(
+      registry.sets,
+      new Map(registry.sets.map((one) => [one.provider_kind, one.vocabulary?.name ?? ''])),
+      trays.queues,
+      roster.people,
+      roster.groups,
+    );
+
+    // `after_dinner` has nobody on it. The list must offer it whoever is ticked — a queue no
+    // group claimed comes up empty by design, and hiding it makes it unreachable.
+    ok(
+      'a queue nobody is filed on reports itself rosterless',
+      browserQueues.find((one) => one.id === 'after_dinner')?.hasRoster === false,
+      JSON.stringify(browserQueues.map((one) => `${one.id}:${one.hasRoster}`)),
+    );
+
+    for (const tile of ['reading', 'shows'] as const) {
+      for (const personIds of [[], ['ada'], ['grace'], ['linus'], ['ada', 'grace']]) {
+        const drawn = await post({ activity: tile, personIds });
+        const server_ = [...drawn.body.shortlist.map((one) => one.setId)].sort();
+        const browser = webTonight
+          .queuesForTonight(browserQueues, tile, personIds)
+          .map((one) => one.id)
+          .sort();
+
+        ok(
+          `${tile} + [${personIds.join(', ')}]: both copies of the filter answer the same`,
+          same(server_, browser),
+          `server ${JSON.stringify(server_)} / browser ${JSON.stringify(browser)}`,
+        );
+      }
+    }
+
+    // …and the GROUP, which is the case a flattened copy gets wrong. `game_night` is "at
+    // least one of Ada and Grace", so either of them alone is enough and both together still
+    // is. Board games are refused at this door, so the browser's answer is the whole
+    // assertion — the rule it reads is the one §5's draws just went through.
+    const boardGames = (ids: string[]) =>
+      webTonight.queuesForTonight(browserQueues, 'board-games', ids).map((one) => one.id);
+
+    ok('a group is at least one of them — Ada alone', same(boardGames(['ada']), ['game_night']));
+    ok('…Grace alone', same(boardGames(['grace']), ['game_night']));
+    ok('…and both together', same(boardGames(['ada', 'grace']), ['game_night']));
+    // Linus is the group's "may join", which is not on the queue. A flattened copy that
+    // unioned the whole roster would answer this one wrong in the other direction.
+    ok('…but the group\'s spare is not on the queue', same(boardGames(['linus']), []));
   }
 
   // ── 6. The two tiles this door REFUSES, by name ──────────────────────────────────── //
