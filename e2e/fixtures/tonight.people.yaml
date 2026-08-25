@@ -1,0 +1,31 @@
+# The people the Tonight harness boots with, in the mapping file's own format — the same
+# owner-confirmed gate the real import runs behind (`store/migrate/people.ts`). It is
+# `confirmed: true` here because a harness is the one place the answer is known in advance.
+#
+# Ada, Grace and Linus. New people fixtures are this cast by rule; the queue and group
+# fixtures elsewhere keep the older Bob / Alice / Carol / Dave / Erin cast and are not
+# renamed.
+confirmed: true
+version: 1
+people:
+- id: ada
+  display_name: Ada
+  board_game_picker_id: player-ada
+  accounts: {}
+  birth_year: null
+  max_weight: null
+  is_beginner: false
+- id: grace
+  display_name: Grace
+  board_game_picker_id: player-grace
+  accounts: {}
+  birth_year: null
+  max_weight: null
+  is_beginner: false
+- id: linus
+  display_name: Linus
+  board_game_picker_id: player-linus
+  accounts: {}
+  birth_year: null
+  max_weight: null
+  is_beginner: true
