@@ -42,6 +42,7 @@ const row = (over: Partial<SourceRow> & { name: string }): SourceRow => ({
   versionNickname: null,
   versionYear: null,
   weight: null,
+  yearPublished: null,
   ...over,
 });
 

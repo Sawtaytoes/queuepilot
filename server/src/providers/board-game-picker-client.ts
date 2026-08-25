@@ -14,24 +14,29 @@
 // wrote out by hand. So the two transports are comparable object-for-object, which is what
 // `e2e/board-game-transport-parity-test.ts` compares.
 //
-// ── ⚠️ ONE CALL IS STILL HTTP, AND IT IS THE WRITE ───────────────────────────────────────
+// ── ⚠️ THE WRITE CAME HOME IN WP-4d — THERE IS NO HTTP LEFT IN REPOSITORY MODE ──────────
 //
-// `logPlay()` still POSTs to the sibling app, on purpose. TWO BOOKS OF RECORD ARE OPEN: the
-// absorb REPLACES all twelve `board_game_*` tables whenever the source file's fingerprint
-// changes, so a play written here would be erased by the next start. `AGENTS.md` states the
-// rule — the day the first writer lands (WP-4d), the source file is retired in the SAME
-// change — and WP-4e is not that day. Do not "finish the swap" by pointing this at the store.
+// `logPlay()` was the one call still on the wire, and the reason was never the seam. TWO BOOKS
+// OF RECORD WERE OPEN: the absorb REPLACED all twelve `board_game_*` tables whenever the source
+// file's fingerprint changed, so a play written here was erased by the next start, silently.
 //
-// Two consequences to know before you trust it:
+// WP-4d retires the source file in the same change as the first writers, which is the rule
+// `AGENTS.md` states and the condition WP-4e was waiting on. So the write is local now, and
+// `boardGamesRepositoryClient` builds no HTTP client at all.
 //
-//   1. A play logged through this route lands in the SIBLING app and is invisible to the
-//      reads above until the collection is staged and absorbed again. Nothing in this app's
-//      UI calls it — only `POST /api/providers/:id/progress/:itemId` does.
-//   2. It records NO PEOPLE, and that is a confirmed live defect, not a design choice:
-//      `board_game_play_people` holds 0 rows against 3 plays.
-//      `agentic:docs/research/2026-08-25-a-logged-play-records-no-players.md` has the
-//      evidence and WP-8 owns the fix. This package leaves it exactly as visible as it found
-//      it.
+// Two things to know before you trust it:
+//
+//   1. IT RECORDS NOBODY, on purpose. `personIds: []` is stated rather than defaulted. Whoever
+//      pressed "we played this" on a tile is not filling in a form, and a play may RENEW a
+//      known-how claim but must never INVENT one — so guessing the roster here would write a
+//      claim against a name that appears on no screen. The screen that asks is the Collection
+//      screen (WP-8), through `POST /api/board-games/plays`.
+//   2. A play against a title this store does not hold answers `null` rather than throwing,
+//      which is what the HTTP client did with the sibling app's 404. `board_game_plays.game_id`
+//      carries a foreign key, so the insert would otherwise take down the request.
+//
+// `BOARD_GAME_TRANSPORT=http` still puts BOTH the reads and the write back on the wire — see
+// the rollback note below. That is what keeps the parity gate able to compare them.
 //
 // ── The privacy rule survives the transport swap ─────────────────────────────────────────
 //
@@ -53,11 +58,13 @@ import { basename, dirname, extname, join } from 'node:path';
 import type { Game } from '../boardgames/types.js';
 import { QUEUES_PATH } from '../config.js';
 import {
+  getBoardGame,
   listBoardGameCategories,
   listBoardGamePlays,
   listBoardGames,
   searchBoardGames,
 } from '../store/db/boardgames.js';
+import { logBoardGamePlay } from '../store/db/boardgamePlays.js';
 import { bookOfRecord } from '../store/db/open.js';
 import type { SqliteDatabase } from '../store/sqlite.js';
 import type { ProviderCover } from '../types.js';
@@ -295,17 +302,15 @@ export function boardGamesHttpClient({
  * asked a board-game question.
  */
 export function boardGamesRepositoryClient({
-  baseUrl, token = null, fetchImpl = null, db = null,
+  baseUrl, fetchImpl = null, db = null,
 }: BoardGamesClientOptions = {}): BoardGamesCollectionClient {
-  // Required even though nothing is fetched: `_base` is what `materialize()` builds
+  // Required even though NOTHING is fetched any more — WP-4d brought the last call home, so
+  // this factory no longer builds an HTTP client at all. `_base` is what `materialize()` builds
   // `/play/<gameId>` out of, and that card is still a screen in the sibling app. WP-10 owns
-  // retiring it; this package ends at the transport.
+  // retiring it and the host it runs on; this package ends at the transport.
   if (!baseUrl) throw new Error('boardGamesClient needs a baseUrl');
   const base = String(baseUrl).replace(/\/+$/, '');
   const handle = (): SqliteDatabase => db ?? bookOfRecord();
-
-  // The one call that is still a POST, and one shared implementation of it.
-  const wire = boardGamesHttpClient({ baseUrl, fetchImpl, token });
 
   /** A `Game` IS the DTO — this app's `Game` is a port of the one the endpoint serialised. */
   const toDto = (game: Game): BoardGamesGameDto => game as unknown as BoardGamesGameDto;
@@ -356,9 +361,29 @@ export function boardGamesRepositoryClient({
       return Promise.resolve(listBoardGameCategories(handle()));
     },
 
-    /** ⚠️ STILL A POST TO THE SIBLING APP. The header says why, at length. */
+    /**
+     * THE WRITE CAME HOME (WP-4d).
+     *
+     * This was the one call left on the wire, and the reason was never the seam — it was that
+     * two books of record were open and the absorb REPLACED all twelve tables on a fingerprint
+     * change, so a play written here was erased by the next start. WP-4d retires the source
+     * file, so the erasing no longer happens and the write belongs where the reads are.
+     *
+     * ⚠️ IT RECORDS NOBODY, AND THAT IS THE CORRECT ANSWER HERE. `personIds: []` is stated on
+     * purpose, not defaulted: whoever pressed "we played this" on a tile is not filling in a
+     * form, and a play may never INVENT a participant or a known-how claim from a counter
+     * (`store/db/boardgamePlays.ts`). The screen that asks who was at the table is the
+     * Collection screen WP-8 built, and it posts to `POST /api/board-games/plays` instead.
+     * Do not "improve" this by guessing the roster.
+     */
     logPlay(gameId: string): Promise<BoardGamesPlayDto | null> {
-      return wire.logPlay(gameId);
+      // A play against a title this store has never heard of is a caller error, not a row.
+      // `board_game_plays.game_id` has a foreign key, so the insert would throw; answering
+      // `null` is what the HTTP client did with the 404 the sibling app returned.
+      if (getBoardGame(gameId, handle()) === null) return Promise.resolve(null);
+      return Promise.resolve(
+        toPlayDto(logBoardGamePlay({ gameId, personIds: [] }, handle())),
+      );
     },
 
     /**
