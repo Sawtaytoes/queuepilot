@@ -695,6 +695,23 @@ jobs:
       - name: Tonight surface (browser, no Plex needed)
         run: $TSX e2e/tonight-test.ts
 
+      # THE WP-8 GATE, and it exists because of a defect in the LIVE data rather than a
+      # design review. The absorbed app logged three plays and attached nobody to any of
+      # them: it asked no screen for the people, so its participant table had never been
+      # written to and the play log could not answer "who has played this".
+      #
+      # The unit tests pin the write — participants land, a claim is renewed and never
+      # invented, a backdated play cannot freshen one. They cannot pin the half that was
+      # actually broken: whether any SCREEN calls that write with a real list of people.
+      # "The writer was fine and every caller passed `[]`" is exactly how it happened, so
+      # this drives the control in a browser and then reads the table with plain SQL.
+      #
+      # Always-on rather than PLEX_TOKEN-gated. Nothing in it touches Plex, and every
+      # assertion is either a settled decision (one card and not three, a shortlist behind
+      # a control, no reroll on a queue arrival) or the defect itself.
+      - name: A play records who played (browser, no Plex needed)
+        run: $TSX e2e/board-game-play-test.ts
+
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # import chromium from `e2e/playwright.ts` and drive a Chromium browser,
       # and the shared server they hit talks to Plex. We can't call e2e/run.sh
