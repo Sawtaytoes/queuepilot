@@ -1,12 +1,13 @@
 # 2026-08-25 — Edit is a pencil icon in the tile chrome, not a text chip in the badge row
 
-Status: Accepted
+Status: Superseded
 Date: 2026-08-25
 Type: frontend (queue editor / tile chrome)
 Supersedes: the quiet text `Edit` chip half of
   [2026-08-14-entry-settings-are-tags-plus-a-panel](2026-08-14-entry-settings-are-tags-plus-a-panel.md)
   (that decision's tags-plus-panel rule stands; only the *door* moves)
-Superseded by: —
+Superseded by:
+  [2026-08-25-checkmark-under-x-edit-by-the-labels](2026-08-25-checkmark-under-x-edit-by-the-labels.md)
 
 ## Decision
 
