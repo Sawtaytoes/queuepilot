@@ -57,7 +57,10 @@ import type { Activity, RegistrySet } from "./types"
  *   - **`narrow-first`** — Surprise Me. It chooses nothing until you have narrowed, and the
  *     narrowings are not settled. See `SURPRISE_SCOPES`.
  */
-export type PickEngine = "board-games" | "narrow-first" | "queue-first"
+export type PickEngine =
+  | "board-games"
+  | "narrow-first"
+  | "queue-first"
 
 export type ActivityRoute = {
   activity: ActivityId
@@ -178,9 +181,7 @@ export function tileForSet(
     case "video-games":
       return "video-games"
     default:
-      return set.behavior === "rewatch"
-        ? "movies"
-        : "shows"
+      return set.behavior === "rewatch" ? "movies" : "shows"
   }
 }
 
@@ -227,7 +228,9 @@ export function oneBackend(
   kinds: readonly string[],
 ): string | null {
   const distinct = [...new Set(kinds.filter(Boolean))]
-  return distinct.length === 1 ? (distinct[0] ?? null) : null
+  return distinct.length === 1
+    ? (distinct[0] ?? null)
+    : null
 }
 
 /**
@@ -243,14 +246,15 @@ export const PICK_ENGINE_NOTES: Readonly<
   Partial<Record<ActivityId, string>>
 > = {
   movies:
-    "Draws one movie queue. Runtime and Seen before are collected but not yet applied — "
-    + "both are facts about an ITEM, and the item is chosen by the queue's own engine when "
-    + "it starts, which is the only place that already knows what is left to watch.",
+    "Draws one movie queue. Runtime and Seen before are collected but not yet applied — " +
+    "both are facts about an ITEM, and the item is chosen by the queue's own engine when " +
+    "it starts, which is the only place that already knows what is left to watch.",
   reading:
     "Draws one reading queue, then the chapter that queue would open next.",
-  shows: "Draws one shows queue, then the episode that queue would play next.",
+  shows:
+    "Draws one shows queue, then the episode that queue would play next.",
   "video-games":
-    "Draws one video-games queue. Knows how to play is collected but not yet applied: "
-    + "there is no video-game known-how table, and a play count may never be turned into a "
-    + "claim.",
+    "Draws one video-games queue. Knows how to play is collected but not yet applied: " +
+    "there is no video-game known-how table, and a play count may never be turned into a " +
+    "claim.",
 }

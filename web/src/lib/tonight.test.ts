@@ -219,6 +219,10 @@ describe("tonightQueues — the registry projection", () => {
     over: Partial<RegistrySet> & Pick<RegistrySet, "id">,
   ) =>
     ({
+      // WP-5 stores the activity ON the set, and `tileForSet()` reads it. The projection no
+      // longer re-derives it from `provider_kind`, so a fixture has to say what it is.
+      activity: "watching",
+      activity_default: "watching",
       blocklist: [],
       delivery: "push",
       kind: "picks",
@@ -259,7 +263,13 @@ describe("tonightQueues — the registry projection", () => {
 
   test("carries the provider's product name for the card badge", () => {
     const [projected] = tonightQueues(
-      [set({ id: "r", provider_kind: "kavita" })],
+      [
+        set({
+          activity: "reading",
+          id: "r",
+          provider_kind: "kavita",
+        }),
+      ],
       new Map([["kavita", "Kavita"]]),
     )
 
