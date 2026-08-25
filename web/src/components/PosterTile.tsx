@@ -10,22 +10,22 @@ import { Tip } from "./Tip"
  * Shared by the Home shelf, the queue grid, the channel member grid (all three
  * editable — every one of them can remove an entry) and the channel eligible pool
  * (read-only, no chrome), so the same entry reads identically wherever it appears. Its class names are the
- * e2e suites' contract (`li.tile`, `.thumb`, `.poster`, `.check`, `.editbtn`,
- * `.remove`, `.cap`, `.title`, `.next`, `.badges`) and `data-key` must be stable
- * across re-render, drag and reload.
+ * e2e suites' contract (`li.tile`, `.thumb`, `.poster`, `.check`, `.remove`,
+ * `.tilechrome`, `.cap`, `.title`, `.next`, `.badges`) and `data-key` must be stable
+ * across re-render, drag and reload. `.editbtn` lives in the badge row (QueueView),
+ * not in this chrome.
  *
- * `.check`, `.editbtn` and `.remove` are SIBLINGS of `.thumb`, not children of it.
- * They used to be absolutely positioned inside the poster, which the poster wall
- * can afford and the other two densities cannot: on a 40px row thumb a 28px ✕
- * covers the artwork entirely, and shrinking it (the old `transform: scale(.75)`)
- * only made it a smaller thing sitting on top of the art. Out here, `cards`/`rows`
- * can give each control its own grid column — off the poster, in the card — while
- * `posters` keeps overlaying them via `position: absolute` on the tile.
+ * `.tilechrome` (✕ above ✓) is a SIBLING of `.thumb`, not a child of it. The
+ * controls used to be absolutely positioned inside the poster, which the poster
+ * wall can afford and the other two densities cannot: on a 40px row thumb a 28px ✕
+ * covers the artwork entirely. Out here, `cards`/`rows` give the stack its own
+ * grid column — off the poster, in the card — while `posters` overlays it via
+ * `position: absolute` on the tile.
  * (decision `2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster`)
  *
- * Edit is a pencil icon in the top-right chrome, not a text chip in the badge row
- * — the same corner treatment Mail Sifter gives its archive glyph
- * (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`).
+ * ✕ sits alone at the top-right; ✓ stacks under it so a reach for select does not
+ * also hit remove. Edit is an outline pencil pill in the badge row, away from ✕
+ * (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`).
  */
 
 type Props = {
@@ -42,8 +42,8 @@ type Props = {
    * `webUrl` and the title becomes the link to it
    * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
    *
-   * The TITLE and not a chip: the tile already carries a ▶, a ✓, a pencil and a ✕, and
-   * the owner's words were that a new control has nowhere to go. Absent/null renders the
+   * The TITLE and not a chip: the tile already carries a ▶, a ✓ and a ✕, and the
+   * owner's words were that a new control has nowhere to go. Absent/null renders the
    * title as plain text, which is what an unresolved entry gets.
    */
   titleHref?: string | null
@@ -66,7 +66,7 @@ type Props = {
    */
   runtime?: string | null
   badges?: ReactNode
-  /** The multi-select checkbox — queue grid only. */
+  /** The multi-select checkbox — queue grid only. Stacks under ✕ in `.tilechrome`. */
   onCheck?: () => void
   /**
    * Start THIS entry now — the ▶ over the poster, queue/channel grid only. Takes the
@@ -90,15 +90,7 @@ type Props = {
   playHref?: string
   playTitle?: string
   /**
-   * Open the entry settings sheet — the pencil in the top-right chrome, left of ✕.
-   * Queue grid only; absent on the shelf and the member grid, which have no per-entry
-   * settings panel.
-   * (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`)
-   */
-  onEdit?: () => void
-  editTitle?: string
-  /**
-   * The ✕.
+   * The ✕. Sits at the top of `.tilechrome`; ✓ stacks under it when both exist.
    *
    * EVERY editable grid passes this. The shelf did not until 2026-08-21, so the one
    * page that reorders a title and drags it into another queue was also the one page
@@ -135,8 +127,11 @@ const PlayGlyph = () => (
   </svg>
 )
 
-/** Pencil — Edit, at the same 12px ink weight the ✕ uses so the pair matches. */
-const PencilGlyph = () => (
+/**
+ * Pencil — the Edit affordance in the badge row (QueueView). Exported so the
+ * outline pill and this shell cannot drift to different glyphs.
+ */
+export const PencilGlyph = () => (
   <svg
     aria-hidden="true"
     fill="none"
@@ -157,12 +152,10 @@ export function PosterTile({
   className,
   dataKey,
   dataSet,
-  editTitle = "Edit entry settings",
   isPending,
   next,
   onCheck,
   onContextMenu,
-  onEdit,
   onPlay,
   onRemove,
   playHref,
@@ -177,6 +170,7 @@ export function PosterTile({
   titleTooltip,
 }: Props) {
   const isStartable = Boolean(next?.onStart && next.text)
+  const hasChrome = Boolean(onCheck || onRemove)
 
   return (
     <li
@@ -186,15 +180,6 @@ export function PosterTile({
       onContextMenu={onContextMenu}
       tabIndex={0}
     >
-      {onCheck ? (
-        <span
-          aria-hidden="true"
-          className="check"
-          onClick={onCheck}
-        >
-          ✓
-        </span>
-      ) : null}
       <div className="thumb">
         {/* `aria-hidden` on Skeleton is the component's contract — the LOAD is
             announced by the owning region's `aria-busy`, never by the placeholder. */}
@@ -249,42 +234,46 @@ export function PosterTile({
           </Tip>
         ) : null}
       </div>
-      {onEdit ? (
-        <Tip label={editTitle}>
-          <button
-            aria-label={editTitle}
-            className="editbtn"
-            onClick={onEdit}
-            type="button"
-          >
-            <PencilGlyph />
-          </button>
-        </Tip>
-      ) : null}
-      {onRemove ? (
-        <Tip label={removeTitle}>
-          <button
-            aria-label={removeTitle}
-            className="remove"
-            onClick={onRemove}
-            type="button"
-          >
-            <svg
+      {/* ✕ on top, ✓ under it — one stack at the trailing edge so a press for
+          select does not land on remove.
+          (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`) */}
+      {hasChrome ? (
+        <div className="tilechrome">
+          {onRemove ? (
+            <Tip label={removeTitle}>
+              <button
+                aria-label={removeTitle}
+                className="remove"
+                onClick={onRemove}
+                type="button"
+              >
+                <svg
+                  aria-hidden="true"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  width="12"
+                >
+                  <path
+                    d="M1.5 1.5l9 9M10.5 1.5l-9 9"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeWidth="2"
+                  />
+                </svg>
+              </button>
+            </Tip>
+          ) : null}
+          {onCheck ? (
+            <span
               aria-hidden="true"
-              height="12"
-              viewBox="0 0 12 12"
-              width="12"
+              className="check"
+              onClick={onCheck}
             >
-              <path
-                d="M1.5 1.5l9 9M10.5 1.5l-9 9"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeWidth="2"
-              />
-            </svg>
-          </button>
-        </Tip>
+              ✓
+            </span>
+          ) : null}
+        </div>
       ) : null}
       <div className="cap">
         <Tip
