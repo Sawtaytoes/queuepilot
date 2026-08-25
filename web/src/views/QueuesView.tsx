@@ -15,10 +15,12 @@ import {
   TypeBadge,
 } from "../components/badges"
 import { isPullSet } from "../components/OpenQueueButton"
+import { PeopleRow } from "../components/PeopleRow"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
+import { queueNumbers, queueTitle } from "../lib/people"
 import {
   isCompleted,
   progressLabel,
@@ -26,8 +28,11 @@ import {
   tileFace,
 } from "../lib/tileFace"
 import type {
+  GroupWithRoster,
   NowState,
+  Person,
   QueueItem,
+  QueueMember,
   RegistrySet,
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
@@ -36,6 +41,7 @@ import {
   openSetModal,
   openTileMenu,
 } from "../state/overlays"
+import { usePeople } from "../state/people"
 import {
   queueEntryActions,
   removeQueueItem,
@@ -54,17 +60,26 @@ import {
  * reorders whole shelves. (decision `2026-07-20-queue-web-ui-ux-and-write-format`)
  */
 
-/** A shelf matches the filter on its label OR any title inside it. */
+/**
+ * A shelf matches the filter on either of its NAMES, or on any title inside it.
+ *
+ * TWO names since WP-5, and both are searched on purpose. The displayed name is the activity
+ * ("Movies & Shows"), which is what somebody reads on screen; the registry's `label` is the
+ * hand-typed string that WP-5 migrated FROM and no longer shows. Dropping the second would
+ * make typing "manga" stop finding the queue the owner named that, on the day the name
+ * disappeared from the screen — a search that used to work and quietly does not.
+ */
 function shelfMatches(
   filter: string,
-  label: string,
+  names: readonly string[],
   items: { title?: string }[],
 ) {
   if (!filter) return true
 
   const f = filter.toLowerCase()
 
-  if (label.toLowerCase().includes(f)) return true
+  if (names.some((name) => name.toLowerCase().includes(f)))
+    return true
 
   return items.some((it) =>
     (it.title || "").toLowerCase().includes(f),
@@ -72,18 +87,31 @@ function shelfMatches(
 }
 
 function Shelf({
+  groups,
   isCollapsed,
   isHiddenByFilter,
   items,
   label,
+  members,
   now,
+  people,
   playingSet,
   providerKind,
   set,
   setId,
 }: {
   setId: string
+  /**
+   * WHAT THIS QUEUE IS CALLED — and since WP-5 that is its ACTIVITY, plus a number when two
+   * cards would otherwise read identically. There is no hand-typed name any more; who the
+   * queue is for is the row of faces below this
+   * (decision `2026-08-25-a-queue-is-people-plus-an-activity` §4).
+   */
   label: string
+  /** This queue's two trays. Empty is legal and means "Anybody". */
+  members: readonly QueueMember[]
+  people: readonly Person[]
+  groups: readonly GroupWithRoster[]
   items: QueueItem[]
   isCollapsed: boolean
   isHiddenByFilter: boolean
@@ -187,6 +215,22 @@ function Shelf({
           <span className="sec">{items.length}</span>{" "}
           <span className="chev">›</span>
         </Link>
+        {/* THE LIST INHERITS THE TRAYS. Must-be-here faces large, nice-to-have faces small and
+            dashed — the queue list draws the same distinction the editor does, because it is
+            now the only thing telling two "Movies & Shows" apart
+            (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster`
+            §3). */}
+        <PeopleRow
+          groups={groups}
+          members={members}
+          people={people}
+        />
+        {/* The PROVIDER, once more than one serves the same activity — "show the provider
+            name in the queue list" (decision §1). It is an ATTRIBUTE of the queue, never a
+            heading over it, so it sits in the shelf's own row rather than grouping anything. */}
+        {providerKind ? (
+          <span className="qprovider">{providerKind}</span>
+        ) : null}
         <span className="livepill" hidden={!isLive}>
           {isLive && now.now?.state === "paused"
             ? "Paused"
@@ -458,6 +502,7 @@ export function QueuesView({
   toolbar: React.ReactNode
 }) {
   const { data, now, reg } = useStore()
+  const people = usePeople()
   const { collapsed, filter } = useUi()
   const shelvesRef = useRef<HTMLDivElement>(null)
 
@@ -478,25 +523,59 @@ export function QueuesView({
 
   const playingSet = activeSet(now, data)
 
+  // WP-5. Two queues may share people and activity — "Allow, and add a number."
+  //
+  // Over the shelves THIS PAGE DRAWS, in the order it draws them, and not over the registry.
+  // A number is how you tell two cards apart, so it only means anything among cards somebody
+  // can see at once: numbering the registry made this page open at "Movies & Shows 3",
+  // because two filtered pools on the Pools page had taken 1 and 2.
+  const shelfIds = queueIds(data)
+  const numbers = queueNumbers(
+    shelfIds
+      .map((id) => reg?.sets.find((s) => s.id === id))
+      .filter((s): s is NonNullable<typeof s> => s != null),
+    people.byQueue,
+  )
+
   return (
     <main className="view" hidden={isHidden} id="home">
       <div id="gslot-narrow">{toolbar}</div>
       <div id="shelves" ref={shelvesRef}>
         {isHidden
           ? null
-          : queueIds(data).map((id) => {
+          : shelfIds.map((id) => {
               const q = data!.sets[id]!
+              const registrySet = reg?.sets.find(
+                (s) => s.id === id,
+              )
+              // THE NAME IS THE ACTIVITY. `q.label` is the hand-typed string the registry
+              // still carries; it is data we migrated FROM, not a field to show. It is kept
+              // as the FILTER's haystack below, because typing "manga" should still find the
+              // queue somebody named that.
+              const title = registrySet
+                ? queueTitle(
+                    registrySet.activity,
+                    numbers.get(id) ?? null,
+                  )
+                : q.label
 
               return (
                 <Shelf
+                  groups={people.groups}
                   isCollapsed={collapsed.has(id)}
                   isHiddenByFilter={
-                    !shelfMatches(filter, q.label, q.items)
+                    !shelfMatches(
+                      filter,
+                      [title, q.label],
+                      q.items,
+                    )
                   }
                   items={q.items}
                   key={id}
-                  label={q.label}
+                  label={title}
+                  members={people.byQueue[id] ?? []}
                   now={now}
+                  people={people.people}
                   playingSet={playingSet}
                   providerKind={
                     reg?.sets.find((s) => s.id === id)

@@ -385,6 +385,14 @@ export type RegistrySet = {
    */
   provider_kind: string
   /**
+   * WP-5. What you are DOING with this queue — the EFFECTIVE value, so nothing here
+   * re-derives it. The ACTIVITY and never a finer content list.
+   */
+  activity: Activity
+  /** What `activity` would be with nothing stored — the provider's own answer. Sent so the
+   *  editor can chip "Default" without shipping the provider table to the browser. */
+  activity_default: Activity
+  /**
    * Curated queues only. Non-consuming / playlist mode: the engine never marks entries
    * done, so the lineup stays re-showable. `reel: true` implies this (normalize reports
    * both). Absent/false on rotation channels.
@@ -738,8 +746,22 @@ export type Person = {
   position: number
 }
 
+/**
+ * `GET /api/people` — everything the Tonight checklist and the three trays are built from, in
+ * one call.
+ *
+ * `groups` and `orphans` are WP-5's; `people` is WP-6's and keeps its shape, so both screens
+ * hold one contract. Two endpoints would let the trays paint a person the rules no longer
+ * know about.
+ */
 export type PeopleResponse = {
   people: Person[]
+  /** WP-5. A group is a SAVED SET OF PEOPLE, so it rides along here rather than in a second
+   *  call — the trays draw people and groups as one pool of cards. */
+  groups: GroupWithRoster[]
+  /** WP-5. Members naming somebody who is gone. Reported, never deleted: `queue_people`
+   *  carries no foreign key on its parent and this is the report that stands in for it. */
+  orphans: QueueMember[]
 }
 
 export type Group = {
@@ -766,6 +788,55 @@ export type GroupsResponse = {
   groups: Group[]
   /** Set ids no group claims — surfaced so filing them is discoverable. */
   unassigned: string[]
+}
+
+// --- WP-5: a queue is people plus an activity ----------------------------------- //
+
+/** What you are DOING. Four values, and Movies & Shows is ONE of them — "Anime" and
+ *  "Movies" are two `watching` queues, told apart by what is in them. */
+export type Activity =
+  | "watching"
+  | "reading"
+  | "video-games"
+  | "board-games"
+
+/** Which tray a member sits in. "Everyone else" is the ABSENCE of a member, never a value. */
+export type MemberRole = "required" | "optional"
+
+/** A queue member is one person, or a whole saved group carrying its own count. */
+export type MemberKind = "person" | "group"
+
+/** One place on a group's roster, and which half of the rule it is in. */
+export type GroupRosterMember = {
+  personId: string
+  role: MemberRole
+  position: number
+}
+
+/** A group as the people surface reports it: a saved set of people, plus its count. */
+export type GroupWithRoster = {
+  id: string
+  label: string
+  /**
+   * How many of the REQUIRED roster must be there. `null` = all of them, which is what
+   * every group written before WP-5 meant — the absence is not silently 1.
+   */
+  minPresent: number | null
+  roster: GroupRosterMember[]
+}
+
+/** One row of a queue's two trays. */
+export type QueueMember = {
+  kind: MemberKind
+  id: string
+  role: MemberRole
+  position: number
+}
+
+/** `GET /api/queue-people` — every queue's trays, so the shelf list paints faces without
+ *  one call per shelf. */
+export type QueuePeopleResponse = {
+  queues: Record<string, QueueMember[]>
 }
 
 /** One row of `GET /api/pending` — something added that nothing is going to play. */

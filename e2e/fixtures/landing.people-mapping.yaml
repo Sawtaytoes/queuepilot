@@ -1,0 +1,54 @@
+# The people half of the landing fixture — WP-5's trays need a house to show.
+#
+# INVENTED, never captured. New people fixtures are Ada, Grace and Linus (AGENTS.md); the
+# groups they attach to are the landing fixture's existing anonymized cast and are not
+# renamed. This repo is public and a committed PNG is opaque to every grep, so a screenshot
+# of the queue editor may only ever show these names.
+#
+# `confirmed: true` is written OUT, unlike the real proposal in `/config` where the tool
+# leaves it commented — a fixture whose whole job is to be imported has nothing to gate.
+confirmed: true
+version: 1
+people:
+  - id: ada
+    display_name: Ada
+    accounts:
+      plex: [ada]
+      kavita: [Ada]
+    birth_year: 1985
+    max_weight: 4.2
+    is_beginner: false
+  - id: grace
+    display_name: Grace
+    accounts:
+      plex: [grace]
+    birth_year: 2013
+    max_weight: 2.5
+    is_beginner: false
+  - id: linus
+    display_name: Linus
+    accounts:
+      plex: [linus]
+    birth_year: 2017
+    max_weight: null
+    is_beginner: true
+groups:
+  # THE RULE WP-5 ADDED, in fixture form: at least one of Grace or Linus, and Ada may join.
+  # This is the shape "at least one of the kids, and no adult is needed" takes — the required
+  # half is the two kids, the count is 1, and the adult is optional rather than required.
+  - id: older-kids
+    label: Older Kids
+    min_present: 1
+    people: [grace, linus]
+    optional_people: [ada]
+  - id: younger-kids
+    label: Younger Kids
+    min_present: 1
+    people: [linus]
+  - id: bob
+    label: Bob
+    people: [ada]
+  # No `min_present`: ALL of them, which is what every group written before WP-5 meant.
+  - id: bob-others
+    label: Bob & Others
+    people: [ada, grace]
