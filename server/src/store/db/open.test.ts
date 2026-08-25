@@ -107,6 +107,47 @@ describe('migrate', () => {
     db.close();
   });
 
+  it('upgrades a WP-4b file in place, keeping the roster it already had (WP-5)', () => {
+    // The other half of the test above. That one proves IDEMPOTENCE over a fresh file; this
+    // one proves UPGRADE over a populated one, which is what a real deploy does. WP-5 is the
+    // first bump that adds columns to tables holding rows, and both of them fail by silence:
+    // `group_people.role` defaulting wrongly changes which queues come up, and `sets.activity`
+    // is a VIRTUAL generated column, which `table_info` does not list at all.
+    const db = openSqlite(':memory:');
+
+    // The pre-WP-5 shape of the two tables that gain a column, and rows in both.
+    db.exec(`
+      CREATE TABLE people (id TEXT PRIMARY KEY, position INTEGER NOT NULL DEFAULT 0, display_name TEXT NOT NULL DEFAULT '');
+      CREATE TABLE group_people (group_id TEXT NOT NULL, person_id TEXT NOT NULL, position INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (group_id, person_id));
+      CREATE TABLE sets (id TEXT PRIMARY KEY, position INTEGER NOT NULL, data TEXT NOT NULL);
+      INSERT INTO people (id, display_name) VALUES ('ada', 'Ada');
+      INSERT INTO group_people (group_id, person_id) VALUES ('kids', 'ada');
+      INSERT INTO sets (id, position, data) VALUES ('q1', 0, '{"id":"q1","label":"Q1"}');
+    `);
+
+    migrate(db);
+    // TWICE, for the reason the test above states: this is where a re-added column throws.
+    expect(() => migrate(db)).not.toThrow();
+
+    // The roster row is still there, and its role is the only meaning it ever had.
+    expect(
+      db.prepare<{ role: string }>("SELECT role FROM group_people WHERE person_id = 'ada'").get()?.role,
+    ).toBe('required');
+    // …and the activity is NULL, which is DERIVED and not missing. A migration that stamped a
+    // value here would freeze today's provider→activity opinion into every existing row.
+    expect(
+      db.prepare<{ activity: string | null }>("SELECT activity FROM sets WHERE id = 'q1'").get()?.activity,
+    ).toBeNull();
+
+    const tables = (
+      db.prepare<{ name: string }>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('queue_people', 'group_membership')",
+      ).all()
+    ).map((row) => row.name).sort();
+    expect(tables).toEqual(['group_membership', 'queue_people']);
+    db.close();
+  });
+
   it('records the schema version and is safe to run again', () => {
     const db = fresh();
     migrate(db);

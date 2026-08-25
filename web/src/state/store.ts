@@ -10,6 +10,7 @@ import type {
   ShelvesResponse,
   StatusKind,
 } from "../lib/types"
+import { loadPeople } from "./people"
 
 /**
  * One module-level store, read through `useSyncExternalStore`.
@@ -290,6 +291,12 @@ export async function load() {
       reg,
     })
     havePhase1 = true
+
+    // WP-5: who each queue is FOR. Phase 1, beside the registry and for the same reason — the
+    // shelf headings paint faces, and fetching them in phase 2 would pop a row of avatars in
+    // after the shelves had already laid out. Its own slice, so a tray drag re-renders the
+    // editor and not every poster. Best effort inside itself; nothing here awaits a failure.
+    void loadPeople()
   } catch {
     /* skeleton is an optimization — fall through to the full fetch */
   }
