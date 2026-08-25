@@ -652,6 +652,21 @@ jobs:
       - name: Play landing reorder (browser, no Plex needed)
         run: $TSX e2e/play-reorder-test.ts
 
+      # The Tonight surface (WP-6). Browser, no Plex, its own server and temp files.
+      #
+      # Always-on rather than PLEX_TOKEN-gated, and the reason is the whole point of the
+      # screen: every assertion in it is something the OWNER settled — six tiles in a fixed
+      # order with Surprise Me last, no provider brand on any of them, the segment defaulted
+      # by the activity, no second "Mode" row, one queue implied and two asked. All of those
+      # fail SILENTLY. A tile reordered or a brand added to a hint passes lint, typecheck,
+      # the unit tests, the build and every other suite.
+      #
+      # The unit tests hold the same list and cannot hold the disagreement this catches:
+      # `SegmentedControl` and `RadioGroup` seed on mount and a keyed remount does not fire
+      # `onChange`, so a control can paint one answer while the view believes another.
+      - name: Tonight surface (browser, no Plex needed)
+        run: $TSX e2e/tonight-test.ts
+
       # Browser e2e (Playwright) — GATED on the PLEX_TOKEN secret. These suites
       # import chromium from `e2e/playwright.ts` and drive a Chromium browser,
       # and the shared server they hit talks to Plex. We can't call e2e/run.sh

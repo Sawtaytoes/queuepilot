@@ -246,6 +246,7 @@ try {
   await visit('/');
   await visit('/queues');
   await visit('/pending');
+  await visit('/tonight');
   await visit('/channels');
   await visit('/', async () => {
     await page.click('#playnewqueue');
