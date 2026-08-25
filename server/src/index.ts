@@ -19,6 +19,7 @@ import { seedIfMissing } from './groups.js';
 import * as sets from './sets.js';
 import { ensureBoardGamesImported } from './store/migrate/boardgames.js';
 import { ensurePeopleImported } from './store/migrate/people.js';
+import { ensureQueuePeopleSeeded } from './store/migrate/queuePeople.js';
 import { startLiveUpdates } from './sse.js';
 import * as warm from './warm.js';
 
@@ -84,6 +85,13 @@ try {
 } catch (e) {
   console.log(`[people] import skipped: ${e instanceof Error ? e.message : String(e)}`);
 }
+
+// WP-5's one-shot seed: a queue no group claims opens with everybody in "Everyone else", and a
+// queue a group DOES claim starts with that group in Must be here. A primary-key join off the
+// `sets:` claim list — no label is parsed and no name is matched. AFTER the people import, so
+// a confirmed mapping's rosters are already in place. Idempotent, and it never overwrites a
+// queue somebody has already edited. See `store/migrate/queuePeople.ts`.
+ensureQueuePeopleSeeded();
 
 // The file watcher + the two MQTT subscriptions that push over SSE. Kept out of
 // buildServer() so building the root for a test starts no timers and no watchers.

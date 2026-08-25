@@ -10,6 +10,7 @@ import * as queues from '../queues.js';
 import * as sets from '../sets.js';
 import * as tiles from '../tiles.js';
 import { mapLimit } from './mapLimit.js';
+import { deleteQueueMembers } from '../store/db/queuePeople.js';
 import { readBody } from './readBody.js';
 
 /** The set REGISTRY surface: create/edit/delete/reorder a set, and a channel's members. */
@@ -115,7 +116,14 @@ export function setsRoutes(): Hono {
     try {
       const id = c.req.param('id');
       const out = await sets.deleteSet(id);
-      if (out.deleted) await queues.deleteSetKey(id);
+      if (out.deleted) {
+        await queues.deleteSetKey(id);
+        // WP-5: and its audience. `queue_people` carries no foreign key on `set_id` — the
+        // registry and its neighbours have always been allowed to disagree, and a cascade
+        // there would delete a queue's people as a side effect of an unrelated set edit — so
+        // the delete path names it, the way it already names `deleteSetKey`.
+        deleteQueueMembers(id);
+      }
       return c.json(out);
     } catch (e) {
       return c.json({ error: errMessage(e) }, 400);

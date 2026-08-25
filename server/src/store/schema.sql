@@ -105,6 +105,17 @@ CREATE TABLE IF NOT EXISTS sets (
   behavior       TEXT    GENERATED ALWAYS AS (json_extract(data, '$.behavior'))         VIRTUAL,
   requires_profile TEXT  GENERATED ALWAYS AS (json_extract(data, '$.requires_profile')) VIRTUAL,
   superseded_by  TEXT    GENERATED ALWAYS AS (json_extract(data, '$.superseded_by'))    VIRTUAL,
+  -- WP-5. WHAT YOU ARE DOING — 'watching' | 'reading' | 'video-games' | 'board-games'. It is
+  -- the ACTIVITY and not a finer content list: "Anime" and "Movies" are two queues under one
+  -- activity, told apart by what is in them
+  -- (decision 2026-08-25-a-queue-is-people-plus-an-activity §1). A finer list was rejected
+  -- because it puts one queue under two headings.
+  --
+  -- NULL is the normal state and is not missing data: the activity is DERIVED from the set's
+  -- provider (`server/src/activity.ts`), and that derivation is exact for every provider this
+  -- app has. The column holds only the override somebody typed, so migration day writes no
+  -- bytes to `sets.yaml` at all.
+  activity       TEXT    GENERATED ALWAYS AS (json_extract(data, '$.activity'))         VIRTUAL,
   CHECK (id = json_extract(data, '$.id'))
 );
 
@@ -323,10 +334,94 @@ CREATE TABLE IF NOT EXISTS group_people (
   group_id  TEXT NOT NULL,
   person_id TEXT NOT NULL REFERENCES people (id) ON DELETE CASCADE ON UPDATE CASCADE,
   position  INTEGER NOT NULL DEFAULT 0,
+  -- WP-5. 'required' | 'optional', and it is what `groups.min_present` counts.
+  --
+  -- The rule the owner asked for is "at least one of these two, and this third may join", and
+  -- that is TWO facts about one roster, not one: which people the count is over, and how many
+  -- of them are enough. So the roster carries the role and the group carries the number. A
+  -- group with three required people and `min_present` NULL means all three, which is what
+  -- every group written before this column meant.
+  --
+  -- Defaulted to 'required' so an existing row keeps its meaning when this column is ALTERed
+  -- in: before WP-5 a roster member was simply a member, and "a member is required" is the
+  -- reading that changes nothing.
+  role      TEXT NOT NULL DEFAULT 'required' CHECK (role IN ('required', 'optional')),
   PRIMARY KEY (group_id, person_id)
 );
 
 CREATE INDEX IF NOT EXISTS group_people_person ON group_people (person_id);
+
+-- HOW MANY of a group's required people are enough — the other half of "at least one of them".
+--
+-- ── Why a table of its own, and not a column on `groups` ─────────────────────────────────
+--
+-- Because `store/db/groups.ts writeDoc()` replaces the whole `groups` table with DELETE +
+-- INSERT on every write. A real column there would be wiped the next time anybody renamed a
+-- group — the same trap `group_people` sits beside, and the same answer.
+--
+-- ── Why it is not in `groups.yaml` either ────────────────────────────────────────────────
+--
+-- The first cut of WP-5 put it in the group's mapping so it would survive the YAML rollback.
+-- That was wrong and it was wrong in an obvious way once written down: the ROSTER the number
+-- counts over lives only in `group_people`, which has no YAML twin at all (WP-3 —
+-- "people arrived after the cutover and have never had a file"). A file carrying
+-- `min_present: 1` next to no people is a rule nobody can read. The number belongs with the
+-- roster.
+--
+-- One row per group, and only for a group that has a rule. An ABSENT row means "all of the
+-- required roster", which is what every group written before WP-5 meant — the absence is not
+-- defaulted to 1, the same discipline `people.max_weight` and `pending.libraries` carry.
+--
+-- No foreign key on `group_id`, for the DELETE + INSERT reason above.
+CREATE TABLE IF NOT EXISTS group_membership (
+  group_id    TEXT PRIMARY KEY,
+  min_present INTEGER NOT NULL CHECK (min_present >= 1)
+) WITHOUT ROWID;
+
+-- ── Queue people — WP-5, and the reason a queue no longer needs a name ───────────────────
+--
+-- A QUEUE IS REQUIRED PEOPLE + OPTIONAL PEOPLE + ONE ACTIVITY
+-- (decision 2026-08-25-a-queue-is-people-plus-an-activity). Every movies queue is called
+-- "Movies"; what tells two of them apart is the row of faces on the card. There is no
+-- generated name, no override and no separator — all three were drawn in the mockup and none
+-- of them ship.
+--
+-- ── Why a member may be a GROUP and not only a person ────────────────────────────────────
+--
+-- Because a kids group is one card in a tray and carries its own count. Flattening it to its
+-- people at write time would lose the rule — the queue would then say "both of them", and the
+-- whole point is that EITHER of them is enough. So the queue points at the group and inherits
+-- `min_present`.
+--
+-- ⚠️ A group used this way must still resolve to EXACTLY ONE provider profile at play time,
+-- or the two `requires_profile` queues break: a queue gated on the Older Kids Plex profile
+-- signs into that profile no matter which of the kids turned up. `server/src/queuePeople.ts
+-- groupPlayProfile()` is that resolution and `PUT /api/sets/:id/people` refuses a member that
+-- cannot answer it.
+--
+-- ── No foreign keys, for two different reasons ───────────────────────────────────────────
+--
+-- `set_id` follows `queues.set_id` and `lead_cooldown.set_id`: the registry and its
+-- neighbours have always been allowed to disagree, and a cascade here would delete a queue's
+-- audience as a side effect of a set edit. `member_id` cannot have one at all — it names a
+-- row in `people` OR in `groups`, and `groups` is replaced wholesale by DELETE + INSERT on
+-- every write, which is the same trap `group_people` documents above. `orphanQueueMembers()`
+-- in `store/db/queuePeople.ts` reports instead.
+CREATE TABLE IF NOT EXISTS queue_people (
+  set_id      TEXT NOT NULL,
+  -- 'person' | 'group'. Part of the key, so a person and a group that happen to share an id
+  -- are two different members rather than one row overwriting the other.
+  member_kind TEXT NOT NULL CHECK (member_kind IN ('person', 'group')),
+  member_id   TEXT NOT NULL,
+  -- 'required' = the Must be here tray, 'optional' = Nice to have. The two trays ARE this
+  -- column; there is no third value, because "Everyone else" is the absence of a row.
+  role        TEXT NOT NULL DEFAULT 'required' CHECK (role IN ('required', 'optional')),
+  position    INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (set_id, member_kind, member_id)
+);
+
+CREATE INDEX IF NOT EXISTS queue_people_member ON queue_people (member_kind, member_id);
+CREATE INDEX IF NOT EXISTS queue_people_role   ON queue_people (set_id, role);
 
 -- ── Board games — the absorbed collection ────────────────────────────────────────────────
 --

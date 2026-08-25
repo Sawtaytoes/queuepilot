@@ -1864,8 +1864,16 @@ body.queue-view #tools {
 #startmodal {
   width: min(460px, 92vw);
 }
+/* WIDER SINCE WP-5, and the number is not a taste call.
+   The editor now holds the three trays, which are a Charcuterie `Board`. That component
+   chooses three-lanes-across versus one-lane-plus-a-segmented-control from a CONTAINER query
+   at `cq-lg` (48rem / 768px) on its own box — so at the old 440px the board is permanently in
+   its narrow form and the "whole house at once" the editor exists for is never on screen at
+   any window width. 920px minus this padding clears 768px, which is the smallest width that
+   shows all three trays side by side. `92vw` still wins on a narrow window, and the board
+   drops back to one lane there on its own, which is the Narrow View this is meant to have. */
 #setmodal {
-  width: min(440px, 92vw);
+  width: min(920px, 92vw);
 }
 #dynmodal {
   width: min(520px, 94vw);
@@ -3989,4 +3997,105 @@ body.rowdragging {
 #tonight .tgo .subhint {
   margin: 0;
   max-width: 46ch;
+}
+
+/* ---- WP-5: who a queue is for (`PersonFace.tsx`, `PeopleRow.tsx`, `PeopleTrays.tsx`) ----
+
+   CONTAINER-INDEPENDENT, every rule. `.pface` is worn by a SHARED component that appears in
+   a shelf heading, in a board card and (later) on the Tonight form, so a descendant rule
+   scoped to `#shelves` would render it unstyled everywhere else while looking styled in the
+   diff (decision `2026-08-21-a-class-name-is-not-a-style`).
+
+   `PersonFace` is the app's stand-in for an `Avatar` that `@charcuterie/ui@3.10.0` does not
+   have — a genuine library gap, not a decision to keep the shape local. It says so at the top
+   of its own file. Everything else on this screen IS a Charcuterie component: the three trays
+   are a `Board`, the empty states are `EmptyState`s, the activity control is a `Picker`. */
+
+.pface {
+  --pface-size: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  inline-size: var(--pface-size);
+  block-size: var(--pface-size);
+  border-radius: 50%;
+  font-size: calc(var(--pface-size) * 0.42);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  /* A hue from the id, a fixed saturation and lightness from the theme. Only the HUE is
+     data — the contrast pair is not left to a hash, which is how a colour-by-hash avatar
+     ends up unreadable one time in six. */
+  background: oklch(0.62 0.13 var(--pface-hue, 0));
+  color: #fff;
+  /* Colour is never the only channel: the initials are inside the circle and the full name is
+     text beside it. A bare coloured dot fails WCAG 1.4.1 and says nothing to a screen
+     reader. */
+  text-shadow: 0 1px 1px rgb(0 0 0 / 35%);
+}
+.pface.sm {
+  --pface-size: 19px;
+}
+/* NICE TO HAVE, drawn as the editor draws it: smaller, and dashed. The dash is the second
+   channel — the size difference alone is a 7px one, which is not a distinction anybody would
+   read as "optional". */
+.pface.opt {
+  background: oklch(0.62 0.06 var(--pface-hue, 0) / 55%);
+  border: 1px dashed currentColor;
+  box-shadow: none;
+}
+
+.qpeople {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-inline-size: 0;
+}
+.qpeople.none {
+  font-size: 0.8rem;
+  opacity: 0.6;
+}
+.qperson {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-inline-size: 0;
+}
+.qpname {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* The provider, once more than one serves the same activity. An ATTRIBUTE of the queue, so it
+   is quiet — it never groups anything and never reads as a heading. */
+.qprovider {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  opacity: 0.55;
+}
+
+/* The editor block. LAYOUT only — the gap between the label and the board, and nothing about
+   the board itself, which is one of the three exceptions the component rule names. */
+.setpeople {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 4px 0 10px;
+}
+.fieldlabel {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  opacity: 0.85;
+}
+/* A group's own rule, in words, under its card. "At least one of Ada, Grace. Linus may join."
+   The count is the whole reason a group is one card instead of three, so it is never hidden
+   behind a hover. */
+.trayrule {
+  font-size: 0.78rem;
+  opacity: 0.75;
 }
