@@ -76,9 +76,16 @@ EXACT STRINGS. A count passes even when every id was replaced.
 
 ## A queue is people plus an activity
 
-WP-5. A queue is **required people + optional people + one activity**. It is not a name
-([data model](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md),
-[editor](docs/decisions/2026-08-25-the-queue-editor-is-two-trays.md)). Five things bite here.
+WP-5. A queue is **required people + optional people + one activity**. It is not a name. The
+two product records live in a **sibling workspace repo, not on GitHub**, so they are named
+rather than linked — a link from here would 404 for anyone reading this on the public repo:
+
+- `agentic:docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md` — the data model
+- `agentic:docs/decisions/2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster.md`
+
+This repo's own record is
+[the play identity is the group's own account](docs/decisions/2026-08-25-a-group-plays-as-its-own-account-not-its-rosters-union.md).
+Five things bite here.
 
 - **THERE IS NO QUEUE NAME. Do not add one back.** Every movies queue is called "Movies"; the
   faces on the card are what tell two of them apart. The mockup drew a "Name it for me" / "I
