@@ -1,0 +1,11 @@
+# Entries for the harness fixture's curated queues. Every entry is a MAPPING — a bare
+# string is the pre-2026-08-21 form and `loadEntries()` refuses it by entry.
+linus_shows:
+- {ratingKey: "701", title: "A Series (2019)"}
+manga_webtoons:
+- {title: "A Long-Running Manga"}
+grace_comics:
+- {title: "A Comic Run"}
+game_night: []
+steam_night: []
+arcade: []

@@ -3812,24 +3812,39 @@ body.rowdragging {
     );
   gap: 8px;
 }
-/* The guests row: a number field between its two steppers. `align-items: end` puts the
-   buttons on the input's baseline rather than on the label's. */
+/* The guests row: a number field with its two steppers beside it. `align-items: end`
+   puts the buttons on the INPUT's baseline, which only works because the hint moved out
+   of `Field`'s description slot and under the whole row — see `GuestStepper.tsx`. */
+.guestrow {
+  margin-top: 16px;
+}
 .gueststep {
   display: flex;
   flex-wrap: wrap;
   align-items: end;
-  gap: 10px;
-  margin-top: 14px;
+  gap: 8px;
 }
 .gueststepbtns {
   display: flex;
   gap: 6px;
 }
-/* WIDTH only, and only because a number input defaults to a text field's measure — a
-   two-digit guest count in a 20rem box reads as a name field. Layout, which is one of
-   the three things the component rule leaves to the app. */
+#tonight .guestrow .subhint {
+  margin: 6px 0 0;
+}
+/* `@charcuterie/ui` ships no text or number INPUT — `Field` wraps whatever control you
+   give it and paints none of them — so this is not an override of a library control, it
+   is the app painting its own, exactly as `#setmodal .field input[type="text"]` does two
+   thousand lines up. Kept to that rule's values so the two boxes are the same box. */
 #tonight .gueststep input[type="number"] {
+  display: block;
   inline-size: 6.5rem;
+  margin-top: 5px;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  font: inherit;
 }
 
 /* ---- 2. Activity, and 5. Which queue ----
@@ -3851,11 +3866,47 @@ body.rowdragging {
     );
   gap: 8px;
 }
-/* A two-line label wants its radio at the TOP of the tile, not centred against both
-   lines. Alignment only. */
+/* ⚠️ THE ONE PLACE THIS FILE PAINTS A LIBRARY CONTROL, and it is the "shape the library
+   cannot express yet" exception rather than a tweak
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+
+   A CHOICE TILE — a bordered card carrying a name, a line of help and a selected state —
+   is the shape the owner settled on in the Tonight mockup, and `@charcuterie/ui` has no
+   prop for it: `RadioGroup` draws a form-length list of prose rows, and `MediaTile` is
+   built around artwork this screen has none of. Rather than hand-roll a `<div>` of
+   `<button aria-pressed>` — the toolbar-of-toggles pattern that says nothing about being
+   exclusive, and which is exactly what `RadioGroup` exists to replace — the semantics stay
+   the library's and only the BOX is the app's.
+
+   The real fix is a Charcuterie `ChoiceTile` (or an `appearance="tile"` on `RadioGroup`),
+   at which point every rule in this block is deleted rather than adjusted. It is a
+   library change with a publish cycle, and it does not block the surface.
+
+   `align-items: start` is the part that is only alignment: a two-line label wants its
+   radio at the top of the tile, not centred between both lines. */
 .actgrid > [role="radio"],
 .queuegrid > [role="radio"] {
   align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+  background: var(--color-surface-raised);
+  transition:
+    border-color var(--duration-fast) var(--ease-standard),
+    background-color var(--duration-fast)
+    var(--ease-standard);
+}
+.actgrid > [role="radio"]:hover,
+.queuegrid > [role="radio"]:hover {
+  border-color: var(--color-border-strong);
+}
+/* The selected tile is a BORDER and a surface, never colour alone — the same reason
+   `Stepper` refuses to say "done" with a hue. The radio dot inside it is still the thing
+   a screen reader reads. */
+.actgrid > [role="radio"][aria-checked="true"],
+.queuegrid > [role="radio"][aria-checked="true"] {
+  border-color: var(--color-intent-accent-solid);
+  background: var(--color-surface-overlay);
 }
 .actlbl,
 .qcard {
@@ -3892,6 +3943,10 @@ body.rowdragging {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  /* One card's width, not the page's. A single implied queue stretched edge to edge is
+     the full-width-row shape the grid rule exists to stop — it just happens to be a list
+     of one. */
+  max-inline-size: min(420px, 100%);
   padding: 10px 12px;
   border: 1px solid var(--color-border-subtle);
   border-radius: 10px;
@@ -3910,9 +3965,13 @@ body.rowdragging {
     );
   gap: 12px;
 }
+/* `align-items: start` so a two-option segment hugs its own strip. Stretched to the
+   grid track it trails 200px of empty control, which reads as a third option nobody
+   drew. */
 .tfilter {
   display: flex;
   flex-direction: column;
+  align-items: start;
   gap: 6px;
 }
 .tfilterlbl {

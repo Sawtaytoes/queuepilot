@@ -393,7 +393,13 @@ export function TonightView({
           ) : null}
 
           {/* 6 — GO. */}
-          <section className="tsection tgo" id="tonight-go">
+          {/* The SECTION and the BUTTON are different ids on purpose: `#tonight-go` is the
+              control the suites drive, and a duplicate on its wrapper would hand every
+              `$eval('#tonight-go')` the box instead of the button. */}
+          <section
+            className="tsection tgo"
+            id="tonight-launch"
+          >
             <GoButton
               chosenQueue={isQueues ? chosenQueue : null}
               guestCount={guestCount}

@@ -46,46 +46,55 @@ export function GuestStepper({
     Math.max(0, Math.min(MAX_GUESTS, Math.trunc(next)))
 
   return (
-    <div className="gueststep">
-      <Field
-        description="Anonymous seats. A guest gets no roster row."
-        id="guests"
-        inputMode="numeric"
-        label="Guests"
-        max={MAX_GUESTS}
-        min={0}
-        onChange={(e) =>
-          onChange(
-            clamp(Number(e.currentTarget.value) || 0),
-          )
-        }
-        type="number"
-        value={String(count)}
-      >
-        <input />
-      </Field>
-      <div className="gueststepbtns">
-        <IconButton
-          appearance="outline"
-          id="guests-down"
-          intent="neutral"
-          isDisabled={count <= 0}
-          label="One guest fewer"
-          onClick={() => onChange(clamp(count - 1))}
+    <div className="guestrow">
+      <div className="gueststep">
+        <Field
+          id="guests"
+          inputMode="numeric"
+          label="Guests"
+          max={MAX_GUESTS}
+          min={0}
+          onChange={(e) =>
+            onChange(
+              clamp(Number(e.currentTarget.value) || 0),
+            )
+          }
+          type="number"
+          value={String(count)}
         >
-          −
-        </IconButton>
-        <IconButton
-          appearance="outline"
-          id="guests-up"
-          intent="neutral"
-          isDisabled={count >= MAX_GUESTS}
-          label="One guest more"
-          onClick={() => onChange(clamp(count + 1))}
-        >
-          ＋
-        </IconButton>
+          <input />
+        </Field>
+        <div className="gueststepbtns">
+          <IconButton
+            appearance="outline"
+            id="guests-down"
+            intent="neutral"
+            isDisabled={count <= 0}
+            label="One guest fewer"
+            onClick={() => onChange(clamp(count - 1))}
+          >
+            −
+          </IconButton>
+          <IconButton
+            appearance="outline"
+            id="guests-up"
+            intent="neutral"
+            isDisabled={count >= MAX_GUESTS}
+            label="One guest more"
+            onClick={() => onChange(clamp(count + 1))}
+          >
+            ＋
+          </IconButton>
+        </div>
       </div>
+      {/* The hint sits UNDER the whole row rather than in `Field`'s `description` slot:
+          the slot renders inside the field's own box, which would push the two stepper
+          buttons a line below the number they step. Same words, same place in the reading
+          order, one line lower. */}
+      <p className="subhint">
+        Anonymous seats. A guest gets no roster row and
+        nothing about them is remembered.
+      </p>
     </div>
   )
 }
