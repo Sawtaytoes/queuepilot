@@ -389,6 +389,17 @@ bite, and four of them bite silently.
 - **⚠️ RETIRING THE SOURCE FILE IS NOT RETIRING THE APP.** The sibling app, its host, its
   Homepage tile and its repo are all still running. That transfer is WP-10 and it is behind an
   explicit owner gate. Nothing in this repo may redirect, archive or stop it.
+- **THE MQTT TOPICS ARE THE SIBLING APP'S AND DID NOT MOVE.** `board-game-picker/cmd/sync` in,
+  `board-game-picker/resp/sync` out, `board-game-picker/status` retained. Home Assistant
+  publishes that tick on a schedule and templates `isOk` off that response to decide whether to
+  notify, so the handler moved and the contract did not. The base reads wrong and is right;
+  changing it means editing the HA package in the same change, and that is WP-10's, never a
+  tidy-up. `e2e/board-game-sync-mqtt-test.ts` gates it against a real broker, because every part
+  of that contract is a string or a key name that nothing else in this repo reads — rename one
+  and typecheck, the unit tests, the build and the startup log all stay happy while the nightly
+  silently stops.
+- **HA owns the schedule and there is no TrueNAS cron. Do not add one, not even as a side
+  effect.**
 - **The writers are `store/db/boardgameImport.ts`, `boardgameSync.ts` and `boardgameEnrich.ts`,
   and they run as four MQTT-triggered jobs.** `boardgames/jobs/` holds them —
   `sync-bgg`, `enrich`, `link-rulebooks`, `link-videos`, in that order, and deliberately NOT
@@ -508,6 +519,7 @@ server/node_modules/.bin/tsx e2e/tonight-routing-test.ts  # the activity → bac
 server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection absorb
 server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
 server/node_modules/.bin/tsx e2e/board-game-transport-parity-test.ts  # both board-game transports agree
+server/node_modules/.bin/tsx e2e/board-game-sync-mqtt-test.ts  # the nightly's MQTT topic contract
 ```
 
 The three browser gates that need a SHARED SERVER (`narrow-scroll`, `drag-stability`,
