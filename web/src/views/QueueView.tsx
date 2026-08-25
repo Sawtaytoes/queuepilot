@@ -1,7 +1,6 @@
 import { mergeRefs, useFlipList } from "@charcuterie/logic"
 import {
   Badge,
-  BadgeButton,
   Button,
   Checkbox,
   EmptyState,
@@ -936,10 +935,11 @@ export function QueueView({
                     ) : null}
                     {/* The per-entry settings are TAGS now, not four controls per tile: a
                         default entry says nothing, and every tag you do see is a deviation
-                        worth reading. Clicking one (or Edit) opens the panel that changes
-                        them. Same markup in all three densities, which is what lets the
-                        poster wall carry the information at all.
-                        (decision 2026-08-14-entry-settings-are-tags-plus-a-panel) */}
+                        worth reading. Clicking one opens the panel that changes them. The
+                        door itself is the pencil in the tile chrome (passed as `onEdit`
+                        below), not a text chip in this row.
+                        (decision 2026-08-14-entry-settings-are-tags-plus-a-panel;
+                         decision 2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome) */}
                     {item.resolved ? (
                       <SettingTags
                         item={item}
@@ -949,25 +949,6 @@ export function QueueView({
                         }
                         vocab={vocab}
                       />
-                    ) : null}
-                    {item.resolved && setId ? (
-                      <Tip
-                        label={`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per turn, weight, where the batch stops, start point`}
-                      >
-                        {/* The quietest chip on the tile — it is a door, not a state — so
-                            `neutral`, beside the tags that carry a real intent. */}
-                        <BadgeButton
-                          appearance="outline"
-                          className="badge editbtn"
-                          intent="neutral"
-                          onClick={() =>
-                            openEntryEditor(setId, item.key)
-                          }
-                          size="sm"
-                        >
-                          Edit
-                        </BadgeButton>
-                      </Tip>
                     ) : null}
                   </>
                 }
@@ -1016,6 +997,17 @@ export function QueueView({
                   e.preventDefault()
                   openTileMenu(e.clientX, e.clientY, entry)
                 }}
+                // Pencil in the top-right chrome — left of ✕, quiet until hover, same
+                // corner pattern Mail Sifter uses for archive. Resolved entries only:
+                // the settings sheet needs `item.resolved` the same way the old Edit chip
+                // did.
+                // (decision 2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome)
+                onEdit={
+                  item.resolved && setId
+                    ? () => openEntryEditor(setId, item.key)
+                    : undefined
+                }
+                editTitle={`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per turn, weight, where the batch stops, start point`}
                 // Only a RESOLVED entry can be played: an unresolved one has no library item
                 // behind it, so the server would reject the start after the device menu had
                 // already asked which TV. No ▶ is a clearer answer than a late error.

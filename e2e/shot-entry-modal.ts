@@ -13,7 +13,7 @@ await page.goto(`http://localhost:${PORT}/q/bob_anime`, { waitUntil: 'domcontent
 await page.waitForSelector('#grid .tile .cap', { timeout: 30000 });
 await page.evaluate(() => document.documentElement.setAttribute('data-scheme', 'dark'));
 
-// The quiet `Edit` chip opens the panel.
+// The quiet pencil in the tile chrome opens the panel.
 await page.locator('#grid .tile .editbtn').first().click();
 await page.waitForSelector('#entrymodal', { timeout: 10000 });
 await page.waitForTimeout(400);

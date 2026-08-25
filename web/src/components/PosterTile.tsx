@@ -10,18 +10,22 @@ import { Tip } from "./Tip"
  * Shared by the Home shelf, the queue grid, the channel member grid (all three
  * editable — every one of them can remove an entry) and the channel eligible pool
  * (read-only, no chrome), so the same entry reads identically wherever it appears. Its class names are the
- * e2e suites' contract (`li.tile`, `.thumb`, `.poster`, `.check`, `.remove`,
- * `.cap`, `.title`, `.next`, `.badges`) and `data-key` must be stable across
- * re-render, drag and reload.
+ * e2e suites' contract (`li.tile`, `.thumb`, `.poster`, `.check`, `.editbtn`,
+ * `.remove`, `.cap`, `.title`, `.next`, `.badges`) and `data-key` must be stable
+ * across re-render, drag and reload.
  *
- * `.check` and `.remove` are SIBLINGS of `.thumb`, not children of it. They used to
- * be absolutely positioned inside the poster, which the poster wall can afford and
- * the other two densities cannot: on a 40px row thumb a 28px ✕ covers the artwork
- * entirely, and shrinking it (the old `transform: scale(.75)`) only made it a
- * smaller thing sitting on top of the art. Out here, `cards`/`rows` can give each
- * control its own grid column — off the poster, in the card — while `posters` keeps
- * overlaying them via `position: absolute` on the tile.
+ * `.check`, `.editbtn` and `.remove` are SIBLINGS of `.thumb`, not children of it.
+ * They used to be absolutely positioned inside the poster, which the poster wall
+ * can afford and the other two densities cannot: on a 40px row thumb a 28px ✕
+ * covers the artwork entirely, and shrinking it (the old `transform: scale(.75)`)
+ * only made it a smaller thing sitting on top of the art. Out here, `cards`/`rows`
+ * can give each control its own grid column — off the poster, in the card — while
+ * `posters` keeps overlaying them via `position: absolute` on the tile.
  * (decision `2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster`)
+ *
+ * Edit is a pencil icon in the top-right chrome, not a text chip in the badge row
+ * — the same corner treatment Mail Sifter gives its archive glyph
+ * (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`).
  */
 
 type Props = {
@@ -38,7 +42,7 @@ type Props = {
    * `webUrl` and the title becomes the link to it
    * (decision `2026-08-22-a-tile-links-to-its-item-in-plex-or-kavita`).
    *
-   * The TITLE and not a chip: the tile already carries a ▶, a ✓, a ✕ and an Edit chip, and
+   * The TITLE and not a chip: the tile already carries a ▶, a ✓, a pencil and a ✕, and
    * the owner's words were that a new control has nowhere to go. Absent/null renders the
    * title as plain text, which is what an unresolved entry gets.
    */
@@ -86,6 +90,14 @@ type Props = {
   playHref?: string
   playTitle?: string
   /**
+   * Open the entry settings sheet — the pencil in the top-right chrome, left of ✕.
+   * Queue grid only; absent on the shelf and the member grid, which have no per-entry
+   * settings panel.
+   * (decision `2026-08-25-edit-is-a-pencil-icon-in-the-tile-chrome`)
+   */
+  onEdit?: () => void
+  editTitle?: string
+  /**
    * The ✕.
    *
    * EVERY editable grid passes this. The shelf did not until 2026-08-21, so the one
@@ -123,15 +135,34 @@ const PlayGlyph = () => (
   </svg>
 )
 
+/** Pencil — Edit, at the same 12px ink weight the ✕ uses so the pair matches. */
+const PencilGlyph = () => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="12"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="1.75"
+    viewBox="0 0 24 24"
+    width="12"
+  >
+    <path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
+  </svg>
+)
+
 export function PosterTile({
   badges,
   className,
   dataKey,
   dataSet,
+  editTitle = "Edit entry settings",
   isPending,
   next,
   onCheck,
   onContextMenu,
+  onEdit,
   onPlay,
   onRemove,
   playHref,
@@ -218,6 +249,18 @@ export function PosterTile({
           </Tip>
         ) : null}
       </div>
+      {onEdit ? (
+        <Tip label={editTitle}>
+          <button
+            aria-label={editTitle}
+            className="editbtn"
+            onClick={onEdit}
+            type="button"
+          >
+            <PencilGlyph />
+          </button>
+        </Tip>
+      ) : null}
       {onRemove ? (
         <Tip label={removeTitle}>
           <button
