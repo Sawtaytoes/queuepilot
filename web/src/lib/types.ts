@@ -129,6 +129,23 @@ export type QueueItem = {
    */
   batch_stops_at?: BatchStop
   /**
+   * Which LANE of a Picks queue this entry is in, AS STORED — `"priority"` (the Priority
+   * queue, which leads the sitting in list order), `"random"` (the Random pool), or null for
+   * "follow the set's `add_as`", which is what every entry written before Promote existed
+   * says. Never conflate null with the set's value: the editor has to be able to show that a
+   * lane is inherited (decision `2026-08-23-kind-is-picks-or-rules` §2).
+   */
+  placement?: Placement | null
+  /**
+   * Priority lane only. `"always"` = leads every sitting; `"once"` = leads at most once per
+   * `promote_window`, then yields. null = the default for how the entry got into the lane —
+   * `always` when it inherited the lane from an ordered queue, `once` when it was promoted.
+   */
+  lead?: Lead | null
+  /** Priority lane only. This entry's lead cooldown (`"24h"`, `"7d"`, …); null = follow the
+   *  set, then the 24h product default. */
+  promote_window?: string | null
+  /**
    * How OFTEN this entry comes up when the set is randomized: slots per round, not odds.
    * 1 (the default) is normal and wears no tag; 3 means it takes about three slots for every
    * one a 1x entry takes, spread through the queue rather than back to back.
@@ -620,6 +637,11 @@ export type PreviewResponse = {
  * "no boundary" at the set level and "follow the set" on an entry.
  */
 export type BatchStop = "member" | "season" | null
+
+/** Which lane of a Picks queue an entry is in. Null anywhere means "follow the set". */
+export type Placement = "priority" | "random"
+/** How often a Priority-lane entry leads. */
+export type Lead = "once" | "always"
 
 export type ShowEpisodes = {
   multiSeason: boolean

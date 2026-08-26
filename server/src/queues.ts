@@ -11,6 +11,8 @@ import type { Document, Node } from 'yaml';
 import { store } from './store/index.js';
 import { QUEUE_SERIES_LENGTH } from './env.js';
 import { toWeight } from './engine/weight.js';
+import { parsePromoteWindow } from './leadWindow.js';
+import * as promote from './promote.js';
 import * as sets from './sets.js';
 import { toEntryObject } from './entryFormat.js';
 import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
@@ -633,6 +635,69 @@ export async function setWeight(
     else delete e.extras.weight;
   });
   return ok ? { ok: true, weight: n } : { ok: false };
+}
+
+// PROMOTE / DEMOTE — move one entry between a Picks queue's two lanes.
+//
+// "priority" / "random" write the key; anything else DROPS it, which is how an entry says
+// "follow the set's `add_as`" and is what every entry written before this feature says.
+// Sparse on purpose: a queue nobody has promoted anything in carries no `placement:` at all
+// and resolves exactly as it did (decision `2026-08-23-kind-is-picks-or-rules` §2).
+//
+// A DEMOTE also clears the entry's lead cooldown. The window is the memory of a promise this
+// entry no longer makes, and leaving it behind means a re-promote an hour later silently does
+// nothing — the entry would be suppressed by a window it is no longer in the lane for.
+export async function setPlacement(
+  setName: string,
+  key: string,
+  value: unknown,
+): Promise<{ ok: true; placement: string | null } | { ok: false }> {
+  const v = value == null ? '' : String(value).trim().toLowerCase();
+  const placement = v === 'priority' || v === 'random' ? v : null;
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (placement) e.extras.placement = placement;
+    else delete e.extras.placement;
+    // `lead` and `promote_window` only mean anything inside the Priority lane. Leaving them
+    // on a demoted entry is dead YAML that reads as a setting.
+    if (placement !== 'priority') {
+      delete e.extras.lead;
+      delete e.extras.promote_window;
+    }
+  });
+  if (ok && placement !== 'priority') await promote.clearLead(setName, key);
+  return ok ? { ok: true, placement } : { ok: false };
+}
+
+// How often a Priority entry LEADS: "always" (sticky head every sitting) or "once" (at most
+// one contribution per window). Anything else drops the key — which is not the same as either,
+// because the default depends on how the entry got into the lane (see `kind.normalizeLead`).
+//
+// `window` is optional and travels with it: a duration (`24h`, `7d`) or blank/`never`/`0` to
+// clear the override and follow the set. Switching to "always" drops the window with it —
+// a sticky entry has no cooldown to name.
+export async function setLead(
+  setName: string,
+  key: string,
+  lead: unknown,
+  window?: unknown,
+): Promise<{ ok: true; lead: string | null; promote_window: string | null } | { ok: false }> {
+  const v = lead == null ? '' : String(lead).trim().toLowerCase();
+  const mode = v === 'once' || v === 'always' ? v : null;
+  const w = window == null ? '' : String(window).trim().toLowerCase();
+  const win = mode === 'once' && w && !['0', 'never', 'off', 'none', 'disabled'].includes(w)
+    && parsePromoteWindow(w) != null
+    ? w
+    : null;
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (mode) e.extras.lead = mode;
+    else delete e.extras.lead;
+    if (win) e.extras.promote_window = win;
+    else delete e.extras.promote_window;
+  });
+  // Going sticky, or widening the window, should take effect NOW rather than after the old
+  // window expires — the owner just told the queue what to do.
+  if (ok && mode !== 'once') await promote.clearLead(setName, key);
+  return ok ? { ok: true, lead: mode, promote_window: win } : { ok: false };
 }
 
 // Set (or clear) a series/collection entry's `batch_stops_at` override — WHERE this entry's

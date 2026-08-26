@@ -477,6 +477,46 @@ Three things follow, and each has cost something already:
 The one-shot upgrade is `server/src/tools/migrate-entry-objects.ts` — dry run by default, backup
 first, idempotent. **It runs BEFORE the new code deploys**, never after.
 
+## The two lanes inside a Picks queue
+
+A Picks queue is ONE membership list with a **Priority queue** and a **Random pool**
+([decision](docs/decisions/2026-08-23-kind-is-picks-or-rules.md) §2/§4, implemented
+2026-08-26). The Priority lane plays first, in file order; the pool fills the rest of the
+sitting through the existing shuffle/weight path.
+
+- **`add_as` on the SET is the default lane; `placement` on the ENTRY overrides it.**
+  `placement` is SPARSE — a queue nobody has promoted anything in stores none at all, and is
+  entirely one lane. **That is the property to protect on any edit to `nextQueue`'s
+  assembly**: single-lane is not a special case in there, it is the old code path with a
+  filter that matches everything. An Ordered Queue is `add_as: priority`, so every one of its
+  entries is Priority *by inheritance*.
+- **`lead` defaults by HOW the entry got into the lane** — inherited ⇒ `always`, promoted ⇒
+  `once`. Read the ADR's "sparse → once" literally and every ordered queue reshuffles its own
+  head on the second sitting of the day
+  ([decision](docs/decisions/2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue.md)).
+  `kind.normalizeLead()` is the one place that decides it.
+- **The engine never touches the lead ledger.** `nextQueue` takes an injected
+  `resolve.LeadGate` and REPORTS `led` / `suppressed`; `session.startSession` stamps the
+  window after the handoff succeeds, so a lineup that never plays keeps its promise
+  ([decision](docs/decisions/2026-08-26-the-lead-window-is-stamped-when-playback-starts.md)).
+  Keep `engine/` free of `promote.ts` — the duration parser lives in `leadWindow.ts` for
+  exactly that reason, and `promote.ts` re-exports it.
+- **In-progress still outranks a promote**, and only out of the pool. An ordered queue has
+  never hoisted anything and still does not.
+- Gate: `e2e/priority-lane-test.ts`. Half of it is not about the feature — cases 1, 2, 5 and
+  7 pin that an un-promoted queue comes out exactly as it did before the lanes existed.
+
+## Reading the log when a queue plays the wrong thing
+
+`[lineup]` (every curated scan) names the lane split, the head, the first ten titles in
+order, and anything a lead window held back. `[play]` names the keys sent, then **reads the
+playQueue back** and WARNs when Plex leads with a different item or keeps fewer than it was
+given ([decision](docs/decisions/2026-08-26-a-scan-logs-the-lineup-it-built.md)). Those two
+groups exist to separate three failures that used to look identical in the log: a lineup
+built wrong, a lineup Plex reordered, and something else already on screen. Both are
+unconditional — a scan is a button press, and the report always arrives the morning after a
+redeploy has thrown the evidence away.
+
 ## Skipping one item
 
 A **queue** set (`source: queue` — both pool kinds) carries `skipped:` in `sets.yaml`: a flat
@@ -524,6 +564,7 @@ yarn workspace queuepilot-web run lint:biome
 yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-web run test
 yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck
 yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
+server/node_modules/.bin/tsx e2e/priority-lane-test.ts   # the Priority queue / Random pool lanes
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree

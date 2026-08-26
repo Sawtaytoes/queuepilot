@@ -10,6 +10,7 @@ import {
   effectiveCount,
   isCountOverride,
 } from "../lib/countPicker"
+import { normalizeAddAs } from "../lib/kind"
 import { startLabel, tileFace } from "../lib/tileFace"
 import type {
   BatchStop,
@@ -141,6 +142,18 @@ export function SettingTags({
               "neutral",
             )
           : null}
+      {item.placement === "priority"
+        ? tag(
+            item.lead === "once"
+              ? "Priority · once"
+              : "Priority",
+            item.lead === "once"
+              ? "Leads the sitting, then yields until its window is up"
+              : "Leads the sitting, ahead of anything in the random pool",
+            "prioritytag",
+            "accent",
+          )
+        : null}
       {weight > 1
         ? tag(
             `${weight}x as often`,
@@ -245,6 +258,60 @@ export const setEntryWeight = (
     hit.weight = weight
   })
 
+/**
+ * PROMOTE / DEMOTE — move this entry between the Priority queue and the Random pool.
+ *
+ * `""` clears the override, so the entry follows the set's own default lane again. That is
+ * a third state, not a synonym for either value: a queue where nothing has been promoted
+ * stores no `placement` at all, and the panel has to be able to go back to saying so.
+ */
+export const setEntryPlacement = (
+  setId: string,
+  item: QueueItem,
+  value: string,
+) =>
+  patchEntry(
+    setId,
+    item,
+    "placement",
+    { placement: value },
+    (hit) => {
+      hit.placement =
+        value === "priority" || value === "random"
+          ? value
+          : null
+      // The server drops both when an entry leaves the Priority lane — they mean nothing
+      // in the pool — so the optimistic copy has to drop them too, or the panel keeps
+      // rendering a lead mode for an entry that no longer has one.
+      if (value !== "priority") {
+        hit.lead = null
+        hit.promote_window = null
+      }
+    },
+  )
+
+/** How often a Priority entry leads: every sitting, or once per window. */
+export const setEntryLead = (
+  setId: string,
+  item: QueueItem,
+  lead: string,
+  promoteWindow: string,
+) =>
+  patchEntry(
+    setId,
+    item,
+    "lead",
+    { lead, promote_window: promoteWindow },
+    (hit) => {
+      hit.lead =
+        lead === "once" || lead === "always" ? lead : null
+      hit.promote_window =
+        lead === "once" && promoteWindow
+          ? promoteWindow
+          : null
+    },
+  )
+
 export const setEntryBatchStop = (
   setId: string,
   item: QueueItem,
@@ -312,6 +379,34 @@ export function EntryEditor({
   const isVolume = item.unit === "volume"
   const isSeries =
     item.type === "show" || item.type === "collection"
+
+  // ── THE LANE, resolved ────────────────────────────────────────────────────────────────
+  // Three values collapse into two here, and the panel has to keep them apart: what the
+  // ENTRY stores (`item.placement`, often null), what the QUEUE defaults to (`add_as`), and
+  // what the two together MEAN for this sitting. The picker is bound to the stored value so
+  // "Follow the queue" stays reachable; every label around it names the effective one.
+  // `normalizeAddAs`, not a read of `add_as` — the registry row may carry only a LEGACY kind
+  // (`anime` = random, `movies` = priority), and a bare read would call every one of those
+  // sets a Priority queue and lie to the picker below.
+  const setLane = normalizeAddAs(setInfo?.add_as, {
+    kind: setInfo?.kind,
+    source: setInfo?.source,
+  })
+  const setLaneLabel =
+    setLane === "random" ? "Random pool" : "Priority queue"
+  const effectiveLane = item.placement ?? setLane
+  // `lead` defaults by HOW the entry got into the lane: inherited from an ordered queue is
+  // sticky, promoted by hand is once-per-window. Mirrors `kind.normalizeLead` on the server
+  // (decision `2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue`).
+  const leadDefaultLabel =
+    item.placement === "priority"
+      ? "once a day"
+      : "every sitting"
+  const leadValue = item.lead
+    ? item.lead === "once"
+      ? `once:${item.promote_window || "24h"}`
+      : "always"
+    : ""
   const face = tileFace(item)
   const entry = entryFor(item)
   // Pushed at a device, or opened by a link — the same split the tile's ▶ makes. A pull
@@ -468,6 +563,81 @@ export function EntryEditor({
                 ? "A volume is a collection of chapters. This is how many volumes this series contributes per visit — independent of the queue’s chapter count."
                 : `How long this entry’s turn is when the queue reaches it. Overrides
                 the queue’s own default.`}
+            </span>
+          </div>
+        ) : null}
+
+        {/* THE LANE. It sits above Weight deliberately: weight only biases the Random
+            pool, so "which lane is this in" is the question that decides whether the
+            control below it means anything at all
+            (decision `2026-08-23-kind-is-picks-or-rules` §2). */}
+        <div className="field">
+          <span className="fieldlabel">
+            Lane — Priority queue or Random pool
+          </span>
+          <SelectListbox
+            label="Which lane this entry is in"
+            onChange={(v) =>
+              void setEntryPlacement(setId, item, v)
+            }
+            options={[
+              {
+                label: `Follow the queue (${setLaneLabel})`,
+                value: "",
+              },
+              {
+                label: "Priority queue — plays first",
+                value: "priority",
+              },
+              { label: "Random pool", value: "random" },
+            ]}
+            value={item.placement || ""}
+          />
+          <span className="fieldhint">
+            The Priority queue plays before anything in the
+            Random pool, in the order the entries sit in.
+            Everything else is drawn from the pool to fill
+            the rest of the sitting.
+          </span>
+        </div>
+
+        {effectiveLane === "priority" ? (
+          <div className="field">
+            <span className="fieldlabel">
+              How often it leads
+            </span>
+            <SelectListbox
+              label="How often this entry leads"
+              onChange={(v) => {
+                const [lead = "", win = ""] = v.split(":")
+                void setEntryLead(setId, item, lead, win)
+              }}
+              options={[
+                {
+                  label: `Default (${leadDefaultLabel})`,
+                  value: "",
+                },
+                {
+                  label: "Every sitting",
+                  value: "always",
+                },
+                {
+                  label: "Once a day, then yield",
+                  value: "once:24h",
+                },
+                {
+                  label: "Once a week, then yield",
+                  value: "once:7d",
+                },
+              ]}
+              value={leadValue}
+            />
+            <span className="fieldhint">
+              “Every sitting” is what an ordered queue does
+              — the top entry stays the top entry until it
+              is finished. “Once a day” is what a promote is
+              for: guaranteed first tonight, then back in
+              the pool until tomorrow.
             </span>
           </div>
         ) : null}
