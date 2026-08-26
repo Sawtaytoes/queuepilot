@@ -87,6 +87,47 @@ try {
     );
   }
 
+  // ── 2b. A game title does not paint over the page header ────────────────────────── //
+  //
+  // `app.css` styled the bare `header` ELEMENT and Charcuterie's `Card` renders its heading
+  // in one, so every card title inherited the page header's `position: sticky; top: 0;
+  // z-index: 10`. Scrolled, four game titles stuck to the viewport top and covered the back
+  // link, the heading and the undo/redo/scheme cluster. Nothing else here can see it: the
+  // grid assertions above pass either way, `borrowed-class-audit.ts` only asks about CLASS
+  // names, and a `fullPage` screenshot unsticks everything and shows the bug gone.
+  {
+    const stuck = await page.$$eval('#collection-grid header', (heads) =>
+      heads.filter((h) => getComputedStyle(h).position === 'sticky').length,
+    );
+    ok('no card heading is sticky', stuck === 0, `sticky headings=${stuck}`);
+
+    // The page header is the one that sticks, and it is addressed by its id. A bare
+    // `header` rule would silently reach the cards again.
+    const app = await page.evaluate(() => {
+      const el = document.querySelector('#apphead');
+      return el ? getComputedStyle(el).position : '(no #apphead)';
+    });
+    ok('the page header is #apphead and still sticks', app === 'sticky', app);
+
+    // The measurement the picture shows: scrolled, the topmost element at the header's
+    // centre is the header itself, not a game title.
+    await page.evaluate(() => window.scrollTo(0, 420));
+    await page.waitForTimeout(300);
+    const covering = await page.evaluate(() => {
+      // Not `$eval`: without the fix there is no `#apphead` at all, and a throw here would
+      // take the two assertions above down with it instead of reporting three failures.
+      const head = document.querySelector('#apphead');
+
+      if (!head) return '(no #apphead)';
+
+      const box = head.getBoundingClientRect();
+      const hit = document.elementFromPoint(box.width / 2, box.height / 2);
+      return hit?.closest('#apphead') ? 'header' : (hit?.textContent ?? '').trim().slice(0, 40);
+    });
+    ok('nothing covers the page header when scrolled', covering === 'header', covering);
+    await page.evaluate(() => window.scrollTo(0, 0));
+  }
+
   {
     await page.click('#bg-harbour-lantern-played');
     await page.waitForSelector('#bg-harbour-lantern-people', { timeout: 10000 });
