@@ -652,6 +652,16 @@ jobs:
           kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           exit $rc
 
+      # DRAGGING ACROSS THE LANE DIVIDER — the promote, as a gesture. Nothing a unit test can
+      # reach: the lane a tile lands in is read off the DOM at pointerup, from geometry
+      # captured at grab, after a drag that deliberately never re-renders. It spawns its own
+      # server (its two queues need different fixtures from the shared one) and needs no
+      # Plex, so it runs on every PR rather than in the PLEX_TOKEN-gated block.
+      #
+      # Reuses the chromium the narrow-view step installed — keep it AFTER that step.
+      - name: Lane drag — promote and demote (browser, no Plex needed)
+        run: $TSX e2e/lane-drag-test.ts
+
       # Path routing: the client router and the server's SPA fallback, pinned together.
       # ALWAYS runs, like the narrow-view gate above and for the same reason — the
       # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression

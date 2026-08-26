@@ -33,6 +33,26 @@ import {
  * updated. React then performs the reorder itself from a DOM it believes, which is
  * the only way to avoid a stale-fiber `insertBefore`. The restore is invisible —
  * the optimistic state update lands in the same tick.
+ *
+ * ### Two LANES, and the drag across the divider is the promote
+ *
+ * The container is no longer one `<ul>`. It holds a `ul.grid[data-lane]` per lane —
+ * `priority` and `random` — and the gesture spans both, because dropping a tile in
+ * the other lane is how an entry is promoted or demoted
+ * (decision `2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote`).
+ * Three consequences, each of which had to be handled rather than assumed:
+ *
+ *  * **The slot snapshot is per lane**, and an EMPTY lane contributes its own box as a
+ *    slot. Without that, a queue with nothing promoted has no geometry to aim at and
+ *    the first promote is undraggable — which is the case the drop strip exists for.
+ *  * **The pool is not hand-orderable**, so a drag that starts and ends in `random`
+ *    commits nothing. It is not disabled, though: the same press dragged UP is a
+ *    promote, and the two cannot be told apart until the pointer comes up.
+ *  * **The write is two calls, and the order is one list.** `placement` first (so the
+ *    lane is true before anything reads it), then `/order` with BOTH lanes
+ *    concatenated — the file is a single sequence and the engine plays the priority
+ *    entries in file order, so priority-then-pool is the only order that means what
+ *    the screen shows.
  */
 
 const DRAG_THRESHOLD = 6
@@ -55,9 +75,18 @@ type Press = {
 }
 
 export function useGridDrag(
+  /** The element holding every `ul.grid[data-lane]` — not a lane itself. */
   gridRef: RefObject<HTMLElement | null>,
   currentSet: string | null,
-  isChannel: boolean,
+  /**
+   * The queue's OWN default lane (`add_as`), already resolved by the caller.
+   *
+   * It is what an entry with no `placement` of its own means, so it is what decides
+   * whether a dropped tile needs a `placement` written at all: land in the lane you
+   * already inherit and the entry should keep saying nothing, not gain a redundant
+   * override that then stops following the queue.
+   */
+  setLane: "priority" | "random",
   /**
    * A tap on a poster while NOTHING is selected — open this entry.
    *
@@ -89,8 +118,7 @@ export function useGridDrag(
     let press: Press | null = null
 
     const beginDrag = () => {
-      // A channel's member order is irrelevant — there is nothing to reorder.
-      if (isChannel || !press) return
+      if (!press) return
 
       press.isDragging = true
       // BEFORE the dragging class lands: the class lifts the tile (scale/rotate on .thumb) but
@@ -176,12 +204,52 @@ export function useGridDrag(
      * the same places — only which tile sits in which cell changes. So the pointer is compared
      * against geometry that the drag cannot disturb, and the loop is gone.
      */
-    let slots: DOMRect[] = []
+    /**
+     * One aimable position. `tile` is the tile whose slot this is, or null for the
+     * whole-lane box an EMPTY lane contributes — the only geometry a lane with nothing
+     * in it has, and the reason the first promote on a fresh queue is draggable at all.
+     */
+    type Slot = {
+      lane: HTMLElement
+      rect: DOMRect
+      tile: HTMLElement | null
+    }
+
+    let slots: Slot[] = []
+
+    const lanesOf = (root: HTMLElement) => [
+      ...root.querySelectorAll<HTMLElement>(
+        "ul.grid[data-lane]",
+      ),
+    ]
 
     const captureSlots = () => {
-      slots = [
-        ...grid!.querySelectorAll<HTMLElement>("li.tile"),
-      ].map((t) => t.getBoundingClientRect())
+      slots = []
+
+      for (const lane of lanesOf(grid!)) {
+        const tiles = [
+          ...lane.querySelectorAll<HTMLElement>("li.tile"),
+        ]
+
+        // A lane holding only the dragged tile still has to be aimable, or a drag that
+        // starts in a one-entry Priority lane cannot be put back.
+        if (!tiles.length) {
+          slots.push({
+            lane,
+            rect: lane.getBoundingClientRect(),
+            tile: null,
+          })
+
+          continue
+        }
+
+        for (const tile of tiles)
+          slots.push({
+            lane,
+            rect: tile.getBoundingClientRect(),
+            tile,
+          })
+      }
     }
 
     /** Move the dragged tile to wherever the latest pointer position says it belongs. */
@@ -195,11 +263,17 @@ export function useGridDrag(
       // rather than pixels: a Posters tile is roughly square but a Cards tile is 438 x 136, so
       // a raw hypot is three times more sensitive horizontally and aiming at the row above
       // barely registers against a neighbour in the same row.
-      let index = 0
+      //
+      // The lane comes from the winning slot rather than from a hit test of its own. A
+      // point-in-lane test reads more obvious and is worse: the gap BETWEEN two lanes is
+      // inside neither, so a pointer resting on the divider belongs nowhere and the tile
+      // snaps back to where it started for as long as it hovers there.
+      let best: Slot | null = null
       let bestDist = Infinity
+      let isAfter = false
 
-      for (let i = 0; i < slots.length; i += 1) {
-        const r = slots[i]!
+      for (const slot of slots) {
+        const r = slot.rect
         const cx = r.left + r.width / 2
         const cy = r.top + r.height / 2
         const d = Math.hypot(
@@ -209,30 +283,55 @@ export function useGridDrag(
 
         if (d < bestDist) {
           bestDist = d
+          best = slot
           // Past the slot's own centre horizontally means the tile belongs AFTER it.
-          index = px > cx ? i + 1 : i
+          isAfter = px > cx
         }
       }
 
-      // `index` is where the card should sit among ALL tiles, so it addresses the sibling list
-      // directly: inserting before the Nth sibling puts the card at overall position N,
-      // wherever it happens to be right now.
+      if (!best) return
+
+      const lane = best.lane
+      // An empty lane's slot names no tile — the card simply goes in it.
       const others = [
+        ...lane.querySelectorAll<HTMLElement>(
+          "li.tile:not(.dragging)",
+        ),
+      ]
+      const ref = !best.tile
+        ? null
+        : (() => {
+            const i = others.indexOf(best.tile!)
+
+            // The winning tile IS the dragged one (it is excluded from `others`, so the
+            // index misses): the card is already where the pointer is.
+            if (i < 0) return undefined
+
+            return (
+              (isAfter ? others[i + 1] : others[i]) ?? null
+            )
+          })()
+
+      if (ref === undefined) return
+
+      if (
+        lane === press.card.parentElement &&
+        (ref === press.card ||
+          ref === press.card.nextElementSibling)
+      )
+        return
+
+      // FLIP over EVERY tile on the page, not just this lane's: a promote empties a slot in
+      // one lane and opens one in the other, so the tiles that move are in both.
+      const moving = [
         ...grid!.querySelectorAll<HTMLElement>(
           "li.tile:not(.dragging)",
         ),
       ]
-      const ref = others[index] ?? null
-
-      if (
-        ref === press.card ||
-        ref === press.card.nextElementSibling
-      )
-        return
 
       flipMove(
-        others,
-        () => grid!.insertBefore(press!.card, ref),
+        moving,
+        () => lane.insertBefore(press!.card, ref),
         press.card,
       )
     }
@@ -267,17 +366,47 @@ export function useGridDrag(
 
       card.classList.remove("dragging")
 
-      const keys = [
-        ...grid!.querySelectorAll<HTMLElement>("li.tile"),
-      ].map((li) => li.dataset.key!)
+      // WHERE IT LANDED, read off the DOM before React is handed it back.
+      const landedLane =
+        card.closest<HTMLElement>("ul.grid[data-lane]")
+          ?.dataset.lane === "priority"
+          ? "priority"
+          : "random"
+      const startedLane =
+        parent?.dataset.lane === "priority"
+          ? "priority"
+          : "random"
+
+      // Both lanes, in screen order, as ONE list. The file is a single sequence and the
+      // engine plays the priority entries in file order, so priority-then-pool is the only
+      // order that means what the screen shows.
+      const keys = lanesOf(grid!).flatMap((lane) =>
+        [
+          ...lane.querySelectorAll<HTMLElement>("li.tile"),
+        ].map((li) => li.dataset.key!),
+      )
 
       // Hand the DOM back to React, then let the optimistic state update repaint
       // it in the new order within the same tick.
       parent?.insertBefore(card, nextSibling)
 
       const set = currentSet
+      const key = card.dataset.key
 
-      if (!set) return
+      if (!set || !key) return
+
+      // A drag that began and ended in the POOL changes nothing: the pool is not
+      // hand-ordered, because its order does not survive playback — it is shuffled. The
+      // gesture is still allowed to start there, because the same press dragged UP is a
+      // promote and the two are indistinguishable until the pointer comes up.
+      if (
+        landedLane === "random" &&
+        startedLane === "random"
+      ) {
+        await load()
+
+        return
+      }
 
       const q = getState().data?.sets[set]
 
@@ -289,19 +418,52 @@ export function useGridDrag(
         q.items = keys
           .map((k) => byKey.get(k)!)
           .filter(Boolean)
+
+        const hit = byKey.get(key)
+
+        // The optimistic lane, under the SAME sparse rule the server writes: an entry that
+        // lands in the lane it already inherits keeps saying nothing, so it goes on
+        // following the queue if the queue's own default is changed later.
+        if (hit)
+          hit.placement =
+            landedLane === setLane ? null : landedLane
+
         bumpRevision()
       }
 
-      setStatus("Saving order…")
+      const isPromote = landedLane !== startedLane
+
+      setStatus(isPromote ? "Moving…" : "Saving order…")
 
       try {
+        // PLACEMENT FIRST, then the order. The other way round leaves a window in which the
+        // file says an entry is in a lane the order does not put it in, and a scan landing in
+        // that window builds a lineup off the half-written file.
+        if (isPromote) {
+          await api(
+            "PATCH",
+            `/api/queues/${set}/items/${encodeURIComponent(key)}/placement`,
+            {
+              placement:
+                landedLane === setLane ? "" : landedLane,
+            },
+          )
+        }
+
         await api("PATCH", `/api/queues/${set}/order`, {
           keys,
         })
-        setStatus("Order saved", "ok")
+        setStatus(
+          isPromote
+            ? landedLane === "priority"
+              ? "Moved to the Priority queue"
+              : "Moved to the Random pool"
+            : "Order saved",
+          "ok",
+        )
       } catch (e) {
         setStatus(
-          `Reorder failed: ${(e as Error).message}`,
+          `${isPromote ? "Move" : "Reorder"} failed: ${(e as Error).message}`,
           "err",
         )
         await load()
@@ -404,5 +566,5 @@ export function useGridDrag(
       grid.removeEventListener("contextmenu", onContextMenu)
       endPress()
     }
-  }, [currentSet, gridRef, isChannel])
+  }, [currentSet, gridRef, setLane])
 }
