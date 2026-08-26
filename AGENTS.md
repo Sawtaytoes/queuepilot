@@ -182,6 +182,18 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
   number is not automatically a regression, but it needs a reason written down here. ⚠️ Do not trust a zero from it — its first
   draft returned zero on every route, which was a bug (CSS nesting gives every `CSSStyleRule`
   a truthy empty `cssRules`). Confirm the self-test probe fires.
+- **A BARE ELEMENT SELECTOR in `app.css` is the same override, aimed at every component at
+  once.** `header`, `section`, `article` and `dialog` are landmarks a COMPONENT renders too:
+  Charcuterie's `Card` puts its heading in a `<header>`, so `header { position: sticky; top: 0;
+  z-index: 10 }` — written for the page header — reached every card on the page. Each
+  board-game card's title stuck to the VIEWPORT top and painted over the real header, same
+  z-index and later in the DOM, wearing the page header's background, padding and hairline.
+  The page header is **`#apphead`** now and every one of its eleven rules is scoped to it. Two
+  bare element rules are left on purpose and say so where they sit: `h3` (Tailwind preflight
+  strips the UA heading size and three modal `<h3>`s had nothing left) and `button`
+  (`font: inherit; cursor: pointer`). Neither sets position, paint or box. **A new one needs
+  the same kind of note, or a scope.** `borrowed-class-audit.ts` cannot see this — it asks
+  about CLASS names, and an element selector carries none.
 - **A control is a Charcuterie component configured by PROPS, not an app class name.** When
   `@charcuterie/ui` ships the thing, use it: a pressable control is a `Button` /
   `ButtonLink` / `IconButton` with `appearance` / `intent` / `size`, a pill is a `Badge`, a
@@ -629,7 +641,7 @@ there rather than in the gated block. All ten of them, in the order `ci.yml` run
 | `group-create-test.ts` | a new queue joins the group on screen |
 | `play-reorder-test.ts` | the play landing's reorder |
 | `tonight-test.ts` | the Tonight surface — the settled tiles, defaults and steps |
-| `board-game-play-test.ts` | a logged play records WHO played, and never invents a known-how claim |
+| `board-game-play-test.ts` | a logged play records WHO played, never invents a known-how claim, and no card title paints over the page header |
 
 Three of them — `drag-stability`, `shelf-remove` and `group-create` — were missing from this
 list while running in CI the whole time. A gate this file does not name is a gate nobody
