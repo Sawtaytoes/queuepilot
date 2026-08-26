@@ -209,7 +209,7 @@ export function Header({
   }
 
   return (
-    <header ref={headerRef}>
+    <header id="apphead" ref={headerRef}>
       <div className="bar">
         {/* Narrow-View-only left toggle → the nav popover (back / rename). Hidden when it
             would open empty (the Play landing has neither). Desktop shows #back inline. */}
