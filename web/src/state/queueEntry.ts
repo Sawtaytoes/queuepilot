@@ -1,4 +1,8 @@
 import { api } from "../lib/api"
+import {
+  isSkipListChanged,
+  mergeSkipped,
+} from "../lib/skipList"
 import type { QueueItem } from "../lib/types"
 import { refreshData } from "./live"
 import type { EntryActions } from "./overlays"
@@ -132,6 +136,62 @@ export async function skipQueueItem(
     setStatus(`Skipped “${label}”`, "ok")
   } catch (e) {
     setStatus(`Skip failed: ${(e as Error).message}`, "err")
+  }
+}
+
+/**
+ * Save a WHOLE entry's answer to "what plays" — the member list's Save.
+ *
+ * One PATCH for the lot, where `skipQueueItem` is one PATCH per item: the panel exists so
+ * three duplicate cuts of one film can be dealt with in one go, and a write per tick would
+ * cost a Plex re-resolve per tick and reorder the rows under the pointer between them.
+ *
+ * `managed` is what this panel is responsible for; every other key on the set is carried
+ * through untouched (see `mergeSkipped` — the list is per set, not per entry).
+ */
+export async function saveSkipList(
+  setId: string | null | undefined,
+  {
+    managed,
+    skipped,
+  }: {
+    managed: Iterable<string>
+    skipped: Iterable<string>
+  },
+): Promise<boolean> {
+  if (!setId) return false
+
+  const set = getState().reg?.sets.find(
+    (s) => s.id === setId,
+  )
+  const current = set?.skipped || []
+  const next = mergeSkipped({ current, managed, skipped })
+
+  // Nothing ticked or unticked: say so and write nothing. A PATCH here would re-resolve
+  // every tile in the queue to arrive at the list it already had.
+  if (!isSkipListChanged(current, next)) {
+    setStatus("Nothing changed", "ok")
+
+    return true
+  }
+
+  setStatus("Saving…")
+
+  try {
+    await api("PATCH", `/api/sets/${setId}`, {
+      skipped: next,
+    })
+
+    const [data, reg] = await fetchAll()
+
+    setState({ data, reg })
+    setStatus("Saved", "ok")
+
+    return true
+  } catch (e) {
+    setStatus(`Save failed: ${(e as Error).message}`, "err")
+
+    return false
   }
 }
 

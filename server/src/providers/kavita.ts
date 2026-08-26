@@ -504,6 +504,10 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         const item = chapterItem(entry, itemId);
         const n = Number(item.number);
         return {
+          // The chapter's own id — the same key `tiles()` reports as the next-up leaf, and
+          // what this series' skips are written as. Without it the member list can show a
+          // reading queue's chapters but not skip one.
+          ratingKey: item.chapterId != null ? String(item.chapterId) : null,
           episode: Number.isFinite(n) ? n : null,
           title: item.title || '',
           watched: isFullyRead(entry.chapter),

@@ -69,6 +69,14 @@ type Overlays = {
     entry: EntryActions
   } | null
   startModal: EntryActions | null
+  /**
+   * The MEMBER list — every item inside one entry, and which of them this queue plays.
+   *
+   * Its own overlay rather than a section of the entry sheet: the list is as long as the
+   * series is (a collection's five members, a show's whole run), and it saves as one answer
+   * with its own Save/Cancel, where every control on the entry sheet writes on change.
+   */
+  membersModal: EntryActions | null
   playMenu: PlayMenuTarget | null
   setModal: {
     setId: string | null
@@ -111,6 +119,7 @@ let overlays: Overlays = {
   dynModal: null,
   entryEditor: null,
   groupsModal: null,
+  membersModal: null,
   playMenu: null,
   setModal: null,
   startModal: null,
@@ -154,6 +163,18 @@ export const openStartModal = (entry: EntryActions) =>
 
 export const closeStartModal = () =>
   set({ startModal: null })
+
+// Closes the tile menu AND the entry sheet, for the same reason `openStartModal` closes the
+// menu: this opens from either one, and two overlays over one tile is never intended.
+export const openMembersModal = (entry: EntryActions) =>
+  set({
+    entryEditor: null,
+    membersModal: entry,
+    tileMenu: null,
+  })
+
+export const closeMembersModal = () =>
+  set({ membersModal: null })
 
 export const openPlayMenu = (target: PlayMenuTarget) =>
   set({ playMenu: target })

@@ -113,6 +113,17 @@ export async function resolveTile(
     duration = Number(nextEp.duration) || 0;
   }
 
+  // How many of the set's skips are this entry's own — the entry sheet says "2 skipped" and
+  // the member list is where they are cleared. Reads nothing when the set skips nothing.
+  let skippedCount = 0;
+  if (resolved) {
+    try {
+      skippedCount = await plex.countSkippedInside(resolved.ratingKey, resolved.type, skipped, opts);
+    } catch {
+      /* a count is a nicety; a failed read must not cost the tile */
+    }
+  }
+
   return {
     resolved: Boolean(resolved),
     ratingKey: resolved ? resolved.ratingKey : null,
@@ -131,6 +142,7 @@ export async function resolveTile(
     childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
     nextEp,
     isNextEpFailed,
+    skippedCount,
     partiallyWatched,
     viewOffset,
     duration,
@@ -157,6 +169,7 @@ export function unresolvedTile(value: unknown): ResolvedTile {
     editionTitle: null,
     childCount: null,
     nextEp: null,
+    skippedCount: 0,
     isNextEpFailed: false,
     partiallyWatched: false,
     viewOffset: 0,

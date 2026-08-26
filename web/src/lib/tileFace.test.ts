@@ -535,11 +535,11 @@ describe("tileFace", () => {
   })
 
   /**
-   * A COLLECTION face borrows its next-up MEMBER's identity, and the next-up payload carries
-   * no edition for that member — so the face says null. Lending it the collection's own
-   * `editionTitle` would label a member tile with something that is not the member's.
+   * A COLLECTION face borrows its next-up MEMBER's identity, so it must never lend the
+   * collection's own `editionTitle` — that would label a member tile with something that is
+   * not the member's. A next-up that names no member edition says null.
    */
-  test("a collection's borrowed face claims no edition", () => {
+  test("a collection's borrowed face claims no edition of its own", () => {
     const face = tileFace(
       item({
         childCount: 3,
@@ -561,6 +561,36 @@ describe("tileFace", () => {
 
     expect(face.title).toBe("Ulysses")
     expect(face.edition).toBeNull()
+  })
+
+  /**
+   * …and when the payload DOES name one, the face wears it. This is the live case from
+   * 2026-08-26: a collection holding three cuts of one film, where the title line alone
+   * cannot say which of them is about to play.
+   */
+  test("a collection face wears its MEMBER's edition", () => {
+    const face = tileFace(
+      item({
+        childCount: 3,
+        editionTitle: "Director's Cut",
+        nextEp: {
+          episode: null,
+          kind: "movie",
+          member: "Ulysses",
+          memberEdition: "International Cut",
+          memberRatingKey: "77",
+          memberYear: 1954,
+          multiSeason: false,
+          position: 1,
+          season: null,
+        },
+        title: "Ulysses Collection",
+        type: "collection",
+      }),
+    )
+
+    expect(face.title).toBe("Ulysses")
+    expect(face.edition).toBe("International Cut")
   })
 })
 

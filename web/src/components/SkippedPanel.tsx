@@ -125,6 +125,11 @@ export function SkippedPanel({ setId }: { setId: string }) {
  * (`seLabel` drops it for a single-season show): this list mixes shows, and the row has no
  * poster and no `multiSeason` to decide with, so the number that is always right wins over
  * the one that is shorter.
+ *
+ * A film's EDITION is part of naming it for the same reason. The case that put it here was
+ * two skipped rows both reading "The Good, the Bad and the Ugly (1966)" — a collection
+ * holding three cuts of one film, where the title and the year are shared and the edition is
+ * the only field that differs (reported 2026-08-26).
  */
 export function skippedLabel(item: SkippedItem): string {
   if (item.show) {
@@ -136,7 +141,11 @@ export function skippedLabel(item: SkippedItem): string {
     return `${item.show} — ${se}${item.title ? ` — ${item.title}` : ""}`
   }
 
-  return item.year
+  const named = item.year
     ? `${item.title} (${item.year})`
     : item.title
+
+  return item.editionTitle
+    ? `${named} — ${item.editionTitle}`
+    : named
 }
