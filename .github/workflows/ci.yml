@@ -340,6 +340,15 @@ jobs:
       - name: Product kind + lane write side (offline)
         run: $TSX e2e/kind-normalize-test.ts
 
+      # THE TWO LANES inside a Picks queue — Priority queue and Random pool. Half of this file
+      # is not about the feature at all: an Ordered Queue is `add_as: priority`, so every one
+      # of its entries is in the Priority lane by INHERITANCE, and the first two cases pin that
+      # a queue nobody has promoted anything in comes out in exactly the order it did before
+      # the lanes existed. The lead WINDOW is the other trap: read the ADR's `lead` default
+      # literally and an ordered queue reshuffles its own head every night.
+      - name: Priority queue + Random pool lanes (offline)
+        run: $TSX e2e/priority-lane-test.ts
+
       # PLAYBACK LENGTH — how many things a set plays before it stops, for every kind of set.
       # The claim this exists to hold is not "the number is read" but "no existing set moves on
       # deploy": three of the four paths hardcoded their length and two hardcoded it
