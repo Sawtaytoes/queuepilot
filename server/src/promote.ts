@@ -26,6 +26,7 @@
 // `PROMOTE_PATH` is gone with it. The schema is `store/schema.sql`'s now, and this module
 // owns the queries and nothing else.
 import { errMessage } from './errors.js';
+import { DEFAULT_PROMOTE_WINDOW_MS } from './leadWindow.js';
 import { bookOfRecord, closeBookOfRecord, prepareChecked } from './store/db/open.js';
 import type { PreparedStatement } from './store/sqlite.js';
 
@@ -67,29 +68,11 @@ export async function lastLedAt(
   }
 }
 
-/**
- * Parse a promote_window duration (`24h`, `7d`, `30d`, `90m`, …) to milliseconds.
- * Returns null for blank / unrecognised (caller treats as "no window" / default).
- */
-export function parsePromoteWindow(raw: unknown): number | null {
-  const s = String(raw ?? '').trim().toLowerCase();
-  if (!s) return null;
-  const m = /^(\d+)\s*(ms|s|m|h|d)$/.exec(s);
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const unit = m[2]!;
-  const mult =
-    unit === 'ms' ? 1
-      : unit === 's' ? 1000
-        : unit === 'm' ? 60_000
-          : unit === 'h' ? 3_600_000
-            : 86_400_000; // d
-  return n * mult;
-}
-
-/** Product default when neither the entry nor the set names a window. */
-export const DEFAULT_PROMOTE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+// The duration parser and the product default now live in `leadWindow.ts`, and are
+// re-exported here so `promote.parsePromoteWindow(...)` keeps meaning what it did. The move is
+// a LAYERING one: `engine/resolve.ts` needs the window and must not import a module that
+// touches the book of record.
+export { DEFAULT_PROMOTE_WINDOW_MS, parsePromoteWindow } from './leadWindow.js';
 
 /**
  * May this lead:once entry lead again?

@@ -968,6 +968,13 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
   const cap = cfg.max_items;
   const isCapped = typeof cap === 'number' && Number.isInteger(cap) && cap > 0;
   let pqId: number | string | null = null;
+  // What we are ASKING Plex for, before we ask. The head is the whole point of an ordered
+  // queue, so it is named rather than left to be inferred from a count
+  // (decision `2026-08-26-a-scan-logs-the-lineup-it-built`).
+  console.log(
+    `[play] ${setName ?? '(no set)'}: ${ratingKeys.length} key(s), head rk=${ratingKeys[0]}, `
+    + `offset=${Math.round(intOffset(offset) / 1000)}s, continuous=${!isCapped}`,
+  );
   try {
     pqId = await createPlayQueue(ratingKeys, { token: tok, continuous: !isCapped });
   } catch (e) {
@@ -975,6 +982,35 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
     return result;
   }
   result.playQueueID = pqId;
+
+  // And what Plex BUILT. These two agreeing has always been an assumption: `createPlayQueue`
+  // posts a multi-key `library/metadata/K1,K2,…` uri and reads back only the id, so a queue
+  // Plex reordered, deduplicated or partly dropped (an item this profile cannot see) looked
+  // identical to one it took verbatim — and playMedia then starts on whatever is really at the
+  // front. An owner reporting "it played a different movie each time" had no line anywhere to
+  // separate that from a lineup we built wrong. Now it is one WARN.
+  if (pqId != null) {
+    try {
+      const built = await readPlayQueue(pqId, { token: tok });
+      const builtHead = built?.ratingKeys[0];
+      if (built && builtHead !== String(ratingKeys[0])) {
+        console.log(
+          `[play] ⚠ Plex reordered the playQueue: asked for head rk=${ratingKeys[0]}, `
+          + `playQueue ${pqId} leads with rk=${builtHead} (${built.ratingKeys.length} item(s))`,
+        );
+      } else if (built && built.ratingKeys.length !== ratingKeys.length) {
+        console.log(
+          `[play] ⚠ Plex kept ${built.ratingKeys.length} of ${ratingKeys.length} item(s) in `
+          + `playQueue ${pqId} — the head is right, the tail is short`,
+        );
+      } else if (built) {
+        console.log(`[play] playQueue ${pqId}: ${built.ratingKeys.length} item(s), head rk=${builtHead}`);
+      }
+    } catch (e) {
+      // A readback failure is never worth failing a start over — it is a log line.
+      console.log(`[play] playQueue ${pqId} readback failed: ${errMessage(e)}`);
+    }
+  }
 
   if (!client) {
     result.error = "target Shield not listed as a player (is its Plex app installed/signed in?)";

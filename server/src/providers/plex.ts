@@ -28,6 +28,7 @@ import type {
 } from '../types.js';
 
 import * as resolve from '../engine/resolve.js';
+import * as promote from '../promote.js';
 import * as rotation from '../engine/rotation.js';
 import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
 import * as select from '../engine/select.js';
@@ -251,7 +252,13 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         // shuffled order, and nextQueue only shuffles when handed one. Python defaulted it to
         // the `random` module; this call site did not, so every channel quietly played in
         // queues.yaml file order from the Python retirement until this fix.
-        return resolve.nextQueue(c, setName, cfg, entries, watched, token, defaultRng);
+        // The lead gate is BOUND here, not imported by the engine: `promote.canLeadOnce`
+        // reads the book of record, and `engine/resolve.ts` holds no database handle
+        // (see `resolve.LeadGate`).
+        return resolve.nextQueue(
+          c, setName, cfg, entries, watched, token, defaultRng,
+          (entryKey, windowMs) => promote.canLeadOnce(setName, entryKey, windowMs),
+        );
       }
 
       // Rotation channel. `behavior` is the newer knob and wins; `mode` is the legacy one.

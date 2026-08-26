@@ -3130,6 +3130,7 @@ ul.grid.posters .tile .thumb {
   position: relative;
 }
 ul.grid.posters .tile .badges .weighttag,
+ul.grid.posters .tile .badges .prioritytag,
 ul.grid.posters .tile .badges .epstag {
   background: color-mix(
     in oklab,
@@ -3142,8 +3143,10 @@ ul.grid.posters .tile .badges .epstag {
    `.tagbtn` is GONE. Every one of these chips is a `BadgeButton` now — the pill, the
    border, the hover and the focus ring come from the component, and the colour comes from
    the `intent` the call site was already passing to the non-pressable branch beside it.
-   `.weighttag` / `.startbadge` / `.editbtn` survive as SELECTORS only (the e2e suites
-   read them) and carry no paint, exactly as `.badge.movie` and `.badge.show` already do.
+   `.weighttag` / `.startbadge` / `.prioritytag` / `.editbtn` survive as SELECTORS only (the
+   e2e suites read them) and carry no paint, exactly as `.badge.movie` and `.badge.show`
+   already do. The one rule any of them appears in is the poster-density scrim above, which
+   is about legibility ON artwork and applies to the whole group.
    `.editbtn` is the outline pencil pill in this row again — away from ✕
    (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`).
    (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
