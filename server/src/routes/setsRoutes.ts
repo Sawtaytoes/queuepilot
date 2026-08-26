@@ -158,7 +158,7 @@ export function setsRoutes(): Hono {
       if (s.delivery === 'pull') {
         return c.json({
           items: keys.map((ratingKey) => ({
-            ratingKey, type: null, title: `#${ratingKey}`, year: null,
+            ratingKey, type: null, title: `#${ratingKey}`, year: null, editionTitle: null,
             show: null, season: null, episode: null,
           })),
         });

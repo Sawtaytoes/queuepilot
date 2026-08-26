@@ -67,7 +67,13 @@ export interface HistoryRow {
 
 // Bump on ANY schema change below. On open, a mismatch DROPs every table and recreates them —
 // a stale cache schema is never worth migrating (it is a cache).
-const SCHEMA_VERSION = 3;
+//
+// A cached PAYLOAD's shape counts as a schema change: the rows are stored as JSON, so a new
+// field on one of them reads back `undefined` from every row written before it. 3 -> 4 is
+// `CollectionChild.editionTitle`, which the member list needs to tell two cuts of one film
+// apart — without the bump the first read after deploy answers from cache and every edition
+// is missing, which looks exactly like Plex not having one.
+const SCHEMA_VERSION = 4;
 
 const SCHEMA = `
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);

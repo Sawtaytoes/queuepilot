@@ -11,7 +11,11 @@ import {
   isCountOverride,
 } from "../lib/countPicker"
 import { normalizeAddAs } from "../lib/kind"
-import { startLabel, tileFace } from "../lib/tileFace"
+import {
+  hasMemberList,
+  startLabel,
+  tileFace,
+} from "../lib/tileFace"
 import type {
   BatchStop,
   ProviderVocabulary,
@@ -21,6 +25,7 @@ import { applyVocab, PLEX_WORDS } from "../lib/vocab"
 import { refreshData } from "../state/live"
 import {
   type EntryActions,
+  openMembersModal,
   openPlayMenu,
   openStartModal,
 } from "../state/overlays"
@@ -171,6 +176,20 @@ export function SettingTags({
               ? "This batch never crosses a season finale"
               : "This batch never leaves the current show inside the collection",
             "stoptag",
+            "neutral",
+          )
+        : null}
+      {/* A skip is otherwise INVISIBLE on the tile: the caption simply names a different
+          episode, and nothing says why. Same rule as every tag here — a default shows
+          nothing, and what you do see is a deviation worth reading. */}
+      {item.skippedCount
+        ? tag(
+            `${item.skippedCount} skipped`,
+            applyVocab(
+              `${item.skippedCount} ${item.skippedCount === 1 ? "item" : "items"} inside this entry never play. Open it to change what does.`,
+              vocab,
+            ),
+            "skiptag",
             "neutral",
           )
         : null}
@@ -692,6 +711,48 @@ export function EntryEditor({
               Keeps a season finale from being followed by
               the next season (or, in a collection, another
               show&rsquo;s episode 1).
+            </span>
+          </div>
+        ) : null}
+
+        {/* WHAT PLAYS — the entry's members / episodes, and which of them this queue skips.
+            Here and not only on the right-click menu, because a control nobody can see is a
+            control nobody has: the owner looked for this feature, and the skip that already
+            existed was reachable only by right-clicking a tile
+            (reported 2026-08-26, "I don't see the skips/ignore feature"). A poster tap opens
+            this sheet, so this is the surface every device can reach. */}
+        {hasMemberList(item) ? (
+          <div className="field">
+            <span className="fieldlabel">What plays</span>
+            <div className="fieldrow">
+              <span>
+                {item.skippedCount
+                  ? `${item.skippedCount} skipped`
+                  : applyVocab(
+                      "Everything inside this entry",
+                      vocab,
+                    )}
+              </span>
+              <Button
+                appearance="outline"
+                intent="neutral"
+                onClick={() => {
+                  // Its own modal with its own list load — stacking it on this one would put
+                  // two dialogs in the overlay stack for one entry, the same rule the start
+                  // picker follows.
+                  onClose()
+                  openMembersModal(entryFor(item))
+                }}
+                size="sm"
+              >
+                Choose…
+              </Button>
+            </div>
+            <span className="fieldhint">
+              {applyVocab(
+                "Untick anything this queue must never play — one episode, one film inside a collection. A skipped item counts as dealt with, so the entry can still finish.",
+                vocab,
+              )}
             </span>
           </div>
         ) : null}
