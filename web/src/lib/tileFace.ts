@@ -350,10 +350,12 @@ export function tileFace(item: TileEntry): TileFace {
   }
 
   return {
-    // The face is the MEMBER, and the member's edition is not in the next-up payload — so
-    // this is null rather than `item.editionTitle`, which would name the collection's
-    // edition on a tile whose title is the member's.
-    edition: null,
+    // The face is the MEMBER, so this is the MEMBER's edition (`nextEp.memberEdition`) and
+    // never `item.editionTitle`, which would name the collection's edition on a tile whose
+    // title is the member's. It stayed null until 2026-08-26, when the next-up payload
+    // started carrying one: a collection can hold the same film three times, once per cut,
+    // and without this the tile printed the same line whichever of them it had picked.
+    edition: n.memberEdition ?? null,
     from: item.title,
     fullTitle: n.member,
     // A series member reads exactly like a series tile (episode + episode title —
@@ -385,6 +387,21 @@ export const isStartable = (
     item?.resolved &&
       (item.type === "show" || item.type === "collection"),
   )
+
+/**
+ * Does this entry have items INSIDE it to choose between — the member list's gate?
+ *
+ * The same shapes `isStartable` names, for the same reason: a movie IS its own item, so
+ * "which of these plays" has one answer and Remove is the control. Separate from it because
+ * the two answers will drift — a provider can list units without accepting a start floor —
+ * and because a reader should not have to know that "startable" also means "has members".
+ *
+ * A `ratingKey` is required as well: the list is fetched by it, and an entry that resolved
+ * to nothing has none.
+ */
+export const hasMemberList = (
+  item: TileEntry | null | undefined,
+) => Boolean(isStartable(item) && item?.ratingKey)
 
 /**
  * The chip on an overridden tile: "Start E20" / "Start S2E3" (the season only when
