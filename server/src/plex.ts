@@ -197,6 +197,15 @@ export interface CollectionChild {
   type: string | undefined;
   title: string;
   year: number | null;
+  /**
+   * The Plex EDITION, when the member has one — "Extended Cut", "International Cut".
+   *
+   * Present because a collection can hold the SAME film several times, one row per cut, and
+   * three rows reading "The Good, the Bad and the Ugly (1966)" are indistinguishable in the
+   * member list the owner picks from (reported 2026-08-26). Null on a member with no edition,
+   * which is most of them, and on a show.
+   */
+  editionTitle: string | null;
   /** Movies/standalones only — a SHOW reports progress via leafCount instead. */
   watched: boolean;
   viewOffset: number;
@@ -219,6 +228,12 @@ export interface CollectionNextEp extends Omit<NextEp, 'startMember'> {
 
 /** `showEpisodes()` — the "Start from…" editor's per-season episode list. */
 export interface ShowEpisodeRow {
+  /**
+   * The LEAF's own key — what the set's `skipped` list holds, so the member list can skip
+   * one episode by name. The "Start from…" picker never needed it (it writes a
+   * {season, episode} floor), which is why these rows carried no identity until now.
+   */
+  ratingKey: string;
   episode: number | null;
   title: string;
   watched: boolean;
@@ -848,6 +863,9 @@ export interface ItemLabel {
   type: string | null;
   title: string;
   year: number | null;
+  /** The Plex EDITION, for the same reason `CollectionChild` carries one: two skipped cuts
+   *  of one film are otherwise the same row twice. */
+  editionTitle: string | null;
   /** Episodes only — the series this leaf belongs to. */
   show: string | null;
   season: number | null;
@@ -864,7 +882,8 @@ export interface ItemLabel {
 export async function itemLabel(ratingKey: string | number): Promise<ItemLabel> {
   const rk = String(ratingKey);
   const missing: ItemLabel = {
-    ratingKey: rk, type: null, title: `#${rk}`, year: null, show: null, season: null, episode: null,
+    ratingKey: rk, type: null, title: `#${rk}`, year: null, editionTitle: null,
+    show: null, season: null, episode: null,
   };
   let md;
   try {
@@ -878,6 +897,7 @@ export async function itemLabel(ratingKey: string | number): Promise<ItemLabel> 
     type: md.type ?? null,
     title: md.title || `#${rk}`,
     year: md.year ?? null,
+    editionTitle: md.editionTitle ? String(md.editionTitle) : null,
     // `grandparentTitle` is the SERIES on an episode; absent on everything else.
     show: md.grandparentTitle ?? null,
     season: md.parentIndex ?? null,
@@ -1132,6 +1152,7 @@ export async function collectionChildren(
         type: ch.type,
         title: ch.title || '',
         year: ch.year ?? null,
+        editionTitle: ch.editionTitle ? String(ch.editionTitle) : null,
         watched: ch.type !== 'show' && Boolean(ch.viewCount && ch.viewCount > 0),
         // A movie/standalone member's own resume state, so a mid-movie collection tile can
         // say how far in / how long (a show member reports per-episode via nextEpisode).
@@ -1148,6 +1169,43 @@ export async function collectionChildren(
     payload: children,
   }, account);
   return children;
+}
+
+/**
+ * How many of this set's skips land INSIDE one entry — the number the entry sheet prints and
+ * the tile tags.
+ *
+ * Needed because `skipped` is one flat list on the SET (matching a filtered pool's
+ * `blocklist`), so nothing on an entry says whether any of those keys are its own. Without
+ * this the panel could only say "some items may be skipped", which is not a fact worth
+ * printing.
+ *
+ * Costs no extra Plex I/O in practice: both reads below are the cached ones the next-up
+ * lookup has already made for this very tile (`allLeaves`, `collectionChildren`), and it
+ * returns 0 without reading anything when the set skips nothing at all.
+ *
+ * DIRECT members only for a collection — a skipped EPISODE of a member show is not counted,
+ * because reaching it means walking every member's leaves, and the member list does not offer
+ * that drill-in either. The count is of the rows the panel shows.
+ */
+export async function countSkippedInside(
+  ratingKey: string | number,
+  type: string | null | undefined,
+  skipped: ReadonlySet<string>,
+  opts: AccountScope = {},
+): Promise<number> {
+  if (!skipped.size) return 0;
+  if (type === 'show') {
+    const leaves = await allLeaves(ratingKey, opts);
+    if (!leaves) return 0;
+    return leaves.filter((leaf) => skipped.has(String(leaf.ratingKey))).length;
+  }
+  if (type === 'collection') {
+    const children = await collectionChildren(ratingKey, opts);
+    if (!children) return 0;
+    return children.filter((ch) => skipped.has(String(ch.ratingKey))).length;
+  }
+  return 0;
 }
 
 // A start floor for a COLLECTION entry: {series, season, episode} — `series` names the member
@@ -1191,6 +1249,7 @@ export async function showEpisodes(
       seasons.set(s, rows);
     }
     rows.push({
+      ratingKey: String(e.ratingKey ?? ''),
       episode: e.index ?? null,
       title: e.title || '',
       watched: Boolean(e.viewCount && e.viewCount > 0),
@@ -1239,7 +1298,13 @@ export async function collectionNext(
     // A skipped CHILD goes whole, matching `resolve.collectionItems`: the collection is the
     // member, its children are the items inside it.
     if (skipped.has(String(ch.ratingKey))) continue;
-    const where = { member: ch.title, memberRatingKey: ch.ratingKey, memberYear: ch.year, position: i + 1, startMember };
+    const where = {
+      member: ch.title, memberRatingKey: ch.ratingKey, memberYear: ch.year,
+      // The member's own edition, so the tile can say WHICH cut it is about to play. A show
+      // member has none, and passing the collection's would be a different item's label.
+      memberEdition: ch.type === 'show' ? null : ch.editionTitle,
+      position: i + 1, startMember,
+    };
     if (ch.type === 'show') {
       let ep = null;
       try {

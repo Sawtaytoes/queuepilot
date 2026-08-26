@@ -1922,6 +1922,7 @@ body.queue-view #tools {
 #setmodal,
 #dynmodal,
 #entrymodal,
+#membersmodal,
 #groupsmodal,
 #poweroffmodal {
   background: var(--color-surface-raised);
@@ -1958,6 +1959,12 @@ body.queue-view #tools {
 #entrymodal {
   width: min(460px, 92vw);
 }
+/* The member list is the widest of the small modals on purpose: a row carries a title AND a
+   second line naming the edition and the runtime, which is what tells two duplicate cuts of
+   one film apart. At 460px that line wraps on every row and the list stops being scannable. */
+#membersmodal {
+  width: min(560px, 92vw);
+}
 /* Wider than the rest: it is a two-pane settings panel (the list of groups beside the one
    being edited), not a single form. */
 #groupsmodal {
@@ -1974,6 +1981,7 @@ body.queue-view #tools {
 #setmodal form,
 #dynmodal form,
 #entrymodal form,
+#membersmodal form,
 #groupsmodal form,
 #poweroffmodal form {
   position: relative;
@@ -1982,6 +1990,7 @@ body.queue-view #tools {
 #setmodal h3,
 #dynmodal h3,
 #entrymodal h3,
+#membersmodal h3,
 #groupsmodal h3,
 #poweroffmodal h3 {
   margin: 0 0 14px;
@@ -2180,7 +2189,8 @@ body.queue-view #tools {
    modals' buttons for a change that was only meant to fix `#entrymodal`. */
 #startmodal .idnote,
 #setmodal .idnote,
-#dynmodal .idnote {
+#dynmodal .idnote,
+#membersmodal .idnote {
   color: var(--color-content-muted);
   font-size: 0.82rem;
   margin: 10px 0 0;
@@ -2213,6 +2223,7 @@ body.queue-view #tools {
 #setmodal .modalbtns,
 #dynmodal .modalbtns,
 #entrymodal .modalbtns,
+#membersmodal .modalbtns,
 #groupsmodal .modalbtns,
 #poweroffmodal .modalbtns {
   display: flex;
@@ -3198,6 +3209,7 @@ ul.grid.posters .tile .thumb {
 }
 ul.grid.posters .tile .badges .weighttag,
 ul.grid.posters .tile .badges .prioritytag,
+ul.grid.posters .tile .badges .skiptag,
 ul.grid.posters .tile .badges .epstag {
   background: color-mix(
     in oklab,
@@ -3840,6 +3852,68 @@ body.rowdragging {
   align-items: center;
   gap: 8px;
   justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+/* ---- The member list (`MembersModal.tsx`) ----
+   ROWS, one column at every width. A row is a title over a line of detail — a reading
+   surface, not a card — which is the narrowing the grid rule already carries
+   (decision `2026-08-25-a-text-heavy-row-list-is-one-column`).
+
+   Everything that PAINTS here is a Charcuterie component: the tick is a `Checkbox` (label +
+   `description`), the two chips are `Badge`es. What is left is app LAYOUT — the list, the
+   gaps, and the season headings — which is one of the three exceptions the component rule
+   names. Scoped under `#membersmodal` because that is the only place this list appears; if
+   it is ever reused elsewhere, the rule moves to the class
+   (decision `2026-08-21-a-class-name-is-not-a-style`). */
+#membersmodal .subhint {
+  color: var(--color-content-muted);
+  font-size: 0.86rem;
+  margin: 0 0 12px;
+}
+#membersmodal .memberscount {
+  color: var(--color-content-muted);
+  font-size: 0.82rem;
+  margin: 0 0 8px;
+}
+#membersmodal .memberlist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* The list is as long as the series is — 200 episodes is an ordinary anime — so it
+     scrolls inside the sheet rather than pushing Save off the bottom of the window. The
+     modal box already caps itself at 90vh; this is what keeps the footer reachable. */
+  max-height: min(52vh, 460px);
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+}
+#membersmodal .memberlist > li {
+  display: flex;
+  align-items: start;
+  gap: 8px;
+  justify-content: space-between;
+}
+/* The season that opens a group. Full width, and it does not sit in the row flow above. */
+#membersmodal .memberlist > li.memberseason {
+  display: block;
+  margin-top: 6px;
+}
+#membersmodal .memberlist > li.memberseason:first-child {
+  margin-top: 0;
+}
+#membersmodal .memberlist h4 {
+  margin: 0;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-content-muted);
+}
+/* A row the provider cannot skip — it reads, it does not pretend to be a control. */
+#membersmodal .memberplain {
+  color: var(--color-content-muted);
   font-size: 0.9rem;
 }
 

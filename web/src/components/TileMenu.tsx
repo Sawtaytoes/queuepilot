@@ -6,10 +6,11 @@ import {
   useState,
 } from "react"
 
-import { isStartable } from "../lib/tileFace"
+import { hasMemberList, isStartable } from "../lib/tileFace"
 import { applyVocab, vocabForSet } from "../lib/vocab"
 import {
   closeTileMenu,
+  openMembersModal,
   openStartModal,
   useOverlays,
 } from "../state/overlays"
@@ -146,6 +147,24 @@ export function TileMenu() {
           }}
         >
           Start automatically (clear override)
+        </Button>
+      ) : null}
+      {/* WHAT PLAYS — the whole inside of the entry, in one list. The row below skips the ONE
+          item that is next; this is how you reach the other four, and how three duplicate cuts
+          of one film in a collection get dealt with in one save rather than three
+          (owner, 2026-08-26: "it won't let me skip the duplicate ... ones and select only the
+          one I want"). Offered on the same shapes `Start from…` is — a movie has one item
+          inside it, which is itself. */}
+      {entry && hasMemberList(item) ? (
+        <Button
+          appearance="ghost"
+          intent="neutral"
+          isFullWidth
+          onClick={() => openMembersModal(entry)}
+        >
+          {item?.type === "collection"
+            ? "Choose what plays…"
+            : t("Choose which episodes play…")}
         </Button>
       ) : null}
       {/* SKIP — "not this one", which is a different ask from "not this show". It drops the

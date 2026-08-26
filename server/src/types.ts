@@ -116,6 +116,13 @@ export interface UnitList {
   seasons: {
     season: number;
     episodes: {
+      /**
+       * The unit's OWN id — a Plex episode ratingKey, a Kavita chapter id — which is what a
+       * set's `skipped` list holds. Optional because a provider that cannot name a leaf
+       * cannot support skipping either; the member list simply offers no control on a row
+       * that has no id, the same way the tile menu omits Skip there.
+       */
+      ratingKey?: string | null;
       episode: number | null;
       title: string;
       watched: boolean;
@@ -1418,6 +1425,15 @@ export interface NextEp {
   kind?: 'show' | 'movie';
   /** Which member the stored start point named — may be EARLIER than `member`. */
   startMember?: string;
+  /**
+   * The MEMBER's own Plex edition ("Extended Cut"), collection entries only.
+   *
+   * A collection tile borrows its next-up member's identity for the title line, so without
+   * this the tile cannot say which of three cuts of one film is the one about to play — and
+   * a collection that holds all three (the live case, 2026-08-26) printed the same title
+   * whichever it picked. Null for a show member and for a member with no edition.
+   */
+  memberEdition?: string | null;
   partiallyWatched?: boolean;
   viewOffset?: number;
   duration?: number;
@@ -1457,6 +1473,16 @@ export interface Tile {
    * "N in order"), so the failure is carried rather than collapsed into the same null.
    */
   isNextEpFailed: boolean;
+  /**
+   * How many of the SET's skipped keys belong to this entry — a collection member, an
+   * episode of this show. Zero for a movie, and zero on a set that skips nothing.
+   *
+   * The list itself lives on the set (like a pool's `blocklist`), so this is the only thing
+   * that ties a skip back to the entry it came from: the entry sheet prints "2 skipped" and
+   * points at the member list, which is where a skip is undone. Direct members only — see
+   * `plex.countSkippedInside`.
+   */
+  skippedCount: number;
   /** Mid-playback and unwatched — the exact state the engine resumes from. Per-EPISODE:
    * a movie reads its own viewOffset, a show/collection reads the next-up leaf's. */
   partiallyWatched: boolean;

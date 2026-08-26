@@ -46,6 +46,9 @@ export type NextEp = {
   kind?: "show" | "movie"
   /** Which member the stored start point named — may be earlier than `member`. */
   startMember?: string
+  /** The MEMBER's own Plex edition ("Extended Cut") — collection entries only, null on a
+   *  show member. It is how a tile says which of three cuts of one film plays next. */
+  memberEdition?: string | null
   /** This next-up leaf has a Plex viewOffset (started, unwatched) — mid-episode resume. */
   partiallyWatched?: boolean
   /** The leaf's resume offset in ms (0 when not started). */
@@ -111,6 +114,14 @@ export type QueueItem = {
    * empty. Both leave `nextEp` null, but only the empty one means "all watched".
    */
   isNextEpFailed?: boolean
+  /**
+   * How many of the SET's skipped keys are inside THIS entry (a collection member, an
+   * episode of this show). Absent on a provider that does not count them.
+   *
+   * The skip list is per set, so this is the only thing that ties one back to the entry it
+   * came from — it is what lets the entry sheet say "2 skipped" instead of a hedge.
+   */
+  skippedCount?: number
   /**
    * Per-entry override of the set's chapter/episode batch. `null` = follow the
    * set (the picker then shows the set's number, tagged Default). A stored `1`
@@ -236,6 +247,14 @@ export type ChannelMember = {
    */
   isNextEpFailed?: boolean
   /**
+   * How many of the SET's skipped keys are inside THIS entry (a collection member, an
+   * episode of this show). Absent on a provider that does not count them.
+   *
+   * The skip list is per set, so this is the only thing that ties one back to the entry it
+   * came from — it is what lets the entry sheet say "2 skipped" instead of a hedge.
+   */
+  skippedCount?: number
+  /**
    * Where this item lives in the app that owns it — its Plex details page, its Kavita
    * series page. The SHOW or the FILM, never the next episode: the next-up line already
    * names the episode and is already a control
@@ -264,6 +283,9 @@ export type SkippedItem = {
   type: string | null
   title: string
   year: number | null
+  /** The item's Plex edition, so two skipped cuts of one film are two readable rows and
+   *  not the same line twice. */
+  editionTitle?: string | null
   show: string | null
   season: number | null
   episode: number | null
@@ -648,6 +670,9 @@ export type ShowEpisodes = {
   seasons: {
     season: number
     episodes: {
+      /** The leaf's own key — what the set's `skipped` list holds. Absent on a provider
+       *  that cannot name one, and a row without it offers no skip control. */
+      ratingKey?: string | null
       episode: number
       title?: string
       watched?: boolean
@@ -659,6 +684,12 @@ export type CollectionChild = {
   ratingKey: string
   title: string
   type: "show" | "movie" | string
+  year?: number | null
+  /** Plex's EDITION for this member ("Extended Cut"). A collection can hold the same film
+   *  three times, one row per cut, and this is the only thing that tells them apart. */
+  editionTitle?: string | null
+  /** The member's runtime in ms (0/absent when Plex does not know it). */
+  duration?: number
   leafCount?: number
   viewedLeafCount?: number
   watched?: boolean
