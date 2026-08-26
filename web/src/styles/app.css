@@ -246,7 +246,16 @@ body {
   padding-bottom: 80px;
 }
 
-header {
+/* THE PAGE HEADER IS `#apphead`, NEVER THE BARE `header` ELEMENT. `<header>` is a landmark
+   a COMPONENT may render too: Charcuterie's `Card` puts its heading in one, and this file is
+   unlayered, so `header { position: sticky; top: 0; z-index: 10 }` reached every card on the
+   page. Each board-game card's title then stuck to the VIEWPORT top and painted over the real
+   header — same z-index, later in the DOM, so the card won — carrying the page header's
+   background, padding and hairline with it. Element selectors here are the same silent
+   override a borrowed class name is (decision
+   `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`); scope to the id.
+   `h3` and `button` below stay bare on purpose and say why. */
+#apphead {
   background: var(--color-surface-base);
   border-bottom: 1px solid var(--color-border-default);
   /* F4: tighter top/bottom (was 16/12) — with the toolbar merged onto the bar row and F2's
@@ -259,7 +268,7 @@ header {
 }
 /* `.bar` is the popover anchor: the two `.hmenu` panels are absolutely positioned to
    its edges. `position: relative` scopes them here rather than to the sticky header. */
-header .bar {
+#apphead .bar {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -278,7 +287,7 @@ header .bar {
 #gslot-wide:empty {
   display: none;
 }
-header h1 {
+#apphead h1 {
   margin: 0;
   font-size: 1.5rem;
   flex: 1;
@@ -300,7 +309,7 @@ header h1 {
   min-height: 1.25rem;
   margin-top: 4px;
 }
-header .sub {
+#apphead .sub {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
@@ -342,8 +351,8 @@ header .sub {
     font-size: 1.25rem;
   }
   /* Everything the popovers absorb comes off the bar in the Narrow View. */
-  header #back,
-  header .namepen,
+  #apphead #back,
+  #apphead .namepen,
   .chrome {
     display: none;
   }
@@ -2641,10 +2650,10 @@ body.name-editable #heading:hover ~ .namepen {
   color: var(--color-intent-accent-content);
   border-color: var(--color-intent-accent-solid);
 }
-body.name-editable header h1 {
+body.name-editable #apphead h1 {
   cursor: text;
 }
-header h1 input {
+#apphead h1 input {
   width: 100%;
   font: inherit;
   font-size: 1.4rem;
@@ -2792,25 +2801,25 @@ header h1 input {
   :root {
     --tile: 132px;
   }
-  header {
+  #apphead {
     padding: 10px 14px 8px;
   }
   .view {
     padding: 16px 14px 40px;
   }
-  header h1 {
+  #apphead h1 {
     font-size: 1.2rem;
     text-align: center;
   }
   /* The info line now costs one truncated row, so it stays in the Narrow View — the now-playing
      state and status toasts are worth the line. Un-stick the Play header still. */
-  body.play-view header {
+  body.play-view #apphead {
     position: static;
   }
   .infoline {
     justify-content: center;
   }
-  header .sub {
+  #apphead .sub {
     flex: 0 1 auto;
     text-align: center;
   }
