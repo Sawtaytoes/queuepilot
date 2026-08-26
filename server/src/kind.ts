@@ -139,3 +139,55 @@ export function isAutoRewatch(opts: {
   if (behavior === 'progress' || behavior === 'episodic' || behavior === 'both') return false;
   return String(opts.kind ?? '').trim().toLowerCase() === 'movie';
 }
+
+// --------------------------------------------------------------------------- //
+// The two LANES inside a Picks queue (decision 2026-08-23-kind-is-picks-or-rules §2)
+// --------------------------------------------------------------------------- //
+
+/** Which lane of a Picks queue one entry sits in. */
+export type Placement = 'priority' | 'random';
+/** Whether a Priority entry leads every sitting, or once per `promote_window`. */
+export type Lead = 'once' | 'always';
+
+/**
+ * One entry's lane: its own `placement` when it has one, else the set's `add_as`.
+ *
+ * Sparse on disk, and deliberately so — a queue where every entry follows the set default
+ * writes no `placement:` at all, which is every queue that existed before this shipped.
+ */
+export function normalizePlacement(raw: unknown, addAs: AddAs): Placement {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (v === 'priority' || v === 'random') return v;
+  return addAs;
+}
+
+/** True when this entry NAMES its lane, rather than inheriting the set's. */
+export function isExplicitPlacement(raw: unknown): boolean {
+  const v = String(raw ?? '').trim().toLowerCase();
+  return v === 'priority' || v === 'random';
+}
+
+/**
+ * How often a Priority entry may lead — and the default is the interesting part.
+ *
+ * The ADR's table says a sparse `lead` means `once`. Read literally that would break every
+ * Ordered Queue in the house: those sets are `add_as: priority`, so EVERY entry is in the
+ * Priority lane by inheritance, and a 24h window on each of them turns "play this list in
+ * order" into "play a different entry each night". A show entry that contributes one episode
+ * per sitting would yield to the entry below it before its second episode.
+ *
+ * So the default follows HOW THE ENTRY GOT INTO THE LANE:
+ *
+ *   * inherited (the set is `add_as: priority`) -> `always`, which is what an ordered queue
+ *     has always done and what its owner means by "in order";
+ *   * PROMOTED (the entry itself says `placement: priority`) -> `once`, which is what the
+ *     owner asked promote for: "guaranteed first tonight, then not again until tomorrow".
+ *
+ * An explicit `lead:` on the entry outranks both.
+ * (decision `2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue`)
+ */
+export function normalizeLead(raw: unknown, opts: { isPromoted: boolean }): Lead {
+  const v = String(raw ?? '').trim().toLowerCase();
+  if (v === 'once' || v === 'always') return v;
+  return opts.isPromoted ? 'once' : 'always';
+}

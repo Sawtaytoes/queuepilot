@@ -782,6 +782,10 @@ export function QueueView({
               label: "Weighted above 1x",
               value: "weighted",
             },
+            {
+              label: "In the Priority queue",
+              value: "priority",
+            },
             { label: "Has a start point", value: "start" },
           ]}
           size="sm"

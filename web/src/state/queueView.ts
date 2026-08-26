@@ -22,6 +22,7 @@ export type EntryState =
   | "active"
   | "overrides"
   | "weighted"
+  | "priority"
   | "start"
 
 export type Sort = "queue" | "title" | "weight"
@@ -125,6 +126,9 @@ export const hasOverrides = (it: QueueItem) =>
   it.volumes != null ||
   (it.weight ?? 1) > 1 ||
   Boolean(it.batch_stops_at) ||
+  // A promote IS an override — the entry says something its queue did not. `lead` rides
+  // with it rather than being listed separately: it only exists on a promoted entry.
+  Boolean(it.placement) ||
   Boolean(it.start)
 
 /** Apply one queue's filters to its entries. Order is the caller's; sort is applied last. */
@@ -151,6 +155,14 @@ export function applyFilters(
     if (f.state === "overrides" && !hasOverrides(it))
       return false
     if (f.state === "weighted" && (it.weight ?? 1) < 2)
+      return false
+    // The entry's own PROMOTE, not the effective lane. On an ordered queue every entry is in
+    // the Priority lane by inheritance, so an effective-lane filter would match all of them
+    // and answer a question nobody asked; "what have I promoted here" is the useful one.
+    if (
+      f.state === "priority" &&
+      it.placement !== "priority"
+    )
       return false
     if (f.state === "start" && !it.start) return false
     return true

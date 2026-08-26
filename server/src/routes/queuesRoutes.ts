@@ -16,7 +16,7 @@ import * as sets from '../sets.js';
 import { store } from '../store/index.js';
 import * as tiles from '../tiles.js';
 import type { ResolvedTile } from '../tiles.js';
-import type { QueueEntry, Start } from '../types.js';
+import type { EntryObject, QueueEntry, Start } from '../types.js';
 import { mapLimit } from './mapLimit.js';
 import { readBody } from './readBody.js';
 
@@ -62,6 +62,18 @@ function isRevivedEntry(e: QueueEntry, core: ResolvedTile | ProviderTile): boole
   return Boolean(core.nextEp);
 }
 
+/** The entry's stored lane, or null for "follow the set". Never guesses. */
+function placementOf(v: EntryObject | null): 'priority' | 'random' | null {
+  const p = v && v.placement ? String(v.placement).trim().toLowerCase() : null;
+  return p === 'priority' || p === 'random' ? p : null;
+}
+
+/** The entry's stored lead mode, or null for "follow the default for how it got here". */
+function leadOf(v: EntryObject | null): 'once' | 'always' | null {
+  const l = v && v.lead ? String(v.lead).trim().toLowerCase() : null;
+  return l === 'once' || l === 'always' ? l : null;
+}
+
 /**
  * One resolved queue entry, as the grid reads it: the tile CORE (from whichever resolver
  * answered — Plex's tiles.ts or the provider's) plus the per-entry knobs, which are stored on
@@ -83,6 +95,12 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     // How often this entry comes up when the set is randomized (1 = normal; the editor shows
     // a tag only above 1).
     weight: toWeight(v ? v.weight : null),
+    // The LANE, as STORED — null means "follow the set's add_as", which is what every entry
+    // written before promote existed says. The editor resolves the effective lane against the
+    // set, so the two are never conflated: a tile has to be able to say "inherited".
+    placement: placementOf(v),
+    lead: leadOf(v),
+    promote_window: v && v.promote_window ? String(v.promote_window).trim().toLowerCase() : null,
     batch_stops_at: batchStopsAt === 'member' || batchStopsAt === 'season' ? batchStopsAt : null,
     start: startOf(e),
     // A finished-but-kept entry (Python tagged it done); the grid greys it and the
@@ -560,6 +578,33 @@ export function queuesRoutes(): Hono {
     const { weight } = await readBody(c);
     try {
       return c.json(await queues.setWeight(set, decodeURIComponent(c.req.param('key')), weight));
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // PROMOTE / DEMOTE. Body: {placement: "priority"|"random"} — anything else clears the
+  // override and the entry follows the set's `add_as` again.
+  app.patch('/queues/:set/items/:key/placement', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    const { placement } = await readBody(c);
+    try {
+      return c.json(await queues.setPlacement(set, decodeURIComponent(c.req.param('key')), placement));
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // How often a Priority entry leads. Body: {lead: "once"|"always", promote_window?: "24h"}.
+  app.patch('/queues/:set/items/:key/lead', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    const body = await readBody(c);
+    try {
+      return c.json(await queues.setLead(
+        set, decodeURIComponent(c.req.param('key')), body.lead, body.promote_window,
+      ));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }
