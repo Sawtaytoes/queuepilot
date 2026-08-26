@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { isCompleted } from "../lib/tileFace"
+import { byTitle, isCompleted } from "../lib/tileFace"
 import type { QueueItem } from "../lib/types"
 
 /**
@@ -130,6 +130,42 @@ export const hasOverrides = (it: QueueItem) =>
   // with it rather than being listed separately: it only exists on a promoted entry.
   Boolean(it.placement) ||
   Boolean(it.start)
+
+/**
+ * The two LANES a Picks queue's grid is drawn in — Priority queue first, Random pool below
+ * (decision `2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote`).
+ *
+ * `setLane` is the queue's own `add_as`, resolved by the caller through `normalizeAddAs` —
+ * this function must not re-derive it, because the registry row may carry only a legacy kind
+ * and there would then be two places that decide what an un-promoted entry means.
+ *
+ * The lanes are a VIEW. One list is stored, and an entry's lane is `placement ?? setLane`,
+ * so a queue nobody has promoted anything in puts every entry in one lane and leaves the
+ * other empty — which is the common case and is why the empty lane is a drop strip rather
+ * than an error.
+ *
+ * ORDER differs by lane, and deliberately:
+ *   * `priority` keeps the caller's order, which is FILE order. That is what the engine
+ *     plays, so what you drag is literally what happens.
+ *   * `random` is sorted for LOOKUP, because its order changes nothing — the pool is
+ *     shuffled at playback. The queue page has always done this for a random-order set;
+ *     this keeps it, now scoped to the lane instead of the whole page.
+ */
+export function splitLanes(
+  items: QueueItem[],
+  setLane: "priority" | "random",
+): { priority: QueueItem[]; random: QueueItem[] } {
+  const priority: QueueItem[] = []
+  const random: QueueItem[] = []
+
+  for (const it of items) {
+    if ((it.placement ?? setLane) === "priority")
+      priority.push(it)
+    else random.push(it)
+  }
+
+  return { priority, random: random.sort(byTitle) }
+}
 
 /** Apply one queue's filters to its entries. Order is the caller's; sort is applied last. */
 export function applyFilters(
