@@ -22,7 +22,10 @@ import {
 } from './select.js';
 import { isUnweighted, toWeight, weightedShuffle } from './weight.js';
 import { initialQueueSize, playbackLength } from './playbackLength.js';
-import { isRandomOrder } from '../kind.js';
+import {
+  isExplicitPlacement, isRandomOrder, normalizeAddAs, normalizeLead, normalizePlacement,
+} from '../kind.js';
+import { DEFAULT_PROMOTE_WINDOW_MS, parsePromoteWindow } from '../leadWindow.js';
 import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
@@ -76,6 +79,11 @@ export type ResolveCfg = {
    */
   skipped?: readonly unknown[] | null;
   kind?: string | null;
+  /** The set's DEFAULT lane for entries that name none — `priority` | `random`. See
+   *  `kind.normalizeAddAs`, which tolerates the pre-migration `movies` / `anime` spellings. */
+  add_as?: unknown;
+  /** The set's default lead cooldown (`24h`, `7d`, …) for a promoted entry. */
+  promote_window?: unknown;
   /** Playback length: how many ITEMS this set plays in one sitting. See engine/playbackLength. */
   length?: unknown;
   /** Legacy spelling of `length: infinite`; read, never written. */
@@ -98,6 +106,12 @@ type RawEntryObject = {
   done_at?: unknown;
   /** This entry's override of the set's `batch_stops_at` — see `EntryDescriptor`. */
   batch_stops_at?: unknown;
+  /** Which LANE of a Picks queue this entry is in — see `EntryDescriptor.placement`. */
+  placement?: unknown;
+  /** How often a Priority entry leads — see `EntryDescriptor.lead`. */
+  lead?: unknown;
+  /** This entry's override of the set's lead cooldown — see `EntryDescriptor.promoteWindow`. */
+  promote_window?: unknown;
 };
 
 /** Anything the episode filters below probe. Both spellings of season/episode, because a raw
@@ -138,6 +152,21 @@ export interface EntryDescriptor {
    * set's intent instead of being flattened to "off" on the way in.
    */
   batch_stops_at: unknown;
+  /**
+   * Which LANE of a Picks queue this entry is in — `priority`, `random`, or null for
+   * "follow the set's `add_as`". Carried RAW for the same reason `batch_stops_at` is:
+   * `kind.normalizePlacement()` is the one place that decides what a value means, so a
+   * typo falls through to the set default instead of being flattened on the way in
+   * (decision `2026-08-23-kind-is-picks-or-rules` §2).
+   */
+  placement: unknown;
+  /** `once` | `always` | null — how often this entry may LEAD, when it is in the Priority
+   *  lane. Null follows `kind.normalizeLead()`, whose default depends on whether the lane
+   *  was inherited or promoted. */
+  lead: unknown;
+  /** This entry's override of the set's lead cooldown (`24h`, `7d`, …). Null follows the
+   *  set, then `promote.DEFAULT_PROMOTE_WINDOW_MS`. */
+  promoteWindow: unknown;
   /**
    * TRUE when this descriptor came from a bare SCALAR — the legacy entry form.
    *
@@ -188,6 +217,9 @@ interface Batch {
   type: string;
   items: ResolvedItem[];
   weight: number;
+  /** The entry this batch came from. The LANE split reads `placement` / `lead` off it, and
+   *  the lead ledger is keyed by `key`. Absent on nothing — every batch has an entry. */
+  desc: EntryDescriptor;
 }
 
 /** What `buildReel()` / `nextQueue()` return — the same dict the Python `next_queue` returns. */
@@ -207,6 +239,18 @@ export interface QueueResult {
   offset: number;
   revived?: string[];
   newlyDone?: string[];
+  /**
+   * The `lead: once` entry keys that LED this lineup, so the caller can stamp their cooldown
+   * once playback actually starts.
+   *
+   * Deliberately NOT stamped in here: this function is called to BUILD a lineup, and several
+   * callers (the preview endpoint, a profile gate that then fails, a cancelled scan) build one
+   * that never plays. Stamping at resolve time would burn a 24h window on a sitting nobody
+   * watched (decision `2026-08-26-the-lead-window-is-stamped-when-playback-starts`).
+   */
+  led?: string[];
+  /** Priority entries held back by an unexpired lead window, as `key` strings. */
+  suppressed?: string[];
 }
 
 // --------------------------------------------------------------------------- //
@@ -287,6 +331,11 @@ export function describe(entry: unknown): EntryDescriptor {
       // entry's batch may stop. Lets one OVA collection roll straight through on a channel that
       // otherwise stops at season boundaries. Raw — batchStop() does the normalizing.
       batch_stops_at: entry.batch_stops_at ?? null,
+      // The lane knobs, raw. `placement` decides WHICH lane; `lead` + `promote_window`
+      // only mean anything inside the Priority one.
+      placement: entry.placement ?? null,
+      lead: entry.lead ?? null,
+      promoteWindow: entry.promote_window ?? null,
       start: (entry.start ?? null) as Start | null,
       // How OFTEN this entry comes up when the set is randomized — slots per round, not a
       // probability. Absent = 1 (see select.js toWeight); only the shuffled paths read it.
@@ -305,6 +354,7 @@ export function describe(entry: unknown): EntryDescriptor {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
+      placement: null, lead: null, promoteWindow: null,
       weight: 1, done: false, doneAt: null, raw: entry, legacy: true,
     };
   }
@@ -313,7 +363,8 @@ export function describe(entry: unknown): EntryDescriptor {
   const coll = cm ? cm[1]!.trim() : null;
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
-    collection: coll, episodes: null, batch_stops_at: null, start: null, weight: 1, done: false,
+    collection: coll, episodes: null, batch_stops_at: null, start: null,
+    placement: null, lead: null, promoteWindow: null, weight: 1, done: false,
     doneAt: null, raw: entry, legacy: true,
   };
 }
@@ -864,6 +915,84 @@ export async function buildReel(
   return { set: setName, play, last, done: [], unresolved, remaining: play.length, offset: 0 };
 }
 
+/**
+ * "May this entry lead again?", injected rather than imported.
+ *
+ * The answer lives in SQLite (`promote.canLeadOnce`), and this file is the deterministic
+ * engine the parity corpus replays — it holds no database handle and must stay runnable
+ * without one. `providers/plex.ts` binds the real gate; a null gate means "nothing has ever
+ * led", which is what a fresh store says anyway.
+ */
+export type LeadGate = (entryKey: string, windowMs: number) => Promise<boolean>;
+
+/** The lead cooldown for one entry: entry > set > product default. `0` = no window. */
+function leadWindowMs(desc: EntryDescriptor, cfg: ResolveCfg): number {
+  const fromEntry = parsePromoteWindow(desc.promoteWindow);
+  if (fromEntry != null) return fromEntry;
+  const fromSet = parsePromoteWindow(cfg.promote_window);
+  if (fromSet != null) return fromSet;
+  return DEFAULT_PROMOTE_WINDOW_MS;
+}
+
+/**
+ * What this scan decided, in four lines, on every curated scan.
+ *
+ * WHY IT IS UNCONDITIONAL: "it played a different movie each time" was unanswerable from the
+ * container log, because the only thing a queue scan said out loud was which entries it had
+ * finished. The lineup itself — the order, the lane each entry landed in, which title is
+ * about to play — was never written down anywhere, so a wrong head could not be told from a
+ * wrong ORDER, and neither could be told from Plex ignoring both
+ * (decision `2026-08-26-a-scan-logs-the-lineup-it-built`).
+ *
+ * Bounded on purpose: the head gets a line of its own, the order is cut at ten titles with a
+ * count of the rest, and a queue that resolved to nothing says so in one line. A scan happens
+ * on a button press, not on a timer, so this is a handful of lines per sitting.
+ */
+function logLineup(setName: string, cfg: ResolveCfg, x: {
+  addAs: string;
+  ordered: Batch[];
+  priority: Batch[];
+  pool: Batch[];
+  resuming: Batch[];
+  playItems: ResolvedItem[];
+  suppressed: string[];
+  doneFlagged: string[];
+  unresolved: string[];
+}): void {
+  const head = x.playItems.length ? x.playItems[0]! : null;
+  const headBatch = x.ordered.length ? x.ordered[0]! : null;
+  const lane = headBatch
+    ? (x.resuming.includes(headBatch) ? 'resuming'
+      : x.priority.includes(headBatch) ? 'priority' : 'pool')
+    : '-';
+  const order = String(cfg.source) === 'queue' && !isRandomOrder(cfg) ? 'in order' : 'shuffled';
+  console.log(
+    `[lineup] ${setName}: add_as=${x.addAs} (${order}), length=${playbackLength(cfg)} `
+    + `-> ${x.playItems.length} item(s) from ${x.ordered.length} entry(s) `
+    + `[priority ${x.priority.length}, pool ${x.pool.length}, resuming ${x.resuming.length}]`,
+  );
+  if (head) {
+    console.log(
+      `[lineup] ${setName} head: "${headBatch?.title ?? head.title ?? '?'}" `
+      + `rk=${head.ratingKey} lane=${lane}`,
+    );
+  } else {
+    console.log(`[lineup] ${setName} head: NOTHING — every entry is finished or unresolved`);
+  }
+  const titles = x.ordered.slice(0, 10).map((b, i) => `${i + 1} ${b.title}`);
+  const more = x.ordered.length > titles.length ? ` (+${x.ordered.length - titles.length} more)` : '';
+  if (titles.length) console.log(`[lineup] ${setName} order: ${titles.join(' | ')}${more}`);
+  if (x.suppressed.length) {
+    console.log(`[lineup] ${setName} held back by their lead window: ${x.suppressed.join(', ')}`);
+  }
+  if (x.doneFlagged.length || x.unresolved.length) {
+    console.log(
+      `[lineup] ${setName} not playable: ${x.doneFlagged.length} finished, `
+      + `${x.unresolved.length} unresolved`,
+    );
+  }
+}
+
 // The DETERMINISTIC classify+order core of next_queue: resolve each entry, split finished /
 // unresolved / active, then pick the play items (a QUEUE plays the first active batch; an anime
 // CHANNEL hoists in-progress members then shuffles the rest via the injected `rng`). Port of
@@ -877,6 +1006,7 @@ export async function nextQueue(
   watched: ReadonlySet<string>,
   token: Token,
   rng: Rng | null = null,
+  canLead: LeadGate | null = null,
 ): Promise<QueueResult> {
   if (!entries.length) return emptyResult(setName);
   const newlyDone: string[] = [];
@@ -912,7 +1042,7 @@ export async function nextQueue(
         revived.push(desc.key as string);
         remaining += 1;
         // `head` is non-null only when `res` was, so the assertions add no branch.
-        batches.push({ title: res!.title, type: res!.type, items: res!.items, weight: res!.weight });
+        batches.push({ title: res!.title, type: res!.type, items: res!.items, weight: res!.weight, desc });
       } else {
         doneFlagged.push((desc.title || desc.ratingKey || desc.key) as string);
       }
@@ -942,7 +1072,7 @@ export async function nextQueue(
       remaining -= 1;
       continue;
     }
-    batches.push({ title: res.title, type: res.type, items: res.items, weight: res.weight });
+    batches.push({ title: res.title, type: res.type, items: res.items, weight: res.weight, desc });
   }
 
   const leadsInProgress = (b: Batch): boolean => {
@@ -950,49 +1080,85 @@ export async function nextQueue(
     return Boolean(it && inProgress(it.viewOffset, it.viewCount));
   };
 
-  let playItems: ResolvedItem[];
-  let leadBatch: Batch | null;
-  if (isRandomOrder(cfg)) {
-    // Random-pool Picks (legacy kind: anime): member order is irrelevant AND shuffled — but
-    // an in-progress member LEADS so it resumes. Hoist in-progress batches (file order among
-    // them), shuffle the rest via `rng`.
-    const lead = batches.filter(leadsInProgress);
-    const rest = batches.filter((b) => !leadsInProgress(b));
-    // A channel plays each member ONCE per scan and gets cut at ROTATION_LENGTH, so "comes up
-    // more often" here means "lands near the front more often": a weighted shuffle, not the
-    // slots-per-round interleave the rotation channels use (they replay a member across rounds;
-    // this path does not). With nothing weighted, the plain Fisher–Yates shuffle runs unchanged
-    // — same rng, same sequence — so an unweighted channel's seeded order is untouched.
-    if (isUnweighted(rest)) {
-      if (rng) rng.shuffle(rest);
+  // ── THE TWO LANES ─────────────────────────────────────────────────────────────────────
+  // A Picks queue is one membership list with a Priority queue and a Random pool
+  // (decision `2026-08-23-kind-is-picks-or-rules` §2/§4). The set's `add_as` says which lane
+  // an entry with no `placement:` of its own is in — so a queue nobody has promoted anything
+  // in is ENTIRELY one lane, and comes out of here in exactly the order it came out before
+  // this existed. That is the property to protect on every edit below: single-lane behaviour
+  // is not a special case here, it is the old code path with a filter that matched everything.
+  const addAs = normalizeAddAs(cfg.add_as, { kind: cfg.kind, source: cfg.source });
+  const laneOf = (b: Batch) => normalizePlacement(b.desc.placement, addAs);
+
+  // A Priority entry with an unexpired lead window YIELDS this sitting: it stays in the queue
+  // and simply does not lead. It falls back to the pool rather than vanishing, so a promoted
+  // film that already led today can still come up on a random-default queue — it has just
+  // stopped being a promise.
+  const suppressed: string[] = [];
+  const led: string[] = [];
+  const priority: Batch[] = [];
+  const pool: Batch[] = [];
+  for (const b of batches) {
+    if (laneOf(b) !== 'priority') { pool.push(b); continue; }
+    const isPromoted = isExplicitPlacement(b.desc.placement);
+    const mode = normalizeLead(b.desc.lead, { isPromoted });
+    if (mode === 'always') { priority.push(b); continue; }
+    const windowMs = leadWindowMs(b.desc, cfg);
+    // No gate injected (the parity corpus, a unit test) means "nothing has ever led" — the
+    // deterministic answer, and the one that keeps the engine runnable without the store.
+    const mayLead = canLead ? await canLead(b.desc.key as string, windowMs) : true;
+    if (mayLead) {
+      priority.push(b);
+      led.push(b.desc.key as string);
     } else {
-      weightedShuffle(rest, rng);
+      suppressed.push(b.desc.key as string);
+      pool.push(b);
     }
-    const ordered = lead.concat(rest);
-    // The SET's own playback length, not a hardcoded env window. A curated pool read
-    // ROTATION_LENGTH directly and so was the one kind of set whose length could never be
-    // configured — invisible, because 12 is also what a filtered pool defaults to.
-    const cap = initialQueueSize(playbackLength(cfg));
+  }
+
+  // In-progress OUTRANKS a promote, and only out of the pool. Two halves of one rule:
+  //   * a half-watched member of a random pool has always led so it resumes, and a promote
+  //     must not steal the screen from a show somebody is in the middle of (ADR §4.4);
+  //   * an ORDERED queue has never hoisted anything — its head is its head — so the hoist
+  //     stays scoped to the pool, where it already lived, and a priority-default queue with
+  //     no pool never reaches it.
+  const resuming = pool.filter(leadsInProgress);
+  const rest = pool.filter((b) => !leadsInProgress(b));
+  // A channel plays each member ONCE per scan and gets cut at ROTATION_LENGTH, so "comes up
+  // more often" here means "lands near the front more often": a weighted shuffle, not the
+  // slots-per-round interleave the rotation channels use (they replay a member across rounds;
+  // this path does not). With nothing weighted, the plain Fisher-Yates shuffle runs unchanged
+  // — same rng, same sequence — so an unweighted channel's seeded order is untouched.
+  if (isUnweighted(rest)) {
+    if (rng) rng.shuffle(rest);
+  } else {
+    weightedShuffle(rest, rng);
+  }
+  const ordered = resuming.concat(priority, rest);
+
+  // The CAP still follows the set, not the lane. `playbackLength` is a set-level knob and
+  // means two different things either side of `add_as` — ENTRIES on a priority-default queue
+  // (where "length 1" means the entry at the top, whole, `episodes:` and all) and ITEMS on a
+  // random-default one (where there are no entries to count). Keeping the unit tied to the
+  // set is what makes a queue with nothing promoted bit-for-bit what it was.
+  const cap = initialQueueSize(playbackLength(cfg));
+  let playItems: ResolvedItem[];
+  if (isRandomOrder(cfg)) {
     playItems = [];
     for (const b of ordered) {
       playItems.push(...b.items.slice(0, cap - playItems.length));
       if (playItems.length >= cap) break;
     }
-    leadBatch = ordered.length ? ordered[0]! : null;
   } else {
-    // An ordered queue played `batches[0]` and stopped — its head ENTRY, whole.
-    //
-    // So this is the one path that counts ENTRIES rather than items, and it has to be: a show
-    // entry's batch is already its own knob (`episodes:`), and capping items here at 1 would
-    // silently truncate a 2-episode entry to one episode — which is what the first cut of this
-    // did, and what `resume-in-queue-test` caught. "Playback Length 1" on an ordered queue
-    // means the entry at the top, whole; on a rule-based pool, where there are no entries to
-    // count, it means one item.
-    const cap = initialQueueSize(playbackLength(cfg));
     playItems = [];
-    for (const b of batches.slice(0, cap)) playItems.push(...b.items);
-    leadBatch = batches.length ? batches[0]! : null;
+    for (const b of ordered.slice(0, cap)) playItems.push(...b.items);
   }
+  const leadBatch: Batch | null = ordered.length ? ordered[0]! : null;
+
+  logLineup(setName, cfg, {
+    addAs, ordered, priority, pool, resuming, playItems, suppressed, doneFlagged, unresolved,
+  });
+
   // A non-empty `playItems` implies a `leadBatch`, as it always did.
   const last = playItems.length
     ? { title: leadBatch!.title, type: leadBatch!.type, ratingKey: playItems[0]!.ratingKey } : null;
@@ -1000,5 +1166,9 @@ export async function nextQueue(
   return {
     set: setName, play: playItems, last, done: doneFlagged, unresolved, remaining, offset, revived,
     newlyDone, // D4: keys for queues.markDone (not in the Python JSON oracle shape)
+    // Only the entries that actually LED — the caller stamps their cooldown once playback
+    // starts, never here (see `QueueResult.led`).
+    led: playItems.length ? led : [],
+    suppressed,
   };
 }

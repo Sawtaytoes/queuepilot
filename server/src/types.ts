@@ -640,6 +640,18 @@ export interface EntryExtras {
    */
   queued_at?: number;
   collection?: string;
+  /**
+   * Which LANE of a Picks queue this entry is in — `priority` (guaranteed, ordered) or
+   * `random` (the pool). Absent means "follow the set's `add_as`", which is what every entry
+   * written before promote existed says (decision `2026-08-23-kind-is-picks-or-rules` §2).
+   */
+  placement?: string;
+  /** Priority lane only: `always` = sticky head every sitting, `once` = lead at most once per
+   *  `promote_window`. Absent follows `kind.normalizeLead`. */
+  lead?: string;
+  /** Priority lane only: this entry's lead cooldown (`24h`, `7d`, …). Absent follows the set,
+   *  then `leadWindow.DEFAULT_PROMOTE_WINDOW_MS`. */
+  promote_window?: string;
   [extra: string]: unknown;
 }
 
@@ -908,6 +920,15 @@ export interface BucketsResult {
   revived?: string[];
   /** Entry keys to persist as done after this scan. */
   newlyDone?: string[];
+  /**
+   * Priority-lane entry keys that LED this lineup on a `lead: once` window, so the caller can
+   * stamp their cooldown — but only once playback actually starts. A lineup that is built and
+   * never played (a preview, a failed profile gate, a cancelled scan) must not burn the window
+   * (decision `2026-08-26-the-lead-window-is-stamped-when-playback-starts`).
+   */
+  led?: string[];
+  /** Priority-lane entry keys held back this scan by an unexpired lead window. */
+  suppressed?: string[];
   /** Set by the rewatch branch, which returns a single pick rather than a lineup. */
   rewatch?: boolean;
   /** Kavita returns its buckets alongside `play` so the caller can render the pool. */

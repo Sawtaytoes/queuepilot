@@ -16,6 +16,7 @@ import { isAutoRewatch, wireKindForSet } from './kind.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as profiles from './profiles.js';
+import * as promote from './promote.js';
 import * as adb from './adb.js';
 import * as playback from './playback.js';
 import * as driver from './driver.js';
@@ -305,6 +306,9 @@ export async function startSession(
   SESSION.userUuid = binding.user_uuid || null;
   let resumeMs = 0;
   let playItems: PlayItem[] = [];
+  // Priority entries that LED this lineup on a once-per-window lead. Stamped only after the
+  // handoff succeeds — see `BucketsResult.led`.
+  let ledKeys: string[] = [];
 
   // UNGUARDED on purpose, and the `!` says so: `profileToken` is OPTIONAL on the `Provider`
   // interface (every other optional member is called behind a `typeof … === 'function'`
@@ -341,6 +345,10 @@ export async function startSession(
     }
     playItems = res.play;
     resumeMs = res.offset || 0;
+    ledKeys = res.led || [];
+    if (res.suppressed?.length) {
+      console.log(`[session] ${setName} held back by a lead window: ${res.suppressed}`);
+    }
     if (res.last) _publishLastPlayed(lastPlayedFromItem(res.last));
   } else if (res.rewatch) {
     if (!res.play?.length) {
@@ -457,6 +465,13 @@ export async function startSession(
   // result because that is where it is created; a pull provider has no playQueue and leaves
   // it null, which is exactly what topup's Plex branch checks for.
   SESSION.playQueueID = (result as { playQueueID?: number | string | null }).playQueueID ?? null;
+  // Playback started, so the promises this lineup made are now spent. Every earlier `return`
+  // above this line is a sitting that did NOT play — a profile gate that never opened, a
+  // cancel, a Plex error — and none of them may consume a 24h window.
+  for (const key of ledKeys) {
+    await promote.recordLead(setName, key);
+    console.log(`[session] ${setName}: '${key}' led — its window restarts now`);
+  }
   _publishState({ playback: result, ...SESSION.asDict() });
   return { ok: true, playback: result, set: setName, count: ratingKeys.length };
 }
