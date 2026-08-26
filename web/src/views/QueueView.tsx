@@ -38,7 +38,6 @@ import { isRandomOrder } from "../lib/kind"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { entryTitle } from "../lib/searchGroups"
 import {
-  byTitle,
   isCompleted,
   isStartable,
   progressLabel,
@@ -64,6 +63,7 @@ import {
 import {
   applyFilters,
   type Density,
+  splitLanes,
   useQueueView,
 } from "../state/queueView"
 import {
@@ -175,7 +175,7 @@ export function QueueView({
 }) {
   const { data, now, reg } = useStore()
   const selected = useSelected()
-  const gridRef = useRef<HTMLUListElement>(null)
+  const lanesRef = useRef<HTMLDivElement>(null)
   const lastPaintedSet = useRef<string | null>(null)
   const [addPosition, setAddPosition] = useState("top")
   // Density + filter, remembered per queue (state/queueView.ts).
@@ -198,7 +198,11 @@ export function QueueView({
     : undefined
   // Prefer the registry row when present — it always carries effective add_as.
   // The queues payload may still be the shelves skeleton for a beat.
+  // The queue's OWN default lane — what an entry with no `placement` of its own means.
+  // `isRandomOrder` already tolerates a registry row carrying only a legacy kind, so this
+  // is that one answer named as a lane rather than as a boolean about order.
   const isChannel = isRandomOrder(regSet ?? q)
+  const setLane = isChannel ? "random" : "priority"
   // Pushed at a device, or opened by a link. Decides the whole start affordance — the
   // queue-level button AND every tile's ▶.
   const isPull = isPullSet(regSet)
@@ -209,12 +213,9 @@ export function QueueView({
 
   // The fourth argument is the poster tap: with no selection running, tapping a poster
   // opens that entry's sheet. See the hook for why the gesture is resolved there.
-  useGridDrag(
-    gridRef,
-    setId,
-    Boolean(isChannel),
-    openEntryEditor,
-  )
+  // The CONTAINER, not a lane: the gesture spans both `ul.grid[data-lane]` under it,
+  // because a drag across the divider is how an entry is promoted or demoted.
+  useGridDrag(lanesRef, setId, setLane, openEntryEditor)
 
   // A CHANNEL's members play in random order, so the grid lists them
   // alphabetically for lookup; a queue keeps its hand order (top plays next).
@@ -226,11 +227,10 @@ export function QueueView({
   // appeared when the background refetch landed ~400 ms later, which is exactly the
   // freeze the optimistic path exists to remove. Sorting a few dozen entries per
   // render costs nothing; being wrong costs the whole feature.
-  const allItems = !q
-    ? []
-    : isChannel
-      ? [...q.items].sort(byTitle)
-      : q.items
+  // FILE order, always. The page-wide alphabetical sort a random-order set used to get
+  // here moved INTO the pool lane (`splitLanes`): it was never true of the whole page once
+  // half of it is a Priority queue whose order is the thing being edited.
+  const allItems = q ? q.items : []
 
   // The libraries this queue actually draws from — the only ones its search can return, so
   // offering the whole server's list would be four dead options out of five. A queue that
@@ -261,6 +261,10 @@ export function QueueView({
   // one.
   const isSamePaint = lastPaintedSet.current === setId
 
+  // THE SPLIT. One stored list, drawn as two lanes — an entry's lane is its own
+  // `placement`, else the queue's `add_as` (`state/queueView.splitLanes`).
+  const lanes = splitLanes(items, setLane)
+
   /*
    * FLIP is `@charcuterie/logic`'s now, not this repo's.
    *
@@ -280,11 +284,19 @@ export function QueueView({
    * The ref is MERGED rather than replacing `gridRef`: `useGridDrag`
    * claimed that ref first, and the drag needs the same element.
    */
-  const flipRef = useFlipList<HTMLUListElement>({
+  const flipRef = useFlipList<HTMLDivElement>({
     isAnimating: !isHidden && isSamePaint,
     itemSelector: "li.tile",
     keyAttribute: "data-key",
-    signature: `${setId}:${items.map((i) => i.key).join("|")}`,
+    // Each entry's LANE rides in the signature. Without it a move whose only effect is
+    // which half a tile sits in does not read as a change, and the tile teleports across
+    // the divider instead of gliding.
+    signature: `${setId}:${[
+      ...lanes.priority,
+      ...lanes.random,
+    ]
+      .map((i) => `${i.key}@${i.placement ?? setLane}`)
+      .join("|")}`,
   })
 
   if (!isHidden && setId) lastPaintedSet.current = setId
@@ -300,6 +312,255 @@ export function QueueView({
 
   const entryFor = (item: QueueItem): EntryActions =>
     queueEntryActions(setId, item)
+
+  /**
+   * ONE tile, rendered the same in either lane.
+   *
+   * It was inline in the grid's `.map()` until the page grew a second lane. Extracted
+   * VERBATIM rather than rewritten: the two lanes have to be the same tile in every
+   * density, with the same chrome and the same handlers, and a copy per lane is two places
+   * for that to stop being true.
+   */
+  const renderTile = (item: QueueItem) => {
+    const face = tileFace(item)
+    const isPlaying =
+      setId === playingSet && isPlayingItem(now, item)
+    const entry = entryFor(item)
+
+    return (
+      <PosterTile
+        badges={
+          <>
+            <TypeBadge face={face} item={item} />
+            {/* Which EDITION this is, when Plex tagged one — the only thing that
+                    tells two tiles of the same film in the same year apart. */}
+            <EditionChip face={face} />
+            {/* "In Progress" wins over "Completed": a mid-episode resume point
+                    (Plex viewOffset, unwatched) means the item is being watched, not
+                    finished — the Prison School OAD case must never read "Completed". */}
+            {item.partiallyWatched ? (
+              <Tip
+                label={progressLabel(
+                  item.viewOffset,
+                  item.duration,
+                )}
+              >
+                <Badge
+                  appearance="outline"
+                  className="badge progressbadge"
+                  intent="accent"
+                  size="sm"
+                >
+                  In Progress
+                </Badge>
+              </Tip>
+            ) : isCompleted(item) ? (
+              <Badge
+                appearance="outline"
+                className="badge donebadge"
+                intent="success"
+                size="sm"
+              >
+                Completed
+              </Badge>
+            ) : null}
+            {/* Solid, not outline: this one has to win against the
+                    type and Completed chips beside it. Green rather than
+                    amber so it never reads as the selection outline. */}
+            {isPlaying ? (
+              <Badge
+                appearance="solid"
+                className="badge playingbadge"
+                intent="info"
+                size="sm"
+              >
+                {now.now?.state === "paused"
+                  ? "Paused"
+                  : "Now playing"}
+              </Badge>
+            ) : null}
+            {/* The per-entry settings are TAGS now, not four controls per tile: a
+                default entry says nothing, and every tag you do see is a deviation
+                worth reading. Clicking one (or the pencil pill) opens the panel.
+                The pencil sits HERE — by the labels — so it is not next to ✕.
+                (decision 2026-08-14-entry-settings-are-tags-plus-a-panel;
+                 decision 2026-08-25-checkmark-under-x-edit-by-the-labels) */}
+            {item.resolved ? (
+              <SettingTags
+                item={item}
+                onEdit={() =>
+                  setId && openEntryEditor(setId, item.key)
+                }
+                vocab={vocab}
+              />
+            ) : null}
+            {item.resolved && setId ? (
+              <Tip
+                label={`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per turn, weight, where the batch stops, start point`}
+              >
+                <BadgeButton
+                  appearance="outline"
+                  className="badge editbtn"
+                  intent="neutral"
+                  onClick={() =>
+                    openEntryEditor(setId, item.key)
+                  }
+                  size="sm"
+                >
+                  <PencilGlyph />
+                </BadgeButton>
+              </Tip>
+            ) : null}
+          </>
+        }
+        className={[
+          // See QueuesView: a pending tile has not claimed to be missing.
+          item.resolved || item.pending
+            ? null
+            : "unresolved",
+          isCompleted(item) ? "done" : null,
+          isPlaying ? "playing" : null,
+          setId && selected.has(`${setId}::${item.key}`)
+            ? "selected"
+            : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        dataKey={item.key}
+        dataSet={setId ?? undefined}
+        isPending={item.pending}
+        key={item.key}
+        next={{
+          isDone: face.nextDone,
+          onStart: isStartable(item)
+            ? () => openStartModal(entry)
+            : undefined,
+          text: face.next,
+          tooltip: `${
+            face.from && item.childCount != null
+              ? `${face.next} — ${item.childCount} in order`
+              : face.next
+          }${
+            isStartable(item)
+              ? `\nTap to choose where this ${
+                  item.type === "collection"
+                    ? "collection"
+                    : "show"
+                } starts`
+              : ""
+          }`,
+        }}
+        onCheck={() =>
+          setId && toggleSelect(setId, item.key)
+        }
+        onContextMenu={(e) => {
+          e.preventDefault()
+          openTileMenu(e.clientX, e.clientY, entry)
+        }}
+        // Only a RESOLVED entry can be played: an unresolved one has no library item
+        // behind it, so the server would reject the start after the device menu had
+        // already asked which TV. No ▶ is a clearer answer than a late error.
+        //
+        // PUSH only. A pull queue has no device to name, so its tile gets a link
+        // (`playHref` below) instead of the device menu — which used to offer the
+        // Shield, Plex Dash and a phone for a manga chapter.
+        onPlay={
+          setId && item.resolved && !isPull
+            ? (anchor) =>
+                openPlayMenu({
+                  anchor,
+                  only: item.key,
+                  onlyLabel: face.title,
+                  setId,
+                })
+            : undefined
+        }
+        onRemove={() => removeTile(item)}
+        // "Read THIS one now": rebuild the reading list around this one entry and
+        // 302 into the reader. The pull counterpart of the play-one-entry key.
+        playHref={
+          setId && item.resolved && isPull
+            ? `/go/${encodeURIComponent(setId)}?only=${encodeURIComponent(item.key)}`
+            : undefined
+        }
+        playTitle={`${verb} “${face.title}” now`}
+        posterCover={item.cover}
+        // How long the next episode runs. The next-up leaf's runtime is the one Plex
+        // sends for a show; a film reads its own. The batch is the entry's override,
+        // else the queue's default — the same number the engine will queue.
+        runtime={runtimeLabel(
+          item.nextEp?.duration || item.duration,
+          item.episodes ?? regSet?.episodes ?? 1,
+        )}
+        posterRatingKey={
+          item.resolved ? face.ratingKey : null
+        }
+        title={
+          face.title + (face.year ? ` (${face.year})` : "")
+        }
+        // The item's own page in Plex / Kavita. `webUrl` is absent on an unresolved
+        // entry, and the tile then renders the caption as plain text.
+        titleHref={item.webUrl}
+        titleHrefLabel={vocab.name ?? "Plex"}
+        titleTooltip={
+          face.from
+            ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
+            : face.title +
+              (face.year ? ` (${face.year})` : "")
+        }
+      />
+    )
+  }
+
+  /**
+   * One lane — a heading, a count, and the grid of tiles under it.
+   *
+   * `data-lane` is the DRAG's handle as much as a style hook: `useGridDrag` finds the lanes
+   * with `ul.grid[data-lane]` and reads the landed lane back off it, so the attribute is
+   * load-bearing and must not be swapped for a class.
+   *
+   * An EMPTY lane renders a slim drop STRIP rather than the app's `EmptyState` box. It has
+   * to render something with height: an empty `<ul>` is zero pixels tall, which leaves the
+   * first promote on a fresh queue with nothing to aim at — and that is the case the whole
+   * gesture exists for.
+   */
+  const renderLane = (
+    lane: "priority" | "random",
+    laneItems: QueueItem[],
+  ) => {
+    const isPriority = lane === "priority"
+
+    return (
+      <section className="lane" data-lane={lane}>
+        <h2 className="lanehead">
+          {isPriority ? "Priority queue" : "Random pool"}
+          <Badge appearance="outline" size="sm">
+            {laneItems.length}
+          </Badge>
+          <span className="lanehint">
+            {isPriority
+              ? "plays first, in this order — drag to reorder"
+              : "drawn at random to fill the rest"}
+          </span>
+        </h2>
+        <ul
+          className={`grid ${view.density}`}
+          data-lane={lane}
+          id={isPriority ? "grid-priority" : "grid-pool"}
+        >
+          {laneItems.length === 0 ? (
+            <li className="dropstrip">
+              {isPriority
+                ? "Drag something here to play it first"
+                : "Drag something here to let it come up at random"}
+            </li>
+          ) : (
+            laneItems.map(renderTile)
+          )}
+        </ul>
+      </section>
+    )
+  }
 
   return (
     <main
@@ -867,217 +1128,38 @@ export function QueueView({
           nothing for it. */}
       {setId ? <SkippedPanel setId={setId} /> : null}
 
-      <ul
-        className={`grid ${view.density}`}
+      {/* TWO LANES, and the drag across the divider is the promote
+          (decision `2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote`).
+          Both are always drawn, even when one is empty: a lane you cannot see is a lane you
+          cannot drag into, and demoting off an ordered queue needs the pool to exist as a
+          target. The empty one is a strip, not a box — see `renderLane`. */}
+      <div
+        className="lanes"
+        // `#grid` STAYS on the container, and that is not cosmetic. It used to be the one
+        // `<ul>`, and both a CSS rule and a dozen harnesses read `#grid li.tile` meaning
+        // "every tile in this queue" — which is still exactly what it means here, and would
+        // NOT be if the id had followed one lane. `body.gdrag #grid li.tile` is the settle
+        // transition every sibling glides on during a drag; scoped to the Priority lane it
+        // would have left the pool's tiles jumping while a promote glided past them.
         id="grid"
-        ref={mergeRefs(gridRef, flipRef)}
+        ref={mergeRefs(lanesRef, flipRef)}
       >
-        {isHidden || !q ? null : items.length === 0 ? (
-          <li className="empty">
+        {isHidden || !q ? null : allItems.length === 0 ? (
+          <div className="empty">
             <EmptyState
               description="Search above to add something."
               heading="Empty"
               headingLevel={3}
               size="sm"
             />
-          </li>
+          </div>
         ) : (
-          items.map((item) => {
-            const face = tileFace(item)
-            const isPlaying =
-              setId === playingSet &&
-              isPlayingItem(now, item)
-            const entry = entryFor(item)
-
-            return (
-              <PosterTile
-                badges={
-                  <>
-                    <TypeBadge face={face} item={item} />
-                    {/* Which EDITION this is, when Plex tagged one — the only thing that
-                            tells two tiles of the same film in the same year apart. */}
-                    <EditionChip face={face} />
-                    {/* "In Progress" wins over "Completed": a mid-episode resume point
-                            (Plex viewOffset, unwatched) means the item is being watched, not
-                            finished — the Prison School OAD case must never read "Completed". */}
-                    {item.partiallyWatched ? (
-                      <Tip
-                        label={progressLabel(
-                          item.viewOffset,
-                          item.duration,
-                        )}
-                      >
-                        <Badge
-                          appearance="outline"
-                          className="badge progressbadge"
-                          intent="accent"
-                          size="sm"
-                        >
-                          In Progress
-                        </Badge>
-                      </Tip>
-                    ) : isCompleted(item) ? (
-                      <Badge
-                        appearance="outline"
-                        className="badge donebadge"
-                        intent="success"
-                        size="sm"
-                      >
-                        Completed
-                      </Badge>
-                    ) : null}
-                    {/* Solid, not outline: this one has to win against the
-                            type and Completed chips beside it. Green rather than
-                            amber so it never reads as the selection outline. */}
-                    {isPlaying ? (
-                      <Badge
-                        appearance="solid"
-                        className="badge playingbadge"
-                        intent="info"
-                        size="sm"
-                      >
-                        {now.now?.state === "paused"
-                          ? "Paused"
-                          : "Now playing"}
-                      </Badge>
-                    ) : null}
-                    {/* The per-entry settings are TAGS now, not four controls per tile: a
-                        default entry says nothing, and every tag you do see is a deviation
-                        worth reading. Clicking one (or the pencil pill) opens the panel.
-                        The pencil sits HERE — by the labels — so it is not next to ✕.
-                        (decision 2026-08-14-entry-settings-are-tags-plus-a-panel;
-                         decision 2026-08-25-checkmark-under-x-edit-by-the-labels) */}
-                    {item.resolved ? (
-                      <SettingTags
-                        item={item}
-                        onEdit={() =>
-                          setId &&
-                          openEntryEditor(setId, item.key)
-                        }
-                        vocab={vocab}
-                      />
-                    ) : null}
-                    {item.resolved && setId ? (
-                      <Tip
-                        label={`${vocab.units[0]?.toUpperCase()}${vocab.units.slice(1)} per turn, weight, where the batch stops, start point`}
-                      >
-                        <BadgeButton
-                          appearance="outline"
-                          className="badge editbtn"
-                          intent="neutral"
-                          onClick={() =>
-                            openEntryEditor(setId, item.key)
-                          }
-                          size="sm"
-                        >
-                          <PencilGlyph />
-                        </BadgeButton>
-                      </Tip>
-                    ) : null}
-                  </>
-                }
-                className={[
-                  // See QueuesView: a pending tile has not claimed to be missing.
-                  item.resolved || item.pending
-                    ? null
-                    : "unresolved",
-                  isCompleted(item) ? "done" : null,
-                  isPlaying ? "playing" : null,
-                  setId &&
-                  selected.has(`${setId}::${item.key}`)
-                    ? "selected"
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                dataKey={item.key}
-                dataSet={setId ?? undefined}
-                isPending={item.pending}
-                key={item.key}
-                next={{
-                  isDone: face.nextDone,
-                  onStart: isStartable(item)
-                    ? () => openStartModal(entry)
-                    : undefined,
-                  text: face.next,
-                  tooltip: `${
-                    face.from && item.childCount != null
-                      ? `${face.next} — ${item.childCount} in order`
-                      : face.next
-                  }${
-                    isStartable(item)
-                      ? `\nTap to choose where this ${
-                          item.type === "collection"
-                            ? "collection"
-                            : "show"
-                        } starts`
-                      : ""
-                  }`,
-                }}
-                onCheck={() =>
-                  setId && toggleSelect(setId, item.key)
-                }
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  openTileMenu(e.clientX, e.clientY, entry)
-                }}
-                // Only a RESOLVED entry can be played: an unresolved one has no library item
-                // behind it, so the server would reject the start after the device menu had
-                // already asked which TV. No ▶ is a clearer answer than a late error.
-                //
-                // PUSH only. A pull queue has no device to name, so its tile gets a link
-                // (`playHref` below) instead of the device menu — which used to offer the
-                // Shield, Plex Dash and a phone for a manga chapter.
-                onPlay={
-                  setId && item.resolved && !isPull
-                    ? (anchor) =>
-                        openPlayMenu({
-                          anchor,
-                          only: item.key,
-                          onlyLabel: face.title,
-                          setId,
-                        })
-                    : undefined
-                }
-                onRemove={() => removeTile(item)}
-                // "Read THIS one now": rebuild the reading list around this one entry and
-                // 302 into the reader. The pull counterpart of the play-one-entry key.
-                playHref={
-                  setId && item.resolved && isPull
-                    ? `/go/${encodeURIComponent(setId)}?only=${encodeURIComponent(item.key)}`
-                    : undefined
-                }
-                playTitle={`${verb} “${face.title}” now`}
-                posterCover={item.cover}
-                // How long the next episode runs. The next-up leaf's runtime is the one Plex
-                // sends for a show; a film reads its own. The batch is the entry's override,
-                // else the queue's default — the same number the engine will queue.
-                runtime={runtimeLabel(
-                  item.nextEp?.duration || item.duration,
-                  item.episodes ?? regSet?.episodes ?? 1,
-                )}
-                posterRatingKey={
-                  item.resolved ? face.ratingKey : null
-                }
-                title={
-                  face.title +
-                  (face.year ? ` (${face.year})` : "")
-                }
-                // The item's own page in Plex / Kavita. `webUrl` is absent on an unresolved
-                // entry, and the tile then renders the caption as plain text.
-                titleHref={item.webUrl}
-                titleHrefLabel={vocab.name ?? "Plex"}
-                titleTooltip={
-                  face.from
-                    ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-                    : face.title +
-                      (face.year ? ` (${face.year})` : "")
-                }
-              />
-            )
-          })
+          <>
+            {renderLane("priority", lanes.priority)}
+            {renderLane("random", lanes.random)}
+          </>
         )}
-      </ul>
+      </div>
 
       {/* One panel for the whole grid, addressed by entry key — see state/overlays.ts for why
           it holds the key rather than the item. */}

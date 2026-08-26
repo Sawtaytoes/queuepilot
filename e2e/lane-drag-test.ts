@@ -1,0 +1,223 @@
+// DRAGGING ACROSS THE DIVIDER IS THE PROMOTE.
+//
+// The queue page is two lanes — a Priority queue that plays first in file order, and a
+// Random pool below it (decision `2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote`).
+// Moving a tile between them is the whole gesture, and there is nothing a unit test can say
+// about it: the lane a tile lands in is read off the DOM at pointerup, from geometry captured
+// at grab, after a drag that never re-renders.
+//
+// Four things it pins, and each one broke at least once while it was being written:
+//
+//   1. a tile dragged from the pool into the Priority lane is PATCHed `placement: priority`;
+//   2. …and the order PATCH that follows lists BOTH lanes, priority first, because the file
+//      is one sequence and the engine plays the priority entries in file order;
+//   3. a drag that begins and ends in the POOL writes nothing at all — the pool is not
+//      hand-ordered, and an accidental nudge must not save an order that means nothing;
+//   4. an EMPTY lane is still a drop target. A queue with nothing promoted has no tile to aim
+//      at, so the lane's own box is the slot — without it the first promote is undraggable,
+//      which is the case the whole feature exists for.
+//
+// Browser, but NO PLEX: it drives the degraded path where tiles render unresolved but render.
+// The Plex-gated suites are skipped on every PR, so a gate that lived there would never run.
+//
+// Usage: `server/node_modules/.bin/tsx e2e/lane-drag-test.ts`  (spawns its own server)
+import assert from 'node:assert/strict';
+import { promises as fs } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { chromium } from './playwright.js';
+import { killServer, spawnServer } from './stubs/server-process.mjs';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PORT = parseInt(process.env.WEB_PORT || '18981', 10);
+const BASE = `http://localhost:${PORT}`;
+// `bob_anime` is the fixture's RANDOM-order queue, so every entry starts in the pool and a
+// promote is a drag upwards into an empty Priority lane — cases 1, 2 and 4 in one gesture.
+const POOL_QUEUE = 'bob_anime';
+// `bob` is priority-by-default: everything starts in the Priority lane, so its pool is the
+// empty one and a demote is the drag downwards.
+const ORDERED_QUEUE = 'bob';
+
+const waitReady = async (url: string, ms = 30000) => {
+  const end = Date.now() + ms;
+  for (;;) {
+    try {
+      if ((await fetch(url)).ok) return;
+    } catch {
+      /* not up yet */
+    }
+    if (Date.now() > end) throw new Error(`not ready: ${url}`);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+};
+
+await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-lanedrag.yaml');
+await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-lanedrag.yaml');
+for (const lock of ['/tmp/queues-lanedrag.yaml.lock', '/tmp/sets-lanedrag.yaml.lock']) {
+  await fs.rm(lock, { force: true });
+}
+
+const srv = spawnServer({
+  env: {
+    ...process.env,
+    HISTORY_PATH: '/tmp/.history-lanedrag.json',
+    MQTT_HOST: '',
+    NODE_TLS_REJECT_UNAUTHORIZED: '0',
+    QUEUES_PATH: '/tmp/queues-lanedrag.yaml',
+    SETS_PATH: '/tmp/sets-lanedrag.yaml',
+    STORE_PATH: '/tmp/queuepilot-lanedrag.sqlite',
+    WEB_PORT: String(PORT),
+  },
+  stdio: ['ignore', 'ignore', 'inherit'],
+});
+
+let failed = 0;
+const check = (name: string, ok: boolean, detail = '') => {
+  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
+  if (!ok) failed += 1;
+};
+
+try {
+  await waitReady(`${BASE}/api/queues`);
+
+  const browser = await chromium.launch();
+  const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
+  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+
+  /** Every write this page makes, in order, so a gesture can be asserted on its EFFECT. */
+  const writes: { body: string; method: string; url: string }[] = [];
+  await page.route('**/api/queues/**', async (route, request) => {
+    const method = request.method();
+    if (method === 'PATCH') {
+      writes.push({ body: request.postData() || '', method, url: request.url() });
+    }
+    await route.continue();
+  });
+
+  /** Centre of a `.thumb`, which is the only part of a tile the drag arms from. */
+  const centreOf = async (selector: string) => JSON.parse(String(await page.evaluate(
+    `(() => { const el = document.querySelector(${JSON.stringify(selector)});`
+    + ` if (!el) return 'null'; const r = el.getBoundingClientRect();`
+    + ` return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2]); })()`,
+  ))) as [number, number] | null;
+
+  /** A slow, deliberate pointer drag — the same motion `drag-stability-test` uses. */
+  const dragTo = async (from: [number, number], to: [number, number]) => {
+    await page.mouse.move(from[0], from[1]);
+    await page.mouse.down();
+    for (let i = 1; i <= 24; i += 1) {
+      await page.mouse.move(
+        from[0] + ((to[0] - from[0]) * i) / 24,
+        from[1] + ((to[1] - from[1]) * i) / 24,
+      );
+      await page.waitForTimeout(16);
+    }
+    await page.mouse.up();
+    await page.waitForTimeout(700);
+  };
+
+  // ── A POOL queue: both lanes render, and the Priority one is an empty drop strip ────────
+  await page.goto(`${BASE}/q/${POOL_QUEUE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#grid-pool li.tile', { timeout: 30000 });
+  await page.waitForTimeout(1500);
+
+  const laneCount = Number(await page.evaluate(
+    `document.querySelectorAll('#grid ul.grid[data-lane]').length`,
+  ));
+  check('the page renders two lanes', laneCount === 2, `got ${laneCount}`);
+
+  const hasStrip = Boolean(await page.evaluate(
+    `!!document.querySelector('ul.grid[data-lane="priority"] .dropstrip')`,
+  ));
+  check(
+    'an empty Priority lane renders a drop strip, not nothing',
+    hasStrip,
+    'no `.dropstrip` — the first promote would have nothing to aim at',
+  );
+
+  const stripBox = await centreOf('ul.grid[data-lane="priority"] .dropstrip');
+  const firstPoolTile = await centreOf('#grid-pool li.tile .thumb');
+  assert.ok(stripBox && firstPoolTile, 'need both a strip and a pool tile to drag');
+
+  const promotedKey = String(await page.evaluate(
+    `document.querySelector('#grid-pool li.tile').dataset.key`,
+  ));
+
+  writes.length = 0;
+  await dragTo(firstPoolTile, stripBox);
+
+  const placementWrite = writes.find((w) => w.url.includes('/placement'));
+  check(
+    'a drag into the Priority lane PATCHes placement: priority',
+    Boolean(placementWrite && JSON.parse(placementWrite.body).placement === 'priority'),
+    `writes: ${JSON.stringify(writes.map((w) => w.url.split('/api')[1]))}`,
+  );
+
+  const orderWrite = writes.find((w) => w.url.endsWith('/order'));
+  check(
+    'and the order that follows leads with the promoted entry',
+    Boolean(orderWrite && JSON.parse(orderWrite.body).keys?.[0] === promotedKey),
+    `order was ${orderWrite ? JSON.stringify(JSON.parse(orderWrite.body).keys?.slice(0, 3)) : 'not written'}`,
+  );
+
+  check(
+    'placement is written BEFORE the order',
+    Boolean(placementWrite && orderWrite)
+      && writes.indexOf(placementWrite!) < writes.indexOf(orderWrite!),
+    'a scan landing between the two would read a half-written file',
+  );
+
+  const landed = Boolean(await page.evaluate(
+    `!!document.querySelector('ul.grid[data-lane="priority"] li.tile[data-key=${JSON.stringify(promotedKey)}]')`,
+  ));
+  check('the tile is now in the Priority lane on screen', landed, 'it snapped back');
+
+  // ── A drag that stays in the POOL writes nothing ────────────────────────────────────────
+  const poolA = await centreOf('#grid-pool li.tile .thumb');
+  const poolB = await centreOf('#grid-pool li.tile:nth-child(3) .thumb');
+  assert.ok(poolA && poolB, 'need two pool tiles');
+
+  writes.length = 0;
+  await dragTo(poolA, poolB);
+  check(
+    'a drag inside the pool saves nothing',
+    writes.length === 0,
+    `wrote ${JSON.stringify(writes.map((w) => w.url.split('/api')[1]))} — the pool is shuffled at playback, so its order is not a thing to save`,
+  );
+
+  // ── An ORDERED queue: the pool is the empty lane, and the drag down is a demote ─────────
+  await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#grid-priority li.tile', { timeout: 30000 });
+  await page.waitForTimeout(1500);
+
+  const poolStrip = await centreOf('ul.grid[data-lane="random"] .dropstrip');
+  const firstOrdered = await centreOf('#grid-priority li.tile .thumb');
+  assert.ok(poolStrip && firstOrdered, 'need a pool strip and an ordered tile');
+
+  const demotedKey = String(await page.evaluate(
+    `document.querySelector('#grid-priority li.tile').dataset.key`,
+  ));
+
+  writes.length = 0;
+  await dragTo(firstOrdered, poolStrip);
+
+  const demote = writes.find((w) => w.url.includes('/placement'));
+  check(
+    'a drag into the pool PATCHes placement: random',
+    Boolean(demote && JSON.parse(demote.body).placement === 'random'),
+    `writes: ${JSON.stringify(writes.map((w) => `${w.url.split('/api')[1]} ${w.body}`))}`,
+  );
+  check(
+    'and it names the entry that was dragged',
+    Boolean(demote?.url.includes(encodeURIComponent(demotedKey))),
+    `patched ${demote?.url.split('/items/')[1]}, dragged ${demotedKey}`,
+  );
+
+  await browser.close();
+} finally {
+  killServer(srv);
+}
+
+console.log(failed ? `\n${failed} FAILURE(S)` : '\nALL PASS');
+process.exit(failed ? 1 : 0);

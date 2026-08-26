@@ -59,8 +59,15 @@ await page.evaluate(`(() => {
   const g = document.querySelector('#grid');
   new MutationObserver((rs) => { for (const r of rs) if (r.attributeName === 'style') window.__m.style++; })
     .observe(g, { attributes: true, subtree: true, attributeFilter: ['style'] });
+  // Count inserts into ANY LANE, not into #grid itself. #grid is the two-lane container now
+  // and the drag inserts into the ul.grid[data-lane] inside it, so the old this === g test
+  // silently counted zero — which passes the <= 8 assertion below while measuring nothing.
+  // (No backticks in here: this whole block is a template literal.)
   const orig = Node.prototype.insertBefore;
-  Node.prototype.insertBefore = function (...a) { if (this === g) window.__m.insert++; return orig.apply(this, a); };
+  Node.prototype.insertBefore = function (...a) {
+    if (this === g || (this instanceof Element && this.matches('ul.grid[data-lane]'))) window.__m.insert++;
+    return orig.apply(this, a);
+  };
 })()`);
 
 const start = JSON.parse(String(await page.evaluate(
