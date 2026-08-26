@@ -506,6 +506,27 @@ sitting through the existing shuffle/weight path.
 - Gate: `e2e/priority-lane-test.ts`. Half of it is not about the feature — cases 1, 2, 5 and
   7 pin that an un-promoted queue comes out exactly as it did before the lanes existed.
 
+### The page is two lanes, and `#grid` is the container
+
+`QueueView` draws a **Priority queue** above a **Random pool**
+([decision](docs/decisions/2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote.md)).
+Four things to know before touching it:
+
+- **`#grid` is the WRAPPER, not a `<ul>`.** The lanes are `#grid-priority` and `#grid-pool`,
+  both `ul.grid[data-lane]`. `#grid li.tile` therefore still means "every tile in this
+  queue", which is what a dozen harnesses and `body.gdrag #grid li.tile` (the drag settle
+  transition) have always meant by it. Scope that id to one lane and the other lane's tiles
+  stop gliding during a promote.
+- **`data-lane` is load-bearing, not a style hook.** `useGridDrag` finds the lanes with it
+  and reads the landed lane back off it at pointerup.
+- **The empty lane renders an `li.dropstrip`.** It must render something with height or the
+  first promote has nothing to aim at.
+- **The pool saves no order.** A drag that starts and ends in `random` writes nothing —
+  deliberate, because the pool is shuffled at playback.
+
+Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). `splitLanes` in
+`state/queueView.ts` is the pure half and has unit tests.
+
 ## Reading the log when a queue plays the wrong thing
 
 `[lineup]` (every curated scan) names the lane split, the head, the first ten titles in
@@ -565,6 +586,8 @@ yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-web run
 yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck
 yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
 server/node_modules/.bin/tsx e2e/priority-lane-test.ts   # the Priority queue / Random pool lanes
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/lane-drag-test.ts     # dragging across the lane divider
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree

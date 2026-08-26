@@ -3,6 +3,8 @@
 //   lanepanel — the entry settings sheet, which gains the Lane picker and (once an entry is
 //               in the Priority lane) the "How often it leads" picker
 //   lanetag   — the tile itself, wearing the Priority chip
+//   lanes     — the whole queue page, split into a Priority queue above and a Random pool
+//               below, with the empty half a drop strip
 //
 // EVERY byte on screen is FIXTURE data. The repo is public: the set labels come from
 // `e2e/fixtures/sets.fixture.yaml`, and the two entries are INVENTED here rather than
@@ -131,6 +133,10 @@ try {
   //     there is no chip to wear, which is the whole point of the pair.
   await shot('tag', '#grid');
 
+  // 1b — the whole page. `before` is one undivided grid; `after` is two named lanes with
+  //      the promoted film alone above the pool.
+  await shot('lanes', '#grid');
+
   // 2 — the settings sheet for the PROMOTED entry.
   await page.locator('#grid .tile .editbtn').first().click();
   await page.waitForSelector('#entrymodal', { timeout: 15000 });
@@ -139,6 +145,15 @@ try {
 
   const lanes = await page.locator('#entrymodal .field').count();
   console.log(`entry panel fields: ${lanes}`);
+
+  // 3 — the EMPTY-lane case, on a queue nobody has promoted anything in. `bob` is
+  //     priority-by-default, so its pool is the empty half and the strip is what a person
+  //     drags onto to demote. Real fixture entries here, not the substituted pair.
+  await page.keyboard.press('Escape');
+  await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#grid-priority li.tile', { timeout: 30000 });
+  await page.waitForTimeout(1200);
+  await shot('strip', '#grid');
 
   await browser.close();
 } finally {

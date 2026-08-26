@@ -900,6 +900,64 @@ ul.grid {
   overflow-anchor: none; /* drag insertions must not shift the page via scroll anchoring */
 }
 
+/* ---- The two LANES: Priority queue above, Random pool below ----
+   (decision `2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote`)
+
+   Stacked, never side by side, and that is the grid rule rather than a preference: each
+   lane holds POSTER tiles, which are card-shaped and want a responsive grid that gains
+   columns with the container. Two columns of lanes would halve the width each grid has to
+   do that in, on the widest window, for a page whose whole job is showing artwork.
+
+   `ul.grid` inside a lane is untouched — same tile, same densities, same auto-fill. */
+.lanes {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
+.lanehead {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-content-primary);
+}
+.lanehint {
+  font-size: 0.82rem;
+  font-weight: 400;
+  color: var(--color-content-muted);
+}
+/* The empty lane. A STRIP and not an `EmptyState` box, because it is a drop target the
+   width of the grid rather than an explanation — and it must have height at all, or the
+   first promote on a queue that has never promoted anything has nothing to aim at. It is
+   inside the `ul`, so it takes a grid cell; spanning every column keeps it one strip
+   instead of one tile-sized box in the corner. */
+.dropstrip {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 56px;
+  padding: 0 14px;
+  border: 1px dashed var(--color-border-default);
+  border-radius: var(--radius-md, 10px);
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+/* While a drag is live the target reads as a target. `body.gdrag` is set by `useGridDrag`
+   for the length of the gesture and is the only signal available here — the strip cannot
+   know the pointer is over it without a hit test the drag deliberately does not do. */
+body.gdrag .dropstrip {
+  border-color: var(
+    --color-border-strong,
+    var(--color-border-default)
+  );
+  color: var(--color-content-primary);
+}
+
 /* ---- Poster tile (shared by shelf + grid) ---- */
 .tile {
   width: 100%;

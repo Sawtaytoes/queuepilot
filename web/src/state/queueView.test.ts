@@ -1,7 +1,11 @@
 import { describe, expect, test } from "vitest"
 
 import type { QueueItem } from "../lib/types"
-import { applyFilters, hasOverrides } from "./queueView"
+import {
+  applyFilters,
+  hasOverrides,
+  splitLanes,
+} from "./queueView"
 
 const item = (over: Partial<QueueItem>): QueueItem => ({
   childCount: null,
@@ -101,5 +105,63 @@ describe("applyFilters — the Priority lane", () => {
     expect(
       applyFilters(items, { ...base, state: "" }),
     ).toHaveLength(3)
+  })
+})
+
+describe("splitLanes", () => {
+  const items = [
+    item({ key: "rk:1", title: "Bravo" }),
+    item({ key: "rk:2", title: "Alpha" }),
+    item({
+      key: "rk:3",
+      title: "Charlie",
+      placement: "priority",
+    }),
+    item({
+      key: "rk:4",
+      title: "Delta",
+      placement: "random",
+    }),
+  ]
+
+  test("an ordered queue puts everything in Priority except what was demoted", () => {
+    const { priority, random } = splitLanes(
+      items,
+      "priority",
+    )
+
+    // FILE order in the Priority lane — that is what the engine plays, so what you drag is
+    // literally what happens.
+    expect(priority.map((it) => it.title)).toEqual([
+      "Bravo",
+      "Alpha",
+      "Charlie",
+    ])
+    expect(random.map((it) => it.title)).toEqual(["Delta"])
+  })
+
+  test("a pool queue puts everything in the pool except what was promoted", () => {
+    const { priority, random } = splitLanes(items, "random")
+
+    expect(priority.map((it) => it.title)).toEqual([
+      "Charlie",
+    ])
+    // ALPHABETICAL in the pool. Its order changes nothing at playback — the pool is
+    // shuffled — so the lane is sorted for lookup instead.
+    expect(random.map((it) => it.title)).toEqual([
+      "Alpha",
+      "Bravo",
+      "Delta",
+    ])
+  })
+
+  test("a queue nobody has promoted anything in is entirely one lane", () => {
+    const plain = [
+      item({ key: "rk:1" }),
+      item({ key: "rk:2" }),
+    ]
+
+    expect(splitLanes(plain, "priority").random).toEqual([])
+    expect(splitLanes(plain, "random").priority).toEqual([])
   })
 })
