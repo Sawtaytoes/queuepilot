@@ -693,6 +693,15 @@ jobs:
       - name: Tile chrome — the select mark paints, and the lane button moves (browser, no Plex needed)
         run: $TSX e2e/tile-lane-test.ts
 
+      # THE TILE MENU, and the long press that opens it. The menu carries only what the card
+      # cannot (the lane moves, the start point, Skip) and a long press is one gesture, not
+      # two — the hold used to arm the reorder drag AND pop the menu over the picked-up tile.
+      # Same shape as the step above: its own server, no Plex, so it runs on every PR.
+      #
+      # Reuses the chromium the narrow-view step installed — keep it AFTER that step.
+      - name: Tile menu — lane rows, and a long press that is not also a drag
+        run: $TSX e2e/tile-menu-test.ts
+
       # Path routing: the client router and the server's SPA fallback, pinned together.
       # ALWAYS runs, like the narrow-view gate above and for the same reason — the
       # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression

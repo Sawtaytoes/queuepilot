@@ -4,7 +4,9 @@
 - **Date:** 2026-08-26
 - **Type:** UI / bugfix
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** point 5 only, by [A lane change writes the order too, because the file is
+  one sequence](2026-08-27-a-lane-change-writes-the-order-too-because-the-file-is-one-sequence.md).
+  Points 1-4 and 6 stand.
 
 Extends [✓ stacks under ✕; Edit is a pencil pill by the
 labels](2026-08-25-checkmark-under-x-edit-by-the-labels.md) — the stack keeps its order and
@@ -22,8 +24,11 @@ stays exactly as it is.
 3. **A third control sits under it**: ↑ moves the entry into the Priority queue, ↓ moves it
    back out to the Random pool. The arrow points the way the tile moves on screen.
 4. **A promote lands at the END of the Priority lane** (`promotedOrder`), never at its head.
-5. **A demote writes no order at all.** The pool is shuffled at playback, so its order means
-   nothing, and writing one would be a change to the file's bytes and nothing else.
+5. ~~**A demote writes no order at all.** The pool is shuffled at playback, so its order means
+   nothing, and writing one would be a change to the file's bytes and nothing else.~~
+   **Superseded 2026-08-27** — a demote writes the order too, because the file is one sequence
+   and an entry that leaves the lane has to leave the priority run with it. See
+   [the superseding record](2026-08-27-a-lane-change-writes-the-order-too-because-the-file-is-one-sequence.md).
 6. **The drag across the divider stays.** This is the same write, for a pointer that would
    rather press than drag — and the only way across on a touch device without a long press.
 
@@ -87,5 +92,6 @@ BROWSER what it painted, because nothing else can: tsc does not read CSS, Biome 
 and axe passes an invisible glyph. It pins that the mark is invisible unchecked and opaque
 checked, that the two states differ in fill, the `aria-pressed` announcement, both arrow
 labels, that a promote PATCHes placement THEN order, that it survives a reload, and that a
-demote writes no order. Unit tests cover `promotedOrder`. Shots:
+demote writes the order too, placement first (changed 2026-08-27; it pinned the opposite until
+then). Unit tests cover `orderAfterLaneMove`, which replaced `promotedOrder`. Shots:
 `e2e/shot-tile-lane.ts [before|after]`, dark scheme, fixture data.

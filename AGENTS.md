@@ -609,6 +609,41 @@ Move-to picker. **Add a fourth list of queues and it gets the chip too** — fix
 is how a rule becomes folklore. Required members only, three names then `+n`, `Anybody` for a
 queue nobody has filed.
 
+### The tile menu, and the long press that opens it
+
+Two rules, both settled 2026-08-26 after the owner met them on a tablet
+([menu](docs/decisions/2026-08-26-the-tile-menu-carries-what-the-card-cannot.md),
+[long press](docs/decisions/2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both.md)):
+
+- **The menu carries only what the CARD cannot.** Play this next, the two lane moves, the
+  manual start point, Skip. **Never Remove** — every editable grid puts a ✕ on the tile, so
+  a Remove row repeats a control six pixels away. The test for a new row is not "is this
+  useful", it is "can the card already do it". An entry with no rows opens **no menu**:
+  `openTileMenu` no-ops (`hasTileMenuActions`) rather than painting an empty box.
+- **A long press is the menu OR the drag, never both.** The 200 ms hold timer only ARMS the
+  gesture; `beginDrag()` runs on the first move past the threshold. Move a `beginDrag()`
+  back into that timer and the tile is picked up under a stationary finger, the browser's
+  own long-press menu opens on top of it, and the card it came from is left empty. The
+  grid's `contextmenu` handler **ends the press**, which is also what stops the `pointerup`
+  behind it settling as a tap and opening the entry sheet under the menu.
+- Two smaller rules in the same gesture: `onPointerDown` takes the **primary button only**
+  (a right-click used to open a press whose `pointerup` opened the entry sheet), and
+  `TileMenu` closes on a scroll that **moves the page**, not on the zero-delta `scroll`
+  Chromium fires in the frame the menu opens.
+- A promote from the menu, the selection bar **or the tile's arrow** lands at the **end** of
+  its new lane (`state/queueView.orderAfterLaneMove`, unit-tested) — one function for all
+  three, so they cannot drift. `moveEntryLane` is a toggle wrapper over `setEntryLane` and
+  computes nothing; `promotedOrder` is deleted, and a second order helper is a regression.
+- **Every lane change writes `placement` and THEN the order**, the demote included. The file
+  is one sequence, so an entry that leaves the Priority queue has to leave the priority run of
+  the file with it — and the next promote would re-sequence it anyway, since
+  `orderAfterLaneMove` rebuilds priority-then-random from the placements it reads. The arrow
+  used to skip the order on a demote, which is what let the two gates assert opposite things
+  about one operation (decision
+  `2026-08-27-a-lane-change-writes-the-order-too-because-the-file-is-one-sequence`).
+
+Gate: `e2e/tile-menu-test.ts` (spawns its own server; browser, no Plex).
+
 ## Reading the log when a queue plays the wrong thing
 
 `[lineup]` (every curated scan) names the lane split, the head, the first ten titles in
@@ -821,6 +856,8 @@ yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run 
 server/node_modules/.bin/tsx e2e/priority-lane-test.ts   # the Priority queue / Random pool lanes
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/lane-drag-test.ts     # dragging across the lane divider
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/tile-menu-test.ts     # the tile menu + the long press
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \

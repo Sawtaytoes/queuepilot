@@ -161,6 +161,12 @@ export function useGridDrag(
 
             return
           }
+
+          // Armed and now moving: THIS is the drag. Held still instead and the long-press
+          // menu takes the press (see `onPointerDown`).
+          if (!isFar) return
+
+          beginDrag()
         } else if (isFar) {
           beginDrag()
         } else {
@@ -501,6 +507,11 @@ export function useGridDrag(
       )
         return // their own clicks
       if (!target.closest(".thumb")) return // drag/select only from the poster
+      // PRIMARY button only. `pointerdown` fires for the right button too, so a right-click
+      // on the poster opened a press that its own `pointerup` then settled as a TAP — which
+      // opens the entry sheet. The tile menu the right-click had just opened went under it,
+      // and the one gesture did two things. Touch and pen both report button 0.
+      if (e.button !== 0) return
 
       const card = target.closest<HTMLElement>("li.tile")
 
@@ -526,11 +537,17 @@ export function useGridDrag(
       busy.gridPress = true
 
       if (e.pointerType === "touch") {
+        // ARM only — the pick-up waits for the first MOVE.
+        //
+        // `beginDrag()` used to run here, so a finger held still lifted the tile out of its
+        // card at 200 ms. The browser then fires its own long-press `contextmenu` at ~500 ms,
+        // and the tile menu opened on top of a tile that was mid-drag, with the card it came
+        // from left empty behind it. One hold, two gestures, both half-done. Deferring the
+        // pick-up makes the two exclusive: move and it is a drag, stay still and it is the
+        // menu (`onContextMenu` below cancels the press outright).
+        // (decision `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`)
         press.holdTimer = setTimeout(() => {
-          if (press) {
-            press.isArmed = true
-            beginDrag()
-          }
+          if (press) press.isArmed = true
         }, 200)
       }
 
@@ -545,9 +562,34 @@ export function useGridDrag(
     // by default; a native image drag pre-empts the pointer-drag with a
     // pointercancel).
     const onDragStart = (e: Event) => e.preventDefault()
-    // The long-press that arms a touch drag must not also pop the native context
-    // menu over the poster. A right-click elsewhere on the tile opens OUR menu.
+    // A long press is the MENU or the DRAG, never both.
+    //
+    // This event IS the long press on touch, so by the time it fires the gesture has
+    // declared itself: the finger never moved, the tile menu is about to open, and the
+    // press must stop being a candidate drag. `endPress` drops the window listeners with
+    // it, so the `pointerup` that follows cannot settle as a tap and open the entry sheet
+    // under the menu either.
+    // (decision `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`)
+    //
+    // The `preventDefault` is unchanged and still only about the poster: the browser's own
+    // menu (Save image, Copy image) must not pop over it. A right-click elsewhere on the
+    // tile opens OUR menu.
     const onContextMenu = (e: MouseEvent) => {
+      if (press) {
+        // Put the node back where React last rendered it before dropping the press, the
+        // same restore `onUp` does. With the pick-up deferred a still finger is never
+        // dragging by now, so this is a belt-and-braces branch, not the common path.
+        if (press.isDragging) {
+          press.card.classList.remove("dragging")
+          press.parent?.insertBefore(
+            press.card,
+            press.nextSibling,
+          )
+        }
+
+        endPress()
+      }
+
       if ((e.target as HTMLElement).closest(".thumb"))
         e.preventDefault()
     }

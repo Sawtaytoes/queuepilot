@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from "react"
 
-import { api } from "../lib/api"
+import { api, writeCount } from "../lib/api"
 import type {
   GroupsResponse,
   NowState,
@@ -9,6 +9,7 @@ import type {
   ShelvesResponse,
   StatusKind,
 } from "../lib/types"
+import { uiBusy } from "./busy"
 import { loadPeople } from "./people"
 
 /**
@@ -282,11 +283,30 @@ export async function revalidate(): Promise<void> {
 
   setState({ isRevalidating: true })
 
+  // What the page had written when this question was ASKED. The answer describes the files as
+  // they were at that moment, and this pass is slow enough — about seven seconds — that a
+  // promote, a demote, a remove or a rename can happen inside it.
+  const askedAt = writeCount()
+
   try {
     const data = await api<QueuesResponse>(
       "GET",
       "/api/queues?fresh=1",
     )
+
+    // A WRITE LANDED WHILE THIS WAS IN FLIGHT, so the payload predates it and committing it
+    // would put the entry back in the lane the user just moved it out of — with the file
+    // saying the opposite, until the next page load agreed with the file again. Drop it: the
+    // copy on screen is already complete, and the only thing this pass adds is fresher
+    // provider fields. It is the same rule the live path states as "the optimistic-edit
+    // clobbering race", which the conditional GET handles there and cannot handle here
+    // (`?fresh=1` re-reads the providers, so it never 304s).
+    // (decision `2026-08-27-a-revalidate-never-overwrites-a-write-it-did-not-see`)
+    if (writeCount() !== askedAt) return
+
+    // And never mid-gesture, for the reason `state/live.ts` gives: committing a whole payload
+    // replaces the DOM under a drag.
+    if (uiBusy()) return
 
     setState({ data })
   } catch {
