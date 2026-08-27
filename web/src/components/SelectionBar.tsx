@@ -1,16 +1,16 @@
 import { Button } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
-import { isRandomOrder } from "../lib/kind"
+import { queuePeopleLabel } from "../lib/people"
 import { openPlayMenu } from "../state/overlays"
+import { usePeople } from "../state/people"
 import {
   clearSelection,
   useSelected,
 } from "../state/selection"
 import {
-  channelSetIds,
+  curatedIds,
   load,
-  queueIds,
   setStatus,
   useStore,
 } from "../state/store"
@@ -62,6 +62,7 @@ export function SelectionBar({
   currentSet: string | null
 }) {
   const { data, reg } = useStore()
+  const people = usePeople()
   const selected = useSelected()
   const [target, setTarget] = useState("")
   // `null` = "— keep —": the field is not part of this apply.
@@ -75,11 +76,20 @@ export function SelectionBar({
     (currentSet
       ? reg?.sets.find((s) => s.id === currentSet)?.episodes
       : null) ?? 1
-  const family =
-    currentSet && isRandomOrder(data?.sets[currentSet])
-      ? channelSetIds(data)
-      : queueIds(data)
-  const options = family.filter((id) => id !== currentSet)
+  /**
+   * WHERE A SELECTION CAN MOVE: any other Picks queue.
+   *
+   * This used to ask whether the queue you are standing in is random-order and then offer
+   * only its own half of the split — a random-lane queue could move entries to random-lane
+   * queues, a priority-lane one to priority-lane ones. The split was the old
+   * Curated-Pool-versus-Ordered-Queue taxonomy, and it made a move between two Picks queues
+   * impossible for no reason a person could see. Both lanes exist inside EVERY Picks queue
+   * now, so the destination queue's own `add_as` decides which lane the entry lands in
+   * (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
+   */
+  const options = curatedIds(data).filter(
+    (id) => id !== currentSet,
+  )
   const value = options.includes(target)
     ? target
     : (options[0] ?? "")
@@ -277,7 +287,16 @@ export function SelectionBar({
           key={currentSet}
           label="Move to"
           onChange={setTarget}
+          // WHO each destination is for, as the option's trailing chip. Every queue's
+          // displayed name is its ACTIVITY now, so a list of them reads "Movies & Shows,
+          // Movies & Shows 2, Movies & Shows 3" and a move lands wherever you guessed
+          // (owner, 2026-08-26). The badge is what the shelf says with faces.
           options={options.map((id) => ({
+            badge: queuePeopleLabel(
+              people.byQueue[id] ?? [],
+              people.people,
+              people.groups,
+            ),
             label: data!.sets[id]!.label,
             value: id,
           }))}

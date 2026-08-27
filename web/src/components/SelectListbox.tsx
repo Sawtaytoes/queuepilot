@@ -122,7 +122,14 @@ export function SelectListbox({
         isDisabled: option.isDisabled,
         label: (
           <span data-value={option.value}>
-            {option.label}
+            {/* The text in its OWN element, so it can ellipsise independently of the chip
+                beside it. A bare text node next to a `Badge` becomes an anonymous flex item
+                once the row is laid out as a flex line, and an anonymous item takes no
+                `min-width: 0` — so the trigger sized to the whole string and the Rules
+                header scrolled sideways at 390px the day the account chip landed. */}
+            <span className="optionlabel">
+              {option.label}
+            </span>
             {option.badge ? (
               <Badge
                 appearance="outline"

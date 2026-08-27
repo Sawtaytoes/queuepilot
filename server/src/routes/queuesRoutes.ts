@@ -230,6 +230,12 @@ export function queuesRoutes(): Hono {
             title: tiles.displayFor(e.value),
             resolved: false,
             done: Boolean(e.done),
+            // The LANE, for the same reason `add_as` is here and by the same zero-cost read:
+            // it is written on the entry, so it costs one property access. Without it every
+            // entry falls into the set's default lane on first paint, and the Picks page's
+            // divider — plus the run of tiles either side of it — moves when /api/queues
+            // lands. That is precisely the layout shift this endpoint exists to prevent.
+            placement: placementOf(e.value && typeof e.value === 'object' ? e.value : null),
           })),
         };
       }

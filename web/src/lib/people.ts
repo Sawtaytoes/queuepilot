@@ -344,3 +344,48 @@ export function queueTitle(
     ? label
     : `${label} ${duplicateNumber}`
 }
+
+/**
+ * WHO A QUEUE IS FOR, in one short string — the text form of `PeopleRow`.
+ *
+ * A shelf, a landing card and the queue editor all draw the faces. A DROPDOWN cannot: an
+ * option row is a line of text, and `SelectListbox` takes a `badge` string beside it. Without
+ * one, a list of queues is a list of activities — "Movies & Shows", "Movies & Shows 2",
+ * "Movies & Shows 3" — because the hand-typed name that used to carry the household is gone
+ * (decision `2026-08-25-a-queue-is-people-plus-an-activity`). The owner reported exactly that
+ * on 2026-08-26: *"it's not clear now that we're using auto-names."*
+ *
+ * REQUIRED members only, and it is not an oversight. The nice-to-have tray is what a face can
+ * say with a dashed ring and a line of text cannot; listing both would put four names in a
+ * dropdown badge and tell you less than two do. It is the same reduction the shelf makes when
+ * it draws optional faces at `sm`.
+ *
+ * Three names at most, then a `+n` — the badge sits at the right-hand end of an option row
+ * that already holds a name, and a long one pushes the row into a wrap or an ellipsis.
+ */
+export function queuePeopleLabel(
+  members: readonly QueueMember[],
+  people: readonly Person[],
+  groups: readonly GroupWithRoster[],
+): string {
+  const nameOf = (member: QueueMember): string =>
+    member.kind === "group"
+      ? (groups.find((g) => g.id === member.id)?.label ??
+        member.id)
+      : (people.find((p) => p.id === member.id)
+          ?.displayName ?? member.id)
+
+  const required = members.filter(
+    (m) => m.role === "required",
+  )
+
+  // "Anybody" and not an empty string: a queue nobody has filed yet is a real state, and a
+  // blank badge reads as data that failed to load. Same word `PeopleRow` uses for it.
+  if (required.length === 0) return "Anybody"
+
+  const names = required.map(nameOf)
+
+  if (names.length <= 3) return names.join(", ")
+
+  return `${names.slice(0, 3).join(", ")} +${names.length - 3}`
+}
