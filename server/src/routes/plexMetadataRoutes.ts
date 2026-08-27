@@ -1,10 +1,15 @@
 import { Hono } from 'hono';
+import * as cache from '../cache.js';
 import * as plex from '../plex.js';
 import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
 import { parseSearchQuery, rankByYear } from '../searchQuery.js';
 import { binaryResponse } from './binaryResponse.js';
+
+/** The member ORDER as one comparable string — the only field a Plex re-order moves. */
+const memberOrder = (children: readonly plex.CollectionChild[] | null): string =>
+  (children || []).map((ch) => ch.ratingKey).join(',');
 
 /**
  * The read-only Plex-facing lookups: search, the profile/rating facets, the "Start from…"
@@ -266,14 +271,40 @@ export function plexMetadataRoutes(): Hono {
     }
   });
 
+  /**
+   * A collection's members, in the collection's own order.
+   *
+   * `?fresh=1` re-reads them from Plex and rewrites the cache row. The "What plays" panel
+   * asks for the cached copy first and then for this, so the list paints at once and
+   * CORRECTS itself a moment later — the owner asked for that shape over a blocking live
+   * read, so the panel never sits empty waiting on Plex
+   * (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
+   *
+   * Why the panel and not a shorter TTL: a re-order changes no timestamp Plex reports, so no
+   * validator and no clock can see one. Opening the panel is the moment the answer has to be
+   * right, and it is a single container read.
+   *
+   * A CHANGED order also bumps the cache generation, so the grid behind the panel re-reads
+   * too. Its tile names the next member by position — that is the field a re-order moves, and
+   * leaving it stale is the bug reported on 2026-08-26 in a different place.
+   */
   app.get('/collection/:ratingKey/children', async (c) => {
     try {
       // Every progress field on a member row is the querying account's: a movie's `watched`,
       // and the "154/155 watched" a show member prints in the series picker.
       const { scope } = await pickerScope(c);
-      const children = await plex.collectionChildren(c.req.param('ratingKey'), scope);
+      const rk = c.req.param('ratingKey');
+      const isFresh = ['1', 'true', 'yes'].includes((c.req.query('fresh') ?? '').toLowerCase());
+      // Read BEFORE the drop, so the comparison below is against what the grid is painting.
+      const stale = isFresh
+        ? await cache.getCollectionChildren<plex.CollectionChild[]>(rk, null, scope.account ?? '')
+        : null;
+      if (isFresh) await cache.dropCollectionChildren(rk);
+      const children = await plex.collectionChildren(rk, scope);
       if (!children) return c.json({ error: 'no collection' }, 404);
-      return c.json({ children });
+      const isChanged = Boolean(stale) && memberOrder(stale) !== memberOrder(children);
+      if (isChanged) await cache.bumpGeneration();
+      return c.json({ children, isChanged });
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

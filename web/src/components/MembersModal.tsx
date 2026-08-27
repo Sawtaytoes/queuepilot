@@ -20,7 +20,11 @@ import {
   useOverlays,
 } from "../state/overlays"
 import { saveSkipList } from "../state/queueEntry"
-import { useStore } from "../state/store"
+import {
+  fetchAll,
+  setState,
+  useStore,
+} from "../state/store"
 import { Modal } from "./Modal"
 
 /**
@@ -165,6 +169,17 @@ export function MembersModal() {
   const [rows, setRows] = useState<MemberRow[] | null>(null)
   const [note, setNote] = useState("")
   const [isSaving, setIsSaving] = useState(false)
+  /**
+   * The re-read against Plex that runs AFTER the cached rows paint. See `recheck` below for
+   * why it is a second pass rather than the only one.
+   *
+   * `null` = not running and nothing to say. The two strings are what the chip prints, and
+   * the chip is the point: the owner asked that a list which is about to correct itself SAY
+   * so, rather than re-ordering under him with no warning.
+   */
+  const [recheck, setRecheck] = useState<
+    "checking" | "updated" | null
+  >(null)
   /** The keys this panel will write as skipped. Seeded from the set the moment the rows land,
    *  then owned by the user until Save. */
   const [skips, setSkips] = useState<Set<string>>(
@@ -194,6 +209,7 @@ export function MembersModal() {
 
     setRows(null)
     setNote("")
+    setRecheck(null)
 
     const qs = [
       setId ? `set=${encodeURIComponent(setId)}` : "",
@@ -225,6 +241,70 @@ export function MembersModal() {
       return toEpisodeRows(res, unitOf(item, vocab))
     }
 
+    /**
+     * Pass 2, collections only: ask Plex again, with the cache row thrown away first.
+     *
+     * A collection's member order is Plex's own (`collectionSort`), and re-ordering one
+     * moves nothing the derived cache can validate against — no timestamp, no count, no
+     * member. So the cached copy can be wrong for up to its 24 h TTL, which is what the
+     * owner hit: he put a fanedit first in Plex and the app kept the old order
+     * (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
+     *
+     * It runs after pass 1 has painted rather than instead of it: opening the panel must
+     * not wait on a Plex round trip, and the correction is worth about a second when it
+     * lands. A failure here is SILENT — pass 1's rows are the ones already on screen and
+     * still the best answer available.
+     */
+    const recheckAgainstPlex = async () => {
+      if (!isCollection) return
+
+      setRecheck("checking")
+
+      try {
+        const res = await api<{
+          children: CollectionChild[]
+          isChanged?: boolean
+        }>(
+          "GET",
+          `/api/collection/${ratingKey}/children${q ? `${q}&` : "?"}fresh=1`,
+        )
+
+        if (isStale) return
+
+        const next = toMemberRows(res.children || [], t)
+        const owned = new Set(
+          next
+            .map((r) => r.ratingKey)
+            .filter((k): k is string => Boolean(k)),
+        )
+
+        setRows(next)
+        // The user's own ticks OUTRANK the seed on this pass — they may have been editing
+        // while it was in flight. Only keys the re-read dropped leave the set; a member Plex
+        // has since ADDED seeds from the set's stored list, exactly as pass 1 does.
+        setSkips((prev) => {
+          const kept = [...prev].filter((k) => owned.has(k))
+          const added = skippedRef.current.filter(
+            (k) => owned.has(k) && !prev.has(k),
+          )
+
+          return new Set([...kept, ...added])
+        })
+        setRecheck(res.isChanged ? "updated" : null)
+
+        // The grid behind this panel names the next member BY POSITION, so a re-order makes
+        // its tile wrong too. The server bumped the cache generation for the same reason;
+        // this is the open page acting on it.
+        if (res.isChanged) {
+          const [data, reg] = await fetchAll()
+
+          if (!isStale) setState({ data, reg })
+        }
+      } catch {
+        if (!isStale) setRecheck(null)
+      }
+    }
+
     void load()
       .then((next) => {
         if (isStale) return
@@ -243,6 +323,8 @@ export function MembersModal() {
             skippedRef.current.filter((k) => owned.has(k)),
           ),
         )
+
+        return recheckAgainstPlex()
       })
       .catch((e: Error) => {
         if (isStale) return
@@ -338,6 +420,20 @@ export function MembersModal() {
           <p className="memberscount">
             {playing} of {managed.length} {unitWord} play
             {playing === 1 ? "s" : ""}
+            {recheck ? (
+              <Badge
+                intent={
+                  recheck === "updated"
+                    ? "accent"
+                    : "neutral"
+                }
+                size="sm"
+              >
+                {recheck === "updated"
+                  ? "Updated from Plex"
+                  : "Checking Plex…"}
+              </Badge>
+            ) : null}
           </p>
           <ul className="memberlist" id="memberlist">
             {rows.map((row, i) => (
