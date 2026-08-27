@@ -274,7 +274,23 @@ interface SetRegistryCommon {
   power_off_when_done: boolean;
   /** IMMUTABLE — HA automations / NFC cards / MQTT reference it. */
   id: string;
+  /**
+   * The queue's own name, or its ID when it has none.
+   *
+   * The id fallback is what makes this field always printable, and it is exactly why a caller
+   * cannot use it to decide whether a name was TYPED — `has_explicit_label` answers that.
+   */
   label: string;
+  /**
+   * Whether `label:` is actually on disk.
+   *
+   * A queue's name is OPTIONAL as of 2026-08-26: with nothing stored, the card reads its
+   * ACTIVITY ("Movies & Shows", numbered when two collide) and the faces beside it say which
+   * one it is (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+   * The same shape as `has_explicit_profiles`, and for the same reason — the normalized field
+   * cannot tell "absent" from "written", and here the difference decides what the UI prints.
+   */
+  has_explicit_label: boolean;
   /**
    * Product kind: `picks` | `rules` after normalize(). On disk the legacy spellings
    * (`movies` / `anime` / `cartoons` / `demo`) are still accepted and mapped here

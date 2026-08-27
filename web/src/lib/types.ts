@@ -393,6 +393,18 @@ export type RegistrySet = {
   weights?: Record<string, number>
   profiles?: Binding[]
   has_explicit_profiles?: boolean
+  /**
+   * Whether a NAME was typed for this queue, as opposed to `label` falling back to the id.
+   *
+   * A queue's name is optional: with nothing stored the card reads its ACTIVITY, numbered
+   * when two collide, and the faces beside it say which one it is (decision
+   * `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). `label` cannot answer
+   * this — the server makes it printable by falling back to the id — so this flag is what
+   * `queueTitle` reads. Optional on the type for the same reason `has_explicit_profiles` is:
+   * an older payload simply does not carry it, and absent must read as "no name typed"
+   * rather than crash.
+   */
+  has_explicit_label?: boolean
   /** Which binding the Play/Channels dropdowns seed to (a binding's `plex_user`).
    * A stale value falls back to `profiles[0]`. */
   default_profile?: string | null

@@ -20,6 +20,7 @@ import {
 } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
 import { isRandomOrder } from "../lib/kind"
+import { queueNumbers, queueTitle } from "../lib/people"
 import {
   membersMatchPeople,
   resolveMembers,
@@ -284,8 +285,12 @@ function PlayCard({
  */
 function ChannelCard({
   channel,
+  duplicateNumber,
 }: {
   channel: RegistrySet
+  /** The number after the activity when two nameless pools would read identically, or null.
+   *  Ignored outright when the pool has a name of its own. */
+  duplicateNumber: number | null
 }) {
   const people = usePeople()
   const isRewatch = channel.behavior === "rewatch"
@@ -348,7 +353,11 @@ function ChannelCard({
   return (
     <PlayCard
       kind="rules"
-      label={channel.label}
+      // Its own name when it has one — "Shorts", "Movies" — and its ACTIVITY when it has
+      // not. A rules pool is as much a `watching` thing as a curated queue is, so the same
+      // rule applies to both cards on this grid
+      // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+      label={queueTitle(channel, duplicateNumber)}
       set={channel}
       // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
       // until you know one is Younger Kids and the other Older Kids, and that used to be
@@ -548,6 +557,18 @@ export function PlayView({
   )
 
   /**
+   * The number a nameless queue wears after its activity, over the WHOLE registry.
+   *
+   * Computed on the registry rather than on `shown`, so a filter never renumbers what is
+   * left. "Movies & Shows 2" has to be the same card whether or not Linus is ticked; a
+   * number that moves with the filter is a different card every time you look.
+   */
+  const numbers = useMemo(
+    () => queueNumbers(reg?.sets ?? [], people.byQueue),
+    [reg, people.byQueue],
+  )
+
+  /**
    * WHAT A CHIP WILL SHOW YOU, counted over the same predicate the grid uses.
    *
    * Not "how many queues is this person on" — that number stops predicting the tap the
@@ -720,12 +741,33 @@ export function PlayView({
           ? null
           : shown.map((e) =>
               e.kind === "rules" ? (
-                <ChannelCard channel={e.set} key={e.id} />
+                <ChannelCard
+                  channel={e.set}
+                  duplicateNumber={
+                    numbers.get(e.id) ?? null
+                  }
+                  key={e.id}
+                />
               ) : (
                 <PlayCard
                   key={e.id}
                   kind="picks"
-                  label={data!.sets[e.id]!.label}
+                  // The REGISTRY's label, not the queues payload's: only the registry carries
+                  // `has_explicit_label`, which is what separates a name somebody typed from
+                  // the id the server falls back to.
+                  label={queueTitle(
+                    reg?.sets.find(
+                      (x) => x.id === e.id,
+                    ) ?? {
+                      // No registry entry yet — one payload arrived before the other. All
+                      // that is known is the queues payload's label, so it is treated as
+                      // EXPLICIT: showing it beats showing an activity guessed from nothing.
+                      activity: "watching",
+                      has_explicit_label: true,
+                      label: data!.sets[e.id]!.label,
+                    },
+                    numbers.get(e.id) ?? null,
+                  )}
                   // The registry entry, so a Plex Picks card and a Plex Rules card two
                   // cards apart render in the same amber rather than one of them in the
                   // neutral accent.

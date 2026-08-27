@@ -36,6 +36,7 @@
 // instead of asserting that something came back.
 //
 // CODE here, DATA in `/config/queuepilot.sqlite`. Fixtures are Ada, Grace and Linus.
+import { activityLabel } from '../activity.js';
 import type { Activity } from '../activity.js';
 import type { GroupMembership, QueueMember, ResolvedMember } from '../queuePeople.js';
 import type { PlayItem } from '../types.js';
@@ -110,7 +111,10 @@ export function toResolvedMembers(
  *  registry shapes (`QueueSet` / `RotationSet`) both satisfy it and neither is imported. */
 export interface CandidateSet {
   id: string;
+  /** The registry's, so it falls back to the id. Read `has_explicit_label` before showing it. */
   label: string;
+  /** Whether a name was TYPED. Absent on a hand-built fixture, which reads as "no name". */
+  has_explicit_label?: boolean;
   enabled: boolean;
   activity: Activity;
   behavior?: string | null;
@@ -177,7 +181,12 @@ export function candidatesFor({
       providerLabel: set.vocabulary?.name ?? '',
       queueActivity: set.activity,
       setId: set.id,
-      setLabel: set.label || set.id,
+      // The queue's own name when it has one, its ACTIVITY when it has not. `set.label`
+      // falls back to the ID, so a nameless queue used to arrive at the result card as
+      // `movies_shows` (decision
+      // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). No NUMBER here:
+      // this is one card for one draw, not a list where two could sit side by side.
+      setLabel: set.has_explicit_label ? set.label : activityLabel(set.activity),
       source: set.source,
       tile,
     });
