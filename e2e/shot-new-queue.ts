@@ -84,7 +84,7 @@ try {
 
   // 1. The landing, wide. NOT `fullPage`: the claim is about the link row near the top,
   //    and a 17-set full page shrinks that row to an unreadable band in the PR.
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/newqueue-${TAG}-wide.png` });
 
@@ -96,14 +96,14 @@ try {
 
   // 3. The Narrow View, where the toolbar this button replaces never mounted at all.
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/newqueue-${TAG}-narrow.png` });
 
   // 4. What the button opens. Skipped, loudly, when there is no button — which is the whole
   //    point of the BEFORE frame.
   await page.setViewportSize({ width: 1420, height: 940 });
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await settle();
 
   const hasTrigger = await page

@@ -119,7 +119,7 @@ try {
   await shot('shelfhead', '.shelf h2');
 
   // 2 — the Groups editor's reorder pair. `GroupBar` mounts on the PLAY landing only.
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#heading', { timeout: 30000 });
   await page.waitForTimeout(1800);
   if (await page.locator('#groupsedit').count()) {
