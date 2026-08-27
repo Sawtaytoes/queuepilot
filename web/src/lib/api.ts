@@ -4,11 +4,35 @@
  * `Error` carrying that message and every call site does its own try/catch with a
  * toast. Keeping that shape means the error strings the user sees are unchanged.
  */
+/**
+ * How many WRITES this page has made, ever.
+ *
+ * A background pass that swaps a whole payload in — phase 3's `revalidate()` — asked the
+ * server a question whose answer is only true of the files as they were when the request
+ * went OUT. That pass takes about seven seconds, so a promote made while it is in flight is
+ * already missing from the answer when it arrives, and committing it paints the entry back
+ * where it was: the screen undid a move the FILE had kept, about a second after the tap.
+ *
+ * A caller reads this before its fetch and again after, and drops the payload if the number
+ * moved. It counts at CALL time rather than on completion, so a write still in flight counts
+ * too — that is the same race one beat earlier.
+ *
+ * The live path solves the same problem two other ways, and neither one covers this pass: the
+ * conditional GET 304s when the YAML has not moved (`?fresh=1` always reads the providers, so
+ * it always answers 200), and `uiBusy()` defers a commit landing mid-gesture (a tap on a menu
+ * row is not a gesture and leaves nothing busy).
+ */
+let writes = 0
+
+export const writeCount = () => writes
+
 export async function api<T = unknown>(
   method: string,
   url: string,
   body?: unknown,
 ): Promise<T> {
+  if (method !== "GET") writes += 1
+
   const res = await fetch(url, {
     body: body ? JSON.stringify(body) : undefined,
     headers: body

@@ -1,6 +1,10 @@
 import { useSyncExternalStore } from "react"
 
+import { isStartable } from "../lib/tileFace"
 import type { StartPoint, TileEntry } from "../lib/types"
+
+/** The two lanes a Picks queue is drawn in. Mirrors `AddAs` on the wire. */
+export type Lane = "priority" | "random"
 
 /**
  * The five things that float above a view: the tile context menu, the "Start
@@ -21,6 +25,15 @@ export type EntryActions = {
   item: TileEntry
   save: (start: StartPoint | null) => Promise<unknown>
   refresh: () => void
+  /**
+   * How to remove the entry.
+   *
+   * NOT a tile-menu row — the ✕ on the card is the remove, in every editable grid
+   * (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`), and a menu
+   * that repeats what the card already carries is a menu with nothing in it
+   * (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`). It stays on the type
+   * because `PosterTile`'s ✕ and the entry sheet both call it.
+   */
   remove?: () => void
   removeLabel?: string
   /**
@@ -30,6 +43,21 @@ export type EntryActions = {
    */
   skip?: () => void
   skipLabel?: string
+  /**
+   * The entry's LANE, and how to move it — a promote or a demote without a drag.
+   *
+   * Absent on anything that is not a Picks queue entry: a rules channel's curated members are
+   * one list, not two lanes, so the rows are not rendered there rather than rendered and
+   * inert. Present on a queue entry wherever it is drawn, so the Home shelf's tiles get the
+   * same two rows the queue page's do.
+   */
+  lane?: {
+    current: Lane
+    /** Already at the head of the Priority queue, so "Play this next" would do nothing. */
+    isFirst: boolean
+    moveTo: (lane: Lane) => void
+    playNext: () => void
+  }
   /** A Plex Home profile's `user_uuid`, set for a per-profile channel so the start
    * picker scopes its "watched" marks to THAT profile (not the admin account). Omitted
    * for queues/admin, which read Bob's view. */
@@ -151,11 +179,31 @@ export const useOverlays = () =>
     () => overlays,
   )
 
+/**
+ * Does this entry have anything to PUT in the tile menu?
+ *
+ * The menu carries only what the card cannot: the lane moves, the manual start point and
+ * Skip. Remove is on the card as ✕ and is deliberately not a row. So an entry with none of
+ * those — a movie member of a rules channel — would open an empty box, and this is what
+ * stops it: `openTileMenu` no-ops instead, and the long-press does nothing visible.
+ * (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`)
+ */
+export const hasTileMenuActions = (entry: EntryActions) =>
+  Boolean(
+    entry.lane ||
+      entry.skip ||
+      (entry.item && isStartable(entry.item)),
+  )
+
 export const openTileMenu = (
   x: number,
   y: number,
   entry: EntryActions,
-) => set({ tileMenu: { entry, x, y } })
+) => {
+  if (!hasTileMenuActions(entry)) return
+
+  set({ tileMenu: { entry, x, y } })
+}
 
 export const closeTileMenu = () => {
   if (overlays.tileMenu) set({ tileMenu: null })

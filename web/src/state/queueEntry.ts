@@ -1,12 +1,16 @@
 import { api } from "../lib/api"
+import { isRandomOrder } from "../lib/kind"
 import {
   isSkipListChanged,
   mergeSkipped,
 } from "../lib/skipList"
 import type { QueueItem } from "../lib/types"
 import { refreshData } from "./live"
-import type { EntryActions } from "./overlays"
-import { promotedOrder } from "./queueView"
+import type { EntryActions, Lane } from "./overlays"
+import {
+  effectiveLane,
+  orderAfterLaneMove,
+} from "./queueView"
 import { deselect } from "./selection"
 import {
   bumpRevision,
@@ -141,81 +145,36 @@ export async function skipQueueItem(
 }
 
 /**
- * Move ONE entry between the lanes — the tile's ↑ / ↓, and the same write the drag across the
- * lane divider makes.
+ * TOGGLE one entry's lane — the tile's ↑ / ↓, on the queue page and on a Picks shelf.
  *
- * Two requests, in the order the drag uses and for the same reason: PLACEMENT first, then the
- * order. The other way round leaves a window in which the file says an entry is in a lane the
- * order does not put it in, and a scan landing in that window builds a lineup off the
- * half-written file.
+ * A thin wrapper, deliberately. The arrow and the tile menu's two lane rows are the same
+ * write with different words on them, and they used to be two functions computing the file
+ * order two ways (`promotedOrder` here, `orderAfterLaneMove` there). That is the drift
+ * `2026-08-26-the-tile-menu-carries-what-the-card-cannot` names: a promote from the arrow
+ * and a promote from the menu must land in the same place, and the only way to be sure of
+ * that is for one of them not to have its own implementation.
  *
- * The placement is written SPARSELY — an entry that lands in the lane it already inherits
- * from the queue stores nothing, so it goes on following the queue if the queue's own default
- * is changed later. That is the rule `useGridDrag` already writes by.
+ * The arrow says only "the other lane", so the toggle is all this adds. Everything the old
+ * body carried — the sparse placement write, `placement` before `/order`, the optimistic
+ * paint, the re-sync on failure — is `setEntryLane`, unchanged.
  *
- * A DEMOTE sends no order at all: the pool is shuffled at playback, so its order means
- * nothing, and a reorder there would be a write that changes only the file's bytes.
+ * One behaviour moved with it: a DEMOTE now sends the order too. It used to send none, on
+ * the ground that the pool is shuffled at playback so its order means nothing. That is still
+ * true of the POOL, but the file is one sequence, and an entry that leaves the Priority
+ * queue has to leave the priority run of the file as well.
  */
 export async function moveEntryLane(
   setId: string | null | undefined,
   item: QueueItem,
-  setLane: "priority" | "random",
+  setLane: Lane,
 ) {
-  if (!setId) return
-
-  const from = item.placement ?? setLane
-  const to = from === "priority" ? "random" : "priority"
-  const set = getState().data?.sets[setId]
-  const keys =
-    to === "priority" && set
-      ? promotedOrder(set.items, item.key, setLane)
-      : null
-
-  // Optimistic, like the drag: the tile crosses the divider on the press rather than after
-  // the round trip, and a failure re-syncs from the server below.
-  if (set) {
-    const hit = set.items.find((it) => it.key === item.key)
-
-    if (hit) hit.placement = to === setLane ? null : to
-
-    if (keys) {
-      const byKey = new Map(
-        set.items.map((it) => [it.key, it]),
-      )
-
-      set.items = keys
-        .map((k) => byKey.get(k))
-        .filter((it): it is QueueItem => Boolean(it))
-    }
-
-    bumpRevision()
-  }
-
-  setStatus("Moving…")
-
-  try {
-    await api(
-      "PATCH",
-      `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/placement`,
-      { placement: to === setLane ? "" : to },
-    )
-
-    if (keys) {
-      await api("PATCH", `/api/queues/${setId}/order`, {
-        keys,
-      })
-    }
-
-    setStatus(
-      to === "priority"
-        ? "Moved to the Priority queue"
-        : "Moved to the Random pool",
-      "ok",
-    )
-  } catch (e) {
-    setStatus(`Move failed: ${(e as Error).message}`, "err")
-    refreshData()
-  }
+  await setEntryLane(
+    setId,
+    item,
+    effectiveLane(item, setLane) === "priority"
+      ? "random"
+      : "priority",
+  )
 }
 
 /**
@@ -315,6 +274,21 @@ export const queueEntryActions = (
   item: QueueItem,
 ): EntryActions => ({
   item,
+  // The LANE half of the menu. Only a queue entry has one — a rules channel's members are
+  // not a two-lane list — so this is set here and left off `channelEntryActions`.
+  lane: setId
+    ? {
+        current: laneOf(setId, item),
+        isFirst:
+          getState().data?.sets[setId]?.items.find(
+            (it) => laneOf(setId, it) === "priority",
+          )?.key === item.key,
+        moveTo: (lane) =>
+          void setEntryLane(setId, item, lane),
+        playNext: () =>
+          void setEntryLane(setId, item, "priority", "top"),
+      }
+    : undefined,
   refresh: () => refreshData(),
   remove: () => removeQueueItem(setId, item),
   removeLabel: "Remove from this queue",
@@ -332,3 +306,147 @@ export const queueEntryActions = (
       { start },
     ),
 })
+
+/**
+ * The queue's OWN default lane — what an entry carrying no `placement` of its own means.
+ *
+ * The registry row first, the queues payload second, exactly as `QueueView` resolves it: the
+ * registry always reports an effective `add_as`, while `/api/queues` may still be the shelves
+ * skeleton for a beat.
+ */
+const defaultLaneOf = (
+  setId: string | null | undefined,
+): Lane => {
+  if (!setId) return "priority"
+
+  const state = getState()
+  const set =
+    state.reg?.sets.find((s) => s.id === setId) ??
+    state.data?.sets[setId]
+
+  return isRandomOrder(set) ? "random" : "priority"
+}
+
+/** Which lane one entry is in: its own `placement`, else the queue's default. */
+export const laneOf = (
+  setId: string | null | undefined,
+  item: QueueItem,
+): Lane => effectiveLane(item, defaultLaneOf(setId))
+
+/**
+ * Move ONE entry between the Priority queue and the Random pool.
+ *
+ * The same write the drag across the lane divider makes (`useGridDrag`), reachable without a
+ * drag — which is what the tile menu needed, because a promote was a touch gesture only
+ * (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`).
+ *
+ * `where` says which END of the Priority queue the entry lands on. "Move to the Priority
+ * queue" appends, so a promote never displaces what is already promoted; "Play this next"
+ * puts it first, which is the whole point of that row. The Random pool stores no order — it
+ * is shuffled at playback — so `where` means nothing there and the entry simply joins it.
+ *
+ * OPTIMISTIC, then two writes in the order `useGridDrag` documents: `placement` FIRST, so the
+ * file never says an entry is in a lane the order does not put it in, then `/order` with BOTH
+ * lanes concatenated, priority first, because the file is one sequence.
+ */
+export async function setEntryLane(
+  setId: string | null | undefined,
+  item: QueueItem,
+  lane: Lane,
+  where: "top" | "bottom" = "bottom",
+) {
+  if (!setId) return
+
+  const set = getState().data?.sets[setId]
+
+  if (!set) return
+
+  const defaultLane = defaultLaneOf(setId)
+  const from = laneOf(setId, item)
+  // Sparse, under the same rule the server writes: an entry that lands in the lane it
+  // already inherits keeps saying nothing, so it goes on following the queue if the
+  // queue's own default is changed later.
+  const placement = lane === defaultLane ? null : lane
+  const moved = set.items.find((it) => it.key === item.key)
+
+  if (!moved) return
+
+  moved.placement = placement
+  set.items = orderAfterLaneMove(
+    set.items,
+    defaultLane,
+    [moved.key],
+    lane,
+    where,
+  )
+  bumpRevision()
+
+  const isMove = from !== lane
+
+  setStatus(isMove ? "Moving…" : "Saving order…")
+
+  try {
+    if (isMove) {
+      await api(
+        "PATCH",
+        `/api/queues/${setId}/items/${encodeURIComponent(moved.key)}/placement`,
+        { placement: placement ?? "" },
+      )
+    }
+
+    await api("PATCH", `/api/queues/${setId}/order`, {
+      keys: set.items.map((it) => it.key),
+    })
+    setStatus(
+      isMove
+        ? lane === "priority"
+          ? "Moved to the Priority queue"
+          : "Moved to the Random pool"
+        : "Plays next",
+      "ok",
+    )
+  } catch (e) {
+    setStatus(
+      `${isMove ? "Move" : "Reorder"} failed: ${(e as Error).message}`,
+      "err",
+    )
+    refreshData()
+  }
+}
+
+/**
+ * Re-sequence ONE queue's file order after a BULK lane change.
+ *
+ * `PATCH /api/queues/bulk` writes each entry's `placement` and nothing else, so a promoted
+ * pool entry would join the Priority queue at whatever position it happened to hold in the
+ * file — and the pool is displayed alphabetically, so that position is arbitrary to anyone
+ * looking at the screen. This lands the whole selection at the END of the lane it moved to,
+ * which is what the one-entry menu row does (`setEntryLane`, `where: "bottom"`).
+ *
+ * Runs AFTER the bulk apply's own `load()`, so `laneOf` reads the placements the server has
+ * already written rather than the ones it is about to.
+ */
+export async function settleLanes(
+  setId: string,
+  movedKeys: string[],
+  lane: Lane,
+) {
+  const set = getState().data?.sets[setId]
+
+  if (!set) return
+
+  if (!set.items.some((it) => movedKeys.includes(it.key)))
+    return
+
+  set.items = orderAfterLaneMove(
+    set.items,
+    defaultLaneOf(setId),
+    movedKeys,
+    lane,
+  )
+  bumpRevision()
+
+  await api("PATCH", `/api/queues/${setId}/order`, {
+    keys: set.items.map((it) => it.key),
+  })
+}

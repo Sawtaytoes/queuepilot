@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react"
 
 import { byTitle, isCompleted } from "../lib/tileFace"
 import type { QueueItem } from "../lib/types"
+import type { Lane } from "./overlays"
 
 /**
  * How ONE queue is being looked at: its density, and the filter narrowing what you see.
@@ -153,13 +154,13 @@ export const hasOverrides = (it: QueueItem) =>
  */
 export function splitLanes(
   items: QueueItem[],
-  setLane: "priority" | "random",
+  setLane: Lane,
 ): { priority: QueueItem[]; random: QueueItem[] } {
   const priority: QueueItem[] = []
   const random: QueueItem[] = []
 
   for (const it of items) {
-    if ((it.placement ?? setLane) === "priority")
+    if (effectiveLane(it, setLane) === "priority")
       priority.push(it)
     else random.push(it)
   }
@@ -167,43 +168,54 @@ export function splitLanes(
   return { priority, random: random.sort(byTitle) }
 }
 
+/** Which lane ONE entry is in: its own `placement`, else the queue's default. */
+export const effectiveLane = (
+  item: Pick<QueueItem, "placement">,
+  setLane: Lane,
+): Lane =>
+  (item.placement ?? setLane) === "priority"
+    ? "priority"
+    : "random"
+
 /**
- * The file order after a PROMOTE by button — the entry lands at the END of the Priority lane.
+ * The new FILE order after `movedKeys` land in `lane`.
  *
- * A drag says where it lands; a button cannot, so it has to pick, and it must not pick the
- * head. The Priority lane plays in file order, so dropping a promoted entry wherever its
- * stored position happens to fall can silently make it the next thing that plays — which is
- * an answer nobody asked this control for. Last in the lane is the conservative reading of
- * "promote this": it plays before the pool, and after everything already promoted.
+ * The file is ONE sequence and the engine plays the priority entries in file order, so a
+ * lane change is only half a write — the order has to say the same thing the lane does.
+ * `useGridDrag` reads that order off the DOM after a drop; the tile menu and the selection
+ * bar have no DOM to read, so they compute it here and both go through the same function.
  *
- * A DEMOTE needs none of this and must not reorder: the pool is shuffled at playback, so its
- * order means nothing (`splitLanes` sorts it for lookup alone).
+ * The moved entries land at ONE END of their new lane rather than keeping their file
+ * positions. A promoted pool entry has no meaningful position to keep — the pool is
+ * displayed alphabetically and shuffled at playback — so "wherever it happened to sit in the
+ * file" would look arbitrary on screen. `bottom` is the promote ("after what is already
+ * promoted"); `top` is "Play this next".
  *
- * Returns the whole key list, in the shape `PATCH /api/queues/:id/order` takes.
+ * Callers pass items whose `placement` is ALREADY the new one.
+ * (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`)
  */
-export function promotedOrder(
+export function orderAfterLaneMove(
   items: QueueItem[],
-  key: string,
-  setLane: "priority" | "random",
-): string[] {
-  const laneOf = (it: QueueItem) => it.placement ?? setLane
-  const moved = items.find((it) => it.key === key)
-
-  if (!moved) return items.map((it) => it.key)
-
-  const rest = items.filter((it) => it.key !== key)
+  setLane: Lane,
+  movedKeys: string[],
+  lane: Lane,
+  where: "top" | "bottom" = "bottom",
+): QueueItem[] {
+  const isMoved = new Set(movedKeys)
+  const moved = items.filter((it) => isMoved.has(it.key))
+  const rest = items.filter((it) => !isMoved.has(it.key))
   const priority = rest.filter(
-    (it) => laneOf(it) === "priority",
+    (it) => effectiveLane(it, setLane) === "priority",
   )
-  const pool = rest.filter(
-    (it) => laneOf(it) !== "priority",
+  const random = rest.filter(
+    (it) => effectiveLane(it, setLane) === "random",
   )
+  const target = lane === "priority" ? priority : random
 
-  return [
-    ...priority.map((it) => it.key),
-    key,
-    ...pool.map((it) => it.key),
-  ]
+  if (where === "top") target.unshift(...moved)
+  else target.push(...moved)
+
+  return [...priority, ...random]
 }
 
 /** Apply one queue's filters to its entries. Order is the caller's; sort is applied last. */
