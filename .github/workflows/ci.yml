@@ -506,6 +506,13 @@ jobs:
       - name: Queues keyed by people (offline)
         run: $TSX e2e/queue-people-test.ts
 
+      # A queue's NAME is optional, and the activity fills in. No Plex, its own server and
+      # temp files. The sharp assertions are the file ones: a nameless create writes no
+      # `label:` line and a cleared name DELETES it rather than storing a blank, which is what
+      # `has_explicit_label` reads back and what stops the browser printing a slug on a card.
+      - name: A queue's name is optional (no Plex)
+        run: $TSX e2e/queue-name-test.ts
+
       # THE ROSTER EDITOR GATE. Before `PeopleModal` the roster arrived only through the
       # owner-confirmed mapping file in `/config`, so adding somebody meant editing YAML on the
       # appliance and restarting; this pins the four rules the editor rests on. A person id is a
