@@ -1283,7 +1283,8 @@ body.gdrag .dropstrip {
    so a reach for select does not land on remove. Edit is an outline pencil pill in the
    badge row, away from that stack
    (decision `2026-08-25-checkmark-under-x-edit-by-the-labels`). */
-.tile .check {
+.tile .check,
+.tile .lanebtn {
   display: none;
 }
 /* The tile is the positioning context for `.tilechrome` (see PosterTile). Only the
@@ -1299,13 +1300,16 @@ body.gdrag .dropstrip {
    visible whatever the pointer is doing — that check is state, not an affordance.
    (decision `2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster`) */
 .editable .tile .check,
+.editable .tile .lanebtn,
 .tile .remove {
   opacity: 0;
   transition: opacity 0.12s;
 }
 .editable .tile:hover .check,
+.editable .tile:hover .lanebtn,
 .tile:hover .remove,
 .editable .tile:focus-within .check,
+.editable .tile:focus-within .lanebtn,
 .tile:focus-within .remove,
 .editable .tile.selected .check {
   opacity: 1;
@@ -1314,6 +1318,7 @@ body.gdrag .dropstrip {
    controller, and a hover-capable stylus should still get the quiet treatment. */
 @media (hover: none) {
   .editable .tile .check,
+  .editable .tile .lanebtn,
   .tile .remove {
     opacity: 1;
   }
@@ -1415,23 +1420,52 @@ ul.grid.cards .tile .tileplay {
 .tile .tilechrome .remove:hover {
   background: var(--color-intent-danger-solid);
 }
-.editable .tile .tilechrome .check {
+.editable .tile .tilechrome .check,
+.editable .tile .tilechrome .lanebtn {
   display: flex;
   position: static;
   cursor: pointer;
+  padding: 0;
   width: 28px;
   height: 28px;
   border-radius: 999px;
   align-items: center;
   justify-content: center;
   background: var(--color-scrim);
-  color: transparent;
-  font-weight: 700;
-  font-size: 1rem;
+  color: var(--color-content-primary);
   border: 2px solid var(--color-border-strong);
 }
-.editable .tile .tilechrome .check:hover {
+.editable .tile .tilechrome .check:hover,
+.editable .tile .tilechrome .lanebtn:hover {
   border-color: var(--color-intent-accent-solid);
+}
+/* THE MARK, and the reason this is three rules rather than a `color`.
+   An empty ring is the unchecked state; a hover shows the mark at half strength, so the
+   circle says what pressing it will do; a checked tile shows it solid on the accent fill.
+   Painting the mark with `color` is what failed before — `.tile.selected .check` (0,2,1) is
+   outranked by the rule above (0,3,1), so the checked state never landed and the control
+   looked the same either way. Every state below is written at the SAME specificity as the
+   rule it has to beat. */
+.editable .tile .tilechrome .check svg,
+.editable .tile .tilechrome .lanebtn svg {
+  display: block;
+  opacity: 0.45;
+  transition: opacity 0.12s;
+}
+.editable .tile .tilechrome .check:hover svg,
+.editable .tile .tilechrome .lanebtn:hover svg {
+  opacity: 1;
+}
+.editable .tile .tilechrome .check svg {
+  opacity: 0;
+}
+.editable .tile.selected .tilechrome .check {
+  background: var(--color-intent-accent-solid);
+  border-color: var(--color-intent-accent-solid);
+  color: var(--color-intent-accent-on-solid);
+}
+.editable .tile.selected .tilechrome .check svg {
+  opacity: 1;
 }
 /* In move mode the whole poster is a select target, so show the select cursor, not grab. */
 .editable.move-mode .tile .thumb {
@@ -1444,10 +1478,7 @@ ul.grid.cards .tile .tileplay {
 .tile.selected .thumb {
   border-color: var(--color-intent-accent-solid);
 }
-.tile.selected .check {
-  background: var(--color-intent-accent-solid);
-  color: var(--color-intent-accent-on-solid);
-}
+
 /* Drag feedback: the picked-up tile LIFTS (scale + elevation + accent ring), it doesn't
    just fade — so it's obvious what's moving. Siblings glide out of the way via FLIP
    (transform transition applied inline in lib/flip.ts). Kept transform-only so scroll
@@ -3163,8 +3194,10 @@ ul.grid.rows .tile .tilechrome {
   align-self: center;
 }
 ul.grid.cards .tile .tilechrome .check,
+ul.grid.cards .tile .tilechrome .lanebtn,
 ul.grid.cards .tile .tilechrome .remove,
 ul.grid.rows .tile .tilechrome .check,
+ul.grid.rows .tile .tilechrome .lanebtn,
 ul.grid.rows .tile .tilechrome .remove {
   width: 24px;
   height: 24px;

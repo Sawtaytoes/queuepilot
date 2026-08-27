@@ -167,6 +167,45 @@ export function splitLanes(
   return { priority, random: random.sort(byTitle) }
 }
 
+/**
+ * The file order after a PROMOTE by button — the entry lands at the END of the Priority lane.
+ *
+ * A drag says where it lands; a button cannot, so it has to pick, and it must not pick the
+ * head. The Priority lane plays in file order, so dropping a promoted entry wherever its
+ * stored position happens to fall can silently make it the next thing that plays — which is
+ * an answer nobody asked this control for. Last in the lane is the conservative reading of
+ * "promote this": it plays before the pool, and after everything already promoted.
+ *
+ * A DEMOTE needs none of this and must not reorder: the pool is shuffled at playback, so its
+ * order means nothing (`splitLanes` sorts it for lookup alone).
+ *
+ * Returns the whole key list, in the shape `PATCH /api/queues/:id/order` takes.
+ */
+export function promotedOrder(
+  items: QueueItem[],
+  key: string,
+  setLane: "priority" | "random",
+): string[] {
+  const laneOf = (it: QueueItem) => it.placement ?? setLane
+  const moved = items.find((it) => it.key === key)
+
+  if (!moved) return items.map((it) => it.key)
+
+  const rest = items.filter((it) => it.key !== key)
+  const priority = rest.filter(
+    (it) => laneOf(it) === "priority",
+  )
+  const pool = rest.filter(
+    (it) => laneOf(it) !== "priority",
+  )
+
+  return [
+    ...priority.map((it) => it.key),
+    key,
+    ...pool.map((it) => it.key),
+  ]
+}
+
 /** Apply one queue's filters to its entries. Order is the caller's; sort is applied last. */
 export function applyFilters(
   items: QueueItem[],

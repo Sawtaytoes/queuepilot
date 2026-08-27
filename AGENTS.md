@@ -602,6 +602,8 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/lane-drag-test.ts     # dragging across the lane divider
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/tile-lane-test.ts     # the tile's three controls
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
 server/node_modules/.bin/tsx e2e/tonight-routing-test.ts  # the activity → backend map
@@ -628,12 +630,14 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All ten of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All twelve of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
 | `narrow-scroll-test.ts` | the Narrow View never scrolls horizontally |
 | `drag-stability-test.ts` | a drag's PATH, not its result — reversals, re-inserts, style writes |
+| `lane-drag-test.ts` | dragging across the lane divider — the promote and the demote |
+| `tile-lane-test.ts` | the tile's three controls: the select mark PAINTS when checked, and the lane button promotes / demotes |
 | `routing-test.ts` | the client router and the server's SPA fallback, together |
 | `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
 | `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |
@@ -643,7 +647,7 @@ there rather than in the gated block. All ten of them, in the order `ci.yml` run
 | `tonight-test.ts` | the Tonight surface — the settled tiles, defaults and steps |
 | `board-game-play-test.ts` | a logged play records WHO played, never invents a known-how claim, and no card title paints over the page header |
 
-Three of them — `drag-stability`, `shelf-remove` and `group-create` — were missing from this
+Four of them — `drag-stability`, `lane-drag`, `shelf-remove` and `group-create` — were missing from this
 list while running in CI the whole time. A gate this file does not name is a gate nobody
 re-runs by hand before claiming a change is safe.
 
