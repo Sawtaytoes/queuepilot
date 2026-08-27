@@ -205,14 +205,27 @@ describe('candidatesFor — the queues a session could draw', () => {
     expect(candidatesFor({ ...base, tile: 'reading' })[0]?.providerLabel).toBe('Kavita');
   });
 
-  it('falls back to the wire id when a queue has no label', () => {
+  it('a queue with no name carries its ACTIVITY, never its wire id', () => {
+    // It fell back to the id until 2026-08-26, which put a slug on the result card. A name
+    // is optional now and the activity is what fills in
+    // (decision 2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in).
     expect(
       candidatesFor({
         ...base,
         sets: [set({ id: 'unnamed' })],
         tile: 'shows',
       })[0]?.setLabel,
-    ).toBe('unnamed');
+    ).toBe('Movies & Shows');
+  });
+
+  it('…and a name somebody typed is carried verbatim', () => {
+    expect(
+      candidatesFor({
+        ...base,
+        sets: [set({ has_explicit_label: true, id: 'named', label: 'Manga & Webtoons' })],
+        tile: 'shows',
+      })[0]?.setLabel,
+    ).toBe('Manga & Webtoons');
   });
 });
 

@@ -24,6 +24,7 @@ import {
   ratingOptions,
 } from "../lib/channels"
 import { LINEUP_PRESET_COMMON } from "../lib/countPicker"
+import { queueTitle } from "../lib/people"
 import type {
   Binding,
   LineupDefaults,
@@ -256,7 +257,12 @@ export function DynModal() {
 
     let isStale = false
 
-    setLabel(editing ? editing.label : "")
+    // The TYPED name only. `editing.label` falls back to the id, so seeding from it would
+    // pre-fill a nameless queue's input with `movies_shows` and the next Save would store
+    // that slug as its name.
+    setLabel(
+      editing?.has_explicit_label ? editing.label : "",
+    )
     setKind(
       editing ? editing.kind || "cartoons" : "cartoons",
     )
@@ -387,13 +393,12 @@ export function DynModal() {
     )
 
   const onSubmit = async () => {
+    // No name gate. An empty Name is a legitimate save: the queue is then called after its
+    // ACTIVITY, and the server seeds its immutable id from the activity too
+    // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). On an EDIT
+    // it clears the stored name; `PATCH /api/sets/:id` deletes the `label:` line rather than
+    // storing a blank.
     const name = label.trim()
-
-    if (!name) {
-      setStatus("Name required", "err")
-
-      return
-    }
 
     // No library gate. A channel that ticks nothing pools from EVERY video library
     // (decision `2026-08-17-no-libraries-checked-means-every-library`); the server stopped
@@ -576,23 +581,30 @@ export function DynModal() {
       onSubmit={() => void onSubmit()}
       title={
         editing
-          ? `Configure “${editing.label}”`
+          ? `Configure “${queueTitle(editing, null)}”`
           : "New rules queue"
       }
       titleId="dynmodal-title"
     >
+      {/* OPTIONAL, the same as `#set-label` and for the same reason — a pool with no name of
+          its own is called after its ACTIVITY, and its faces say which one it is
+          (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). The
+          live pools DO have names — "Shorts", "Movies" — and keep them. */}
       <label className="field">
         Name
         <input
           id="dyn-label"
           maxLength={60}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="e.g. Older Kids — Anime"
-          required
+          placeholder="Movies & Shows"
           type="text"
           value={label}
         />
       </label>
+      <p className="subhint" id="dyn-label-hint">
+        Optional. Leave it empty and this pool is called
+        after its activity.
+      </p>
       <label className="field">
         Behavior
         {/* Keyed on openness for the same reason as `#set-kind`: this modal is

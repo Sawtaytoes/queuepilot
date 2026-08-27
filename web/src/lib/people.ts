@@ -302,13 +302,44 @@ export function queueNumbers(
   return out
 }
 
-/** What a queue card says. The activity, and a number only when it needs one — never a
- *  hand-typed string, because there is not one any more. */
+/**
+ * WHAT A QUEUE CARD SAYS.
+ *
+ * The queue's own name when somebody typed one, and its ACTIVITY when nobody did — numbered
+ * only when two nameless queues would otherwise read identically
+ * (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`):
+ *
+ *     Manga & Webtoons     a name, kept verbatim
+ *     Movies               a name, kept verbatim
+ *     Movies & Shows       no name — the activity
+ *     Movies & Shows 2     …and the second one of those
+ *
+ * `has_explicit_label` and NOT `label`, because the server makes `label` printable by falling
+ * back to the id: a nameless queue would otherwise print `movies_shows` here. An older
+ * payload without the flag reads as "no name typed", which is the safe direction — it prints
+ * the activity rather than an id.
+ *
+ * The NUMBER is only ever appended to the activity. Two queues called "Movies" are the
+ * owner's own doing and he can tell them apart; two called "Movies & Shows" are the app's,
+ * and numbering them is the app's job.
+ */
 export function queueTitle(
-  activity: Activity,
+  set: {
+    activity: Activity
+    has_explicit_label?: boolean
+    label?: string
+  },
   duplicateNumber: number | null,
 ): string {
-  const label = ACTIVITY_LABELS[activity] ?? activity
+  const typed = set.has_explicit_label
+    ? (set.label ?? "").trim()
+    : ""
+
+  if (typed) return typed
+
+  const label =
+    ACTIVITY_LABELS[set.activity] ?? set.activity
+
   return duplicateNumber == null
     ? label
     : `${label} ${duplicateNumber}`

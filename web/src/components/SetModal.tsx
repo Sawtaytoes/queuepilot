@@ -5,7 +5,7 @@ import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
 import { SET_LENGTH_PRESETS } from "../lib/countPicker"
 import { normalizeAddAs } from "../lib/kind"
-import { ACTIVITY_LABELS } from "../lib/people"
+import { ACTIVITY_LABELS, queueTitle } from "../lib/people"
 import type {
   Activity,
   Profile,
@@ -162,7 +162,12 @@ export function SetModal() {
   useEffect(() => {
     if (!setModal) return
 
-    setLabel(editing ? editing.label : "")
+    // The TYPED name only. `editing.label` falls back to the id, so seeding from it would
+    // pre-fill a nameless queue's input with `movies_shows` and the next Save would store
+    // that slug as its name.
+    setLabel(
+      editing?.has_explicit_label ? editing.label : "",
+    )
     const nextAddAs = editing
       ? normalizeAddAs(editing.add_as, {
           kind: editing.kind,
@@ -321,13 +326,12 @@ export function SetModal() {
   }
 
   const onSubmit = async () => {
+    // No name gate. An empty Name is a legitimate save: the queue is then called after its
+    // ACTIVITY, and the server seeds its immutable id from the activity too
+    // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). On an EDIT
+    // it clears the stored name; `PATCH /api/sets/:id` deletes the `label:` line rather than
+    // storing a blank.
     const name = label.trim()
-
-    if (!name) {
-      setStatus("Name required", "err")
-
-      return
-    }
 
     // A block with NO library ticked is valid and means every library the source has
     // (decision `2026-08-17-no-libraries-checked-means-every-library`). This used to be a
@@ -438,7 +442,7 @@ export function SetModal() {
 
     if (
       !confirm(
-        `Delete “${editing.label}”${n ? ` and its ${n} entries` : ""}? This cannot be undone.`,
+        `Delete “${queueTitle(editing, null)}”${n ? ` and its ${n} entries` : ""}? This cannot be undone.`,
       )
     ) {
       return
@@ -523,35 +527,42 @@ export function SetModal() {
       onSubmit={() => void onSubmit()}
       title={
         editing
-          ? `Edit “${editing.label}”`
+          ? `Edit “${queueTitle(editing, null)}”`
           : "New picks queue"
       }
       titleId="setmodal-title"
     >
-      {/* THE NAME IS NOT WHAT THE LIST SHOWS ANY MORE, and the hint says so rather than
-          leaving the editor contradicting the page behind it. Since WP-5 a queue card reads
-          its ACTIVITY and its people; this string stays because it is still the queue's
-          searchable name, still what `sets.yaml` carries and still what the delete
-          confirmation quotes — and because the owner kept the right to type one:
-          *"If I want to customize queue names, I can. And in this case, I've already
-          customized my one Kavita queue."* What is gone is the GENERATED name and its
-          override switch (decision `2026-08-25-a-queue-is-people-plus-an-activity` §4). */}
+      {/* THE NAME IS OPTIONAL, and the hint says exactly what an empty one does rather than
+          leaving the editor contradicting the page behind it. A queue with a name is called
+          that everywhere; a queue without one is called after its ACTIVITY, numbered only
+          when two nameless ones would read identically, and the faces below say which is
+          which (decision
+          `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+
+          NOT `required`, as of 2026-08-26. It was, because the queue's immutable id is
+          slugged from it at create — the server seeds that from the ACTIVITY now when
+          nothing is typed, so the one thing the field was load-bearing for has another
+          answer. Clearing it on an edit deletes the `label:` line rather than storing a
+          blank.
+
+          The owner kept the right to type one and uses it: *"If I want to customize queue
+          names, I can. And in this case, I've already customized my one Kavita queue."* */}
       <label className="field">
         Name
         <input
           id="set-label"
           maxLength={60}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="e.g. Alice — Shorts"
-          required
+          placeholder="Movies & Shows"
           type="text"
           value={label}
         />
       </label>
       <p className="subhint" id="set-label-hint">
-        The queue list shows the activity and the people.
-        This name stays searchable and is what the config
-        file carries.
+        Optional. Leave it empty and this queue is called
+        after its activity — the faces below are what tell
+        two of them apart. A name you do type is used
+        everywhere, and is what the config file carries.
       </p>
       <label className="field">
         Type
