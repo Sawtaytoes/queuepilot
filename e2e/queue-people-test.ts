@@ -15,6 +15,12 @@
 //      one account no matter which of its people turned up.
 //   4. **The activity is derived from the provider**, so migrating sixteen queues writes no
 //      bytes, and a stored override is dropped again when it equals the derivation.
+//   5. **A RULES queue carries people the same way a Picks queue does.** `queue_people` is
+//      keyed on the set id and has never known a set's kind, so `kids_shorts` (a
+//      `source: rotation` pool) is seeded by the same group claim and written by the same
+//      endpoint. The UI refused to draw either half until 2026-08-26
+//      (decision `2026-08-26-a-rules-queue-carries-people-too`); nothing on the server
+//      changed, which is exactly what this section is here to keep true.
 //
 // Plex is unreachable on purpose (a closed port), so nothing here talks to the household.
 //
@@ -51,7 +57,13 @@ const same = (name: string, actual: unknown, expected: unknown): void =>
 // `carol_shows` is deliberately claimed by NO group — it is the "everybody in Everyone else"
 // case, and it is the one a label-parsing migration would have guessed at.
 
-const SET_IDS = ['bob_movies', 'bob_alice_anime', 'carol_shows', 'dave_reading'] as const;
+const SET_IDS = [
+  'bob_movies',
+  'bob_alice_anime',
+  'carol_shows',
+  'dave_reading',
+  'kids_shorts',
+] as const;
 
 const SETS = `sets:
 - id: bob_movies
@@ -77,6 +89,16 @@ const SETS = `sets:
   providers:
   - provider: kavita
     libraries: [2]
+- id: kids_shorts
+  label: Shorts
+  kind: cartoons
+  source: rotation
+  sections: [15]
+  item_sections: [15]
+  allowed_ratings: [TV-Y, TV-G, G]
+  plex_user: Kids
+  account_id: 11111111
+  user_uuid: "1111111111111111"
 `;
 
 const QUEUES = `bob_movies:
@@ -98,7 +120,7 @@ const GROUPS = `groups:
   label: Kids
   accounts:
     plex: [kids_plex]
-  sets: [bob_alice_anime]
+  sets: [bob_alice_anime, kids_shorts]
 - id: dave
   label: Dave
   sets: [dave_reading]
@@ -211,6 +233,7 @@ try {
       // Anime is NOT a type — `bob_alice_anime` is `watching`, told apart from `bob_movies` by
       // what is in it. A Kavita queue is the only one here that is not.
       dave_reading: 'reading',
+      kids_shorts: 'watching',
     },
   );
   same(
@@ -267,7 +290,14 @@ try {
   same(
     '…for every group that claims it',
     Object.keys(trays.queues).sort(),
-    ['bob_alice_anime', 'bob_movies', 'dave_reading'],
+    ['bob_alice_anime', 'bob_movies', 'dave_reading', 'kids_shorts'],
+  );
+  // A RULES pool is seeded by the same join, off the same claim list. It is the half the
+  // editor had no screen for, and the rows were here the whole time.
+  same(
+    'a RULES pool is filed the same way a Picks queue is',
+    trays.queues.kids_shorts,
+    [{ id: 'kids', kind: 'group', position: 0, role: 'required' }],
   );
   same(
     'an UNCLAIMED queue comes up with nobody rather than a guess off its label',
@@ -287,6 +317,16 @@ try {
   same('…and reads back Must-be-here first', written.body.members, [
     { id: 'ada', kind: 'person', position: 0, role: 'required' },
     { id: 'linus', kind: 'person', position: 0, role: 'optional' },
+  ]);
+
+  // …and the same endpoint writes a RULES pool. Nothing about `PUT /api/sets/:id/people`
+  // consults a set's kind, and this is what stops that becoming true by accident.
+  const onRules = await put('/api/sets/kids_shorts/people', {
+    members: [{ id: 'grace', kind: 'person', role: 'required' }],
+  });
+  ok('a RULES pool takes a tray write too', onRules.status === 200, `status ${onRules.status}`);
+  same('…and reads it back', onRules.body.members, [
+    { id: 'grace', kind: 'person', position: 0, role: 'required' },
   ]);
 
   const emptied = await put('/api/sets/carol_shows/people', { members: [] });

@@ -28,16 +28,19 @@ import type {
   Binding,
   LineupDefaults,
   Profile,
+  QueueMember,
   RegistrySet,
 } from "../lib/types"
 import {
   closeDynModal,
   useOverlays,
 } from "../state/overlays"
+import { saveQueuePeople, usePeople } from "../state/people"
 import { load, setStatus, useStore } from "../state/store"
 import { CheckboxGroup } from "./CheckboxGroup"
 import { CountPicker, type INFINITE } from "./CountPicker"
 import { Modal } from "./Modal"
+import { PeopleTrays } from "./PeopleTrays"
 import { SelectListbox } from "./SelectListbox"
 
 /**
@@ -150,6 +153,31 @@ export function DynModal() {
         : null,
     [reg, setId],
   )
+
+  // WP-5's trays, on a RULES queue as well as a Picks one. `queue_people` is keyed on the
+  // set id and knows nothing about a set's kind, so this is the same slice, the same
+  // endpoint and the same component the picks editor uses — what was missing was a place to
+  // put it (decision `2026-08-26-a-rules-queue-carries-people-too`).
+  const people = usePeople()
+  const members = setId ? (people.byQueue[setId] ?? []) : []
+
+  /** Save the trays as they move, not on Submit — identical to `SetModal`'s, and for the
+   *  same two reasons: a drag that waits for Save reads as a drag that failed, and
+   *  `saveQueuePeople` is optimistic and snaps back on a refusal. It is also what keeps the
+   *  trays out of `onSubmit`'s `PATCH /api/sets/:id` body, which carries rotation fields
+   *  only and would otherwise need to learn about a table it does not own. */
+  const onPeopleChange = async (next: QueueMember[]) => {
+    if (!setId) return
+
+    try {
+      await saveQueuePeople(setId, next)
+    } catch (e) {
+      setStatus(
+        `Could not move them: ${(e as Error).message}`,
+        "err",
+      )
+    }
+  }
 
   const [label, setLabel] = useState("")
   const [kind, setKind] = useState("cartoons")
@@ -603,6 +631,34 @@ export function DynModal() {
           value={kind}
         />
       </label>
+
+      {/* WHO THIS POOL IS FOR — the same three trays the picks editor draws, because it is
+          the same question and the same table.
+
+          It was missing here, and the reason it was missing does not survive contact with
+          the live app: a rotation pool is bound to one provider ACCOUNT, so the card's meta
+          line already named "Younger Kids", and the trays looked redundant. They are not.
+          An account is which profile Plex signs in as; the trays are WHO the pool is for,
+          and those are two different facts about two different systems — reported as
+          *"No way to add people to a Rules in QueuePilot. I can't add them here to Shorts
+          nor Movies."*
+
+          EDIT ONLY, the same constraint `#set-people` carries and for the same reason:
+          `queue_people` is keyed on the set id and a set being created has not got one yet.
+          A new rules queue is created, then filed. */}
+      {editing ? (
+        <div className="setpeople" id="dyn-people">
+          <p className="fieldlabel">Who is this pool for</p>
+          <PeopleTrays
+            groups={people.groups}
+            members={members}
+            onChange={(next) => {
+              void onPeopleChange(next)
+            }}
+            people={people.people}
+          />
+        </div>
+      ) : null}
 
       <div id="dyn-libs">
         <fieldset className="field">
