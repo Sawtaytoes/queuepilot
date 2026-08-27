@@ -1,9 +1,11 @@
 import { Button } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
+import { normalizeProductKind } from "../lib/kind"
 import { queuePeopleLabel } from "../lib/people"
 import { openPlayMenu } from "../state/overlays"
 import { usePeople } from "../state/people"
+import { settleLanes } from "../state/queueEntry"
 import {
   clearSelection,
   useSelected,
@@ -71,7 +73,11 @@ export function SelectionBar({
   )
   const [weight, setWeight] = useState<number | null>(null)
   const [batchStop, setBatchStop] = useState(KEEP)
+  const [lane, setLane] = useState(KEEP)
 
+  const picksSet = currentSet
+    ? reg?.sets.find((x) => x.id === currentSet)
+    : undefined
   const chapterDefault =
     (currentSet
       ? reg?.sets.find((s) => s.id === currentSet)?.episodes
@@ -110,10 +116,23 @@ export function SelectionBar({
       ? { ...sel, title: item.title }
       : null
   })()
+  // A Picks queue is two lanes; a rules channel's members are one list. The Lane field is
+  // rendered only for the first, so the bar never offers a promote where there is no lane
+  // to promote into.
+  const isPicks =
+    Boolean(currentSet) &&
+    normalizeProductKind(
+      // The registry row first, the queues payload second — the same order `QueueView`
+      // resolves the lane in, and for the same reason: the registry always carries an
+      // effective `kind`.
+      picksSet?.kind ?? data?.sets[currentSet!]?.kind,
+      picksSet?.source ?? data?.sets[currentSet!]?.source,
+    ) === "picks"
   const hasEdit =
     episodes !== null ||
     weight !== null ||
-    batchStop !== KEEP
+    batchStop !== KEEP ||
+    lane !== KEEP
 
   /** One PATCH for the whole selection — see the route's comment for why not N. */
   const applyBulk = async (
@@ -142,7 +161,25 @@ export function SelectionBar({
       setEpisodes(null)
       setWeight(null)
       setBatchStop(KEEP)
+      setLane(KEEP)
       await load()
+
+      // A lane change also settles the ORDER: the bulk route writes `placement` and nothing
+      // else, so without this a promoted entry joins the Priority queue at its old file
+      // position — arbitrary, because the pool it came from is displayed alphabetically.
+      if (
+        currentSet &&
+        (body.placement === "priority" ||
+          body.placement === "random")
+      ) {
+        await settleLanes(
+          currentSet,
+          items
+            .filter((it) => it.set === currentSet)
+            .map((it) => it.key),
+          body.placement,
+        )
+      }
     } catch (e) {
       setStatus(
         `${verb} failed: ${(e as Error).message}`,
@@ -243,6 +280,31 @@ export function SelectionBar({
           value={batchStop}
         />
       </div>
+      {/* LANE — the promote/demote, for a whole selection.
+          Until this shipped, moving an entry between the Priority queue and the Random pool
+          was a drag across the lane divider and nothing else, so it was strictly one entry at
+          a time: "You can't switch priority of a group". A selection is exactly the case a
+          drag cannot serve.
+          (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`) */}
+      {isPicks ? (
+        <div className="bulkfield">
+          <span>Lane</span>
+          <SelectListbox
+            id="bulklane"
+            label="Lane for the selection"
+            onChange={setLane}
+            options={[
+              { label: "— keep —", value: KEEP },
+              {
+                label: "Priority queue",
+                value: "priority",
+              },
+              { label: "Random pool", value: "random" },
+            ]}
+            value={lane}
+          />
+        </div>
+      ) : null}
       {/* The one `solid` control in the bar. This is what `primary` was asking for and
           never got. */}
       <Button
@@ -256,6 +318,7 @@ export function SelectionBar({
               ...(batchStop !== KEEP
                 ? { batch_stops_at: batchStop }
                 : {}),
+              ...(lane !== KEEP ? { placement: lane } : {}),
             },
             "Updated",
           )

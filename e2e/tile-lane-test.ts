@@ -244,9 +244,30 @@ try {
     Boolean(demoteWrite) && JSON.parse(demoteWrite!.body).placement === 'random',
     JSON.stringify(demoteWrite ?? null),
   );
+  // CHANGED 2026-08-27, and the old claim was the opposite one: "the demote writes NO order".
+  //
+  // The arrow and the tile menu's two lane rows were two functions computing the file order
+  // two ways, and they disagreed here — the menu's demote wrote an order, the arrow's did not.
+  // They are one function now (`setEntryLane`), so one of the two claims had to go, and this
+  // is the one that goes: the file is ONE sequence, and an entry that leaves the Priority
+  // queue has to leave the priority run of the file with it. It is also what the drag across
+  // the divider has always written, which is the precedent the arrow says it follows.
+  //
+  // Nothing on screen changes either way — `splitLanes` re-derives the lanes from `placement`
+  // — so what this pins is the FILE, and the order the two writes go out in.
+  const demoteOrderWrite = writes.find((w) => w.url.endsWith('/order'));
   check(
-    'the demote writes NO order — the pool is shuffled, so its order means nothing',
-    !writes.some((w) => w.url.endsWith('/order')),
+    'the demote writes the order too — the file is one sequence, so it must agree with the lane',
+    Boolean(demoteOrderWrite),
+    `writes: ${writes.map((w) => w.url.split('/').pop()).join(' → ')}`,
+  );
+  check(
+    '…and placement still goes FIRST, so the file never says a lane the order contradicts',
+    Boolean(
+      demoteWrite
+        && demoteOrderWrite
+        && writes.indexOf(demoteWrite) < writes.indexOf(demoteOrderWrite),
+    ),
     `writes: ${writes.map((w) => w.url.split('/').pop()).join(' → ')}`,
   );
 

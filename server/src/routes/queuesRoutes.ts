@@ -538,6 +538,12 @@ export function queuesRoutes(): Hono {
         if (wants('volumes')) await queues.setVolumes(set, key, body.volumes);
         if (wants('weight')) await queues.setWeight(set, key, body.weight);
         if (wants('batch_stops_at')) await queues.setBatchStop(set, key, body.batch_stops_at);
+        // LANE, for a whole selection. `setPlacement` keeps the sparse rule — anything that
+        // is not "priority"/"random" clears the entry's own placement, so it goes back to
+        // following the queue's `add_as`. Not part of `reset`: a lane is where the entry IS,
+        // not an override of how it plays, and "Reset to defaults" must not silently
+        // demote a selection.
+        if (wants('placement')) await queues.setPlacement(set, key, body.placement);
         applied.push({ set, key });
       }
       await cache.bumpGeneration();
