@@ -725,6 +725,19 @@ jobs:
       - name: Pool editor keeps Blocked (browser, no Plex needed)
         run: $TSX e2e/pool-editor-keeps-blocked-test.ts
 
+      # A collection RE-ORDERED in Plex reaches the "What plays" panel. Browser, its own
+      # server against a stub Plex whose member order moves under a WARM cache.
+      #
+      # It belongs in this always-on block, and the reason is the defect itself: nothing the
+      # derived cache can validate against moves when only the ORDER changes. `/children`
+      # answers with a container carrying `size` and nothing else, the collection's own
+      # `updatedAt` does not move, and `childCount` is identical on both sides — so this is
+      # the one library change with no signal at all behind it, and a suite that only runs
+      # when a secret happens to be present would not have caught it either
+      # (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
+      - name: A re-ordered collection reaches the panel (browser, stub Plex)
+        run: $TSX e2e/collection-reorder-test.ts
+
       # The shelf's ✕. Browser, no Plex, its own server and temp files.
       #
       # It belongs in this always-on block rather than in the PLEX_TOKEN-gated one below for
