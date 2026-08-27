@@ -2,8 +2,7 @@
  * The pure half of the router: pathname in, route out.
  *
  *   `/`                       MODE LANDING — choose Admin or What to Watch/Play
- *   `/admin`                  ADMIN — every group's sets and app configuration
- *   `/g/<group>`              PLAY, filtered to one QueuePilot group
+ *   `/admin`                  ADMIN — every queue and pool, filtered by `?people=` / `?only=`
  *   `/what-to-watch-play`     WHAT TO WATCH/PLAY — who's here, an activity, and Go
  *   `/what-to-watch-play/surprise`  WHAT TO WATCH/PLAY, on Surprise Me's narrowing step
  *   `/what-to-watch-play/go?…`  WHAT TO WATCH/PLAY with the answers baked in
@@ -28,14 +27,13 @@
  * `surprise` does: the view is What to Watch/Play either way, and a refused preset has to land on that
  * form with what the card did say already filled in.
  *
- * `/g/<group>` is the same VIEW as the Admin landing, not a new one — it is the management
- * page with a filter applied, which is why it parses to `{view: "play"}` carrying a group
- * rather than to a view of its own. Every other route is group-agnostic on purpose: a queue has ONE
- * canonical address (`/q/<id>`) even when it belongs to three groups.
- *
- * `/g/` and not `/p/`: PROFILE is Plex's word in this app (`/api/profiles` is the Home
- * profile list, and the pool editor's second picker is labelled Profile), so the
- * household concept is a GROUP — see `server/src/groups.ts`.
+ * `/g/<group>` is GONE as of 2026-08-26 and redirects to `/admin`. It was the management
+ * page with a GROUP filter applied; that page filters by PEOPLE now — a multi-select in the
+ * query string rather than a single group in the path
+ * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`). A group is
+ * still a real object with a real editor; it is no longer an address. A redirect rather than
+ * a 404 because `/g/<id>` was bookmarkable for nine days and that was half the point of it,
+ * so an old bookmark has to land on a page rather than on an error.
  *
  * `/board-game-collection` and NOT `/collection`, since 2026-08-25. The shelf is one KIND of
  * collection, and the generic word is already Plex's in this app — `type: "collection"` is a
@@ -57,8 +55,9 @@
 
 export type Route =
   | { view: "home" }
+  // ADMIN is the page `play` used to be. There is no `play` route any more: it existed only
+  // to carry a group id, and a group is not an address (see the `/g/<group>` note above).
   | { view: "admin" }
-  | { view: "play"; group: string | null }
   | { view: "boardGameCollection" }
   | { view: "result"; gameId: string | null }
   | {
@@ -96,6 +95,17 @@ const MOVED_PATHS = [
 ] as const
 
 /**
+ * `/g` and `/g/<anything>` — a group page, which no longer exists.
+ *
+ * It cannot be a `MOVED_PATHS` entry because that mapping keeps the TAIL
+ * (`/collection/x` → `/board-game-collection/x`) and this one deliberately drops it: there
+ * is no per-group address to move a group id to. The people filter is not a translation of
+ * a group — a group is a saved set of people, and picking the same people by hand is a
+ * different assertion — so guessing one would be worse than landing on everything.
+ */
+const GROUP_PATH = /^\/g(\/.*)?$/
+
+/**
  * Where a legacy path should be REWRITTEN to, or `null` when it is already canonical.
  *
  * Pure, like the rest of this module: the caller owns the `navigate(…, {replace: true})`.
@@ -111,6 +121,8 @@ export function canonicalPath(
     if (path === from || path.startsWith(`${from}/`))
       return to + path.slice(from.length)
 
+  if (GROUP_PATH.test(path)) return "/admin"
+
   return null
 }
 
@@ -121,15 +133,11 @@ export function parsePath(pathname: string): Route {
 
   if (path === "/admin") return { view: "admin" }
 
-  if (path === "/g") return { group: null, view: "play" }
-
-  const g = path.match(/^\/g\/(.+)$/)
-
-  if (g?.[1])
-    return {
-      group: decodeURIComponent(g[1]),
-      view: "play",
-    }
+  // A retired group page renders ADMIN while `canonicalPath` swaps the address underneath —
+  // the same shape `/collection` uses. Drop this branch and an old bookmark falls through to
+  // the catch-all, which is the MODE landing rather than the page it used to be, so the
+  // redirect would flash a screen nobody asked for.
+  if (GROUP_PATH.test(path)) return { view: "admin" }
 
   const q = path.match(/^\/q\/(.+)$/)
 
@@ -218,8 +226,7 @@ export function labelForPath(p: string): string {
   if (p.startsWith("/q/")) return "‹ Back"
   if (p === "/admin" || p.startsWith("/admin/"))
     return "‹ Admin"
-  if (p === "/" || p.startsWith("/g/"))
-    return "‹ QueuePilot"
+  if (p === "/") return "‹ QueuePilot"
 
   return "‹ QueuePilot"
 }
