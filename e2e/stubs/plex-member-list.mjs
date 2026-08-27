@@ -105,6 +105,33 @@ export function setsYamlWithSkips(skipped) {
   return `${SETS_YAML}    skipped: [${skipped.map((k) => `"${k}"`).join(', ')}]\n`;
 }
 
+/**
+ * The order `/children` currently answers in — Plex's `collectionSort`, which the owner can
+ * change from the Plex UI at any moment.
+ *
+ * Mutable, and that is the whole point: a RE-ORDER is the one library change the derived
+ * cache cannot see (no timestamp moves, no count moves, no member joins or leaves), so a
+ * suite that wants to reproduce one has to move the members under a warm cache. Call
+ * `setMemberOrder` between two reads
+ * (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
+ */
+let memberOrder = MEMBERS.map((m) => m.ratingKey);
+
+/** Re-order the collection, by ratingKey. Unknown keys are ignored; omitted ones drop out. */
+export function setMemberOrder(keys) {
+  memberOrder = keys.filter((k) => MEMBERS.some((m) => m.ratingKey === k));
+}
+
+/** Put the members back in their declared order — call it between suites sharing a stub. */
+export function resetMemberOrder() {
+  memberOrder = MEMBERS.map((m) => m.ratingKey);
+}
+
+/** The members as `/children` would list them right now. */
+export function orderedMembers() {
+  return memberOrder.map((k) => MEMBERS.find((m) => m.ratingKey === k)).filter(Boolean);
+}
+
 /** Start the stub on `port`; `close()` stops it. */
 export function startStubPlex(port) {
   const server = createServer((req, res) => {
@@ -134,7 +161,11 @@ export function startStubPlex(port) {
       return wrap(wanted ? pool.filter((m) => m.title.toLowerCase().includes(wanted)) : pool);
     }
     if (url.pathname === `/library/collections/${COLLECTION.ratingKey}/children`) {
-      return wrap(MEMBERS, { childCount: MEMBERS.length, updatedAt: 1_755_000_000 });
+      // The container carries `childCount`/`updatedAt` that REAL Plex does not send here (it
+      // answers `size` and nothing else). Harmless — the reader treats both as optional — and
+      // it keeps the fixture honest about what a validator would have to work with: neither
+      // field moves when only the ORDER does.
+      return wrap(orderedMembers(), { childCount: MEMBERS.length, updatedAt: 1_755_000_000 });
     }
     if (url.pathname === `/library/metadata/${SHOW.ratingKey}/allLeaves`) {
       return wrap(EPISODES);
