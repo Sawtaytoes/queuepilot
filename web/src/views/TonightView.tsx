@@ -15,6 +15,7 @@ import { SelectListbox } from "../components/SelectListbox"
 import { api } from "../lib/api"
 import { tableSize } from "../lib/boardGames"
 import { writePickSession } from "../lib/pickSession"
+import { WATCH_PLAY_PATH } from "../lib/routePaths"
 import {
   ACTIVITIES,
   ACTIVITY_FILTERS,
@@ -41,7 +42,6 @@ import type {
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
 import { usePeople } from "../state/people"
-import { WATCH_PLAY_PATH } from "../state/route"
 import { setStatus, useStore } from "../state/store"
 
 /**
@@ -93,10 +93,8 @@ import { setStatus, useStore } from "../state/store"
  * Not built, and deliberately not faked: Surprise Me's narrowings. Its own step says so.
  */
 export function TonightView({
-  isHidden,
   step,
 }: {
-  isHidden: boolean
   step: "go" | "surprise" | null
 }) {
   const navigate = useNavigate()
@@ -183,12 +181,9 @@ export function TonightView({
     )
   }
 
-  // Loaded when the view becomes visible rather than at mount: the four views are all
-  // permanently mounted and toggle `hidden`, so an eager fetch here would run on every
-  // landing paint for a screen nobody opened.
+  // Loaded on mount, which is when this page is opened: the route table mounts a view only
+  // on its own route, so no other page pays for a screen nobody asked for.
   useEffect(() => {
-    if (isHidden) return
-
     let isCancelled = false
 
     void api<PeopleResponse>("GET", "/api/people")
@@ -213,7 +208,7 @@ export function TonightView({
     return () => {
       isCancelled = true
     }
-  }, [isHidden])
+  }, [])
 
   // The provider's PRODUCT name, off the registry's own vocabulary — no second request, and
   // no table of brand names in this app's source.
@@ -284,7 +279,7 @@ export function TonightView({
   const drawnPreset = useRef<string | null>(null)
 
   useEffect(() => {
-    if (isHidden || step !== "go") return
+    if (step !== "go") return
     if (drawnPreset.current === presetSearch) return
     drawnPreset.current = presetSearch
 
@@ -332,7 +327,7 @@ export function TonightView({
         )
         navigate(WATCH_PLAY_PATH, { replace: true })
       })
-  }, [isHidden, navigate, presetSearch, step])
+  }, [navigate, presetSearch, step])
 
   // A PRESET CARD IS NOT A FORM. While the draw is in flight the screen says what it is
   // doing rather than painting the form the card exists to skip — a flash of Who's here
@@ -340,7 +335,7 @@ export function TonightView({
   // preset navigates to `/tonight` a moment later and renders it properly anyway.
   if (step === "go") {
     return (
-      <main className="view" hidden={isHidden} id="tonight">
+      <main className="view" id="tonight">
         <EmptyState
           description="Reading the card, then drawing your pick."
           heading="Setting up your pick…"
@@ -350,7 +345,7 @@ export function TonightView({
   }
 
   return (
-    <main className="view" hidden={isHidden} id="tonight">
+    <main className="view" id="tonight">
       {/* 0 — WHAT A PRESET CARD COULD NOT DO. Only ever present after a card sent somebody
           here, and it names the one answer that is missing. */}
       {presetNote ? (

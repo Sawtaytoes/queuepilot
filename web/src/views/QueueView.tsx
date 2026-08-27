@@ -168,10 +168,8 @@ function optimisticItem(hit: SearchHit): QueueItem {
 }
 
 export function QueueView({
-  isHidden,
   setId,
 }: {
-  isHidden: boolean
   setId: string | null
 }) {
   const { data, now, reg } = useStore()
@@ -286,7 +284,7 @@ export function QueueView({
    * claimed that ref first, and the drag needs the same element.
    */
   const flipRef = useFlipList<HTMLDivElement>({
-    isAnimating: !isHidden && isSamePaint,
+    isAnimating: isSamePaint,
     itemSelector: "li.tile",
     keyAttribute: "data-key",
     // Each entry's LANE rides in the signature. Without it a move whose only effect is
@@ -300,7 +298,7 @@ export function QueueView({
       .join("|")}`,
   })
 
-  if (!isHidden && setId) lastPaintedSet.current = setId
+  if (setId) lastPaintedSet.current = setId
 
   const playingSet = activeSet(now, data)
 
@@ -589,7 +587,6 @@ export function QueueView({
       // that belongs to no queue stays Charcuterie because it sits outside this element.
       // (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={regSet?.provider_kind || undefined}
-      hidden={isHidden}
       id="queue"
     >
       <div className="add">
@@ -1163,7 +1160,7 @@ export function QueueView({
         id="grid"
         ref={mergeRefs(lanesRef, flipRef)}
       >
-        {isHidden || !q ? null : allItems.length === 0 ? (
+        {!q ? null : allItems.length === 0 ? (
           <div className="empty">
             <EmptyState
               description="Search above to add something."
