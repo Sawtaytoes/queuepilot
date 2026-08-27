@@ -676,12 +676,16 @@ follow:
   which Plex profile the Shield signs in as; the faces beside it are who the pool is for. Both
   belong on the card, and folding either into the other is what made the Rules pools
   unreachable from every people-shaped control in the app.
-- **The move handle says "Move", and NEVER `≡`.** `≡` in this app means DRAG ME — the shelf
-  grip, the card grip, `useHomeDrags`' own wording. The tray handle is a MENU BUTTON first
-  (that is the keyboard, screen-reader and narrow-board path), which is why the library's
-  default is the word. Passing `moveIcon` here taught the one gesture that cannot work, and
-  the owner reported it as "how do I move these?"
-  ([decision](docs/decisions/2026-08-27-the-tray-move-handle-says-move-it-does-not-wear-the-drag-glyph.md)).
+- **The move handle wears the gesture that can succeed, and the LIBRARY decides which.**
+  `PeopleTrays` passes `moveIcon="≡"` — this app's own grip, the shelf grip, the card grip,
+  `useHomeDrags`' own wording — and `@charcuterie/ui` paints it only while the three trays are
+  side by side. Under the board's `cq-lg` it swaps itself for the word "Move", because there
+  is nothing on screen to drop onto and the glyph would teach the one gesture that cannot
+  work. ⚠️ **Do not hard-code either half here.** Both were tried and both were reported: the
+  glyph everywhere gave "how do I move these?", and the word everywhere gave "the drag handles
+  were fine […] but it has this 'move' button instead"
+  ([decision](docs/decisions/2026-08-27-the-tray-move-handle-wears-the-gesture-that-can-succeed.md),
+  [library](https://github.com/Sawtaytoes/charcuterie/blob/master/docs/decisions/2026-08-27-the-move-handle-wears-the-gesture-that-can-succeed.md)).
 - **A modal that holds the trays is `min(920px, 92vw)`, and that number is not a taste call.**
   The board picks three-lanes-across versus one-lane-plus-a-segmented-control from a CONTAINER
   query at `cq-lg` (48rem / 768px) on its own box. Below it there is ONE tray on screen and
