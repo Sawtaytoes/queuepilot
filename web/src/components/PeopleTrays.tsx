@@ -163,10 +163,23 @@ export function PeopleTrays({
         laneFor("optional"),
         laneFor("roster"),
       ]}
-      // `Board` ships no icon glyphs by default, because a `⋮` renders as nothing where the
-      // font lacks it. This app owns a glyph set and already uses `≡` for its own drag
-      // handles, so the handle reads the same here as it does on a shelf.
-      moveIcon="≡"
+      // NO `moveIcon`, so the handle keeps the library's default — the WORD "Move".
+      //
+      // It passed `moveIcon="≡"` until 2026-08-27, on the argument that this app owns a glyph
+      // set and already uses `≡` for its handles. That argument is exactly backwards, and the
+      // owner reported the result: *"I can't seem to drag 'n drop the names from Everyone Else
+      // anywhere else. There's no right-click or anything. How do I move these?"*
+      //
+      // `≡` in this app means DRAG ME — it is the shelf-reorder grip in `QueuesView`, the card
+      // grip in `PlayView`, and `useHomeDrags` documents it in those words. This control is a
+      // MENU BUTTON first: pressing it lists the other trays, and that is the only path that
+      // works from the keyboard, from a screen reader, and in the narrow board where the other
+      // trays are not on screen to drop onto. Wearing the drag glyph taught the one gesture
+      // that cannot work there
+      // (decision `2026-08-27-the-tray-move-handle-says-move-it-does-not-wear-the-drag-glyph`).
+      //
+      // The word costs ~55px of row, which the library's own docs price. In a tray whose rows
+      // are a face and a name, that is affordable; a control nobody can find is not.
       narrowLaneKey="required"
       onMove={onMove}
     />
