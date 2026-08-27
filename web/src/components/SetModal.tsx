@@ -101,6 +101,17 @@ export function SetModal() {
   const [isReel, setIsReel] = useState(false)
   const [removeCompletedAfter, setRemoveCompletedAfter] =
     useState("")
+  /**
+   * How long a PROMOTED entry stays led-out before it may lead again.
+   *
+   * Free text rather than a preset list, and that is the point of the control: the right
+   * number is a property of WHEN this queue is watched, not a value a menu can guess. A
+   * sitting that runs past midnight stamps its lead after midnight, so a flat 24h puts the
+   * next eligible time LATER on the clock than the following night's scan and the promote
+   * skips a night. Blank follows the 24h product default.
+   * (decision `2026-08-26-the-promote-window-is-a-queue-setting`)
+   */
+  const [promoteWindow, setPromoteWindow] = useState("")
   const [batchStopsAt, setBatchStopsAt] = useState("none")
   // This queue's default batch. 1 is the engine default everywhere, and the point of the
   // control is that the right number differs per queue — one episode for TV, three chapters
@@ -206,6 +217,10 @@ export function SetModal() {
         nextAddAs === "random" ? "" : "24h",
       )
     }
+    // No create-time default: a blank window IS the 24h product default, and seeding "24h"
+    // here would write the key onto every new queue and make the sparse file lie about
+    // which queues have an opinion.
+    setPromoteWindow(editing?.promote_window || "")
     // Seed the blocks. An existing set always reports at least one (the implicit Plex block
     // for a pre-blocks set); a NEW set starts with one block on the first configured
     // provider, so creating a queue is exactly as many clicks as it was before.
@@ -380,6 +395,9 @@ export function SetModal() {
       reel: isReel,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
+      // Empty string drops the key and falls back to the 24h product default; `never`/`0`
+      // clears it to "no window", which means a promoted entry may lead every sitting.
+      promote_window: promoteWindow.trim(),
       // "none" is the engine default, so it is stored as the absence of the key.
       batch_stops_at: batchStopsAt,
       // Likewise 1 — the server drops the key at <= 1, so a queue that never touched this
@@ -847,6 +865,32 @@ export function SetModal() {
           tagged done until you clear them. Playlist / reel
           queues never mark done, so this only applies to
           ordinary consuming queues.
+        </p>
+        <label
+          className="field"
+          htmlFor="set-promote-window"
+        >
+          A promoted entry leads again after
+          <input
+            id="set-promote-window"
+            onChange={(e) =>
+              setPromoteWindow(e.target.value)
+            }
+            placeholder="e.g. 20h — blank = 24h"
+            type="text"
+            value={promoteWindow}
+          />
+        </label>
+        <p className="subhint" id="set-promote-hint">
+          How long a promoted entry stays out of the lead
+          after it plays (`20h`, `24h`, `7d`). It is a
+          rolling timer from the moment playback started,
+          not a calendar day — so set it SHORTER than the
+          gap between your sittings. A queue watched late at
+          night stamps its lead after midnight, and a flat
+          24h then blocks the next night’s scan. Blank means
+          24h; `never` or `0` means a promoted entry leads
+          every sitting.
         </p>
         {/* `batch_stops_at` is PLEX-ONLY: it is read by the curated resolver
             (engine/resolve.js) and by nothing else, so on a queue with no Plex source it is
