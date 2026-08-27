@@ -1,15 +1,28 @@
 import { lazy, Suspense, useEffect } from "react"
-import { useNavigate } from "react-router"
+import {
+  Outlet,
+  Route,
+  Routes,
+  useLocation,
+  useMatch,
+  useNavigate,
+  useParams,
+} from "react-router"
 
-import { Header } from "./components/Header"
-import { NowPlayingBar } from "./components/NowPlayingBar"
+import { Page, usePageChrome } from "./components/Page"
 import { PlayMenu } from "./components/PlayMenu"
 import { SelectionBar } from "./components/SelectionBar"
 import { Toolbar } from "./components/Toolbar"
 import { useMediaQuery } from "./hooks/useMediaQuery"
 import { isRandomOrder } from "./lib/kind"
 import { activeSet } from "./lib/nowPlaying"
-import type { RegistrySet } from "./lib/types"
+import {
+  canonicalCollectionPath,
+  canonicalWatchPlayPath,
+  labelForPath,
+  ROUTE_PATHS,
+  WATCH_PLAY_PATH,
+} from "./lib/routePaths"
 import {
   resolveChannel,
   useChannelSelection,
@@ -20,13 +33,9 @@ import {
   useOverlays,
 } from "./state/overlays"
 import {
-  canonicalPath,
   getRouteOrigin,
-  labelForPath,
-  parsePath,
   trackRouteOrigin,
   usePath,
-  WATCH_PLAY_PATH,
 } from "./state/route"
 import {
   load,
@@ -44,21 +53,19 @@ import { ResultView } from "./views/ResultView"
 import { TonightView } from "./views/TonightView"
 
 /**
- * The four overlays are code-split and hung off overlay state — they are ~1,400
- * lines of TSX (`DynModal` alone is 671) that the landing route never renders, and
- * the landing route is the LCP.
+ * The overlays are code-split and hung off overlay state — they are ~1,400 lines of TSX
+ * (`DynModal` alone is 671) that the landing route never renders, and the landing route is
+ * the LCP.
  *
- * **The VIEWS are deliberately NOT split.** They stay permanently mounted and
- * toggle `hidden`, and the e2e suites read their internals in the same tick they
- * assert the container is visible — `channels-test` does
- * `waitForSelector('#queue:not([hidden])')` and then `$('#qplay:not([hidden])')`,
- * and `ui-test` reads `#search`'s placeholder the same way. A `Suspense` boundary
- * inside the view would paint the shell one commit before the body, so those reads
- * would race a fallback. That is a poor trade for ~15 KB against a DOM contract
- * seventeen suites depend on.
+ * **The VIEWS are not split, and each one now mounts only on its own route.** They used to be
+ * mounted all at once and toggle the `hidden` attribute, which is what the vanilla app did;
+ * the route table replaced that on 2026-08-27. A `Suspense` boundary INSIDE a view would
+ * still be wrong: the e2e suites read a view's internals in the same tick they assert the
+ * container is on screen — `channels-test` does `waitForSelector('#queue:not([hidden])')` and
+ * then `$('#qplay:not([hidden])')` — so the shell must not paint one commit before the body.
  *
- * The overlays have no such contract: every suite CLICKS them open first, and
- * Playwright's selectors auto-wait, so the one-time chunk fetch is invisible.
+ * The overlays have no such contract: every suite CLICKS them open first, and Playwright's
+ * selectors auto-wait, so the one-time chunk fetch is invisible.
  */
 const DynModal = lazy(async () => ({
   default: (await import("./components/DynModal")).DynModal,
@@ -87,39 +94,99 @@ const TileMenu = lazy(async () => ({
 }))
 
 /**
- * The whole editor. View containers are ALWAYS mounted and toggle the `hidden`
- * attribute, exactly as the vanilla app did — the e2e suites select
- * `#queue:not([hidden])` / `#channels:not([hidden])`, the body classes drive
- * `display` on several children, and `#tools` has to exist (hidden) even in the
- * queue view for its computed style to be asserted. Their CONTENT is only rendered
- * for the active view, so a hidden pane never holds stale data.
+ * THE ROUTE TABLE. One `<Route>` per address, under one pathless layout route that carries
+ * everything which outlives a page: the store subscription, the selection bar and the
+ * overlays.
  *
- * The header chrome — heading, sub-line, back target, whether the heading is
- * renameable — is computed here rather than inside each view, which is what the
- * vanilla `renderPlay()` / `renderHome()` / `renderQueue()` / `renderChannels()`
- * each did for themselves.
+ * Every path is a constant from `lib/routePaths.ts`, which is also what the pure test matches
+ * against — so there is one table, not a table and a parser that have to agree
+ * (decision `2026-08-27-the-route-table-is-react-router-not-a-parsed-pathname`).
+ *
+ * The three LEGACY routes each paint the page their address moved to and rewrite the URL
+ * underneath, rather than redirecting first and painting second. A `<Navigate>` would blank
+ * the screen for a frame, and these are addresses people bookmarked — `/g/<id>` for nine
+ * days, `/collection` for a few hours, `/tonight` until it was renamed.
  */
+export const appRouteElements = (
+  <Route element={<AppFrame />}>
+    <Route
+      element={<ModeLandingPage />}
+      path={ROUTE_PATHS.home}
+    />
+    <Route
+      element={<AdminPage />}
+      path={ROUTE_PATHS.admin}
+    />
+    <Route
+      element={<PendingPage />}
+      path={ROUTE_PATHS.pending}
+    />
+    <Route
+      element={<CollectionPage />}
+      path={ROUTE_PATHS.boardGameCollection}
+    />
+    <Route
+      element={<ResultPage />}
+      path={ROUTE_PATHS.result}
+    />
+    <Route
+      element={<WatchPlayPage />}
+      path={ROUTE_PATHS.watchPlay}
+    />
+    <Route
+      element={<QueuesPage />}
+      path={ROUTE_PATHS.queues}
+    />
+    <Route
+      element={<ChannelsPage />}
+      path={ROUTE_PATHS.channels}
+    />
+    <Route
+      element={<QueuePage />}
+      path={ROUTE_PATHS.queue}
+    />
 
-type Chrome = {
-  documentTitle: string
-  heading: string
-  sub: string
-  isSubHidden: boolean
-  back: { target: string; label: string } | null
-  editableSetId: string | null
-  bodyClasses: string[]
-}
+    <Route
+      element={<LegacyGroupPage />}
+      path={ROUTE_PATHS.legacyGroup}
+    />
+    <Route
+      element={<LegacyCollectionPage />}
+      path={ROUTE_PATHS.legacyCollection}
+    />
+    <Route
+      element={<LegacyWatchPlayPage />}
+      path={ROUTE_PATHS.legacyTonight}
+    />
+
+    {/* An unknown path paints the mode landing rather than a blank page, and keeps the
+        address — the server hands index.html to ANY extensionless path, so this is the only
+        thing standing between a typo'd URL and an empty shell. */}
+    <Route
+      element={<ModeLandingPage />}
+      path={ROUTE_PATHS.fallback}
+    />
+  </Route>
+)
 
 export function App() {
-  const navigate = useNavigate()
+  return <Routes>{appRouteElements}</Routes>
+}
+
+/**
+ * The layout route: everything that must outlive a page change.
+ *
+ * `<Outlet />` is where the page goes, and it is FIRST — the header is part of a page, so the
+ * DOM order is header, now-playing bar, view, then the selection bar and the overlays, which
+ * is the order the vanilla app had.
+ */
+function AppFrame() {
   const path = usePath()
 
-  // Before anything reads `getRouteOrigin()` — see the note in `state/route.ts` on why
-  // this is a render-time call and why calling it twice at the same path is harmless.
+  // Before anything reads `getRouteOrigin()` — see the note in `state/route.ts` on why this
+  // is a render-time call and why calling it twice at the same path is harmless. It belongs
+  // here because this component renders above every page.
   trackRouteOrigin(path)
-
-  const route = parsePath(path)
-  const { data, now, reg } = useStore()
 
   useEffect(() => {
     void load()
@@ -130,167 +197,27 @@ export function App() {
   // A route change closes any floating device menu, as the vanilla `route()` did.
   useEffect(closePlayMenus, [path])
 
-  /**
-   * A path that MOVED is rewritten to its new address — `/collection` →
-   * `/board-game-collection`, `/tonight` → `/what-to-watch-play`, and whatever joins it
-   * later (`state/parsePath.ts`, `MOVED_PATHS`).
-   *
-   * REPLACES the entry rather than pushing one, for the reason the group rule below does:
-   * a pushed redirect makes Back land on the old path, which redirects forward again and
-   * the button reads as dead.
-   *
-   * `parsePath` still resolves the old path to its view, so this changes the ADDRESS under
-   * an already-painted screen. Search and hash are carried across — neither route uses one
-   * today, and dropping them silently is the kind of thing a later route would inherit.
-   */
-  useEffect(() => {
-    const canonical = canonicalPath(path)
+  // The bulk-edit bar acts on the OPEN queue, which only `/q/<id>` has. `useMatch` is
+  // react-router asking the same question the route table does, one level above it.
+  const queueMatch = useMatch(ROUTE_PATHS.queue)
 
-    if (!canonical) return
-
-    navigate(
-      canonical +
-        window.location.search +
-        window.location.hash,
-      { replace: true },
-    )
-  }, [navigate, path])
-
-  // Redirects the vanilla render functions did with `location.assign`.
-  useEffect(() => {
-    if (!data) return
-
-    if (route.view === "queue") {
-      const set = data.sets[route.id]
-
-      if (set?.source !== "queue") navigate("/admin")
-    }
-
-    if (
-      route.view === "channels" &&
-      reg &&
-      !rotationChannels(reg).length
-    ) {
-      navigate("/admin")
-    }
-  }, [data, navigate, reg, route])
-
-  // The Channels chrome depends on WHICH channel is selected, which is module
-  // state rather than route state (the bare `/channels` route names none).
-  const { channelId } = useChannelSelection()
-  const selectedChannel = resolveChannel(
-    reg,
-    route.view === "channels" ? route.id : null,
-    channelId,
-  )
-  const chrome = computeChrome(
-    route,
-    data,
-    now,
-    selectedChannel,
-    reg,
-  )
-
-  useEffect(() => {
-    document.title = chrome.documentTitle
-  }, [chrome.documentTitle])
-
-  useEffect(() => {
-    const all = [
-      "mode-view",
-      "queue-view",
-      "play-view",
-      "channel-mode",
-      "movies-channel",
-      "name-editable",
-    ]
-
-    for (const c of all) document.body.classList.remove(c)
-
-    for (const c of chrome.bodyClasses)
-      document.body.classList.add(c)
-
-    if (chrome.editableSetId)
-      document.body.classList.add("name-editable")
-  }, [chrome.bodyClasses, chrome.editableSetId])
-
-  // Wide View: the toolbar lives in the sticky header. Narrow View: at the top of the
-  // Home content, because the header is far too tight to carry it — Bob's explicit ask.
-  //
-  // `isNarrow`, not `isMobile`: the trigger is the WIDTH and nothing else. A docked
-  // Surface is touch-capable and never narrow; a half-width desktop window is the Narrow
-  // View on a machine nobody would call mobile.
-  // (root decision `2026-08-17-the-cramped-layout-is-the-narrow-view-not-mobile`)
-  const isNarrow = useMediaQuery("(max-width: 760px)")
-  const toolbar = <Toolbar />
-
-  // Gate each lazy overlay's chunk fetch on its own overlay state, so importing it
-  // is deferred until the user actually opens it. The overlays self-gate to `null`
-  // when their state is falsy, but a lazy component still triggers its import the
-  // moment it is mounted — so the mount itself has to be conditional, not just the
-  // render inside it. `PlayMenu` stays eager: it is small and the play button is on
-  // the landing route.
+  // Gate each lazy overlay's chunk fetch on its own overlay state, so importing it is
+  // deferred until the user actually opens it. The overlays self-gate to `null` when their
+  // state is falsy, but a lazy component still triggers its import the moment it is mounted —
+  // so the mount itself has to be conditional, not just the render inside it. `PlayMenu`
+  // stays eager: it is small and the play button is on the landing route.
   const overlays = useOverlays()
 
   return (
     <>
-      {route.view === "home" ? null : (
-        <Header
-          back={chrome.back}
-          editableSetId={chrome.editableSetId}
-          heading={chrome.heading}
-          isSubHidden={chrome.isSubHidden}
-          sub={chrome.sub}
-        >
-          {isNarrow ? null : toolbar}
-        </Header>
-      )}
-
-      {/* Directly under the header, and only while something is on
-          screen: the owner asked for the controls "at the top". It
-          renders null when nothing is playing, so it costs no space the
-          rest of the time. */}
-      {route.view === "home" ? null : <NowPlayingBar />}
-
-      <ModeLandingView isHidden={route.view !== "home"} />
-      <PlayView isHidden={route.view !== "admin"} />
-      <PendingView isHidden={route.view !== "pending"} />
-      <CollectionView
-        isHidden={route.view !== "boardGameCollection"}
-      />
-      <ResultView
-        gameId={
-          route.view === "result" ? route.gameId : null
-        }
-        isHidden={route.view !== "result"}
-      />
-      <TonightView
-        isHidden={route.view !== "tonight"}
-        step={route.view === "tonight" ? route.step : null}
-      />
-      <QueuesView
-        isHidden={route.view !== "queues"}
-        toolbar={isNarrow ? toolbar : null}
-      />
-      <ChannelsView
-        isHidden={route.view !== "channels"}
-        routeId={
-          route.view === "channels" ? route.id : null
-        }
-      />
-      <QueueView
-        isHidden={route.view !== "queue"}
-        setId={route.view === "queue" ? route.id : null}
-      />
+      <Outlet />
 
       <SelectionBar
-        currentSet={
-          route.view === "queue" ? route.id : null
-        }
+        currentSet={queueMatch?.params.setId ?? null}
       />
 
-      {/* A single Suspense with a null fallback: an overlay opens on a user gesture,
-          and a spinner for the ~15 ms chunk fetch would flash worse than nothing. */}
+      {/* A single Suspense with a null fallback: an overlay opens on a user gesture, and a
+          spinner for the ~15 ms chunk fetch would flash worse than nothing. */}
       <Suspense fallback={null}>
         {overlays.setModal ? <SetModal /> : null}
         {overlays.dynModal ? <DynModal /> : null}
@@ -305,212 +232,304 @@ export function App() {
   )
 }
 
-function computeChrome(
-  route: ReturnType<typeof parsePath>,
-  data: ReturnType<typeof useStore>["data"],
-  now: ReturnType<typeof useStore>["now"],
-  selectedChannel: RegistrySet | null,
-  // The REGISTRY, for the one thing the queue payload does not carry: which provider a set
-  // draws from, and therefore whether its copy says "episodes each show" or "chapters each
-  // series".
-  reg: ReturnType<typeof useStore>["reg"],
-): Chrome {
-  if (route.view === "home") {
-    return {
-      back: null,
-      bodyClasses: ["mode-view"],
-      documentTitle: "QueuePilot",
-      editableSetId: null,
-      heading: "QueuePilot",
-      isSubHidden: true,
-      sub: "Choose a mode.",
-    }
-  }
+/** The front door: two cards, no header, no now-playing bar. */
+function ModeLandingPage() {
+  usePageChrome({
+    bodyClass: "mode-view",
+    documentTitle: "QueuePilot",
+  })
 
-  if (route.view === "admin") {
-    return {
-      back: { label: "‹ QueuePilot", target: "/" },
-      bodyClasses: ["queue-view", "play-view"],
-      documentTitle: "Admin — QueuePilot",
-      editableSetId: null,
-      heading: "Admin",
-      isSubHidden: false,
-      sub: "Manage queues, rules, groups, and the content QueuePilot can choose.",
-    }
-  }
+  return <ModeLandingView />
+}
 
-  if (route.view === "pending") {
-    return {
-      back: { label: "‹ Admin", target: "/admin" },
-      // `queue-view` is what HIDES the Queues toolbar. Without it the landing's add-to-any-
-      // queue search, queue filter and "New queue" all leak into this page's header.
-      bodyClasses: ["queue-view"],
-      documentTitle: "Pending — QueuePilot",
-      editableSetId: null,
-      heading: "Pending",
-      isSubHidden: false,
-      sub: "New in your libraries, and not picked up by any pool or queue yet.",
-    }
-  }
+function AdminPage() {
+  return (
+    <Page
+      back={{ label: "‹ QueuePilot", target: "/" }}
+      bodyClass="queue-view play-view"
+      documentTitle="Admin — QueuePilot"
+      editableSetId={null}
+      heading="Admin"
+      isSubHidden={false}
+      sub="Manage queues, rules, groups, and the content QueuePilot can choose."
+    >
+      <PlayView />
+    </Page>
+  )
+}
 
-  if (route.view === "tonight") {
-    return {
-      back: { label: "‹ QueuePilot", target: "/" },
-      // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending makes of it.
-      // Without it the landing's search, queue filter and "New queue" all leak into this
-      // page's header.
-      bodyClasses: ["queue-view"],
-      documentTitle: "What to Watch/Play — QueuePilot",
-      editableSetId: null,
-      heading: "What to Watch/Play",
-      isSubHidden: false,
-      sub: "Choose who is here, what you want to do, and what to start.",
-    }
-  }
+function PendingPage() {
+  return (
+    <Page
+      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      // `queue-view` is what HIDES the Queues toolbar. Without it the landing's
+      // add-to-any-queue search, queue filter and "New queue" all leak into this page's
+      // header.
+      bodyClass="queue-view"
+      documentTitle="Pending — QueuePilot"
+      editableSetId={null}
+      heading="Pending"
+      isSubHidden={false}
+      sub="New in your libraries, and not picked up by any pool or queue yet."
+    >
+      <PendingView />
+    </Page>
+  )
+}
 
-  if (route.view === "boardGameCollection") {
-    return {
-      back: { label: "‹ Admin", target: "/admin" },
-      // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending and Tonight
-      // make of it. Without it the landing's search, queue filter and "New queue" leak in.
-      bodyClasses: ["queue-view"],
-      documentTitle: "Collection — QueuePilot",
-      editableSetId: null,
-      heading: "Collection",
-      isSubHidden: false,
-      sub: "Every board game on the shelf. Mark one played, and say who was at the table.",
-    }
-  }
+function CollectionPage() {
+  return (
+    <Page
+      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending and What to
+      // Watch/Play make of it.
+      bodyClass="queue-view"
+      documentTitle="Collection — QueuePilot"
+      editableSetId={null}
+      heading="Collection"
+      isSubHidden={false}
+      sub="Every board game on the shelf. Mark one played, and say who was at the table."
+    >
+      <CollectionView />
+    </Page>
+  )
+}
 
-  if (route.view === "result") {
-    return {
-      // BACK GOES TO WHAT TO WATCH/PLAY, not to the landing: this card is the end of that form, and
-      // "change the answers" is the thing somebody wants next when the pick is wrong.
-      back: {
+function ResultPage() {
+  const { gameId } = useParams()
+
+  return (
+    <Page
+      // BACK GOES TO WHAT TO WATCH/PLAY, not to the landing: this card is the end of that
+      // form, and "change the answers" is the thing somebody wants next when the pick is
+      // wrong.
+      back={{
         label: "‹ What to Watch/Play",
         target: WATCH_PLAY_PATH,
-      },
-      bodyClasses: ["queue-view"],
-      documentTitle: "Your pick — QueuePilot",
-      editableSetId: null,
-      heading: "Your pick",
-      isSubHidden: false,
-      // WP-7: this card is now one of TWO answers — a game off the shelf, or a queue for
-      // the evening — so the sentence says the half they share. It used to promise "say you
+      }}
+      bodyClass="queue-view"
+      documentTitle="Your pick — QueuePilot"
+      editableSetId={null}
+      heading="Your pick"
+      isSubHidden={false}
+      // WP-7: this card is now one of TWO answers — a game off the shelf, or a queue for the
+      // evening — so the sentence says the half they share. It used to promise "say you
       // played it", which a queue card does not offer at all: a queue records its own
       // progress when it plays.
-      sub: "One answer. Reroll it, or start it.",
-    }
-  }
+      sub="One answer. Reroll it, or start it."
+    >
+      <ResultView gameId={gameId ?? null} />
+    </Page>
+  )
+}
 
-  if (route.view === "queues") {
-    return {
-      back: { label: "‹ Admin", target: "/admin" }, // Picks is a top-level configurator
-      bodyClasses: [],
-      documentTitle: "Picks — QueuePilot",
-      editableSetId: null,
-      heading: "Picks",
-      isSubHidden: false,
-      sub: "Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues.",
-    }
-  }
+/** `/what-to-watch-play/<step>` — one view, two steps, and neither is a view of its own. */
+function WatchPlayPage() {
+  const { step } = useParams()
 
-  if (route.view === "channels") {
-    // The kind derives from the selected channel's `behavior`, not from a
-    // `sub`-view argument — that is what lets each rotation be first-class.
-    const isMovies = selectedChannel?.behavior === "rewatch"
+  return (
+    <Page
+      back={{ label: "‹ QueuePilot", target: "/" }}
+      // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending makes of it.
+      bodyClass="queue-view"
+      documentTitle="What to Watch/Play — QueuePilot"
+      editableSetId={null}
+      heading="What to Watch/Play"
+      isSubHidden={false}
+      sub="Choose who is here, what you want to do, and what to start."
+    >
+      <TonightView step={watchPlayStep(step)} />
+    </Page>
+  )
+}
 
-    return {
-      back: { label: "‹ Admin", target: "/admin" },
-      bodyClasses: isMovies
-        ? ["queue-view", "movies-channel"]
-        : ["queue-view"], // reuse: hides the queues toolbar
-      documentTitle: "Rules — QueuePilot",
-      editableSetId: null,
-      heading: "Rules",
-      isSubHidden: false,
-      sub: isMovies
-        ? "The Movies rules queue: a weighted rewatch of films this account has seen — least-watched most likely."
-        : "A rules queue: these filters shape what it can draw from the library.",
-    }
-  }
+/** Anything else in that segment is the bare form, which is what an unknown step deserves. */
+function watchPlayStep(
+  step: string | undefined,
+): "go" | "surprise" | null {
+  return step === "go" || step === "surprise" ? step : null
+}
 
-  if (route.view === "queue") {
-    const q = data?.sets[route.id]
-    const label = q?.label ?? "QueuePilot"
-    const isChannel = isRandomOrder(
-      reg?.sets.find((s) => s.id === route.id) ?? q,
-    )
-    // Plex's words unless the registry says otherwise, so a response that predates
-    // `vocabulary` renders exactly as it always did.
-    const vocab = reg?.sets.find((s) => s.id === route.id)
-      ?.vocabulary ?? {
-      done: "watched",
-      member: "show",
-      name: "Plex",
-      unit: "episode",
-      units: "episodes",
-      verb: "Play",
-    }
-    const playing = activeSet(now, data)
-    const origin =
-      getRouteOrigin() ||
-      (isChannel ? "/channels" : "/queues")
+function QueuesPage() {
+  // The Narrow View puts the toolbar at the top of this page's content instead of in the
+  // header; `Page` asks the same question and renders nothing in the header when it is true,
+  // so exactly one `Toolbar` is mounted either way.
+  const isNarrow = useMediaQuery("(max-width: 760px)")
 
-    // This queue is the running session — say what's on screen (the matching tile
-    // is highlighted too, but a long queue can scroll it out of view).
-    if (playing && playing === route.id) {
-      const n = now.now!
-      const what = n.title || n.showTitle || ""
+  return (
+    <Page
+      // Picks is a top-level configurator.
+      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      bodyClass=""
+      documentTitle="Picks — QueuePilot"
+      editableSetId={null}
+      heading="Picks"
+      isSubHidden={false}
+      sub="Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues."
+    >
+      <QueuesView toolbar={isNarrow ? <Toolbar /> : null} />
+    </Page>
+  )
+}
 
-      return {
-        back: {
-          label: labelForPath(origin),
-          target: origin,
-        },
-        bodyClasses: isChannel
-          ? ["queue-view", "channel-mode"]
-          : ["queue-view"],
-        documentTitle: `${label} — QueuePilot`,
-        editableSetId: route.id,
-        heading: label,
-        isSubHidden: false,
-        sub: `${n.state === "paused" ? "⏸ Paused" : "▶ Now playing"}${what ? ` — ${what}` : ""}`,
+function ChannelsPage() {
+  const navigate = useNavigate()
+  const { channelId: routeId } = useParams()
+  const { reg } = useStore()
+
+  // WHICH channel is selected is module state, not route state — the bare `/channels` route
+  // names none — and the heading's sub-line and the `movies-channel` body class both depend
+  // on it. Same split the vanilla app had.
+  const { channelId } = useChannelSelection()
+  const channel = resolveChannel(
+    reg,
+    routeId ?? null,
+    channelId,
+  )
+  const isMovies = channel?.behavior === "rewatch"
+
+  // A redirect the vanilla render functions did with `location.assign`.
+  useEffect(() => {
+    if (reg && !rotationChannels(reg).length)
+      navigate(ROUTE_PATHS.admin)
+  }, [navigate, reg])
+
+  return (
+    <Page
+      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      // `queue-view` reuse: it hides the queues toolbar.
+      bodyClass={
+        isMovies
+          ? "queue-view movies-channel"
+          : "queue-view"
       }
-    }
+      documentTitle="Rules — QueuePilot"
+      editableSetId={null}
+      heading="Rules"
+      isSubHidden={false}
+      sub={
+        isMovies
+          ? "The Movies rules queue: a weighted rewatch of films this account has seen — least-watched most likely."
+          : "A rules queue: these filters shape what it can draw from the library."
+      }
+    >
+      <ChannelsView routeId={routeId ?? null} />
+    </Page>
+  )
+}
 
-    return {
-      back: { label: labelForPath(origin), target: origin },
-      bodyClasses: isChannel
-        ? ["queue-view", "channel-mode"]
-        : ["queue-view"],
-      documentTitle: `${label} — QueuePilot`,
-      editableSetId: route.id,
-      heading: label,
-      isSubHidden: !isChannel,
-      // A curated pool's members play in a shuffled order — say so, and drop the ordering
-      // UI. In the PROVIDER's nouns: on a reading pool this used to promise "how many
-      // episodes each show plays per visit", which is two wrong words in one sentence.
-      // "contributes" is the neutral verb the type declarations already use for this
-      // number, so the sentence needs no per-provider branch of its own.
-      sub: isChannel
-        ? `A curated pool — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
-        : "",
-    }
-  }
+/** One curated queue or rules pool as a grid — the only page whose chrome is data. */
+function QueuePage() {
+  const navigate = useNavigate()
+  const { setId = "" } = useParams()
+  const { data, now, reg } = useStore()
 
-  // THE LANDING, and there is only one of it now. A group page used to take the heading and
-  // the browser tab title, because `/g/<id>` was a bookmark and a row of tabs all called
-  // "QueuePilot" is not one. The filters live in the query string instead, so there is no
-  // second title to write (decision
-  // `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
-  return {
-    back: null,
-    bodyClasses: ["queue-view", "play-view"], // hides the queues toolbar
-    documentTitle: "QueuePilot",
-    editableSetId: null,
-    heading: "QueuePilot",
-    isSubHidden: false,
-    sub: "Pick something and play it. Drag a card to reorder.",
+  // A redirect the vanilla render functions did with `location.assign`. Waits for `data`:
+  // before it lands, "no such queue" and "not fetched yet" look the same.
+  useEffect(() => {
+    if (!data) return
+
+    if (data.sets[setId]?.source !== "queue")
+      navigate(ROUTE_PATHS.admin)
+  }, [data, navigate, setId])
+
+  const q = data?.sets[setId]
+  const registrySet = reg?.sets.find((s) => s.id === setId)
+  const label = q?.label ?? "QueuePilot"
+  const isChannel = isRandomOrder(registrySet ?? q)
+  // Plex's words unless the registry says otherwise, so a response that predates
+  // `vocabulary` renders exactly as it always did.
+  const vocab = registrySet?.vocabulary ?? {
+    done: "watched",
+    member: "show",
+    name: "Plex",
+    unit: "episode",
+    units: "episodes",
+    verb: "Play",
   }
+  const playing = activeSet(now, data)
+  const origin =
+    getRouteOrigin() ||
+    (isChannel ? "/channels" : "/queues")
+  const isPlayingThis = Boolean(
+    playing && playing === setId,
+  )
+  const n = now.now
+
+  return (
+    <Page
+      back={{ label: labelForPath(origin), target: origin }}
+      bodyClass={
+        isChannel ? "queue-view channel-mode" : "queue-view"
+      }
+      documentTitle={`${label} — QueuePilot`}
+      editableSetId={setId}
+      heading={label}
+      // This queue is the running session — say what's on screen (the matching tile is
+      // highlighted too, but a long queue can scroll it out of view).
+      isSubHidden={isPlayingThis ? false : !isChannel}
+      sub={
+        isPlayingThis && n
+          ? `${n.state === "paused" ? "⏸ Paused" : "▶ Now playing"}${n.title || n.showTitle ? ` — ${n.title || n.showTitle}` : ""}`
+          : isChannel
+            ? // A curated pool's members play in a shuffled order — say so, and drop the
+              // ordering UI. In the PROVIDER's nouns: on a reading pool this used to promise
+              // "how many episodes each show plays per visit", which is two wrong words in
+              // one sentence. "contributes" is the neutral verb the type declarations already
+              // use for this number, so the sentence needs no per-provider branch.
+              `A curated pool — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
+            : ""
+      }
+    >
+      <QueueView setId={setId} />
+    </Page>
+  )
+}
+
+/**
+ * A path that MOVED, rewritten to its new address while the page it moved to is already on
+ * screen.
+ *
+ * REPLACES the entry rather than pushing one: a pushed redirect makes Back land on the old
+ * path, which redirects forward again and the button reads as dead. Search and hash are
+ * carried across — no legacy route uses one today, and dropping them silently is the kind of
+ * thing a later route would inherit.
+ */
+function useCanonicalPath(canonical: string): void {
+  const navigate = useNavigate()
+  const { hash, pathname, search } = useLocation()
+
+  useEffect(() => {
+    if (pathname === canonical) return
+
+    navigate(canonical + search + hash, { replace: true })
+  }, [canonical, hash, navigate, pathname, search])
+}
+
+/**
+ * `/g/<group>`, which no longer exists. The tail is deliberately DROPPED: there is no
+ * per-group address to move a group id to. The people filter is not a translation of a group
+ * — a group is a saved set of people, and picking the same people by hand is a different
+ * assertion — so guessing one would be worse than landing on everything.
+ */
+function LegacyGroupPage() {
+  useCanonicalPath(ROUTE_PATHS.admin)
+
+  return <AdminPage />
+}
+
+function LegacyCollectionPage() {
+  const params = useParams()
+
+  useCanonicalPath(canonicalCollectionPath(params["*"]))
+
+  return <CollectionPage />
+}
+
+function LegacyWatchPlayPage() {
+  const { step } = useParams()
+
+  useCanonicalPath(canonicalWatchPlayPath(step))
+
+  return <WatchPlayPage />
 }

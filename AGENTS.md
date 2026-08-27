@@ -289,6 +289,39 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
   `charcuterie/prefer-listbox-over-select`) still do not run here, and do not need to:
   this repo lints with Biome and the ban is expressed natively.
 
+## Routing
+
+**A react-router `<Routes>` table in `web/src/App.tsx` decides which page renders. There is no
+parsed pathname any more** ([decision](docs/decisions/2026-08-27-the-route-table-is-react-router-not-a-parsed-pathname.md)).
+
+- **The paths are constants in `web/src/lib/routePaths.ts`**, and the table renders those
+  constants. `web/src/lib/routePaths.test.ts` runs react-router's own `matchRoutes` over the
+  same constants, so the pure test and the app cannot disagree. Add a route in both places at
+  once: the constant, and the `<Route>` that uses it.
+- **A view mounts only on its own route.** Until 2026-08-27 every view was mounted at all
+  times and toggled the `hidden` attribute, which is what the vanilla app did — nine `<main>`
+  elements on every page, eight of them empty. If you are reading a comment that says a view
+  is "permanently mounted", it is stale; say so and fix it.
+  - A consequence worth knowing: **an e2e suite may no longer read a page it has navigated
+    away from.** `routing-test.ts` did, and it now reads the link before clicking it.
+  - The `#id:not([hidden])` selectors seventeen suites use still work — an element with no
+    `hidden` attribute matches `:not([hidden])`.
+- **Each page states its own chrome.** `components/Page.tsx` takes the heading, sub-line, back
+  target, document title and body classes as props and renders `Header` + `NowPlayingBar`
+  above the view. The mode landing draws no header, so it calls `usePageChrome` on its own.
+  There is no `computeChrome()` switch — that was the hand-rolled router wearing a different
+  hat.
+- **`AppFrame` is the pathless layout route** and holds what outlives a page: the store load,
+  the live subscription, the selection bar and the seven lazy overlays. It is also the one
+  place `trackRouteOrigin` is called, because the back button's target is the page you came
+  FROM and react-router does not expose that.
+- **A moved address keeps working.** `/g/<id>`, `/collection` and `/tonight` each have a
+  LEGACY route that paints the page they moved to and rewrites the URL underneath
+  (`replace`, never a push). A `<Navigate>` would blank the screen for a frame, and these are
+  addresses people bookmarked.
+- The server's SPA fallback (`hasSpaFallback: true`) is half of this and lives in another
+  package. `e2e/routing-test.ts` pins the two halves together and runs on every PR.
+
 ## The store
 
 **`/config/queuepilot.sqlite` is the book of record.** Sets, queues, entries, groups, pending
