@@ -170,6 +170,8 @@ describe("tonightPresetHref", () => {
       personIds: [],
     })
 
-    expect(href).toBe("/tonight/go?activity=board-games")
+    expect(href).toBe(
+      "/what-to-watch-play/go?activity=board-games",
+    )
   })
 })

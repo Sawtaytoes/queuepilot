@@ -177,7 +177,7 @@ try {
   await shot('pr4-channels-movies.png');
 
   // --- 7. Play landing: profile options mirror the bindings; play carries profile //
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#play:not([hidden]) .playcard');
   // The tier picker is a themed Listbox now, not a native <select>
   // (2026-08-07-plex-channels-pickers-are-listbox-not-native-select): open it, read the portalled

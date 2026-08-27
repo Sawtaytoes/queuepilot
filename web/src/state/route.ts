@@ -30,6 +30,7 @@ export {
   canonicalPath,
   labelForPath,
   parsePath,
+  WATCH_PLAY_PATH,
 } from "./parsePath"
 
 let currentPath = "/"

@@ -138,7 +138,7 @@ try {
   await escape();
 
   // --- the groups panel, from the group bar on the landing --------------------- //
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 30000 });
   await page.waitForTimeout(1500);
   const groupEdit = page.locator('.groupedit').first();

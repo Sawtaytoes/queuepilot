@@ -41,6 +41,7 @@ import type {
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
 import { usePeople } from "../state/people"
+import { WATCH_PLAY_PATH } from "../state/route"
 import { setStatus, useStore } from "../state/store"
 
 /**
@@ -176,7 +177,9 @@ export function TonightView({
     // Surprise Me is a SECOND SCREEN, not a one-tap random pick: you narrow down first and
     // only then does it choose. Every other tile leaves that step.
     navigate(
-      id === "surprise" ? "/tonight/surprise" : "/tonight",
+      id === "surprise"
+        ? `${WATCH_PLAY_PATH}/surprise`
+        : WATCH_PLAY_PATH,
     )
   }
 
@@ -304,8 +307,8 @@ export function TonightView({
       setPresetNote(parsed.reason)
       navigate(
         parsed.preset?.activity === "surprise"
-          ? "/tonight/surprise"
-          : "/tonight",
+          ? `${WATCH_PLAY_PATH}/surprise`
+          : WATCH_PLAY_PATH,
         { replace: true },
       )
       return
@@ -317,7 +320,7 @@ export function TonightView({
       .then((outcome) => {
         if (!outcome.isDrawn) {
           setPresetNote(outcome.reason)
-          navigate("/tonight", { replace: true })
+          navigate(WATCH_PLAY_PATH, { replace: true })
           return
         }
         writePickSession(outcome.session)
@@ -327,7 +330,7 @@ export function TonightView({
         setPresetNote(
           `Could not pick: ${e instanceof Error ? e.message : String(e)}`,
         )
-        navigate("/tonight", { replace: true })
+        navigate(WATCH_PLAY_PATH, { replace: true })
       })
   }, [isHidden, navigate, presetSearch, step])
 
@@ -339,8 +342,8 @@ export function TonightView({
     return (
       <main className="view" hidden={isHidden} id="tonight">
         <EmptyState
-          description="Reading the card, then drawing tonight's pick."
-          heading="Setting up tonight…"
+          description="Reading the card, then drawing your pick."
+          heading="Setting up your pick…"
         />
       </main>
     )
