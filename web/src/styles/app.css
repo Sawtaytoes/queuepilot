@@ -2077,8 +2077,15 @@ body.queue-view #tools {
 #setmodal {
   width: min(920px, 92vw);
 }
+/* WIDER SINCE 2026-08-27, and for the reason `#setmodal` is — the same number, the same
+   container query, the same editor gaining the same three trays. `#dyn-people` landed on
+   2026-08-26 and this width did not move with it, so the rules editor shipped with the
+   board permanently in its narrow form: one tray on screen, nowhere to drop, and a drag the
+   owner could not complete at any window width. 920px minus this modal's padding clears the
+   `cq-lg` (48rem / 768px) the board measures its own box against. `92vw` still wins on a
+   narrow window, and the board drops back to one lane there on its own. */
 #dynmodal {
-  width: min(520px, 94vw);
+  width: min(920px, 92vw);
 }
 #entrymodal {
   width: min(460px, 92vw);
