@@ -550,6 +550,28 @@ built wrong, a lineup Plex reordered, and something else already on screen. Both
 unconditional — a scan is a button press, and the report always arrives the morning after a
 redeploy has thrown the evidence away.
 
+## People on a queue
+
+A queue's audience is three trays — **Must be here**, **Nice to have**, **Everyone else** —
+stored in `queue_people` and drawn by `PeopleTrays`
+([decision](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md)).
+
+**Both kinds carry them.** A `source: rotation` pool (Rules) has the same trays a
+`source: queue` queue (Picks) has, in the same component, written by the same endpoint —
+`#dyn-people` in `DynModal` beside `#set-people` in `SetModal`
+([decision](docs/decisions/2026-08-26-a-rules-queue-carries-people-too.md)). Three things
+follow:
+
+- **The server has no kind check and must not grow one.** `PUT /api/sets/:id/people` and
+  `store/migrate/queuePeople.ts` have never consulted a set's kind; `e2e/queue-people-test.ts`
+  gates a rotation pool through both so neither learns to.
+- **The trays are EDIT ONLY, in both editors.** `queue_people` is keyed on the set id and a
+  set being created has not got one. A new queue is created, then filed.
+- **A pool's provider ACCOUNT is not its audience.** The account in the card's meta line is
+  which Plex profile the Shield signs in as; the faces beside it are who the pool is for. Both
+  belong on the card, and folding either into the other is what made the Rules pools
+  unreachable from every people-shaped control in the app.
+
 ## Skipping one item
 
 A **queue** set (`source: queue` — both pool kinds) carries `skipped:` in `sets.yaml`: a flat

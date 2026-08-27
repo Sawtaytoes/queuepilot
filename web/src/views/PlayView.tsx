@@ -171,10 +171,12 @@ function PlayCard({
    * has none, so this row is doing MORE work here, not less
    * (decision `2026-08-25-a-queue-is-people-plus-an-activity`).
    *
-   * Null on a Rules card, and that is not an omission. A filtered pool has no member trays at
-   * all — it is bound to one provider ACCOUNT, which its meta line already names — so a row
-   * there would read "Anybody" on every one of them and teach the eye that the row means
-   * nothing.
+   * A RULES card carries one too, as of 2026-08-26. It used to be null here on the argument
+   * that a filtered pool is bound to one provider ACCOUNT and its meta line already names it.
+   * That conflated two facts: the account is which Plex profile the pool signs in as, and the
+   * trays are who the pool is FOR. The owner reported the gap from the other end — there was
+   * no way to put anybody on Shorts or Movies at all
+   * (decision `2026-08-26-a-rules-queue-carries-people-too`).
    */
   people?: ReactNode
   /** The registry entry, for `delivery`, the accent + the start button's words. Absent =
@@ -290,6 +292,7 @@ function ChannelCard({
   /** The group being viewed, so the card can drop that name from its own. */
   groupLabel: string | null
 }) {
+  const people = usePeople()
   const isRewatch = channel.behavior === "rewatch"
   const options = channel.has_explicit_profiles
     ? (channel.profiles || []).map((b) => ({
@@ -362,6 +365,17 @@ function ChannelCard({
         onlyAccount
           ? `${onlyAccount} · ${behaviour}`
           : behaviour
+      }
+      // A rules pool has trays now, so it wears the same row of faces a picks card does.
+      // The account in the meta line beside it is a DIFFERENT fact — which Plex profile
+      // this pool signs in as — and the two disagree often enough to be worth showing
+      // together (decision `2026-08-26-a-rules-queue-carries-people-too`).
+      people={
+        <PeopleRow
+          groups={people.groups}
+          members={people.byQueue[channel.id] ?? []}
+          people={people.people}
+        />
       }
       to={`/channels/${encodeURIComponent(channel.id)}`}
       onPlay={(anchor) => {

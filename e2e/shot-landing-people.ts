@@ -2,7 +2,7 @@
 //
 // Two frames, and each one is a claim the PR makes:
 //
-//   1. `landing`  the Play landing at 1420px. On main a Picks card is a name, a count and a
+//   1. `landing`  the Admin landing (`/admin`) at 1420px. On main a Picks card is a name, a count and a
 //                 start button; on the branch it carries the same row of faces the Picks page
 //                 draws in a shelf heading. A card nobody is filed on says "Anybody" — which
 //                 is the state, not a blank.
@@ -101,7 +101,7 @@ try {
   await ctx.addInitScript(darkInit);
   const page = await ctx.newPage();
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `__screenshots__/landingpeople-${TAG}-landing.png` });
@@ -114,17 +114,20 @@ try {
       : `${faces} faces across the landing cards, and ${anybody} card(s) saying "Anybody"`,
   );
 
-  // A Rules card carries no people row at all — the claim the `people` prop's comment makes,
-  // asserted rather than eyeballed, because an empty row there would read as "nobody" instead
-  // of "this kind does not have trays".
+  // A Rules card carries a people row TOO, since 2026-08-26. This line used to assert the
+  // opposite and warn when one appeared: the argument was that a filtered pool is bound to one
+  // provider account and its meta line already says so. The owner reported the other half —
+  // there was no way to put a person on Shorts or Movies at all — and the rows were in
+  // `queue_people` the whole time (decision `2026-08-26-a-rules-queue-carries-people-too`).
+  // `shot-rules-people.ts` is this change's own before/after.
   const onRules = await page.$$eval(
     '.playcard[data-kind="rules"] .qpeople',
     (nodes) => nodes.length,
   );
   console.log(
     onRules === 0
-      ? 'no people row on any Rules card'
-      : `⚠️ ${onRules} Rules card(s) grew a people row`,
+      ? '⚠️ no people row on any Rules card'
+      : `${onRules} Rules card(s) carry a people row`,
   );
 
   await ctx.close();
@@ -142,7 +145,7 @@ try {
   });
   await narrowCtx.addInitScript(darkInit);
   const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await narrow.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await narrow.waitForSelector('.playcard', { timeout: 30000 });
   await narrow.waitForTimeout(1500);
   // SCROLL TO A PICKS CARD FIRST. The fixture's Rules cards sort ahead of the Picks ones and
