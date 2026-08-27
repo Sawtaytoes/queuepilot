@@ -18,10 +18,19 @@ import { useStore } from "../state/store"
 import { commitStart } from "./startCommit"
 
 /**
- * The tile context menu (right-click / long-press): the per-entry actions that used
- * to sit inline on the tile — *Start from an episode… / Start automatically (clear
- * override) / Skip “<item>” / Remove*.
- * (decision `2026-07-31-start-episode-is-picked-in-a-modal`)
+ * The tile context menu (right-click / long-press): **only what the card cannot do.**
+ *
+ * *Play this next / Move to the Priority queue / Move to the Random pool / Start from an
+ * episode… / Start automatically (clear override) / Skip “<item>”*.
+ *
+ * **Remove is not here.** Every editable grid puts a ✕ on the tile
+ * (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`), so the menu
+ * used to open on a queue tile holding one row that repeated the control six pixels away —
+ * "I'd prefer options that aren't on the card". The lane rows are what the menu is for: a
+ * promote was a drag across the lane divider and nothing else, which is a gesture, not an
+ * action you can find.
+ * (decisions `2026-08-26-the-tile-menu-carries-what-the-card-cannot`,
+ *  `2026-07-31-start-episode-is-picked-in-a-modal`)
  *
  * `#tilemenu` is always in the document and toggles `hidden`, matching the vanilla
  * markup that `verify-start-modal.mjs` selects as `#tilemenu:not([hidden])`.
@@ -69,7 +78,14 @@ export function TileMenu() {
       ),
     })
 
-    ref.current.querySelector("button")?.focus()
+    // `preventScroll`, and it is not a nicety: the effect above has ALREADY clamped the menu
+    // into the viewport, so there is nothing to scroll to — but a plain `focus()` scrolls
+    // anyway on a narrow screen, that scroll fires the `scroll` listener below, and the menu
+    // closes itself in the same frame it opened. It read as a long-press that did nothing.
+    // (decision `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`)
+    ref.current
+      .querySelector("button")
+      ?.focus({ preventScroll: true })
   }, [tileMenu])
 
   useEffect(() => {
@@ -87,7 +103,32 @@ export function TileMenu() {
       true,
     )
     document.addEventListener("keydown", onKeyDown)
-    window.addEventListener("scroll", closeTileMenu, true)
+    // Close when the page actually MOVES under the menu — the menu is `position: fixed` and
+    // pinned to where the tile WAS, so a scroll leaves it pointing at nothing.
+    //
+    // A zero-delta scroll event does not count. Chromium fires one at the document, with the
+    // scroll position unchanged, in the frame the menu opens over a grid that was scrolled
+    // into view — and closing on that made the long-press look like it did nothing at all:
+    // the menu opened and vanished before it painted. An INNER scroller (the Home shelf's
+    // strip) has no position to compare, so any scroll from one still closes.
+    // (decision `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`)
+    const at = { x: window.scrollX, y: window.scrollY }
+    const onScroll = (e: Event) => {
+      const isPage =
+        e.target === document ||
+        e.target === document.scrollingElement
+
+      if (
+        isPage &&
+        window.scrollX === at.x &&
+        window.scrollY === at.y
+      )
+        return
+
+      closeTileMenu()
+    }
+
+    window.addEventListener("scroll", onScroll, true)
 
     return () => {
       document.removeEventListener(
@@ -96,11 +137,7 @@ export function TileMenu() {
         true,
       )
       document.removeEventListener("keydown", onKeyDown)
-      window.removeEventListener(
-        "scroll",
-        closeTileMenu,
-        true,
-      )
+      window.removeEventListener("scroll", onScroll, true)
     }
   }, [])
 
@@ -121,9 +158,54 @@ export function TileMenu() {
           device rows already use, and for the same reason: this is a hand-rolled menu whose
           ROWS are still ordinary buttons. `.ctxmenu button`'s skin is deleted; what stays is
           layout (`justify-content`, `width`, `text-align`), exactly as `.qmenu button` does.
-          `intent="danger"` replaces `.ctxmenu button.danger`'s colour.
+          Every row is `neutral` now — the one `danger` row was Remove, and Remove is the ✕
+          on the card.
           (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
           `2026-08-02-adopting-a-component-means-deleting-its-skin`) */}
+      {/* PLAY THIS NEXT — the head of the Priority queue, which is the one position the
+          lane rows below cannot reach: "Move to the Priority queue" appends, so a promote
+          never displaces what is already promoted. Hidden when the entry already leads that
+          queue, where the row would do nothing. */}
+      {entry?.lane &&
+      !(
+        entry.lane.current === "priority" &&
+        entry.lane.isFirst
+      ) ? (
+        <Button
+          appearance="ghost"
+          intent="neutral"
+          isFullWidth
+          onClick={() => {
+            closeTileMenu()
+            entry.lane?.playNext()
+          }}
+        >
+          Play this next
+        </Button>
+      ) : null}
+      {/* THE PROMOTE / THE DEMOTE. The same write the drag across the lane divider makes
+          (`useGridDrag`), which until now was the only way to make one — and a drag is hard
+          to aim on touch and impossible to discover. The wording is the lanes' own names, so
+          the row, the lane heading and the toast all say the same thing. */}
+      {entry?.lane ? (
+        <Button
+          appearance="ghost"
+          intent="neutral"
+          isFullWidth
+          onClick={() => {
+            closeTileMenu()
+            entry.lane?.moveTo(
+              entry.lane.current === "priority"
+                ? "random"
+                : "priority",
+            )
+          }}
+        >
+          {entry.lane.current === "priority"
+            ? "Move to the Random pool"
+            : "Move to the Priority queue"}
+        </Button>
+      ) : null}
       {entry && item && isStartable(item) ? (
         <Button
           appearance="ghost"
@@ -184,19 +266,6 @@ export function TileMenu() {
           }}
         >
           {entry.skipLabel || "Skip this one"}
-        </Button>
-      ) : null}
-      {entry?.remove ? (
-        <Button
-          appearance="ghost"
-          intent="danger"
-          isFullWidth
-          onClick={() => {
-            closeTileMenu()
-            entry.remove?.()
-          }}
-        >
-          {entry.removeLabel || "Remove"}
         </Button>
       ) : null}
     </div>

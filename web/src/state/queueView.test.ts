@@ -3,8 +3,9 @@ import { describe, expect, test } from "vitest"
 import type { QueueItem } from "../lib/types"
 import {
   applyFilters,
+  effectiveLane,
   hasOverrides,
-  promotedOrder,
+  orderAfterLaneMove,
   splitLanes,
 } from "./queueView"
 
@@ -167,49 +168,142 @@ describe("splitLanes", () => {
   })
 })
 
-describe("promotedOrder", () => {
+describe("orderAfterLaneMove", () => {
+  // Three promoted, three in the pool, on a queue whose own default lane is `random`.
   const items = [
-    item({ key: "rk:1", placement: "priority" }),
-    item({ key: "rk:2", placement: "priority" }),
-    item({ key: "rk:3" }),
-    item({ key: "rk:4" }),
+    item({ key: "a", placement: "priority" }),
+    item({ key: "b", placement: "priority" }),
+    item({ key: "c", placement: "priority" }),
+    item({ key: "d" }),
+    item({ key: "e" }),
+    item({ key: "f" }),
   ]
+  const keys = (out: QueueItem[]) => out.map((i) => i.key)
 
-  // The claim the whole helper exists for: a button cannot say WHERE, so it must not pick
-  // the head — the Priority lane plays in file order, and landing first would silently
-  // change what plays next.
-  test("a promoted entry lands at the END of the Priority lane", () => {
-    expect(promotedOrder(items, "rk:4", "random")).toEqual([
-      "rk:1",
-      "rk:2",
-      "rk:4",
-      "rk:3",
-    ])
-  })
-
-  test("the queue's own default lane counts as promoted", () => {
-    // Every entry inherits `priority` here, so rk:3 is already in the lane and the only
-    // thing that moves is where it sits in it.
-    expect(
-      promotedOrder(items, "rk:3", "priority"),
-    ).toEqual(["rk:1", "rk:2", "rk:4", "rk:3"])
-  })
-
-  test("an unknown key leaves the order exactly as it was", () => {
-    expect(promotedOrder(items, "rk:99", "random")).toEqual(
-      ["rk:1", "rk:2", "rk:3", "rk:4"],
+  test("a promote lands at the END of the Priority queue, not at its old file position", () => {
+    const moved = items.map((i) =>
+      i.key === "e"
+        ? { ...i, placement: "priority" as const }
+        : i,
     )
+
+    expect(
+      keys(
+        orderAfterLaneMove(
+          moved,
+          "random",
+          ["e"],
+          "priority",
+        ),
+      ),
+    ).toEqual(["a", "b", "c", "e", "d", "f"])
   })
 
-  test("the first promote into an empty lane puts it at the head, which is the whole lane", () => {
-    const pool = [
-      item({ key: "rk:1" }),
-      item({ key: "rk:2" }),
-    ]
+  test('"Play this next" lands at the HEAD of the Priority queue', () => {
+    const moved = items.map((i) =>
+      i.key === "e"
+        ? { ...i, placement: "priority" as const }
+        : i,
+    )
 
-    expect(promotedOrder(pool, "rk:2", "random")).toEqual([
-      "rk:2",
-      "rk:1",
+    expect(
+      keys(
+        orderAfterLaneMove(
+          moved,
+          "random",
+          ["e"],
+          "priority",
+          "top",
+        ),
+      ),
+    ).toEqual(["e", "a", "b", "c", "d", "f"])
+  })
+
+  test("a demote leaves the Priority queue in its own order and joins the pool", () => {
+    const moved = items.map((i) =>
+      i.key === "b" ? { ...i, placement: null } : i,
+    )
+
+    expect(
+      keys(
+        orderAfterLaneMove(
+          moved,
+          "random",
+          ["b"],
+          "random",
+        ),
+      ),
+    ).toEqual(["a", "c", "d", "e", "f", "b"])
+  })
+
+  test("a BULK move keeps the selection's relative order and lands it together", () => {
+    const moved = items.map((i) =>
+      i.key === "d" || i.key === "f"
+        ? { ...i, placement: "priority" as const }
+        : i,
+    )
+
+    expect(
+      keys(
+        orderAfterLaneMove(
+          moved,
+          "random",
+          ["d", "f"],
+          "priority",
+        ),
+      ),
+    ).toEqual(["a", "b", "c", "d", "f", "e"])
+  })
+
+  // Carried over from `promotedOrder`, which this function replaced: a key that is not in
+  // the queue must be a no-op rather than a re-sequence. A stale selection is the way it
+  // happens — the entry was removed in another tab between the tick and the apply.
+  test("a key that is not in the queue leaves the order exactly as it was", () => {
+    expect(
+      keys(
+        orderAfterLaneMove(
+          items,
+          "random",
+          ["nope"],
+          "priority",
+        ),
+      ),
+    ).toEqual(["a", "b", "c", "d", "e", "f"])
+  })
+
+  test("the file stays ONE sequence — priority first, always", () => {
+    const out = orderAfterLaneMove(
+      items,
+      "random",
+      [],
+      "priority",
+    )
+
+    expect(keys(out)).toEqual([
+      "a",
+      "b",
+      "c",
+      "d",
+      "e",
+      "f",
     ])
+  })
+})
+
+describe("effectiveLane", () => {
+  test("the entry's own placement wins", () => {
+    expect(
+      effectiveLane({ placement: "priority" }, "random"),
+    ).toBe("priority")
+    expect(
+      effectiveLane({ placement: "random" }, "priority"),
+    ).toBe("random")
+  })
+
+  test("no placement means the queue's own default — the sparse case", () => {
+    expect(
+      effectiveLane({ placement: null }, "random"),
+    ).toBe("random")
+    expect(effectiveLane({}, "priority")).toBe("priority")
   })
 })

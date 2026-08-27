@@ -178,7 +178,15 @@ try {
   // a regression that was not there.
   //
   // The CLAIM is unchanged and is not weakened: the tile must be in the Priority lane, and a
-  // tile that snapped back never arrives, so this still fails — two seconds later.
+  // tile that snapped back never arrives, so this still fails — ten seconds later.
+  //
+  // Two seconds was enough until the read cache landed. Phase 3 (`/api/queues?fresh=1`) now
+  // re-reads every provider behind the page that has already painted, and on a CI runner
+  // that pass is in flight at exactly this moment: the same drag, the same commit, failed on
+  // CI run 33052181234 and passed on the re-run of it. The commit this waits for is not late
+  // because anything is wrong, it is late because the machine is busy. Waiting longer costs a
+  // green run nothing — it returns the moment the tile arrives — and costs a genuine
+  // snap-back only the extra seconds before it reports.
   const landed = await page
     .waitForFunction(
       (key) =>
@@ -186,7 +194,7 @@ try {
           `ul.grid[data-lane="priority"] li.tile[data-key="${(key as string).replace(/["\\]/g, '\\$&')}"]`,
         ),
       promotedKey,
-      { timeout: 2000 },
+      { timeout: 10000 },
     )
     .then(() => true)
     .catch(() => false);

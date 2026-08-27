@@ -211,19 +211,44 @@ try {
   await poster.click({ button: 'right' });
   await page.waitForSelector('#tilemenu:not([hidden])', { timeout: 15000 });
   ok('right-click opens the per-entry menu', true);
-  // By NAME, not by `.danger`. That class was the app's own colour, and it stopped existing
-  // when the row became a Charcuterie `Button` with `intent="danger"` — a skin is not a
-  // handle, and a test that addresses one breaks the moment the skin becomes a prop. The
-  // accessible name is the thing being asserted anyway, and it is what an agent driving this
-  // menu would match on.
-  const menuRemove = page.getByRole('button', { name: 'Remove from this queue' });
-  ok('the menu offers a scoped Remove',
-    ((await menuRemove.textContent()) ?? '').includes('Remove from this queue'));
-  await menuRemove.click();
-  await page.waitForFunction(
-    () => document.querySelectorAll('.shelf[data-set="q_shelf"] li.tile').length === 2,
-    undefined, { timeout: 15000 });
-  ok('the menu removes too', (await tiles()) === 2);
+  // The menu carries what the CARD cannot, and Remove is not one of those things: the ✕ six
+  // pixels away already does it, and this suite pins that ✕ four times over
+  // (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`). Until 2026-08-26 the
+  // menu held one row — "Remove from this queue" — and this file asserted it. The rows are
+  // read BY NAME, not by class: `.danger` was the app's own colour and stopped existing when
+  // the row became a Charcuterie `Button` with an `intent` prop, and a skin is not a handle.
+  const rows = () => page.$$eval('#tilemenu button',
+    (els) => els.map((e) => (e.textContent ?? '').trim()));
+  ok('the menu offers no Remove row',
+    !(await rows()).some((r) => /remove/i.test(r)));
+  // `q_shelf` declares no random order, so every entry starts in the Priority queue and the
+  // lane row is the DEMOTE. This is the shelf's half of the claim: the page that could not
+  // remove a title also could not change its lane, because a lane was a drag across a
+  // divider the shelf does not draw.
+  const laneRow = page.getByRole('button', { name: 'Move to the Random pool' });
+  ok('the menu carries the lane move', (await rows()).includes('Move to the Random pool'));
+  await laneRow.click();
+  // The FILE, not the DOM: a demote paints nothing on a shelf — the tile stays where it is,
+  // which is why the write is the only honest assertion here.
+  //
+  // Read RAW, not through `fileEntries`: an entry that gains a key is rewritten as a block
+  // map over two lines, and that helper only ever sees the `- ` bullet. The regex pins both
+  // writes at once — the `placement`, and the demoted entry sitting at the END of the file's
+  // one sequence, which is the order half
+  // (decision `2026-08-27-a-lane-change-writes-the-order-too-because-the-file-is-one-sequence`).
+  const shelfYaml = async () => {
+    const lines = (await fs.readFile(QUEUES, 'utf8')).split('\n');
+    const rest = lines.slice(lines.findIndex((l) => l.startsWith('q_shelf:')) + 1);
+    const end = rest.findIndex((l) => /^[^\s-]/.test(l));
+    return (end < 0 ? rest : rest.slice(0, end)).join('\n').trimEnd();
+  };
+  const demoted = async () =>
+    /- title: Duel \(1971\)\s*\n\s+placement: random$/.test(await shelfYaml());
+  for (let i = 0; i < 75 && !(await demoted()); i++) {
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  ok('the lane row writes the placement, and the demote lands at the end', await demoted());
+  ok('and the entry is still on the shelf', (await tiles()) === 3);
 
   // ---- 5. the queue page still removes, after the lift ----
   //
