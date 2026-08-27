@@ -1,35 +1,36 @@
 /**
  * The pure half of the router: pathname in, route out.
  *
- *   `/`                       PLAY (landing) — every group's sets
+ *   `/`                       MODE LANDING — choose Admin or What to Watch/Play
+ *   `/admin`                  ADMIN — every group's sets and app configuration
  *   `/g/<group>`              PLAY, filtered to one QueuePilot group
- *   `/tonight`                TONIGHT — who's here, an activity, and Go
- *   `/tonight/surprise`       TONIGHT, on Surprise Me's narrowing step
- *   `/tonight/go?…`           TONIGHT with the answers baked in — a PRESET CARD's address
- *   `/result`                 RESULT — tonight's pick: one card, reroll, confirm
+ *   `/what-to-watch-play`     WHAT TO WATCH/PLAY — who's here, an activity, and Go
+ *   `/what-to-watch-play/surprise`  WHAT TO WATCH/PLAY, on Surprise Me's narrowing step
+ *   `/what-to-watch-play/go?…`  WHAT TO WATCH/PLAY with the answers baked in
+ *   `/result`                 RESULT — the pick: one card, reroll, confirm
  *   `/result/<gameId>`        RESULT for one named game — a queue arrival, and it has NO reroll
  *   `/board-game-collection`  COLLECTION — the board-game shelf, and "we played this"
  *   `/queues`                 QUEUES configurator (poster shelves)
  *   `/q/<id>`                 one curated queue / channel as a grid
  *   `/channels[/<id>]`        the rule-based rotation channels
  *
- * `/tonight/surprise` is a STEP of the Tonight view, not a view of its own — Surprise Me
+ * `/what-to-watch-play/surprise` is a STEP of the What to Watch/Play view, not a view of its own — Surprise Me
  * opens a second screen where you narrow down before anything is chosen, and the who's-here
  * answer above it is still the same answer. It carries a path anyway because it is a place
  * you can be, and a place you can be is a URL you can reload and share.
  *
- * `/tonight/go` is the same kind of thing pointed the other way: not a place you sit but an
+ * `/what-to-watch-play/go` is the same kind of thing pointed the other way: not a place you sit but an
  * ADDRESS A CARD CARRIES. The query string holds the answers the form would have collected —
  * who is here, the activity, the filters — so the tap draws and lands on `/result` instead of
  * opening a form and asking again (absorb decision §5: *"Pick-preset NFC → land on result
  * card, not an empty form"*). The grammar and the rule that a card which names NOBODY is
  * refused are both in `lib/tonightPreset.ts`. It parses to a STEP for the same reason
- * `surprise` does: the view is Tonight either way, and a refused preset has to land on that
+ * `surprise` does: the view is What to Watch/Play either way, and a refused preset has to land on that
  * form with what the card did say already filled in.
  *
- * `/g/<group>` is the same VIEW as `/`, not a new one — it is the landing with a filter
- * applied, which is why it parses to `{view: "play"}` carrying a group rather than to a
- * view of its own. Every other route is group-agnostic on purpose: a queue has ONE
+ * `/g/<group>` is the same VIEW as the Admin landing, not a new one — it is the management
+ * page with a filter applied, which is why it parses to `{view: "play"}` carrying a group
+ * rather than to a view of its own. Every other route is group-agnostic on purpose: a queue has ONE
  * canonical address (`/q/<id>`) even when it belongs to three groups.
  *
  * `/g/` and not `/p/`: PROFILE is Plex's word in this app (`/api/profiles` is the Home
@@ -55,6 +56,8 @@
  */
 
 export type Route =
+  | { view: "home" }
+  | { view: "admin" }
   | { view: "play"; group: string | null }
   | { view: "boardGameCollection" }
   | { view: "result"; gameId: string | null }
@@ -66,6 +69,8 @@ export type Route =
   | { view: "pending" }
   | { view: "queue"; id: string }
   | { view: "channels"; id: string | null }
+
+export const WATCH_PLAY_PATH = "/what-to-watch-play"
 
 // `/queues/` and `/queues` are one page. A path router makes trailing slashes
 // reachable in a way `location.hash` never did (a link, a proxy rewrite, or a
@@ -87,14 +92,15 @@ function stripTrailingSlash(pathname: string): string {
  */
 const MOVED_PATHS = [
   ["/collection", "/board-game-collection"],
+  ["/tonight", WATCH_PLAY_PATH],
 ] as const
 
 /**
  * Where a legacy path should be REWRITTEN to, or `null` when it is already canonical.
  *
  * Pure, like the rest of this module: the caller owns the `navigate(…, {replace: true})`.
- * A redirect rather than a 404 because `/collection` was live for a few hours on
- * 2026-08-25 and a link to it may already be in a chat window.
+ * A redirect rather than a 404 because both `/collection` and `/tonight` were live addresses
+ * and a link to either one may already be in a chat window.
  */
 export function canonicalPath(
   pathname: string,
@@ -110,6 +116,12 @@ export function canonicalPath(
 
 export function parsePath(pathname: string): Route {
   const path = stripTrailingSlash(pathname)
+
+  if (path === "/") return { view: "home" }
+
+  if (path === "/admin") return { view: "admin" }
+
+  if (path === "/g") return { group: null, view: "play" }
 
   const g = path.match(/^\/g\/(.+)$/)
 
@@ -132,10 +144,10 @@ export function parsePath(pathname: string): Route {
       view: "channels",
     }
 
-  // `/result/<gameId>` is a QUEUE ARRIVAL and `/result` is tonight's own pick. They are
+  // `/result/<gameId>` is a QUEUE ARRIVAL and `/result` is the pick form's result. They are
   // one view with one card; the difference is that the queue already chose, so the first
   // has no reroll. Matched before the bare `/result` for the same reason
-  // `/tonight/surprise` is matched before `/tonight`.
+  // the Surprise Me step is matched before the bare What to Watch/Play route.
   const r = path.match(/^\/result\/(.+)$/)
 
   if (r?.[1])
@@ -158,12 +170,23 @@ export function parsePath(pathname: string): Route {
   )
     return { view: "boardGameCollection" }
 
-  // Longest first: neither step may be swallowed by the bare `/tonight`.
-  if (path === "/tonight/surprise")
+  // Longest first: neither step may be swallowed by the bare What to Watch/Play route.
+  if (
+    path === `${WATCH_PLAY_PATH}/surprise` ||
+    path === "/tonight/surprise"
+  )
     return { step: "surprise", view: "tonight" }
-  if (path === "/tonight/go")
+  if (
+    path === `${WATCH_PLAY_PATH}/go` ||
+    path === "/tonight/go"
+  )
     return { step: "go", view: "tonight" }
-  if (path.startsWith("/tonight"))
+  if (
+    path === WATCH_PLAY_PATH ||
+    path.startsWith(`${WATCH_PLAY_PATH}/`) ||
+    path === "/tonight" ||
+    path.startsWith("/tonight/")
+  )
     return { step: null, view: "tonight" }
 
   if (path.startsWith("/queues")) return { view: "queues" }
@@ -173,21 +196,30 @@ export function parsePath(pathname: string): Route {
   // An unknown path lands on the landing rather than a blank page. With a SPA
   // fallback the server hands index.html to ANY extensionless path, so this is now
   // the only thing standing between a typo'd URL and an empty shell.
-  return { group: null, view: "play" }
+  return { view: "home" }
 }
 
 /** What the back button should SAY, given where it goes. */
 export function labelForPath(p: string): string {
-  if (p.startsWith("/tonight")) return "‹ Tonight"
+  if (
+    p.startsWith(WATCH_PLAY_PATH) ||
+    p === "/tonight" ||
+    p.startsWith("/tonight/")
+  )
+    return "‹ What to Watch/Play"
   if (
     p.startsWith("/board-game-collection") ||
     p.startsWith("/collection")
   )
     return "‹ Collection"
-  if (p.startsWith("/result")) return "‹ Tonight's pick"
+  if (p.startsWith("/result")) return "‹ What to Watch/Play"
   if (p.startsWith("/queues")) return "‹ Picks"
   if (p.startsWith("/channels")) return "‹ Rules"
   if (p.startsWith("/q/")) return "‹ Back"
+  if (p === "/admin" || p.startsWith("/admin/"))
+    return "‹ Admin"
+  if (p === "/" || p.startsWith("/g/"))
+    return "‹ QueuePilot"
 
-  return "‹ Play"
+  return "‹ QueuePilot"
 }

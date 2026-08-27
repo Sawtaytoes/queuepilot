@@ -7,24 +7,28 @@ import {
 } from "./parsePath"
 
 /**
- * The routes are a settled IA — Play is the landing and the two configurators
- * hang off it (decision `2026-07-21-queues-vs-channels-taxonomy-play-first-ia`) —
- * and they are real paths as of 2026-08-16, not `#/…`
+ * The routes are a settled IA — the root is a mode landing, with Admin and What to
+ * Watch/Play as the two top-level choices — and they are real paths as of 2026-08-16, not
+ * `#/…`
  * (decision `2026-08-16-routing-is-paths-not-hashes`). The e2e suites navigate by
  * `page.goto()`ing these paths, which only works because the server answers them
  * with index.html.
  *
- * `/g/<group>` joined them on 2026-08-17. It is the LANDING with a filter, not a fifth
- * view, which is why it parses to `{view: "play"}` carrying a group — and why `/` now
- * reports `group: null` rather than omitting the key. Everything else stays
+ * `/g/<group>` joined them on 2026-08-17. It is the ADMIN landing with a filter, not a fifth
+ * view, which is why it parses to `{view: "play"}` carrying a group. Everything else stays
  * group-agnostic: a queue has one canonical address even when three groups hold it.
  */
 
 describe("parsePath", () => {
-  test("the root path is PLAY, the landing, with no group", () => {
+  test("the root path is the mode landing", () => {
     expect(parsePath("/")).toEqual({
-      group: null,
-      view: "play",
+      view: "home",
+    })
+  })
+
+  test("/admin opens the administrative landing", () => {
+    expect(parsePath("/admin")).toEqual({
+      view: "admin",
     })
   })
 
@@ -44,7 +48,7 @@ describe("parsePath", () => {
     })
   })
 
-  test("a bare /g is the unfiltered landing, not an empty group", () => {
+  test("a bare /g is the unfiltered Play page, not an empty group", () => {
     expect(parsePath("/g")).toEqual({
       group: null,
       view: "play",
@@ -100,11 +104,25 @@ describe("parsePath", () => {
   })
 
   /**
-   * The three Tonight addresses. `/tonight/go` is a PRESET CARD's — the answers the form
+   * The three What to Watch/Play addresses. `/tonight/go` is a PRESET CARD's — the answers the form
    * would have collected, in the query string — and it must not be swallowed by the bare
    * `/tonight`, or a tapped card opens the empty form it exists to skip.
    */
-  test("/tonight and its two steps", () => {
+  test("What to Watch/Play and its two steps", () => {
+    expect(parsePath("/what-to-watch-play")).toEqual({
+      step: null,
+      view: "tonight",
+    })
+    expect(
+      parsePath("/what-to-watch-play/surprise"),
+    ).toEqual({
+      step: "surprise",
+      view: "tonight",
+    })
+    expect(parsePath("/what-to-watch-play/go")).toEqual({
+      step: "go",
+      view: "tonight",
+    })
     expect(parsePath("/tonight")).toEqual({
       step: null,
       view: "tonight",
@@ -168,10 +186,9 @@ describe("parsePath", () => {
     })
   })
 
-  test("an unknown path falls back to PLAY rather than a blank page", () => {
+  test("an unknown path falls back to the mode landing rather than a blank page", () => {
     expect(parsePath("/nope")).toEqual({
-      group: null,
-      view: "play",
+      view: "home",
     })
   })
 })
@@ -189,18 +206,25 @@ describe("canonicalPath", () => {
     expect(canonicalPath("/collection/")).toBe(
       "/board-game-collection",
     )
+    expect(canonicalPath("/tonight")).toBe(
+      "/what-to-watch-play",
+    )
+    expect(canonicalPath("/tonight/surprise/")).toBe(
+      "/what-to-watch-play/surprise",
+    )
   })
 
   test("the new path is already canonical", () => {
     expect(
       canonicalPath("/board-game-collection"),
     ).toBeNull()
+    expect(canonicalPath("/what-to-watch-play")).toBeNull()
   })
 
   test("every other route is left alone", () => {
     expect(canonicalPath("/")).toBeNull()
+    expect(canonicalPath("/admin")).toBeNull()
     expect(canonicalPath("/queues")).toBeNull()
-    expect(canonicalPath("/tonight")).toBeNull()
     expect(canonicalPath("/q/bob")).toBeNull()
     expect(canonicalPath("/collections")).toBeNull()
   })
@@ -217,6 +241,13 @@ describe("labelForPath", () => {
     // The legacy path keeps the same label, so a redirect in flight never
     // paints "‹ Play" for a frame.
     expect(labelForPath("/collection")).toBe("‹ Collection")
-    expect(labelForPath("/")).toBe("‹ Play")
+    expect(labelForPath("/what-to-watch-play")).toBe(
+      "‹ What to Watch/Play",
+    )
+    expect(labelForPath("/tonight")).toBe(
+      "‹ What to Watch/Play",
+    )
+    expect(labelForPath("/admin")).toBe("‹ Admin")
+    expect(labelForPath("/")).toBe("‹ QueuePilot")
   })
 })

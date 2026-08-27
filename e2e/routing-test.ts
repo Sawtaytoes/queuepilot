@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/what-to-watch-play', '/what-to-watch-play/surprise', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -57,16 +57,34 @@ const heading = (want: string) =>
   ).then(() => true, () => false);
 
 // Each deep link boots straight into its own view — the router agreeing with the server.
+await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+const modeLanding = () =>
+  page.waitForSelector('#mode-landing:not([hidden])', { timeout: 30000 });
+await modeLanding();
+const modeLinks = await page.$$eval('#mode-landing a', (els) =>
+  els.map((el) => ({
+    href: el.getAttribute('href'),
+    text: el.textContent?.replace(/\s+/g, ' ').trim(),
+  })),
+);
+ok(
+  'the root mode landing offers Admin and What to Watch/Play',
+  modeLinks.length === 2 &&
+    modeLinks[0]?.href === '/admin' &&
+    modeLinks[0].text?.startsWith('Admin') === true &&
+    modeLinks[1]?.href === '/what-to-watch-play' &&
+    modeLinks[1].text?.startsWith('What to Watch/Play') === true,
+);
+
 for (const [path, want] of [
-  ['/', 'QueuePilot'],
+  ['/admin', 'Admin'],
   ['/queues', 'Picks'],
   ['/q/bob', 'Bob — Movies'],
   ['/channels/shows', 'Rules'],
-  // Tonight, and its Surprise Me STEP. The step is a second path on one view, so it is the
-  // case a `startsWith` router gets wrong in the direction that never fails loudly: match
-  // `/tonight` first and `/tonight/surprise` silently becomes the bare form.
-  ['/tonight', 'Tonight'],
-  ['/tonight/surprise', 'Tonight'],
+  // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
+  // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
+  ['/what-to-watch-play', 'What to Watch/Play'],
+  ['/what-to-watch-play/surprise', 'What to Watch/Play'],
   // The board-game shelf. A LONG path on purpose: `/collection` claimed a generic word for
   // one specific shelf, and "collection" already means a row of films everywhere else in
   // this app (decision `2026-08-25-the-board-game-shelf-is-board-game-collection`).
@@ -74,22 +92,37 @@ for (const [path, want] of [
 ] as const) {
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
   ok(`deep link ${path} renders "${want}"`, await heading(want));
+  if (path === '/what-to-watch-play') {
+    const text = await page.locator('body').innerText();
+    ok('the activity picker does not use Tonight as its visible name', !/\bTonight\b/.test(text));
+  }
 }
 
 // The Surprise Me step really is the STEP and not the bare route — the heading is the same
 // on both, so the heading alone cannot tell them apart.
 {
-  await page.goto(`${BASE}/tonight/surprise`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/what-to-watch-play/surprise`, { waitUntil: 'domcontentloaded' });
   const isStep = await page
     .waitForSelector('#tonight-surprise', { timeout: 30000 })
     .then(() => true, () => false);
-  ok('/tonight/surprise renders the narrowing step, not the bare form', isStep);
+  ok('/what-to-watch-play/surprise renders the narrowing step, not the bare form', isStep);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   const survives = await page
     .waitForSelector('#tonight-surprise', { timeout: 30000 })
     .then(() => true, () => false);
   ok('…and survives a reload, so the SPA fallback answers a nested path too', survives);
+}
+
+// `/tonight` was the old user-facing name. It remains a live address, but the app rewrites
+// it to the new name instead of showing the old label.
+{
+  await page.goto(`${BASE}/tonight`, { waitUntil: 'domcontentloaded' });
+  ok('the legacy /tonight address opens What to Watch/Play', await heading('What to Watch/Play'));
+  ok(
+    '…and its URL is rewritten to /what-to-watch-play',
+    (await page.evaluate(() => location.pathname)) === '/what-to-watch-play',
+  );
 }
 
 // The board-game shelf, both halves of the 2026-08-25 rename.
@@ -117,7 +150,7 @@ for (const [path, want] of [
   // The legacy address. `/collection` was live for a few hours on 2026-08-25, so it
   // REDIRECTS rather than 404ing or falling through to the landing.
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await heading('QueuePilot');
+  await modeLanding();
   await page.goto(`${BASE}/collection`, { waitUntil: 'domcontentloaded' });
   ok('the legacy /collection still renders the shelf', await heading('Collection'));
 
@@ -132,7 +165,7 @@ for (const [path, want] of [
   // REPLACE, not push: a redirect that pushes makes Back land on the old path, which
   // redirects forward again and the button reads as dead.
   await page.goBack();
-  ok('…Back from the redirect returns to the landing, not into a loop', await heading('QueuePilot'));
+  ok('…Back from the redirect returns to the mode landing, not into a loop', Boolean(await modeLanding()));
 }
 
 // A reload has to survive, which is the entire point of the fallback.
@@ -145,7 +178,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
 // bare `<a href="/queues">` still "works" for the user but refetches the whole app, so
 // count real page loads rather than trusting the URL alone.
 {
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#goqueues');
 
   let loads = 0;
@@ -164,7 +197,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
 
 // The browser's own Back must work — it did not exist as a question under the hash router.
 await page.goBack();
-ok('browser Back returns to the landing', await heading('QueuePilot'));
+ok('browser Back returns to Admin', await heading('Admin'));
 
 // The in-app back control points at the ORIGIN — where navigation into this view STARTED,
 // not a fixed parent (Bob's ask). That is tracked in web/src/state/route.ts, and it is the

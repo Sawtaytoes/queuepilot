@@ -106,7 +106,7 @@ try {
     await page.waitForTimeout(1200);
   };
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await settle(true);
   await page.screenshot({ path: `__screenshots__/npbar-${TAG}-wide.png`, fullPage: false });
 

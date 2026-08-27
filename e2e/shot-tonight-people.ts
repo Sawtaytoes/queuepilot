@@ -44,7 +44,7 @@ try {
   };
 
   const open = async () => {
-    await page.goto(`${server.base}/tonight`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${server.base}/what-to-watch-play`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#tonight:not([hidden])', { timeout: 30000 });
     // The queues come from `/api/sets` and their people from `/api/queue-people`, both of
     // which the landing loads on boot.

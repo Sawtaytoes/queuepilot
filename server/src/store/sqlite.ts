@@ -152,6 +152,16 @@ const isNamedParameters = (
 ): value is Record<string, BindValue> =>
   typeof value === 'object' && value !== null && !ArrayBuffer.isView(value);
 
+/** Keep the binding contract stable when a JavaScript caller bypasses the TypeScript type. */
+const rejectUnsupportedBinding = (value: unknown): void => {
+  if (value === undefined || typeof value === 'boolean')
+    throw new TypeError('sqlite shim: booleans and undefined are not bindable');
+
+  if (typeof value === 'object' && value !== null && !ArrayBuffer.isView(value)) {
+    for (const nested of Object.values(value)) rejectUnsupportedBinding(nested);
+  }
+};
+
 /**
  * Split the variadic arguments the way node:sqlite's signature wants them: the named-parameter
  * object first (if there is one), then the anonymous ones.
@@ -163,6 +173,8 @@ const isNamedParameters = (
 const splitParams = (
   params: readonly (BindValue | Record<string, BindValue>)[],
 ): { named: Record<string, BindValue> | undefined; anonymous: BindValue[] } => {
+  for (const param of params) rejectUnsupportedBinding(param);
+
   const [first, ...rest] = params;
 
   if (isNamedParameters(first)) {

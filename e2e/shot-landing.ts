@@ -77,7 +77,7 @@ try {
     await page.waitForTimeout(1800);
   };
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-wide.png`, fullPage: true });
 
@@ -97,7 +97,7 @@ try {
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-account-group.png`, fullPage: true });
 
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-narrow.png`, fullPage: true });
 

@@ -46,7 +46,7 @@ try {
     console.log('wrote', path);
   };
 
-  const open = async (path = '/tonight') => {
+  const open = async (path = '/what-to-watch-play') => {
     await page.goto(`${server.base}${path}`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#tonight:not([hidden])', { timeout: 30000 });
     await page.waitForTimeout(1200);

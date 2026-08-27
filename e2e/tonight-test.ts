@@ -35,7 +35,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1420, height: 1100 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 
-  const open = async (path = '/tonight') => {
+  const open = async (path = '/what-to-watch-play') => {
     await page.goto(`${server.base}${path}`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('#tonight-activity [role="radiogroup"]', { timeout: 30000 });
     await page.waitForTimeout(900);
@@ -384,7 +384,7 @@ try {
     await page.click(tile('Surprise Me'));
     await page.waitForTimeout(400);
     ok('the Surprise Me tile routes to its narrowing step',
-      new URL(page.url()).pathname === '/tonight/surprise', page.url());
+      new URL(page.url()).pathname === '/what-to-watch-play/surprise', page.url());
     ok('…and renders that step', Boolean(await page.$('#tonight-surprise')));
     // It chooses NOTHING on the way there. A Go that had already picked would be the
     // one-tap random pick the owner rejected.
@@ -393,7 +393,7 @@ try {
     // Any other tile leaves the step.
     await page.click(tile('Movies'));
     await page.waitForTimeout(400);
-    ok('another tile leaves the step', new URL(page.url()).pathname === '/tonight');
+    ok('another tile leaves the step', new URL(page.url()).pathname === '/what-to-watch-play');
   }
 } finally {
   await browser.close();
