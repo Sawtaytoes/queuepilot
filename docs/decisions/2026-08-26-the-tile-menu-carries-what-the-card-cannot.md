@@ -81,6 +81,9 @@ change a lane, because a lane was only ever a drag, and a drag is one entry at a
 - `e2e/tile-menu-test.ts` — the menu's rows, the absence of Remove, both lane writes
   (`placement` first, then the order, as the drag does), the head-of-queue order that
   "Play this next" writes, and the selection bar's Lane field applied to two entries.
+- `e2e/shelf-remove-test.ts` — the SHELF's copy of the same claim: the menu opens on a shelf
+  poster, holds no Remove row, and its lane row writes. That file asserted the Remove row
+  until this decision; the ✕ it pins four times over is what removes a shelf entry.
 - `web/src/state/queueView.test.ts` — `orderAfterLaneMove` and `effectiveLane`: the
   promote-to-the-end, the play-next-to-the-head, the demote, a bulk move that keeps the
   selection's relative order, and the file staying one priority-first sequence.
