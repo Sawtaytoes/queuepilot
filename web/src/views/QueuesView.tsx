@@ -19,6 +19,7 @@ import { PeopleRow } from "../components/PeopleRow"
 import { PosterTile } from "../components/PosterTile"
 import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
+import { isRandomOrder } from "../lib/kind"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { queueNumbers, queueTitle } from "../lib/people"
 import {
@@ -43,10 +44,12 @@ import {
 } from "../state/overlays"
 import { usePeople } from "../state/people"
 import {
+  moveEntryLane,
   queueEntryActions,
   removeQueueItem,
 } from "../state/queueEntry"
-import { queueIds, useStore } from "../state/store"
+import { splitLanes } from "../state/queueView"
+import { curatedIds, useStore } from "../state/store"
 import {
   homeScroll,
   toggleCollapsed,
@@ -99,6 +102,7 @@ function Shelf({
   providerKind,
   set,
   setId,
+  setLane,
 }: {
   setId: string
   /**
@@ -126,6 +130,14 @@ function Shelf({
     RegistrySet,
     "id" | "delivery" | "episodes" | "vocabulary"
   > | null
+  /**
+   * This queue's OWN default lane — what an entry carrying no `placement` means here.
+   *
+   * Resolved by the caller through `isRandomOrder`, exactly as `QueueView` does it, because
+   * the registry row may carry only a legacy `kind` and there must not be two places that
+   * decide what an un-promoted entry is.
+   */
+  setLane: "priority" | "random"
 }) {
   const stripRef = useRef<HTMLUListElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
@@ -173,6 +185,192 @@ function Shelf({
 
   const isLive = setId === playingSet
 
+  /**
+   * THE TWO LANES, in the ONE strip.
+   *
+   * A Picks queue is one membership list with a Priority queue and a Random pool
+   * (decision `2026-08-23-kind-is-picks-or-rules`), and until 2026-08-26 this page only ever
+   * drew queues whose entries were all in one of them — the random-lane ones were listed on
+   * the Rules page. They are all here now, so a shelf has to be able to say which lane a
+   * poster is in.
+   *
+   * ONE strip and not two, unlike `/q/<id>`. `useHomeDrags` reads a shelf as a single
+   * `.strip` — it hit-tests one per shelf, and it rebuilds the file order from
+   * `strip.querySelectorAll("li.tile")` — so a second `<ul>` would send a PATCH carrying half
+   * the queue's keys. The lanes are two RUNS inside that one list instead: Priority first,
+   * then a divider `<li>`, then the pool. The divider is not a `li.tile`, so every one of
+   * those queries steps over it.
+   */
+  const lanes = splitLanes(items, setLane)
+  const hasBothLanes = Boolean(
+    lanes.priority.length && lanes.random.length,
+  )
+  /**
+   * The lane clause beside the count.
+   *
+   * A shelf holding one lane still has to say WHICH — the strip's divider can only appear
+   * when there are two runs to divide, so a queue with every entry in the pool would
+   * otherwise be indistinguishable from an ordered one. Same clause `PlayView.picksMeta`
+   * puts on a landing card, so the two pages agree about a queue at a glance.
+   */
+  const laneClause = hasBothLanes
+    ? `${lanes.priority.length} priority · ${lanes.random.length} pool`
+    : items.length === 0
+      ? null
+      : lanes.priority.length
+        ? "priority queue"
+        : "random pool"
+
+  /**
+   * ONE poster, rendered the same in either lane.
+   *
+   * Extracted from the strip's `.map()` when the shelf grew a second run, for the reason
+   * `QueueView.renderTile` gives: the two lanes have to be the same tile, with the same
+   * chrome and the same handlers, and a copy per lane is two places for that to stop being
+   * true. `lane` is the entry's OWN lane — `placement ?? setLane`, already resolved by
+   * `splitLanes` — and it decides only the promote arrow's direction.
+   */
+  const renderTile = (
+    item: QueueItem,
+    lane: "priority" | "random",
+  ) => {
+    const face = tileFace(item)
+    const isPlaying = isLive && isPlayingItem(now, item)
+
+    return (
+      <PosterTile
+        badges={
+          <>
+            <TypeBadge face={face} item={item} />
+            {/* Which EDITION this is — see QueueView. The shelf shows the same
+                        entries the grid does, so it has the same pair to tell apart. */}
+            <EditionChip face={face} />
+            {/* "In Progress" wins over "Completed": a mid-episode resume point
+                          (Plex viewOffset, unwatched) means the item is being watched, not
+                          finished — the Prison School OAD case must never read "Completed". */}
+            {item.partiallyWatched ? (
+              <Tip
+                label={progressLabel(
+                  item.viewOffset,
+                  item.duration,
+                )}
+              >
+                <Badge
+                  appearance="outline"
+                  className="badge progressbadge"
+                  intent="accent"
+                  size="sm"
+                >
+                  In Progress
+                </Badge>
+              </Tip>
+            ) : isCompleted(item) ? (
+              <Badge
+                appearance="outline"
+                className="badge donebadge"
+                intent="success"
+                size="sm"
+              >
+                Completed
+              </Badge>
+            ) : null}
+            {/* Solid, not outline: this one has to win against the
+                          type and Completed chips beside it. Green rather than
+                          amber so it never reads as the selection outline. */}
+            {isPlaying ? (
+              <Badge
+                appearance="solid"
+                className="badge playingbadge"
+                intent="info"
+                size="sm"
+              >
+                {now.now?.state === "paused"
+                  ? "Paused"
+                  : "Now playing"}
+              </Badge>
+            ) : null}
+          </>
+        }
+        className={[
+          // `pending` is not `unresolved`: the red border means "this
+          // entry names something Plex does not have", and a tile that
+          // simply hasn't been resolved YET has made no such claim.
+          item.resolved || item.pending
+            ? null
+            : "unresolved",
+          isCompleted(item) ? "done" : null,
+          isPlaying ? "playing" : null,
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        dataKey={item.key}
+        dataSet={setId}
+        isPending={item.pending}
+        isPriority={lane === "priority"}
+        key={item.key}
+        // The third control in the tile's chrome stack: into the Priority queue, or
+        // back out to the pool. The queue page's divider drag has no counterpart here
+        // — a shelf is one `.strip` and its drag rebuilds file order, not placement —
+        // so on this page the arrow is the ONLY promote, which is why it is offered on
+        // every shelf rather than only on the mixed ones.
+        onLane={() =>
+          void moveEntryLane(setId, item, setLane)
+        }
+        next={{
+          isDone: face.nextDone,
+          text: face.next,
+          tooltip:
+            face.from && item.childCount != null
+              ? `${face.next} — ${item.childCount} in order`
+              : face.next,
+        }}
+        // The same per-entry menu the queue grid opens. It was already
+        // half-wired here: `useHomeDrags` suppresses the browser's native menu
+        // over a poster so a touch long-press can arm a drag, so a right-click
+        // on a shelf poster did NOTHING at all. It also carries the start-point
+        // actions, which had no shelf route either.
+        onContextMenu={(e) => {
+          e.preventDefault()
+          openTileMenu(
+            e.clientX,
+            e.clientY,
+            queueEntryActions(setId, item),
+          )
+        }}
+        // The ✕. A shelf already REORDERS a title and MOVES it to another queue
+        // (`useHomeDrags`), so "open the queue first" was the only write it
+        // refused — reported 2026-08-21: "From the Ordered Queues view, I can't
+        // remove items either."
+        // (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`)
+        onRemove={() => removeQueueItem(setId, item)}
+        posterCover={item.cover}
+        // The runtime line, the same as the queue grid's — the shelf shows the
+        // same entries and answers the same question about them.
+        runtime={runtimeLabel(
+          item.nextEp?.duration || item.duration,
+          item.episodes ?? set?.episodes ?? 1,
+        )}
+        posterRatingKey={
+          item.resolved ? face.ratingKey : null
+        }
+        title={
+          face.title + (face.year ? ` (${face.year})` : "")
+        }
+        // The item's own page in Plex / Kavita — see QueueView.
+        titleHref={item.webUrl}
+        titleHrefLabel={
+          set?.vocabulary?.name || PLEX_WORDS.name
+        }
+        titleTooltip={
+          face.from
+            ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
+            : face.title +
+              (face.year ? ` (${face.year})` : "")
+        }
+      />
+    )
+  }
+
   return (
     <section
       className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}`}
@@ -213,6 +411,9 @@ function Shelf({
         >
           <span className="lbl">{label}</span>{" "}
           <span className="sec">{items.length}</span>{" "}
+          {laneClause ? (
+            <span className="lanes-sec">{laneClause}</span>
+          ) : null}{" "}
           <span className="chev">›</span>
         </Link>
         {/* THE LIST INHERITS THE TRAYS. Must-be-here faces large, nice-to-have faces small and
@@ -341,138 +542,28 @@ function Shelf({
               />
             </li>
           ) : (
-            items.map((item) => {
-              const face = tileFace(item)
-              const isPlaying =
-                isLive && isPlayingItem(now, item)
-
-              return (
-                <PosterTile
-                  badges={
-                    <>
-                      <TypeBadge face={face} item={item} />
-                      {/* Which EDITION this is — see QueueView. The shelf shows the same
-                          entries the grid does, so it has the same pair to tell apart. */}
-                      <EditionChip face={face} />
-                      {/* "In Progress" wins over "Completed": a mid-episode resume point
-                            (Plex viewOffset, unwatched) means the item is being watched, not
-                            finished — the Prison School OAD case must never read "Completed". */}
-                      {item.partiallyWatched ? (
-                        <Tip
-                          label={progressLabel(
-                            item.viewOffset,
-                            item.duration,
-                          )}
-                        >
-                          <Badge
-                            appearance="outline"
-                            className="badge progressbadge"
-                            intent="accent"
-                            size="sm"
-                          >
-                            In Progress
-                          </Badge>
-                        </Tip>
-                      ) : isCompleted(item) ? (
-                        <Badge
-                          appearance="outline"
-                          className="badge donebadge"
-                          intent="success"
-                          size="sm"
-                        >
-                          Completed
-                        </Badge>
-                      ) : null}
-                      {/* Solid, not outline: this one has to win against the
-                            type and Completed chips beside it. Green rather than
-                            amber so it never reads as the selection outline. */}
-                      {isPlaying ? (
-                        <Badge
-                          appearance="solid"
-                          className="badge playingbadge"
-                          intent="info"
-                          size="sm"
-                        >
-                          {now.now?.state === "paused"
-                            ? "Paused"
-                            : "Now playing"}
-                        </Badge>
-                      ) : null}
-                    </>
-                  }
-                  className={[
-                    // `pending` is not `unresolved`: the red border means "this
-                    // entry names something Plex does not have", and a tile that
-                    // simply hasn't been resolved YET has made no such claim.
-                    item.resolved || item.pending
-                      ? null
-                      : "unresolved",
-                    isCompleted(item) ? "done" : null,
-                    isPlaying ? "playing" : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                  dataKey={item.key}
-                  dataSet={setId}
-                  isPending={item.pending}
-                  key={item.key}
-                  next={{
-                    isDone: face.nextDone,
-                    text: face.next,
-                    tooltip:
-                      face.from && item.childCount != null
-                        ? `${face.next} — ${item.childCount} in order`
-                        : face.next,
-                  }}
-                  // The same per-entry menu the queue grid opens. It was already
-                  // half-wired here: `useHomeDrags` suppresses the browser's native menu
-                  // over a poster so a touch long-press can arm a drag, so a right-click
-                  // on a shelf poster did NOTHING at all. It also carries the start-point
-                  // actions, which had no shelf route either.
-                  onContextMenu={(e) => {
-                    e.preventDefault()
-                    openTileMenu(
-                      e.clientX,
-                      e.clientY,
-                      queueEntryActions(setId, item),
-                    )
-                  }}
-                  // The ✕. A shelf already REORDERS a title and MOVES it to another queue
-                  // (`useHomeDrags`), so "open the queue first" was the only write it
-                  // refused — reported 2026-08-21: "From the Ordered Queues view, I can't
-                  // remove items either."
-                  // (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`)
-                  onRemove={() =>
-                    removeQueueItem(setId, item)
-                  }
-                  posterCover={item.cover}
-                  // The runtime line, the same as the queue grid's — the shelf shows the
-                  // same entries and answers the same question about them.
-                  runtime={runtimeLabel(
-                    item.nextEp?.duration || item.duration,
-                    item.episodes ?? set?.episodes ?? 1,
-                  )}
-                  posterRatingKey={
-                    item.resolved ? face.ratingKey : null
-                  }
-                  title={
-                    face.title +
-                    (face.year ? ` (${face.year})` : "")
-                  }
-                  // The item's own page in Plex / Kavita — see QueueView.
-                  titleHref={item.webUrl}
-                  titleHrefLabel={
-                    set?.vocabulary?.name || PLEX_WORDS.name
-                  }
-                  titleTooltip={
-                    face.from
-                      ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-                      : face.title +
-                        (face.year ? ` (${face.year})` : "")
-                  }
-                />
-              )
-            })
+            <>
+              {lanes.priority.map((item) =>
+                renderTile(item, "priority"),
+              )}
+              {/* THE DIVIDER, and it is deliberately not a `li.tile`: `useHomeDrags` builds
+                  the queue's new order from `strip.querySelectorAll("li.tile")` and hit-tests
+                  drop slots the same way, so a marker that matched would be sent to the
+                  server as a key. `aria-hidden` because the shelf heading already says the
+                  split in words ("3 priority · 9 pool") — this is the visual echo of that
+                  sentence, not a second copy of it for a screen reader to read out. */}
+              {hasBothLanes ? (
+                <li
+                  aria-hidden="true"
+                  className="lanesplit"
+                >
+                  <span>Random pool</span>
+                </li>
+              ) : null}
+              {lanes.random.map((item) =>
+                renderTile(item, "random"),
+              )}
+            </>
           )}
         </ul>
         <button
@@ -529,7 +620,10 @@ export function QueuesView({
   // A number is how you tell two cards apart, so it only means anything among cards somebody
   // can see at once: numbering the registry made this page open at "Movies & Shows 3",
   // because two filtered pools on the Pools page had taken 1 and 2.
-  const shelfIds = queueIds(data)
+  // EVERY Picks queue, both lane defaults. It was the priority-lane half until 2026-08-26,
+  // which is what left `Kevin — Anime` and nine others listed on the Rules page instead
+  // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
+  const shelfIds = curatedIds(data)
   const numbers = queueNumbers(
     shelfIds
       .map((id) => reg?.sets.find((s) => s.id === id))
@@ -580,14 +674,19 @@ export function QueuesView({
                   people={people.people}
                   playingSet={playingSet}
                   providerKind={
-                    reg?.sets.find((s) => s.id === id)
-                      ?.provider_kind ?? ""
+                    registrySet?.provider_kind ?? ""
                   }
-                  set={
-                    reg?.sets.find((s) => s.id === id) ??
-                    null
-                  }
+                  set={registrySet ?? null}
                   setId={id}
+                  // The registry row first, the queues payload as the fallback — the same
+                  // pair `QueueView` and `App` resolve the lane from, so one queue cannot
+                  // read as priority-by-default on its shelf and random-by-default on its
+                  // own page.
+                  setLane={
+                    isRandomOrder(registrySet ?? q)
+                      ? "random"
+                      : "priority"
+                  }
                 />
               )
             })}

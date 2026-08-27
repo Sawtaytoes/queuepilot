@@ -537,8 +537,77 @@ Four things to know before touching it:
 - **The pool saves no order.** A drag that starts and ends in `random` writes nothing —
   deliberate, because the pool is shuffled at playback.
 
-Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). `splitLanes` in
+Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). ⚠️ **Run it with
+`PLEX_TOKEN=` blank.** It drives the DEGRADED path on purpose, and a workspace shell that has
+sourced the root `.env` gives its server a live Plex — the tiles then resolve, the layout
+moves, and every drag in the file lands somewhere other than where it aimed. That reads as
+six hard failures and is an environment difference, not a regression. `splitLanes` in
 `state/queueView.ts` is the pure half and has unit tests.
+
+### The Picks PAGE lists both lanes' queues, in one strip each
+
+**Which screen a queue is on comes from `source`, never from `add_as`**
+([decision](docs/decisions/2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to.md)).
+`/queues` (**Picks**) lists every `source: queue` set; `/channels` (**Rules**) lists every
+`source: rotation` set. Nothing appears on both. The two `add_as` selectors that used to
+split them — `queueIds` and `channelSetIds` — are **gone**; there is one, `curatedIds`, and a
+new filter on `add_as` in a screen list is a regression, not a feature.
+
+- **A shelf is ONE `.strip` with two RUNS in it**, never two `<ul>`s like `/q/<id>`.
+  `useHomeDrags` hit-tests one `.strip` per shelf and rebuilds the queue's file order from
+  `strip.querySelectorAll("li.tile")`, so a second list would PATCH an order carrying half
+  the keys. The divider between the runs is an `li.lanesplit` — deliberately not a `li.tile`,
+  so every one of those queries steps over it.
+- **A shelf drag REORDERS; the tile's arrow PROMOTES.** There is no drag-across-the-divider
+  here (see above), so a tile dropped in the other run returns to its own lane on the next
+  render. `onLane` is offered on every shelf tile because it is the only promote on this page.
+- **The heading says the lane in words** — `3 priority · 9 pool`, or `priority queue` /
+  `random pool` when a queue is entirely one. The one-lane clause is the contract, not
+  decoration: a divider needs two runs to exist between, so without it an all-pooled queue
+  and an ordered one are the same row of posters.
+- ⚠️ **`/api/shelves` carries `placement`, and must keep carrying it.** The skeleton exists to
+  paint at final geometry before `/api/queues` resolves against Plex; the geometry now
+  includes the lane split. Drop the field and every entry falls into the set's default lane
+  on first paint, so the divider and the tiles either side of it move when the resolved
+  payload lands — the exact shift that endpoint was added to prevent. It costs one property
+  read and no Plex call. Gate: `e2e/api-v2-test.ts`, always-on.
+
+### A rules row names its ACCOUNT, and the gate is the LABEL
+
+*"Shows" and "Shows & Shorts" are the same words until you know one is Younger Kids and the
+other Older Kids.* `channelAccountLabel` is the one place that decides it — the rules picker's
+chips, the Play landing card's meta line, and nothing else needs a fourth copy.
+
+⚠️ **Do not gate it on `has_explicit_profiles`.** `PlayView` did, on the belief that a legacy
+flat set's SYNTHESIZED binding reports the channel's own label. It does not — the synthesized
+binding carries the real `plex_user`, and `/api/sets` says so:
+`younger | Shows & Shorts | explicit: false | profiles: ["Younger Kids"]`. That belief reads as
+true against the live `sets.yaml` only because those two pools are named after the accounts
+they play as. The gate is a comparison with the row's own label, which is the check the flag
+was reaching for.
+
+**"Plays as `<account>`" is gone from the Rules header** — the picker beside it says the
+account on every row, so the sentence said it twice. The 2026-08-17 rule stands: the account
+is a fact, not a choice, and must never wear a chevron of its own.
+
+**A chip on a picker TRIGGER shrinks; a chip on a list ROW does not.** `.optionbadge` is
+`flex: none` for a row (as wide as the panel) and `flex: 0 1 auto` on `.qppicker > span >`,
+and the option's text lives in `.optionlabel` so it can ellipsise beside it — a bare text node
+next to a `Badge` becomes an anonymous flex item, which takes no `min-width: 0`. Skip either
+half and the Rules header scrolls sideways at 390px. `narrow-scroll-test` is the gate.
+
+### A list of queues names its PEOPLE
+
+A queue's displayed name is its ACTIVITY
+([decision](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md)), so any control
+that lists queues by name reads "Movies & Shows", "Movies & Shows 2", "Movies & Shows 3" and
+names nothing. Shelves and landing cards answer that with `PeopleRow`; a **menu row or a
+picker option** cannot hold 26px faces, so it gets `queuePeopleLabel` instead — as a
+`SelectListbox` option `badge`, or as `<QueuePeopleBadge>` inside a `MenuItem`'s `label`.
+Three call sites today: both Add-to menus (`Toolbar`, `PendingView`) and the selection bar's
+Move-to picker. **Add a fourth list of queues and it gets the chip too** — fixing one of three
+is how a rule becomes folklore. Required members only, three names then `+n`, `Anybody` for a
+queue nobody has filed.
 
 ## Reading the log when a queue plays the wrong thing
 

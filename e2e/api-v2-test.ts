@@ -88,6 +88,30 @@ try {
   const hist = await api('/history');
   ok(`mutations snapshotted for undo (undo=${hist.undo})`, hist.undo >= 1);
 
+  // --- B2: the shelf SKELETON carries the lane -------------------------------- //
+  //
+  // `/api/shelves` exists to paint the Picks page at FINAL geometry before `/api/queues`
+  // resolves against Plex, and since 2026-08-26 that geometry includes the lane split — a
+  // Priority run, a divider, then the pool. A skeleton with no `placement` puts every entry
+  // in the set's default lane, so the divider and the tiles either side of it move when the
+  // resolved payload lands: the exact layout shift this endpoint was added to prevent, and
+  // invisible to any test that only reads `/api/queues`.
+  //
+  // Zero Plex calls either way — `placement` is written on the entry, so it costs a property
+  // read. That is why this belongs in the skeleton at all.
+  const promoteKey = (await api('/queues')).sets.bob.items[0].key as string;
+  await patch(`/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`, { placement: 'priority' });
+  const skeleton = (await api('/shelves')).sets.bob.items as JsonBody[];
+  ok('the shelf skeleton reports the promoted entry\'s lane',
+    skeleton.find((i) => i.key === promoteKey)?.placement === 'priority');
+  ok('an un-promoted entry is null in the skeleton, never guessed',
+    skeleton.filter((i) => i.key !== promoteKey).every((i) => i.placement === null));
+  const resolved = (await api('/queues')).sets.bob.items as JsonBody[];
+  ok('the skeleton and the resolved payload agree, entry for entry',
+    JSON.stringify(skeleton.map((i) => [i.key, i.placement]))
+      === JSON.stringify(resolved.map((i) => [i.key, i.placement])));
+  await patch(`/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`, { placement: '' });
+
   // --- C: collection-typed add + collections search flag --------------------- //
   const addColl = await post('/queues/bob/items', { type: 'collection', value: { title: 'Marvel Cinematic Universe' } });
   ok('collection add accepted', addColl.added === true);

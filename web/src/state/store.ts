@@ -1,7 +1,6 @@
 import { useSyncExternalStore } from "react"
 
 import { api } from "../lib/api"
-import { isRandomOrder } from "../lib/kind"
 import type {
   GroupsResponse,
   NowState,
@@ -117,27 +116,26 @@ export function setStatus(
 }
 
 // --- derived selectors ------------------------------------------------------- //
-// Hand-picked (source: queue) sets, split by lane default: priority vs random.
-// Both are product kind `picks`; add_as (and legacy movies/anime) chooses the lane
-// (decision 2026-08-23-kind-is-picks-or-rules).
+/**
+ * EVERY Picks queue — every hand-picked (`source: queue`) set, whatever its lane default.
+ *
+ * There used to be two more selectors beside this one, `queueIds` and `channelSetIds`, which
+ * split this list on `add_as` and handed each half to a different SCREEN: the priority half
+ * to Picks (`/queues`), the random half to Rules (`/channels`). That was the last of the
+ * three-way Ordered Queue / Curated Pool / Filtered Pool taxonomy, and it put ten of the
+ * household's Picks queues in the Rules picker — `Kevin — Anime` and `Manga & Webtoons` sat
+ * in a dropdown headed by two rules queues, on a page whose heading says Rules.
+ *
+ * `add_as` is a LANE DEFAULT, not a product kind. It decides which lane a new entry lands in
+ * inside one Picks queue; it never decides which page the queue lives on
+ * (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
+ */
 export const curatedIds = (data: QueuesResponse | null) =>
   data
     ? data.order.filter(
         (id) => data.sets[id]?.source === "queue",
       )
     : []
-
-export const queueIds = (data: QueuesResponse | null) =>
-  curatedIds(data).filter(
-    (id) => !isRandomOrder(data!.sets[id]!),
-  )
-
-export const channelSetIds = (
-  data: QueuesResponse | null,
-) =>
-  curatedIds(data).filter((id) =>
-    isRandomOrder(data!.sets[id]!),
-  )
 
 /**
  * PR 4 cutover: a migrated function channel carries `profiles[]` bindings and a
@@ -225,6 +223,11 @@ function shelvesAsQueues(
         key: it.key,
         nextEp: null,
         pending: true,
+        // The LANE the entry is stored in. Carried through the skeleton so the Picks
+        // shelf draws its Priority run, its divider and its pool run at FINAL geometry —
+        // dropping it here put every entry in the set's default lane for the first paint
+        // and moved the whole strip when /api/queues landed.
+        placement: it.placement ?? null,
         ratingKey: null,
         raw: it.raw,
         resolved: false,
