@@ -53,7 +53,7 @@ try {
   };
 
   // ── 1. The landing, and the way in ──────────────────────────────────────────────── //
-  await goto('/', '#play:not([hidden])');
+  await goto('/admin', '#play:not([hidden])');
   await shot('landing');
 
   // ── 2. The shelf ────────────────────────────────────────────────────────────────── //
@@ -79,7 +79,7 @@ try {
   await page.setViewportSize({ width: 1420, height: 1100 });
 
   // ── 6. Tonight, on Board Games, with a table ────────────────────────────────────── //
-  await goto('/tonight', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]');
+  await goto('/what-to-watch-play', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]');
   await page.click('#tonight-activity [role="radio"]:has-text("Board Games")');
   await page.waitForTimeout(400);
   for (const id of ['ada', 'grace', 'linus']) {

@@ -1,3 +1,4 @@
+import { WATCH_PLAY_PATH } from "../state/parsePath"
 import {
   ACTIVITY_FILTERS,
   type ActivityId,
@@ -189,5 +190,5 @@ export function tonightPresetHref(
     }
   }
 
-  return `/tonight/go?${params.toString()}`
+  return `${WATCH_PLAY_PATH}/go?${params.toString()}`
 }

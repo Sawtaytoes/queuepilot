@@ -42,6 +42,7 @@ import {
   openSetModal,
 } from "../state/overlays"
 import { usePeople } from "../state/people"
+import { WATCH_PLAY_PATH } from "../state/route"
 import {
   bumpRevision,
   getState,
@@ -52,7 +53,8 @@ import {
 } from "../state/store"
 
 /**
- * PLAY — the landing. Every pool and queue as a posterless card: pick one and play it.
+ * ADMIN — the management landing. Every pool and queue as a posterless card: manage it or
+ * open it for playback.
  * The configurators (posters, drag, filters) live behind the "Configure ›" links.
  * (decision `2026-07-21-queues-vs-channels-taxonomy-play-first-ia`)
  *
@@ -634,14 +636,13 @@ export function PlayView({
         >
           ＋ New picks queue
         </Button>
-        {/* TONIGHT, first among the links because it is where an EVENING starts — the rest
-            of this row configures the app. A new route beside this landing rather than a
-            replacement for it, so the landing keeps working while the absorb is built. */}
-        <Link id="gotonight" to="/tonight">
-          Tonight &rsaquo;
+        {/* What to Watch/Play, first among the links because it is where choosing starts —
+            the rest of this row configures the app. */}
+        <Link id="gotonight" to={WATCH_PLAY_PATH}>
+          What to Watch/Play &rsaquo;
         </Link>
-        {/* THE COLLECTION, beside Tonight rather than under Configure: marking a game
-            played is a thing you do during an evening, not a setting you change. */}
+        {/* THE COLLECTION, beside What to Watch/Play rather than under Configure: marking a
+            game played is an activity, not a setting you change. */}
         <Link id="gocollection" to="/board-game-collection">
           Board game collection &rsaquo;
         </Link>

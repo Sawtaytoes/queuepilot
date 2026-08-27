@@ -117,7 +117,7 @@ try {
   await shot('tools', '#tools');
 
   // 2 — the landing's link row (`.playlinks`), the second place `.accent` has a rule.
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playlinks', { timeout: 30000 });
   await page.waitForTimeout(2000);
   await shot('playlinks', '.playlinks');
@@ -131,7 +131,7 @@ try {
   // 4 — the groups panel's ＋ New group. Its `accent` matches NEITHER `#tools button.accent`
   //     NOR `.playlinks button.accent`, so it has never once shown the treatment its class
   //     asks for — the same latent bug the channels toolbar had.
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 30000 });
   await page.waitForTimeout(1500);
   const groupEdit = page.locator('.groupedit').first();

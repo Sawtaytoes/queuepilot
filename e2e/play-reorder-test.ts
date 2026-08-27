@@ -95,7 +95,7 @@ try {
 
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
 
   const gridOrder = () =>
@@ -184,14 +184,14 @@ try {
   // that could swallow them. A press on either is deliberately not a drag, so both still
   // behave — this is the assertion that keeps "the whole card is the handle" honest.
   await page.setViewportSize({ width: 1400, height: 950 });
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
 
   await page.locator('#playgrid li[data-set="q_alpha"] .rowname').click();
   await page.waitForTimeout(600);
   ok('the name still navigates', page.url().endsWith('/q/q_alpha'));
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
   await page.locator('#playgrid li[data-set="q_alpha"] .playbtn').click();
   await page.waitForTimeout(600);
@@ -214,7 +214,7 @@ try {
   // surface the page scrolls by. So the glyph survives there, and CSS is what decides.
   const touch = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
   const tp = await touch.newPage();
-  await tp.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await tp.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await tp.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
   ok('a coarse pointer still gets a handle to grab',
     await tp.$$eval('#playgrid .rowdrag', (els) =>

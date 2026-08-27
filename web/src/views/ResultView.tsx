@@ -39,6 +39,7 @@ import type {
   TonightPickWire,
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
+import { WATCH_PLAY_PATH } from "../state/route"
 import { setStatus } from "../state/store"
 
 /**
@@ -218,21 +219,21 @@ export function ResultView({
         </p>
       ) : isPending ? (
         <div className="cloading">
-          <Spinner label="Reading tonight's pick" />
+          <Spinner label="Reading your pick" />
         </div>
       ) : !first || !session ? (
         <section className="tsection" id="result-none">
           <EmptyState
-            description="Nothing has been picked tonight — or the last pick was long enough ago that it was somebody else's evening. Start one from Tonight."
+            description="Nothing has been picked yet. Start a new pick from What to Watch/Play."
             headingLevel={2}
             heading="No pick to show"
           />
           <ButtonLink
-            href="/tonight"
+            href={WATCH_PLAY_PATH}
             id="result-gotonight"
             intent="accent"
           >
-            Go to Tonight
+            Go to What to Watch/Play
           </ButtonLink>
         </section>
       ) : (
@@ -303,7 +304,7 @@ export function ResultView({
             ) : null}
 
             <ButtonLink
-              href="/tonight"
+              href={WATCH_PLAY_PATH}
               id="result-back"
               size="lg"
             >
@@ -423,8 +424,8 @@ async function rerollBoardGame(
     setStatus(
       answer.result?.outcome === "empty"
         ? (answer.result.suggestion ??
-            "Nothing else fits tonight.")
-        : "Nothing else fits tonight.",
+            "Nothing else fits those choices.")
+        : "Nothing else fits those choices.",
       "err",
     )
     return null
@@ -468,7 +469,7 @@ async function rerollQueue(
 
   if (!answer.pick || answer.shortlist.length === 0) {
     setStatus(
-      answer.reason ?? "Nothing else for that tonight.",
+      answer.reason ?? "Nothing else for those choices.",
       "err",
     )
     return null
