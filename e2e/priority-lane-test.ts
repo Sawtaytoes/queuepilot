@@ -171,5 +171,39 @@ check('nothing playable means nothing led', watchedAll.led, []);
 const promote = await import('../server/src/promote.js');
 check('resolving a lineup does not consume the window', await promote.canLeadOnce('set1', 'rk:3'), true);
 
+// ── 9. The QUEUE names the window, and the ENTRY outranks it ──────────────────────────────
+// `leadWindowMs` is entry > set > 24h product default. The set level is the one that had no
+// UI and no test: a 24h window is a rolling timer, so a queue watched past midnight stamps
+// its lead AFTER midnight and blocks the following night's scan — which is what happened on
+// 2026-08-26 (decision 2026-08-26-the-promote-window-is-a-queue-setting). The assertion is on
+// the milliseconds handed to the gate, because that is the only place the precedence is
+// observable from outside.
+const asked: number[] = [];
+const recordingGate: LeadGate = async (_k, ms) => { asked.push(ms); return true; };
+
+asked.length = 0;
+await run(POOL, promoted, recordingGate);
+check('with no window anywhere, the gate is asked for the 24h default', asked, [86_400_000]);
+
+asked.length = 0;
+await run({ ...POOL, promote_window: '20h' }, promoted, recordingGate);
+check('the QUEUE window reaches the gate', asked, [72_000_000]);
+
+asked.length = 0;
+await run(
+  { ...POOL, promote_window: '20h' },
+  [entry('1'), entry('2'), entry('3', { placement: 'priority', promote_window: '7d' }), entry('4')],
+  recordingGate,
+);
+check('an ENTRY window outranks the queue', asked, [604_800_000]);
+
+// `never`/`0` is how a queue says "no cooldown". `parsePromoteWindow` returns null for it,
+// which falls through to the default rather than meaning zero — so the OFF spelling has to be
+// cleared at write time (sets.ts drops the key), and this pins that reading it back is the
+// default and not an accidental 0ms free pass.
+asked.length = 0;
+await run({ ...POOL, promote_window: 'never' }, promoted, recordingGate);
+check('an unparseable queue window falls back to the default', asked, [86_400_000]);
+
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nALL PASS');
 process.exit(failed ? 1 : 0);
