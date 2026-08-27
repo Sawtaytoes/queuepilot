@@ -1,18 +1,19 @@
-// Before/after for "the tray move handle says Move, and the rules editor is wide enough".
+// Before/after for "the tray move handle wears the gesture that can succeed".
 //
-// Three frames, and each one is a claim the PR makes:
+// Four frames, and each one is a claim the PR makes:
 //
-//   1. `editor`   `/channels/shorts` → ⚙ Configure at 1420px. Before, the modal is 520px, so
-//                 the board is in its NARROW form — one tray on screen, the other two behind
-//                 a segmented control, and nowhere to drop. After, it is 920px and all three
-//                 trays are side by side, which is what makes a drag possible at all.
-//   2. `handle`   the same modal, hovering the first card. Before, the handle is `≡`, which
-//                 is this app's DRAG glyph. After, it is the word "Move".
-//   3. `menu`     the handle pressed. The menu of the other trays — the path that always
-//                 worked and that nothing on screen advertised.
+//   1. `editor`   `/channels/shorts` → ⚙ Configure at 1420px. The modal is 920px and all
+//                 three trays are side by side, which is what makes a drag possible at all.
+//   2. `handle`   the same modal, hovering the first card. The handle is `≡`, this app's
+//                 DRAG glyph, and here that promise can be kept.
+//   3. `menu`     the handle pressed. The menu of the other trays — the path that works from
+//                 the keyboard, from a screen reader, and at every width.
+//   4. `narrow`   390px. One tray on screen, nothing to drop onto, and the SAME handle now
+//                 reads the word "Move".
 //
-// It also ASSERTS the lane count, because "three trays are visible" is the whole first claim
-// and a screenshot cannot fail.
+// The pair in frames 2 and 4 is the whole point, so both are ASSERTED rather than only
+// photographed — a handle that says the same thing at both widths is the bug, in one
+// direction or the other, and a screenshot cannot fail.
 //
 // **Fixture data, never live.** The landing fixture's anonymized cast
 // (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live`).
@@ -125,10 +126,13 @@ try {
   const handleText = (await handle.count())
     ? ((await handle.innerText()).split('\n')[0] ?? '').trim()
     : '(none)';
+  // Three trays are on screen, so a drag has somewhere to land and the grip is honest.
+  // The word here is the OTHER failure the owner reported: *"the drag handles were fine, but
+  // now you have it in a 3-column mode […] it has this 'move' button instead."*
   console.log(
     handleText === '≡'
-      ? "⚠️ the move handle wears the app's DRAG glyph — the BEFORE state"
-      : `the move handle reads "${handleText}"`,
+      ? 'the wide board\'s handle is the grip `≡` — a drag can land here'
+      : `⚠️ the wide board's handle reads "${handleText}" — it should be the grip`,
   );
 
   await handle.hover();
@@ -168,6 +172,23 @@ try {
   await narrow.waitForSelector('#dyn-people', { timeout: 30000 });
   await narrow.waitForTimeout(1200);
   await narrow.screenshot({ path: `__screenshots__/traymove-${TAG}-narrow.png` });
+
+  // The other half of the pair. One tray is on screen, so there is nothing to drop onto and
+  // the SAME control has to stop advertising a drag — this is the first report:
+  // *"There's no right-click or anything. How do I move these?"*
+  const narrowHandle = narrow.locator('#dyn-people button[aria-haspopup="menu"]').first();
+  const narrowHandleText = (await narrowHandle.count())
+    ? ((await narrowHandle.innerText()).split('\n')[0] ?? '').trim()
+    : '(none)';
+  const narrowLanes = await narrow.$$eval(
+    '#dyn-people [role="group"]',
+    (nodes) => nodes.filter((n) => (n as HTMLElement).offsetParent !== null).length,
+  );
+  console.log(
+    narrowHandleText === 'Move'
+      ? `the Narrow View shows ${narrowLanes} tray and the handle reads "Move"`
+      : `⚠️ the Narrow View shows ${narrowLanes} tray(s) and the handle reads "${narrowHandleText}" — it should be the word`,
+  );
 
   const narrowWidth = await narrow.$eval('#dynmodal', (n) =>
     Math.round(n.getBoundingClientRect().width),
