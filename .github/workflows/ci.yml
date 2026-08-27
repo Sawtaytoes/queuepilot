@@ -662,6 +662,17 @@ jobs:
       - name: Lane drag — promote and demote (browser, no Plex needed)
         run: $TSX e2e/lane-drag-test.ts
 
+      # THE TILE'S THREE CONTROLS — remove, select, and the lane button under them. It exists
+      # for a defect nothing else could see: the select circle painted identically checked and
+      # unchecked, because the checked rule was outranked on SPECIFICITY by the rule that
+      # draws the circle. tsc cannot read CSS, Biome sees a string, and axe passes an
+      # invisible glyph — asking the browser what it painted is the only check there is.
+      # Spawns its own server, needs no Plex.
+      #
+      # Reuses the chromium the narrow-view step installed — keep it AFTER that step.
+      - name: Tile chrome — the select mark paints, and the lane button moves (browser, no Plex needed)
+        run: $TSX e2e/tile-lane-test.ts
+
       # Path routing: the client router and the server's SPA fallback, pinned together.
       # ALWAYS runs, like the narrow-view gate above and for the same reason — the
       # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression
