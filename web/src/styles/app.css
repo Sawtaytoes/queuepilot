@@ -358,6 +358,19 @@ body.mode-view {
   top: 0;
   z-index: 10;
 }
+/* PHASE 3's progress line, pinned to the header's bottom edge and spanning its full width —
+   the header has 24px of side padding and this must sit ON the hairline, not inside it.
+   LAYOUT ONLY (position and size), which is the one thing an app rule may set on a
+   Charcuterie component's outer element; every pixel of the bar's own paint stays the
+   component's (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+   `#apphead` is already `position: sticky`, so it is the containing block. */
+#apphead #revalidating {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+}
+
 /* `.bar` is the popover anchor: the two `.hmenu` panels are absolutely positioned to
    its edges. `position: relative` scopes them here rather than to the sticky header. */
 #apphead .bar {

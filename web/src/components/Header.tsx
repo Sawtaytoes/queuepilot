@@ -3,6 +3,7 @@ import {
   ButtonLink,
   ColorSchemeSwitcher,
   IconButton,
+  ProgressBar,
 } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
@@ -57,7 +58,7 @@ export function Header({
   isSubHidden,
   sub,
 }: Props) {
-  const { history, status } = useStore()
+  const { history, isRevalidating, status } = useStore()
   const [isEditing, setIsEditing] = useState(false)
   const [draft, setDraft] = useState("")
   const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
@@ -451,6 +452,24 @@ export function Header({
           </span>
         </Tip>
       </div>
+      {/* PHASE 3 in progress: the page is painted from cache and the providers are being
+          re-read behind it. A line at the top edge of the header rather than a chip beside
+          the title, because the tiles that are about to change are BELOW it and at every
+          scroll position — the owner asked to be told before they move, not after.
+
+          Charcuterie's `ProgressBar`, indeterminate: the pass has no measurable progress (it
+          is one request that either lands or does not), and an empty determinate bar reads as
+          stalled. It is REMOVED from the DOM rather than hidden, so there is no permanent
+          rule under the header that a later layout change has to work around. */}
+      {isRevalidating ? (
+        <ProgressBar
+          id="revalidating"
+          intent="accent"
+          isIndeterminate
+          label="Checking Plex and Kavita for changes"
+          size="sm"
+        />
+      ) : null}
     </header>
   )
 }
