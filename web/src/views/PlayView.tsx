@@ -12,6 +12,7 @@ import {
   isPullSet,
   OpenQueueButton,
 } from "../components/OpenQueueButton"
+import { PeopleRow } from "../components/PeopleRow"
 import { SelectListbox } from "../components/SelectListbox"
 import {
   spliceOrder,
@@ -41,6 +42,7 @@ import {
   openSetModal,
 } from "../state/overlays"
 import { WATCH_PLAY_PATH } from "../state/route"
+import { usePeople } from "../state/people"
 import {
   bumpRevision,
   getState,
@@ -137,6 +139,7 @@ function PlayCard({
   label,
   meta,
   onPlay,
+  people,
   set,
   tier,
   to,
@@ -159,6 +162,21 @@ function PlayCard({
   label: string
   meta: string
   onPlay: (anchor: DOMRect) => void
+  /**
+   * WHO THIS QUEUE IS FOR — a `PeopleRow`, or null for a card that has no trays.
+   *
+   * The same row the Picks page draws in a shelf heading, and it is here for the reason it
+   * is there: it is the only thing on the card that says a queue apart from its neighbour
+   * once you stop reading the name. A shelf can lean on its posters for that; a landing card
+   * has none, so this row is doing MORE work here, not less
+   * (decision `2026-08-25-a-queue-is-people-plus-an-activity`).
+   *
+   * Null on a Rules card, and that is not an omission. A filtered pool has no member trays at
+   * all — it is bound to one provider ACCOUNT, which its meta line already names — so a row
+   * there would read "Anybody" on every one of them and teach the eye that the row means
+   * nothing.
+   */
+  people?: ReactNode
   /** The registry entry, for `delivery`, the accent + the start button's words. Absent =
    * push (pre-provider callers). */
   set?: Pick<
@@ -203,6 +221,12 @@ function PlayCard({
             pill's own line-height fights. */}
         <span className="cardkind">{KIND_WORD[kind]}</span>
       </div>
+      {/* ITS OWN ROW, above the meta rather than inside it. The faces are 26px tall and the
+          meta is 0.83rem text; sharing a line would set the row's height from the faces and
+          leave the count floating half-way up it. Above the meta and not below, because the
+          two lines answer "whose is this" and then "how big is it" — the order somebody
+          scanning a wall of cards asks them in. */}
+      {people}
       {/* THE META OWNS A LINE. It used to be the first child of `.cardfoot`, sharing the
           row with the start button, and `.cardfoot` wraps — so whether the button ended up
           beside the meta or on a line of its own was decided by how many characters that
@@ -435,6 +459,7 @@ export function PlayView({
   groupId: string | null
 }) {
   const { data, groups, reg } = useStore()
+  const people = usePeople()
   const { search } = useLocation()
   const only = parseOnly(search)
 
@@ -672,6 +697,17 @@ export function PlayView({
                   // cards apart render in the same amber rather than one of them in the
                   // neutral accent.
                   set={reg?.sets.find((x) => x.id === e.id)}
+                  // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
+                  // `usePeople` is a store slice of its own and is loaded once at start-up,
+                  // so this costs the landing no extra request and no extra render on a
+                  // queue-editor save.
+                  people={
+                    <PeopleRow
+                      groups={people.groups}
+                      members={people.byQueue[e.id] ?? []}
+                      people={people.people}
+                    />
+                  }
                   meta={picksMeta(
                     data!.sets[e.id]!.items.length,
                     reg?.sets.find((x) => x.id === e.id) ??
