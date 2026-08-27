@@ -282,12 +282,55 @@ describe("moving a person is one action, and it is the whole list that is writte
   })
 })
 
-describe("there is no queue name — the activity is the name", () => {
-  it("calls every watching queue Movies & Shows", () => {
-    expect(queueTitle("watching", null)).toBe(
+describe("a queue's name is optional, and the activity fills in", () => {
+  it("calls a NAMELESS watching queue Movies & Shows", () => {
+    expect(queueTitle({ activity: "watching" }, null)).toBe(
       "Movies & Shows",
     )
-    expect(queueTitle("reading", null)).toBe("Reading")
+    expect(queueTitle({ activity: "reading" }, null)).toBe(
+      "Reading",
+    )
+  })
+
+  it("keeps a name somebody typed, verbatim", () => {
+    // The case that made this a rule: the shelf printed "Reading" over the one Kavita queue
+    // the owner had deliberately named.
+    expect(
+      queueTitle(
+        {
+          activity: "reading",
+          has_explicit_label: true,
+          label: "Manga & Webtoons",
+        },
+        null,
+      ),
+    ).toBe("Manga & Webtoons")
+  })
+
+  it("ignores `label` when no name was typed — it is the ID then", () => {
+    // The server makes `label` printable by falling back to the id, so trusting it here
+    // would put `movies_shows` on the card.
+    expect(
+      queueTitle(
+        { activity: "watching", label: "movies_shows" },
+        null,
+      ),
+    ).toBe("Movies & Shows")
+  })
+
+  it("never numbers a name somebody typed", () => {
+    // Two queues called "Movies" are the owner's own doing and he can tell them apart. Two
+    // called "Movies & Shows" are the app's, and numbering them is the app's job.
+    expect(
+      queueTitle(
+        {
+          activity: "watching",
+          has_explicit_label: true,
+          label: "Movies",
+        },
+        2,
+      ),
+    ).toBe("Movies")
   })
 
   it("numbers the second of two identical cards and not the first", () => {
@@ -340,7 +383,10 @@ describe("there is no queue name — the activity is the name", () => {
     expect(numbers.get("b")).toBe(2)
     expect(numbers.get("c")).toBeNull()
     expect(
-      queueTitle("watching", numbers.get("b") ?? null),
+      queueTitle(
+        { activity: "watching" },
+        numbers.get("b") ?? null,
+      ),
     ).toBe("Movies & Shows 2")
   })
 
