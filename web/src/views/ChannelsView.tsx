@@ -7,7 +7,10 @@ import {
 } from "../components/OpenQueueButton"
 import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
-import { activeBinding } from "../lib/channels"
+import {
+  activeBinding,
+  channelAccountLabel,
+} from "../lib/channels"
 import type { RegistrySet } from "../lib/types"
 import {
   resolveChannel,
@@ -124,14 +127,15 @@ export function ChannelsView({
    *
    * Same rule the Play landing row got on 2026-08-17, and it has to be the same rule: this
    * page and that row are two views of one pool, and a chevron on one but not the other says
-   * they disagree about whether the account is a choice. It is not — it is a fact, so it
-   * prints as text beside the pool's name.
+   * they disagree about whether the account is a choice. It is not — it is a fact.
+   *
+   * WHERE that fact prints moved on 2026-08-26. It was a "Plays as <account>" sentence beside
+   * this control; it is now a chip on every row of the control itself, which is the same fact
+   * in one place instead of two. The picker below only appears for a pool a hand-edit left
+   * carrying several bindings.
    * (decision `2026-08-17-a-filtered-pool-is-locked-to-one-account`)
    */
   const hasProfileChoice = profileOptions.length > 1
-  const onlyAccount = channel.has_explicit_profiles
-    ? (channel.profiles || [])[0]?.plex_user || null
-    : null
 
   return (
     <main
@@ -193,6 +197,15 @@ export function ChannelsView({
              * (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
              */
             options={all.map((s) => ({
+              // WHOSE pool this is, as the row's trailing chip. `Shows` and `Shows & Shorts`
+              // are the same words until you know one is Younger Kids and the other Older
+              // Kids — the Play landing's card has said so in its meta line since 2026-08-17,
+              // and this picker never had a version of it (owner, 2026-08-26).
+              //
+              // `?? undefined` and not `?? ""`: `SelectListbox` draws the `Badge` on any
+              // truthy value, so an empty string would put a blank pill on a legacy flat set
+              // rather than no pill at all.
+              badge: channelAccountLabel(s) ?? undefined,
               label: s.label,
               value: s.id,
             }))}
@@ -220,11 +233,18 @@ export function ChannelsView({
               value={profileValueNow}
             />
           </label>
-        ) : onlyAccount ? (
-          <span className="chaccount" id="chprofile-fixed">
-            Plays as <strong>{onlyAccount}</strong>
-          </span>
         ) : null}
+        {/* "Plays as <account>" stood here from 2026-08-17 until 2026-08-26. It said the
+            account a SECOND time, one control apart: the picker beside it now carries the
+            account on every row, so its trigger reads "Shows & Shorts · Younger Kids" and the
+            sentence repeated the two words already on screen.
+            (decision `2026-08-17-a-filtered-pool-is-locked-to-one-account`, narrowed by
+            `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`)
+
+            ⚠️ The RULE that record set is untouched, and must stay: the account is a FACT
+            about this pool, not a choice, so it must never wear a chevron of its own. It has
+            not gained one — the chevron here changes the POOL, and each row names the account
+            it comes with. What changed is only where the fact is printed. */}
         {isPullSet(channel) ? (
           <OpenQueueButton set={channel} />
         ) : (

@@ -568,6 +568,30 @@ new filter on `add_as` in a screen list is a regression, not a feature.
   payload lands — the exact shift that endpoint was added to prevent. It costs one property
   read and no Plex call. Gate: `e2e/api-v2-test.ts`, always-on.
 
+### A rules row names its ACCOUNT, and the gate is the LABEL
+
+*"Shows" and "Shows & Shorts" are the same words until you know one is Younger Kids and the
+other Older Kids.* `channelAccountLabel` is the one place that decides it — the rules picker's
+chips, the Play landing card's meta line, and nothing else needs a fourth copy.
+
+⚠️ **Do not gate it on `has_explicit_profiles`.** `PlayView` did, on the belief that a legacy
+flat set's SYNTHESIZED binding reports the channel's own label. It does not — the synthesized
+binding carries the real `plex_user`, and `/api/sets` says so:
+`younger | Shows & Shorts | explicit: false | profiles: ["Younger Kids"]`. That belief reads as
+true against the live `sets.yaml` only because those two pools are named after the accounts
+they play as. The gate is a comparison with the row's own label, which is the check the flag
+was reaching for.
+
+**"Plays as `<account>`" is gone from the Rules header** — the picker beside it says the
+account on every row, so the sentence said it twice. The 2026-08-17 rule stands: the account
+is a fact, not a choice, and must never wear a chevron of its own.
+
+**A chip on a picker TRIGGER shrinks; a chip on a list ROW does not.** `.optionbadge` is
+`flex: none` for a row (as wide as the panel) and `flex: 0 1 auto` on `.qppicker > span >`,
+and the option's text lives in `.optionlabel` so it can ellipsise beside it — a bare text node
+next to a `Badge` becomes an anonymous flex item, which takes no `min-width: 0`. Skip either
+half and the Rules header scrolls sideways at 390px. `narrow-scroll-test` is the gate.
+
 ### A list of queues names its PEOPLE
 
 A queue's displayed name is its ACTIVITY

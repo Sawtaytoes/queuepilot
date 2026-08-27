@@ -921,6 +921,29 @@ ul.grid .empty {
   overflow: hidden;
   text-overflow: ellipsis;
 }
+/* A trigger whose option carries a CHIP — the account on a rules queue, the people on a
+   Picks queue. Two boxes on one line, and BOTH have to be allowed to shrink: the chip is
+   data too ("Younger Kids, Older Kids" is 196px), so a chip pinned at its intrinsic width
+   holds the trigger open just as surely as a long label does. `overflow: hidden` on the
+   parent would clip whichever came second; a flex line with two shrinkable items
+   ellipsises each one instead. */
+.qppicker > span:has(> .optionbadge) {
+  display: flex;
+  align-items: center;
+}
+.qppicker .optionlabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.qppicker > span > .optionbadge {
+  /* `.optionbadge` is `flex: none` for a LIST ROW, where the row is as wide as the panel
+     and the chip must not be squeezed. A trigger is as wide as its container lets it be. */
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 /* The chevron is a fixed glyph, not text — it must not absorb the shrink. */
 .qppicker > svg {
   flex-shrink: 0;
@@ -1867,6 +1890,10 @@ body.queue-view #tools {
   display: flex;
   gap: 8px;
   align-items: center;
+  /* Without it this flex item refuses to shrink below its min-content, so the picker inside
+     never reaches its own ellipsis and the whole row overflows. `.chhead` wraps, which hides
+     the problem until ONE item is wider than the viewport — which the account chip made it. */
+  min-width: 0;
 }
 .chnote {
   color: var(--color-content-muted);
@@ -2600,18 +2627,6 @@ html.modal-open {
 .filterchip[aria-current="page"] .filtercount {
   background: var(--color-surface-raised);
   color: var(--color-content-secondary);
-}
-
-/* "Plays as Younger Kids" — what replaced the pool editor's single-option Profile picker.
-   Styled as the label text beside it, not as a control, because that is what it now is. */
-.chaccount {
-  color: var(--color-content-secondary);
-  font-size: 0.95rem;
-  white-space: nowrap;
-}
-.chaccount strong {
-  color: var(--color-content-primary);
-  font-weight: 600;
 }
 
 /* ---- the landing's card grid ----

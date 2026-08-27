@@ -83,11 +83,64 @@ Required members only, because the nice-to-have tray is what a dashed face can s
 of text cannot. Listing both would put four names in a dropdown badge and tell you less than
 two do.
 
-### 6. Move-to offers every other Picks queue
+### 6. A rules row names its ACCOUNT
+
+The same rule, one kind over. The Play landing's card has carried the bound account in its
+meta line since
+[a-filtered-pool-is-locked-to-one-account](2026-08-17-a-filtered-pool-is-locked-to-one-account.md),
+and said why: *"Shows" and "Shows & Shorts" are the same words until you know one is Younger
+Kids and the other Older Kids.* The rules PICKER never carried it.
+
+Each row now does, as a chip — `channelAccountLabel`, three names then `+n`.
+
+**The gate is the row's own LABEL, not `has_explicit_profiles`.** `PlayView` used the flag,
+on the stated belief that a legacy flat set's synthesized binding reports the channel's own
+label. The server does not do that; the synthesized binding carries the real `plex_user`,
+measured on `/api/sets`:
+
+    younger | Shows & Shorts | explicit: false | profiles: ["Younger Kids"]
+
+The claim reads as true against the live `sets.yaml` only because those two pools are *named
+after the accounts they play as*, so the label and the account are the same words. Gating on
+the flag dropped the account from every legacy pool; gating on the label drops only the one
+real failure, a row saying itself twice. The landing card and the Rules header both move onto
+the helper, so all three agree.
+
+**"Plays as `<account>`" comes off the Rules header.** That sentence was
+[2026-08-17](2026-08-17-a-filtered-pool-is-locked-to-one-account.md)'s answer to the same
+question, and the picker beside it now answers it — the trigger reads
+"Shows & Shorts · Younger Kids", so the sentence repeated two words already on screen. **The
+rule that record set is untouched:** the account is a FACT about the pool, not a choice, and
+it still wears no chevron of its own. The chevron there changes the POOL; each row names the
+account it comes with. Only where the fact prints has moved.
+
+**A chip is data, so it shrinks.** `.optionbadge` is `flex: none` on a list row, where the
+row is as wide as the panel. On a TRIGGER it is `flex: 0 1 auto` and ellipsises, and the
+option's text moved into its own `.optionlabel` element to ellipsise beside it — a bare text
+node next to a `Badge` becomes an anonymous flex item, and an anonymous item takes no
+`min-width: 0`. Without both, "Younger Kids, Older Kids" held the trigger at 349px and the
+Rules header scrolled sideways at 390px. `.chhead label` needed `min-width: 0` for the same
+reason one level up. Gate: `narrow-scroll-test`, which caught it.
+
+### 7. Move-to offers every other Picks queue
 
 The selection bar used to ask whether the queue you are standing in is random-order and then
 offer its own half of the split. A move between two Picks queues was impossible for no reason
 a person could see. The destination's own `add_as` decides which lane the entry lands in.
+
+### 8. Two `ui-test` assertions were stale, and the suite was dying on one
+
+Not this PR's subject, but this PR's gates live below them, so they had to be fixed or the
+new assertions would never execute.
+
+- **Line 97 waited for a shelf named `Bob — Shorts`.** A shelf is named after its ACTIVITY
+  since [a-queue-is-people-plus-an-activity](2026-08-25-a-queue-is-people-plus-an-activity.md),
+  so that text can never appear there again. A `waitForFunction` timeout THROWS rather than
+  printing `FAIL`, so the suite read as a short passing run while **thirty assertions below it
+  never ran** — the second time this file has lost its tail that way. It waits on the shelf
+  COUNT now, and the rename check below it waits on `/api/sets` instead of a display name.
+- **`filter "anime" → 0 shelves (channels moved out)`** asserted the defect this record
+  removes. It now asserts the filter's real job: the anime queues shown, and only those.
 
 ## Context
 
@@ -132,7 +185,12 @@ nothing.
 
 ## Evidence
 
-- Owner, 2026-08-26, with a screenshot of the Rules page's picker: the quotes above.
+- Owner, 2026-08-26, with a screenshot of the Rules page's picker: the quotes above, and on
+  the picker once it listed rules queues alone: *"Do we not have a way to show the associated
+  account too in this dropdown?"*
+- `/api/sets` on the landing fixture, which is what disproves `PlayView`'s stated reason for
+  the `has_explicit_profiles` gate: `younger | Shows & Shorts | explicit: false | profiles:
+  ["Younger Kids"]`.
 - Live `sets.yaml`: four `kind: rules` sets (Younger Kids, Older Kids, Shorts, Movies); every
   other set is `kind: picks`, ten of them `add_as: random`.
 - `web/src/state/store.ts` before this change: `queueIds` and `channelSetIds`, one `add_as`

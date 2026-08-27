@@ -30,7 +30,11 @@ await page.click('#channelslink');
 await page.waitForSelector('#channels:not([hidden])');
 const channels = await readOptions(page, '[data-testid="chchannel"]');
 ok(`rules picker lists rules queues and nothing else (${channels.length}): ${JSON.stringify(channels)}`,
-  channels.length === 2 && channels[0] === 'Shows & Shorts' && channels[1] === 'Movies');
+  channels.length === 2
+  // `startsWith`, because a row is "<pool><account>" since 2026-08-26 — the account chip is
+  // part of the option's text.
+  && channels[0]?.startsWith('Shows & Shorts') === true
+  && channels[1]?.startsWith('Movies') === true);
 // The tier picker lists ONLY the selected channel's own bindings — no cross-channel
 // duplicates (the split-channels bug: every progress channel folded into one dropdown).
 const profiles = await readOptions(page, '[data-testid="chprofile"]');
