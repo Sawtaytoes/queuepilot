@@ -572,6 +572,18 @@ follow:
   which Plex profile the Shield signs in as; the faces beside it are who the pool is for. Both
   belong on the card, and folding either into the other is what made the Rules pools
   unreachable from every people-shaped control in the app.
+- **The move handle says "Move", and NEVER `≡`.** `≡` in this app means DRAG ME — the shelf
+  grip, the card grip, `useHomeDrags`' own wording. The tray handle is a MENU BUTTON first
+  (that is the keyboard, screen-reader and narrow-board path), which is why the library's
+  default is the word. Passing `moveIcon` here taught the one gesture that cannot work, and
+  the owner reported it as "how do I move these?"
+  ([decision](docs/decisions/2026-08-27-the-tray-move-handle-says-move-it-does-not-wear-the-drag-glyph.md)).
+- **A modal that holds the trays is `min(920px, 92vw)`, and that number is not a taste call.**
+  The board picks three-lanes-across versus one-lane-plus-a-segmented-control from a CONTAINER
+  query at `cq-lg` (48rem / 768px) on its own box. Below it there is ONE tray on screen and
+  nowhere to drop, at any window width. `#setmodal` learned this on 2026-08-25; `#dynmodal`
+  shipped trays on 2026-08-26 at 520px and had to learn it again. **A new modal that gains
+  `PeopleTrays` gains this width in the same change.**
 
 ## A queue's name
 
