@@ -85,3 +85,24 @@ export function isRandomOrder(
     }) === "random"
   )
 }
+
+/**
+ * The lead cooldown when neither the entry nor the queue names one — the server's
+ * `DEFAULT_PROMOTE_WINDOW_MS`, spelled the way it is written on disk.
+ */
+export const DEFAULT_LEAD_WINDOW = "24h"
+
+/**
+ * A lead window as a person says it.
+ *
+ * Only the two durations that have an English name get one; everything else is read back
+ * as typed. A queue set to `20h` says "once every 20h", which is exact and short — the
+ * alternative ("once every 20 hours") is a units expander this app has no other use for,
+ * and rounding it to "a day" is the lie the control exists to stop telling.
+ */
+export function leadWindowLabel(raw: string): string {
+  const w = raw.trim().toLowerCase()
+  if (w === "24h" || w === "1d") return "a day"
+  if (w === "7d" || w === "1w") return "a week"
+  return w
+}

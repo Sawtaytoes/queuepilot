@@ -10,7 +10,11 @@ import {
   effectiveCount,
   isCountOverride,
 } from "../lib/countPicker"
-import { normalizeAddAs } from "../lib/kind"
+import {
+  DEFAULT_LEAD_WINDOW,
+  leadWindowLabel,
+  normalizeAddAs,
+} from "../lib/kind"
 import {
   hasMemberList,
   startLabel,
@@ -414,18 +418,29 @@ export function EntryEditor({
   const setLaneLabel =
     setLane === "random" ? "Random pool" : "Priority queue"
   const effectiveLane = item.placement ?? setLane
+  // THE WINDOW THIS ENTRY ACTUALLY FOLLOWS — entry, then queue, then the 24h product
+  // default, which is `leadWindowMs()`'s precedence read from the other end. Nothing here
+  // may hardcode "24h": the queue's own window is a setting now, so a panel that says "once
+  // a day" over a queue set to 20h is describing a rule the engine is not running
+  // (decision `2026-08-26-the-promote-window-is-a-queue-setting`).
+  const setWindow =
+    setInfo?.promote_window?.trim() || DEFAULT_LEAD_WINDOW
   // `lead` defaults by HOW the entry got into the lane: inherited from an ordered queue is
   // sticky, promoted by hand is once-per-window. Mirrors `kind.normalizeLead` on the server
   // (decision `2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue`).
   const leadDefaultLabel =
     item.placement === "priority"
-      ? "once a day"
+      ? `once every ${leadWindowLabel(setWindow)}`
       : "every sitting"
   const leadValue = item.lead
     ? item.lead === "once"
-      ? `once:${item.promote_window || "24h"}`
+      ? `once:${item.promote_window || setWindow}`
       : "always"
     : ""
+  // The queue's window first, so the common choice is the one the queue is already set to.
+  // De-duplicated: with the queue on 7d, "a week" must not appear twice, and two options
+  // carrying the same value would leave the picker unable to say which one is selected.
+  const leadWindows = [...new Set([setWindow, "7d"])]
   const face = tileFace(item)
   const entry = entryFor(item)
   // Pushed at a device, or opened by a link — the same split the tile's ▶ makes. A pull
@@ -640,23 +655,22 @@ export function EntryEditor({
                   label: "Every sitting",
                   value: "always",
                 },
-                {
-                  label: "Once a day, then yield",
-                  value: "once:24h",
-                },
-                {
-                  label: "Once a week, then yield",
-                  value: "once:7d",
-                },
+                ...leadWindows.map((w) => ({
+                  label: `Once every ${leadWindowLabel(w)}, then yield`,
+                  value: `once:${w}`,
+                })),
               ]}
               value={leadValue}
             />
             <span className="fieldhint">
               “Every sitting” is what an ordered queue does
               — the top entry stays the top entry until it
-              is finished. “Once a day” is what a promote is
+              is finished. A window is what a promote is
               for: guaranteed first tonight, then back in
-              the pool until tomorrow.
+              the pool until the window runs out. The window
+              is a rolling timer from the moment playback
+              started, and this queue’s own is {setWindow} —
+              the queue editor changes it.
             </span>
           </div>
         ) : null}
