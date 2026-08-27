@@ -1,6 +1,5 @@
 import { Button, Checkbox } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
-import { useLocation } from "react-router"
 
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
@@ -14,12 +13,10 @@ import type {
   ProviderInfo,
   QueueMember,
 } from "../lib/types"
-import { findGroup } from "../state/group"
 import {
   closeSetModal,
   useOverlays,
 } from "../state/overlays"
-import { parsePath } from "../state/parsePath"
 import { saveQueuePeople, usePeople } from "../state/people"
 import { load, setStatus, useStore } from "../state/store"
 import { CountPicker, type INFINITE } from "./CountPicker"
@@ -59,8 +56,7 @@ const newUid = () => {
 
 export function SetModal() {
   const { setModal } = useOverlays()
-  const { data, groups, reg } = useStore()
-  const { pathname } = useLocation()
+  const { data, reg } = useStore()
 
   const setId = setModal?.setId ?? null
   const editing = useMemo(
@@ -71,34 +67,21 @@ export function SetModal() {
     [reg, setId],
   )
 
-  /**
-   * WHERE A NEW SET IS FILED — the group that is on screen behind this modal.
+  /*
+   * A NEW SET JOINS NO GROUP, as of 2026-08-26.
    *
-   * Read off the URL rather than passed in through `openSetModal`, because the URL is
-   * already the one truth about which group is active (`state/group.ts`: the path wins,
-   * storage only answers a `/` that did not say). A second copy travelling through the
-   * overlay store would be a second answer to the same question, and the first thing to
-   * drift would be a modal opened before a route change.
+   * It used to join whichever group was on screen behind this modal, read off the URL —
+   * `/g/<id>` was the one truth about which group was active, and creating from a group page
+   * and landing in All was a reported bug. There is no group page any more: the landing
+   * filters by PEOPLE, in the query string, and a filter is not a claim about where a thing
+   * belongs (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
+   * Filing a new queue into every person you happened to have ticked would be exactly the
+   * failure the old rule's own comment warned about, one control over.
    *
-   * It falls out of that rule that the OTHER two create buttons are unaffected and need no
-   * case here: `#newqueue` in the Ordered Queues toolbar is `/queues` and `＋ Curated pool`
-   * is `/channels`, and `parsePath` gives a group on the play route alone. Nothing is on
-   * screen to join, so nothing is sent.
-   *
-   * `findGroup` returns null for `all` and for an id no longer in the list, which is the
-   * behaviour we want twice over: the everything view is the absence of a filter, and a
-   * stale bookmark to a deleted group must not fail a save.
+   * `POST /api/sets` still ACCEPTS a `group`, and `fileSetIntoGroup` is still gated by
+   * `groups-test.ts`. Nothing about the server changed — the browser simply has nothing to
+   * name. A queue gets its audience from its trays, in the editor, one control below this.
    */
-  const destination = editing
-    ? null
-    : findGroup(
-        groups,
-        (() => {
-          const route = parsePath(pathname)
-
-          return route.view === "play" ? route.group : null
-        })(),
-      )
 
   const [label, setLabel] = useState("")
   /** Default lane for new entries: priority | random. Product kind is always picks. */
@@ -425,18 +408,11 @@ export function SetModal() {
         return
       }
 
-      // `group` rides along with the CREATE so the two writes are one request. The server
-      // writes sets.yaml first and groups.yaml second, and reports a failed filing as
-      // `groupError` on an otherwise successful 200 — the queue exists by then, so
-      // "Save failed" would be a lie that invites a second queue.
-      const made = await api<{
-        id: string
-        group?: string | null
-        groupError?: string
-      }>("POST", "/api/sets", {
-        ...body,
-        group: destination?.id ?? "",
-      })
+      const made = await api<{ id: string }>(
+        "POST",
+        "/api/sets",
+        body,
+      )
 
       /*
         Whoever asked for this queue gets told which one it is, BEFORE the modal state is
@@ -445,14 +421,7 @@ export function SetModal() {
       */
       setModal?.onCreated?.(made.id)
       closeSetModal()
-      setStatus(
-        made.groupError
-          ? `${word} created, but it did not join ${destination?.label ?? "the group"}: ${made.groupError}`
-          : made.group && destination
-            ? `${word} created in ${destination.label}`
-            : `${word} created`,
-        made.groupError ? "err" : "ok",
-      )
+      setStatus(`${word} created`, "ok")
       await load()
     } catch (err) {
       setStatus(
@@ -617,24 +586,6 @@ export function SetModal() {
           value={addAs}
         />
       </label>
-      {/* WHERE IT LANDS, said out loud, so filing is never a thing you discover afterwards.
-          Only on CREATE (an edit changes nothing about membership) and only when a group is
-          on screen. With no group there is nothing to say that the app has not always done:
-          it lands in All, which is where everything is, and a permanent "not filed" line on
-          every create from /queues would be noise on the common path.
-
-          A LINE and not a picker. The destination is a consequence of the URL you are
-          already looking at, so a control here would offer a choice the route has made and
-          put a second membership editor next to the real one — the groups editor stays the
-          one place membership is edited. It is also the smaller claim: the owner asked for
-          "it should join wherever I added it", not for a filing control. */}
-      {destination ? (
-        <p className="groupnote" id="set-groupnote">
-          Joins <strong>{destination.label}</strong> — the
-          group you are looking at. The groups editor can
-          move it later.
-        </p>
-      ) : null}
       {/* ── WHO IS THIS QUEUE FOR ────────────────────────────────────────────────────
           Two trays plus the roster, the whole house visible at once
           (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster`).

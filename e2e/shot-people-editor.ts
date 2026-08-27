@@ -87,10 +87,10 @@ try {
   const page = await ctx.newPage();
 
   await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#groupchips', { timeout: 30000 });
+  await page.waitForSelector('#peoplechips', { timeout: 30000 });
   await page.waitForTimeout(1200);
 
-  const bar = await page.$('#groupchips');
+  const bar = await page.$('#peoplechips');
   await bar?.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-bar.png` });
 
   const entry = await page.$('#peopleedit');
@@ -179,7 +179,7 @@ try {
   });
   const narrow = await narrowCtx.newPage();
   await narrow.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
-  await narrow.waitForSelector('#groupchips', { timeout: 30000 });
+  await narrow.waitForSelector('#peoplechips', { timeout: 30000 });
   await narrow.waitForTimeout(1200);
   const narrowEntry = await narrow.$('#peopleedit');
   if (narrowEntry) {

@@ -83,18 +83,12 @@ try {
 
   // One group selected — the case where a kind empties out entirely and the old layout paid
   // for it with a blank column.
-  await page.goto(`http://localhost:${PORT}/g/bob`, { waitUntil: 'domcontentloaded' });
-  await settle();
-  await page.screenshot({ path: `__screenshots__/landing-${TAG}-group.png`, fullPage: true });
-
-  // A group whose NAME is also the account its rule pools are bound to — the case
-  // `accountInGroup` exists for. `bob` above cannot show it: it holds only Picks queues, and
-  // the account only ever appears in a rule pool's meta. Here "Younger Kids" is the page
-  // title, the lit chip, the name `labelInGroup` already stripped off each card, and (before
-  // this shot was added) the first two words of two of the three metas.
-  await page.goto(`http://localhost:${PORT}/g/younger-kids`, { waitUntil: 'domcontentloaded' });
-  await settle();
-  await page.screenshot({ path: `__screenshots__/landing-${TAG}-account-group.png`, fullPage: true });
+  //
+  // THE GROUP PAGES ARE GONE. This used to shoot `/g/bob` and `/g/younger-kids` — a group
+  // filter, and a group whose NAME was also the account its rule pools bind to. `/admin`
+  // filters by PEOPLE now and neither address exists
+  // (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`), so the two
+  // frames are dropped rather than pointed somewhere that only looks similar.
 
   await page.setViewportSize({ width: 390, height: 900 });
   await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
