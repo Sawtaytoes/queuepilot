@@ -247,10 +247,11 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
     edge, revealed on hover. A fade, not a button.
   - **`GroupsModal`'s `.grouppick`** — a master-detail list ROW carrying `aria-current`,
     not a button.
-  - **`GroupBar`'s `#groupsedit`** — the only one of these blocked on the LIBRARY rather
-    than settled. It is a chip-shaped button among four chip-shaped `<Link>`s, and
-    `BadgeButton` would migrate one of five and split the row. It needs a `BadgeLink`,
-    which does not exist yet.
+  - **`LandingFilterBar`'s `#groupsedit` and `#peopleedit`** — the only ones of these
+    blocked on the LIBRARY rather than settled. They are chip-shaped buttons in a row of
+    chip-shaped `<Link>`s, and `BadgeButton` would migrate two of a dozen and split the row.
+    It needs a `BadgeLink`, which does not exist yet. (`GroupBar` was this file's name for
+    that component until 2026-08-26.)
 
   Everything pill-shaped and pressable is a **`BadgeButton`** (`@charcuterie/ui@3.10.0`),
   built for this app's setting tags, the outline pencil Edit pill, two start chips and a
@@ -572,6 +573,34 @@ follow:
   belong on the card, and folding either into the other is what made the Rules pools
   unreachable from every people-shaped control in the app.
 
+## The Admin landing's filter
+
+`/admin` filters by **people** and by **provider**, both in the QUERY STRING
+(`?people=ada,grace&only=kavita`), and every chip is a real `<a href>` that keeps the other
+filter as it changes its own
+([decision](docs/decisions/2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md)).
+Four things that look like leftovers and are not:
+
+- **There is no group chip and no `/g/<id>`.** A group is still a real object with a real
+  editor (`⚙ Edit groups`, same row) — it holds "at least one of the kids", it is what a
+  Must-be-here tray points at, and it resolves the one provider profile a queue signs in as.
+  It just is not a shelf label or an address any more. `/g/<id>` redirects to `/admin`.
+- **`membersMatchPeople` has TWO callers and must keep exactly one implementation.** This
+  page and What to Watch/Play ask the same question of the same rows; a second copy drifts,
+  and the way it drifts is that one screen offers a queue the other hides. It mirrors
+  `server/src/queuePeople.ts queueMatchesSelection` statement for statement, and
+  `tonight-routing-test.ts` §5 is what stops THAT pair drifting.
+- **Two empties, both load-bearing.** Nobody ticked is no filter at all; a queue nobody is
+  filed on is never filtered out. Either branch removed makes most of the app unreachable
+  from one tick.
+- **A chip's count is "with this person INCLUDED", not "what you get if you click".** The
+  two agree on an unticked chip and disagree on a ticked one, because clicking a ticked chip
+  REMOVES that person — which put the unfiltered total on the one chip doing the filtering.
+
+Nothing about the landing is remembered in `localStorage`. `state/group.ts` did remember the
+last group, because a group was a PLACE; a remembered filter is a search field that comes
+back pre-typed.
+
 ## Skipping one item
 
 A **queue** set (`source: queue` — both pool kinds) carries `skipped:` in `sets.yaml`: a flat
@@ -694,14 +723,19 @@ there rather than in the gated block. All thirteen of them, in the order `ci.yml
 | `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |
 | `collection-reorder-test.ts` | a collection RE-ORDERED in Plex reaches the "What plays" panel |
 | `shelf-remove-test.ts` | the shelf's remove ✕ |
-| `group-create-test.ts` | a new queue joins the group on screen |
 | `play-reorder-test.ts` | the play landing's reorder |
 | `tonight-test.ts` | the Tonight surface — the settled tiles, defaults and steps |
 | `board-game-play-test.ts` | a logged play records WHO played, never invents a known-how claim, and no card title paints over the page header |
 
-Four of them — `drag-stability`, `lane-drag`, `shelf-remove` and `group-create` — were missing from this
+Three of them — `drag-stability`, `lane-drag` and `shelf-remove` — were missing from this
 list while running in CI the whole time. A gate this file does not name is a gate nobody
 re-runs by hand before claiming a change is safe.
+
+`group-create-test.ts` is **deleted**, not forgotten. It pinned "a new queue joins the group
+on screen", and there is no group on screen any more — the landing filters by PEOPLE and a
+group is not an address ([decision](docs/decisions/2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md)).
+`groups-test.ts` still pins the WRITE it sat beside, so what is gone with it is a browser
+assertion about a control that no longer exists.
 
 > ### The browser gates will not launch in an agent sandbox — that is the container
 >
