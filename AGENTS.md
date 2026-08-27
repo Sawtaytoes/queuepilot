@@ -742,6 +742,43 @@ Four things to know before touching it:
 `PATCH /api/sets/:id` rejects `skipped` on a rotation channel: `blocklist` is the same feature
 there, and one set never carries two exclude lists.
 
+## The page loads from CACHE, and phase 3 re-reads the providers
+
+**`GET /api/queues` makes no provider call.** Every entry resolves out of three tables —
+`item_meta`, `section_collections`, `kavita_item` — and they have **no TTL**: a row is served
+whatever its age. The browser is what re-reads. `store.load()` ends with `revalidate()`, which
+asks for **`/api/queues?fresh=1`** and swaps the answer in, with a thin indeterminate
+`ProgressBar` on the header's bottom edge for as long as it runs
+([decision](docs/decisions/2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints.md)).
+
+Five things to know before touching any of it:
+
+- **A new provider read belongs in a cache.** A warm page load was **566 calls and 5.1 s**, and
+  339 of them were one `/library/metadata/<rk>` per queue entry. It is now about 0.1 s. Adding
+  an uncached per-entry read puts it straight back.
+- **`isFresh` rides on `AccountScope` and on `ProviderTileOpts`**, so it reaches the four levels
+  between the route and the provider without a new parameter at each one. Only `?fresh=1` sets
+  it.
+- **The revalidation pass must never 304.** The ETag is two file revisions plus the cache
+  generation, and none of them move when a PROVIDER's data changes — which is the whole thing
+  the pass exists to notice. The `if-none-match` short-circuit is skipped when `isFresh`.
+- ⚠️ **Do NOT skip the leaves validator on the cached read.** It is one Plex call per show and
+  it looks like free money. It was tried on 2026-08-26 and reverted within the hour: the
+  browser's first paint and the ENGINE building a lineup read through `allLeaves` with the same
+  flag, and there a stale episode is queued and PLAYED rather than merely displayed
+  ([2026-08-07](docs/decisions/2026-08-07-leaves-cache-revalidates-on-read.md) still stands).
+  `e2e/leaves-revalidate-test.ts` fails if you do.
+- **`_memo` in `providers/kavita.ts` is load-bearing.** A `series-detail` DTO is the whole
+  series; reading 188 of them back out of SQLite cost **17 s of cumulative blocking time**,
+  while the walk they feed costs 2 ms. `DatabaseSync` blocks the event loop, so those reads
+  never overlap. Delete the memo and the page goes back to 2 s.
+
+**Measure with `plexGet`, never with `globalThis.fetch`.** `plex.ts` uses `undici.request`, so
+a `fetch` wrapper reports **zero** Plex traffic on a page making 377 Plex calls. That false
+reading is what sent the first pass at this after a CPU cost that did not exist.
+`e2e/provider-cache-test.ts` gates the behaviour by COUNTING calls; a wall-clock assertion in
+CI would only be a flake.
+
 ## A collection's ORDER is Plex's, and a re-order has no signal
 
 **The order is `collectionSort`, read straight off `/library/collections/<rk>/children`. The
@@ -789,6 +826,7 @@ server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/tile-lane-test.ts     # the tile's three controls
 server/node_modules/.bin/tsx e2e/collection-reorder-test.ts  # a re-ordered collection reaches the panel
+server/node_modules/.bin/tsx e2e/provider-cache-test.ts  # a warm page makes no provider call
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
 server/node_modules/.bin/tsx e2e/tonight-routing-test.ts  # the activity → backend map
@@ -816,7 +854,7 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All thirteen of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All fourteen of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
@@ -828,6 +866,7 @@ there rather than in the gated block. All thirteen of them, in the order `ci.yml
 | `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
 | `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |
 | `collection-reorder-test.ts` | a collection RE-ORDERED in Plex reaches the "What plays" panel |
+| `provider-cache-test.ts` | a warm `/api/queues` makes no provider call, and `?fresh=1` is what re-reads |
 | `shelf-remove-test.ts` | the shelf's remove ✕ |
 | `play-reorder-test.ts` | the play landing's reorder |
 | `tonight-test.ts` | the Tonight surface — the settled tiles, defaults and steps |

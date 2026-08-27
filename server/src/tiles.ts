@@ -63,7 +63,7 @@ export async function resolveTile(
 ): Promise<ResolvedTile> {
   let resolved: ResolvedItem | null = null;
   try {
-    resolved = await plex.resolveValue(sections, value);
+    resolved = await plex.resolveValue(sections, value, opts);
   } catch {
     /* leave unresolved */
   }

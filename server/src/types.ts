@@ -881,6 +881,14 @@ export interface ProviderTileOpts {
    * name something the next launch is going to refuse to play.
    */
   skipped?: readonly string[];
+  /**
+   * Re-read the provider instead of serving its cached rows.
+   *
+   * Set only by the browser's revalidation pass (`GET /api/queues?fresh=1`), which runs right
+   * after the page paints. A provider that caches nothing may ignore it
+   * (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+   */
+  isFresh?: boolean;
 }
 
 export interface ProviderTileRow {

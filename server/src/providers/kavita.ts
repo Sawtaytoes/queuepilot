@@ -37,6 +37,7 @@ import type {
 
 import { kavitaClient, readerSegment } from './kavita-client.js';
 import { readingListCoverBase64 } from './kavita-cover.js';
+import * as cache from '../cache.js';
 import { errMessage } from '../errors.js';
 import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
@@ -92,6 +93,69 @@ export interface KavitaProviderOptions {
 // impression. (An earlier continue-point shortcut was dropped: it named the next chapter
 // without its volume, which broke volume labelling and the volumes-first order.)
 const PROBE_CONCURRENCY = 8;
+
+/**
+ * The PARSED rows, in front of the SQLite cache — and it is not a micro-optimisation.
+ *
+ * A Kavita `series-detail` DTO is the whole series: every chapter, with all of its metadata.
+ * Reading 188 of those back out of SQLite and parsing them cost **17 seconds of cumulative
+ * blocking time** on a warm page load, which is 2.1 s of wall clock — more than the network
+ * calls it replaced. Measured, not guessed: the ordered-chapter walk those payloads feed is
+ * 2 ms, so none of it was the work, all of it was getting the bytes back.
+ *
+ * `node:sqlite`'s DatabaseSync blocks the event loop, so 188 large reads do not overlap no
+ * matter what concurrency the caller uses. The memo makes it once per process per series.
+ *
+ * Written on every path that writes the row, so the two can never disagree, and the
+ * revalidation pass (`isFresh`) replaces the entry rather than reading around it. Unbounded
+ * by design: it holds one entry per series in the library, which is the same set of rows the
+ * SQLite table holds — about 14 MB against a container that sits at 470.
+ */
+const _memo = new Map<string, unknown>();
+
+// --- the two cached reads a reading tile makes ------------------------------------------ //
+//
+// Read-through, no clock. `isFresh` is the browser's revalidation pass and is the ONLY thing
+// that re-reads Kavita; see the decision named at the call site for why a TTL is the wrong
+// tool here. A null answer is cached as a null, so a series deleted out from under a queue
+// costs one call rather than one per page load.
+//
+// A THROWN read caches nothing and rethrows: "Kavita was unreachable" must never be stored as
+// "this series does not exist", which would leave an unresolved tile that repairs itself only
+// when somebody notices.
+async function cachedRead<T>(
+  kind: string,
+  id: string | number,
+  isFresh: boolean,
+  read: () => Promise<T | null>,
+): Promise<T | null> {
+  const memoKey = `${kind}:${id}`;
+  if (!isFresh) {
+    if (_memo.has(memoKey)) return _memo.get(memoKey) as T | null;
+    const hit = await cache.getKavitaItem<T>(kind, id);
+    if (hit) {
+      _memo.set(memoKey, hit.v);
+      return hit.v;
+    }
+  }
+  const value = await read();
+  await cache.putKavitaItem(kind, id, value);
+  _memo.set(memoKey, value);
+  return value;
+}
+
+const cachedSeries = (
+  c: KavitaHttpClient,
+  id: string | number,
+  isFresh: boolean,
+) => cachedRead('series', id, isFresh, () => c.series(id));
+
+const cachedDetail = (
+  c: KavitaHttpClient,
+  id: string | number,
+  isFresh: boolean,
+) => cachedRead('detail', id, isFresh, () => c.seriesDetail(id));
+
 
 // The pool view pays one call per series and is an explicit "show me everything" action, so
 // it runs wider than a launch does. Still bounded — this is a self-hosted Kavita, not a CDN.
@@ -449,9 +513,18 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // below, and for the same reason the Plex tile applies it: a caption naming the chapter
       // the next launch will refuse to open reads as the feature not working.
       const skipped = new Set((opts?.skipped || []).map(String));
+      const isFresh = Boolean(opts?.isFresh);
       return mapLimit([...ids].map(String), PROBE_CONCURRENCY, async (id) => {
         try {
-          const [s, detail] = await Promise.all([c.series(id), c.seriesDetail(id)]);
+          // TWO calls per series, and both were live on every page load: 189 Kavita requests
+          // for one warm /api/queues, 94 of them the heavy `series-detail`. Kavita has no
+          // webhook and nothing here polls, so a clock would have to be short enough to be
+          // useless; the browser revalidates instead, once, after the page paints
+          // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+          const [s, detail] = await Promise.all([
+            cachedSeries(c, id, isFresh),
+            cachedDetail(c, id, isFresh),
+          ]);
           if (!s) return null;
           const unread = orderedUnread(detail)
             .filter((e) => !skipped.has(String(e.chapter.id)));

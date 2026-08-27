@@ -128,6 +128,7 @@ function unresolvedTile(value: unknown): ProviderTile {
 export async function resolveTiles(
   set: TileSetSource,
   values: readonly unknown[],
+  { isFresh = false }: { isFresh?: boolean } = {},
 ): Promise<ProviderTile[]> {
   if (!values.length) return [];
 
@@ -152,7 +153,7 @@ export async function resolveTiles(
     // The skip list rides on the SET, so it is passed once rather than per item. A provider
     // that ignores the third argument simply does not support skipping yet, and the tile menu
     // never offers it there (no leaf id reaches `nextEp.ratingKey`).
-    rows = await provider.tiles(wanted, refs, { skipped: set.skipped || [] });
+    rows = await provider.tiles(wanted, refs, { isFresh, skipped: set.skipped || [] });
   } catch (e) {
     console.log(`[providers] tiles for set '${set.id}': ${errMessage(e)}`);
     return values.map(unresolvedTile);

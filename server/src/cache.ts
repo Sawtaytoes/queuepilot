@@ -72,8 +72,9 @@ export interface HistoryRow {
 // field on one of them reads back `undefined` from every row written before it. 3 -> 4 is
 // `CollectionChild.editionTitle`, which the member list needs to tell two cuts of one film
 // apart — without the bump the first read after deploy answers from cache and every edition
-// is missing, which looks exactly like Plex not having one.
-const SCHEMA_VERSION = 4;
+// is missing, which looks exactly like Plex not having one. 4 -> 5 adds the three
+// ITEM-RESOLUTION tables below.
+const SCHEMA_VERSION = 5;
 
 const SCHEMA = `
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
@@ -107,6 +108,39 @@ CREATE TABLE collection_children (
 CREATE TABLE section_listing (
   section TEXT, type TEXT, account TEXT,
   payload TEXT, fetched_at INT, PRIMARY KEY (section, type, account));
+
+-- --- item resolution: the three reads that had no cache at all (2026-08-26) ------------ --
+--
+-- Measured on the live registry, on a WARM /api/queues: 566 provider calls per page load,
+-- 5.1 s. The cache above covers episode lists, collection children, title lookups and section
+-- listings — and missed the hottest path in the app, which is turning one queue ENTRY into
+-- one item. 339 of those calls were /library/metadata/<rk>, one per entry, every time.
+--
+-- All three are READ-THROUGH with no clock: a cached row is served whatever its age, and the
+-- browser asks for a revalidation pass right after the page paints (?fresh=1). That is what
+-- makes the page fast without ever showing an answer nobody re-checked (decision
+-- 2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints).
+--
+-- NOTE no backticks anywhere in this string: SCHEMA is a template literal, so one would end it
+-- mid-statement. That is not a style rule, it is a parse error.
+
+-- One Plex item by ratingKey, PER ACCOUNT — posterFields()'s projection, or a NULL payload for
+-- a rating key that resolves to nothing (a dead id, or a type this resolver does not answer
+-- for). Per account because viewCount / viewOffset are the querying account's, and they are
+-- what the tile's "In Progress" badge reads.
+CREATE TABLE item_meta (
+  rk TEXT, account TEXT, payload TEXT, fetched_at INT, PRIMARY KEY (rk, account));
+
+-- A section's COLLECTION listing (/library/sections/<id>/collections). Not per account: it is
+-- the collection rows themselves, and every progress field a collection tile shows comes from
+-- collection_children, which has its own account column.
+CREATE TABLE section_collections (
+  section TEXT, payload TEXT, fetched_at INT, PRIMARY KEY (section));
+
+-- One Kavita read, by (kind, id) — kind is 'series' or 'detail', the two calls a reading tile
+-- makes. Not per account: this app talks to Kavita as one user.
+CREATE TABLE kavita_item (
+  kind TEXT, id TEXT, payload TEXT, fetched_at INT, PRIMARY KEY (kind, id));
 
 -- watched history, replacing the paged /history walk. Append-only; an incremental cursor on
 -- viewedAt means a warm fetch stops at the first row it already has (normally one page).
@@ -374,6 +408,85 @@ export async function putCollectionChildren(
 export async function dropCollectionChildren(rk: string | number): Promise<void> {
   if (!ready()) return;
   q('DELETE FROM collection_children WHERE rk = ?').run(String(rk));
+}
+
+// --- item resolution (read-through, revalidated by the page rather than by a clock) ----- //
+//
+// No TTL on purpose, and it is the part most worth being careful about. A clock here would be
+// the worst of both: long enough to be useful means long enough to be wrong, and short enough
+// to be safe means the 566 calls come straight back. The browser revalidates instead — one
+// pass right after the page paints — so a row is only ever as stale as the seconds between
+// the first paint and the refresh landing.
+//
+// A backstop still exists: a row nobody revalidates is dropped when the schema version moves,
+// and `dropItemMeta` / `dropKavitaItem` bust one key on demand.
+
+/** The payload wrapper. A resolver that answered NOTHING is cached too — `{v: null}` — so a
+ *  dead rating key costs one Plex call ever, not one per page load. */
+interface CachedValue<T> { v: T | null }
+
+export async function getItemMeta<T = unknown>(
+  rk: string | number,
+  account: string = '',
+): Promise<CachedValue<T> | null> {
+  if (!ready()) return null;
+  const row = q('SELECT payload FROM item_meta WHERE rk = ? AND account = ?').get(String(rk), String(account || ''));
+  return row ? payloadOf<CachedValue<T>>(row) : null;
+}
+
+export async function putItemMeta(
+  rk: string | number,
+  value: unknown,
+  account: string = '',
+): Promise<void> {
+  if (!ready()) return;
+  q(
+    `INSERT INTO item_meta (rk, account, payload, fetched_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(rk, account) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+  ).run(String(rk), String(account || ''), JSON.stringify({ v: value ?? null }), now());
+}
+
+/** Every account's row for one rating key — the item is the same thing to all of them. */
+export async function dropItemMeta(rk: string | number): Promise<void> {
+  if (!ready()) return;
+  q('DELETE FROM item_meta WHERE rk = ?').run(String(rk));
+}
+
+export async function getSectionCollections<T = unknown>(section: string | number): Promise<T | null> {
+  if (!ready()) return null;
+  const row = q('SELECT payload FROM section_collections WHERE section = ?').get(String(section));
+  return row ? payloadOf<T>(row) : null;
+}
+
+export async function putSectionCollections(section: string | number, payload: unknown): Promise<void> {
+  if (!ready()) return;
+  q(
+    `INSERT INTO section_collections (section, payload, fetched_at) VALUES (?, ?, ?)
+     ON CONFLICT(section) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+  ).run(String(section), JSON.stringify(payload), now());
+}
+
+export async function getKavitaItem<T = unknown>(
+  kind: string,
+  id: string | number,
+): Promise<CachedValue<T> | null> {
+  if (!ready()) return null;
+  const row = q('SELECT payload FROM kavita_item WHERE kind = ? AND id = ?').get(String(kind), String(id));
+  return row ? payloadOf<CachedValue<T>>(row) : null;
+}
+
+export async function putKavitaItem(kind: string, id: string | number, value: unknown): Promise<void> {
+  if (!ready()) return;
+  q(
+    `INSERT INTO kavita_item (kind, id, payload, fetched_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(kind, id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
+  ).run(String(kind), String(id), JSON.stringify({ v: value ?? null }), now());
+}
+
+/** Both kinds for one series — a reading tile makes both calls and they must not disagree. */
+export async function dropKavitaItem(id: string | number): Promise<void> {
+  if (!ready()) return;
+  q('DELETE FROM kavita_item WHERE id = ?').run(String(id));
 }
 
 // --- section_listing (soft TTL, stale-while-revalidate) -------------------------------- //
