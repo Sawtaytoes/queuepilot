@@ -2047,6 +2047,7 @@ body.queue-view #tools {
 #entrymodal,
 #membersmodal,
 #groupsmodal,
+#peoplemodal,
 #poweroffmodal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
@@ -2093,6 +2094,12 @@ body.queue-view #tools {
 #groupsmodal {
   width: min(780px, 95vw);
 }
+/* A one-column list of name fields, so it is sized by the LINE and not by a form: 560px is the
+   width at which a long name plus its Save button and its ✕ still sit on one row, which is what
+   keeps the list scannable down the left edge. `92vw` takes over on a narrow window. */
+#peoplemodal {
+  width: min(560px, 92vw);
+}
 /* A question and two buttons — narrower than every form here, because making it form-width
    would read as "there is something to fill in". */
 #poweroffmodal {
@@ -2106,6 +2113,7 @@ body.queue-view #tools {
 #entrymodal form,
 #membersmodal form,
 #groupsmodal form,
+#peoplemodal form,
 #poweroffmodal form {
   position: relative;
 }
@@ -2115,6 +2123,7 @@ body.queue-view #tools {
 #entrymodal h3,
 #membersmodal h3,
 #groupsmodal h3,
+#peoplemodal h3,
 #poweroffmodal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
@@ -4334,6 +4343,113 @@ body.rowdragging {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   opacity: 0.55;
+}
+
+/* ---- the roster editor (`PeopleModal.tsx`) ----
+
+   LAYOUT ONLY, and scoped to `#peoplemodal` where it is about this modal's own chrome. The
+   controls inside are Charcuterie `Button`s and `IconButton`s configured by props; nothing
+   here paints one (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+
+   ⚠️ `.subhint` IS SCOPED IN THIS FILE — every rule for it lives under a view or modal id — so
+   `#peoplemodal .subhint` is re-scoped here rather than borrowed, or it renders unstyled while
+   looking styled in the diff (decision `2026-08-21-a-class-name-is-not-a-style`). */
+#peoplemodal .subhint {
+  margin: 0;
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+}
+#peoplemodal .peoplehint {
+  margin-bottom: 14px;
+  max-width: 58ch;
+}
+.peoplesec {
+  margin-block-end: 18px;
+}
+.peoplesec h4 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+}
+/* RE-SCOPED, not borrowed. `.field` and its text input are painted under `#startmodal`,
+   `#setmodal` and `#dynmodal` only, so the same markup in a new modal renders as a bare UA
+   input while looking styled in the diff (decision `2026-08-21-a-class-name-is-not-a-style`).
+   That is what the first cut of this modal shipped. */
+#peoplemodal .field {
+  display: block;
+  color: var(--color-content-muted);
+  font-size: 0.92rem;
+}
+#peoplemodal .field input[type="text"],
+#peoplemodal input.peoplename {
+  display: block;
+  width: 100%;
+  background: var(--color-surface-overlay);
+  color: var(--color-content-primary);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font: inherit;
+}
+#peoplemodal .field input[type="text"] {
+  margin-top: 5px;
+}
+
+/* ONE COLUMN at every width. A row here is a face and a text field — a reading surface, not a
+   wall of cards — so the field takes the space rather than the layout taking columns
+   (decision `2026-08-25-a-text-heavy-row-list-is-one-column`). */
+.peoplerows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.peoplerow {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 8px;
+  background: var(--color-surface-raised);
+}
+.peoplerowmain {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+/* The field is the row. `min-inline-size: 0` is what lets it shrink inside the flex row rather
+   than pushing the Save button off the end of a 390px modal. */
+.peoplename {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+}
+.peoplerownote {
+  margin: 0;
+  padding-inline-start: 34px; /* clears the face, so the note hangs under the NAME */
+  font-size: 0.82rem;
+  color: var(--color-content-muted);
+}
+/* The inline delete confirmation. It wraps on purpose: the sentence names what is about to be
+   un-filed, and truncating that is the one thing this control must not do. */
+.peopleconfirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-content-primary);
+}
+.peopleadd {
+  display: flex;
+  align-items: end;
+  gap: 8px;
+  margin-block-start: 10px;
+}
+#peoplemodal .peopleadd .field {
+  flex: 1 1 auto;
+  min-inline-size: 0;
 }
 
 /* The editor block. LAYOUT only — the gap between the label and the board, and nothing about
