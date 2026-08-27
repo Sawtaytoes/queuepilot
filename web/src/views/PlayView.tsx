@@ -7,7 +7,7 @@ import {
   useState,
 } from "react"
 import { Link, useLocation } from "react-router"
-import { GroupBar } from "../components/GroupBar"
+import { LandingFilterBar } from "../components/LandingFilterBar"
 import {
   isPullSet,
   OpenQueueButton,
@@ -21,22 +21,20 @@ import {
 import { api } from "../lib/api"
 import { isRandomOrder } from "../lib/kind"
 import {
-  accountInGroup,
-  labelInGroup,
-} from "../lib/setLabel"
+  membersMatchPeople,
+  resolveMembers,
+  rosterOrder,
+} from "../lib/tonight"
 import type {
-  Group,
   QueuesResponse,
   RegistrySet,
   SetsResponse,
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
 import {
-  ALL_ID,
-  findGroup,
-  groupPath,
   parseOnly,
-} from "../state/group"
+  parsePeople,
+} from "../state/landingFilter"
 import {
   openPlayMenu,
   openSetModal,
@@ -286,11 +284,8 @@ function PlayCard({
  */
 function ChannelCard({
   channel,
-  groupLabel,
 }: {
   channel: RegistrySet
-  /** The group being viewed, so the card can drop that name from its own. */
-  groupLabel: string | null
 }) {
   const people = usePeople()
   const isRewatch = channel.behavior === "rewatch"
@@ -341,14 +336,11 @@ function ChannelCard({
     : channel.has_explicit_profiles
       ? (channel.profiles || [])[0]?.plex_user || null
       : null
-  // ...and dropped again while you are standing INSIDE that account's group, where it is the
-  // heading said a third time: the chip is lit, the page title says it, and `labelInGroup`
-  // has already taken it off this card's own name. Same rule, same module, other half of
-  // the card.
-  const onlyAccount = accountInGroup(
-    boundAccount,
-    groupLabel,
-  )
+  // It is ALWAYS said now. It used to be dropped while you stood inside that account's own
+  // group, where it was the heading repeated — but there is no group page to stand in any
+  // more, so `accountInGroup` had one caller and one answer and is gone with the chips
+  // (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
+  const onlyAccount = boundAccount
   const behaviour = isRewatch
     ? "weighted rewatch"
     : "rotation · ratings-filtered"
@@ -356,7 +348,7 @@ function ChannelCard({
   return (
     <PlayCard
       kind="rules"
-      label={labelInGroup(channel.label, groupLabel)}
+      label={channel.label}
       set={channel}
       // Whose pool this is comes FIRST — "Shows" and "Shows & Shorts" are the same words
       // until you know one is Younger Kids and the other Older Kids, and that used to be
@@ -466,45 +458,70 @@ function buildEntries(
 
 export function PlayView({
   isHidden,
-  groupId,
 }: {
   isHidden: boolean
-  /** The `/g/<id>` segment, or null for the everything view. */
-  groupId: string | null
 }) {
-  const { data, groups, reg } = useStore()
+  const { data, reg } = useStore()
   const people = usePeople()
   const { search } = useLocation()
   const only = parseOnly(search)
-
-  const active = findGroup(groups, groupId)
-  // A stale bookmark to a deleted group shows EVERYTHING rather than an empty page. The
-  // alternative — an error state — punishes the person for our own rename.
-  const inGroup = active ? new Set(active.setIds) : null
+  const selected = parsePeople(search)
 
   const kindOf = (id: string) =>
     reg?.sets.find((s) => s.id === id)?.provider_kind ?? ""
 
   /**
-   * The one predicate the grid filters through. Group first (whose is it), provider
-   * second (which backend) — the two are independent, which is the whole reason the
-   * provider is a chip and not a level of the route.
+   * Every set's trays, resolved to what the filter reads.
+   *
+   * A GROUP MEMBER IS NOT FLATTENED to its people — "at least one of Grace or Linus" is a
+   * set, a number and a spare, and flattening it into two ids turns "either is enough" into
+   * "both are required", which is the rule inverted. `resolveMembers` is the same function
+   * Tonight uses, over the same two payloads.
    */
-  const isShown = (id: string) =>
-    (!inGroup || inGroup.has(id)) &&
-    (!only || kindOf(id) === only)
+  const membersOf = useMemo(() => {
+    const out = new Map<
+      string,
+      ReturnType<typeof resolveMembers>
+    >()
 
-  // Counts on the chips are AFTER the provider filter, so the numbers add up to what you
-  // are about to see rather than to what the group holds in the abstract.
-  const countFor = useMemo(
-    () => (group: Group) =>
-      group.setIds.filter(
-        (id) => !only || kindOf(id) === only,
-      ).length,
-    // `reg` is what `kindOf` reads; `only` is the filter itself.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [only, reg],
-  )
+    for (const [setId, members] of Object.entries(
+      people.byQueue,
+    )) {
+      out.set(
+        setId,
+        resolveMembers(
+          members,
+          people.people,
+          people.groups,
+        ),
+      )
+    }
+
+    return out
+  }, [people])
+
+  /**
+   * The one predicate the grid filters through. People first (who is this for), provider
+   * second (which backend) — the two are independent, which is the whole reason each is a
+   * chip rather than a level of the route.
+   *
+   * Two empties, and both branches are load-bearing. **Nobody ticked is no filter at all**,
+   * or the page would open showing nothing. **A set nobody is filed on is never filtered
+   * out**, or one tick would make every unfiled queue unreachable. Both live in
+   * `membersMatchPeople`, which is the browser's mirror of the server's own rule
+   * (`queuePeople.ts queueMatchesSelection`) — the two are one implementation on each side
+   * of the wire on purpose, so Play and Tonight can never offer different answers.
+   */
+  const matches = (
+    id: string,
+    forPeople: readonly string[],
+    forOnly: string | null,
+  ) =>
+    (!forOnly || kindOf(id) === forOnly) &&
+    membersMatchPeople(membersOf.get(id) ?? [], forPeople)
+
+  const isShown = (id: string) =>
+    matches(id, selected, only)
 
   const labelForKind = (kind: string) =>
     reg?.sets.find((s) => s.provider_kind === kind)
@@ -512,23 +529,38 @@ export function PlayView({
     PLEX_WORDS.name ||
     kind
 
-  // What the provider chips hang off. `/g/all` has to stay `/g/all` here: sending them to
-  // bare `/` would hand the remembered-group redirect a URL that "did not say" and bounce a
-  // provider tap on the everything view into somebody's group — the All-chip bug, one
-  // control over. Bare `/` is still itself, for the visit that has no memory to answer.
-  const basePath = active
-    ? groupPath(active)
-    : groupId === ALL_ID
-      ? `/g/${ALL_ID}`
-      : "/"
-  // Inside a group, a card drops that group's own name — the heading already says it, and
-  // repeating it buries the one word that tells two cards apart. See `lib/setLabel.ts`.
-  const groupLabel = active?.label ?? null
+  /** Every provider kind in the registry, in registry order — de-duplicated by first
+   *  appearance rather than sorted, so the chips read in the order the file does. */
+  const providerKinds = useMemo(
+    () => [
+      ...new Set(
+        (reg?.sets ?? [])
+          .map((set) => set.provider_kind)
+          .filter(Boolean),
+      ),
+    ],
+    [reg],
+  )
 
   const entries = useMemo(
     () => buildEntries(reg, data),
     [data, reg],
-  ).filter((e) => isShown(e.id))
+  )
+
+  /**
+   * WHAT A CHIP WILL SHOW YOU, counted over the same predicate the grid uses.
+   *
+   * Not "how many queues is this person on" — that number stops predicting the tap the
+   * moment a second person is ticked, and a count that mis-predicts is worse than none.
+   */
+  const countFor = (
+    forPeople: readonly string[],
+    forOnly: string | null,
+  ) =>
+    entries.filter((e) => matches(e.id, forPeople, forOnly))
+      .length
+
+  const shown = entries.filter((e) => isShown(e.id))
 
   // --- reorder ---------------------------------------------------------------- //
   // The grid is ONE list now, so a drop permutes one list — but it is still only a SLICE
@@ -583,24 +615,18 @@ export function PlayView({
 
   return (
     <main className="view" hidden={isHidden} id="play">
-      {isHidden || !groups ? null : (
-        <GroupBar
-          activeId={active?.id ?? null}
-          basePath={basePath}
+      {isHidden ? null : (
+        <LandingFilterBar
+          // `/admin` and nothing else. This page had three possible base paths while the
+          // groups were routes; it has one now, and the filters ride in the query.
+          basePath="/admin"
           countFor={countFor}
-          groups={groups.groups}
           labelForKind={labelForKind}
           only={only}
-          // The kinds of the group you are LOOKING AT, so the card offers Plex/Kavita only
-          // where both are actually reachable.
-          providerKinds={
-            (
-              active ??
-              groups.groups.find((g) => g.isAll) ?? {
-                providerKinds: [],
-              }
-            ).providerKinds
-          }
+          people={rosterOrder(people.people)}
+          providerKinds={providerKinds}
+          search={search}
+          selected={selected}
         />
       )}
       {/*
@@ -674,14 +700,14 @@ export function PlayView({
       {/*
         Nothing to show is a real state now that there are no headings to stand in for the
         cards. Unfiltered it means a fresh install (the links above are the way out of it);
-        under a filter it means this group holds nothing on this provider, which is worth
-        saying rather than leaving as a blank page that reads like a failed load.
+        under a filter it means nobody has a queue that matches every name you ticked, which
+        is worth saying rather than leaving as a blank page that reads like a failed load.
       */}
-      {!isHidden && reg && !entries.length ? (
+      {!isHidden && reg && !shown.length ? (
         <EmptyState
           description={
-            active || only
-              ? "Nothing in this group on this provider. Try All, or another group."
+            selected.length || only
+              ? "No queue matches everybody you ticked on this provider. Untick a name, or try Anyone."
               : "Configure a picks or rules queue to put something here."
           }
           heading="Nothing to play"
@@ -692,21 +718,14 @@ export function PlayView({
       <ul className="playgrid" id="playgrid" ref={gridRef}>
         {isHidden
           ? null
-          : entries.map((e) =>
+          : shown.map((e) =>
               e.kind === "rules" ? (
-                <ChannelCard
-                  channel={e.set}
-                  groupLabel={groupLabel}
-                  key={e.id}
-                />
+                <ChannelCard channel={e.set} key={e.id} />
               ) : (
                 <PlayCard
                   key={e.id}
                   kind="picks"
-                  label={labelInGroup(
-                    data!.sets[e.id]!.label,
-                    groupLabel,
-                  )}
+                  label={data!.sets[e.id]!.label}
                   // The registry entry, so a Plex Picks card and a Plex Rules card two
                   // cards apart render in the same amber rather than one of them in the
                   // neutral accent.

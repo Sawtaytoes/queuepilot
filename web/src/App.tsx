@@ -14,12 +14,6 @@ import {
   resolveChannel,
   useChannelSelection,
 } from "./state/channelSelection"
-import {
-  ALL_ID,
-  findGroup,
-  lastUsedGroup,
-  rememberGroup,
-} from "./state/group"
 import { startLiveUpdates } from "./state/live"
 import {
   closePlayMenus,
@@ -125,7 +119,7 @@ export function App() {
   trackRouteOrigin(path)
 
   const route = parsePath(path)
-  const { data, groups, now, reg } = useStore()
+  const { data, now, reg } = useStore()
 
   useEffect(() => {
     void load()
@@ -162,47 +156,6 @@ export function App() {
     )
   }, [navigate, path])
 
-  /**
-   * The group rule, both halves, in one place: **the URL wins; storage only answers a URL
-   * that did not say.**
-   *
-   * Landing on `/g/<id>` records it, so the memory follows a bookmark or a link from Home
-   * Assistant and not merely a click on the picker. The mode landing at `/` never redirects
-   * to a remembered group: it is a choice page, not the filtered Play page.
-   *
-   * **`/g/all` is a URL that DID say.** Picking All is a choice, so it clears the memory and
-   * stays put. While All was spelled bare `/` it was indistinguishable from "did not say",
-   * so this effect bounced every tap on the All chip straight back to the remembered group
-   * and the chip looked dead (reported 2026-08-19). Clearing rather than storing `"all"`
-   * keeps the stored value meaning one thing — a specific group — and makes the next bare
-   * `/` land on All, which is what this device did in fact look at last.
-   * (decision `2026-08-19-all-is-an-address-not-the-absence-of-one`)
-   *
-   * Waits for `groups` so a group link can be remembered only after the list has loaded.
-   */
-  useEffect(() => {
-    if (route.view !== "play" || !groups) return
-
-    if (route.group) {
-      if (route.group === ALL_ID) rememberGroup(null)
-      // An unknown id still renders (PlayView falls back to everything), but it must not
-      // be remembered — that would make one bad link sticky on this device.
-      else if (findGroup(groups, route.group)) {
-        rememberGroup(route.group)
-      }
-
-      return
-    }
-
-    const last = lastUsedGroup()
-
-    if (last && findGroup(groups, last)) {
-      navigate(`/g/${encodeURIComponent(last)}`, {
-        replace: true,
-      })
-    }
-  }, [groups, navigate, route])
-
   // Redirects the vanilla render functions did with `location.assign`.
   useEffect(() => {
     if (!data) return
@@ -236,7 +189,6 @@ export function App() {
     now,
     selectedChannel,
     reg,
-    groups,
   )
 
   useEffect(() => {
@@ -301,12 +253,7 @@ export function App() {
       {route.view === "home" ? null : <NowPlayingBar />}
 
       <ModeLandingView isHidden={route.view !== "home"} />
-      <PlayView
-        groupId={route.view === "play" ? route.group : null}
-        isHidden={
-          route.view !== "play" && route.view !== "admin"
-        }
-      />
+      <PlayView isHidden={route.view !== "admin"} />
       <PendingView isHidden={route.view !== "pending"} />
       <CollectionView
         isHidden={route.view !== "boardGameCollection"}
@@ -367,7 +314,6 @@ function computeChrome(
   // draws from, and therefore whether its copy says "episodes each show" or "chapters each
   // series".
   reg: ReturnType<typeof useStore>["reg"],
-  groups: ReturnType<typeof useStore>["groups"],
 ): Chrome {
   if (route.view === "home") {
     return {
@@ -553,28 +499,11 @@ function computeChrome(
     }
   }
 
-  // The landing, filtered or not. A group page says WHOSE it is in the heading — the
-  // browser tab title too, because half the point of `/g/<id>` is that it is a bookmark and
-  // a row of tabs all called "QueuePilot" is not one.
-  const active =
-    route.view === "play"
-      ? findGroup(groups, route.group)
-      : null
-
-  if (active) {
-    return {
-      // No back button: a group is a top-level place, not somewhere you descend into.
-      // Switching is what the chips are for.
-      back: null,
-      bodyClasses: ["queue-view", "play-view"],
-      documentTitle: `${active.label} — QueuePilot`,
-      editableSetId: null,
-      heading: active.label,
-      isSubHidden: false,
-      sub: "Pick something and play it. Drag a card to reorder.",
-    }
-  }
-
+  // THE LANDING, and there is only one of it now. A group page used to take the heading and
+  // the browser tab title, because `/g/<id>` was a bookmark and a row of tabs all called
+  // "QueuePilot" is not one. The filters live in the query string instead, so there is no
+  // second title to write (decision
+  // `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
   return {
     back: null,
     bodyClasses: ["queue-view", "play-view"], // hides the queues toolbar

@@ -2330,19 +2330,6 @@ body.queue-view #tools {
 #startmodal .idnote:empty {
   display: none;
 }
-/* Where a new set will be FILED. Same muted size as `.idnote` — it is a statement of fact,
-   not a warning — but it sits BETWEEN two fields rather than under the last one, so it needs
-   a bottom margin the `.idnote` rule above deliberately gave up. The group's own name is
-   `<strong>`: that word is the whole content of the line, and it is the one the eye is
-   looking for when the question is "where did my queue go". */
-#setmodal .groupnote {
-  color: var(--color-content-muted);
-  font-size: 0.82rem;
-  margin: -2px 0 12px;
-}
-#setmodal .groupnote strong {
-  color: var(--color-content-primary);
-}
 /* The footer OWNS the space above it. Nothing used to: `margin-top` and `padding-top` were
    0 on all four modals, and the three that looked right were only borrowing the 14px bottom
    margin of the `.idnote` line that happens to sit last in their bodies. `#entrymodal` has
@@ -2480,19 +2467,24 @@ html.modal-open {
 #channels:not([hidden]) {
   display: block;
 }
-/* WHO IS WATCHING — the group chips, and the provider filter under them.
+/* WHO ARE YOU LOOKING FOR — the people chips, and the provider filter under them.
+
+   `.groupbar` until 2026-08-26, when the chips stopped being groups and became a
+   multi-select over the roster. Renamed rather than reused: a class called `groupchip` on a
+   row with no groups in it is a trap for the next reader, and this app has already paid for
+   a class name that meant something else (decision `2026-08-21-a-class-name-is-not-a-style`).
 
    `#play` was a 3-column grid until 2026-08-19 and this bar needed `grid-column: 1 / -1` to
    stay a header rather than becoming a fourth column. `#play` is a block now, so the span is
    gone with it — the bar is simply the first block on the page. */
-.groupbar {
+.filterbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px 18px;
   margin: 0 0 4px;
 }
-.groupchips {
+.filterchips {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -2506,7 +2498,7 @@ html.modal-open {
 .providerchips {
   margin-left: auto;
 }
-.groupchip {
+.filterchip {
   display: inline-flex;
   align-items: center;
   gap: 7px;
@@ -2525,20 +2517,29 @@ html.modal-open {
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard);
 }
-.groupchip:hover {
+.filterchip:hover {
   border-color: var(--color-border-strong);
   color: var(--color-content-primary);
 }
 /* The SELECTED chip is `aria-current="page"`, not a class. The attribute is the fact — this
-   is the page you are on — and styling the fact keeps the two from drifting apart, which is
-   how a selected-looking chip that is not actually current gets shipped. */
-.groupchip[aria-current="page"] {
+   is part of the address you are on — and styling the fact keeps the two from drifting
+   apart, which is how a selected-looking chip that is not actually current gets shipped.
+   MORE THAN ONE may be current now: the people chips are a multi-select, and each ticked
+   name is genuinely part of the current URL. */
+.filterchip[aria-current="page"] {
   border-color: var(--color-intent-accent-border);
   background: var(--color-intent-accent-surface);
   color: var(--color-intent-accent-content);
 }
 /* A count of zero is still shown: "Kavita: 0" is the answer to "where did my stuff go", and
-   hiding it turns a filtered-to-nothing group into an unexplained empty page. */
+   hiding it turns a filtered-to-nothing chip into an unexplained empty page. The number is
+   what you will see AFTER the tap, not what that person owns — see `LandingFilterBar`.
+
+   `.groupcount` rides along because the groups editor's master list wears the same pill for
+   the same reason. It is NOT a borrowed class: both selectors are on this one rule, so the
+   pill paints wherever it is used rather than only inside `.filterbar`
+   (decision `2026-08-21-a-class-name-is-not-a-style`). */
+.filtercount,
 .groupcount {
   min-width: 1.35em;
   padding: 0 5px;
@@ -2549,7 +2550,7 @@ html.modal-open {
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
-.groupchip[aria-current="page"] .groupcount {
+.filterchip[aria-current="page"] .filtercount {
   background: var(--color-surface-raised);
   color: var(--color-content-secondary);
 }
@@ -3638,8 +3639,9 @@ ul.grid.posters .tile .badges .epstag {
   font-size: 0.78rem;
   font-style: normal;
 }
-/* The chip that opens all this. Quieter than a group — it is not a place you can be. */
-.groupedit {
+/* The two ⚙ chips. Quieter than a filter chip — they open an editor rather than narrowing
+   the page, so they must not read as a third thing you can tick. */
+.filteredit {
   border-style: dashed;
   color: var(--color-content-tertiary);
   cursor: pointer;
