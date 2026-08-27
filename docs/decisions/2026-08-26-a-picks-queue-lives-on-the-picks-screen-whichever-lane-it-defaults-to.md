@@ -142,6 +142,18 @@ new assertions would never execute.
 - **`filter "anime" → 0 shelves (channels moved out)`** asserted the defect this record
   removes. It now asserts the filter's real job: the anime queues shown, and only those.
 
+### 9. `lane-drag-test`'s on-screen check was a race
+
+Not this PR's subject either, and it cost an afternoon. CI run 33037647755 failed
+`the tile is now in the Priority lane on screen` and passed on a **re-run of the same
+commit**, which is the signature of a flake — and it looked exactly like a regression from
+§4, because §4 is the only thing in this change that touches an entry's lane.
+
+The check read the DOM once, immediately after the three checks above it were satisfied. Those
+are satisfied when the network writes are OBSERVED; the lane is painted on React's next commit.
+Nothing orders the two. It waits now, on the same claim — a tile that snapped back never
+arrives, so it still fails, two seconds later.
+
 ## Context
 
 `kind: picks | rules` landed on 2026-08-23 and the lanes landed in the data on 2026-08-26, but

@@ -537,7 +537,11 @@ Four things to know before touching it:
 - **The pool saves no order.** A drag that starts and ends in `random` writes nothing —
   deliberate, because the pool is shuffled at playback.
 
-Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). `splitLanes` in
+Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). ⚠️ **Run it with
+`PLEX_TOKEN=` blank.** It drives the DEGRADED path on purpose, and a workspace shell that has
+sourced the root `.env` gives its server a live Plex — the tiles then resolve, the layout
+moves, and every drag in the file lands somewhere other than where it aimed. That reads as
+six hard failures and is an environment difference, not a regression. `splitLanes` in
 `state/queueView.ts` is the pure half and has unit tests.
 
 ### The Picks PAGE lists both lanes' queues, in one strip each
