@@ -41,8 +41,8 @@ import {
   openPlayMenu,
   openSetModal,
 } from "../state/overlays"
-import { WATCH_PLAY_PATH } from "../state/route"
 import { usePeople } from "../state/people"
+import { WATCH_PLAY_PATH } from "../state/route"
 import {
   bumpRevision,
   getState,
