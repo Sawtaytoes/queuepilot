@@ -32,6 +32,7 @@ import {
   parsePath,
   trackRouteOrigin,
   usePath,
+  WATCH_PLAY_PATH,
 } from "./state/route"
 import {
   load,
@@ -40,6 +41,7 @@ import {
 } from "./state/store"
 import { ChannelsView } from "./views/ChannelsView"
 import { CollectionView } from "./views/CollectionView"
+import { ModeLandingView } from "./views/ModeLandingView"
 import { PendingView } from "./views/PendingView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
@@ -52,7 +54,7 @@ import { TonightView } from "./views/TonightView"
  * lines of TSX (`DynModal` alone is 671) that the landing route never renders, and
  * the landing route is the LCP.
  *
- * **The four VIEWS are deliberately NOT split.** They stay permanently mounted and
+ * **The VIEWS are deliberately NOT split.** They stay permanently mounted and
  * toggle `hidden`, and the e2e suites read their internals in the same tick they
  * assert the container is visible — `channels-test` does
  * `waitForSelector('#queue:not([hidden])')` and then `$('#qplay:not([hidden])')`,
@@ -87,7 +89,7 @@ const TileMenu = lazy(async () => ({
 }))
 
 /**
- * The whole editor. Four view containers are ALWAYS mounted and toggle the `hidden`
+ * The whole editor. View containers are ALWAYS mounted and toggle the `hidden`
  * attribute, exactly as the vanilla app did — the e2e suites select
  * `#queue:not([hidden])` / `#channels:not([hidden])`, the body classes drive
  * `display` on several children, and `#tools` has to exist (hidden) even in the
@@ -132,8 +134,8 @@ export function App() {
 
   /**
    * A path that MOVED is rewritten to its new address — `/collection` →
-   * `/board-game-collection`, and whatever joins it later (`state/parsePath.ts`,
-   * `MOVED_PATHS`).
+   * `/board-game-collection`, `/tonight` → `/what-to-watch-play`, and whatever joins it
+   * later (`state/parsePath.ts`, `MOVED_PATHS`).
    *
    * REPLACES the entry rather than pushing one, for the reason the group rule below does:
    * a pushed redirect makes Back land on the old path, which redirects forward again and
@@ -161,9 +163,8 @@ export function App() {
    * that did not say.**
    *
    * Landing on `/g/<id>` records it, so the memory follows a bookmark or a link from Home
-   * Assistant and not merely a click on the picker. Landing on bare `/` with a remembered
-   * group REPLACES the entry rather than pushing one — otherwise Back from `/g/bob` lands
-   * on `/`, which immediately redirects forward again and the button appears dead.
+   * Assistant and not merely a click on the picker. The mode landing at `/` never redirects
+   * to a remembered group: it is a choice page, not the filtered Play page.
    *
    * **`/g/all` is a URL that DID say.** Picking All is a choice, so it clears the memory and
    * stays put. While All was spelled bare `/` it was indistinguishable from "did not say",
@@ -173,8 +174,7 @@ export function App() {
    * `/` land on All, which is what this device did in fact look at last.
    * (decision `2026-08-19-all-is-an-address-not-the-absence-of-one`)
    *
-   * Waits for `groups`: redirecting to a remembered id before the list has loaded cannot
-   * tell "deleted" from "not fetched yet", and would strand a stale bookmark.
+   * Waits for `groups` so a group link can be remembered only after the list has loaded.
    */
   useEffect(() => {
     if (route.view !== "play" || !groups) return
@@ -206,7 +206,7 @@ export function App() {
     if (route.view === "queue") {
       const set = data.sets[route.id]
 
-      if (set?.source !== "queue") navigate("/")
+      if (set?.source !== "queue") navigate("/admin")
     }
 
     if (
@@ -214,7 +214,7 @@ export function App() {
       reg &&
       !rotationChannels(reg).length
     ) {
-      navigate("/")
+      navigate("/admin")
     }
   }, [data, navigate, reg, route])
 
@@ -241,6 +241,7 @@ export function App() {
 
   useEffect(() => {
     const all = [
+      "mode-view",
       "queue-view",
       "play-view",
       "channel-mode",
@@ -277,25 +278,30 @@ export function App() {
 
   return (
     <>
-      <Header
-        back={chrome.back}
-        editableSetId={chrome.editableSetId}
-        heading={chrome.heading}
-        isSubHidden={chrome.isSubHidden}
-        sub={chrome.sub}
-      >
-        {isNarrow ? null : toolbar}
-      </Header>
+      {route.view === "home" ? null : (
+        <Header
+          back={chrome.back}
+          editableSetId={chrome.editableSetId}
+          heading={chrome.heading}
+          isSubHidden={chrome.isSubHidden}
+          sub={chrome.sub}
+        >
+          {isNarrow ? null : toolbar}
+        </Header>
+      )}
 
       {/* Directly under the header, and only while something is on
           screen: the owner asked for the controls "at the top". It
           renders null when nothing is playing, so it costs no space the
           rest of the time. */}
-      <NowPlayingBar />
+      {route.view === "home" ? null : <NowPlayingBar />}
 
+      <ModeLandingView isHidden={route.view !== "home"} />
       <PlayView
         groupId={route.view === "play" ? route.group : null}
-        isHidden={route.view !== "play"}
+        isHidden={
+          route.view !== "play" && route.view !== "admin"
+        }
       />
       <PendingView isHidden={route.view !== "pending"} />
       <CollectionView
@@ -358,9 +364,33 @@ function computeChrome(
   reg: ReturnType<typeof useStore>["reg"],
   groups: ReturnType<typeof useStore>["groups"],
 ): Chrome {
+  if (route.view === "home") {
+    return {
+      back: null,
+      bodyClasses: ["mode-view"],
+      documentTitle: "QueuePilot",
+      editableSetId: null,
+      heading: "QueuePilot",
+      isSubHidden: true,
+      sub: "Choose a mode.",
+    }
+  }
+
+  if (route.view === "admin") {
+    return {
+      back: { label: "‹ QueuePilot", target: "/" },
+      bodyClasses: ["queue-view", "play-view"],
+      documentTitle: "Admin — QueuePilot",
+      editableSetId: null,
+      heading: "Admin",
+      isSubHidden: false,
+      sub: "Manage queues, rules, groups, and the content QueuePilot can choose.",
+    }
+  }
+
   if (route.view === "pending") {
     return {
-      back: { label: "‹ Play", target: "/" },
+      back: { label: "‹ Admin", target: "/admin" },
       // `queue-view` is what HIDES the Queues toolbar. Without it the landing's add-to-any-
       // queue search, queue filter and "New queue" all leak into this page's header.
       bodyClasses: ["queue-view"],
@@ -374,22 +404,22 @@ function computeChrome(
 
   if (route.view === "tonight") {
     return {
-      back: { label: "‹ Play", target: "/" },
+      back: { label: "‹ QueuePilot", target: "/" },
       // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending makes of it.
       // Without it the landing's search, queue filter and "New queue" all leak into this
       // page's header.
       bodyClasses: ["queue-view"],
-      documentTitle: "Tonight — QueuePilot",
+      documentTitle: "What to Watch/Play — QueuePilot",
       editableSetId: null,
-      heading: "Tonight",
+      heading: "What to Watch/Play",
       isSubHidden: false,
-      sub: "Who's here, what you're doing, and Go.",
+      sub: "Choose who is here, what you want to do, and what to start.",
     }
   }
 
   if (route.view === "boardGameCollection") {
     return {
-      back: { label: "‹ Play", target: "/" },
+      back: { label: "‹ Admin", target: "/admin" },
       // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending and Tonight
       // make of it. Without it the landing's search, queue filter and "New queue" leak in.
       bodyClasses: ["queue-view"],
@@ -403,13 +433,16 @@ function computeChrome(
 
   if (route.view === "result") {
     return {
-      // BACK GOES TO TONIGHT, not to the landing: this card is the end of that form, and
+      // BACK GOES TO WHAT TO WATCH/PLAY, not to the landing: this card is the end of that form, and
       // "change the answers" is the thing somebody wants next when the pick is wrong.
-      back: { label: "‹ Tonight", target: "/tonight" },
+      back: {
+        label: "‹ What to Watch/Play",
+        target: WATCH_PLAY_PATH,
+      },
       bodyClasses: ["queue-view"],
-      documentTitle: "Tonight's pick — QueuePilot",
+      documentTitle: "Your pick — QueuePilot",
       editableSetId: null,
-      heading: "Tonight's pick",
+      heading: "Your pick",
       isSubHidden: false,
       // WP-7: this card is now one of TWO answers — a game off the shelf, or a queue for
       // the evening — so the sentence says the half they share. It used to promise "say you
@@ -421,7 +454,7 @@ function computeChrome(
 
   if (route.view === "queues") {
     return {
-      back: { label: "‹ Play", target: "/" }, // Picks is a top-level configurator
+      back: { label: "‹ Admin", target: "/admin" }, // Picks is a top-level configurator
       bodyClasses: [],
       documentTitle: "Picks — QueuePilot",
       editableSetId: null,
@@ -437,7 +470,7 @@ function computeChrome(
     const isMovies = selectedChannel?.behavior === "rewatch"
 
     return {
-      back: { label: "‹ Play", target: "/" },
+      back: { label: "‹ Admin", target: "/admin" },
       bodyClasses: isMovies
         ? ["queue-view", "movies-channel"]
         : ["queue-view"], // reuse: hides the queues toolbar

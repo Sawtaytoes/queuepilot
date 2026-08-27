@@ -246,6 +246,98 @@ body {
   padding-bottom: 80px;
 }
 
+/* MODE LANDING: the root route names the two jobs before either page opens. It follows the
+   same simple two-card entry shape as Mux-Magic and Gallery-Downloader, but keeps the cards
+   local because they are QueuePilot's own mode choices rather than a shared control. */
+body.mode-view {
+  padding-bottom: 0;
+}
+#mode-landing:not([hidden]) {
+  display: block;
+  max-width: 1280px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 80px 24px 96px;
+  position: relative;
+}
+#mode-landing .mode-landing-scheme {
+  position: absolute;
+  right: 24px;
+  top: 24px;
+}
+#mode-landing .mode-landing-intro {
+  text-align: center;
+}
+#mode-landing .mode-landing-intro h1 {
+  font-size: clamp(3rem, 5vw, 4.5rem);
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  margin: 0;
+}
+#mode-landing .mode-landing-intro p {
+  color: var(--color-content-secondary);
+  font-size: 1.35rem;
+  margin: 16px 0 0;
+}
+#mode-landing .mode-landing-cards {
+  display: grid;
+  gap: 28px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 64px auto 0;
+}
+#mode-landing .mode-card {
+  background: var(--color-surface-sunken);
+  border: 1px solid var(--color-border-default);
+  border-radius: 16px;
+  color: var(--color-content-primary);
+  display: block;
+  min-height: 226px;
+  padding: 32px;
+  text-decoration: none;
+  transition:
+    background var(--duration-fast) var(--ease-standard),
+    border-color var(--duration-fast) var(--ease-standard);
+}
+#mode-landing .mode-card:hover {
+  background: var(--color-surface-raised);
+  border-color: var(--color-border-strong);
+}
+#mode-landing .mode-card:focus-visible {
+  border-color: var(--color-border-focus);
+  outline: 3px solid
+    color-mix(
+      in srgb,
+      var(--color-border-focus) 35%,
+      transparent
+    );
+  outline-offset: 3px;
+}
+#mode-landing .mode-card-heading {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+}
+#mode-landing .mode-card-heading h2 {
+  font-size: 1.9rem;
+  font-weight: 650;
+  line-height: 1.2;
+  margin: 0;
+}
+#mode-landing .mode-card p {
+  color: var(--color-content-secondary);
+  font-size: 1.15rem;
+  line-height: 1.65;
+  margin: 22px 0 0;
+  max-width: 38rem;
+}
+#mode-landing .mode-card-admin .mode-card-icon {
+  color: var(--color-intent-accent-content);
+}
+#mode-landing .mode-card-watch-play .mode-card-icon {
+  color: var(--color-intent-success-content);
+}
+
 /* THE PAGE HEADER IS `#apphead`, NEVER THE BARE `header` ELEMENT. `<header>` is a landmark
    a COMPONENT may render too: Charcuterie's `Card` puts its heading in one, and this file is
    unlayered, so `header { position: sticky; top: 0; z-index: 10 }` reached every card on the
@@ -2811,6 +2903,37 @@ body.name-editable #apphead h1 {
 @media (max-width: 760px) {
   :root {
     --tile: 132px;
+  }
+  #mode-landing:not([hidden]) {
+    padding: 56px 14px 64px;
+  }
+  #mode-landing .mode-landing-scheme {
+    right: 14px;
+    top: 14px;
+  }
+  #mode-landing .mode-landing-intro h1 {
+    font-size: 2.75rem;
+  }
+  #mode-landing .mode-landing-intro p {
+    font-size: 1.15rem;
+  }
+  #mode-landing .mode-landing-cards {
+    grid-template-columns: 1fr;
+    margin-top: 48px;
+  }
+  #mode-landing .mode-card {
+    min-height: 0;
+    padding: 24px;
+  }
+  #mode-landing .mode-card-heading {
+    gap: 12px;
+  }
+  #mode-landing .mode-card-heading h2 {
+    font-size: 1.5rem;
+  }
+  #mode-landing .mode-card p {
+    font-size: 1rem;
+    margin-top: 16px;
   }
   #apphead {
     padding: 10px 14px 8px;
