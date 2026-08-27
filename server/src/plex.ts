@@ -182,6 +182,18 @@ interface PlexTvHomeUser {
 export interface AccountScope {
   token?: string | null;
   account?: string;
+  /**
+   * Re-read the item-resolution caches from Plex instead of serving them.
+   *
+   * It rides on this bag rather than on a parameter of its own because it has to reach the
+   * same places `account` already does — `resolveValue` is four calls deep from the route and
+   * every one of them already threads a scope. It scopes to the THREE tables the browser's
+   * refresh pass owns (`item_meta`, `section_collections`, and Kavita's twin); `leaves` and
+   * `collection_children` are deliberately untouched, because both have real validators and
+   * busting them would trade 566 cheap calls for a full library re-read
+   * (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+   */
+  isFresh?: boolean;
 }
 
 /** The show-node validator `allLeaves()` reads before trusting a cached leaves row. */
@@ -685,31 +697,45 @@ export async function search(sections: SectionIds, query: string): Promise<Poste
 // {type:'collection', ...} so the add flow writes it as a `{collection: "<name>"}` entry
 // (before 2026-08-21, the literal string "Collection: <name>"; same entry key either way)
 // entry the Python resolver expands. Collections per library are few, so this stays cheap.
-export async function collections(sections: SectionIds, query: string): Promise<CollectionHit[]> {
+export async function collections(
+  sections: SectionIds,
+  query: string,
+  opts: AccountScope = {},
+): Promise<CollectionHit[]> {
   const ql = String(query || '').trim().toLowerCase();
   const out: CollectionHit[] = [];
   const seen = new Set<string>();
   for (const section of ([] as number[]).concat(sections)) {
-    let json;
-    try {
-      json = await plexGet(`/library/sections/${section}/collections?X-Plex-Container-Size=500`);
-    } catch {
-      continue;
+    // Cached PER SECTION and unfiltered, so the same row serves every `{collection: <name>}`
+    // entry drawing from that library — 24 identical listings per warm page load before this,
+    // because the filtering is client-side and each caller asked again for its own name.
+    let rows = opts.isFresh ? null : await cache.getSectionCollections<CollectionHit[]>(section);
+    if (!rows) {
+      let json;
+      try {
+        json = await plexGet(`/library/sections/${section}/collections?X-Plex-Container-Size=500`);
+      } catch {
+        continue;
+      }
+      rows = [];
+      for (const e of container(json).Metadata || []) {
+        if (e.type !== 'collection') continue;
+        rows.push({
+          type: 'collection',
+          ratingKey: String(e.ratingKey),
+          title: e.title,
+          sectionId: Number(section),
+          childCount: e.childCount != null ? Number(e.childCount) : null,
+          hasThumb: Boolean(e.thumb),
+        });
+      }
+      await cache.putSectionCollections(section, rows);
     }
-    for (const e of container(json).Metadata || []) {
-      if (e.type !== 'collection') continue;
-      if (ql && !String(e.title || '').toLowerCase().includes(ql)) continue;
-      const rk = String(e.ratingKey);
-      if (seen.has(rk)) continue;
-      seen.add(rk);
-      out.push({
-        type: 'collection',
-        ratingKey: rk,
-        title: e.title,
-        sectionId: Number(section),
-        childCount: e.childCount != null ? Number(e.childCount) : null,
-        hasThumb: Boolean(e.thumb),
-      });
+    for (const row of rows) {
+      if (ql && !String(row.title || '').toLowerCase().includes(ql)) continue;
+      if (seen.has(row.ratingKey)) continue;
+      seen.add(row.ratingKey);
+      out.push(row);
     }
   }
   return out;
@@ -721,8 +747,9 @@ export async function collections(sections: SectionIds, query: string): Promise<
 export async function resolveCollection(
   sections: SectionIds,
   name: string,
+  opts: AccountScope = {},
 ): Promise<ResolvedCollection | null> {
-  const list = await collections(sections, name);
+  const list = await collections(sections, name, opts);
   if (!list.length) return null;
   const nl = String(name).trim().toLowerCase();
   const c = list.find((x) => String(x.title).trim().toLowerCase() === nl) || list[0];
@@ -809,6 +836,7 @@ export async function resolveTitle(
 export async function resolveValue(
   sections: SectionIds,
   value: unknown,
+  opts: AccountScope = {},
 ): Promise<ResolvedItem | null> {
   // ratingKey (scalar number/numeric-string, or a mapping carrying one)
   let ratingKey: string | null = null;
@@ -821,7 +849,7 @@ export async function resolveValue(
     // this resolver could not see it: every `{collection:}` entry painted as an UNRESOLVED
     // tile in the grid while playing perfectly. Read before the `title` branch, because a
     // collection entry may carry both.
-    if (mapping.collection) return resolveCollection(sections, String(mapping.collection));
+    if (mapping.collection) return resolveCollection(sections, String(mapping.collection), opts);
     if (mapping.ratingKey != null) ratingKey = String(mapping.ratingKey);
     if (mapping.title) titleText = String(mapping.title);
   } else if (typeof value === 'number' || /^\d+$/.test(String(value).trim())) {
@@ -830,17 +858,32 @@ export async function resolveValue(
     titleText = String(value);
   }
   if (ratingKey) {
-    try {
-      const md = (container(await plexGet(`/library/metadata/${ratingKey}`)).Metadata || [])[0];
-      if (md && (md.type === 'movie' || md.type === 'show')) return posterFields(md);
-    } catch {
-      /* dead id */
+    // THE hot path: one call per queue entry, and until 2026-08-26 it was made on every single
+    // /api/queues. 339 of the 377 Plex calls a warm page load made were this line.
+    //
+    // A MISS is cached as well as a hit (`{v: null}`), because a dead rating key is exactly
+    // the entry somebody leaves in a queue for months — without it, the one line nothing can
+    // resolve costs a live round trip forever.
+    if (!opts.isFresh) {
+      const hit = await cache.getItemMeta<PosterFields>(ratingKey, opts.account ?? '');
+      if (hit) return hit.v;
     }
-    return null;
+    let item: PosterFields | null = null;
+    try {
+      const md = (container(await plexGet(`/library/metadata/${ratingKey}`, opts.token ?? null)).Metadata || [])[0];
+      if (md && (md.type === 'movie' || md.type === 'show')) item = posterFields(md);
+    } catch {
+      // A dead id resolves to null and is cached as one. A TRANSPORT failure must not be:
+      // caching "Plex was down" as "this entry does not exist" would paint an unresolved tile
+      // that never repairs itself, so nothing is written here.
+      return null;
+    }
+    await cache.putItemMeta(ratingKey, item, opts.account ?? '');
+    return item;
   }
   if (!titleText) return null;
   const collName = /^\s*collection:\s*(.+)$/i.exec(titleText)?.[1];
-  if (collName !== undefined) return resolveCollection(sections, collName);
+  if (collName !== undefined) return resolveCollection(sections, collName, opts);
   const { title, year, guid } = parseTitleString(titleText);
   if (!title) return null;
   for (const section of ([] as number[]).concat(sections)) {
@@ -1009,9 +1052,24 @@ async function allLeaves(
   // out-of-band completion used to stick. The validator is one light show-node call (no leaves);
   // when Plex is unreachable it is null and getLeaves falls back to the TTL — offline unchanged.
   // (decision 2026-08-07-leaves-cache-revalidates-on-read)
+  //
+  // ⚠️ NOT skipped on the cache-preferred read, and that is deliberate. It is one Plex call per
+  // SHOW — 121 of them on a warm /api/queues, about half a second — and dropping it was tried
+  // on 2026-08-26 and REVERTED the same hour. `isFresh` cannot separate the two callers that
+  // matter: the browser's first paint (where a second of staleness is fine, because its own
+  // refresh pass is already on the way) and the ENGINE building a lineup (where it is not,
+  // because the stale answer gets QUEUED and played). Both read with `isFresh` false, so a
+  // flag here would have silently handed the engine an episode somebody had already watched.
+  // `e2e/leaves-revalidate-test.ts` failed on exactly that, which is what the gate is for.
+  //
+  // The cheap version of this is real and is NOT built: a section listing carries
+  // (updatedAt, leafCount, viewedLeafCount) for every show in it, so one call could validate
+  // all 121. It needs its own decision, because that listing has a 5-minute soft TTL and
+  // "revalidates on read" would quietly become "revalidates within five minutes".
   const agg = await showAggregate(rk, token);
   const hit = await cache.getLeaves<PlexMetadata[]>(rk, agg, account);
   if (hit) return hit;
+  const aggForWrite = agg;
   let mc;
   try {
     mc = container(await plexGet(`/library/metadata/${rk}/allLeaves`, token));
@@ -1023,9 +1081,9 @@ async function allLeaves(
   // so reading them off `mc` stored 0s and the row could never validate). Fall back to the
   // container / leaf length only when the aggregate call failed.
   await cache.putLeaves(rk, {
-    updatedAt: agg?.updatedAt ?? Number(mc.updatedAt ?? 0),
-    leafCount: agg?.leafCount ?? Number(mc.leafCount ?? eps.length),
-    viewedLeafCount: agg?.viewedLeafCount ?? Number(mc.viewedLeafCount ?? 0),
+    updatedAt: aggForWrite?.updatedAt ?? Number(mc.updatedAt ?? 0),
+    leafCount: aggForWrite?.leafCount ?? Number(mc.leafCount ?? eps.length),
+    viewedLeafCount: aggForWrite?.viewedLeafCount ?? Number(mc.viewedLeafCount ?? 0),
     payload: eps,
   }, account);
   return eps;
