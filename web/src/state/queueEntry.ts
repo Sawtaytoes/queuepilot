@@ -6,6 +6,7 @@ import {
 import type { QueueItem } from "../lib/types"
 import { refreshData } from "./live"
 import type { EntryActions } from "./overlays"
+import { promotedOrder } from "./queueView"
 import { deselect } from "./selection"
 import {
   bumpRevision,
@@ -136,6 +137,84 @@ export async function skipQueueItem(
     setStatus(`Skipped “${label}”`, "ok")
   } catch (e) {
     setStatus(`Skip failed: ${(e as Error).message}`, "err")
+  }
+}
+
+/**
+ * Move ONE entry between the lanes — the tile's ↑ / ↓, and the same write the drag across the
+ * lane divider makes.
+ *
+ * Two requests, in the order the drag uses and for the same reason: PLACEMENT first, then the
+ * order. The other way round leaves a window in which the file says an entry is in a lane the
+ * order does not put it in, and a scan landing in that window builds a lineup off the
+ * half-written file.
+ *
+ * The placement is written SPARSELY — an entry that lands in the lane it already inherits
+ * from the queue stores nothing, so it goes on following the queue if the queue's own default
+ * is changed later. That is the rule `useGridDrag` already writes by.
+ *
+ * A DEMOTE sends no order at all: the pool is shuffled at playback, so its order means
+ * nothing, and a reorder there would be a write that changes only the file's bytes.
+ */
+export async function moveEntryLane(
+  setId: string | null | undefined,
+  item: QueueItem,
+  setLane: "priority" | "random",
+) {
+  if (!setId) return
+
+  const from = item.placement ?? setLane
+  const to = from === "priority" ? "random" : "priority"
+  const set = getState().data?.sets[setId]
+  const keys =
+    to === "priority" && set
+      ? promotedOrder(set.items, item.key, setLane)
+      : null
+
+  // Optimistic, like the drag: the tile crosses the divider on the press rather than after
+  // the round trip, and a failure re-syncs from the server below.
+  if (set) {
+    const hit = set.items.find((it) => it.key === item.key)
+
+    if (hit) hit.placement = to === setLane ? null : to
+
+    if (keys) {
+      const byKey = new Map(
+        set.items.map((it) => [it.key, it]),
+      )
+
+      set.items = keys
+        .map((k) => byKey.get(k))
+        .filter((it): it is QueueItem => Boolean(it))
+    }
+
+    bumpRevision()
+  }
+
+  setStatus("Moving…")
+
+  try {
+    await api(
+      "PATCH",
+      `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/placement`,
+      { placement: to === setLane ? "" : to },
+    )
+
+    if (keys) {
+      await api("PATCH", `/api/queues/${setId}/order`, {
+        keys,
+      })
+    }
+
+    setStatus(
+      to === "priority"
+        ? "Moved to the Priority queue"
+        : "Moved to the Random pool",
+      "ok",
+    )
+  } catch (e) {
+    setStatus(`Move failed: ${(e as Error).message}`, "err")
+    refreshData()
   }
 }
 

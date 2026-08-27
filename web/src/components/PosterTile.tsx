@@ -69,6 +69,24 @@ type Props = {
   /** The multi-select checkbox — queue grid only. Stacks under ✕ in `.tilechrome`. */
   onCheck?: () => void
   /**
+   * Is this tile in the selection? The control is a real `aria-pressed` button, so the state
+   * has to reach it — the CSS used to read `.tile.selected` on an ancestor instead, and it
+   * lost that fight on specificity (see `CheckGlyph`).
+   */
+  isChecked?: boolean
+  /**
+   * Move this entry between the two lanes — into the Priority queue, or back out to the
+   * Random pool. The third control in the stack, under ✓.
+   *
+   * The same answer the drag across the lane divider gives, reachable without a drag
+   * (owner, 2026-08-26: "instead of right-click, I think we should add a 3rd icon under the
+   * checkbox that allows you to move it into Priority or out of Priority"). Absent on every
+   * grid that has no lanes — the shelf, the channel member grid.
+   */
+  onLane?: () => void
+  /** Which lane the entry is in NOW, which decides the arrow's direction and its label. */
+  isPriority?: boolean
+  /**
    * Start THIS entry now — the ▶ over the poster, queue/channel grid only. Takes the
    * button's viewport box because what it opens is the same fixed-position device menu
    * "Play on ▾" opens; nothing here plays without naming a device.
@@ -128,6 +146,59 @@ const PlayGlyph = () => (
 )
 
 /**
+ * ✓ — the select mark, as an SVG.
+ *
+ * It was the TEXT character `✓` until 2026-08-26, and it never painted: the rule that turns a
+ * selected tile's circle accent (`.tile.selected .check`) is outranked by the one that draws
+ * the circle in the first place (`.editable .tile .tilechrome .check`), so the mark stayed
+ * `color: transparent` in every state and the control looked identical checked and unchecked.
+ * The same reason `.remove` gives for its ×: a font glyph is not a reliable icon here.
+ */
+const CheckGlyph = () => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="13"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="2.5"
+    viewBox="0 0 14 14"
+    width="13"
+  >
+    <path d="M2.5 7.5l3 3 6-6.5" />
+  </svg>
+)
+
+/**
+ * ↑ / ↓ — into the Priority queue, or back out to the Random pool.
+ *
+ * The arrow points the way the tile MOVES on screen: the Priority lane is drawn above the
+ * pool, so up is a promote and down is a demote. It is the same write the drag across the
+ * lane divider makes, for a pointer that would rather press a button than drag one
+ * (owner, 2026-08-26).
+ */
+const LaneGlyph = ({ isUp }: { isUp: boolean }) => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="13"
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth="2"
+    viewBox="0 0 14 14"
+    width="13"
+  >
+    {isUp ? (
+      <path d="M7 11.5V2.5M3 6.5l4-4 4 4" />
+    ) : (
+      <path d="M7 2.5v9M3 7.5l4 4 4-4" />
+    )}
+  </svg>
+)
+
+/**
  * Pencil — the Edit affordance in the badge row (QueueView). Exported so the
  * outline pill and this shell cannot drift to different glyphs.
  */
@@ -152,9 +223,12 @@ export function PosterTile({
   className,
   dataKey,
   dataSet,
+  isChecked = false,
   isPending,
+  isPriority = false,
   next,
   onCheck,
+  onLane,
   onContextMenu,
   onPlay,
   onRemove,
@@ -170,7 +244,13 @@ export function PosterTile({
   titleTooltip,
 }: Props) {
   const isStartable = Boolean(next?.onStart && next.text)
-  const hasChrome = Boolean(onCheck || onRemove)
+  const hasChrome = Boolean(onCheck || onRemove || onLane)
+  const laneTitle = isPriority
+    ? "Move out of the Priority queue"
+    : "Move to the Priority queue"
+  const checkTitle = isChecked
+    ? "Deselect this entry"
+    : "Select this entry"
 
   return (
     <li
@@ -264,14 +344,34 @@ export function PosterTile({
               </button>
             </Tip>
           ) : null}
+          {/* A BUTTON, not a `<span aria-hidden>`: it holds state, it is the only way to
+              build a multi-select from the keyboard, and a screen reader was told to ignore
+              it. `aria-pressed` is what announces the state a `.selected` class used to
+              carry alone. */}
           {onCheck ? (
-            <span
-              aria-hidden="true"
-              className="check"
-              onClick={onCheck}
-            >
-              ✓
-            </span>
+            <Tip label={checkTitle}>
+              <button
+                aria-label={checkTitle}
+                aria-pressed={isChecked}
+                className="check"
+                onClick={onCheck}
+                type="button"
+              >
+                <CheckGlyph />
+              </button>
+            </Tip>
+          ) : null}
+          {onLane ? (
+            <Tip label={laneTitle}>
+              <button
+                aria-label={laneTitle}
+                className="lanebtn"
+                onClick={onLane}
+                type="button"
+              >
+                <LaneGlyph isUp={!isPriority} />
+              </button>
+            </Tip>
           ) : null}
         </div>
       ) : null}
