@@ -58,11 +58,7 @@ import type {
  * stores as it is given — what is NOT allowed is logging one that quietly means nobody while
  * looking like it means everybody, which is the defect this whole package is about.
  */
-export function CollectionView({
-  isHidden,
-}: {
-  isHidden: boolean
-}) {
+export function CollectionView() {
   const [games, setGames] = useState<
     BoardGameCard[] | null
   >(null)
@@ -76,11 +72,9 @@ export function CollectionView({
     useState(false)
   const [reloadCount, setReloadCount] = useState(0)
 
-  // Loaded when the view becomes visible: every view here is permanently mounted and toggles
-  // `hidden`, so an eager fetch would pull the whole shelf on every landing paint.
+  // Loaded on mount, which is when this page is opened: the route table mounts a view only
+  // on its own route, so no other page pays for the whole shelf.
   useEffect(() => {
-    if (isHidden) return
-
     let isCancelled = false
 
     void Promise.all([
@@ -103,7 +97,7 @@ export function CollectionView({
     return () => {
       isCancelled = true
     }
-  }, [isHidden, reloadCount])
+  }, [reloadCount])
 
   const shelf = filterCollection(games ?? [], {
     isExcludedShown,
@@ -111,11 +105,7 @@ export function CollectionView({
   })
 
   return (
-    <main
-      className="view"
-      hidden={isHidden}
-      id="collection"
-    >
+    <main className="view" id="collection">
       <section className="tsection" id="collection-find">
         <h2 className="tlabel">The collection</h2>
         <p className="subhint">
