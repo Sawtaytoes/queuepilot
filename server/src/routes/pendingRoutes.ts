@@ -30,9 +30,14 @@ export function pendingRoutes(): Hono {
    * `plex.collections()` takes a query and title-filters client-side; an empty query is every
    * collection in the section, which is what this wants. Collections per library are few, so
    * this is one cheap read on top of the listing that was already happening.
+   *
+   * `isFresh` for the same reason the search route uses it: this pass answers "what is in the
+   * library that no queue plays", and a cached listing would keep reporting a collection
+   * somebody has since queued — or miss one they have just made. It is not on the page-load
+   * path (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
    */
   const listCollections = async (sectionId: number) => (
-    (await plex.collections([sectionId], '')).map((row) => ({
+    (await plex.collections([sectionId], '', { isFresh: true })).map((row) => ({
       childCount: row.childCount,
       ratingKey: row.ratingKey,
       sectionId: row.sectionId,

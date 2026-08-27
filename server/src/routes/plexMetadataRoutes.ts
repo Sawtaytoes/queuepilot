@@ -124,7 +124,12 @@ export function plexMetadataRoutes(): Hono {
           // dozens of individual show/movie hits, and the frontend caps the dropdown — so a
           // collection appended AFTER the items was pushed past the cap and never shown. The
           // collection is usually the higher-level thing the user wants, so it goes first.
-          results.unshift(...(await plex.collections(collectionSections, q)));
+          // ALWAYS fresh. Everything else reads this listing through its cache, but a SEARCH is
+          // somebody typing the name of a collection they may have made in Plex a minute ago,
+          // and "it is not there" is indistinguishable from "it does not exist". A search is
+          // one call and is not on the page-load path
+          // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+          results.unshift(...(await plex.collections(collectionSections, q, { isFresh: true })));
         } catch {
           /* collections are additive — a Plex hiccup there never fails item search */
         }

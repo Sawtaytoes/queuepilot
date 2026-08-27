@@ -268,10 +268,19 @@ export function queuesRoutes(): Hono {
       //
       // Hand-rolled, and it STAYS hand-rolled: this is app logic over file mtimes and a cache
       // generation, nothing to do with the shared static handler's ETag on `web/dist`.
+      // The browser's revalidation pass. `/api/queues` serves whatever the item-resolution
+      // caches hold, however old; this is the follow-up that re-reads the providers and
+      // rewrites them, and the page shows a progress line for as long as it runs
+      // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+      const isFresh = ['1', 'true', 'yes'].includes((c.req.query('fresh') ?? '').toLowerCase());
       const tag = `W/"${store.queues.revision()}-${store.sets.revision()}-${await cache.generation()}"`;
       c.header('ETag', tag);
       c.header('Cache-Control', 'private, no-store');
-      if (c.req.header('if-none-match') === tag) return c.body(null, 304);
+      // A revalidation pass must never 304. The tag is built from two file revisions and the
+      // cache generation, and NONE of them move when a provider's own data changes — which is
+      // the entire thing this pass exists to notice. Answering 304 here would make the refresh
+      // a no-op that reported success, and the page would sit on the cached copy forever.
+      if (!isFresh && c.req.header('if-none-match') === tag) return c.body(null, 304);
 
       const reg = await sets.getRegistry();
       const all = await queues.listAll();
@@ -316,7 +325,7 @@ export function queuesRoutes(): Hono {
       const scopes = new Map<string, AccountScope>();
       await Promise.all(
         [...new Set(reg.sets.map((s) => s.requires_profile || ''))].map(async (p) => {
-          scopes.set(p, await plex.profileScope(p));
+          scopes.set(p, { ...(await plex.profileScope(p)), isFresh });
         }),
       );
       const resolvedItems = await mapLimit(work, 8, async ({ s, e }) => {
@@ -350,7 +359,7 @@ export function queuesRoutes(): Hono {
 
       // The pull sets, each in one provider round-trip, all of them concurrently.
       await Promise.all(pull.map(async ({ s, entries }) => {
-        const cores = await providerTiles.resolveTiles(s, entries.map((e) => e.value));
+        const cores = await providerTiles.resolveTiles(s, entries.map((e) => e.value), { isFresh });
         // `?.` only because `noUncheckedIndexedAccess` cannot see that the loop above wrote
         // this key; upstream indexed it directly and the entry is always there.
         const row = result[s.id];

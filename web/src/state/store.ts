@@ -41,12 +41,22 @@ export type Snapshot = {
   /** Bumped whenever `data`/`reg` are replaced in place by a mutation helper, so
    * subscribers re-render even though the object identity game is played by hand. */
   revision: number
+  /**
+   * True while PHASE 3 is running — the pass that re-reads Plex and Kavita behind the page
+   * that has already painted. The header renders a thin progress line for exactly this
+   * (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+   *
+   * It is a separate flag and not a `status` toast on purpose: a toast auto-dismisses after
+   * four seconds and this pass takes six, so the message would leave before the work did.
+   */
+  isRevalidating: boolean
 }
 
 let snapshot: Snapshot = {
   data: null,
   history: { redo: 0, undo: 0 },
   groups: null,
+  isRevalidating: false,
   reg: null,
   now: { now: null, set: null },
   revision: 0,
@@ -248,6 +258,44 @@ function shelvesAsQueues(
   return { order: shelves.order, sets }
 }
 
+/**
+ * PHASE 3 — re-read the providers behind the page that has already painted.
+ *
+ * Phases 1 and 2 are served from the item-resolution caches and make no provider call at all,
+ * which is what took a warm `/api/queues` from 5.1 s to about 0.55 s. The cost of that is that
+ * both are answers nobody re-checked, so this pass asks for the same thing with `?fresh=1`,
+ * which re-reads Plex and Kavita and rewrites the rows
+ * (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+ *
+ * Three things it deliberately does NOT do:
+ *
+ *   * it does not block anything. The page is interactive throughout, and a failure is
+ *     silent — the cached copy is already on screen and is still the best answer available;
+ *   * it does not run on a route change. `load()` is the real page load, and a pass costs
+ *     566 provider calls against somebody's self-hosted Plex and Kavita;
+ *   * it does not toast. `isRevalidating` drives a progress line in the header instead,
+ *     because the owner asked to be told BEFORE the tiles change rather than after — "so it
+ *     doesn't just pop in with new content randomly".
+ */
+export async function revalidate(): Promise<void> {
+  if (getState().isRevalidating) return
+
+  setState({ isRevalidating: true })
+
+  try {
+    const data = await api<QueuesResponse>(
+      "GET",
+      "/api/queues?fresh=1",
+    )
+
+    setState({ data })
+  } catch {
+    /* the cached copy is on screen and stays there */
+  } finally {
+    setState({ isRevalidating: false })
+  }
+}
+
 export async function load() {
   setStatus("Loading…")
 
@@ -329,6 +377,7 @@ export async function load() {
 
     setStatus("Ready", "ok")
     void refreshHistoryButtons()
+    void revalidate()
   } catch (e) {
     setStatus(`Failed: ${(e as Error).message}`, "err")
   }

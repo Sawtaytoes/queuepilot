@@ -758,6 +758,17 @@ jobs:
       - name: A re-ordered collection reaches the panel (browser, stub Plex)
         run: $TSX e2e/collection-reorder-test.ts
 
+      # A warm /api/queues makes no provider call, and `?fresh=1` is the only thing that does.
+      # Browserless; its own server against a COUNTING stub Plex.
+      #
+      # It counts calls rather than timing anything on purpose — a wall-clock assertion on a
+      # shared runner is a flake, and the claim worth pinning is not "fast", it is "asked
+      # nobody". It also pins the other half: that the refresh pass picks up a change made
+      # behind the app's back, so the cached answer is safe to serve rather than merely quick
+      # (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
+      - name: A warm page makes no provider call (stub Plex, counting)
+        run: $TSX e2e/provider-cache-test.ts
+
       # The shelf's ✕. Browser, no Plex, its own server and temp files.
       #
       # It belongs in this always-on block rather than in the PLEX_TOKEN-gated one below for
