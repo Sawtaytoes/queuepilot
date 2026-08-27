@@ -314,21 +314,44 @@ export function queueMatchesPeople(
   queue: TonightQueue,
   selectedPersonIds: readonly string[],
 ): boolean {
-  if (!queue.hasRoster || queue.members.length === 0)
-    return true
+  if (!queue.hasRoster) return true
+
+  return membersMatchPeople(
+    queue.members,
+    selectedPersonIds,
+  )
+}
+
+/**
+ * The rule itself, over a queue's members alone.
+ *
+ * Split out of `queueMatchesPeople` so the PLAY LANDING can ask the same question without
+ * first building a `TonightQueue` — it has the trays off `usePeople()` and nothing else it
+ * needs. One implementation, two callers: two copies of this would drift, and the way they
+ * drift is that one screen offers a queue the other hides
+ * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
+ *
+ * `hasRoster` stays on the caller above, because it answers a DIFFERENT question — whether
+ * the queue has been filed at all — and the landing reads that off `members.length` directly.
+ */
+export function membersMatchPeople(
+  members: readonly TonightMember[],
+  selectedPersonIds: readonly string[],
+): boolean {
+  if (members.length === 0) return true
 
   const selected = new Set(selectedPersonIds)
   if (selected.size === 0) return true
 
   const onQueue = new Set<string>()
-  for (const member of queue.members)
+  for (const member of members)
     for (const personId of member.people)
       onQueue.add(personId)
 
   for (const personId of selected)
     if (!onQueue.has(personId)) return false
 
-  for (const member of queue.members) {
+  for (const member of members) {
     if (member.role !== "required") continue
     const present = member.people.filter((personId) =>
       selected.has(personId),

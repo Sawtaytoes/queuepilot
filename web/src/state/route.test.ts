@@ -14,9 +14,12 @@ import {
  * `page.goto()`ing these paths, which only works because the server answers them
  * with index.html.
  *
- * `/g/<group>` joined them on 2026-08-17. It is the ADMIN landing with a filter, not a fifth
- * view, which is why it parses to `{view: "play"}` carrying a group. Everything else stays
- * group-agnostic: a queue has one canonical address even when three groups hold it.
+
+ * `/g/<group>` joined them on 2026-08-17 and LEFT on 2026-08-26. `/admin` filters by PEOPLE
+ * now, in the query string, so a group is no longer an address and the `play` route is gone
+ * with it (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`). The
+ * old path still PARSES to `/admin` and `canonicalPath` rewrites it underneath — the same
+ * shape `/collection` uses — because it was bookmarkable and that was half its point.
  */
 
 describe("parsePath", () => {
@@ -32,27 +35,20 @@ describe("parsePath", () => {
     })
   })
 
-  test("/g/<group> is the landing filtered, id-decoded", () => {
-    expect(parsePath("/g/bob")).toEqual({
-      group: "bob",
-      view: "play",
-    })
+  test("a retired /g/<group> still RENDERS Admin", () => {
+    // It renders so that the redirect has a page to swap the address under. Nothing is
+    // decoded off it any more — there is no group filter to seed.
+    expect(parsePath("/g/bob")).toEqual({ view: "admin" })
     expect(parsePath("/g/bob%20%26%20alice")).toEqual({
-      group: "bob & alice",
-      view: "play",
+      view: "admin",
     })
     // Trailing slash is the same page, like every other route.
-    expect(parsePath("/g/bob/")).toEqual({
-      group: "bob",
-      view: "play",
-    })
+    expect(parsePath("/g/bob/")).toEqual({ view: "admin" })
   })
 
-  test("a bare /g is the unfiltered Play page, not an empty group", () => {
-    expect(parsePath("/g")).toEqual({
-      group: null,
-      view: "play",
-    })
+  test("a bare /g is Admin too, and redirects there", () => {
+    expect(parsePath("/g")).toEqual({ view: "admin" })
+    expect(canonicalPath("/g")).toBe("/admin")
   })
 
   test("/queues is the shelf configurator", () => {
@@ -219,6 +215,14 @@ describe("canonicalPath", () => {
       canonicalPath("/board-game-collection"),
     ).toBeNull()
     expect(canonicalPath("/what-to-watch-play")).toBeNull()
+  })
+
+  test("a group page redirects to the landing, tail dropped", () => {
+    // The tail is DROPPED on purpose — there is no per-group address to move a group id
+    // to, and the people filter is not a translation of a group. Landing on everything is
+    // the honest answer; guessing a set of people would not be.
+    expect(canonicalPath("/g/bob")).toBe("/admin")
+    expect(canonicalPath("/g/older-kids/")).toBe("/admin")
   })
 
   test("every other route is left alone", () => {

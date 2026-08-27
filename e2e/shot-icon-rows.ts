@@ -44,8 +44,8 @@ const waitReady = async (url: string, ms = 30000) => {
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-iconrow.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-iconrow.yaml');
-// The Groups editor only has a trigger when groups exist — `GroupBar` renders nothing
-// otherwise, which is why the borrowed-class audit has never reached that modal either.
+// The Groups editor's trigger is `#groupsedit` on the Admin landing. The fixture still
+// declares groups so the modal has rows to shoot.
 await fs.copyFile(`${ROOT}/e2e/fixtures/landing.groups.yaml`, '/tmp/groups-iconrow.yaml');
 for (const lock of ['/tmp/queues-iconrow.yaml.lock', '/tmp/sets-iconrow.yaml.lock', '/tmp/groups-iconrow.yaml.lock']) {
   await fs.rm(lock, { force: true });
@@ -118,7 +118,7 @@ try {
   await page.waitForTimeout(500);
   await shot('shelfhead', '.shelf h2');
 
-  // 2 — the Groups editor's reorder pair. `GroupBar` mounts on the PLAY landing only.
+  // 2 — the Groups editor's reorder pair. `LandingFilterBar` mounts on `/admin` only.
   await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#heading', { timeout: 30000 });
   await page.waitForTimeout(1800);
@@ -130,7 +130,7 @@ try {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(400);
   } else {
-    console.log('SKIPPED groupmove — no #groupsedit (no groups in this fixture)');
+    console.log('SKIPPED groupmove — no #groupsedit on the page');
   }
 
   // 3 — the search row's Add-to trigger, in the header's own results list.
