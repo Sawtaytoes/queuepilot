@@ -186,3 +186,51 @@ export function libSelection(
 
   return { item: both, show: both }
 }
+
+/**
+ * WHICH ACCOUNT a rules queue plays as, in one short string.
+ *
+ * *"Shows" and "Shows & Shorts" are the same words until you know one is Younger Kids and the
+ * other Older Kids* — the Play landing's card has said so in its meta line since 2026-08-17.
+ * The rules PICKER had no version of it: four rows named after what they hold, and nothing
+ * saying who they are for. The owner, looking at it on 2026-08-26: *"Do we not have a way to
+ * show the associated account too in this dropdown?"*
+ *
+ * ⚠️ **The gate is the LABEL, not `has_explicit_profiles`.** `PlayView` used the flag and said
+ * why: *"the synthesized [binding] a legacy flat set reports, whose `plex_user` is the
+ * channel's own label"*. That is not what the server does — a legacy flat set's synthesized
+ * binding carries its real `plex_user`, measured on `/api/sets`:
+ *
+ *     younger | Shows & Shorts | explicit: false | profiles: ["Younger Kids"]
+ *
+ * The claim reads as true against the LIVE `sets.yaml` only because those two sets are named
+ * after the accounts they play as, so the label and the account are the same words. Gate on
+ * the flag and every legacy pool silently loses its account; gate on the label and the one
+ * real failure — a row saying itself twice — is the only thing dropped.
+ *
+ * Returns null rather than an empty string when there is nothing to say, so a caller drops the
+ * chip instead of drawing a blank one.
+ *
+ * Three names at most, then a `+n`. A pool carrying several bindings is rare — they are locked
+ * to one account since 2026-08-17, and the picker beside this one only appears when a
+ * hand-edit left more — but the badge sits at the right-hand end of a row that already holds a
+ * name.
+ */
+export function channelAccountLabel(
+  channel: RegistrySet | null | undefined,
+): string | null {
+  if (!channel) return null
+
+  const label = channel.label?.trim().toLowerCase() ?? ""
+  const accounts = (channel.profiles || [])
+    .map((b) => b.plex_user?.trim() ?? "")
+    .filter(
+      (name) =>
+        Boolean(name) && name.toLowerCase() !== label,
+    )
+
+  if (accounts.length === 0) return null
+  if (accounts.length <= 3) return accounts.join(", ")
+
+  return `${accounts.slice(0, 3).join(", ")} +${accounts.length - 3}`
+}

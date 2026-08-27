@@ -19,6 +19,7 @@ import {
   useRowReorder,
 } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
+import { channelAccountLabel } from "../lib/channels"
 import { isRandomOrder } from "../lib/kind"
 import { queueNumbers, queueTitle } from "../lib/people"
 import {
@@ -333,14 +334,19 @@ function ChannelCard({
   const value = options.some((o) => o.value === tierValue)
     ? tierValue
     : (defaultValue ?? options[0]?.value ?? channel.id)
-  // The account this pool is locked to, for the meta line. `has_explicit_profiles` is what
-  // separates a real binding from the synthesized one a legacy flat set reports, whose
-  // `plex_user` is the channel's own label and would read as "Shows · Shows".
+  // The account this pool is locked to, for the meta line. Null when the tier picker is on
+  // screen — the card is asking rather than telling.
+  //
+  // This used to gate on `has_explicit_profiles`, on the belief that a legacy flat set's
+  // SYNTHESIZED binding reports the channel's own label and would read as "Shows · Shows".
+  // The server does not do that — the synthesized binding carries the real `plex_user` — so
+  // the gate was dropping the account from every legacy pool. It only ever looked right
+  // against the live `sets.yaml`, where those pools are NAMED after the accounts they play
+  // as. `channelAccountLabel` compares the two instead, which is the check that claim was
+  // reaching for. (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen…`)
   const boundAccount = hasChoice
     ? null
-    : channel.has_explicit_profiles
-      ? (channel.profiles || [])[0]?.plex_user || null
-      : null
+    : channelAccountLabel(channel)
   // It is ALWAYS said now. It used to be dropped while you stood inside that account's own
   // group, where it was the heading repeated — but there is no group page to stand in any
   // more, so `accountInGroup` had one caller and one answer and is gone with the chips

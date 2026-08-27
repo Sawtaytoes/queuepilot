@@ -321,6 +321,9 @@ export type ShelfItem = {
   title: string
   resolved: false
   done: boolean
+  /** The entry's stored lane, or null for "follow the set's `add_as`" — see `QueueItem`.
+   *  Carried by the skeleton so the shelf draws its two lanes at final geometry. */
+  placement?: "priority" | "random" | null
 }
 
 export type ShelfSet = {

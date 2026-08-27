@@ -20,6 +20,7 @@ import {
 import { CheckboxGroup } from "../components/CheckboxGroup"
 import { EditionBadge } from "../components/EditionBadge"
 import { Poster } from "../components/Poster"
+import { QueuePeopleBadge } from "../components/QueuePeopleBadge"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
 import { startLabel } from "../lib/tileFace"
@@ -37,6 +38,7 @@ import {
   openStartModal,
 } from "../state/overlays"
 import { usePendingView } from "../state/pendingView"
+import { usePeople } from "../state/people"
 import { setStatus, useStore } from "../state/store"
 
 /**
@@ -198,6 +200,7 @@ export function PendingView({
   isHidden: boolean
 }) {
   const { reg } = useStore()
+  const people = usePeople()
   const { density, setDensity } = usePendingView()
   const [items, setItems] = useState<PendingItem[] | null>(
     null,
@@ -453,7 +456,18 @@ export function PendingView({
       : compatible.map(
           (s): MenuItem => ({
             key: s.id,
-            label: s.label,
+            // The queue's name, then WHO it is for — see `QueuePeopleBadge`. An activity
+            // name alone cannot tell two of these rows apart.
+            label: (
+              <>
+                {s.label}
+                <QueuePeopleBadge
+                  groups={people.groups}
+                  members={people.byQueue[s.id] ?? []}
+                  people={people.people}
+                />
+              </>
+            ),
             onSelect: () => void addTo(item, s),
           }),
         )),
