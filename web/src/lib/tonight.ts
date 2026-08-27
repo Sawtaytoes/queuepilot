@@ -1,3 +1,4 @@
+import { queueNumbers, queueTitle } from "./people"
 import { tileForSet } from "./tonightRouting"
 import type {
   GroupWithRoster,
@@ -153,14 +154,14 @@ export type TonightMember = {
 /**
  * One queue as this screen needs it.
  *
- * `name` is a display string rather than the activity's label because today's queues carry
- * a hand-typed label and nothing else. Once the shelf paints the activity everywhere, a
- * queue's name IS its activity ("Movies") and the people are the badges that tell two of
- * them apart (`2026-08-25-a-queue-is-people-plus-an-activity` §4) — that is a change to what
- * fills this field, not to the field.
+ * `name` is `queueTitle`'s answer: the queue's own name when somebody typed one, its
+ * ACTIVITY when nobody did, numbered only in the second case. One function, so this list and
+ * the Admin grid cannot call the same queue two different things
+ * (`2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
  */
 export type TonightQueue = {
   id: string
+  /** What this queue is CALLED — `queueTitle`'s answer, so it matches the Admin grid. */
   name: string
   activity: ActivityId
   /**
@@ -267,6 +268,11 @@ export function tonightQueues(
   people: readonly Person[] = [],
   groups: readonly GroupWithRoster[] = [],
 ): TonightQueue[] {
+  // The SAME numbering the Admin grid applies, over the same whole registry, so a queue is
+  // called one thing in this app. Computed once for the list rather than per row: the number
+  // is a property of the set beside its neighbours, not of the row.
+  const numbers = queueNumbers(sets, membersByQueue)
+
   return sets.map((set) => {
     const members = resolveMembers(
       membersByQueue[set.id] ?? [],
@@ -280,7 +286,11 @@ export function tonightQueues(
       hasRoster: members.length > 0,
       id: set.id,
       members,
-      name: set.label || set.id,
+      // Its own name when it has one, its ACTIVITY when it has not — `queueTitle`, the same
+      // function the cards use (decision
+      // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). This used to be
+      // `set.label || set.id`, which printed a slug for a nameless queue.
+      name: queueTitle(set, numbers.get(set.id) ?? null),
       providerLabel:
         providerLabels.get(set.provider_kind) ?? "",
     }

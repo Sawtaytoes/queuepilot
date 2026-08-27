@@ -548,13 +548,15 @@ export function QueuesView({
               const registrySet = reg?.sets.find(
                 (s) => s.id === id,
               )
-              // THE NAME IS THE ACTIVITY. `q.label` is the hand-typed string the registry
-              // still carries; it is data we migrated FROM, not a field to show. It is kept
-              // as the FILTER's haystack below, because typing "manga" should still find the
-              // queue somebody named that.
+              // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
+              // printed the activity unconditionally until 2026-08-26, which renamed
+              // "Manga & Webtoons" to "Reading" on a queue the owner had deliberately named
+              // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+              // `q.label` stays the FILTER's haystack below either way, so typing "manga"
+              // finds it even when the shelf is showing the activity.
               const title = registrySet
                 ? queueTitle(
-                    registrySet.activity,
+                    registrySet,
                     numbers.get(id) ?? null,
                   )
                 : q.label

@@ -573,6 +573,31 @@ follow:
   belong on the card, and folding either into the other is what made the Rules pools
   unreachable from every people-shaped control in the app.
 
+## A queue's name
+
+**Optional.** A queue with a name is called that everywhere; a queue without one is called
+after its **activity** — "Movies & Shows", numbered only when two nameless ones would read
+identically — and the faces beside it say which one it is
+([decision](docs/decisions/2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in.md)).
+`queueTitle(set, number)` is the one function that answers this, and the Admin grid, the Picks
+shelves and What to Watch/Play all call it.
+
+Four traps, each of which has a comment at its site:
+
+- **Read `has_explicit_label`, never `label`.** The registry makes `label` printable by
+  falling back to the **id**, so a nameless queue's `label` is `movies_shows`. Trusting it
+  puts a slug on the card, and it is why the flag exists at all (same shape as
+  `has_explicit_profiles`).
+- **The Name input seeds from the TYPED name only.** Seeding from `label` pre-fills a nameless
+  queue's field with its id, and the next Save stores that slug as a name.
+- **The id is still slugged at create, from the ACTIVITY when nothing is typed.** It is a WIRE
+  ID an NFC card carries. It is NOT derived from the provider there — the body is a half-built
+  set, and a wrong id is permanent in a way a wrong display is not.
+- **Clearing a name DELETES the `label:` line**, never stores a blank. `PATCH /api/sets/:id`
+  with `label: ""` is a legitimate edit; it used to be a 400.
+
+Gate: `e2e/queue-name-test.ts`, 18 assertions, in CI.
+
 ## The Admin landing's filter
 
 `/admin` filters by **people** and by **provider**, both in the QUERY STRING

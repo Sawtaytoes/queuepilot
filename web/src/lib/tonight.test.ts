@@ -517,13 +517,31 @@ describe("tonightQueues — the registry projection", () => {
     ])
   })
 
-  test("falls back to the id when a set has no label", () => {
+  test("a set with no name reads its ACTIVITY, never its id", () => {
+    // It fell back to the id until 2026-08-26, which put a slug on the card. A name is
+    // optional now and the activity is what fills in
+    // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
     const [projected] = tonightQueues(
       [set({ id: "unnamed" })],
       new Map(),
     )
 
-    expect(projected?.name).toBe("unnamed")
+    expect(projected?.name).toBe("Movies & Shows")
+  })
+
+  test("…and keeps a name somebody typed", () => {
+    const [projected] = tonightQueues(
+      [
+        set({
+          has_explicit_label: true,
+          id: "manga_webtoons",
+          label: "Manga & Webtoons",
+        }),
+      ],
+      new Map(),
+    )
+
+    expect(projected?.name).toBe("Manga & Webtoons")
   })
 
   test("carries the provider's product name for the card badge", () => {

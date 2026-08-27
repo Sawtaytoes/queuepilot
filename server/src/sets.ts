@@ -24,7 +24,7 @@ import { QUEUE_SERIES_LENGTH, ROTATION_LENGTH_MAX } from './env.js';
 import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { store } from './store/index.js';
 import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
-import { activityForSet, isActivity } from './activity.js';
+import { activityForSet, activityLabel, isActivity } from './activity.js';
 import type {
   BatchStop,
   Binding,
@@ -445,6 +445,11 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     power_off_when_done: ent.power_off_when_done === true,
     id,
     label: String(ent.label || id),
+    // Whether a name was TYPED, which `label` above cannot say — it falls back to the id so
+    // that every caller has something printable. A queue with nothing stored reads its
+    // ACTIVITY on screen (decision
+    // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+    has_explicit_label: Boolean(ent.label && String(ent.label).trim()),
     // Product kind on the API surface; legacy movies/anime/cartoons still accepted on disk.
     kind: normalizeProductKind(ent.kind, source),
     sections: toInts(ent.sections),
@@ -663,7 +668,9 @@ function slugify(label: unknown, taken: string[]): string {
 function rotationCreateObj(id: string, body: Record<string, unknown>): Record<string, unknown> {
   const obj: Record<string, unknown> = {
     id,
-    label: String(body.label).trim(),
+    // Sparse, the same way a curated queue's is — a rules pool with no name of its own reads
+    // its activity too.
+    ...(String(body.label ?? '').trim() ? { label: String(body.label).trim() } : {}),
     kind: kindForWrite(body.kind, 'rotation').kind,
     source: 'rotation',
     sections: toInts(body.sections),
@@ -808,15 +815,30 @@ function providerKindForSet(ent: RawSet): string {
 export async function createSet(body: Record<string, unknown> = {}): Promise<{ id: string }> {
   const { label, kind, sections, source } = body;
   const isRotation = source === 'rotation';
-  if (!label || !String(label).trim()) throw new Error('label required');
+  const name = String(label ?? '').trim();
   const secs = toInts(sections);
+  /**
+   * WHAT THE ID IS SLUGGED FROM when nobody typed a name.
+   *
+   * A name is optional now, and the id is not: it is a WIRE ID an NFC card carries, so it has
+   * to come from somewhere at create time. The activity is the honest seed, because it is
+   * also what the queue will be CALLED on screen — a nameless `watching` queue is
+   * `movies_shows`, then `movies_shows_2`, which is the same numbering the display rule
+   * applies and reads the same in a URL bar.
+   *
+   * Not derived from the provider here even though `activityForSet` could: the body is a
+   * half-built set, the provider blocks are not normalized yet, and a wrong guess is
+   * PERMANENT in a way a wrong display is not. An absent activity falls through to
+   * `slugify`'s own `queue`.
+   */
+  const idSeed = name || (isActivity(body.activity) ? activityLabel(body.activity) : '');
   // A set may name NO library at all — that is "every library", not "no source". See the
   // note above `writableBlocks`.
   return withLock(async () => {
     const doc = await readDoc();
     const seq = setsSeq(doc);
     const taken = seq.items.map((n) => (isMap(n) ? String(n.get('id')) : '')).filter(Boolean);
-    const id = slugify(label, taken);
+    const id = slugify(idSeed, taken);
     // Starts as `{}` rather than null purely so the ternary below needs no assertion: it is
     // overwritten wholesale on the only branch that reads it.
     let curated: Record<string, unknown> = {};
@@ -824,7 +846,9 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       const written = kindForWrite(kind, 'queue');
       curated = {
         id,
-        label: String(label).trim(),
+        // Sparse: a queue with no name of its own writes no `label:` line at all, which is
+        // what `has_explicit_label` reads back as false.
+        ...(name ? { label: name } : {}),
         kind: written.kind,
         source: 'queue',
         sections: secs,
@@ -1240,8 +1264,14 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       if (k === 'audio_language') v = v == null || String(v).trim() === '' ? null : String(v).trim();
       if ((k === 'plex_user' || k === 'user_uuid') && v != null) v = String(v);
       if (k === 'label') {
-        v = String(v).trim();
-        if (!v) throw new Error('label required');
+        v = String(v ?? '').trim();
+        // CLEARING is a legitimate edit, not a refusal. Emptying the Name field is how a
+        // queue goes back to being called after its activity, and it is the whole of
+        // "auto-generated unless specified" on the write side. `node.delete` rather than an
+        // empty string so the file carries no `label:` line and `has_explicit_label` reads
+        // back false (decision
+        // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+        if (!v) { node.delete('label'); continue; }
       }
       // Preserve an inline comment on the value being replaced (e.g. `label: Bob  # rename
       // freely` typed over SMB) — see setKeepingComment + e2e/yaml-roundtrip-test.mjs.
