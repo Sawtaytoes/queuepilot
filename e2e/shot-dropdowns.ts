@@ -39,7 +39,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 
   // 1 + 2 — Play landing: the tier picker open, then the Play menu open.
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-kind="rules"]');
   await page.locator('#playgrid li[data-kind="rules"]').first().locator('.rowtier').click();
   await page.waitForSelector('[role="listbox"] [role="option"]');

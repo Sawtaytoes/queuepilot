@@ -66,7 +66,7 @@ try {
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}` }); console.log('wrote', `${OUT}/${name}`); };
 
   // 1. Play landing.
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(500);
   await shot('harness-play.png');
@@ -119,7 +119,7 @@ try {
   }
 
   // 8. Device menu ("Play on ▾") open on the Play landing (fake MQTT devices — #0 enabler).
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   const playBtn = await page.$('.playcard .playbtn');
   if (playBtn) { await playBtn.click(); await page.waitForTimeout(500); await shot('harness-devicemenu.png'); }

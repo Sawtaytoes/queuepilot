@@ -51,7 +51,7 @@ try {
   const tap = async (href: string): Promise<void> => {
     await page.goto(`${server.base}${href}`, { waitUntil: 'domcontentloaded' });
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (!new URL(page.url()).pathname.startsWith('/tonight/go')) break;
+      if (!new URL(page.url()).pathname.startsWith('/what-to-watch-play/go')) break;
       await page.waitForTimeout(100);
     }
     await page.waitForTimeout(1400);
@@ -60,18 +60,18 @@ try {
   // ── 1. A VALID PRESET CARD ──────────────────────────────────────────────────────── //
   // BEFORE: the Who's-here form, because the address means nothing yet.
   // AFTER:  the result card, with the queue the card's people resolved to, and a reroll.
-  await tap('/tonight/go?activity=reading&people=ada');
+  await tap('/what-to-watch-play/go?activity=reading&people=ada');
   await shot('valid-card');
 
   // ── 2. A CARD THAT NAMES NOBODY ─────────────────────────────────────────────────── //
   // BEFORE: the form, indistinguishable from frame 1 — which is the whole complaint.
   // AFTER:  the form again, but carrying the reason and the activity the card asked for.
-  await tap('/tonight/go?activity=board-games&light=on');
+  await tap('/what-to-watch-play/go?activity=board-games&light=on');
   await shot('names-nobody');
 
   // ── 3. A CARD NAMING SOMETHING THAT IS NOT A TILE ───────────────────────────────── //
   // A card is written once and read for years, so a typo has to say what it said.
-  await tap('/tonight/go?activity=retro-games&people=ada');
+  await tap('/what-to-watch-play/go?activity=retro-games&people=ada');
   await shot('unknown-activity');
 } finally {
   await browser.close();

@@ -111,7 +111,7 @@ const offenders = (page: Page) => page.evaluate(() => {
 for (const width of WIDTHS) {
   const page = await browser.newPage({ viewport: { width, height: 844 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400); // let the header's ResizeObserver settle --header-h
 
@@ -181,15 +181,17 @@ for (const width of WIDTHS) {
   ok(`${width}px: found a queue id on the landing to visit`, Boolean(queueId));
 
   const routes = [
+    ['/', '#mode-landing:not([hidden]) .mode-card'],
+    ['/admin', '#play:not([hidden]) .playcard'],
     ['/queues', '.playcard, #newqueue, .shelf'],
     ['/channels/shows', '#chbody'],
-    // Tonight, added with the route (WP-6). It carries three grids and a stepper row, and
+    // What to Watch/Play, added with the route (WP-6). It carries three grids and a stepper row, and
     // every one of them is a `repeat(auto-fill, minmax(min(Xpx, 100%), 1fr))` — the
     // `min()` is what lets the last column collapse below its own floor on a screen
     // narrower than one card, and dropping it is how a grid pushes the page sideways.
     // Two of the three are Charcuterie's now (`RadioGroup itemShape="tile"`), which is
     // where that `min()` moved to rather than where it went.
-    ['/tonight', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]'],
+    ['/what-to-watch-play', '#tonight:not([hidden]) #tonight-activity [role="radiogroup"]'],
     // The collection shelf and the result card, added with their routes (WP-8). This
     // server has no board-game collection beside it, so both land on their EMPTY state —
     // which is the right thing to walk here anyway: the page chrome, the search row and
@@ -222,12 +224,12 @@ for (const width of WIDTHS) {
   //    measurement above — `position: fixed` boxes are excluded from `scrollWidth` by
   //    definition, which is exactly why they get to be wrong on their own.
   const modals = [
-    // The LANDING's own create button. It is in this list rather than in a suite of its own
+    // The ADMIN landing's own create button. It is in this list rather than in a suite of its own
     // because this is the always-on browser gate: the Plex-gated suites are skipped on every
     // PR, so a landing that quietly loses its only create affordance again — which is how it
     // shipped for a month — would reach main unchallenged. The assertion is both halves at
-    // once: the trigger exists on `/`, and the modal it opens lands inside the screen.
-    ['/', '#playnewqueue', 'setmodal', 'New picks queue (landing)'],
+    // once: the trigger exists on `/admin`, and the modal it opens lands inside the screen.
+    ['/admin', '#playnewqueue', 'setmodal', 'New picks queue (admin)'],
     ['/queues', '#newqueue', 'setmodal', 'New queue'],
     ['/channels/shows', '#newcurated', 'setmodal', 'New picks queue'],
     ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a rules queue'],
@@ -297,11 +299,11 @@ for (const width of WIDTHS) {
     viewport: { width, height: 844 },
   });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400);
 
-  for (const hash of ['/', '/queues', '/channels/shows'] as const) {
+  for (const hash of ['/', '/admin', '/queues', '/channels/shows'] as const) {
     await page.goto(`http://localhost:${PORT}${hash}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(700);
 

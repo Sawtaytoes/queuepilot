@@ -9,7 +9,7 @@
 // and §5's last line says where it has to land: *"Pick-preset NFC → land on result card (or
 // announce), not an empty form."*
 //
-// `/tonight/go?…` is that card's address. This suite drives it in a real browser and asserts
+// `/what-to-watch-play/go?…` is that card's address. This suite drives it in a real browser and asserts
 // the landing, because the failure it guards is invisible to every unit test: the parse can be
 // perfect, the draw can succeed, and the screen can still paint the Who's-here form for a
 // moment or land back on it — which from the couch reads as "the card did not work".
@@ -48,7 +48,7 @@ try {
     await page.goto(`${server.base}${href}`, { waitUntil: 'domcontentloaded' });
     // The preset draws before it navigates, so wait for the URL to stop being the card's.
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (!new URL(page.url()).pathname.startsWith('/tonight/go')) break;
+      if (!new URL(page.url()).pathname.startsWith('/what-to-watch-play/go')) break;
       await page.waitForTimeout(100);
     }
     await page.waitForTimeout(500);
@@ -65,7 +65,7 @@ try {
   // the people the card names; `manga_webtoons` is the fixture's Kavita queue and Ada is the
   // one person filed on it.
   {
-    await tap('/tonight/go?activity=reading&people=ada');
+    await tap('/what-to-watch-play/go?activity=reading&people=ada');
 
     ok('a valid preset card lands on /result', path() === '/result', page.url());
     ok('…and a result CARD is on the screen', await isVisible('#result-card'));
@@ -96,7 +96,7 @@ try {
   // roster rows still draws — which is what stops the who's-here rule from meaning "only
   // people the app already knows about".
   {
-    await tap('/tonight/go?activity=movies&guests=2');
+    await tap('/what-to-watch-play/go?activity=movies&guests=2');
 
     ok('a card carrying only guests still draws', path() === '/result', page.url());
     ok('…and lands on a card', await isVisible('#result-card'));
@@ -112,7 +112,7 @@ try {
     await page.waitForTimeout(600);
     ok(
       'Back does not return to the card’s address and re-draw',
-      !path().startsWith('/tonight/go'),
+      !path().startsWith('/what-to-watch-play/go'),
       page.url(),
     );
   }
@@ -121,9 +121,9 @@ try {
   //
   // Brief §5's fourth row, and a RULE rather than a gap: a card cannot see the room.
   {
-    await tap('/tonight/go?activity=board-games&light=on');
+    await tap('/what-to-watch-play/go?activity=board-games&light=on');
 
-    ok('a card that names nobody lands on the form', path() === '/tonight', page.url());
+    ok('a card that names nobody lands on the form', path() === '/what-to-watch-play', page.url());
     ok('…and the form is really there', await isVisible('#tonight-people'));
     ok('…rather than on a result', !(await isVisible('#result-card')));
 
@@ -146,11 +146,11 @@ try {
   //
   // It narrows on a second screen before it picks, and what it narrows BY is not settled.
   {
-    await tap('/tonight/go?activity=surprise&people=ada');
+    await tap('/what-to-watch-play/go?activity=surprise&people=ada');
 
     ok(
       'a Surprise Me card lands on the narrowing screen, not on a result',
-      path() === '/tonight/surprise',
+      path() === '/what-to-watch-play/surprise',
       page.url(),
     );
     ok('…and not on a result card', !(await isVisible('#result-card')));
@@ -161,9 +161,9 @@ try {
   // A card is written once and read for years, so the failure to design for is a typo. It
   // must say what the card asked for rather than silently picking something else.
   {
-    await tap('/tonight/go?activity=retro-games&people=ada');
+    await tap('/what-to-watch-play/go?activity=retro-games&people=ada');
 
-    ok('an unknown activity lands on the form', path() === '/tonight', page.url());
+    ok('an unknown activity lands on the form', path() === '/what-to-watch-play', page.url());
     const note = (await page.locator('#tonight-preset-note').textContent()) ?? '';
     ok('…quoting what the card actually said', note.includes('retro-games'), note);
   }
@@ -174,9 +174,9 @@ try {
   // landing is the form carrying the queue engine's OWN sentence — never a result card with
   // nothing on it, and never a silent bounce to the landing page.
   {
-    await tap('/tonight/go?activity=movies&people=ada');
+    await tap('/what-to-watch-play/go?activity=movies&people=ada');
 
-    ok('an empty draw lands on the form', path() === '/tonight', page.url());
+    ok('an empty draw lands on the form', path() === '/what-to-watch-play', page.url());
     ok('…and not on an empty result card', !(await isVisible('#result-card')));
 
     const note = (await page.locator('#tonight-preset-note').textContent()) ?? '';
