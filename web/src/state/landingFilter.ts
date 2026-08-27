@@ -23,8 +23,8 @@
  * always opens on everything, and the URL is the whole of the truth
  * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
  *
- * `/g/<id>` is a MOVED PATH now — `state/parsePath.ts` redirects it to `/` — so an old
- * bookmark lands on the landing rather than on a filter nothing can turn off.
+ * `/g/<id>` is a MOVED PATH now — the legacy route in `App.tsx` rewrites it to `/admin` — so
+ * an old bookmark lands on the management page rather than on a filter nothing can turn off.
  */
 
 /** The people ticked, in the order the URL lists them. Empty means NO FILTER AT ALL, which

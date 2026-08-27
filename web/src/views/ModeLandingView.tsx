@@ -7,17 +7,9 @@ import { schemeIcons } from "../components/SchemeIcons"
  * The app entry point. QueuePilot has two different jobs, so the root route names both
  * before it opens either one.
  */
-export function ModeLandingView({
-  isHidden,
-}: {
-  isHidden: boolean
-}) {
+export function ModeLandingView() {
   return (
-    <main
-      className="mode-landing"
-      hidden={isHidden}
-      id="mode-landing"
-    >
+    <main className="mode-landing" id="mode-landing">
       <div className="mode-landing-scheme">
         <ColorSchemeSwitcher icons={schemeIcons} />
       </div>

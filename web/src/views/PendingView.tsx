@@ -194,11 +194,7 @@ const asStartEntry = (
  * - **Dismiss** — no. Per item, because skipping one film must not hide the twelve after it.
  * - **Mark all as seen** — none of this, and do not ask again. One watermark, one write.
  */
-export function PendingView({
-  isHidden,
-}: {
-  isHidden: boolean
-}) {
+export function PendingView() {
   const { reg } = useStore()
   const people = usePeople()
   const { density, setDensity } = usePendingView()
@@ -318,10 +314,10 @@ export function PendingView({
   }
 
   useEffect(() => {
-    // Only when the view is actually on screen: this is one container read per video
-    // library, and the landing route must not pay for a screen nobody opened.
-    if (!isHidden) void load()
-  }, [isHidden, load])
+    // On mount, which is when this page is opened: this is one container read per video
+    // library, and no other route mounts this view to pay for it.
+    void load()
+  }, [load])
 
   const queuesFor = (sectionId: number): RegistrySet[] =>
     (reg?.sets ?? []).filter(
@@ -577,7 +573,7 @@ export function PendingView({
   }
 
   return (
-    <main className="view" hidden={isHidden} id="pending">
+    <main className="view" id="pending">
       <div className="pendinghead">
         <p className="muted">
           Added to the libraries below, and{" "}

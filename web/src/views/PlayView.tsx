@@ -22,6 +22,7 @@ import { api } from "../lib/api"
 import { channelAccountLabel } from "../lib/channels"
 import { isRandomOrder } from "../lib/kind"
 import { queueNumbers, queueTitle } from "../lib/people"
+import { WATCH_PLAY_PATH } from "../lib/routePaths"
 import {
   membersMatchPeople,
   resolveMembers,
@@ -42,7 +43,6 @@ import {
   openSetModal,
 } from "../state/overlays"
 import { usePeople } from "../state/people"
-import { WATCH_PLAY_PATH } from "../state/route"
 import {
   bumpRevision,
   getState,
@@ -471,11 +471,7 @@ function buildEntries(
   return out
 }
 
-export function PlayView({
-  isHidden,
-}: {
-  isHidden: boolean
-}) {
+export function PlayView() {
   const { data, reg } = useStore()
   const people = usePeople()
   const { search } = useLocation()
@@ -638,24 +634,22 @@ export function PlayView({
       })
   }, [])
 
-  useRowReorder(gridRef, commitOrder, !isHidden)
+  useRowReorder(gridRef, commitOrder, true)
 
   return (
-    <main className="view" hidden={isHidden} id="play">
-      {isHidden ? null : (
-        <LandingFilterBar
-          // `/admin` and nothing else. This page had three possible base paths while the
-          // groups were routes; it has one now, and the filters ride in the query.
-          basePath="/admin"
-          countFor={countFor}
-          labelForKind={labelForKind}
-          only={only}
-          people={rosterOrder(people.people)}
-          providerKinds={providerKinds}
-          search={search}
-          selected={selected}
-        />
-      )}
+    <main className="view" id="play">
+      <LandingFilterBar
+        // `/admin` and nothing else. This page had three possible base paths while the
+        // groups were routes; it has one now, and the filters ride in the query.
+        basePath="/admin"
+        countFor={countFor}
+        labelForKind={labelForKind}
+        only={only}
+        people={rosterOrder(people.people)}
+        providerKinds={providerKinds}
+        search={search}
+        selected={selected}
+      />
       {/*
         Where you GO from here. These were three "Configure ›" links, one per shelf heading,
         and the headings are gone — so they gather into one quiet row. It stays rendered even
@@ -730,7 +724,7 @@ export function PlayView({
         under a filter it means nobody has a queue that matches every name you ticked, which
         is worth saying rather than leaving as a blank page that reads like a failed load.
       */}
-      {!isHidden && reg && !shown.length ? (
+      {reg && !shown.length ? (
         <EmptyState
           description={
             selected.length || only
@@ -743,64 +737,58 @@ export function PlayView({
       ) : null}
 
       <ul className="playgrid" id="playgrid" ref={gridRef}>
-        {isHidden
-          ? null
-          : shown.map((e) =>
-              e.kind === "rules" ? (
-                <ChannelCard
-                  channel={e.set}
-                  duplicateNumber={
-                    numbers.get(e.id) ?? null
-                  }
-                  key={e.id}
+        {shown.map((e) =>
+          e.kind === "rules" ? (
+            <ChannelCard
+              channel={e.set}
+              duplicateNumber={numbers.get(e.id) ?? null}
+              key={e.id}
+            />
+          ) : (
+            <PlayCard
+              key={e.id}
+              kind="picks"
+              // The REGISTRY's label, not the queues payload's: only the registry carries
+              // `has_explicit_label`, which is what separates a name somebody typed from
+              // the id the server falls back to.
+              label={queueTitle(
+                reg?.sets.find((x) => x.id === e.id) ?? {
+                  // No registry entry yet — one payload arrived before the other. All
+                  // that is known is the queues payload's label, so it is treated as
+                  // EXPLICIT: showing it beats showing an activity guessed from nothing.
+                  activity: "watching",
+                  has_explicit_label: true,
+                  label: data!.sets[e.id]!.label,
+                },
+                numbers.get(e.id) ?? null,
+              )}
+              // The registry entry, so a Plex Picks card and a Plex Rules card two
+              // cards apart render in the same amber rather than one of them in the
+              // neutral accent.
+              set={reg?.sets.find((x) => x.id === e.id)}
+              // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
+              // `usePeople` is a store slice of its own and is loaded once at start-up,
+              // so this costs the landing no extra request and no extra render on a
+              // queue-editor save.
+              people={
+                <PeopleRow
+                  groups={people.groups}
+                  members={people.byQueue[e.id] ?? []}
+                  people={people.people}
                 />
-              ) : (
-                <PlayCard
-                  key={e.id}
-                  kind="picks"
-                  // The REGISTRY's label, not the queues payload's: only the registry carries
-                  // `has_explicit_label`, which is what separates a name somebody typed from
-                  // the id the server falls back to.
-                  label={queueTitle(
-                    reg?.sets.find(
-                      (x) => x.id === e.id,
-                    ) ?? {
-                      // No registry entry yet — one payload arrived before the other. All
-                      // that is known is the queues payload's label, so it is treated as
-                      // EXPLICIT: showing it beats showing an activity guessed from nothing.
-                      activity: "watching",
-                      has_explicit_label: true,
-                      label: data!.sets[e.id]!.label,
-                    },
-                    numbers.get(e.id) ?? null,
-                  )}
-                  // The registry entry, so a Plex Picks card and a Plex Rules card two
-                  // cards apart render in the same amber rather than one of them in the
-                  // neutral accent.
-                  set={reg?.sets.find((x) => x.id === e.id)}
-                  // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
-                  // `usePeople` is a store slice of its own and is loaded once at start-up,
-                  // so this costs the landing no extra request and no extra render on a
-                  // queue-editor save.
-                  people={
-                    <PeopleRow
-                      groups={people.groups}
-                      members={people.byQueue[e.id] ?? []}
-                      people={people.people}
-                    />
-                  }
-                  meta={picksMeta(
-                    data!.sets[e.id]!.items.length,
-                    reg?.sets.find((x) => x.id === e.id) ??
-                      data!.sets[e.id],
-                  )}
-                  to={`/q/${e.id}`}
-                  onPlay={(anchor) =>
-                    openPlayMenu({ anchor, setId: e.id })
-                  }
-                />
-              ),
-            )}
+              }
+              meta={picksMeta(
+                data!.sets[e.id]!.items.length,
+                reg?.sets.find((x) => x.id === e.id) ??
+                  data!.sets[e.id],
+              )}
+              to={`/q/${e.id}`}
+              onPlay={(anchor) =>
+                openPlayMenu({ anchor, setId: e.id })
+              }
+            />
+          ),
+        )}
       </ul>
     </main>
   )

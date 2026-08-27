@@ -1,4 +1,4 @@
-import { WATCH_PLAY_PATH } from "../state/parsePath"
+import { WATCH_PLAY_PATH } from "./routePaths"
 import {
   ACTIVITY_FILTERS,
   type ActivityId,

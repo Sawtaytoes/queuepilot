@@ -585,10 +585,8 @@ function Shelf({
 }
 
 export function QueuesView({
-  isHidden,
   toolbar,
 }: {
-  isHidden: boolean
   /** The Home toolbar, when the viewport is narrow enough that it mounts here. */
   toolbar: React.ReactNode
 }) {
@@ -603,14 +601,12 @@ export function QueuesView({
   // height is settled synchronously — restore the pre-navigation scroll on the next
   // frame.
   useEffect(() => {
-    if (isHidden) return
-
     const y = homeScroll.y
 
     requestAnimationFrame(() => window.scrollTo(0, y))
-    // Only on entering the view.
+    // Only on entering the view, which is now the same thing as mounting it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isHidden])
+  }, [])
 
   const playingSet = activeSet(now, data)
 
@@ -632,64 +628,62 @@ export function QueuesView({
   )
 
   return (
-    <main className="view" hidden={isHidden} id="home">
+    <main className="view" id="home">
       <div id="gslot-narrow">{toolbar}</div>
       <div id="shelves" ref={shelvesRef}>
-        {isHidden
-          ? null
-          : shelfIds.map((id) => {
-              const q = data!.sets[id]!
-              const registrySet = reg?.sets.find(
-                (s) => s.id === id,
+        {shelfIds.map((id) => {
+          const q = data!.sets[id]!
+          const registrySet = reg?.sets.find(
+            (s) => s.id === id,
+          )
+          // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
+          // printed the activity unconditionally until 2026-08-26, which renamed
+          // "Manga & Webtoons" to "Reading" on a queue the owner had deliberately named
+          // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+          // `q.label` stays the FILTER's haystack below either way, so typing "manga"
+          // finds it even when the shelf is showing the activity.
+          const title = registrySet
+            ? queueTitle(
+                registrySet,
+                numbers.get(id) ?? null,
               )
-              // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
-              // printed the activity unconditionally until 2026-08-26, which renamed
-              // "Manga & Webtoons" to "Reading" on a queue the owner had deliberately named
-              // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
-              // `q.label` stays the FILTER's haystack below either way, so typing "manga"
-              // finds it even when the shelf is showing the activity.
-              const title = registrySet
-                ? queueTitle(
-                    registrySet,
-                    numbers.get(id) ?? null,
-                  )
-                : q.label
+            : q.label
 
-              return (
-                <Shelf
-                  groups={people.groups}
-                  isCollapsed={collapsed.has(id)}
-                  isHiddenByFilter={
-                    !shelfMatches(
-                      filter,
-                      [title, q.label],
-                      q.items,
-                    )
-                  }
-                  items={q.items}
-                  key={id}
-                  label={title}
-                  members={people.byQueue[id] ?? []}
-                  now={now}
-                  people={people.people}
-                  playingSet={playingSet}
-                  providerKind={
-                    registrySet?.provider_kind ?? ""
-                  }
-                  set={registrySet ?? null}
-                  setId={id}
-                  // The registry row first, the queues payload as the fallback — the same
-                  // pair `QueueView` and `App` resolve the lane from, so one queue cannot
-                  // read as priority-by-default on its shelf and random-by-default on its
-                  // own page.
-                  setLane={
-                    isRandomOrder(registrySet ?? q)
-                      ? "random"
-                      : "priority"
-                  }
-                />
-              )
-            })}
+          return (
+            <Shelf
+              groups={people.groups}
+              isCollapsed={collapsed.has(id)}
+              isHiddenByFilter={
+                !shelfMatches(
+                  filter,
+                  [title, q.label],
+                  q.items,
+                )
+              }
+              items={q.items}
+              key={id}
+              label={title}
+              members={people.byQueue[id] ?? []}
+              now={now}
+              people={people.people}
+              playingSet={playingSet}
+              providerKind={
+                registrySet?.provider_kind ?? ""
+              }
+              set={registrySet ?? null}
+              setId={id}
+              // The registry row first, the queues payload as the fallback — the same
+              // pair `QueueView` and `App` resolve the lane from, so one queue cannot
+              // read as priority-by-default on its shelf and random-by-default on its
+              // own page.
+              setLane={
+                isRandomOrder(registrySet ?? q)
+                  ? "random"
+                  : "priority"
+              }
+            />
+          )
+        })}
       </div>
     </main>
   )

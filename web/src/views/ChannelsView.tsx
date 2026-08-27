@@ -62,10 +62,8 @@ function resolveInitialProfile(
 }
 
 export function ChannelsView({
-  isHidden,
   routeId,
 }: {
-  isHidden: boolean
   routeId: string | null
 }) {
   const navigate = useNavigate()
@@ -90,7 +88,7 @@ export function ChannelsView({
   const isMovies = channel?.behavior === "rewatch"
 
   useEffect(() => {
-    if (isHidden || !channel) return
+    if (!channel) return
 
     setChannelSelection(
       channel.id,
@@ -100,16 +98,10 @@ export function ChannelsView({
     )
     // Re-derive only when the selected channel changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel?.id, isHidden])
+  }, [channel?.id])
 
   if (!channel) {
-    return (
-      <main
-        className="view"
-        hidden={isHidden}
-        id="channels"
-      />
-    )
+    return <main className="view" id="channels" />
   }
 
   const binding = activeBinding(channel, currentProfile)
@@ -146,7 +138,6 @@ export function ChannelsView({
       // at `/q/<id>`) came out Plex-amber. One page, two colours, same provider.
       // (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={channel.provider_kind || undefined}
-      hidden={isHidden}
       id="channels"
     >
       <div className="chhead">
@@ -332,23 +323,16 @@ export function ChannelsView({
         <ChannelMembers
           channel={channel}
           currentProfile={currentProfile}
-          isShown={!isHidden && !isMovies}
+          isShown={!isMovies}
         />
-        {isHidden ? (
-          <section className="chpool">
-            <h2 id="chpool-title">Eligible pool</h2>
-            <ul className="grid" id="chpool" />
-          </section>
-        ) : (
-          <ChannelPool
-            channel={channel}
-            currentProfile={currentProfile}
-            key={channel.id}
-            onChanged={() => setReloadToken((n) => n + 1)}
-            reloadToken={reloadToken}
-            resampleToken={resampleToken}
-          />
-        )}
+        <ChannelPool
+          channel={channel}
+          currentProfile={currentProfile}
+          key={channel.id}
+          onChanged={() => setReloadToken((n) => n + 1)}
+          reloadToken={reloadToken}
+          resampleToken={resampleToken}
+        />
         <ChannelFilters
           channel={channel}
           currentProfile={currentProfile}

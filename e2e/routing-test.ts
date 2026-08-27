@@ -184,15 +184,19 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   let loads = 0;
   page.on('load', () => { loads += 1; });
 
+  // Still a real anchor with a real href — decision 2026-08-15. `<Link>` renders one, so
+  // middle-click / ⌘-click / "copy link address" survived the migration.
+  //
+  // READ BEFORE THE CLICK, since 2026-08-27: each view mounts only on its own route now, so
+  // Admin's markup is gone the moment this link is followed. Reading it here is also the
+  // honest order — the claim is about the control being clicked.
+  const [tag, href] = await page.$eval('#goqueues', (e) => [e.tagName, e.getAttribute('href')]);
+  ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/queues');
+
   await page.click('#goqueues');
   ok('clicking "Configure ›" routes to /queues', await heading('Picks'));
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);
-
-  // Still a real anchor with a real href — decision 2026-08-15. `<Link>` renders one, so
-  // middle-click / ⌘-click / "copy link address" survived the migration.
-  const [tag, href] = await page.$eval('#goqueues', (e) => [e.tagName, e.getAttribute('href')]);
-  ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/queues');
 }
 
 // The browser's own Back must work — it did not exist as a question under the hash router.
