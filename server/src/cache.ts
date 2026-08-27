@@ -356,6 +356,26 @@ export async function putCollectionChildren(
   ).run(String(rk), String(account || ''), Number(updatedAt ?? 0), Number(childCount ?? 0), JSON.stringify(payload), now());
 }
 
+/**
+ * Throw away one collection's cached children, every account's row at once.
+ *
+ * The `dropLeaves` twin, and it exists for the same reason: nothing else can bust this table.
+ * The validator above is dead weight for a collection — Plex's `/library/collections/<rk>/children`
+ * answers with a container carrying `size` and NOTHING else (no `updatedAt`, no `childCount`),
+ * so the stored `updated_at` is always 0 and can never equal a real one. That leaves the 24 h
+ * TTL as the only expiry, and a CUSTOM SORT is invisible to it: re-ordering a collection in
+ * Plex changes no timestamp, no count and no member — only their positions. The owner
+ * re-ordered the Star Trek collection to put a fanedit first on 2026-08-26 and the app kept
+ * playing the old order (decision `2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads`).
+ *
+ * EVERY account's row, because the member LIST is universal — only the progress fields on it
+ * are the querying account's, and those are re-read with the list.
+ */
+export async function dropCollectionChildren(rk: string | number): Promise<void> {
+  if (!ready()) return;
+  q('DELETE FROM collection_children WHERE rk = ?').run(String(rk));
+}
+
 // --- section_listing (soft TTL, stale-while-revalidate) -------------------------------- //
 const SECTION_SOFT_MS = 5 * 60 * 1000;
 

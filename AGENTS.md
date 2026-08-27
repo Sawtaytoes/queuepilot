@@ -585,6 +585,33 @@ Four things to know before touching it:
 `PATCH /api/sets/:id` rejects `skipped` on a rotation channel: `blocklist` is the same feature
 there, and one set never carries two exclude lists.
 
+## A collection's ORDER is Plex's, and a re-order has no signal
+
+**The order is `collectionSort`, read straight off `/library/collections/<rk>/children`. The
+app does not sort it and does not let you re-order it**
+([decision](docs/decisions/2026-08-26-a-collection-entry-plays-in-plexs-order-and-a-local-override-is-deferred.md)).
+A per-entry `order:` override is **deferred at low priority** — do not build it as part of
+another task, and do not "fix" a collection by sorting its members here.
+
+⚠️ **A re-order is the one library change nothing reports, so it needs an explicit re-read.**
+All three freshness tests miss it, and each one looks like it should work until you check:
+
+- the `(updatedAt, childCount)` validator is **dead code** for this table — `/children` answers
+  with a container carrying `size` and NOTHING else, so the stored `updated_at` is always `0`
+  and can never equal a real one;
+- the collection's OWN `updatedAt` does not move for a re-order (read live: over a year older
+  than the change);
+- `childCount` is identical on both sides, because a re-order adds and removes nothing.
+
+That leaves the 24 h TTL, and a clock misses it too: the cached copy is not old, it is wrong.
+So **opening "What plays" re-reads Plex** — cached rows paint first, `?fresh=1` corrects them,
+and a **Checking Plex… / Updated from Plex** chip says so, because a list that silently
+re-orders itself under somebody mid-edit is worse than a slow one. A changed order also bumps
+the cache generation, since the tile names the next member BY POSITION
+([decision](docs/decisions/2026-08-26-a-collection-re-order-is-invisible-so-the-panel-re-reads.md)).
+`cache.dropCollectionChildren` is the `dropLeaves` twin and is the only thing that can bust
+this table. `e2e/collection-reorder-test.ts` gates it.
+
 ## Gates
 
 Everything CI runs is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and it is
@@ -604,6 +631,7 @@ server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/tile-lane-test.ts     # the tile's three controls
+server/node_modules/.bin/tsx e2e/collection-reorder-test.ts  # a re-ordered collection reaches the panel
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate
 server/node_modules/.bin/tsx e2e/tonight-routing-test.ts  # the activity → backend map
@@ -630,7 +658,7 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All twelve of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All thirteen of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
@@ -641,6 +669,7 @@ there rather than in the gated block. All twelve of them, in the order `ci.yml` 
 | `routing-test.ts` | the client router and the server's SPA fallback, together |
 | `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
 | `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |
+| `collection-reorder-test.ts` | a collection RE-ORDERED in Plex reaches the "What plays" panel |
 | `shelf-remove-test.ts` | the shelf's remove ✕ |
 | `group-create-test.ts` | a new queue joins the group on screen |
 | `play-reorder-test.ts` | the play landing's reorder |
