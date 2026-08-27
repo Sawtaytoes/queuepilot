@@ -540,6 +540,47 @@ Four things to know before touching it:
 Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). `splitLanes` in
 `state/queueView.ts` is the pure half and has unit tests.
 
+### The Picks PAGE lists both lanes' queues, in one strip each
+
+**Which screen a queue is on comes from `source`, never from `add_as`**
+([decision](docs/decisions/2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to.md)).
+`/queues` (**Picks**) lists every `source: queue` set; `/channels` (**Rules**) lists every
+`source: rotation` set. Nothing appears on both. The two `add_as` selectors that used to
+split them — `queueIds` and `channelSetIds` — are **gone**; there is one, `curatedIds`, and a
+new filter on `add_as` in a screen list is a regression, not a feature.
+
+- **A shelf is ONE `.strip` with two RUNS in it**, never two `<ul>`s like `/q/<id>`.
+  `useHomeDrags` hit-tests one `.strip` per shelf and rebuilds the queue's file order from
+  `strip.querySelectorAll("li.tile")`, so a second list would PATCH an order carrying half
+  the keys. The divider between the runs is an `li.lanesplit` — deliberately not a `li.tile`,
+  so every one of those queries steps over it.
+- **A shelf drag REORDERS; the tile's arrow PROMOTES.** There is no drag-across-the-divider
+  here (see above), so a tile dropped in the other run returns to its own lane on the next
+  render. `onLane` is offered on every shelf tile because it is the only promote on this page.
+- **The heading says the lane in words** — `3 priority · 9 pool`, or `priority queue` /
+  `random pool` when a queue is entirely one. The one-lane clause is the contract, not
+  decoration: a divider needs two runs to exist between, so without it an all-pooled queue
+  and an ordered one are the same row of posters.
+- ⚠️ **`/api/shelves` carries `placement`, and must keep carrying it.** The skeleton exists to
+  paint at final geometry before `/api/queues` resolves against Plex; the geometry now
+  includes the lane split. Drop the field and every entry falls into the set's default lane
+  on first paint, so the divider and the tiles either side of it move when the resolved
+  payload lands — the exact shift that endpoint was added to prevent. It costs one property
+  read and no Plex call. Gate: `e2e/api-v2-test.ts`, always-on.
+
+### A list of queues names its PEOPLE
+
+A queue's displayed name is its ACTIVITY
+([decision](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md)), so any control
+that lists queues by name reads "Movies & Shows", "Movies & Shows 2", "Movies & Shows 3" and
+names nothing. Shelves and landing cards answer that with `PeopleRow`; a **menu row or a
+picker option** cannot hold 26px faces, so it gets `queuePeopleLabel` instead — as a
+`SelectListbox` option `badge`, or as `<QueuePeopleBadge>` inside a `MenuItem`'s `label`.
+Three call sites today: both Add-to menus (`Toolbar`, `PendingView`) and the selection bar's
+Move-to picker. **Add a fourth list of queues and it gets the chip too** — fixing one of three
+is how a rule becomes folklore. Required members only, three names then `+n`, `Anybody` for a
+queue nobody has filed.
+
 ## Reading the log when a queue plays the wrong thing
 
 `[lineup]` (every curated scan) names the lane split, the head, the first ten titles in

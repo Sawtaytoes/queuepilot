@@ -19,12 +19,18 @@ await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded'
 await page.waitForSelector('.shelf');
 ok('no Refresh button', !(await page.$('#refresh')));
 
-// Channels navigation: channel picker (2 generic + 3 anime channels) + tier picker.
+// Rules navigation: the rules-queue picker + the tier picker.
+//
+// RULES QUEUES ONLY, since 2026-08-26. This dropdown used to append every random-lane Picks
+// queue under a `q:` prefix — the last of the Curated-Pool taxonomy — which put five of the
+// fixture's Picks queues on a page headed Rules. `channelSetIds` is gone with it, and a Picks
+// queue reaches its editor from the Picks page or from `/q/<id>`.
+// (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`)
 await page.click('#channelslink');
 await page.waitForSelector('#channels:not([hidden])');
 const channels = await readOptions(page, '[data-testid="chchannel"]');
-ok(`channel dropdown: 2 function channels + 3 curated (${channels.length})`,
-  channels.length === 5 && channels[0] === 'Shows & Shorts' && channels[1] === 'Movies');
+ok(`rules picker lists rules queues and nothing else (${channels.length}): ${JSON.stringify(channels)}`,
+  channels.length === 2 && channels[0] === 'Shows & Shorts' && channels[1] === 'Movies');
 // The tier picker lists ONLY the selected channel's own bindings — no cross-channel
 // duplicates (the split-channels bug: every progress channel folded into one dropdown).
 const profiles = await readOptions(page, '[data-testid="chprofile"]');
@@ -76,17 +82,27 @@ ok('movies channel prefills its own library (Movies=1)',
 const mratings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input', (is) => is.filter((i) => i.checked).map((i) => i.value));
 ok('movies ratings prefilled from movie_ratings (no PG)', mratings.includes('G') && !mratings.includes('PG'));
 
-// An anime channel in the picker opens the grid editor in channel mode: no ordering UI.
-await pickValue(page, '[data-testid="chchannel"]', 'q:bob_anime');
+// A random-lane Picks queue still opens the grid editor in channel mode: no ordering UI.
+// Reached by its own URL now rather than through the rules picker, which no longer lists it.
+await page.goto('http://localhost:18768/q/bob_anime', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#queue:not([hidden])');
-ok('anime channel opens grid editor in channel mode',
+ok('a random-lane Picks queue opens the grid editor in channel mode',
   await page.evaluate(() => document.body.classList.contains('channel-mode')));
 ok('channel mode: no top/bottom picker',
   await page.$eval('#queue .addpos', (e) => getComputedStyle(e).display === 'none'));
 ok('channel mode: random-order note shown', /random order/.test(await page.textContent('#sub') ?? ''));
-await page.click('#back');
+
+// …and it is a SHELF on the Picks page, which is where it lives now.
+await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('.shelf');
+ok('the random-lane Picks queue has a shelf on the Picks page',
+  Boolean(await page.$('.shelf[data-set="bob_anime"]')));
+ok('its shelf heading names the lane',
+  /pool/.test(await page.textContent('.shelf[data-set="bob_anime"] h2 .lanes-sec') ?? ''));
+
+await page.goto('http://localhost:18768/channels', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#channels:not([hidden])');
-ok('channel editor backs out to Channels', true);
+ok('the rules page still opens', true);
 
 // Play menu degrades without MQTT
 await page.click('#chplay');

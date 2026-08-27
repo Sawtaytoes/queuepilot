@@ -17,13 +17,8 @@ import {
 import {
   openDynModal,
   openPlayMenu,
-  openSetModal,
 } from "../state/overlays"
-import {
-  channelSetIds,
-  rotationChannels,
-  useStore,
-} from "../state/store"
+import { rotationChannels, useStore } from "../state/store"
 import { ChannelFilters } from "./ChannelFilters"
 import { ChannelMembers } from "./ChannelMembers"
 import { ChannelPool } from "./ChannelPool"
@@ -32,9 +27,9 @@ import { ChannelPool } from "./ChannelPool"
  * CHANNELS — the rule-based rotations: a computed pool plus its filter knobs,
  * deliberately distinct from the hand-ordered queues (it is a filter, not a list).
  *
- * The picker lists EVERY dynamic channel by id, plus the curated channels (which
- * configure in the grid view, so picking one navigates there). The tier picker
- * lists only THIS channel's bindings, so a tier never appears more than once.
+ * The picker lists EVERY rules queue by id, and NOTHING else — a Picks queue is on the
+ * Picks screen, whichever lane it defaults to. The tier picker lists only THIS channel's
+ * bindings, so a tier never appears more than once.
  * (decision `2026-07-29-dynamic-channels-first-class-and-deletable`)
  *
  * `currentChannelKind` derives from the channel's `behavior` rather than from a
@@ -71,7 +66,7 @@ export function ChannelsView({
   routeId: string | null
 }) {
   const navigate = useNavigate()
-  const { data, reg } = useStore()
+  const { reg } = useStore()
   const {
     channelId: currentChannel,
     profile: currentProfile,
@@ -152,7 +147,13 @@ export function ChannelsView({
     >
       <div className="chhead">
         <label>
-          Pool
+          {/* "Pool" until 2026-08-26, and it was wrong twice over: the page's own heading
+              says Rules, and `pool` is already the name of a LANE inside a Picks queue (the
+              Random pool). The ADR that named the two kinds says not to spend the word on
+              both (decision `2026-08-23-kind-is-picks-or-rules`). "Eligible pool" further
+              down this page keeps it — that one IS a pool of candidates, which is the sense
+              the word still owns here. */}
+          Rules queue
           {/* `key={channel.id}` on BOTH pickers, for two different reasons, and
               neither is "the value changed".
 
@@ -175,26 +176,26 @@ export function ChannelsView({
           <SelectListbox
             id="chchannel"
             key={channel.id}
-            label="Pool"
-            onChange={(v) => {
-              // A curated pool configures in the grid editor.
-              if (v.startsWith("q:"))
-                navigate(`/q/${v.slice(2)}`)
-              else navigate(`/channels/${v}`)
-            }}
-            // Flat list: `Listbox` has no option groups, so the Play landing's
-            // "Rules" / "Picks" headings are dropped — rules queues first, then the
-            // picks ones (the `q:` prefix still routes them to the grid editor).
-            options={[
-              ...all.map((s) => ({
-                label: s.label,
-                value: s.id,
-              })),
-              ...channelSetIds(data).map((id) => ({
-                label: data!.sets[id]!.label,
-                value: `q:${id}`,
-              })),
-            ]}
+            label="Rules queue"
+            onChange={(v) => navigate(`/channels/${v}`)}
+            /**
+             * RULES QUEUES ONLY.
+             *
+             * This list used to append every Picks queue whose `add_as` is `random`, under a
+             * `q:` prefix that routed the pick to `/q/<id>`. That was the last of the old
+             * three-way taxonomy: a "Curated Pool" was filed with the pools because both were
+             * shuffled, so ten of the household's Picks queues — `Kevin — Anime`,
+             * `Manga & Webtoons`, `Younger Kids — Shows` — sat in a dropdown on a page whose
+             * heading says Rules, between `Shorts` and `Movies`.
+             *
+             * `add_as` is a lane default INSIDE a Picks queue, not a product kind. Every Picks
+             * queue is on the Picks screen now, both lanes together
+             * (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
+             */
+            options={all.map((s) => ({
+              label: s.label,
+              value: s.id,
+            }))}
             value={channel.id}
           />
         </label>
@@ -297,17 +298,11 @@ export function ChannelsView({
         >
           ＋ Rules queue
         </Button>
-        {/* "New queue" splits by how membership is decided: a Picks queue is a
-            hand-picked member set (the set modal); a Rules queue derives its
-            members from filters. */}
-        <Button
-          appearance="outline"
-          id="newcurated"
-          intent="accent"
-          onClick={() => openSetModal(null, "random")}
-        >
-          ＋ Picks queue
-        </Button>
+        {/* ＋ Picks queue used to stand here too, seeded `random`, because a random-lane
+            Picks queue was LISTED here. It is not any more, so a page that cannot show you
+            what you just made must not offer to make it: Picks are created from the Play
+            landing (`#newqueue-play`) and from the Picks toolbar (`#newqueue`), and the lane
+            default is the modal's own Type control either way. */}
         <span className="chnote">
           A sample of what could play — the real rotation
           re-draws fresh every scan.

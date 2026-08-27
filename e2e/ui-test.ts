@@ -42,12 +42,33 @@ ok('landing: cards named Picks + Rules only',
   && !kindWords0.includes('Ordered Queue') && !kindWords0.includes('Curated Pool')
   && !kindWords0.includes('Filtered Pool'));
 
-// 1. Picks configurator: only hand-picked shelves here (rules live elsewhere).
+// 1. Picks configurator: EVERY hand-picked shelf, and only those (rules live elsewhere).
+//
+// Six and not three, since 2026-08-26. The random-lane Picks queues — `bob_anime` and its
+// siblings — used to be listed on the RULES page, which was the last of the
+// Ordered-Queue / Curated-Pool / Filtered-Pool split. `add_as` is a lane default inside one
+// Picks queue and never decides which page it lives on
+// (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
 await page.click('#goqueues');
 await page.waitForSelector('.shelf', { timeout: 30000 });
 const shelves = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
-ok('three queue shelves (no filtered pools, no anime curated pools)',
-  shelves.length === 3 && !shelves.includes('younger') && !shelves.includes('bob_anime'));
+ok(`every Picks queue has a shelf, both lanes (${shelves.length})`,
+  shelves.length === picksRows.length && shelves.includes('bob_anime'));
+ok('no rules queue on the Picks page', !shelves.includes('younger') && !shelves.includes('older'));
+// A shelf SAYS which lane its posters are in — the count clause beside the name. Without it a
+// random-lane queue and an ordered one are the same row of posters.
+//
+// NON-EMPTY shelves, and the qualifier is the contract rather than a hedge: an empty queue is
+// in neither lane, so it draws no clause. Counting `.shelf` instead would make this assertion
+// fail the moment somebody adds an empty queue to the fixture.
+const laneClauses = await page.$$eval('.shelf', (els) =>
+  els.map((el) => ({
+    hasItems: el.querySelectorAll('li.tile').length > 0,
+    text: (el.querySelector('h2 .lanes-sec')?.textContent ?? '').trim(),
+  })));
+ok(`every non-empty shelf names its lane (${JSON.stringify(laneClauses)})`,
+  laneClauses.some((c) => c.hasItems)
+  && laneClauses.every((c) => (c.hasItems ? /priority|pool/.test(c.text) : c.text === '')));
 
 // 2. Toolbar mounted in header on desktop.
 ok('tools in header (Wide View)', await page.$eval('#gslot-wide #tools', () => true).catch(() => false));
@@ -205,14 +226,20 @@ ok('F: cards named Picks + Rules',
   kindWords.includes('Picks') && kindWords.includes('Rules')
   && !kindWords.includes('Ordered Queue') && !kindWords.includes('Curated Pool')
   && !kindWords.includes('Filtered Pool'));
-// The Rules picker lists the same sets — now a flat SelectListbox, NOT a native
-// <select> with optgroups (Listbox has no option groups; rules first, then picks).
-// 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
+// The Rules picker lists the RULES sets and only those — a flat SelectListbox, never a
+// native <select> (2026-08-07-plex-channels-pickers-are-listbox-not-native-select). It used
+// to append every random-lane Picks queue under a `q:` prefix; the Picks page holds both
+// lanes now, so the two lists stopped overlapping
+// (2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to).
 await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('[data-testid="chchannel"]', { state: 'attached', timeout: 20000 });
 const chanOpts = await readOptions(page, '[data-testid="chchannel"]');
-ok('F: channel picker lists rules-then-picks (flat)',
-  chanOpts[0] === 'Shows & Shorts' && chanOpts[1] === 'Movies' && chanOpts.length >= 3);
+ok(`F: rules picker lists rules queues alone (${JSON.stringify(chanOpts)})`,
+  chanOpts.length === dyn.length && chanOpts[0] === 'Shows & Shorts' && chanOpts[1] === 'Movies');
+// Stated as its own claim rather than left implicit in the count: the defect was a Picks
+// queue APPEARING here, and a length check alone would pass a list that swapped one in.
+ok('F: no Picks queue in the rules picker',
+  chanOpts.every((label) => !picks.includes(label)));
 // Noun: open a random-default Picks grid → its add box says "pool", not "queue".
 //
 // This assertion asked for "channel" until 2026-08-17, which the app stopped saying when

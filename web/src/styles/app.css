@@ -657,6 +657,17 @@ button {
   font-weight: 400;
   font-size: 0.85rem;
 }
+/* WHICH LANE, or the split between the two — "3 priority · 9 pool", or "random pool" on a
+   shelf that has only one. Quieter than the count beside it and set apart by a rule, because
+   it answers a different question: `.sec` says how big the queue is, this says how it plays.
+   A shelf with no entries has neither. */
+.shelf h2 .lanes-sec {
+  color: var(--color-content-muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+  padding-left: 10px;
+  border-left: 1px solid var(--color-border-default);
+}
 .shelf h2 .chev {
   color: var(--color-intent-accent-solid);
   font-size: 1.3rem;
@@ -726,6 +737,35 @@ ul.strip {
 body.hdrag ul.strip {
   scroll-snap-type: none;
   scroll-behavior: auto;
+}
+/* THE LANE DIVIDER inside a shelf's one strip — the Priority run on its left, the Random pool
+   on its right. `/q/<id>` can afford two stacked grids with a heading each; a shelf is one
+   horizontal `.strip` (see `useHomeDrags`), so the split has to be a member of that row.
+
+   It is a flex ITEM of `ul.strip`, sized only by its rule and its word — deliberately narrow,
+   because every pixel it takes is a pixel of poster the eye does not get. `writing-mode`
+   stands the label up beside the rule rather than under it, which is what keeps it that
+   narrow at any tile height.
+
+   Not `li.tile`: the drag reads its keys from `li.tile`, so this must never match. */
+.lanesplit {
+  flex: none;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 2px dashed var(--color-border-default);
+  padding-left: 12px;
+  margin-left: -2px;
+  color: var(--color-content-muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  scroll-snap-align: none;
+}
+.lanesplit > span {
+  writing-mode: vertical-rl;
+  white-space: nowrap;
 }
 /* Edge shadows: the persistent "more items this way" cue (the arrows appear on hover). */
 .strip-wrap::before,
@@ -3183,6 +3223,20 @@ body.name-editable #apphead h1 {
   width: 100%;
 }
 [role="option"] > span:has(> .optionbadge) > .optionbadge {
+  margin-left: auto;
+}
+/* The same chip, on a MENU row — the two Add-to menus name a queue by its activity, so the
+   people chip is what tells four "Movies & Shows" rows apart. A menu item is a
+   `role="menuitem"` and never a `role="option"`, so it needs its own pair of rules rather
+   than a looser selector: widening the ones above to any element holding a chip would reach
+   the Start-from picker's rows and the count picker's, both of which are already right. */
+[role="menuitem"]:has(.optionbadge) {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+[role="menuitem"] > .optionbadge,
+[role="menuitem"] .optionbadge {
   margin-left: auto;
 }
 
