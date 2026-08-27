@@ -4,6 +4,7 @@ import type { QueueItem } from "../lib/types"
 import {
   applyFilters,
   hasOverrides,
+  promotedOrder,
   splitLanes,
 } from "./queueView"
 
@@ -163,5 +164,52 @@ describe("splitLanes", () => {
 
     expect(splitLanes(plain, "priority").random).toEqual([])
     expect(splitLanes(plain, "random").priority).toEqual([])
+  })
+})
+
+describe("promotedOrder", () => {
+  const items = [
+    item({ key: "rk:1", placement: "priority" }),
+    item({ key: "rk:2", placement: "priority" }),
+    item({ key: "rk:3" }),
+    item({ key: "rk:4" }),
+  ]
+
+  // The claim the whole helper exists for: a button cannot say WHERE, so it must not pick
+  // the head — the Priority lane plays in file order, and landing first would silently
+  // change what plays next.
+  test("a promoted entry lands at the END of the Priority lane", () => {
+    expect(promotedOrder(items, "rk:4", "random")).toEqual([
+      "rk:1",
+      "rk:2",
+      "rk:4",
+      "rk:3",
+    ])
+  })
+
+  test("the queue's own default lane counts as promoted", () => {
+    // Every entry inherits `priority` here, so rk:3 is already in the lane and the only
+    // thing that moves is where it sits in it.
+    expect(
+      promotedOrder(items, "rk:3", "priority"),
+    ).toEqual(["rk:1", "rk:2", "rk:4", "rk:3"])
+  })
+
+  test("an unknown key leaves the order exactly as it was", () => {
+    expect(promotedOrder(items, "rk:99", "random")).toEqual(
+      ["rk:1", "rk:2", "rk:3", "rk:4"],
+    )
+  })
+
+  test("the first promote into an empty lane puts it at the head, which is the whole lane", () => {
+    const pool = [
+      item({ key: "rk:1" }),
+      item({ key: "rk:2" }),
+    ]
+
+    expect(promotedOrder(pool, "rk:2", "random")).toEqual([
+      "rk:2",
+      "rk:1",
+    ])
   })
 })

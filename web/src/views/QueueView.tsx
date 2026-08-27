@@ -57,6 +57,7 @@ import {
   useOverlays,
 } from "../state/overlays"
 import {
+  moveEntryLane,
   queueEntryActions,
   removeQueueItem,
 } from "../state/queueEntry"
@@ -450,8 +451,26 @@ export function QueueView({
               : ""
           }`,
         }}
+        isChecked={Boolean(
+          setId && selected.has(`${setId}::${item.key}`),
+        )}
+        isPriority={
+          (item.placement ?? setLane) === "priority"
+        }
         onCheck={() =>
           setId && toggleSelect(setId, item.key)
+        }
+        // The third control in the stack: into the Priority queue, or back out to the pool.
+        // The drag across the divider does the same thing and stays — this is the answer for
+        // a pointer that would rather press than drag, and the only one a touch device gets
+        // without a long press (owner, 2026-08-26).
+        // Every queue page draws BOTH lanes, whatever its own default is — a random-order
+        // queue's Priority lane is exactly where a promote goes — so this is offered on all
+        // of them and gated only on there being a set to write to.
+        onLane={
+          setId
+            ? () => void moveEntryLane(setId, item, setLane)
+            : undefined
         }
         onContextMenu={(e) => {
           e.preventDefault()
