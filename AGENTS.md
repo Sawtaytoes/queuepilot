@@ -637,6 +637,7 @@ server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmati
 server/node_modules/.bin/tsx e2e/tonight-routing-test.ts  # the activity → backend map
 server/node_modules/.bin/tsx e2e/board-game-absorb-test.ts  # the collection absorb
 server/node_modules/.bin/tsx e2e/queue-people-test.ts    # a queue is people plus an activity
+server/node_modules/.bin/tsx e2e/roster-editor-test.ts   # add / rename / remove a person
 server/node_modules/.bin/tsx e2e/board-game-transport-parity-test.ts  # both board-game transports agree
 server/node_modules/.bin/tsx e2e/board-game-sync-mqtt-test.ts  # the nightly's MQTT topic contract
 server/node_modules/.bin/tsx e2e/nfc-wire-contract-test.ts  # the cards' set ids, over a real broker

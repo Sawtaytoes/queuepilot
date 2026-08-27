@@ -113,12 +113,15 @@ type Overlays = {
    * leaving a stale draft on screen. Same rule `entryEditor` above follows.
    */
   groupsModal: { selectedId: string | null } | null
+  /** The roster editor. No payload — it always opens on the whole household. */
+  peopleModal: boolean
 }
 
 let overlays: Overlays = {
   dynModal: null,
   entryEditor: null,
   groupsModal: null,
+  peopleModal: false,
   membersModal: null,
   playMenu: null,
   setModal: null,
@@ -209,7 +212,8 @@ export const closeDynModal = () => set({ dynModal: null })
 
 export const openGroupsModal = (
   selectedId: string | null = null,
-) => set({ groupsModal: { selectedId } })
+) =>
+  set({ groupsModal: { selectedId }, peopleModal: false })
 
 export const selectGroupInModal = (
   selectedId: string | null,
@@ -217,6 +221,15 @@ export const selectGroupInModal = (
 
 export const closeGroupsModal = () =>
   set({ groupsModal: null })
+
+// Opening one closes the other. They are two halves of the same question — "who exists and
+// what are they called" — and the roster editor links straight across to the groups one, so
+// stacking them would put a modal over a modal on that hop.
+export const openPeopleModal = () =>
+  set({ groupsModal: null, peopleModal: true })
+
+export const closePeopleModal = () =>
+  set({ peopleModal: false })
 
 // Opening the entry panel closes the tile menu that usually launched it, the same way
 // openStartModal does — two overlays over one tile is never intended.

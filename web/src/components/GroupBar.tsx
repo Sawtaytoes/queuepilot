@@ -2,7 +2,10 @@ import { Link } from "react-router"
 
 import type { Group } from "../lib/types"
 import { groupPath, onlyPath } from "../state/group"
-import { openGroupsModal } from "../state/overlays"
+import {
+  openGroupsModal,
+  openPeopleModal,
+} from "../state/overlays"
 
 /**
  * WHO IS WATCHING — the row of groups at the top of the landing, and the provider filter
@@ -86,6 +89,20 @@ export function GroupBar({
             type="button"
           >
             ⚙ Edit groups
+          </button>
+        </li>
+        <li>
+          {/* WHO EXISTS, beside WHAT THE CHIPS ARE. Until 2026-08-26 the roster had no editor
+              at all — a name could only be changed by hand-editing `/config/people-mapping.yaml`
+              on the appliance — and this is the row where somebody already comes looking, because
+              the chip beside it is the other half of the same question. */}
+          <button
+            className="groupchip groupedit"
+            id="peopleedit"
+            onClick={openPeopleModal}
+            type="button"
+          >
+            ⚙ Edit people
           </button>
         </li>
       </ul>
