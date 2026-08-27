@@ -27,6 +27,7 @@ import {
   readPickSession,
   writePickSession,
 } from "../lib/pickSession"
+import { WATCH_PLAY_PATH } from "../lib/routePaths"
 import { rosterOrder } from "../lib/tonight"
 import type {
   BoardGameResponse,
@@ -39,7 +40,6 @@ import type {
   TonightPickWire,
 } from "../lib/types"
 import { openPlayMenu } from "../state/overlays"
-import { WATCH_PLAY_PATH } from "../state/route"
 import { setStatus } from "../state/store"
 
 /**
@@ -83,10 +83,8 @@ import { setStatus } from "../state/store"
  */
 export function ResultView({
   gameId,
-  isHidden,
 }: {
   gameId: string | null
-  isHidden: boolean
 }) {
   const [session, setSession] =
     useState<PickSession | null>(null)
@@ -101,8 +99,6 @@ export function ResultView({
   const [isPending, setIsPending] = useState(true)
 
   useEffect(() => {
-    if (isHidden) return
-
     let isCancelled = false
     setIsPending(true)
     setIsShortlistShown(false)
@@ -169,7 +165,7 @@ export function ResultView({
     return () => {
       isCancelled = true
     }
-  }, [gameId, isHidden])
+  }, [gameId])
 
   /** Draw again, remembering everything already turned down. That memory is the durable half. */
   const reroll = async () => {
@@ -212,7 +208,7 @@ export function ResultView({
   const rest = cards.rest
 
   return (
-    <main className="view" hidden={isHidden} id="result">
+    <main className="view" id="result">
       {error ? (
         <p className="subhint" role="alert">
           Could not read that: {error}
