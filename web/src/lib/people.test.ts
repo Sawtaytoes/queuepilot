@@ -8,6 +8,7 @@ import {
   initials,
   moveToTray,
   queueNumbers,
+  queuePeopleLabel,
   queueTitle,
   trayOf,
 } from "./people"
@@ -446,5 +447,73 @@ describe("a queue's name is optional, and the activity fills in", () => {
       },
     )
     expect([...numbers.values()]).toEqual([null, null])
+  })
+})
+
+describe("a dropdown row says who the queue is for, in words", () => {
+  const member = (
+    id: string,
+    role: "required" | "optional" = "required",
+  ): QueueMember => ({
+    id,
+    kind: id === "kids" ? "group" : "person",
+    position: 0,
+    role,
+  })
+
+  it("names the required members, a group by its own label", () => {
+    expect(
+      queuePeopleLabel(
+        [member("ada"), member("kids")],
+        people,
+        [kids],
+      ),
+    ).toBe("Ada, Kids")
+  })
+
+  it("drops the nice-to-have tray — a line of text cannot say dashed", () => {
+    expect(
+      queuePeopleLabel(
+        [member("ada"), member("linus", "optional")],
+        people,
+        [kids],
+      ),
+    ).toBe("Ada")
+  })
+
+  it("says Anybody rather than nothing, so a blank never reads as a failed load", () => {
+    expect(queuePeopleLabel([], people, [kids])).toBe(
+      "Anybody",
+    )
+    // Optional-only is the same fact: nobody HAS to be here.
+    expect(
+      queuePeopleLabel(
+        [member("linus", "optional")],
+        people,
+        [kids],
+      ),
+    ).toBe("Anybody")
+  })
+
+  it("counts past three, so the chip cannot push the row into a wrap", () => {
+    expect(
+      queuePeopleLabel(
+        [
+          member("ada"),
+          member("grace"),
+          member("linus"),
+          member("kids"),
+          member("nobody"),
+        ],
+        people,
+        [kids],
+      ),
+    ).toBe("Ada, Grace Hopper, Linus +2")
+  })
+
+  it("falls back to the id when the roster has not loaded yet", () => {
+    expect(queuePeopleLabel([member("ada")], [], [])).toBe(
+      "ada",
+    )
   })
 })

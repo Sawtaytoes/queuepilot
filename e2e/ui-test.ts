@@ -42,12 +42,33 @@ ok('landing: cards named Picks + Rules only',
   && !kindWords0.includes('Ordered Queue') && !kindWords0.includes('Curated Pool')
   && !kindWords0.includes('Filtered Pool'));
 
-// 1. Picks configurator: only hand-picked shelves here (rules live elsewhere).
+// 1. Picks configurator: EVERY hand-picked shelf, and only those (rules live elsewhere).
+//
+// Six and not three, since 2026-08-26. The random-lane Picks queues — `bob_anime` and its
+// siblings — used to be listed on the RULES page, which was the last of the
+// Ordered-Queue / Curated-Pool / Filtered-Pool split. `add_as` is a lane default inside one
+// Picks queue and never decides which page it lives on
+// (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
 await page.click('#goqueues');
 await page.waitForSelector('.shelf', { timeout: 30000 });
 const shelves = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
-ok('three queue shelves (no filtered pools, no anime curated pools)',
-  shelves.length === 3 && !shelves.includes('younger') && !shelves.includes('bob_anime'));
+ok(`every Picks queue has a shelf, both lanes (${shelves.length})`,
+  shelves.length === picksRows.length && shelves.includes('bob_anime'));
+ok('no rules queue on the Picks page', !shelves.includes('younger') && !shelves.includes('older'));
+// A shelf SAYS which lane its posters are in — the count clause beside the name. Without it a
+// random-lane queue and an ordered one are the same row of posters.
+//
+// NON-EMPTY shelves, and the qualifier is the contract rather than a hedge: an empty queue is
+// in neither lane, so it draws no clause. Counting `.shelf` instead would make this assertion
+// fail the moment somebody adds an empty queue to the fixture.
+const laneClauses = await page.$$eval('.shelf', (els) =>
+  els.map((el) => ({
+    hasItems: el.querySelectorAll('li.tile').length > 0,
+    text: (el.querySelector('h2 .lanes-sec')?.textContent ?? '').trim(),
+  })));
+ok(`every non-empty shelf names its lane (${JSON.stringify(laneClauses)})`,
+  laneClauses.some((c) => c.hasItems)
+  && laneClauses.every((c) => (c.hasItems ? /priority|pool/.test(c.text) : c.text === '')));
 
 // 2. Toolbar mounted in header on desktop.
 ok('tools in header (Wide View)', await page.$eval('#gslot-wide #tools', () => true).catch(() => false));
@@ -72,8 +93,21 @@ await page.fill('#set-label', 'Bob — Shorts');
 // assertions below it with it. One source is the only shape this suite creates, so there
 // is exactly one `.libs` here.
 await page.check('#setmodal .libs input[value="15"]');
+// The shelf count BEFORE the save — see the wait below for why it is not the name.
+const shelvesBeforeAdd = shelves.length;
 await page.click('#set-save');
-await page.waitForFunction(() => [...document.querySelectorAll('.shelf .lbl')].some((e) => e.textContent === 'Bob — Shorts'), undefined, { timeout: 20000 });
+// A COUNT, not the name typed above. `.lbl` is the queue's ACTIVITY since WP-5 landed on
+// 2026-08-25 (`queueTitle`), so this shelf reads "Movies & Shows 7" and the hand-typed label
+// it was matching can never appear there again. The suite had been dying on this line ever
+// since — silently, because a `waitForFunction` timeout throws rather than printing FAIL,
+// so it read as a passing run that simply stopped early and took the ~30 assertions below
+// it with it. Second time this file has lost its tail that way; `#set-libs` was the first,
+// and the comment above says so.
+await page.waitForFunction(
+  (before) => document.querySelectorAll('.shelf').length === before + 1,
+  shelvesBeforeAdd,
+  { timeout: 20000 },
+);
 ok('new queue shelf appears', true);
 
 // 5. Search again → menu now offers the new queue; add Toy Tinkers to it.
@@ -82,17 +116,28 @@ await page.waitForSelector('#gresults.open li', { timeout: 15000 });
 await page.click('#gresults li [data-testid="results-addto"]');
 await page.waitForSelector('.addtomenu [role="menuitem"]');
 const menuLabels = await page.$$eval('.addtomenu [role="menuitem"]', (bs) => bs.map((b) => b.textContent));
-ok('menu offers Bob — Shorts', menuLabels.includes('Bob — Shorts'));
+// `startsWith`, not equality: a row is "<queue><people>" since 2026-08-26 — the chip that
+// tells two "Movies & Shows" rows apart is part of the menu item's text.
+ok(`menu offers Bob — Shorts (${JSON.stringify(menuLabels)})`,
+  menuLabels.some((label) => label?.startsWith('Bob — Shorts')));
 await page.click('.addtomenu [role="menuitem"]:has-text("Bob — Shorts")');
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Added'), undefined, { timeout: 20000 });
 ok('added via header search', true);
 ok('results stay open after add', await page.$eval('#gresults', (e) => e.classList.contains('open')));
 await page.keyboard.press('Escape');
 
-// 6. Filter hides non-matching shelves (anime channels no longer shelve here at all).
+// 6. Filter hides non-matching shelves.
+//
+// This asserted **0** until 2026-08-26, on the premise that "anime channels no longer shelve
+// here at all" — which was the defect this PR fixes, written down as an expectation. Every
+// Picks queue is on this page now, so the anime ones are here and the filter has real work to
+// do. Asserting the SPLIT rather than a bare count: a filter that matched everything and a
+// filter that matched nothing would both slip past "> 0".
 await page.fill('#qfilter', 'anime');
-const visible = await page.$$eval('.shelf', (els) => els.filter((e) => !e.hidden).length);
-ok('filter "anime" → 0 shelves (channels moved out)', visible === 0);
+const shown = await page.$$eval('.shelf', (els) =>
+  els.filter((e) => !(e as HTMLElement).hidden).map((e) => (e as HTMLElement).dataset.set));
+ok(`filter "anime" → the anime queues, and only those (${JSON.stringify(shown)})`,
+  shown.length > 0 && shown.every((id) => id?.includes('anime')));
 await page.fill('#qfilter', '');
 await page.$$eval('.shelf', (els) => els.forEach(() => {}));
 
@@ -142,7 +187,18 @@ await page.click('.shelf[data-set="bob_shorts"] .shelfedit');
 ok('idnote shows immutable id', /id: bob_shorts/.test(await page.textContent('#set-idnote') ?? ''));
 await page.fill('#set-label', 'Bob — Short Films');
 await page.click('#set-save');
-await page.waitForFunction(() => [...document.querySelectorAll('.shelf .lbl')].some((e) => e.textContent === 'Bob — Short Films'), undefined, { timeout: 20000 });
+// The REGISTRY, not `.shelf .lbl`. A shelf is named after its activity since WP-5, so the
+// typed label never reaches that element and this line waited 20 s and then killed the rest
+// of the suite — the same stale-name trap as the create wait above. What the assertion under
+// it is actually about is that the rename persisted and the ID did not move, which is a
+// question for `/api/sets`.
+await page.waitForFunction(async () => {
+  const r = await fetch('/api/sets').then((x) => x.json());
+  return r.sets.some(
+    (s: { id: string; label: string }) =>
+      s.id === 'bob_shorts' && s.label === 'Bob — Short Films',
+  );
+}, undefined, { timeout: 20000 });
 const sameId = await page.$('.shelf[data-set="bob_shorts"]');
 ok('rename keeps id', Boolean(sameId));
 
@@ -205,14 +261,31 @@ ok('F: cards named Picks + Rules',
   kindWords.includes('Picks') && kindWords.includes('Rules')
   && !kindWords.includes('Ordered Queue') && !kindWords.includes('Curated Pool')
   && !kindWords.includes('Filtered Pool'));
-// The Rules picker lists the same sets — now a flat SelectListbox, NOT a native
-// <select> with optgroups (Listbox has no option groups; rules first, then picks).
-// 2026-08-07-plex-channels-pickers-are-listbox-not-native-select.
+// The Rules picker lists the RULES sets and only those — a flat SelectListbox, never a
+// native <select> (2026-08-07-plex-channels-pickers-are-listbox-not-native-select). It used
+// to append every random-lane Picks queue under a `q:` prefix; the Picks page holds both
+// lanes now, so the two lists stopped overlapping
+// (2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to).
 await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('[data-testid="chchannel"]', { state: 'attached', timeout: 20000 });
 const chanOpts = await readOptions(page, '[data-testid="chchannel"]');
-ok('F: channel picker lists rules-then-picks (flat)',
-  chanOpts[0] === 'Shows & Shorts' && chanOpts[1] === 'Movies' && chanOpts.length >= 3);
+// `readOptions` returns each row's whole text, and a row is "<pool><account>" since
+// 2026-08-26 — so these are `startsWith`, not equality.
+ok(`F: rules picker lists rules queues alone (${JSON.stringify(chanOpts)})`,
+  chanOpts.length === dyn.length
+  && chanOpts[0]?.startsWith('Shows & Shorts') === true
+  && chanOpts[1]?.startsWith('Movies') === true);
+// Stated as its own claim rather than left implicit in the count: the defect was a Picks
+// queue APPEARING here, and a length check alone would pass a list that swapped one in.
+ok('F: no Picks queue in the rules picker',
+  chanOpts.every((label) => !picks.some((p) => p && label.startsWith(p))));
+// WHOSE pool each row is. "Shows" and "Shows & Shorts" are the same words until you know one
+// is Younger Kids and the other Older Kids, which the landing card has said since 2026-08-17
+// and this picker did not say at all (owner, 2026-08-26). Every fixture pool names an account,
+// so every row must carry one — including the LEGACY flat ones, whose synthesized binding the
+// first cut of `channelAccountLabel` wrongly refused.
+ok(`F: every rules row names its account (${JSON.stringify(chanOpts)})`,
+  chanOpts.every((label) => /Younger Kids|Older Kids/.test(label)));
 // Noun: open a random-default Picks grid → its add box says "pool", not "queue".
 //
 // This assertion asked for "channel" until 2026-08-17, which the app stopped saying when

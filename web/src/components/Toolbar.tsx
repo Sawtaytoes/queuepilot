@@ -7,8 +7,9 @@ import { entryTitle } from "../lib/searchGroups"
 import type { RegistrySet, SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
+import { usePeople } from "../state/people"
 import {
-  queueIds,
+  curatedIds,
   setStatus,
   useStore,
 } from "../state/store"
@@ -20,6 +21,7 @@ import {
 } from "../state/ui"
 import { EditionBadge } from "./EditionBadge"
 import { Poster } from "./Poster"
+import { QueuePeopleBadge } from "./QueuePeopleBadge"
 import { SearchDropdown } from "./SearchDropdown"
 import { SelectListbox } from "./SelectListbox"
 
@@ -39,6 +41,7 @@ import { SelectListbox } from "./SelectListbox"
 export function Toolbar() {
   const navigate = useNavigate()
   const { data, reg } = useStore()
+  const people = usePeople()
   const { collapsed, filter } = useUi()
   const [openMenu, setOpenMenu] = useState<number | null>(
     null,
@@ -57,7 +60,10 @@ export function Toolbar() {
    * from anywhere else. Outside-press dismissal came with it.
    */
 
-  const ids = queueIds(data)
+  // Every Picks queue, which is every shelf this page draws — so Collapse all collapses
+  // all of them. It was the priority-lane half until 2026-08-26, back when the random-lane
+  // half was listed on the Rules page instead.
+  const ids = curatedIds(data)
   const isAllCollapsed =
     ids.length > 0 && ids.every((id) => collapsed.has(id))
 
@@ -147,7 +153,21 @@ export function Toolbar() {
                   ]
                 : compatible.map((s) => ({
                     key: s.id,
-                    label: s.label,
+                    // The queue's name, then WHO it is for. Every queue is called after its
+                    // activity now, so four rows read "Movies & Shows" and the add lands
+                    // wherever you guessed (owner, 2026-08-26).
+                    label: (
+                      <>
+                        {s.label}
+                        <QueuePeopleBadge
+                          groups={people.groups}
+                          members={
+                            people.byQueue[s.id] ?? []
+                          }
+                          people={people.people}
+                        />
+                      </>
+                    ),
                     onSelect: () => void addToQueue(s),
                   }))
 
@@ -299,7 +319,9 @@ export function Toolbar() {
           navigate("/channels")
         }}
       >
-        Pools ›
+        {/* The page it opens is headed Rules and its picker now lists rules queues alone —
+            "Pools ›" was the 2026-08-16 name, from when a Curated Pool was filed there too. */}
+        Rules ›
       </Button>
     </div>
   )

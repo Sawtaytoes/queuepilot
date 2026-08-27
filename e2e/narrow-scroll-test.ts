@@ -231,7 +231,9 @@ for (const width of WIDTHS) {
     // once: the trigger exists on `/admin`, and the modal it opens lands inside the screen.
     ['/admin', '#playnewqueue', 'setmodal', 'New picks queue (admin)'],
     ['/queues', '#newqueue', 'setmodal', 'New queue'],
-    ['/channels/shows', '#newcurated', 'setmodal', 'New picks queue'],
+    // `#newcurated` — ＋ Picks queue on the RULES page — was here until 2026-08-26. The Rules
+    // page lists rules queues alone now, so a page that cannot show you what you made no
+    // longer offers to make it; the two rows above are the app's Picks create affordances.
     ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a rules queue'],
   ] as const;
 
@@ -240,8 +242,10 @@ for (const width of WIDTHS) {
     await page.waitForTimeout(700);
     // `waitForSelector`, not a bare `$` after a fixed sleep. The channels view renders its
     // action buttons once the registry lands, and on a cold CI runner that took longer than
-    // the 700ms wait above — `#newcurated` was reported missing at 320px while passing at
-    // 390px in the SAME run, which is the signature of a race and not of a real absence.
+    // the 700ms wait above — the Rules page's `#newcurated` was reported missing at 320px
+    // while passing at 390px in the SAME run, which is the signature of a race and not of a
+    // real absence. That button is gone; the wait stays, and `#chconfigure` beside it lands
+    // on exactly the same render.
     const isTriggerThere = await page
       .waitForSelector(trigger, { timeout: 20000 })
       .then(() => true)

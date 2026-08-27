@@ -168,9 +168,28 @@ try {
     'a scan landing between the two would read a half-written file',
   );
 
-  const landed = Boolean(await page.evaluate(
-    `!!document.querySelector('ul.grid[data-lane="priority"] li.tile[data-key=${JSON.stringify(promotedKey)}]')`,
-  ));
+  // WAIT for it, do not read it once.
+  //
+  // The optimistic lane is written to the store during pointerup and painted on React's next
+  // commit; the three checks above are satisfied the moment the network writes are OBSERVED.
+  // Those two are not ordered with respect to each other, so a bare `evaluate()` here is a
+  // race — it read the DOM one commit early on CI run 33037647755 and passed on a re-run of
+  // the same commit, which is the signature of a flake and cost an afternoon of looking for
+  // a regression that was not there.
+  //
+  // The CLAIM is unchanged and is not weakened: the tile must be in the Priority lane, and a
+  // tile that snapped back never arrives, so this still fails — two seconds later.
+  const landed = await page
+    .waitForFunction(
+      (key) =>
+        !!document.querySelector(
+          `ul.grid[data-lane="priority"] li.tile[data-key="${(key as string).replace(/["\\]/g, '\\$&')}"]`,
+        ),
+      promotedKey,
+      { timeout: 2000 },
+    )
+    .then(() => true)
+    .catch(() => false);
   check('the tile is now in the Priority lane on screen', landed, 'it snapped back');
 
   // ── A drag that stays in the POOL writes nothing ────────────────────────────────────────
