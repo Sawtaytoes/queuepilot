@@ -29,7 +29,7 @@
 import { Hono } from 'hono';
 
 import { errMessage } from '../errors.js';
-import { storedGroups } from '../groups.js';
+import { slugify, storedGroups } from '../groups.js';
 import * as sets from '../sets.js';
 import {
   isMemberKind,
@@ -44,12 +44,15 @@ import {
 import { bookOfRecord } from '../store/db/open.js';
 import {
   bumpPeopleVersion,
+  deletePerson,
+  getPerson,
   groupMembership,
   listPeople,
   minPresentByGroup,
   rosterMembersByGroup,
   setGroupMinPresent,
   setGroupPeople,
+  upsertPerson,
 } from '../store/db/people.js';
 import {
   bumpQueuePeopleVersion,
@@ -152,6 +155,139 @@ export function peopleRoutes(): Hono {
   });
 
   /**
+   * ADD a person. Body: `{displayName}`.
+   *
+   * Until this route the roster could only arrive through `store/migrate/people.ts` — the
+   * owner-confirmed mapping file in `/config` — so adding somebody meant editing YAML on the
+   * appliance and restarting the app. That is the same complaint the groups editor was built
+   * to answer: *"All those configs are managed by you, not inside the app."*
+   *
+   * The mapping file KEEPS working and is not touched here. It owns only the rows it names
+   * (`store/migrate/people.ts`: "a person in the database the file has never heard of is
+   * untouched"), which is precisely what makes a hand-added person safe beside it.
+   *
+   * ⚠️ **The id is generated once from the name and is immutable after.** A person id is a
+   * WIRE ID — `queue_people` and `group_people` both store it — so it follows `slugify`'s
+   * contract, not the display name's. Renaming somebody never moves their id, which is also
+   * what keeps their colour: `PersonFace` hashes the ID into a hue exactly so a rename does
+   * not repaint them.
+   */
+  app.post('/people', async (c) => {
+    try {
+      const displayName = String((await readBody(c)).displayName ?? '').trim();
+      if (!displayName) return c.json({ error: 'a person needs a name' }, 400);
+
+      const base = slugify(displayName);
+      if (!base)
+        return c.json({ error: `'${displayName}' has no letters or digits to make an id from` }, 400);
+
+      const roster = listPeople();
+      const taken = new Set(roster.map((person) => person.id));
+      // Two people may legitimately share a name, so the ID de-duplicates rather than the save
+      // failing — the same answer `createGroup` gives, and for the same reason.
+      let id = base;
+      for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+
+      const db = bookOfRecord();
+      db.withTransaction(() => {
+        upsertPerson(
+          {
+            displayName,
+            id,
+            // Appended, never inserted. `listPeople()` answers in `position, id` order and
+            // THAT ORDER IS THE CONTRACT the trays and the checklist paint in, so a new
+            // person goes on the end rather than renumbering everybody who was already there.
+            position: roster.reduce((max, person) => Math.max(max, person.position), -1) + 1,
+            source: 'app',
+          },
+          db,
+        );
+        bumpPeopleVersion(db);
+      });
+
+      return c.json({ ok: true, person: projected(id) }, 201);
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 400);
+    }
+  });
+
+  /**
+   * RENAME a person. Body: `{displayName}`.
+   *
+   * A rename and nothing else. The stored `Person` also carries provider accounts, a birth
+   * year, a maximum game weight and a beginner flag; none of those is projected out of
+   * `/people` (see the header), so a route that accepted them would be writing household data
+   * this surface has deliberately never shown. Those belong to the mapping file and to the
+   * board-game picker, which is where they are read.
+   */
+  app.patch('/people/:id', async (c) => {
+    const id = c.req.param('id');
+    try {
+      if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+
+      const body = await readBody(c);
+      if (!('displayName' in body)) return c.json({ error: 'displayName required' }, 400);
+
+      const displayName = String(body.displayName ?? '').trim();
+      // Not a repair. `display_name` is NOT NULL with a `''` default, and a blank one paints a
+      // nameless card with a "?" for a face — so it is refused here rather than allowed to
+      // become a row nobody can identify on any screen.
+      if (!displayName) return c.json({ error: 'a person needs a name' }, 400);
+
+      const db = bookOfRecord();
+      db.withTransaction(() => {
+        upsertPerson({ displayName, id }, db);
+        bumpPeopleVersion(db);
+      });
+
+      return c.json({ ok: true, person: projected(id) });
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 400);
+    }
+  });
+
+  /**
+   * REMOVE a person, and every tray and roster that names them.
+   *
+   * `deletePerson()` already cascades all three tables — `person_accounts` and `group_people`
+   * by foreign key, `queue_people` through its own `forgetMember` — so this is one call and
+   * not a repair loop. The answer NAMES what went with them, because that is the part the
+   * caller cannot see: removing somebody from the roster silently changes which queues come
+   * up, and a bare `{ok: true}` would not say so.
+   *
+   * The un-filing is counted BEFORE the delete. Afterwards the rows are gone and the same
+   * scan would answer "nothing", which is true and useless.
+   */
+  app.delete('/people/:id', (c) => {
+    const id = c.req.param('id');
+    try {
+      if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+
+      const queues = [...membersByQueue()]
+        .filter(([, members]) =>
+          members.some((member) => member.kind === 'person' && member.id === id),
+        )
+        .map(([setId]) => setId);
+      const groups = [...rosterMembersByGroup()]
+        .filter(([, roster]) => roster.some((member) => member.personId === id))
+        .map(([groupId]) => groupId);
+
+      const db = bookOfRecord();
+      db.withTransaction(() => {
+        deletePerson(id, db);
+        bumpPeopleVersion(db);
+        // `queue_people` rows went too, so the trays payload changed and every shelf and
+        // landing card reading it has to be told.
+        bumpQueuePeopleVersion(db);
+      });
+
+      return c.json({ ok: true, unfiled: { groups, queues } });
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 400);
+    }
+  });
+
+  /**
    * One group's membership RULE. Body: `{minPresent, roster: [{personId, role}]}`.
    *
    * `minPresent: null` clears it back to "all of them"; omitting the key leaves it alone. The
@@ -203,6 +339,15 @@ export function peopleRoutes(): Hono {
   });
 
   return app;
+}
+
+/** One person in the shape `/people` projects — three fields, so a write answers with exactly
+ *  what a read would have said. Widening this widens the read too; see the file header. */
+function projected(id: string): { displayName: string; id: string; position: number } | null {
+  const person = getPerson(id);
+  return person
+    ? { displayName: person.displayName, id: person.id, position: person.position }
+    : null;
 }
 
 const roleOf = (raw: unknown): MemberRole => {

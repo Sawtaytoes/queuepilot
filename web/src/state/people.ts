@@ -124,3 +124,78 @@ export async function saveQueuePeople(
  *  apart. */
 export const queuePeople = (setId: string): QueueMember[] =>
   snapshot.byQueue[setId] ?? []
+
+// ── The roster editor's writes ──────────────────────────────────────────────────────────── //
+//
+// Until these landed the roster arrived only through `/config/people-mapping.yaml`, so adding
+// or renaming somebody meant editing YAML on the appliance and restarting the app. That is the
+// same complaint the groups editor answered: *"All those configs are managed by you, not
+// inside the app."*
+//
+// ⚠️ **NOT optimistic, unlike `saveQueuePeople` above.** A tray drag is a gesture whose whole
+// point is that the card moves NOW, and the round trip is the only thing between two states
+// the caller can already see. These three are form submits behind a button: the answer is a
+// server-generated id, a refused blank name or a list of what a delete un-filed, and guessing
+// any of that would mean painting a person who may not exist. So each one re-reads and the
+// caller awaits it.
+
+/** Add somebody. The id is generated from the name, by the server, and is immutable after. */
+export async function createPerson(
+  displayName: string,
+): Promise<void> {
+  await api("POST", "/api/people", { displayName })
+  await loadPeople()
+}
+
+/** Rename somebody. Their id — and so their colour — does not move. */
+export async function renamePerson(
+  id: string,
+  displayName: string,
+): Promise<void> {
+  await api(
+    "PATCH",
+    `/api/people/${encodeURIComponent(id)}`,
+    { displayName },
+  )
+  await loadPeople()
+}
+
+/**
+ * Remove somebody, and every tray and roster that names them.
+ *
+ * Answers WHAT went with them, because the caller has to say so before doing it — a person on
+ * three Must-be-here trays is three queues that stop coming up, and that is not visible from
+ * the row being deleted.
+ */
+export async function removePerson(id: string): Promise<{
+  groups: string[]
+  queues: string[]
+}> {
+  const answer = await api<{
+    unfiled: { groups: string[]; queues: string[] }
+  }>("DELETE", `/api/people/${encodeURIComponent(id)}`)
+  await loadPeople()
+  return answer.unfiled
+}
+
+/**
+ * Rename a group.
+ *
+ * `PATCH /api/groups/:id` is a partial write and the groups editor's own save path, so this
+ * sends the LABEL alone rather than a whole draft — a group's sets and accounts are that
+ * editor's business, and round-tripping them through here would be a chance to drop one.
+ *
+ * The caller must also `refreshGroups()`: a group label is painted by the chips at the top of
+ * the landing, which read `state/store.ts` and not this slice.
+ */
+export async function renameGroup(
+  id: string,
+  label: string,
+): Promise<void> {
+  await api(
+    "PATCH",
+    `/api/groups/${encodeURIComponent(id)}`,
+    { label },
+  )
+  await loadPeople()
+}

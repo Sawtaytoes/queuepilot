@@ -74,6 +74,10 @@ const GroupsModal = lazy(async () => ({
   default: (await import("./components/GroupsModal"))
     .GroupsModal,
 }))
+const PeopleModal = lazy(async () => ({
+  default: (await import("./components/PeopleModal"))
+    .PeopleModal,
+}))
 const StartModal = lazy(async () => ({
   default: (await import("./components/StartModal"))
     .StartModal,
@@ -338,6 +342,7 @@ export function App() {
         {overlays.setModal ? <SetModal /> : null}
         {overlays.dynModal ? <DynModal /> : null}
         {overlays.groupsModal ? <GroupsModal /> : null}
+        {overlays.peopleModal ? <PeopleModal /> : null}
         {overlays.startModal ? <StartModal /> : null}
         {overlays.membersModal ? <MembersModal /> : null}
         {overlays.tileMenu ? <TileMenu /> : null}

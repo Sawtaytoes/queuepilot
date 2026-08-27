@@ -506,6 +506,19 @@ jobs:
       - name: Queues keyed by people (offline)
         run: $TSX e2e/queue-people-test.ts
 
+      # THE ROSTER EDITOR GATE. Before `PeopleModal` the roster arrived only through the
+      # owner-confirmed mapping file in `/config`, so adding somebody meant editing YAML on the
+      # appliance and restarting; this pins the four rules the editor rests on. A person id is a
+      # WIRE ID — `queue_people` and `group_people` both store it, and `PersonFace` hashes it
+      # into a hue — so a rename must not move it, or a queue's tray silently empties AND the
+      # person changes colour. A blank name is refused rather than stored, because
+      # `display_name` is NOT NULL with a `''` default and a blank one paints a face nobody can
+      # identify. A delete cascades all three tables and NAMES what it un-filed, which the
+      # orphan report re-checks. And the mapping file comes out byte-identical, which is what
+      # stops the next restart re-importing over an edit made in the app.
+      - name: The roster editor (offline)
+        run: $TSX e2e/roster-editor-test.ts
+
       # THE WP-4e GATE. The board-game provider stopped speaking HTTP; this is what says the
       # same queue still produces the same lineup. One invented shelf is expressed TWICE — as
       # hand-written objects behind a real http server running the sibling app's transcribed
