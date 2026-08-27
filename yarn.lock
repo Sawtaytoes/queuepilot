@@ -110,37 +110,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/logic@npm:2.2.0":
-  version: 2.2.0
-  resolution: "@charcuterie/logic@npm:2.2.0"
-  peerDependencies:
-    "@preact/signals-core": ">=1.8"
-    "@tanstack/react-query": ">=5"
-    jotai: ">=2"
-    openapi-fetch: ">=0.17"
-    openapi-react-query: ">=0.5"
-    preact: ">=10.11"
-    react: ">=18"
-  peerDependenciesMeta:
-    "@preact/signals-core":
-      optional: true
-    "@tanstack/react-query":
-      optional: true
-    jotai:
-      optional: true
-    openapi-fetch:
-      optional: true
-    openapi-react-query:
-      optional: true
-    preact:
-      optional: true
-    react:
-      optional: true
-  checksum: 10c0/168d0187968a99ce6b68fee24db53d8dd6d0e6bc00bde379d54ae80a719ddda1b345d543215d1f9e674f8d79eb8ddbe78af62f05ceaad88f94931c9b50f61b03
-  languageName: node
-  linkType: hard
-
-"@charcuterie/logic@npm:^2.3.0":
+"@charcuterie/logic@npm:2.3.0, @charcuterie/logic@npm:^2.3.0":
   version: 2.3.0
   resolution: "@charcuterie/logic@npm:2.3.0"
   peerDependencies:
@@ -201,11 +171,11 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/ui@npm:^3.16.0":
-  version: 3.16.0
-  resolution: "@charcuterie/ui@npm:3.16.0"
+"@charcuterie/ui@npm:^3.24.0":
+  version: 3.24.0
+  resolution: "@charcuterie/ui@npm:3.24.0"
   dependencies:
-    "@charcuterie/logic": "npm:2.2.0"
+    "@charcuterie/logic": "npm:2.3.0"
     "@charcuterie/tokens": "npm:1.6.0"
     "@floating-ui/react": "npm:^0.27.20"
     "@tanstack/react-virtual": "npm:^3.13.12"
@@ -235,7 +205,7 @@ __metadata:
       optional: true
     react-router:
       optional: true
-  checksum: 10c0/6bccb328ddfdd636bd297b215852ade9e066fed27aa92363e557c9b3718c53520e2dd790b33cafc467fab4360a12a0442069ab3f2bb25118032803c0f4ef2cc9
+  checksum: 10c0/517b7e85eef9fa20109eb965fdbfee07fc10774c55a63435ac45760d10cb0b8963b18eb2fdfbeb7d057242287ec96eee7e098eb04fc9cac267e81ac5d5e581d5
   languageName: node
   linkType: hard
 
@@ -2835,7 +2805,7 @@ __metadata:
     "@charcuterie/server": "npm:^0.4.0"
     "@charcuterie/tokens": "npm:^1.6.0"
     "@charcuterie/tsconfig": "npm:^1.0.0"
-    "@charcuterie/ui": "npm:^3.16.0"
+    "@charcuterie/ui": "npm:^3.24.0"
     "@charcuterie/vite-config": "npm:^1.0.2"
     "@charcuterie/vitest-config": "npm:^1.0.1"
     "@tailwindcss/vite": "npm:^4.3.0"

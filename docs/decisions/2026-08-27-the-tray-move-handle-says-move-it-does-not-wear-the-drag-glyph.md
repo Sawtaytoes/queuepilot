@@ -5,7 +5,8 @@
 - **Type:** UI / affordance
 - **Supersedes:** the `moveIcon="≡"` rationale in `web/src/components/PeopleTrays.tsx`, shipped
   2026-08-25 with [the queue editor is two trays](2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster.md)
-- **Superseded by:** —
+- **Superseded by:** [The tray move handle wears the gesture that can succeed](2026-08-27-the-tray-move-handle-wears-the-gesture-that-can-succeed.md) —
+  its **part 1** only (the blanket "never `≡`"). Part 2, the 920px modal, still stands.
 
 ## Decision
 

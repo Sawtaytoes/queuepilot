@@ -163,23 +163,27 @@ export function PeopleTrays({
         laneFor("optional"),
         laneFor("roster"),
       ]}
-      // NO `moveIcon`, so the handle keeps the library's default — the WORD "Move".
+      // `≡` — this app's grip glyph, the same one `QueuesView` and `PlayView` use — and the
+      // library now shows it ONLY while the three trays are side by side. Under the board's
+      // `cq-lg` it swaps itself for the word "Move" on its own.
       //
-      // It passed `moveIcon="≡"` until 2026-08-27, on the argument that this app owns a glyph
-      // set and already uses `≡` for its handles. That argument is exactly backwards, and the
-      // owner reported the result: *"I can't seem to drag 'n drop the names from Everyone Else
-      // anywhere else. There's no right-click or anything. How do I move these?"*
+      // That split is the whole history of this line, and it took two reports to find. The
+      // handle wore `≡` at every width and the modal was too narrow for three lanes, so the
+      // glyph promised a drag with nowhere to land: *"I can't seem to drag 'n drop the names
+      // from Everyone Else anywhere else. There's no right-click or anything. How do I move
+      // these?"* The first fix dropped the glyph at every width, which broke the wide board
+      // instead: *"I think the drag handles were fine, but now you have it in a 3-column mode,
+      // so dragging would work, but it has this 'move' button instead."*
       //
-      // `≡` in this app means DRAG ME — it is the shelf-reorder grip in `QueuesView`, the card
-      // grip in `PlayView`, and `useHomeDrags` documents it in those words. This control is a
-      // MENU BUTTON first: pressing it lists the other trays, and that is the only path that
-      // works from the keyboard, from a screen reader, and in the narrow board where the other
-      // trays are not on screen to drop onto. Wearing the drag glyph taught the one gesture
-      // that cannot work there
-      // (decision `2026-08-27-the-tray-move-handle-says-move-it-does-not-wear-the-drag-glyph`).
+      // So the rule is not "glyph" or "word" — it is that the handle wears the gesture that
+      // can succeed, and only the BOARD knows which that is. It moved into `@charcuterie/ui`
+      // for that reason (`2026-08-27-the-move-handle-wears-the-gesture-that-can-succeed`), and
+      // this app is back to passing the glyph it owns
+      // (decision `2026-08-27-the-tray-move-handle-wears-the-gesture-that-can-succeed`).
       //
-      // The word costs ~55px of row, which the library's own docs price. In a tray whose rows
-      // are a face and a name, that is affordable; a control nobody can find is not.
+      // ⚠️ This needs `#dynmodal` to stay wide enough for three lanes — see `app.css`. Narrow
+      // that modal again and the trays go back to one lane, where the word is what shows.
+      moveIcon="≡"
       narrowLaneKey="required"
       onMove={onMove}
     />
