@@ -6,7 +6,7 @@
 - **Supersedes:** —
 - **Extends:** [2026-08-15-the-reading-list-is-rebuilt-not-appended](2026-08-15-the-reading-list-is-rebuilt-not-appended.md),
   [2026-08-17-playback-length-is-the-knob-and-top-up-is-derived](2026-08-17-playback-length-is-the-knob-and-top-up-is-derived.md)
-- **Superseded by:** —
+- **Superseded by:** its HA time-pattern consequence only, by [QueuePilot owns its top-up timer and publishes the result over MQTT](2026-08-28-queuepilot-owns-its-top-up-timer.md). The maintained-window and sweep semantics below stand.
 
 ## Decision
 

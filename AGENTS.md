@@ -454,8 +454,11 @@ bite, and four of them bite silently.
   of that contract is a string or a key name that nothing else in this repo reads — rename one
   and typecheck, the unit tests, the build and the startup log all stay happy while the nightly
   silently stops.
-- **HA owns the schedule and there is no TrueNAS cron. Do not add one, not even as a side
-  effect.**
+- **HA owns the board-game sync schedule and there is no TrueNAS cron. Do not add one, not even
+  as a side effect.** QueuePilot's five-minute session top-up and fifteen-minute pull-list
+  maintenance are the application-lifecycle exception: the app owns those timers and publishes
+  each result on `queuepilot/resp/topup`
+  ([decision](docs/decisions/2026-08-28-queuepilot-owns-its-top-up-timer.md)).
 - **The writers are `store/db/boardgameImport.ts`, `boardgameSync.ts` and `boardgameEnrich.ts`,
   and they run as four MQTT-triggered jobs.** `boardgames/jobs/` holds them —
   `sync-bgg`, `enrich`, `link-rulebooks`, `link-videos`, in that order, and deliberately NOT
