@@ -129,7 +129,7 @@ export function Toolbar() {
                 refreshData()
               } catch (err) {
                 setStatus(
-                  "Add failed: " + (err as Error).message,
+                  `Add failed: ${(err as Error).message}`,
                   "err",
                 )
               }
