@@ -41,6 +41,7 @@ import * as cache from '../cache.js';
 import { errMessage } from '../errors.js';
 import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
+import { normalizeAddAs, normalizePlacement, type Placement } from '../kind.js';
 
 /**
  * One interleave bucket: a series and the unread chapters this scan may draw from it.
@@ -55,9 +56,19 @@ interface KavitaSeriesBucket {
   seriesId: number | string | undefined;
   libraryId: number | string | null;
   format: number | null;
+  /** The Picks lane. Rule-based library buckets do not have one. */
+  lane?: Placement;
   /** How many of this series' items one round of the interleave takes — its own batch. */
   batch?: number;
   items: KavitaPlayItem[];
+}
+
+interface KavitaSource {
+  series: KavitaSeriesDto;
+  chapterBatch: number;
+  volumeBatch: number;
+  start: Start | null;
+  lane?: Placement;
 }
 
 /** A pool row before it is mapped into the Plex-shaped `ProviderPoolBucket` the grid renders. */
@@ -736,6 +747,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       const skipped = new Set(((cfgAny.skipped as unknown[] | undefined) || []).map(String));
       const named = (libraries.length ? libraries : ((cfgAny.libraries as string[] | undefined) || [])).map(String);
       const curated = entries.filter((e) => e && e.id);
+      const addAs = normalizeAddAs(cfgAny.add_as, { kind: cfgAny.kind, source: cfgAny.source });
       // ENTRIES BEAT LIBRARIES (see this method's header), so the "every library" widening
       // is only asked for on the rule-based branch — a curated queue must never enumerate a
       // shelf, and calling for the library list here would be a request per launch that
@@ -769,14 +781,9 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // to it. A curated entry's own `episodes:` override rides here; a library series has
       // none and takes the queue default. `start` is the same floor Plex already honours:
       // earlier unread chapters are skipped, never marked read.
-      let sources: {
-        series: KavitaSeriesDto;
-        chapterBatch: number;
-        volumeBatch: number;
-        start: Start | null;
-      }[];
+      let sources: KavitaSource[];
       if (curated.length) {
-        const rows = await mapLimit(curated, PROBE_CONCURRENCY, async (e) => {
+        const rows = await mapLimit(curated, PROBE_CONCURRENCY, async (e): Promise<KavitaSource | null> => {
           try {
             const s = await c.series(e.id);
             // A series deleted in Kavita drops out rather than throwing — one stale entry
@@ -786,14 +793,13 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
               chapterBatch: Math.max(1, Number(e.batch ?? perSeries) || perSeries),
               volumeBatch: Math.max(1, Number(e.volumes ?? perVolume) || perVolume),
               start: e.start ?? null,
+              lane: normalizePlacement(e.placement, addAs),
             } : null;
           } catch {
             return null;
           }
         });
-        sources = rows.filter((r): r is {
-          series: KavitaSeriesDto; chapterBatch: number; volumeBatch: number; start: Start | null;
-        } => r != null);
+        sources = rows.filter((r): r is KavitaSource => r != null);
       } else {
         const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
         sources = seriesLists.flat()
@@ -807,7 +813,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       // bucket at all, which is what keeps a finished series out of the rotation without a
       // separate "done" store — the read state in Kavita IS the done state.
       const probed = await mapLimit(sources, PROBE_CONCURRENCY, async ({
-        series: s, chapterBatch, volumeBatch: volWant, start,
+        series: s, chapterBatch, volumeBatch: volWant, start, lane,
       }): Promise<KavitaSeriesBucket | null> => {
         const bucket = {
           key: `series:${s.id}`,
@@ -834,17 +840,28 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
         const want = head.unit === 'volume' ? volWant : chapterBatch;
         return {
           ...bucket,
+          lane,
           batch: want,
           items: unread.slice(0, want).map((e) => chapterItem(e, s.id)),
         };
       });
-      const buckets = probed.filter((b): b is KavitaSeriesBucket => b != null);
+      let buckets = probed.filter((b): b is KavitaSeriesBucket => b != null);
 
-      // A channel plays in RANDOM order, which is what its editor copy promises and what the
-      // Plex side gets from `buildRotation`'s injected rng. Without this a capped curated
-      // channel serves the same first `cap` entries in stored order on every single launch —
-      // the other eighty-one would never come up.
-      if (isRandomOrder) {
+      // A curated queue has two lanes. Priority stays in stored order, and the Random pool
+      // shuffles after it. This is the same contract as the Plex resolver: an explicit
+      // placement overrides the set default, and a Random default does not pull a promoted
+      // entry back into the pool.
+      if (curated.length) {
+        const priority = buckets.filter((b) => b.lane === 'priority');
+        const random = buckets.filter((b) => b.lane === 'random');
+        for (let i = random.length - 1; i > 0; i -= 1) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [random[i], random[j]] = [random[j] as KavitaSeriesBucket, random[i] as KavitaSeriesBucket];
+        }
+        buckets = priority.concat(random);
+      } else if (isRandomOrder) {
+        // Rule-based library buckets keep the existing random-channel behaviour. They have
+        // no entry placement, so the set-level flag remains the only ordering signal.
         for (let i = buckets.length - 1; i > 0; i -= 1) {
           const j = Math.floor(Math.random() * (i + 1));
           [buckets[i], buckets[j]] = [buckets[j] as KavitaSeriesBucket, buckets[i] as KavitaSeriesBucket];
@@ -858,21 +875,32 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
       //
       // Per bucket rather than one global `perSeries`, because an entry may override it — a
       // shared slice width would silently apply one entry's "read 5" to every other series.
+      const lanes = curated.length
+        ? [
+            buckets.filter((b) => b.lane === 'priority'),
+            buckets.filter((b) => b.lane === 'random'),
+          ]
+        : [buckets];
       const play: KavitaPlayItem[] = [];
-      for (let round = 0; play.length < cap; round += 1) {
-        let placedThisRound = false;
-        for (const b of buckets) {
-          const width = Math.max(1, b.batch ?? perSeries);
-          const slice = b.items.slice(round * width, (round + 1) * width);
-          for (const it of slice) {
+      for (const lane of lanes) {
+        for (let round = 0; play.length < cap; round += 1) {
+          let placedThisRound = false;
+          for (const b of lane) {
+            const width = Math.max(1, b.batch ?? perSeries);
+            const slice = b.items.slice(round * width, (round + 1) * width);
+            for (const it of slice) {
+              if (play.length >= cap) break;
+              play.push({ ...it, bucket: b.key, seriesFormat: b.format, libraryId: b.libraryId });
+              placedThisRound = true;
+            }
             if (play.length >= cap) break;
-            play.push({ ...it, bucket: b.key, seriesFormat: b.format, libraryId: b.libraryId });
-            placedThisRound = true;
           }
-          if (play.length >= cap) break;
+          // Every bucket in this lane is exhausted — stop, or this loops forever on a short
+          // library.
+          if (!placedThisRound) break;
         }
-        // Every bucket is exhausted — stop, or this loops forever on a short library.
-        if (!placedThisRound) break;
+        // A priority lane fills the cap before the Random pool gets a turn.
+        if (play.length >= cap) break;
       }
       return { play, buckets };
     },

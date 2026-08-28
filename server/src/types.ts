@@ -1195,6 +1195,10 @@ export type HandoffResult = PushResult | PullResult;
 export interface CuratedEntryRef {
   /** The provider's own item id (a Kavita seriesId), off the entry's `ratingKey`. */
   id: string;
+  /**
+   * The entry's explicit Picks lane. Absent / null follows the set's `add_as` default.
+   */
+  placement?: 'priority' | 'random' | null;
   batch?: number | null;
   /**
    * Epoch seconds this entry was queued — `EntryExtras.queued_at`. Providers that count
@@ -1223,7 +1227,7 @@ export interface BucketsContext {
   lastMovieRk?: string | null;
   libraries?: string[];
   /**
-   * The curated ENTRIES of a `source: queue` set, in stored order.
+   * The curated ENTRIES of a `source: queue` set, in stored order, with their explicit lanes.
    *
    * When present these ARE the lineup. `libraries` is the pool a set draws from when it has
    * no entries of its own — which is the RULE-based case, not the curated one. Conflating
