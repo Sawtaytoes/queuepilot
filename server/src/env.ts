@@ -92,15 +92,15 @@ export const ROTATION_LENGTH_MAX = int('ROTATION_LENGTH_MAX', 200);
 
 // --- top-up (a `refill: true` channel) ---------------------------------------- //
 // How few items may remain AFTER the playing one before a top-up tick actually extends the
-// lineup. A tick that finds more than this left does nothing, so HA can publish on a dumb
-// interval and the app stays the one deciding — the tick is a WAKE-UP, not a command to grow.
+// lineup. A tick that finds more than this left does nothing, so the scheduler stays separate
+// from the decision — the tick is a WAKE-UP, not a command to grow.
 //
 // 3 and not 1: the extend is a Plex round trip plus a lineup build, so waking with one item
 // left races the viewer finishing it. It is also why top-up's "Play Next" insert position is
 // harmless in practice — at 3 remaining there is almost no tail left to jump.
 export const TOPUP_AT = int('TOPUP_AT', 3);
-// How long after a top-up before another may run, so a stuck HA automation (or two publishing
-// automations) cannot walk the lineup up to ROTATION_LENGTH_MAX one tick at a time. Belt for
+// How long after a top-up before another may run, so a duplicated command or timer cannot
+// walk the lineup up to ROTATION_LENGTH_MAX one tick at a time. Belt for
 // the TOPUP_AT braces: that guard is a READ of live state and this one needs no read at all.
 export const TOPUP_COOLDOWN_SECONDS = int('TOPUP_COOLDOWN_SECONDS', 60);
 
@@ -232,10 +232,10 @@ export const MQTT_PREFIX = str('MQTT_PREFIX', 'queuepilot');
 export const T_CMD_START = str('T_CMD_START', 'queuepilot/cmd/session/start');
 export const T_CMD_ADVANCE = str('T_CMD_ADVANCE', 'queuepilot/cmd/session/advance');
 export const T_CMD_SOUNDTRACK = str('T_CMD_SOUNDTRACK', 'queuepilot/cmd/soundtrack/resolve');
-// Top-up tick for a `refill: true` channel. Published by an HA automation on a dumb interval
-// while something is playing — HA owns the schedule (workspace rule), and this app owns every
-// judgement about whether the lineup is actually low. The tick carries NO arguments: a payload
-// saying "add 12" would move that judgement to the automation, where it cannot see the queue.
+// Manual top-up tick for a `refill: true` channel. QueuePilot owns the normal application
+// cadence; this command remains for an operator or another service to request the same guarded
+// pass. The tick carries NO arguments: a payload saying "add 12" would move that judgement to
+// the caller, where it cannot see the queue.
 export const T_CMD_TOPUP = str('T_CMD_TOPUP', 'queuepilot/cmd/session/topup');
 // What the tick did, so the automation (and a human reading the broker) can see a no-op as a
 // no-op rather than as silence. Not retained: it describes one tick, not a current state.

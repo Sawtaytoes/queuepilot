@@ -4,7 +4,7 @@
 - **Date:** 2026-08-17
 - **Type:** feature / architecture
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** its schedule-ownership clause only, by [QueuePilot owns its top-up timer and publishes the result over MQTT](2026-08-28-queuepilot-owns-its-top-up-timer.md). The refill, live-playQueue and append semantics below stand.
 - **Extends:** [a channel sets its own lineup length](2026-08-17-a-channel-sets-its-own-lineup-length.md)
 - **Narrows:** [Kavita progress is read on demand](2026-08-16-kavita-progress-is-read-on-demand-not-pushed.md)
 

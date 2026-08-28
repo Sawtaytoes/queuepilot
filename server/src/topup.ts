@@ -5,10 +5,10 @@
 //   "I thought we programmed it to keep going forever. So it'd load up X number in the queue,
 //    and then add more as you started getting close to the end of the queue."
 //
-// WHO DECIDES WHAT. An HA automation publishes `queuepilot/cmd/topup` on a dumb interval
-// while something is playing — that keeps the schedule HA's, per the workspace rule, and
-// means no cron and no in-app poll loop. The tick is a WAKE-UP, not an instruction: every
-// judgement about whether the lineup is actually low, and by how much, is made here.
+// WHO DECIDES WHAT. QueuePilot wakes this path on its own application-lifecycle timer. The
+// tick is still a WAKE-UP, not an instruction: every judgement about whether the lineup is
+// actually low, and by how much, is made here. The MQTT command remains as a manual seam and
+// every scheduled result is published on `queuepilot/resp/topup` for observers.
 //
 // WHAT IT MEASURES. The LIVE playQueue, never `SESSION.queue`. The session remembers what it
 // SENT; the viewer has been skipping around in it since, and a top-up that trusts the sent
@@ -43,8 +43,8 @@ export interface TopupResult {
   error?: string;
 }
 
-// Last successful top-up PER SET, so a stuck (or duplicated) HA automation cannot walk the
-// lineup up one tick at a time. Module state and not SESSION state: it is about THIS
+// Last successful top-up PER SET, so a duplicated command or timer cannot walk the lineup up
+// one tick at a time. Module state and not SESSION state: it is about THIS
 // process's recent behaviour, not about what is playing, and a new scan should not license an
 // instant top-up.
 //
