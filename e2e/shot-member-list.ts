@@ -143,6 +143,12 @@ try {
       await chooseEpisodes.click();
       await page.waitForSelector('#memberlist', { timeout: 30000 });
       await page.waitForTimeout(500);
+      const special = page.locator('#memberlist input[value="9701"]');
+      if (await special.isChecked()) throw new Error('regular special did not start unticked');
+      if (await page.locator('#memberlist').locator('text=Closing Theme').count()) {
+        throw new Error('OP/ED extra appeared in the special chooser');
+      }
+      await special.scrollIntoViewIfNeeded();
       await page.screenshot({ path: `${OUT}/member-list-${STAGE}-5-episodes.png` });
       console.log(`${STAGE} episodes:`, (await page.locator('#memberlist').innerText()).split('\n').join(' | '));
     } else {

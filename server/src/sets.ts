@@ -75,6 +75,7 @@ interface RawSet extends RawBinding {
   item_sections?: unknown[];
   blocklist?: unknown[];
   skipped?: unknown[];
+  included_specials?: unknown[];
   mode?: string;
   behavior?: string;
   profiles?: unknown[];
@@ -460,6 +461,9 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     // The curated queue's own exclude list. Read from the top level on every set, like
     // `blocklist`: it is not a per-profile value, so it never joins a `profiles[]` binding.
     skipped: Array.isArray(ent.skipped) ? ent.skipped.map(String) : [],
+    // Regular Season-0 leaves this queue opts into. Absence means every special stays out.
+    included_specials: Array.isArray(ent.included_specials)
+      ? ent.included_specials.map(String) : [],
     // 'whole' | 'split'. Reported as the EFFECTIVE value, never as the absence the file
     // stores, so the editor's picker has something to select without duplicating the default.
     collection_members: String(ent.collection_members ?? '').trim().toLowerCase() === 'split'
@@ -937,6 +941,7 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // The items this queue never plays. Queue-only (rejected below on rotation, where
       // `blocklist` is the same feature under the name the pool editor already uses).
       'skipped',
+      'included_specials',
       // The queue's default batch — the COUNT to batch_stops_at's WHERE. Valid on both
       // sources: a rule-based reading channel wants "3 chapters per series" just as much as
       // a curated one, and unlike the consumption flags it describes the LINEUP, not how
@@ -1101,6 +1106,17 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         const list = [...new Set((Array.isArray(v) ? v : []).map(String).map((x) => x.trim()).filter(Boolean))];
         if (!list.length) { node.delete('skipped'); continue; }
         node.set('skipped', doc.createNode(list));
+        continue;
+      }
+      if (k === 'included_specials') {
+        if (isRotation) {
+          throw new Error('included_specials is only valid on curated queues');
+        }
+        const list = [...new Set(
+          (Array.isArray(v) ? v : []).map(String).map((x) => x.trim()).filter(Boolean),
+        )];
+        if (!list.length) { node.delete('included_specials'); continue; }
+        node.set('included_specials', doc.createNode(list));
         continue;
       }
       if (k === 'members') {

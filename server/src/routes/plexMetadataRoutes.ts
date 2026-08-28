@@ -257,13 +257,20 @@ export function plexMetadataRoutes(): Hono {
           const block = providerBlocks.resolveSingle({ ...s });
           const p = providerFor(block.provider);
           if (typeof p.listUnits === 'function') {
-            const out = await p.listUnits(c.req.param('ratingKey'), { uuid });
+            const out = await p.listUnits(c.req.param('ratingKey'), {
+              uuid,
+              includeSpecialChoices: c.req.query('specials') === 'choices',
+            });
             if (!out) return c.json({ error: 'no episodes' }, 404);
             return c.json(out);
           }
         }
       }
-      const out = await plex.showEpisodes(c.req.param('ratingKey'), scope);
+      const out = await plex.showEpisodes(
+        c.req.param('ratingKey'),
+        scope,
+        c.req.query('specials') === 'choices',
+      );
       if (!out) return c.json({ error: 'no episodes' }, 404);
       return c.json(out);
     } catch (e) {

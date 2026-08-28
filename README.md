@@ -82,12 +82,15 @@ tier, detected from the PMS debug log):
   [correction](docs/decisions/2026-08-23-a-skipped-item-counts-as-dealt-with-so-the-entry-can-complete.md)).
 - **What plays inside an entry is a LIST you tick.** An entry that holds items — a collection,
   a show — opens a member list: the collection's members, or the show's episodes under season
-  headings. Ticked plays, unticked is skipped, and Save writes the whole answer at once. It is
+  headings. Normal episodes start ticked; regular specials start unticked and can be included
+  one at a time. A selected special uses Plex's original availability date when present and
+  otherwise follows the normal run. Ticked plays, unticked is skipped, and Save writes the whole answer at once. It is
   how three duplicate cuts of one film in one collection are dealt with in a single pass, and
   the rows name the Plex **edition** and the runtime, because that is all that tells two copies
   of the same title apart. Reached from the tile menu, from the **What plays** field on the
   entry sheet, and signposted by an `N skipped` tag on the tile
-  ([decision](docs/decisions/2026-08-26-an-entry-lists-what-is-inside-it-and-you-tick-what-plays.md)).
+  ([member-list decision](docs/decisions/2026-08-26-an-entry-lists-what-is-inside-it-and-you-tick-what-plays.md),
+  [specials decision](docs/decisions/2026-08-28-specials-are-skipped-by-default-and-selected-one-at-a-time.md)).
 
 ## Layout
 
