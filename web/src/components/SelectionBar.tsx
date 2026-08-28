@@ -42,9 +42,8 @@ import { SelectListbox } from "./SelectListbox"
  * to paint every button in this bar, and it did two things wrong at once
  * (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`):
  *
- *  - **Apply was not emphasised.** It wore `primary`, whose only rules are
- *    `#entrymodal .modalbtns button.primary` and its `#groupsmodal` twin — neither of
- *    them this bar. The class did nothing, `#selbar button` caught it, and the one
+ *  - **Apply was not emphasised.** It wore `primary`, but its old modal rule did not
+ *    include this bar. The class did nothing, `#selbar button` caught it, and the one
  *    control that commits the edit painted exactly like Reset and Move beside it.
  *  - **It repainted the two `Picker` triggers**, which are `<button>`s. `app.css` is
  *    unlayered and Tailwind's utilities are in `@layer utilities`, so an id-scoped rule

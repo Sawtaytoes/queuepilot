@@ -1,10 +1,9 @@
 // Before/after for the roster editor.
 //
-// Two frames, and each one is a claim the PR makes:
+// Three frames, and each one is a claim the PR makes:
 //
-//   1. `bar`     the group bar. On main the only editor there is "⚙ Edit groups"; on the branch
-//                "⚙ Edit people" sits beside it, which is the whole discoverability story.
-//   2. `modal`   the editor itself — the roster, the groups, and the add field.
+//   1. `bar`     the people filter row, with "⚙ Edit people" as its editor entry point.
+//   2. `modal`   the people editor itself — the roster and the add field.
 //   3. `confirm` the delete confirmation, open. It is the frame worth having because it is the
 //                one that says what a removal takes with it, which is invisible from the row.
 //
@@ -86,7 +85,7 @@ try {
   });
   const page = await ctx.newPage();
 
-  await page.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#peoplechips', { timeout: 30000 });
   await page.waitForTimeout(1200);
 
@@ -178,7 +177,7 @@ try {
     }
   });
   const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/`, { waitUntil: 'domcontentloaded' });
+  await narrow.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
   await narrow.waitForSelector('#peoplechips', { timeout: 30000 });
   await narrow.waitForTimeout(1200);
   const narrowEntry = await narrow.$('#peopleedit');

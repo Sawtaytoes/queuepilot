@@ -171,8 +171,9 @@ try {
   await firstTile.locator('.thumb').hover();
   await firstTile.locator('.lanebtn').click();
   await page.waitForFunction(
-    () => document.querySelectorAll('ul.grid[data-lane="priority"] li.tile').length === 1,
-    undefined,
+    (expectedTitle) => [...document.querySelectorAll('ul.grid[data-lane="priority"] li.tile .title')]
+      .some((el) => (el.textContent || '').trim() === expectedTitle),
+    promotedTitle,
     { timeout: 20000 },
   );
   await page.waitForTimeout(600);
@@ -203,7 +204,12 @@ try {
 
   // It has to SURVIVE a reload: the optimistic move is a repaint, and the file is the claim.
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('ul.grid[data-lane="priority"] li.tile', { timeout: 30000 });
+  await page.waitForFunction(
+    (expectedTitle) => [...document.querySelectorAll('ul.grid[data-lane="priority"] li.tile .title')]
+      .some((el) => (el.textContent || '').trim() === expectedTitle),
+    promotedTitle,
+    { timeout: 30000 },
+  );
   await page.waitForTimeout(1200);
   const afterReload = await page.$$eval(
     'ul.grid[data-lane="priority"] li.tile .title',

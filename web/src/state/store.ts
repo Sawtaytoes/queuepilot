@@ -2,7 +2,6 @@ import { useSyncExternalStore } from "react"
 
 import { api, writeCount } from "../lib/api"
 import type {
-  GroupsResponse,
   NowState,
   QueuesResponse,
   SetsResponse,
@@ -30,9 +29,6 @@ import { loadPeople } from "./people"
 export type Snapshot = {
   data: QueuesResponse | null
   reg: SetsResponse | null
-  /** Who is watching, with membership resolved server-side. Null until first load —
-   * the group bar renders nothing rather than a wrong bar. */
-  groups: GroupsResponse | null
   now: NowState
   status: { msg: string; kind: StatusKind }
   history: {
@@ -56,7 +52,6 @@ export type Snapshot = {
 let snapshot: Snapshot = {
   data: null,
   history: { redo: 0, undo: 0 },
-  groups: null,
   isRevalidating: false,
   reg: null,
   now: { now: null, set: null },
@@ -174,28 +169,6 @@ export async function refreshHistoryButtons() {
     setState({ history: h })
   } catch {
     /* cosmetic */
-  }
-}
-
-/**
- * Re-read the GROUPS only.
- *
- * Separate from `load()` on purpose: `load()` re-resolves every queue against Plex and
- * Kavita and takes 7-9 s, while this is a YAML read plus a join and answers in ~10 ms. The
- * groups editor saves through this, because a save that takes eight seconds to reflect is a
- * save the user assumes failed — and worse, the editor re-seeds its form when the refreshed
- * store arrives, so a slow one lands ON TOP of whatever was typed next.
- */
-export async function refreshGroups(): Promise<void> {
-  try {
-    setState({
-      groups: await api<GroupsResponse>(
-        "GET",
-        "/api/groups",
-      ),
-    })
-  } catch {
-    /* the SSE `data` event retries — groups.yaml is watched */
   }
 }
 
@@ -345,20 +318,13 @@ export async function load() {
   let havePhase1 = false
 
   try {
-    // Groups ride in PHASE 1 with the registry, for the same reason the registry does:
-    // the group bar is above the fold and its absence moves everything under it. It is
-    // a YAML read plus a join, so it costs about what /api/sets costs.
-    const [shelves, reg, groups] = await Promise.all([
+    const [shelves, reg] = await Promise.all([
       api<ShelvesResponse>("GET", "/api/shelves"),
       api<SetsResponse>("GET", "/api/sets"),
-      api<GroupsResponse>("GET", "/api/groups").catch(
-        () => null,
-      ),
     ])
 
     setState({
       data: shelvesAsQueues(shelves),
-      groups,
       reg,
     })
     havePhase1 = true

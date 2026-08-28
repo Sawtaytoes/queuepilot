@@ -6,6 +6,7 @@ import type {
   QueueMember,
   QueuePeopleResponse,
 } from "../lib/types"
+import { uiBusy } from "./busy"
 
 /**
  * The people slice — the roster, every group's rule, and every queue's two trays.
@@ -63,22 +64,44 @@ function setPeople(patch: Partial<PeopleSnapshot>) {
 /** Load the roster and every queue's trays. Best effort — the people table is empty until the
  *  owner confirms the mapping file, and an app that will not paint without it is worse than a
  *  card that says "Anybody". */
+async function readPeople(): Promise<
+  Pick<
+    PeopleSnapshot,
+    "byQueue" | "groups" | "isLoaded" | "people"
+  >
+> {
+  const [roster, queues] = await Promise.all([
+    api<PeopleResponse>("GET", "/api/people"),
+    api<QueuePeopleResponse>("GET", "/api/queue-people"),
+  ])
+
+  return {
+    byQueue: queues.queues ?? {},
+    groups: roster.groups ?? [],
+    isLoaded: true,
+    people: roster.people ?? [],
+  }
+}
+
 export async function loadPeople(): Promise<void> {
   try {
-    const [roster, queues] = await Promise.all([
-      api<PeopleResponse>("GET", "/api/people"),
-      api<QueuePeopleResponse>("GET", "/api/queue-people"),
-    ])
-    setPeople({
-      byQueue: queues.queues ?? {},
-      groups: roster.groups ?? [],
-      isLoaded: true,
-      people: roster.people ?? [],
-    })
+    setPeople(await readPeople())
   } catch {
     // Loaded, with nobody in it. The editor says so in words rather than showing three lanes
     // that look broken.
     setPeople({ isLoaded: true })
+  }
+}
+
+/** Refresh the internal roster and group-audience slice after an SSE config change. */
+export async function refreshPeople(): Promise<boolean> {
+  try {
+    const next = await readPeople()
+    if (uiBusy()) return false
+    setPeople(next)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -128,9 +151,8 @@ export const queuePeople = (setId: string): QueueMember[] =>
 // ── The roster editor's writes ──────────────────────────────────────────────────────────── //
 //
 // Until these landed the roster arrived only through `/config/people-mapping.yaml`, so adding
-// or renaming somebody meant editing YAML on the appliance and restarting the app. That is the
-// same complaint the groups editor answered: *"All those configs are managed by you, not
-// inside the app."*
+// or renaming somebody meant editing YAML on the appliance and restarting the app. These
+// writes now live inside the app.
 //
 // ⚠️ **NOT optimistic, unlike `saveQueuePeople` above.** A tray drag is a gesture whose whole
 // point is that the card moves NOW, and the round trip is the only thing between two states
@@ -176,26 +198,4 @@ export async function removePerson(id: string): Promise<{
   }>("DELETE", `/api/people/${encodeURIComponent(id)}`)
   await loadPeople()
   return answer.unfiled
-}
-
-/**
- * Rename a group.
- *
- * `PATCH /api/groups/:id` is a partial write and the groups editor's own save path, so this
- * sends the LABEL alone rather than a whole draft — a group's sets and accounts are that
- * editor's business, and round-tripping them through here would be a chance to drop one.
- *
- * The caller must also `refreshGroups()`: a group label is painted by the chips at the top of
- * the landing, which read `state/store.ts` and not this slice.
- */
-export async function renameGroup(
-  id: string,
-  label: string,
-): Promise<void> {
-  await api(
-    "PATCH",
-    `/api/groups/${encodeURIComponent(id)}`,
-    { label },
-  )
-  await loadPeople()
 }

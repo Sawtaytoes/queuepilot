@@ -235,23 +235,20 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
 - **The button migration is finished, and what is still a raw `<button>` is a decision.**
   65 hand-rolled buttons became Charcuterie components over 2026-08-21/22, and the skins
   went with them — `.primary`, `.accent`, `.ghost`, `.tagbtn`, four modal-footer skins and
-  five element selectors are all deleted. **Seven** raw `<button>`s are left, and each is
+  five element selectors are all deleted. **Eight** raw `<button>`s are left, and each is
   deliberate, so do not "finish the migration" by converting them:
   - **`Modal`'s `.modalx`** — the app's `Modal` is hand-rolled (a `<form>` plus the
     `busy.openModals` guard), and its round scrim ✕ is part of that shape. Converting the
     MODAL is the change; the close button is not separable from it.
-  - **`PosterTile`'s `.tileplay` and `.remove`** — chrome positioned ON the artwork, a
-    38px circle centred over a poster and a ✕ in its corner. Neither is a control shape the
-    library expresses.
+  - **`PosterTile`'s `.tileplay`, `.remove`, `.check` and `.lanebtn`** — chrome positioned
+    ON the artwork: a play circle, a ✕, a selection mark and a lane action. These are not
+    control shapes the library expresses.
   - **`QueuesView`'s two `.scroll` arrows** — a 44px full-height gradient over the strip's
     edge, revealed on hover. A fade, not a button.
-  - **`GroupsModal`'s `.grouppick`** — a master-detail list ROW carrying `aria-current`,
-    not a button.
-  - **`LandingFilterBar`'s `#groupsedit` and `#peopleedit`** — the only ones of these
-    blocked on the LIBRARY rather than settled. They are chip-shaped buttons in a row of
-    chip-shaped `<Link>`s, and `BadgeButton` would migrate two of a dozen and split the row.
-    It needs a `BadgeLink`, which does not exist yet. (`GroupBar` was this file's name for
-    that component until 2026-08-26.)
+  - **`LandingFilterBar`'s `#peopleedit`** — the only one of these blocked on the LIBRARY
+    rather than settled. It is a chip-shaped button in a row of chip-shaped `<Link>`s, and
+    `BadgeButton` would split the row. It needs a `BadgeLink`, which does not exist yet.
+    (`GroupBar` was this file's name for that component until 2026-08-26.)
 
   Everything pill-shaped and pressable is a **`BadgeButton`** (`@charcuterie/ui@3.10.0`),
   built for this app's setting tags, the outline pencil Edit pill, two start chips and a
@@ -759,10 +756,11 @@ filter as it changes its own
 ([decision](docs/decisions/2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md)).
 Four things that look like leftovers and are not:
 
-- **There is no group chip and no `/g/<id>`.** A group is still a real object with a real
-  editor (`⚙ Edit groups`, same row) — it holds "at least one of the kids", it is what a
+- **There is no group chip, no Groups editor, and no new group UI.** Existing group data
+  remains a compatibility object because it holds "at least one of the kids", it is what a
   Must-be-here tray points at, and it resolves the one provider profile a queue signs in as.
-  It just is not a shelf label or an address any more. `/g/<id>` redirects to `/admin`.
+  `/g/<id>` remains a legacy redirect to `/admin`. Retiring the data model needs a separate
+  migration that preserves those queue and provider semantics.
 - **`membersMatchPeople` has TWO callers and must keep exactly one implementation.** This
   page and What to Watch/Play ask the same question of the same rows; a second copy drifts,
   and the way it drifts is that one screen offers a queue the other hides. It mirrors

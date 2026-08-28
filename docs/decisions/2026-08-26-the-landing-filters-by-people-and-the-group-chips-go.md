@@ -8,7 +8,7 @@
   [All is an address, not the absence of one](2026-08-19-all-is-an-address-not-the-absence-of-one.md)
   in full; [A queue created on a group page joins that group](2026-08-21-a-queue-created-on-a-group-page-joins-that-group.md)
   in full
-- **Superseded by:** —
+- **Superseded by:** [The Groups editor is retired](2026-08-27-the-groups-editor-is-retired.md) §1–2 (the editor is no longer exposed; the compatibility data and queue semantics in §5 remain)
 
 ## Decision
 

@@ -4,12 +4,12 @@ import {
   NOT_MODIFIED,
 } from "../lib/api"
 import type {
-  GroupsResponse,
   NowState,
   QueuesResponse,
   SetsResponse,
 } from "../lib/types"
 import { uiBusy } from "./busy"
+import { refreshPeople } from "./people"
 import {
   getState,
   refreshHistoryButtons,
@@ -125,15 +125,12 @@ export async function liveRefresh({
           : apiConditional<QueuesResponse>("/api/queues"),
       (data) => setState({ data }),
     ),
-    // Groups are watched on disk like the other two config files, so editing
-    // `groups.yaml` over SMB has to move the picker at the top of the app without an
-    // F5 — the one control that would otherwise need one.
-    refreshOne<GroupsResponse>(
-      () => api<GroupsResponse>("GET", "/api/groups"),
-      (groups) => setState({ groups }),
-    ),
+    // Group audience data is still used by the queue trays and profile resolution. It lives
+    // in the people slice now, so refresh it without restoring the retired Groups UI.
+    refreshPeople(),
   ])
 
+  if (!committed[2]) livePending = true
   if (committed.some(Boolean)) void refreshHistoryButtons()
 }
 

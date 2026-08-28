@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-26
 Type: product rule / frontend + API (people)
 Supersedes: nothing — it fills a gap `store/migrate/people.ts` left open by design
-Superseded by: —
+Superseded by: [The Groups editor is retired](2026-08-27-the-groups-editor-is-retired.md) §1 (the people editor remains; the Groups editor link and group-label editing do not)
 
 ## Decision
 
