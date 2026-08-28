@@ -371,12 +371,12 @@ try {
       `${board.status} ${board.body.error}`,
     );
 
-    // ⚠️ THE ONE THIS SUITE EXISTS TO PROTECT. Surprise Me narrows BEFORE it picks and the
-    // narrowings are not settled. A route that answered it with something would look settled
-    // and get built on.
+    // Surprise Me narrows BEFORE it picks. The browser translates an approved scope into an
+    // activity and calls that activity's established engine; a bare API request still omits
+    // the second-screen answer and must not become the rejected one-tap pick.
     const surprise = await post({ activity: 'surprise', personIds: [] });
     ok(
-      'Surprise Me is refused until the narrowings arrive — it is never faked',
+      'bare Surprise Me is refused until the second screen supplies its scope',
       surprise.status === 400 && String(surprise.body.error).toLowerCase().includes('narrow'),
       `${surprise.status} ${surprise.body.error}`,
     );

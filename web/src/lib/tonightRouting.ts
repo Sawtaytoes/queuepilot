@@ -54,8 +54,8 @@ import type { Activity, RegistrySet } from "./types"
  *     item when it starts. Named "queue-first" by the implementation plan for Shows and
  *     Reading; it is also what Movies and Video Games get today, and the reason is in
  *     `PICK_ENGINE_NOTES` below rather than hidden in a comment.
- *   - **`narrow-first`** — Surprise Me. It chooses nothing until you have narrowed, and the
- *     narrowings are not settled. See `SURPRISE_SCOPES`.
+ *   - **`narrow-first`** — Surprise Me. It chooses nothing until the second screen supplies
+ *     Media, Games or Reading; `drawSurprise` then delegates to an activity inside it.
  */
 export type PickEngine =
   | "board-games"

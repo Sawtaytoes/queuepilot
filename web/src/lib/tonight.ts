@@ -441,10 +441,9 @@ export const rosterOrder = (
  * "media" spans Movies, Shows and YouTube in one entry. That is the whole reason it
  * cannot be derived from `ACTIVITIES`.
  *
- * ⚠️ **The groupings are NOT settled and are deliberately not guessed here.** The owner
- * has been asked for them. This list is the seam: fill it in and the narrowing step
- * renders, with no other change to the screen. While it is empty the step says so
- * plainly rather than offering a made-up taxonomy.
+ * The owner settled the three groupings on 2026-08-28: Media, Games and Reading. Media
+ * spans Movies and Shows now, with YouTube joining when its provider exists; Games spans
+ * Video Games and Board Games; Reading is the reading activity on its own.
  */
 export type SurpriseScope = {
   id: string
@@ -455,8 +454,26 @@ export type SurpriseScope = {
   activities: readonly ActivityId[]
 }
 
-/** Empty ON PURPOSE — see `SurpriseScope`. */
-export const SURPRISE_SCOPES: readonly SurpriseScope[] = []
+export const SURPRISE_SCOPES: readonly SurpriseScope[] = [
+  {
+    activities: ["movies", "shows"],
+    hint: "Movies, shows and YouTube when it arrives",
+    id: "media",
+    label: "Media",
+  },
+  {
+    activities: ["video-games", "board-games"],
+    hint: "Video games and board games",
+    id: "games",
+    label: "Games",
+  },
+  {
+    activities: ["reading"],
+    hint: "Comics, manga and books",
+    id: "reading",
+    label: "Reading",
+  },
+]
 
 /** Everything a chosen Surprise scope may pick from, once the scopes exist. */
 export function queuesForSurpriseScope(
