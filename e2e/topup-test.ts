@@ -165,9 +165,9 @@ check('  no duplicate reached the queue', new Set(live.ratingKeys).size, live.ra
 check('  filled to the window, not beyond', live.ratingKeys.length - live.selectedOffset - 1, 5);
 
 // --- 3. the cooldown ---------------------------------------------------------
-console.log('=== the cooldown stops a stuck automation walking the queue up ===');
-// Same tick again, immediately. Without this guard a duplicated (or hung-and-retrying) HA
-// automation grows the lineup one window per tick until it hits ROTATION_LENGTH_MAX.
+console.log('=== the cooldown stops a duplicated wake-up walking the queue up ===');
+// Same tick again, immediately. Without this guard a duplicated command or timer grows the
+// lineup one window per tick until it hits ROTATION_LENGTH_MAX.
 live.selectedOffset = live.ratingKeys.length - 1; // pretend it drained again
 appended = [];
 const second = await topup();
