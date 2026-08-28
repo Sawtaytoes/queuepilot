@@ -134,13 +134,6 @@ type Overlays = {
    * stale copy on screen.
    */
   entryEditor: { setId: string; key: string } | null
-  /**
-   * The GROUPS editor — who is watching, and what is theirs. Holds the id being edited
-   * (or null for "nothing selected yet"), not a copy of the group: the panel re-reads it
-   * from the store, so an SSE update or an SMB edit lands in the open editor rather than
-   * leaving a stale draft on screen. Same rule `entryEditor` above follows.
-   */
-  groupsModal: { selectedId: string | null } | null
   /** The roster editor. No payload — it always opens on the whole household. */
   peopleModal: boolean
 }
@@ -148,7 +141,6 @@ type Overlays = {
 let overlays: Overlays = {
   dynModal: null,
   entryEditor: null,
-  groupsModal: null,
   peopleModal: false,
   membersModal: null,
   playMenu: null,
@@ -258,23 +250,8 @@ export const openDynModal = (setId: string | null) =>
 
 export const closeDynModal = () => set({ dynModal: null })
 
-export const openGroupsModal = (
-  selectedId: string | null = null,
-) =>
-  set({ groupsModal: { selectedId }, peopleModal: false })
-
-export const selectGroupInModal = (
-  selectedId: string | null,
-) => set({ groupsModal: { selectedId } })
-
-export const closeGroupsModal = () =>
-  set({ groupsModal: null })
-
-// Opening one closes the other. They are two halves of the same question — "who exists and
-// what are they called" — and the roster editor links straight across to the groups one, so
-// stacking them would put a modal over a modal on that hop.
 export const openPeopleModal = () =>
-  set({ groupsModal: null, peopleModal: true })
+  set({ peopleModal: true })
 
 export const closePeopleModal = () =>
   set({ peopleModal: false })

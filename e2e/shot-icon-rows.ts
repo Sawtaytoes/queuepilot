@@ -2,7 +2,6 @@
 // glyph button by hand, plus the search row's Add-to.
 //
 //   shelfhead  — a shelf heading, HOVERED, so its four controls are revealed
-//   groupmove  — the Groups editor's ▲ / ▼ reorder pair (the ELEMENT selector that died)
 //   countback  — the count picker in Custom mode, beside its back-to-presets control
 //   resultsadd — a header search result row and its Add-to trigger
 //
@@ -44,8 +43,8 @@ const waitReady = async (url: string, ms = 30000) => {
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-iconrow.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-iconrow.yaml');
-// The Groups editor's trigger is `#groupsedit` on the Admin landing. The fixture still
-// declares groups so the modal has rows to shoot.
+// The fixture still declares groups because they remain part of queue-audience compatibility
+// data, even though the Groups editor is no longer exposed.
 await fs.copyFile(`${ROOT}/e2e/fixtures/landing.groups.yaml`, '/tmp/groups-iconrow.yaml');
 for (const lock of ['/tmp/queues-iconrow.yaml.lock', '/tmp/sets-iconrow.yaml.lock', '/tmp/groups-iconrow.yaml.lock']) {
   await fs.rm(lock, { force: true });
@@ -118,22 +117,7 @@ try {
   await page.waitForTimeout(500);
   await shot('shelfhead', '.shelf h2');
 
-  // 2 — the Groups editor's reorder pair. `LandingFilterBar` mounts on `/admin` only.
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#heading', { timeout: 30000 });
-  await page.waitForTimeout(1800);
-  if (await page.locator('#groupsedit').count()) {
-    await page.click('#groupsedit');
-    await page.waitForSelector('#groupsmodal', { timeout: 15000 });
-    await page.waitForTimeout(900);
-    await shot('groupmove', '.grouplist li');
-    await page.keyboard.press('Escape');
-    await page.waitForTimeout(400);
-  } else {
-    console.log('SKIPPED groupmove — no #groupsedit on the page');
-  }
-
-  // 3 — the search row's Add-to trigger, in the header's own results list.
+  // 2 — the search row's Add-to trigger, in the header's own results list.
   await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#gsearch', { timeout: 30000 });
   await page.waitForTimeout(1200);
@@ -146,7 +130,7 @@ try {
     console.log('SKIPPED resultsadd — search returned no rows (Plex is unroutable)');
   }
 
-  // 4 — the count picker, in the entry sheet, switched to Custom where the
+  // 3 — the count picker, in the entry sheet, switched to Custom where the
   // back-to-presets control lives.
   await page.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid .tile', { timeout: 30000 });

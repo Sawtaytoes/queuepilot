@@ -24,9 +24,8 @@
 //
 // ## Coverage
 //
-// The routes and the four editors reachable from the synthetic fixtures. NOT covered:
-// `#groupsmodal` (its only trigger is `#groupsedit` in `LandingFilterBar`), `#startmodal`,
-// and the Narrow View. A finding there needs a
+// The routes and the editors reachable from the synthetic fixtures. NOT covered:
+// `#startmodal` and the Narrow View. A finding there needs a
 // fixture that reaches it — absence of a finding here is not evidence of absence.
 //
 // Usage: `server/node_modules/.bin/tsx e2e/borrowed-class-audit.ts`

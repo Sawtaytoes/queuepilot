@@ -792,14 +792,6 @@ export type ProviderBlockValue = {
 }
 
 /**
- * A QueuePilot GROUP — who is watching, with its membership already resolved by the server
- * (`GET /api/groups`).
- *
- * Deliberately not called a profile: `/api/profiles` is Plex's Home profile list and the
- * pool editor already has a control labelled Profile. A group is ours, and may be a person
- * (Bob), an audience (Bob & Alice) or neither (Demo). See `server/src/groups.ts`.
- */
-/**
  * One human, as `GET /api/people` serves one.
  *
  * Deliberately the three fields a SCREEN needs and nothing else. The store's `Person`
@@ -832,32 +824,6 @@ export type PeopleResponse = {
   /** WP-5. Members naming somebody who is gone. Reported, never deleted: `queue_people`
    *  carries no foreign key on its parent and this is the report that stands in for it. */
   orphans: QueueMember[]
-}
-
-export type Group = {
-  /** IMMUTABLE — it is the URL (`/g/<id>`), so it is a promise to every bookmark. */
-  id: string
-  label: string
-  /** Provider kind -> account names. Empty when membership is by hand. */
-  accounts: Record<string, string[]>
-  /**
-   * The set ids this group NAMES — the stored `sets:` list, not the resolved membership.
-   * The editor needs both: a tick in `sets` is yours to remove, a set that is only in
-   * `setIds` got there by matching an account and cannot be unticked.
-   */
-  sets: string[]
-  /** Set ids, in registry order — the landing filtered, never re-sorted. */
-  setIds: string[]
-  /** Provider kinds present in `setIds`, so the UI offers only the chips that apply. */
-  providerKinds: string[]
-  /** The synthesized everything-view. Pinned first; nothing can make a set unreachable. */
-  isAll?: boolean
-}
-
-export type GroupsResponse = {
-  groups: Group[]
-  /** Set ids no group claims — surfaced so filing them is discoverable. */
-  unassigned: string[]
 }
 
 // --- WP-5: a queue is people plus an activity ----------------------------------- //
