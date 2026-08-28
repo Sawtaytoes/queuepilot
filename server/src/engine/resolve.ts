@@ -696,7 +696,7 @@ export async function collectionItems(
       const epStart = i === floorAt ? start : null;
       const childEps: ResolvedItem[] = await showEpisodes(client, rk, token);
       const ordered = episodesAtOrAfterStart(
-        orderedPlayableEpisodes(childEps, cfg),
+        orderedPlayableEpisodes(childEps, cfg, resume),
         epStart,
       );
       for (const e of ordered) {
@@ -851,7 +851,7 @@ export async function resolveMember(
   }
   const allEps: ResolvedItem[] = await showEpisodes(client, rk, token);
   const start = desc.start;
-  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg), start)
+  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg, resume), start)
     .filter((e) => !watched.has(e.ratingKey)
       || (resume && inProgress(e.viewOffset, e.viewCount)));
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE

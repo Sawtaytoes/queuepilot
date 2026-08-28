@@ -73,6 +73,7 @@ const dateMs = (episode: EpisodeOrderItem): number | null => {
 export function orderedPlayableEpisodes<T extends EpisodeOrderItem>(
   episodes: readonly T[],
   selection: SpecialSelection = {},
+  includeSpecialsOnly = true,
 ): T[] {
   const candidates = episodes.filter(
     (episode) => Boolean(episode.duration) && !isExtraOrPromoEpisode(episode),
@@ -82,7 +83,7 @@ export function orderedPlayableEpisodes<T extends EpisodeOrderItem>(
 
   // A specials-only title treats Season 0 as its real run. This preserves the existing OAD
   // exception and does not require a per-leaf opt-in for a title that has no other episodes.
-  if (!regular.length) return specials;
+  if (!regular.length) return includeSpecialsOnly ? specials : [];
 
   const included = new Set((selection.included_specials || []).map(String));
   const selected = specials.filter(
