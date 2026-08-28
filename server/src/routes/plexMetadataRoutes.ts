@@ -154,16 +154,13 @@ export function plexMetadataRoutes(): Hono {
   });
 
   // --- content ratings (per-account facet) ------------------------------------- //
-  // The contentRating values actually present in a set's libraries, scoped to that set's
-  // ACCOUNT (a managed user sees only its allowed libraries; admin sees all). Feeds the
-  // rating checkboxes so each channel offers only the ratings its account can pick. Falls
-  // back to a small static list when Plex/plex.tv is unreachable.
+  // The contentRating values actually available to a set's ACCOUNT across all video
+  // libraries (a managed user sees only its allowed content; admin sees all). An explicit
+  // sections query can narrow the lookup, but the default is the account-wide vocabulary.
+  // Feeds the rating checkboxes so each channel offers only the ratings its account can pick.
+  // Falls back to a small static list when Plex/plex.tv is unreachable.
   app.get('/ratings', async (c) => {
     const setId = c.req.query('set') ?? '';
-    // Pre-save scoping for the channel form (no set exists yet): the form passes the picked
-    // profile's uuid + the currently-checked libraries so the ratings reflect that profile's
-    // restricted view of those sections, matching the decision that the picker is scoped to a
-    // profile's Plex-available ratings (2026-07-21-channels-function-first-generalized-members).
     const uuidQ = (c.req.query('uuid') ?? '').trim();
     const sectionsQ = (c.req.query('sections') ?? '').trim();
     try {
@@ -172,7 +169,6 @@ export function plexMetadataRoutes(): Hono {
       if (setId) {
         const s = await sets.getSet(setId);
         if (!s) return c.json({ error: 'unknown set' }, 400);
-        sections = [...new Set([...(s.sections || []), ...(s.item_sections || [])])];
         if (s.user_uuid) {
           try {
             token = await plex.accountToken(s.user_uuid);
@@ -180,19 +176,18 @@ export function plexMetadataRoutes(): Hono {
             token = null; // managed-token mint failed → admin token / static fallback
           }
         }
-      } else if (sectionsQ) {
-        sections = [...new Set(sectionsQ.split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)))];
-        if (uuidQ) {
-          try {
-            token = await plex.accountToken(uuidQ);
-          } catch {
-            token = null;
-          }
+      } else if (uuidQ) {
+        try {
+          token = await plex.accountToken(uuidQ);
+        } catch {
+          token = null;
         }
       }
-      // A set (or a form) that names no library draws from every video library, so the
-      // ratings it can pick are every video library's — not the static fallback list an
-      // empty section array would otherwise fall through to.
+      if (sectionsQ) {
+        sections = [...new Set(sectionsQ.split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)))];
+      }
+      // No sections means every video library. This is also the default for a rules queue:
+      // its library checkboxes control the queue contents, not the profile's rating list.
       if (!sections.length) {
         try {
           sections = (await plex.sections()).filter((l) => l.video).map((l) => l.id);
