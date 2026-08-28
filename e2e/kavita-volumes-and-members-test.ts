@@ -20,15 +20,17 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { errMessage } from '../server/src/errors.js';
-import type { BucketsResult, KavitaPlayItem } from '../server/src/types.js';
+import type { BucketsResult, KavitaPlayItem, RoutingQueueCfg } from '../server/src/types.js';
 import type { KavitaHttpClient } from '../server/src/providers/kavita-client.js';
 
 const SCRATCH = mkdtempSync(path.join(tmpdir(), 'kavita-vol-'));
+const QUEUES_FILE = path.join(SCRATCH, 'queues.yaml');
 process.env.PROVIDERS_PATH = path.join(SCRATCH, 'providers.yaml');
 process.env.PROVIDERS_SECRETS_PATH = path.join(SCRATCH, 'providers.secrets.yaml');
 process.env.SETS_PATH = path.join(SCRATCH, 'sets.yaml');
-process.env.QUEUES_PATH = path.join(SCRATCH, 'queues.yaml');
+process.env.QUEUES_PATH = QUEUES_FILE;
 process.env.CACHE_PATH = path.join(SCRATCH, 'cache.sqlite');
+process.env.STORE_BACKEND = 'yaml';
 process.env.KAVITA_API_SERVER_URL = 'https://kavita.invalid';
 writeFileSync(process.env.SETS_PATH, 'sets: []\n');
 writeFileSync(process.env.QUEUES_PATH, '{}\n');
@@ -183,6 +185,7 @@ function stubClient() {
 }
 
 const { kavitaProvider } = await import('../server/src/providers/kavita.js');
+const { pullLineup } = await import('../server/src/providers/pullLineup.js');
 const DEF = { id: 'kavita', kind: 'kavita', label: 'Kavita', base_url: 'https://kavita.invalid' };
 
 // --------------------------------------------------------------------------- //
@@ -256,6 +259,36 @@ await ok('curated entries ARE the lineup — the library is not consulted', asyn
     client._calls.some((c) => c[0] === 'seriesForLibrary'), false,
     'the library shelf was enumerated even though the queue has entries',
   );
+});
+
+await ok('priority entries lead a randomized curated reading queue', async () => {
+  writeFileSync(QUEUES_FILE, `reading:
+  - ratingKey: 4672
+    volumes: 3
+    placement: priority
+  - ratingKey: 4577
+    placement: priority
+  - ratingKey: 5100
+`);
+  const cfg = {
+    source: 'queue',
+    kind: 'picks',
+    add_as: 'random',
+    providers: [{ provider: 'kavita' }],
+  } as unknown as RoutingQueueCfg;
+  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const originalRandom = Math.random;
+  Math.random = () => 0;
+  try {
+    const play = await pullLineup('reading', cfg, p) as KavitaPlayItem[];
+    assert.deepEqual(
+      play.slice(0, 4).map((item) => String(item.seriesId)),
+      ['4672', '4672', '4672', '4577'],
+      'random-pool reading items appeared before all priority items',
+    );
+  } finally {
+    Math.random = originalRandom;
+  }
 });
 
 await ok('a set with NO entries still falls back to its libraries', async () => {

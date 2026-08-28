@@ -25,7 +25,7 @@ export const toBatch = (raw: unknown): number | null => {
 };
 
 /**
- * A curated set's entries, reduced to `{ id, batch }` for a pull provider.
+ * A curated set's entries, reduced to `{ id, placement, batch }` for a pull provider.
  *
  * DONE entries are dropped: a consuming queue marks them, and a reading list rebuilt from
  * them would re-serve what has already been read. A `keep_completed` / reel queue never
@@ -63,6 +63,9 @@ export async function curatedEntries(
     const batch = Number(extras.episodes);
     const volumes = Number(extras.volumes);
     const start = extras.start && typeof extras.start === 'object' ? extras.start : null;
+    const placement = extras.placement === 'priority' || extras.placement === 'random'
+      ? extras.placement
+      : null;
     // Only for a provider that ASKED for it (Provider.stampsQueuedAt) — a Plex or Kavita
     // queue must not grow a key nothing will ever read. An entry added by hand has no
     // stamp; it gets one now rather than being read as "since the beginning of time",
@@ -74,6 +77,7 @@ export async function curatedEntries(
     }
     out.push({
       id: String(ratingKey),
+      placement,
       batch: Number.isFinite(batch) && batch > 0 ? batch : null,
       volumes: Number.isFinite(volumes) && volumes > 0 ? volumes : null,
       queuedAt,
