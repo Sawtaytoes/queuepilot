@@ -49,17 +49,16 @@ import { SelectListbox } from "./SelectListbox"
  * path: everything the Python engine reads from a rotation entry in sets.yaml,
  * authored from the UI.
  *
- * The interesting part is the per-profile **bindings** sub-editor. A rotation
- * channel binds one or more Plex Home profiles, each with its OWN rating caps; the
- * library fieldsets stay channel-level. Two rules here are bug fixes, both of them
+ * The interesting part is the per-profile **binding** sub-editor. A new rotation
+ * channel binds one Plex Home profile with its OWN rating caps; old channels with
+ * multiple bindings remain editable for compatibility. The library fieldsets stay
+ * channel-level. Two rules here are bug fixes, both of them
  * about a binding's ratings being its own data:
  *
  * - A card's option universe is seeded with **`union(known, that binding's saved
- *   ratings)`**, where `known` is scoped to whichever profile happens to be active.
- *   Seeding from `known` alone left a non-active binding's card blank, and the very
- *   next Save persisted that blankness — silent data loss.
- * - Re-scoping a card keeps any **currently-checked** rating as an option even when
- *   the per-profile fetch omits it, for the same reason.
+ *   ratings)`**, so a saved value always remains visible and checkable.
+ * - The available list comes from the profile across all video libraries. The
+ *   selected library boxes control the queue, not the profile's rating vocabulary.
  *
  * (decision `2026-07-29-binding-ratings-render-per-profile-not-shared-scope`)
  */
@@ -335,22 +334,11 @@ export function DynModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dynModal])
 
-  const sectionScope = useCallback(
-    () =>
-      [...new Set([...showSections, ...itemSections])].join(
-        ",",
-      ),
-    [itemSections, showSections],
-  )
-
-  /** Re-scope ONE card's ratings pickers to its profile's restricted view of the
-   * currently-checked libraries, preserving that card's existing selections. */
+  /** Load ONE card's ratings from its profile's complete restricted view, preserving
+   * that card's existing selections. */
   const scopeCard = useCallback(
     async (uid: number, uuid: string) => {
-      const ratings = await fetchScopedRatings(
-        uuid,
-        sectionScope(),
-      )
+      const ratings = await fetchScopedRatings(uuid)
 
       setBindings((prev) =>
         prev.map((d) =>
@@ -370,17 +358,8 @@ export function DynModal() {
         ),
       )
     },
-    [sectionScope],
+    [],
   )
-
-  /** Ratings depend on which libraries are picked, so a library change re-scopes
-   * EVERY binding — each to its own profile's restricted view. */
-  const rescopeAll = useCallback(() => {
-    for (const d of bindings) {
-      if (d.userUuid.trim())
-        void scopeCard(d.uid, d.userUuid.trim())
-    }
-  }, [bindings, scopeCard])
 
   const patchBinding = (
     uid: number,
@@ -684,7 +663,6 @@ export function DynModal() {
                   ? [...prev, v]
                   : prev.filter((x) => x !== v),
               )
-              rescopeAll()
             }}
             options={libOptions(showLibs)}
             seedKey={modalKey}
@@ -701,7 +679,6 @@ export function DynModal() {
                   ? [...prev, v]
                   : prev.filter((x) => x !== v),
               )
-              rescopeAll()
             }}
             options={libOptions(movieLibs)}
             seedKey={modalKey}
@@ -722,7 +699,6 @@ export function DynModal() {
                   ? [...prev, v]
                   : prev.filter((x) => x !== v),
               )
-              rescopeAll()
             }}
             options={libOptions(otherLibs)}
             seedKey={modalKey}
@@ -938,10 +914,10 @@ export function DynModal() {
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>
         <p className="subhint">
-          One or more Plex Home profiles this pool plays
-          under — each with its own rating caps (scoped to
-          what that profile can pick). At play time the
-          signed-in profile decides which applies.
+          One Plex Home profile this pool plays under, with
+          its own rating caps. The ratings list includes
+          every rating allowed for that profile. Older
+          queues with extra profile cards remain editable.
         </p>
         <div id="dyn-bindings">
           {bindings.map((d) => (
@@ -1187,24 +1163,6 @@ export function DynModal() {
             </div>
           ))}
         </div>
-        {/* `.ghost` is Charcuterie's `outline`. `addbinding` keeps its `margin-top: 12px`
-            (app layout); its padding, radius and font-size are the component's now, and its
-            hand-rolled `:focus-visible` outline is deleted — `Button` brings its own, and the
-            app's version fired on `:focus` semantics the token system already settled. */}
-        <Button
-          appearance="outline"
-          className="addbinding"
-          id="dyn-addprofile"
-          intent="neutral"
-          onClick={() =>
-            setBindings((prev) => [
-              ...prev,
-              toDraft({} as Binding, knownRef.current),
-            ])
-          }
-        >
-          + Add profile
-        </Button>
         {/* The default only means something with ≥2 bindings — with one profile there is
             nothing to pick between, and Play already lands on it. */}
         <label
