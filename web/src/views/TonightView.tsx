@@ -32,7 +32,10 @@ import {
   type TonightQueue,
   tonightQueues,
 } from "../lib/tonight"
-import { drawTonight } from "../lib/tonightDraw"
+import {
+  drawSurprise,
+  drawTonight,
+} from "../lib/tonightDraw"
 import { parseTonightPreset } from "../lib/tonightPreset"
 import { routeFor } from "../lib/tonightRouting"
 import type {
@@ -90,7 +93,8 @@ import { setStatus, useStore } from "../state/store"
  *      people filed, and hiding them would make them unreachable.
  *   3. **NFC bypasses this screen entirely** — a card goes straight to its queue.
  *
- * Not built, and deliberately not faked: Surprise Me's narrowings. Its own step says so.
+ * Surprise Me has its own second screen. Its three approved scopes choose an activity first,
+ * then delegate to that activity's existing picker.
  */
 export function TonightView({
   step,
@@ -440,7 +444,10 @@ export function TonightView({
       </section>
 
       {isSurpriseStep ? (
-        <SurpriseStep />
+        <SurpriseStep
+          guestCount={guestCount}
+          selectedPeople={selectedPeople}
+        />
       ) : (
         <>
           {/* 3 — FILTERS. Pick only. Never a second "Mode" row. */}
@@ -809,9 +816,8 @@ function GoButton({
     )
   }
 
-  // SURPRISE ME narrows before it picks, and the narrowings are not settled. The tile routes
-  // to its own screen, so this is only reachable by a stale state; it still says the true
-  // thing rather than offering a draw that cannot be made.
+  // SURPRISE ME narrows before it picks. The tile routes to its own screen, so this branch is
+  // only reachable through stale state; it points back to the approved second step.
   if (!isQueues && route.engine === "narrow-first") {
     return (
       <>
@@ -824,8 +830,8 @@ function GoButton({
           {label}
         </Button>
         <p className="subhint">
-          Surprise Me narrows down first. What it narrows by
-          is still being settled.
+          Surprise Me narrows down first. Choose Media,
+          Games or Reading.
         </p>
       </>
     )
@@ -901,22 +907,46 @@ function GoButton({
  * it choose — and the narrowing list is COARSER than the tile row: "media" is one entry
  * spanning Movies, Shows and YouTube, which is why it cannot be derived from `ACTIVITIES`.
  *
- * ⚠️ **The groupings are not settled and are deliberately not invented.** The owner has been
- * asked for them. `SURPRISE_SCOPES` is the seam; fill it in and this step renders its
- * choices with no other change. Until then it says what it is waiting for, because a
- * plausible made-up taxonomy on this screen would read as settled and get built on.
+ * The owner approved Media, Games and Reading on 2026-08-28. Choosing one starts the draw:
+ * the scope chooses an activity, then that activity's existing engine supplies the result.
  */
-function SurpriseStep() {
-  if (SURPRISE_SCOPES.length === 0) {
-    return (
-      <section className="tsection" id="tonight-surprise">
-        <EmptyState
-          description="Surprise Me narrows down first and chooses second. What it narrows BY is still being settled — it is coarser than the tiles above, so it is not the same list again. Pick another activity for now."
-          headingLevel={2}
-          heading="Narrow it down"
-        />
-      </section>
+function SurpriseStep({
+  guestCount,
+  selectedPeople,
+}: {
+  guestCount: number
+  selectedPeople: readonly string[]
+}) {
+  const navigate = useNavigate()
+  const [isDrawing, setIsDrawing] = useState(false)
+
+  const choose = async (scopeId: string) => {
+    const scope = SURPRISE_SCOPES.find(
+      (one) => one.id === scopeId,
     )
+    if (!scope || isDrawing) return
+
+    setIsDrawing(true)
+    try {
+      const outcome = await drawSurprise({
+        guestCount,
+        personIds: selectedPeople,
+        scope,
+      })
+      if (!outcome.isDrawn) {
+        setStatus(outcome.reason, "err")
+        return
+      }
+      writePickSession(outcome.session)
+      navigate("/result")
+    } catch (e) {
+      setStatus(
+        `Could not pick: ${(e as Error).message}`,
+        "err",
+      )
+    } finally {
+      setIsDrawing(false)
+    }
   }
 
   return (
@@ -926,11 +956,20 @@ function SurpriseStep() {
         itemShape="tile"
         items={SURPRISE_SCOPES.map((scope) => ({
           hint: scope.hint,
+          isDisabled: isDrawing,
           label: scope.label,
           value: scope.id,
         }))}
         label="Narrow it down"
+        onChange={(value) => {
+          if (value) void choose(value)
+        }}
       />
+      {isDrawing ? (
+        <p className="subhint" role="status">
+          Choosing from that group…
+        </p>
+      ) : null}
     </section>
   )
 }

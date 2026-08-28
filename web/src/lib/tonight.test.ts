@@ -603,13 +603,26 @@ describe("rosterOrder", () => {
 })
 
 describe("the Surprise Me narrowing step", () => {
-  /**
-   * The groupings are COARSER than the tile row — "media" spans Movies, Shows and
-   * YouTube in one entry — and the owner has not stated them yet. An empty list here is
-   * the honest state, and this test is what stops somebody filling it in with a guess
-   * that looks settled.
-   */
-  test("has no groupings yet, and they are not guessed", () => {
-    expect(SURPRISE_SCOPES).toEqual([])
+  test("uses the three approved groupings, coarser than the activity row", () => {
+    expect(SURPRISE_SCOPES).toEqual([
+      {
+        activities: ["movies", "shows"],
+        hint: "Movies, shows and YouTube when it arrives",
+        id: "media",
+        label: "Media",
+      },
+      {
+        activities: ["video-games", "board-games"],
+        hint: "Video games and board games",
+        id: "games",
+        label: "Games",
+      },
+      {
+        activities: ["reading"],
+        hint: "Comics, manga and books",
+        id: "reading",
+        label: "Reading",
+      },
+    ])
   })
 })
