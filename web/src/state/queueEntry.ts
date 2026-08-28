@@ -2,6 +2,7 @@ import { api } from "../lib/api"
 import { isRandomOrder } from "../lib/kind"
 import {
   isSkipListChanged,
+  mergeIncludedSpecials,
   mergeSkipped,
 } from "../lib/skipList"
 import type { QueueItem } from "../lib/types"
@@ -187,13 +188,17 @@ export async function moveEntryLane(
  * `managed` is what this panel is responsible for; every other key on the set is carried
  * through untouched (see `mergeSkipped` — the list is per set, not per entry).
  */
-export async function saveSkipList(
+export async function saveMemberSelection(
   setId: string | null | undefined,
   {
+    includedSpecials,
     managed,
+    managedSpecials,
     skipped,
   }: {
+    includedSpecials: Iterable<string>
     managed: Iterable<string>
+    managedSpecials: Iterable<string>
     skipped: Iterable<string>
   },
 ): Promise<boolean> {
@@ -204,10 +209,19 @@ export async function saveSkipList(
   )
   const current = set?.skipped || []
   const next = mergeSkipped({ current, managed, skipped })
+  const currentIncluded = set?.included_specials || []
+  const nextIncluded = mergeIncludedSpecials({
+    current: currentIncluded,
+    managed: managedSpecials,
+    included: includedSpecials,
+  })
 
   // Nothing ticked or unticked: say so and write nothing. A PATCH here would re-resolve
   // every tile in the queue to arrive at the list it already had.
-  if (!isSkipListChanged(current, next)) {
+  if (
+    !isSkipListChanged(current, next) &&
+    !isSkipListChanged(currentIncluded, nextIncluded)
+  ) {
     setStatus("Nothing changed", "ok")
 
     return true
@@ -217,6 +231,7 @@ export async function saveSkipList(
 
   try {
     await api("PATCH", `/api/sets/${setId}`, {
+      included_specials: nextIncluded,
       skipped: next,
     })
 

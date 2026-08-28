@@ -19,7 +19,7 @@ import {
   closeMembersModal,
   useOverlays,
 } from "../state/overlays"
-import { saveSkipList } from "../state/queueEntry"
+import { saveMemberSelection } from "../state/queueEntry"
 import {
   fetchAll,
   setState,
@@ -69,12 +69,14 @@ type MemberRow = {
   detail: string
   /** Fully watched / read — a chip, not a word buried in `detail`. */
   isDone: boolean
+  /** Season 0: absent from playback until its leaf id is explicitly included. */
+  isSpecial: boolean
   /** The season this row sits in, for the group headings. Null on a collection member. */
   season: number | null
 }
 
 const HINT =
-  "Untick anything this queue must never play. A skipped item counts as dealt with, so an entry whose remaining items are all watched or skipped is finished — and Restore in the Skipped panel puts one back."
+  "Normal episodes play unless you untick them. Specials start unticked, and you can include only the ones you want. A skipped normal episode counts as dealt with."
 
 /** A collection member's second line: the edition first, because that is the field two
  *  duplicate members differ by, then the runtime, then a show's progress. */
@@ -114,6 +116,7 @@ function toMemberRows(
                 child.leafCount,
           )
         : Boolean(child.watched),
+    isSpecial: false,
     label: `${i + 1}. ${child.title}`,
     ratingKey: String(child.ratingKey),
     season: null,
@@ -123,11 +126,13 @@ function toMemberRows(
 function toEpisodeRows(
   data: ShowEpisodes,
   unit: EntryUnit,
+  hasSpecials: boolean,
 ): MemberRow[] {
   return data.seasons.flatMap((s) =>
     s.episodes.map((e) => ({
       detail: e.title || "",
       isDone: Boolean(e.watched),
+      isSpecial: hasSpecials && s.season === 0,
       label: seLabel(
         {
           episode: e.episode,
@@ -165,6 +170,9 @@ export function MembersModal() {
   const ratingKey = item?.ratingKey ?? null
   const isCollection = item?.type === "collection"
   const accountUuid = entry?.accountUuid
+  const hasSpecials =
+    reg?.sets.find((set) => set.id === setId)
+      ?.provider_kind === "plex"
 
   const [rows, setRows] = useState<MemberRow[] | null>(null)
   const [note, setNote] = useState("")
@@ -185,6 +193,9 @@ export function MembersModal() {
   const [skips, setSkips] = useState<Set<string>>(
     () => new Set(),
   )
+  const [includedSpecials, setIncludedSpecials] = useState<
+    Set<string>
+  >(() => new Set())
 
   /**
    * The set's live `skipped` list, for the seeding below — a REF, not the value itself.
@@ -198,9 +209,13 @@ export function MembersModal() {
    * SSE refresh landing mid-edit cannot re-tick a box the user just unticked.
    */
   const skippedRef = useRef<readonly string[]>([])
+  const includedSpecialsRef = useRef<readonly string[]>([])
 
   skippedRef.current =
     reg?.sets.find((s) => s.id === setId)?.skipped || []
+  includedSpecialsRef.current =
+    reg?.sets.find((s) => s.id === setId)
+      ?.included_specials || []
 
   useEffect(() => {
     if (!ratingKey) return
@@ -213,6 +228,7 @@ export function MembersModal() {
 
     const qs = [
       setId ? `set=${encodeURIComponent(setId)}` : "",
+      !isCollection ? "specials=choices" : "",
       accountUuid
         ? `uuid=${encodeURIComponent(accountUuid)}`
         : "",
@@ -238,7 +254,11 @@ export function MembersModal() {
         `/api/show/${ratingKey}/episodes${q}`,
       )
 
-      return toEpisodeRows(res, unitOf(item, vocab))
+      return toEpisodeRows(
+        res,
+        unitOf(item, vocab),
+        hasSpecials,
+      )
     }
 
     /**
@@ -323,6 +343,13 @@ export function MembersModal() {
             skippedRef.current.filter((k) => owned.has(k)),
           ),
         )
+        setIncludedSpecials(
+          new Set(
+            includedSpecialsRef.current.filter((k) =>
+              owned.has(k),
+            ),
+          ),
+        )
 
         return recheckAgainstPlex()
       })
@@ -342,7 +369,13 @@ export function MembersModal() {
     // long as one entry's panel is open — the load is keyed on WHICH entry, not on a fresh
     // object identity arriving from an unrelated store refresh.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accountUuid, isCollection, ratingKey, setId])
+  }, [
+    accountUuid,
+    hasSpecials,
+    isCollection,
+    ratingKey,
+    setId,
+  ])
 
   // What re-seeds a box from outside the user's own clicks: a different entry, or this
   // entry's rows arriving. Never `skips` itself, which changes on their click and would
@@ -355,7 +388,23 @@ export function MembersModal() {
   const managed = (rows || [])
     .map((r) => r.ratingKey)
     .filter((k): k is string => Boolean(k))
-  const playing = managed.length - skips.size
+  const managedSpecials = (rows || [])
+    .filter((row) => row.isSpecial)
+    .map((row) => row.ratingKey)
+    .filter((key): key is string => Boolean(key))
+  const specialKeys = new Set(managedSpecials)
+  const managedNormal = managed.filter(
+    (key) => !specialKeys.has(key),
+  )
+  const skippedNormal = managedNormal.filter((key) =>
+    skips.has(key),
+  ).length
+  const playing =
+    managedNormal.length -
+    skippedNormal +
+    managedSpecials.filter((key) =>
+      includedSpecials.has(key),
+    ).length
   const unitWord = isCollection
     ? managed.length === 1
       ? "item"
@@ -366,7 +415,14 @@ export function MembersModal() {
     if (isSaving || !rows) return
 
     setIsSaving(true)
-    void saveSkipList(setId, { managed, skipped: skips })
+    void saveMemberSelection(setId, {
+      includedSpecials,
+      // Own every row here so a special skipped under the legacy all-specials switch loses
+      // that old exclusion when it moves to the explicit inclusion model.
+      managed,
+      managedSpecials,
+      skipped: skips,
+    })
       .then((isOk) => {
         setIsSaving(false)
 
@@ -444,21 +500,35 @@ export function MembersModal() {
 
                   if (!key) return
 
-                  setSkips((prev) => {
-                    const next = new Set(prev)
+                  if (row.isSpecial) {
+                    setIncludedSpecials((prev) => {
+                      const next = new Set(prev)
 
-                    if (isPlaying) next.delete(key)
-                    else next.add(key)
+                      if (isPlaying) next.add(key)
+                      else next.delete(key)
 
-                    return next
-                  })
+                      return next
+                    })
+                  } else {
+                    setSkips((prev) => {
+                      const next = new Set(prev)
+
+                      if (isPlaying) next.delete(key)
+                      else next.add(key)
+
+                      return next
+                    })
+                  }
                 }}
                 previous={rows[i - 1] ?? null}
                 row={row}
                 seedKey={seedKey}
                 t={t}
                 isSkipped={Boolean(
-                  row.ratingKey && skips.has(row.ratingKey),
+                  row.ratingKey &&
+                    (row.isSpecial
+                      ? !includedSpecials.has(row.ratingKey)
+                      : skips.has(row.ratingKey)),
                 )}
               />
             ))}
@@ -504,7 +574,11 @@ function MemberListRow({
         // h4: the modal's own title is an `<h3>` (`Modal.tsx`), so a season group opens one
         // level under it. Nothing on this route sits between them.
         <li className="memberseason">
-          <h4>{`${t("Season")} ${row.season}`}</h4>
+          <h4>
+            {row.isSpecial
+              ? t("Specials")
+              : `${t("Season")} ${row.season}`}
+          </h4>
         </li>
       ) : null}
       <li>
@@ -536,7 +610,9 @@ function MemberListRow({
         ) : null}
         {isSkipped ? (
           <Badge intent="neutral" size="sm">
-            Skipped
+            {row.isSpecial
+              ? "Skipped by default"
+              : "Skipped"}
           </Badge>
         ) : null}
       </li>

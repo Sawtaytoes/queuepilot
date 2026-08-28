@@ -314,6 +314,8 @@ interface SetRegistryCommon {
    * `blocklist` is already the answer.
    */
   skipped: string[];
+  /** Regular Season-0 leaf ids this curated queue opts into. Empty means skipped by default. */
+  included_specials: string[];
   /**
    * `'whole'` | `'split'` — how a `Collection:` member enters a filtered pool. Reported as
    * the EFFECTIVE value (never the absence the file stores for the default), so the pool
@@ -521,6 +523,8 @@ interface RoutingSetCfgCommon {
   requires_profile?: string;
   remove_completed_after?: string;
   include_specials?: true;
+  /** Selective replacement for the legacy all-specials switch. */
+  included_specials?: string[];
   batch_stops_at?: string;
   /** The set's default batch — how many items one entry contributes per visit. See
    *  resolve.ts `setBatch()`; entry `episodes:` overrides it, env is the floor. */
@@ -815,6 +819,8 @@ export interface PoolItem {
   extraType?: number;
   viewCount?: number;
   viewOffset?: number;
+  /** Plex air date. Used only to place an explicitly included special in viewing order. */
+  originallyAvailableAt?: string | null;
 }
 
 /**
@@ -1381,7 +1387,7 @@ export interface Provider {
    */
   listUnits?(
     itemId: string,
-    opts?: { uuid?: string | null },
+    opts?: { uuid?: string | null; includeSpecialChoices?: boolean },
   ): Promise<UnitList | null>;
   /**
    * Optional per the guarded-call-site rule, but note session.js:170 calls it UNGUARDED on

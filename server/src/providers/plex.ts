@@ -206,12 +206,18 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
      * The "Start from…" picker's list. Same answer `/show/:id/episodes` has always
      * given; living on the provider is what lets that route stop assuming Plex.
      */
-    async listUnits(itemId: string, { uuid = null }: { uuid?: string | null } = {}): Promise<UnitList | null> {
+    async listUnits(
+      itemId: string,
+      {
+        uuid = null,
+        includeSpecialChoices = false,
+      }: { uuid?: string | null; includeSpecialChoices?: boolean } = {},
+    ): Promise<UnitList | null> {
       let scope = {};
       if (uuid) {
         try { scope = { token: await c.accountToken(uuid), account: uuid }; } catch { scope = {}; }
       }
-      return showEpisodes(itemId, scope);
+      return showEpisodes(itemId, scope, includeSpecialChoices);
     },
 
     /**

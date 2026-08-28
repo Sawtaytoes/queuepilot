@@ -6,7 +6,7 @@
 - **Supersedes:** the Season-0 `specials_max_index` rule from
   [2026-07-09-anime-continue-watching-set.md](2026-07-09-anime-continue-watching-set.md) (point 5)
   and [2026-07-16-anime-queues-retire-ondeck-set.md](2026-07-16-anime-queues-retire-ondeck-set.md) (point 6)
-- **Superseded by:** —
+- **Superseded by:** [2026-08-28 — Specials are skipped by default and selected one at a time](2026-08-28-specials-are-skipped-by-default-and-selected-one-at-a-time.md)
 - **Refined by:** [2026-08-07 — Episode counts exclude trailers/OP-ED by Season-0 index range](2026-08-07-specials-count-excludes-op-ed-trailer-extras.md) (adds the COUNT rule + a shared `is_extra_or_promo` predicate; the never-OPEN-on-a-special behavior here is unchanged)
 
 ## Decision

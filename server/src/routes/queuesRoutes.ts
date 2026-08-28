@@ -348,6 +348,7 @@ export function queuesRoutes(): Hono {
             s.sections, e.value, startOf(e),
             scopes.get(s.requires_profile || '') ?? {},
             new Set(s.skipped || []),
+            new Set(s.included_specials || []),
           );
         return { setId: s.id, tile: queueTile(e, core) };
       });

@@ -50,19 +50,21 @@ export const COLLECTION = {
   librarySectionID: MOVIES_SECTION,
 };
 
-/** The show for the second frame — two seasons, three episodes each, the first two watched. */
+/** The show for the second frame — two seasons, one selectable special and one OP/ED extra. */
 export const SHOW = {
   ratingKey: '9700',
   type: 'show',
   title: 'The Phantom Carriage',
   year: 1921,
   librarySectionID: SHOWS_SECTION,
-  leafCount: 6,
+  leafCount: 8,
   viewedLeafCount: 2,
   updatedAt: 1_755_000_000,
 };
 
 export const EPISODES = [
+  { ratingKey: '9701', type: 'episode', title: 'Intermission', parentIndex: 0, index: 1, duration: 12 * MIN, originallyAvailableAt: '1921-02-01', grandparentTitle: SHOW.title },
+  { ratingKey: '9702', type: 'episode', title: 'Closing Theme', parentIndex: 0, index: 301, duration: 2 * MIN, originallyAvailableAt: '1921-03-01', grandparentTitle: SHOW.title },
   { ratingKey: '9711', type: 'episode', title: 'The Bell Tolls', parentIndex: 1, index: 1, duration: 24 * MIN, viewCount: 1, grandparentTitle: SHOW.title },
   { ratingKey: '9712', type: 'episode', title: 'A Debt Owed', parentIndex: 1, index: 2, duration: 24 * MIN, viewCount: 1, grandparentTitle: SHOW.title },
   { ratingKey: '9713', type: 'episode', title: 'The Long Road', parentIndex: 1, index: 3, duration: 24 * MIN, grandparentTitle: SHOW.title },

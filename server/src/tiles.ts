@@ -60,6 +60,7 @@ export async function resolveTile(
   start: Start | null = null,
   opts: AccountScope = {},
   skipped: ReadonlySet<string> = new Set<string>(),
+  includedSpecials: ReadonlySet<string> = new Set<string>(),
 ): Promise<ResolvedTile> {
   let resolved: ResolvedItem | null = null;
   try {
@@ -81,13 +82,25 @@ export async function resolveTile(
   let isNextEpFailed = false;
   if (resolved && resolved.type === 'show') {
     try {
-      nextEp = await plex.nextEpisode(resolved.ratingKey, start, opts, skipped);
+      nextEp = await plex.nextEpisode(
+        resolved.ratingKey,
+        start,
+        opts,
+        skipped,
+        includedSpecials,
+      );
     } catch {
       isNextEpFailed = true;
     }
   } else if (resolved && resolved.type === 'collection') {
     try {
-      nextEp = await plex.collectionNext(resolved.ratingKey, start, opts, skipped);
+      nextEp = await plex.collectionNext(
+        resolved.ratingKey,
+        start,
+        opts,
+        skipped,
+        includedSpecials,
+      );
     } catch {
       isNextEpFailed = true;
     }

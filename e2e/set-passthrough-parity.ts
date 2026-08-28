@@ -3,7 +3,7 @@
 // e2e/fixtures/golden/passthrough.json when Python was deleted (2026-08-12).
 //
 // Why this exists: `loadSets()` built each cfg but stopped after label/kind/enabled/mode/
-// behavior. The five fields below are read by session.js (requires_profile,
+// behavior. The fields below are read by session.js (requires_profile,
 // remove_completed_after, max_items), resolve.js (include_specials) and playback.js
 // (audio_language) — so a field the builder forgets does not throw and does not fail a
 // routing test. It reads `undefined` at the consumer and SILENTLY DISABLES the feature.
@@ -28,6 +28,7 @@ const FIELDS = [
   'remove_completed_after',
   'max_items',
   'include_specials',
+  'included_specials',
   'audio_language',
   'batch_stops_at',
 ];
