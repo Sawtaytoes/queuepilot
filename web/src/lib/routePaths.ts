@@ -32,9 +32,9 @@
  * `/g/<group>` is GONE as of 2026-08-26 and redirects to `/admin`. It was the management page
  * with a GROUP filter applied; that page filters by PEOPLE now — a multi-select in the query
  * string rather than a single group in the path
- * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`). A group is
- * still a real object with a real editor; it is no longer an address. A redirect rather than a
- * 404 because `/g/<id>` was bookmarkable for nine days and that was half the point of it.
+ * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`). Groups remain
+ * compatibility data for queue audiences, but the app has no Groups editor. A redirect rather
+ * than a 404 because `/g/<id>` was bookmarkable for nine days and that was half the point of it.
  *
  * `/board-game-collection` and NOT `/collection`, since 2026-08-25. The shelf is one KIND of
  * collection, and the generic word is already Plex's in this app — `type: "collection"` is a

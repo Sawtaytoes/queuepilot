@@ -5,7 +5,7 @@
 //   1. `bar`       `/admin` at 1420px. On main the top row is a chip per GROUP — All, Bob,
 //                  Demo, Older Kids, Younger Kids — each a single-select link to `/g/<id>`.
 //                  On the branch it is a chip per PERSON, multi-select, with Anyone at the
-//                  head and the two ⚙ editors at the tail.
+//                  head and the ⚙ Edit people control at the tail.
 //   2. `filtered`  `/admin?people=linus`. On main the query is ignored and every card shows
 //                  — that IS the before state, and the frame documents it. On the branch the
 //                  grid narrows to the queues Linus is on, including the ones he reaches

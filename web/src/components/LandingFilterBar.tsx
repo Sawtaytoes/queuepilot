@@ -5,10 +5,7 @@ import {
   filterPath,
   togglePerson,
 } from "../state/landingFilter"
-import {
-  openGroupsModal,
-  openPeopleModal,
-} from "../state/overlays"
+import { openPeopleModal } from "../state/overlays"
 import { PersonFace } from "./PersonFace"
 
 /**
@@ -157,22 +154,6 @@ export function LandingFilterBar({
             type="button"
           >
             ⚙ Edit people
-          </button>
-        </li>
-        <li>
-          {/* A GROUP IS STILL A THING, it is just not a chip. It holds "at least one of the
-              kids", it is what a queue's Must-be-here tray points at, and it resolves the
-              one provider profile a queue signs in as — so its editor has to stay reachable
-              even though nothing on this page filters by it. Here rather than buried in the
-              queue editor, because it is the other half of the question the chip beside it
-              asks. */}
-          <button
-            className="filterchip filteredit"
-            id="groupsedit"
-            onClick={() => openGroupsModal(null)}
-            type="button"
-          >
-            ⚙ Edit groups
           </button>
         </li>
       </ul>

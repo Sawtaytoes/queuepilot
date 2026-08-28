@@ -2,42 +2,25 @@ import { Button, EmptyState } from "@charcuterie/ui"
 import { useMemo, useState } from "react"
 
 import type { GroupWithRoster, Person } from "../lib/types"
-import {
-  closePeopleModal,
-  openGroupsModal,
-} from "../state/overlays"
+import { closePeopleModal } from "../state/overlays"
 import {
   createPerson,
   removePerson,
-  renameGroup,
   renamePerson,
   usePeople,
 } from "../state/people"
-import { refreshGroups, setStatus } from "../state/store"
+import { setStatus } from "../state/store"
 import { Modal } from "./Modal"
 import { PersonFace } from "./PersonFace"
 
 /**
  * THE ROSTER EDITOR — who exists in this household, and what each of them is called.
  *
- * It exists because the alternative was me editing `/config/people-mapping.yaml` for him and
- * restarting the app, which is the exact complaint the groups editor was built to answer:
+ * It exists because the alternative was editing `/config/people-mapping.yaml` and restarting
+ * the app:
  * *"All those configs are managed by you, not inside the app."* Reported 2026-08-26, from the
  * queue editor's trays: *"There are now two Kevins here. Can we please fix this so I can edit
  * the names somewhere?"*
- *
- * ── Why people AND groups are both in here ───────────────────────────────────────────────
- *
- * Those two Kevins were a PERSON called Kevin and a GROUP called Kevin, sitting one card
- * apart in the same tray. Nothing was broken — they are different objects and the trays draw
- * both — but no screen let him rename either, and a roster editor that fixed only half of a
- * name collision would have sent him to a second editor to finish the job. So the labels of
- * both live here, side by side, where the clash is visible.
- *
- * The GROUPS section is labels ONLY. Creating a group, deleting one, and choosing which sets
- * and accounts it holds all stay in `GroupsModal`, which is linked from the bottom of this
- * one. A group's sets are a different question from its name, and duplicating that editor
- * here would be two places to change one thing.
  *
  * ── One column, not a grid ───────────────────────────────────────────────────────────────
  *
@@ -58,24 +41,13 @@ export function PeopleModal() {
   return (
     <Modal
       footer={
-        <>
-          {/* The other half of the same question. `openGroupsModal` closes this one, so it
-              is a hop and not a stack. */}
-          <Button
-            appearance="outline"
-            intent="neutral"
-            onClick={() => openGroupsModal(null)}
-          >
-            Edit groups ›
-          </Button>
-          <Button
-            appearance="outline"
-            intent="neutral"
-            onClick={closePeopleModal}
-          >
-            Close
-          </Button>
-        </>
+        <Button
+          appearance="outline"
+          intent="neutral"
+          onClick={closePeopleModal}
+        >
+          Close
+        </Button>
       }
       id="peoplemodal"
       isOpen
@@ -84,9 +56,8 @@ export function PeopleModal() {
       titleId="peoplemodal-title"
     >
       <p className="subhint peoplehint">
-        A person is one human. A group is a saved set of
-        people. They are different things and they may share
-        a name — rename either one here.
+        Add, rename, or remove the people used to filter and
+        label queues.
       </p>
 
       <section className="peoplesec">
@@ -117,28 +88,14 @@ export function PeopleModal() {
         )}
         <AddPerson />
       </section>
-
-      <section className="peoplesec">
-        <h4>Groups</h4>
-        {groups.length === 0 ? (
-          <p className="subhint">No groups yet.</p>
-        ) : (
-          <ul className="peoplerows">
-            {groups.map((group) => (
-              <GroupRow group={group} key={group.id} />
-            ))}
-          </ul>
-        )}
-      </section>
     </Modal>
   )
 }
 
 /**
- * One editable name row — the shape both sections use.
+ * One editable name row for a person.
  *
- * `face` and `note` are passed in rather than derived, because a person and a group differ in
- * exactly those two places and in nothing else. Writing this twice is how the two drift.
+ * `face` and `note` are passed in so the row stays reusable for the person editor.
  */
 function NameRow({
   face,
@@ -151,7 +108,7 @@ function NameRow({
   id: string
   name: string
   face: React.ReactNode
-  /** The quiet second line — a group's rule, or a person's "filed on" count. */
+  /** The quiet second line — a person's "filed on" count. */
   note?: React.ReactNode
   onSave: (next: string) => Promise<void>
   /** The destructive control, when the row has one. */
@@ -335,38 +292,6 @@ function PersonRow({
           </Button>
         )
       }
-    />
-  )
-}
-
-/**
- * One group. LABEL ONLY — no remove control here, deliberately.
- *
- * Deleting a group is `GroupsModal`'s, because a group also holds sets and provider accounts
- * and that editor is the one that shows them. Offering the delete from a row that shows only a
- * name would be asking him to destroy something he cannot see the contents of.
- */
-function GroupRow({ group }: { group: GroupWithRoster }) {
-  return (
-    <NameRow
-      face={
-        <PersonFace id={group.id} label={group.label} />
-      }
-      id={group.id}
-      name={group.label}
-      note={
-        <span className="subhint">
-          {group.roster.length === 0
-            ? "Anybody in this group"
-            : `${group.roster.length} ${group.roster.length === 1 ? "person" : "people"}`}
-        </span>
-      }
-      onSave={async (next) => {
-        await renameGroup(group.id, next)
-        // The chips at the top of the landing paint this label out of `state/store.ts`, which
-        // is a different slice from the one `renameGroup` reloads.
-        await refreshGroups()
-      }}
     />
   )
 }

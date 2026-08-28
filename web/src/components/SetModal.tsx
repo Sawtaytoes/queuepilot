@@ -494,8 +494,8 @@ export function SetModal() {
             be a raw `<button>` wearing an app class, and `app.css` painted every skin by
             hand across five modals: `.modalbtns button` set the radius, the padding and the
             font, `[type="submit"]` painted the confirm accent, `.danger` painted the
-            destructive one, and `#groupsmodal`/`#entrymodal` restated the accent under
-            `.primary` because their confirms are click handlers rather than submits.
+            destructive one, and a modal-specific rule restated the accent under `.primary`
+            because those confirms are click handlers rather than submits.
 
             ⚠️ `.ghost` is Charcuterie's `outline`, NOT its `ghost`. The app class sets a
             surface background AND a border, which is what `outline` means here; Charcuterie's

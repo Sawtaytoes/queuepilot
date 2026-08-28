@@ -1,10 +1,9 @@
 // Before/after shots for the `.ghost` / `.ghost accent` secondary-action pass.
 //
-// Four frames, one per place the app painted a Charcuterie appearance by hand:
+// Three frames, one per place the app painted a Charcuterie appearance by hand:
 //   tools        — the Home toolbar: Collapse all / ＋ New queue / Pools ›
 //   playlinks    — the landing's ＋ New queue
 //   queuetools   — a queue page's Remove all completed / ⚙ Configure
-//   grouplist    — the groups panel's ＋ New group, whose `accent` matched NO rule
 //
 // EVERY byte on screen is FIXTURE data. The repo is public, so the `libraries` half of
 // `/api/sets` is fulfilled from the constant below rather than from a Plex server, and the
@@ -127,22 +126,6 @@ try {
   await page.waitForSelector('#qconfigure', { timeout: 30000 });
   await page.waitForTimeout(2000);
   await shot('queuetools', '#qconfigure');
-
-  // 4 — the groups panel's ＋ New group. Its `accent` matches NEITHER `#tools button.accent`
-  //     NOR `.playlinks button.accent`, so it has never once shown the treatment its class
-  //     asks for — the same latent bug the channels toolbar had.
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#playgrid li[data-set]', { timeout: 30000 });
-  await page.waitForTimeout(1500);
-  const groupEdit = page.locator('.groupedit').first();
-  if (await groupEdit.count()) {
-    await groupEdit.click();
-    await page.waitForSelector('#groupsmodal[data-open]', { timeout: 15000 });
-    await page.waitForTimeout(1000);
-    await shot('grouplist', '#groupnew');
-  } else {
-    console.log('SKIPPED grouplist — no group bar on the landing fixture');
-  }
 
   await browser.close();
 } finally {
