@@ -73,10 +73,6 @@ const DynModal = lazy(async () => ({
 const SetModal = lazy(async () => ({
   default: (await import("./components/SetModal")).SetModal,
 }))
-const GroupsModal = lazy(async () => ({
-  default: (await import("./components/GroupsModal"))
-    .GroupsModal,
-}))
 const PeopleModal = lazy(async () => ({
   default: (await import("./components/PeopleModal"))
     .PeopleModal,
@@ -221,7 +217,6 @@ function AppFrame() {
       <Suspense fallback={null}>
         {overlays.setModal ? <SetModal /> : null}
         {overlays.dynModal ? <DynModal /> : null}
-        {overlays.groupsModal ? <GroupsModal /> : null}
         {overlays.peopleModal ? <PeopleModal /> : null}
         {overlays.startModal ? <StartModal /> : null}
         {overlays.membersModal ? <MembersModal /> : null}
@@ -251,7 +246,7 @@ function AdminPage() {
       editableSetId={null}
       heading="Admin"
       isSubHidden={false}
-      sub="Manage queues, rules, groups, and the content QueuePilot can choose."
+      sub="Manage queues, rules, people, and the content QueuePilot can choose."
     >
       <PlayView />
     </Page>

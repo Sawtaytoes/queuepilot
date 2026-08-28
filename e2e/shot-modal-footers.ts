@@ -1,10 +1,9 @@
 // Before/after shots for the modal-footer button pass — every `.modalbtns` in the app.
 //
-// Five footers, and each one hand-rolled a skin `@charcuterie/ui` already ships:
+// Four footers, and each one hand-rolled a skin `@charcuterie/ui` already ships:
 //   dynmodal     — Delete pool / Cancel / Save
 //   setmodal     — Delete queue / Cancel / Save
 //   startmodal   — Clear / Cancel / Save
-//   groupsmodal  — Delete group / Close / Save        (a click handler, not a submit)
 //   entrymodal   — Done                               (ditto)
 //
 // EVERY byte on screen is FIXTURE data. The repo is public, so the `libraries` half of
@@ -136,28 +135,6 @@ try {
   await page.waitForTimeout(1200);
   await shot('setmodal', '#setmodal .modalbtns');
   await escape();
-
-  // --- the groups panel, from the group bar on the landing --------------------- //
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#playgrid li[data-set]', { timeout: 30000 });
-  await page.waitForTimeout(1500);
-  const groupEdit = page.locator('.groupedit').first();
-  if (await groupEdit.count()) {
-    await groupEdit.click();
-    await page.waitForSelector('#groupsmodal[data-open]', { timeout: 15000 });
-    await page.waitForTimeout(1000);
-    // Pick a group first: Delete only exists once one is selected, and it is the
-    // `ghost danger` pair this pass is replacing.
-    const firstGroup = page.locator('#groupsmodal .grouppick').first();
-    if (await firstGroup.count()) {
-      await firstGroup.click();
-      await page.waitForTimeout(600);
-    }
-    await shot('groupsmodal', '#groupsmodal .modalbtns');
-    await escape();
-  } else {
-    console.log('skip: no group bar on the landing fixture');
-  }
 
   // --- a queue tile: right-click opens `#tilemenu`, whose "Start from…" opens the modal.
   //     `#tilemenu` is a CONTEXT menu, so there is no button to press — the same
