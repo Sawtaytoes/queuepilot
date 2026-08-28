@@ -742,10 +742,12 @@ export function EntryEditor({
               <span>
                 {item.skippedCount
                   ? `${item.skippedCount} skipped`
-                  : applyVocab(
-                      "Everything inside this entry",
-                      vocab,
-                    )}
+                  : item.type === "show"
+                    ? "Normal episodes; specials by choice"
+                    : applyVocab(
+                        "Everything inside this entry",
+                        vocab,
+                      )}
               </span>
               <Button
                 appearance="outline"
@@ -764,7 +766,9 @@ export function EntryEditor({
             </div>
             <span className="fieldhint">
               {applyVocab(
-                "Untick anything this queue must never play — one episode, one film inside a collection. A skipped item counts as dealt with, so the entry can still finish.",
+                item.type === "show"
+                  ? "Normal episodes are selected. Specials start unselected, and you can include them one at a time."
+                  : "Untick anything this queue must never play — one film inside a collection. A skipped item counts as dealt with, so the entry can still finish.",
                 vocab,
               )}
             </span>

@@ -1,6 +1,10 @@
 import { describe, expect, test } from "vitest"
 
-import { isSkipListChanged, mergeSkipped } from "./skipList"
+import {
+  isSkipListChanged,
+  mergeIncludedSpecials,
+  mergeSkipped,
+} from "./skipList"
 
 describe("mergeSkipped", () => {
   // The claim this whole module exists for: `skipped` is per SET, so a panel that edits ONE
@@ -55,6 +59,18 @@ describe("mergeSkipped", () => {
         skipped: ["100"],
       }),
     ).toEqual(["100"])
+  })
+})
+
+describe("mergeIncludedSpecials", () => {
+  test("one show's choices do not replace another show's included specials", () => {
+    expect(
+      mergeIncludedSpecials({
+        current: ["other-show", "old-choice"],
+        included: ["new-choice"],
+        managed: ["old-choice", "new-choice"],
+      }),
+    ).toEqual(["other-show", "new-choice"])
   })
 })
 

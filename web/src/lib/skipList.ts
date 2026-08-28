@@ -34,6 +34,23 @@ export function mergeSkipped({
   return [...kept, ...added]
 }
 
+/** Merge one entry's selective-special opt-ins without touching another entry's choices. */
+export function mergeIncludedSpecials({
+  current,
+  managed,
+  included,
+}: {
+  current: readonly string[]
+  managed: Iterable<string>
+  included: Iterable<string>
+}): string[] {
+  return mergeSkipped({
+    current,
+    managed,
+    skipped: included,
+  })
+}
+
 /** Does this save change anything? A PATCH that writes the identical list still costs a
  *  Plex re-resolve and still says "Saved", so the modal asks first. */
 export function isSkipListChanged(

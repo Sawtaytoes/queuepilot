@@ -18,7 +18,7 @@
 // an injected rng (like build_rotation), so parity covers the deterministic non-anime queue only.
 import { setSections } from './routing.js';
 import {
-  int0, atOrAfterStart, multiSeason, showEpisodes, findCollection, collectionChildren,
+  int0, multiSeason, showEpisodes, findCollection, collectionChildren,
 } from './select.js';
 import { isUnweighted, toWeight, weightedShuffle } from './weight.js';
 import { initialQueueSize, playbackLength } from './playbackLength.js';
@@ -26,6 +26,7 @@ import {
   isExplicitPlacement, isRandomOrder, normalizeAddAs, normalizeLead, normalizePlacement,
 } from '../kind.js';
 import { DEFAULT_PROMOTE_WINDOW_MS, parsePromoteWindow } from '../leadWindow.js';
+import { episodesAtOrAfterStart, orderedPlayableEpisodes } from '../episodeOrder.js';
 import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
@@ -58,6 +59,7 @@ export type ResolveCfg = {
   episodic_sections?: readonly number[] | null;
   item_sections?: readonly number[] | null;
   include_specials?: unknown;
+  included_specials?: readonly unknown[] | null;
   batch_stops_at?: unknown;
   /**
    * The SET's default batch — how many items one entry contributes per visit when the entry
@@ -117,6 +119,7 @@ type RawEntryObject = {
 /** Anything the episode filters below probe. Both spellings of season/episode, because a raw
  * Plex leaf carries `parentIndex`/`index` and a resolved one carries `season`/`episode`. */
 type EpisodeLike = {
+  ratingKey?: unknown;
   type?: unknown;
   extraType?: unknown;
   season?: unknown;
@@ -460,11 +463,12 @@ export function skippedKeys(cfg: { skipped?: readonly unknown[] | null }): Reado
 // _keep_episode.
 export function keepEpisode(
   ep: EpisodeLike,
-  cfg: { include_specials?: unknown },
+  cfg: { include_specials?: unknown; included_specials?: readonly unknown[] | null },
   specialsOk = false,
 ): boolean {
   if (isExtraOrPromo(ep)) return false;
-  if (!cfg.include_specials && !specialsOk && String(ep.season) === '0') return false;
+  const isIncluded = new Set((cfg.included_specials || []).map(String)).has(String(ep.ratingKey));
+  if (!cfg.include_specials && !isIncluded && !specialsOk && String(ep.season) === '0') return false;
   if (!ep.duration) return false;
   return true;
 }
@@ -691,11 +695,14 @@ export async function collectionItems(
     if (ch.type === 'show') {
       const epStart = i === floorAt ? start : null;
       const childEps: ResolvedItem[] = await showEpisodes(client, rk, token);
-      const specialsOk = resume && !hasRealSeasons(childEps);
-      for (const e of childEps) {
+      const ordered = episodesAtOrAfterStart(
+        orderedPlayableEpisodes(childEps, cfg),
+        epStart,
+      );
+      for (const e of ordered) {
         if (skipped.has(e.ratingKey)) continue;
         if ((!watched.has(e.ratingKey) || (resume && inProgress(e.viewOffset, e.viewCount)))
-          && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, epStart)) {
+        ) {
           // Which collection CHILD this leaf came from, so a `batch_stops_at` cut can see the
           // member boundary (segmentKey). showEpisodes builds fresh objects per call, so
           // tagging in place is local to this resolve.
@@ -844,10 +851,9 @@ export async function resolveMember(
   }
   const allEps: ResolvedItem[] = await showEpisodes(client, rk, token);
   const start = desc.start;
-  const specialsOk = resume && !hasRealSeasons(allEps);
-  let eps = allEps.filter((e) => (!watched.has(e.ratingKey)
-    || (resume && inProgress(e.viewOffset, e.viewCount)))
-    && keepEpisode(e, cfg, specialsOk) && atOrAfterStart(e, start));
+  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg), start)
+    .filter((e) => !watched.has(e.ratingKey)
+      || (resume && inProgress(e.viewOffset, e.viewCount)));
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE
   // the batch cap — so skipping E5 makes an `episodes: 2` entry queue E6 + E7, not E6 alone.
   eps = eps.filter((e) => !skipped.has(e.ratingKey));

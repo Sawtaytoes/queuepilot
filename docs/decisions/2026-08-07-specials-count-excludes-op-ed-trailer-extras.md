@@ -5,7 +5,7 @@
 - **Type:** refinement
 - **Supersedes:** —
 - **Superseded by:** —
-- **See also / refines:** [2026-07-17 — A queued/rotated series never plays specials, Season 0 excluded entirely](2026-07-17-anime-series-never-open-on-specials-exclude-season-0.md) (the OPEN-point rule; unchanged). This decision adds the COUNT rule and shares one predicate with it.
+- **See also / refines:** [2026-07-17 — A queued/rotated series never plays specials, Season 0 excluded entirely](2026-07-17-anime-series-never-open-on-specials-exclude-season-0.md) (the OPEN-point rule later superseded by selective inclusion). This decision adds the COUNT rule and shares one predicate with it. [2026-08-28](2026-08-28-specials-are-skipped-by-default-and-selected-one-at-a-time.md) keeps this record's extra classification unchanged.
 
 ## Decision
 The web UI's per-series watched/total episode counts (the Start modal's "`N. Series (X/Y watched)`"
