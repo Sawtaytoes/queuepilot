@@ -148,6 +148,8 @@ export async function showEpisodes(
     extraType: e.extraType,
     viewCount: int0(e.viewCount),
     viewOffset: int0(e.viewOffset),
+    originallyAvailableAt: typeof e.originallyAvailableAt === 'string'
+      ? e.originallyAvailableAt : null,
   }));
 }
 

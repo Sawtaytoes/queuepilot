@@ -377,6 +377,8 @@ export type RegistrySet = {
    * uses `blocklist` for the same job, and `PATCH /api/sets/:id` rejects `skipped` there.
    */
   skipped: string[]
+  /** Regular Season-0 leaf ids this queue opts into. Empty means skipped by default. */
+  included_specials: string[]
   /**
    * `"whole"` (the default) | `"split"` — what a `Collection:` MEMBER contributes to a
    * filtered pool: one ordered member, or one member per child show. Always sent as the

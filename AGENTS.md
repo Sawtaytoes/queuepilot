@@ -815,6 +815,29 @@ Four things to know before touching it:
 `PATCH /api/sets/:id` rejects `skipped` on a rotation channel: `blocklist` is the same feature
 there, and one set never carries two exclude lists.
 
+### Selectively including specials
+
+A normal Plex show lists regular Season-0 leaves under **Specials** in its **What plays**
+editor. They are unticked by default. Ticking one writes its leaf id to the curated set's
+`included_specials:` list; it does NOT remove a synthetic key from `skipped:`. Normal episodes
+keep the opposite default: absent from `skipped:` means playable
+([decision](docs/decisions/2026-08-28-specials-are-skipped-by-default-and-selected-one-at-a-time.md)).
+
+- The legacy `include_specials: true` switch stays readable and means every regular special.
+  The UI writes only `included_specials:`.
+- A specials-only title needs no inclusion. Its Season 0 is the title's real run.
+- The Season-0 200–399 range, Plex clips and `extraType` rows remain extras and never appear in
+  the chooser.
+- A selected special with `originallyAvailableAt` is inserted after the last normal episode on
+  or before that date. An undated one follows the normal run. Do not fall back to Plex's raw
+  Season-0-first order.
+- The Start editor still asks for the playable list. Only the member editor sends
+  `?specials=choices`, through the provider's `listUnits` seam.
+- The dynamic Rules pool keeps its existing membership. Selective inclusion needs the stable
+  curated / explicit show entry that owns the **What plays** editor.
+
+Gate: `e2e/specials-count-test.ts` plus `web/src/lib/skipList.test.ts`.
+
 ## The page loads from CACHE, and phase 3 re-reads the providers
 
 **`GET /api/queues` makes no provider call.** Every entry resolves out of three tables —

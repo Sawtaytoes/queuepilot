@@ -10,6 +10,10 @@
 // Run:  server/node_modules/.bin/tsx e2e/specials-count-test.ts   (repo root; non-zero on failure)
 import { promises as fs } from 'node:fs';
 import type { EpisodeLike } from '../server/src/plex.js';
+import {
+  episodesAtOrAfterStart,
+  orderedPlayableEpisodes,
+} from '../server/src/episodeOrder.js';
 
 // A local const, not `process.env.CACHE_PATH` re-read: the env value is `string | undefined`
 // everywhere it is read back, and the paths below are the same string by construction.
@@ -21,7 +25,15 @@ for (const f of [CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) {
 
 const plex = await import('../server/src/plex.js');
 const cache = await import('../server/src/cache.js');
-const { isExtraOrPromo, isCountableEpisode, isPlayableEpisode, countEpisodes, collectionNext } = plex;
+const {
+  isExtraOrPromo,
+  isCountableEpisode,
+  isPlayableEpisode,
+  countEpisodes,
+  collectionNext,
+  nextEpisode,
+  showEpisodes,
+} = plex;
 
 const ok = (n: string, c: boolean) => {
   console.log(`${c ? 'PASS' : 'FAIL'} ${n}`);
@@ -73,12 +85,76 @@ ok('default playable list is the 3 S1 episodes', showEps.filter((e) => isPlayabl
 // include_specials adds the regular special AND the "other", but never the trailer/OP/ED.
 ok('include_specials adds special + other, not trailer/OP-ED', showEps.filter((e) => isPlayableEpisode(e, { includeSpecials: true })).map((e) => e.ratingKey).join(',') === '11,12,13,20,40');
 
+const dated = [
+  { ...s0('special', 1, 'Between'), originallyAvailableAt: '2020-01-15' },
+  { ...s1('ep1', 1, false), originallyAvailableAt: '2020-01-01' },
+  { ...s1('ep2', 2, false), originallyAvailableAt: '2020-02-01' },
+  s0('undated', 2, 'After the run'),
+  { ...s0('trailer', 201, 'Trailer'), originallyAvailableAt: '2020-01-10' },
+];
+ok(
+  'regular specials are skipped by default',
+  orderedPlayableEpisodes(dated).map((e) => e.ratingKey).join(',') === 'ep1,ep2',
+);
+ok(
+  'selected dated specials use air-date order and undated specials follow the run',
+  orderedPlayableEpisodes(dated, { included_specials: ['special', 'undated'] })
+    .map((e) => e.ratingKey).join(',') === 'ep1,special,ep2,undated',
+);
+ok(
+  'an extra cannot be selected as a special',
+  !orderedPlayableEpisodes(dated, { included_specials: ['trailer'] })
+    .some((e) => e.ratingKey === 'trailer'),
+);
+ok(
+  'a manual start floor applies after viewing-order placement',
+  episodesAtOrAfterStart(
+    orderedPlayableEpisodes(dated, { included_specials: ['special', 'undated'] }),
+    { season: 1, episode: 2 },
+  ).map((e) => e.ratingKey).join(',') === 'ep2,undated',
+);
+
 // ---------------------------------------------------------------------------------------- //
 // Part B — collectionNext advances past a series whose only unwatched leaves are extras
 // (the Saiki K. collection: S1/S2/S3 done except OP/ED theme songs at index 301+; S4 has 6 real
 // unwatched eps). Cache is seeded so collectionChildren + allLeaves hit locally — no Plex/server.
 // ---------------------------------------------------------------------------------------- //
 await cache.init();
+
+const selectiveLeaves = [
+  { ...s0('select-me', 1, 'Between'), originallyAvailableAt: '2020-01-15' },
+  { ...s1('before', 1, true), originallyAvailableAt: '2020-01-01' },
+  { ...s1('after', 2, false), originallyAvailableAt: '2020-02-01' },
+  { ...s0('never-extra', 301, 'Ending'), originallyAvailableAt: '2020-01-20' },
+];
+const selectiveCounts = countEpisodes(selectiveLeaves);
+await cache.putLeaves('SELECTIVE', {
+  updatedAt: 1,
+  leafCount: selectiveCounts.leafCount,
+  viewedLeafCount: selectiveCounts.viewedLeafCount,
+  payload: selectiveLeaves,
+});
+const defaultRows = await showEpisodes('SELECTIVE');
+const choiceRows = await showEpisodes('SELECTIVE', {}, true);
+ok(
+  'the Start list hides normal-show specials',
+  defaultRows?.seasons.flatMap((season) => season.episodes)
+    .map((episode) => episode.ratingKey).join(',') === 'before,after',
+);
+ok(
+  'the member list exposes regular specials but not extras',
+  choiceRows?.seasons.flatMap((season) => season.episodes)
+    .map((episode) => episode.ratingKey).join(',') === 'before,after,select-me',
+);
+ok(
+  'next-up skips a regular special until selected',
+  (await nextEpisode('SELECTIVE'))?.ratingKey === 'after',
+);
+ok(
+  'next-up uses date placement for a selected special',
+  (await nextEpisode('SELECTIVE', null, {}, new Set(), new Set(['select-me'])))?.ratingKey
+    === 'select-me',
+);
 
 const normalEps = (rk: string, n: number, { watched }: { watched: boolean }): EpisodeLike[] =>
   Array.from({ length: n }, (_, k) => s1(`${rk}${k + 1}`, k + 1, watched));
