@@ -180,6 +180,11 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
 {
   await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#goqueues');
+  ok(
+    'Admin no longer exposes the Groups editor',
+    (await page.locator('#groupsedit').count()) === 0 &&
+      !(await page.locator('body').innerText()).includes('Edit groups'),
+  );
 
   let loads = 0;
   page.on('load', () => { loads += 1; });

@@ -1726,8 +1726,8 @@ body.sdrag .shelf:not(.dragging) {
    and `intent` (`components/SelectionBar.tsx`). Two things went wrong while they existed,
    and both are the reason this file must not paint a component:
 
-     1. Apply wore `primary`, whose only rules are `#entrymodal`/`#groupsmodal`, so the
-        class did nothing and `#selbar button` painted it exactly like Reset and Move.
+     1. Apply wore `primary`, but its old modal rule did not include this bar, so the class
+        did nothing and `#selbar button` painted it exactly like Reset and Move.
      2. A `Picker` trigger IS a `<button>`. This file is unlayered and Tailwind's utilities
         are in `@layer utilities`, so `#selbar button` outranked the component and both
         pickers came out solid indigo instead of `Picker`'s `outline`.
@@ -2126,7 +2126,6 @@ body.queue-view #tools {
 #dynmodal,
 #entrymodal,
 #membersmodal,
-#groupsmodal,
 #peoplemodal,
 #poweroffmodal {
   background: var(--color-surface-raised);
@@ -2176,11 +2175,6 @@ body.queue-view #tools {
 #membersmodal {
   width: min(560px, 92vw);
 }
-/* Wider than the rest: it is a two-pane settings panel (the list of groups beside the one
-   being edited), not a single form. */
-#groupsmodal {
-  width: min(780px, 95vw);
-}
 /* A one-column list of name fields, so it is sized by the LINE and not by a form: 560px is the
    width at which a long name plus its Save button and its ✕ still sit on one row, which is what
    keeps the list scannable down the left edge. `92vw` takes over on a narrow window. */
@@ -2199,7 +2193,6 @@ body.queue-view #tools {
 #dynmodal form,
 #entrymodal form,
 #membersmodal form,
-#groupsmodal form,
 #peoplemodal form,
 #poweroffmodal form {
   position: relative;
@@ -2209,7 +2202,6 @@ body.queue-view #tools {
 #dynmodal h3,
 #entrymodal h3,
 #membersmodal h3,
-#groupsmodal h3,
 #peoplemodal h3,
 #poweroffmodal h3 {
   margin: 0 0 14px;
@@ -2430,7 +2422,6 @@ body.queue-view #tools {
 #dynmodal .modalbtns,
 #entrymodal .modalbtns,
 #membersmodal .modalbtns,
-#groupsmodal .modalbtns,
 #poweroffmodal .modalbtns {
   display: flex;
   gap: 10px;
@@ -2452,15 +2443,6 @@ body.queue-view #tools {
 #dynmodal .modalbtns .spacer,
 #poweroffmodal .modalbtns .spacer {
   flex: 1;
-}
-/* Delete stays hard left, Close + Save sit hard right — the same left/right split the other
-   modals get from an explicit `.spacer` child, done here with `margin-left: auto` on the
-   first of the right-hand pair so the footer needs no filler element. */
-#groupsmodal .modalbtns {
-  justify-content: flex-end;
-}
-#groupsmodal .modalbtns #groupdelete {
-  margin-right: auto;
 }
 /* EVERY FOOTER BUTTON'S SKIN IS GONE, not moved. All five `.modalbtns` are Charcuterie
    `Button`s now, so the radius, the padding, the font, the `[type="submit"]` accent and the
@@ -2622,12 +2604,9 @@ html.modal-open {
    hiding it turns a filtered-to-nothing chip into an unexplained empty page. The number is
    what you will see AFTER the tap, not what that person owns — see `LandingFilterBar`.
 
-   `.groupcount` rides along because the groups editor's master list wears the same pill for
-   the same reason. It is NOT a borrowed class: both selectors are on this one rule, so the
-   pill paints wherever it is used rather than only inside `.filterbar`
-   (decision `2026-08-21-a-class-name-is-not-a-style`). */
-.filtercount,
-.groupcount {
+   The count is part of the filter chip, so it stays in this rule rather than getting a
+   selector tied to one particular filter bar (decision `2026-08-21-a-class-name-is-not-a-style`). */
+.filtercount {
   min-width: 1.35em;
   padding: 0 5px;
   border-radius: 999px;
@@ -3108,9 +3087,6 @@ body.name-editable #apphead h1 {
   .providerchips {
     margin-left: 0;
     width: 100%;
-  }
-  .grouplayout {
-    grid-template-columns: 1fr;
   }
   .playcard .rowmeta {
     white-space: normal;
@@ -3600,134 +3576,6 @@ ul.grid.posters .tile .badges .epstag {
 /* The row's Choose… / Back to automatic are outline `Button`s at `size="sm"`. Element
    selector, so deleted rather than left to outrank the component. */
 
-/* --- the Groups editor ------------------------------------------------------------- */
-/* Two panes: the list of groups (which doubles as the reorder control) beside the one being
-   edited. Collapses to one column in the Narrow View — a 220px sidebar next to a form is
-   two things that each want the whole width. */
-.grouplayout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 20px;
-  align-items: start;
-}
-.grouplist ul {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.grouplist li {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.grouppick {
-  flex: 1 1 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 7px 10px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--color-content-secondary);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.grouppick:hover {
-  background: var(--color-surface-sunken);
-  color: var(--color-content-primary);
-}
-.grouppick[aria-current="true"] {
-  border-color: var(--color-intent-accent-border);
-  background: var(--color-intent-accent-surface);
-  color: var(--color-intent-accent-content);
-}
-/* Up/down live OUTSIDE the select button, or clicking a reorder arrow would also change
-   which group the form is editing — two actions on one press. */
-/* Side by side, not stacked. The pair used to be two 9px glyphs in a column, which fitted
-   inside a 42px row; an `IconButton` is honestly sized (`--control-height-sm`), so stacking
-   two of them made every row 74px and the five-group list nearly twice as tall. A row of
-   two keeps the list scannable, and each arrow is now a real target rather than a speck. */
-.groupmove {
-  display: flex;
-  gap: 2px;
-}
-/* ⚠️ `.groupmove button` was an ELEMENT selector and is deleted rather than trimmed: an
-   `IconButton` renders a `<button>`, so it would have kept matching and outranking the
-   component that landed inside `.groupmove`. `isDisabled` paints the disabled pair. */
-.groupform fieldset {
-  margin: 16px 0 0;
-  padding: 12px 14px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 10px;
-}
-.groupform legend {
-  padding: 0 6px;
-  color: var(--color-content-secondary);
-  font-size: 0.88rem;
-}
-.groupform .field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.groupform .field input[type="text"] {
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  background: var(--color-surface-sunken);
-  color: var(--color-content-primary);
-  font: inherit;
-}
-/* CheckboxGroup ships a bare `.libs` div; every other consumer grids it under its own modal
-   id, so this one has to as well or the account ticks run together as one paragraph. */
-.groupform .libs {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 14px;
-}
-.groupform .libs label {
-  display: flex;
-  gap: 6px;
-  align-items: baseline;
-  font-size: 0.9rem;
-}
-.groupform .hint {
-  margin: 6px 0 0;
-  color: var(--color-content-muted);
-  font-size: 0.82rem;
-}
-/* The membership list is the tallest thing in the panel and the only one that grows with the
-   library, so it scrolls rather than the whole modal. */
-.groupsets {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  max-height: 260px;
-  overflow: auto;
-  overscroll-behavior: contain;
-}
-.groupsets label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 3px 0;
-  cursor: pointer;
-}
-.groupsets input:disabled + span {
-  color: var(--color-content-muted);
-}
-/* Why a tick is locked. Quiet, because it is an explanation and not a warning. */
-.derived {
-  color: var(--color-content-muted);
-  font-size: 0.78rem;
-  font-style: normal;
-}
 /* The two ⚙ chips. Quieter than a filter chip — they open an editor rather than narrowing
    the page, so they must not read as a third thing you can tick. */
 .filteredit {
@@ -3960,8 +3808,7 @@ body.rowdragging {
   align-items: center;
   margin-bottom: 6px;
 }
-/* `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own id —
-   see the note above `.groupform .libs`. This one WRAPS in a row rather than taking the
+/* `CheckboxGroup` ships a bare `.libs` div. This one WRAPS in a row rather than taking the
    modals' two columns: it sits full-width above the grid, not in a 420px dialog, and eleven
    library names in two tall columns would push the first tile off the fold. */
 .pendinglibs .libs {
@@ -4217,7 +4064,7 @@ body.rowdragging {
 
 /* ---- 1. Who's here ----
    `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own
-   scope — the same note `.groupform .libs` and `.pendinglibs .libs` carry. */
+   scope — the same note `.pendinglibs .libs` carries. */
 .peoplebox .libs {
   display: grid;
   grid-template-columns: repeat(
@@ -4728,7 +4575,7 @@ body.rowdragging {
   margin: 0;
 }
 /* `CheckboxGroup` ships a bare `.libs` div and every consumer grids it under its own
-   scope — the same note `.peoplebox .libs` and `.groupform .libs` carry. Narrower tracks
+   scope — the same note `.peoplebox .libs` carries. Narrower tracks
    here than the roster's: this grid sits inside a card, not across a form. */
 .mppeople .libs {
   display: grid;

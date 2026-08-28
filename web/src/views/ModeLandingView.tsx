@@ -30,7 +30,7 @@ export function ModeLandingView() {
             <h2>Admin</h2>
           </div>
           <p>
-            Manage queues, rules, groups, and the content
+            Manage queues, rules, people, and the content
             QueuePilot can choose.
           </p>
         </Link>
