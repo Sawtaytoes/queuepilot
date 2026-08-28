@@ -394,6 +394,29 @@ try {
     await page.click(tile('Movies'));
     await page.waitForTimeout(400);
     ok('another tile leaves the step', new URL(page.url()).pathname === '/what-to-watch-play');
+
+    // The second screen is the approved list, not the six activities repeated under a new
+    // heading. Choosing a scope starts the pick; Reading has one activity, so this case is
+    // deterministic even though a multi-activity scope deliberately is not.
+    await page.click(tile('Surprise Me'));
+    await page.waitForTimeout(400);
+    const scopes = await page.$$eval(
+      '#tonight-surprise [role="radio"]',
+      (els, sel) => els.map((el) => el.querySelector(sel)?.textContent?.trim() ?? ''),
+      TILE_NAME,
+    );
+    ok(
+      'the narrowing list is Media, Games and Reading',
+      JSON.stringify(scopes) === JSON.stringify(['Media', 'Games', 'Reading']),
+      JSON.stringify(scopes),
+    );
+    await page.click('#tonight-surprise [role="radio"]:has-text("Reading")');
+    await page.waitForSelector('#result-queue', { timeout: 15000 });
+    ok(
+      'choosing a scope lands on a real result',
+      new URL(page.url()).pathname === '/result',
+      page.url(),
+    );
   }
 } finally {
   await browser.close();
