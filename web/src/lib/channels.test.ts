@@ -1,15 +1,26 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { channelAccountLabel } from "./channels"
+import {
+  channelAccountLabel,
+  fetchRatings,
+  fetchScopedRatings,
+} from "./channels"
 import type { Binding, RegistrySet } from "./types"
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 /** The cast is the landing fixture's — anonymized, never captured from the house. */
-const binding = (plexUser: string | null): Binding => ({
+const binding = (
+  plexUser: string | null,
+  userUuid: string | null = null,
+): Binding => ({
   account_id: null,
   allowed_ratings: [],
   movie_ratings: [],
   plex_user: plexUser,
-  user_uuid: null,
+  user_uuid: userUuid,
 })
 
 const channel = (
@@ -121,5 +132,49 @@ describe("a rules row says which account it plays as", () => {
       channelAccountLabel(channel({ profiles: [] })),
     ).toBeNull()
     expect(channelAccountLabel(null)).toBeNull()
+  })
+})
+
+describe("a rules profile gets its complete ratings vocabulary", () => {
+  it("does not limit an explicit profile to the queue's libraries", async () => {
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ ratings: ["G", "TV-Y7"] }),
+      } as Response)
+
+    const ratings = await fetchRatings(
+      channel({
+        id: "profile-wide-ratings",
+        has_explicit_profiles: true,
+        item_sections: [1],
+        profiles: [binding("Example Kids", "profile-uuid")],
+      }),
+      undefined,
+    )
+
+    expect(ratings).toEqual(["G", "TV-Y7"])
+    expect(request.mock.calls[0]?.[0]).toBe(
+      "/api/ratings?uuid=profile-uuid",
+    )
+    expect(request.mock.calls[0]?.[0]).not.toContain(
+      "sections=",
+    )
+  })
+
+  it("uses the same complete profile view after a profile is picked", async () => {
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValue({
+        ok: true,
+        json: async () => ({ ratings: ["PG", "TV-Y7"] }),
+      } as Response)
+
+    await fetchScopedRatings("profile-uuid-picked")
+
+    expect(request.mock.calls[0]?.[0]).toBe(
+      "/api/ratings?uuid=profile-uuid-picked",
+    )
   })
 })

@@ -1,14 +1,14 @@
 // Verifier for the v3 PR 2b per-profile bindings sub-editor in the dyn (dynamic-channel)
 // form. Boots a FAKE MQTT broker + THIS checkout's Node server against the rich fixture,
-// then drives the modal end to end: behavior select, add/remove profile cards, per-binding
-// profile fill + ratings scoping, submit → profiles[] persisted, and edit-load of a legacy
-// single-binding set. Screenshots land in __screenshots__/ for visual review.
+// then drives the modal end to end: behavior select, one profile card, profile fill + rating
+// loading, submit → profiles[] persisted, and edit-load of legacy single- and multi-binding
+// sets. Screenshots land in __screenshots__/ for visual review.
 //
 //   server/node_modules/.bin/tsx e2e/verify-profile-bindings.ts
 // Needs: root agentic .env (Plex token), e2e/broker deps (aedes), mux-magic playwright,
 // PLAYWRIGHT_BROWSERS_PATH. Copies fixtures to /tmp — never touches real data.
 import { chromium } from './playwright.js';
-import { pickHandle, pickValueMaybe, readOptionValues, readOptionValuesFromHandle } from './pick.js';
+import { readOptionValues } from './pick.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -94,48 +94,15 @@ try {
   ok('no legacy #dyn-mode / #dyn-ratings left', !(await page.$('#dyn-mode')) && !(await page.$('#dyn-ratings')));
   ok('new channel opens with exactly one binding card', (await cards()) === 1);
   ok('single binding hides its Remove button', await page.$eval('#dyn-bindings .binding .b-remove', (b) => Boolean(b.hidden)));
+  ok('new channel does not offer Add profile', !(await page.$('#dyn-addprofile')));
   await shot('pr2b-dyn-new.png');
 
-  // --- 2. Add a second profile → two cards, Remove now shown ----------------- //
-  await page.click('#dyn-addprofile');
-  await page.waitForTimeout(150);
-  ok('Add profile appends a second binding card', (await cards()) === 2);
-  ok('with two bindings, Remove is shown', !(await page.$eval('#dyn-bindings .binding .b-remove', (b) => b.hidden)));
-
-  // Pick a distinct profile in each card; assert it fills the advanced Plex-user field.
-  const [firstSel, secondSel] = await page.$$('#dyn-bindings .binding .b-profile');
-  // Step 2 just asserted there are two cards, so two triggers is a hard expectation —
-  // name it rather than letting `undefined.click()` surface as a Playwright TypeError.
-  if (!firstSel || !secondSel) throw new Error('expected two .b-profile pickers after Add profile');
-  // Every binding card shares the same profile option list — read it from the first.
-  // The predicate (not a bare `Boolean`) is what drops the `null`s from the TYPE too.
-  const profVals = (await readOptionValuesFromHandle(page, firstSel))
-    .filter((value): value is string => Boolean(value));
-  const [profA, profB] = profVals;
-  if (profA && profB) {
-    await pickHandle(page, firstSel, profA);
-    await pickHandle(page, secondSel, profB);
-    await page.waitForTimeout(400);
-    const users = await page.$$eval<string[], HTMLInputElement>('#dyn-bindings .binding .b-plexuser', (is) => is.map((i) => i.value));
-    ok('picking a profile fills that card\'s Plex user', Boolean(users[0] && users[1] && users[0] !== users[1]));
-  } else {
-    ok('picking a profile fills that card\'s Plex user (skipped: <2 Plex profiles live)', true);
-  }
-  await shot('pr2b-dyn-two-bindings.png');
-
-  // --- 3. Submit → the new channel persists profiles[] ----------------------- //
+  // --- 2. Submit → the new channel persists one profiles[] binding ------------ //
   await page.fill('#dyn-label', 'Verify Fn Channel');
-  // Checking a show library re-scopes every binding's ratings (async, replaces the checkbox
-  // DOM), so do it FIRST and let it settle before touching ratings — then use auto-retrying
-  // locators so a re-render mid-check re-resolves rather than detaching.
-  await page.locator('#dyn-showlibs input').first().check();
-  await page.waitForTimeout(700);
-  const nBindings = await cards();
-  for (let i = 0; i < nBindings; i++) {
-    const firstRating = page.locator('#dyn-bindings .binding').nth(i).locator('.b-ratings input').first();
-    await firstRating.waitFor({ timeout: 5000 });
-    await firstRating.check();
-  }
+  // The ratings list is profile-wide. Library selection changes the queue scope only.
+  const firstRating = page.locator('#dyn-bindings .binding').first().locator('.b-ratings input').first();
+  await firstRating.waitFor({ timeout: 5000 });
+  await firstRating.check();
   await page.click('#dyn-save');
   // Save closes the modal; it's a body-portalled overlay now (not a native <dialog>), so
   // "closed" = the element is detached, not `.open === false`.
@@ -146,12 +113,11 @@ try {
   });
   ok('created channel stored', Boolean(created));
   ok('created channel has behavior', created?.behavior === 'progress');
-  ok('created channel persisted profiles[]', Array.isArray(created?.profiles) && created.profiles.length >= 1);
+  ok('created channel persisted one profile binding', Array.isArray(created?.profiles) && created.profiles.length === 1);
 
-  // --- 4. Edit-load a LEGACY single-binding set → one prefilled card ---------- //
+  // --- 3. Edit-load a LEGACY single-binding set → one prefilled card ---------- //
   await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])', { timeout: 30000 });
-  await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForTimeout(300);
   await page.click('#chconfigure');
   await page.waitForSelector('#dynmodal[data-open]');
@@ -164,7 +130,7 @@ try {
   ok('legacy binding ratings prefilled (G, no PG)', legRatings.includes('G') && !legRatings.includes('PG'));
   await shot('pr2b-dyn-edit-legacy.png');
 
-  // --- 5. Edit-load a TWO-binding channel → each card keeps ITS OWN ratings --- //
+  // --- 4. Edit-load a TWO-binding channel → each card keeps ITS OWN ratings --- //
   // Regression: the shared `known` ratings list is scoped to the ACTIVE profile; a second
   // binding for a different profile must still render + check its own saved ratings (the
   // Older card came up blank because Younger's scoped list omitted PG/TV-PG). Create the
