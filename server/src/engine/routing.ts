@@ -53,6 +53,7 @@ type RawSetEntry = BindingSource & {
   on_complete_by_show?: unknown;
   blocklist?: unknown;
   skipped?: unknown;
+  included_specials?: unknown;
   members?: unknown;
   collection_members?: unknown;
   superseded_by?: unknown;
@@ -248,6 +249,10 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
       cfg.remove_completed_after = String(ent.remove_completed_after).trim();
     }
     if (ent.include_specials) cfg.include_specials = true;
+    const includedSpecials = (
+      (ent.included_specials as unknown[] | null | undefined) || []
+    ).map(String);
+    if (includedSpecials.length) cfg.included_specials = includedSpecials;
     // Where a multi-episode batch may stop: "none" | "member" | "season". resolve.js's batchStop
     // interprets it (entry override > set > env BATCH_STOPS_AT).
     if (ent.batch_stops_at != null) {

@@ -67,6 +67,7 @@
     "audio_language": null,
     "batch_stops_at": null,
     "include_specials": true,
+    "included_specials": ["140"],
     "max_items": null,
     "remove_completed_after": null,
     "requires_profile": null

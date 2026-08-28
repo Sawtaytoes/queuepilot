@@ -7,6 +7,12 @@
 import { Agent, request } from 'undici';
 import * as cache from './cache.js';
 import { PLEX_URL, PLEX_TOKEN, PLEX_CLIENT_IDENTIFIER } from './config.js';
+import {
+  episodeSeason,
+  episodesAtOrAfterStart,
+  isExtraOrPromoEpisode,
+  orderedPlayableEpisodes,
+} from './episodeOrder.js';
 import { PlexError, isPlexError } from './errors.js';
 import type {
   NextEp,
@@ -360,19 +366,8 @@ function container(json: unknown): PlexContainer {
 //   * index 400–499 → "other"                              → INCLUDE (meant to be played)
 // So a Season-0 leaf is an extra exactly when 200 <= index <= 399. Real seasons (>=1) are never
 // extras. Plex Extras/clips (a `clip` type or an `extraType`) are excluded too, if any appear.
-const S0_EXTRA_INDEX_MIN = 200; // trailers (200–299) + OP/ED (300–399)
-const S0_EXTRA_INDEX_MAX = 399;
-
 export function isExtraOrPromo(ep: EpisodeLike | null | undefined): boolean {
-  if (!ep) return false;
-  if (ep.type === 'clip') return true;
-  if (ep.extraType != null && ep.extraType !== '') return true;
-  const season = ep.parentIndex != null ? ep.parentIndex : ep.season;
-  if (String(season) === '0') {
-    const idx = Number(ep.index != null ? ep.index : ep.episode);
-    if (Number.isFinite(idx) && idx >= S0_EXTRA_INDEX_MIN && idx <= S0_EXTRA_INDEX_MAX) return true;
-  }
-  return false;
+  return isExtraOrPromoEpisode(ep);
 }
 
 // A real episode for COUNTING purposes: has a duration (a castable file) and is not an
@@ -992,18 +987,6 @@ export async function viewStates(
   return out;
 }
 
-// A manual START floor {season, episode}: `e` is at-or-after it (so it's eligible to play).
-// Earlier episodes are skipped from the pick but never marked watched. No start => always.
-// Season defaults to 1 (single-season anime stores the sole season).
-function atOrAfterStart(e: PlexMetadata, start: Start | null): boolean {
-  if (!start) return true;
-  const es = Number(e.parentIndex) || 0;
-  const ee = Number(e.index) || 0;
-  const ss = Number(start.season) || 1;
-  const se = Number(start.episode) || 1;
-  return es > ss || (es === ss && ee >= se);
-}
-
 // The show's episodes (allLeaves), SQLite-backed. This is the single biggest source of the
 // 2.7 s: one call per show, and every restart lost the in-process cache. It is cached with a
 // 24 h TTL AND busted precisely and for free by the MQTT now-playing watch (cache.dropLeaves
@@ -1111,6 +1094,7 @@ export async function nextEpisode(
   start: Start | null = null,
   opts: AccountScope = {},
   skipped: ReadonlySet<string> = NO_SKIPS,
+  includedSpecials: ReadonlySet<string> = NO_SKIPS,
 ): Promise<NextEp | null> {
   const eps = await allLeaves(showRatingKey, opts);
   if (!eps) return null;
@@ -1122,21 +1106,13 @@ export async function nextEpisode(
     if (e.parentIndex != null) seasons.add(String(e.parentIndex));
   }
   const multiSeason = seasons.size > 1;
-  // A show whose ONLY leaves are Season 0 is a pure OAD / film-as-series (e.g. the Prison
-  // School "Mad Wax" OAD) — its special IS the whole show, so don't skip it as a
-  // front-loading special (that made such a show read "All watched"/Completed). A show WITH
-  // real seasons still never opens on a special. Mirrors the engine's _has_real_seasons.
-  const hasRealSeasons = seasons.size > 0;
-  for (const e of eps) {
-    // JUNK GATE FIRST: a clip/extraType or a Season-0 trailer/OP-ED (index 200-399) is never a
-    // real episode — dropped even for a specials-only OAD, so the OAD (s0e1) survives below but
-    // the ED theme songs (s0e301+) never do (decision 2026-08-07).
-    if (isExtraOrPromo(e)) continue;
-    if (String(e.parentIndex) === '0' && hasRealSeasons) continue;
-    if (!e.duration) continue;
+  const ordered = episodesAtOrAfterStart(
+    orderedPlayableEpisodes(eps, { included_specials: [...includedSpecials] }),
+    start,
+  );
+  for (const e of ordered) {
     // viewCount is OMITTED by Plex at 0, so a missing count is unwatched here — never watched.
     if (e.viewCount && e.viewCount > 0) continue; // already watched by Bob
-    if (!atOrAfterStart(e, start)) continue; // manual start floor
     // On the set's SKIP list. Applied here as well as in the engine, or the tile would keep
     // naming an episode the next scan is never going to play — the caption and the playback
     // disagreeing is the whole failure this guards.
@@ -1286,20 +1262,26 @@ function startMemberIndex(children: CollectionChild[], start: Start | null): num
 export async function showEpisodes(
   showRatingKey: string | number,
   opts: AccountScope = {},
+  includeSpecialChoices = false,
 ): Promise<ShowEpisodes | null> {
   // `opts` ({token, account}) scopes the `watched` marks to a specific profile — a per-profile
   // channel's start editor shows THAT profile's history, not the admin's. Empty for
   // queues/admin, preserving Bob's-view behaviour.
   const eps = await allLeaves(showRatingKey, opts);
   if (!eps) return null;
-  // A specials-only show (an OAD with no real season >= 1, e.g. "Prison School: Mad Wax")
-  // must still list its Season-0 episode(s) — otherwise the start editor reads "no episodes"
-  // and the tile can never resolve. Mirror nextEpisode: keep Season 0 ONLY when there are no
-  // real seasons. Extras / OP-ED / trailers are always dropped (isPlayableEpisode → isExtraOrPromo).
-  const hasRealSeasons = eps.some((e) => isPlayableEpisode(e));
+  // The member editor asks for regular specials because a hidden row cannot be selected
+  // later. The Start editor keeps the playback list: no Season 0 on a normal show. Trailers,
+  // OP/ED items and clips stay absent from both.
+  const realSeasonCount = new Set(
+    eps.filter((e) => isCountableEpisode(e) && episodeSeason(e) !== 0)
+      .map((e) => episodeSeason(e)),
+  ).size;
+  const hasRealSeasons = realSeasonCount > 0;
   const seasons = new Map<number, ShowEpisodeRow[]>(); // season number -> [{episode, title, watched}]
   for (const e of eps) {
-    if (!isPlayableEpisode(e, { includeSpecials: !hasRealSeasons })) continue;
+    if (includeSpecialChoices) {
+      if (!isCountableEpisode(e)) continue;
+    } else if (!isPlayableEpisode(e, { includeSpecials: !hasRealSeasons })) continue;
     const s = Number(e.parentIndex ?? 1);
     let rows = seasons.get(s);
     if (!rows) {
@@ -1314,9 +1296,9 @@ export async function showEpisodes(
     });
   }
   const out = [...seasons.entries()]
-    .sort((a, b) => a[0] - b[0])
+    .sort((a, b) => (a[0] === 0 ? 1 : b[0] === 0 ? -1 : a[0] - b[0]))
     .map(([season, episodes]) => ({ season, episodes }));
-  return { multiSeason: out.length > 1, seasons: out };
+  return { multiSeason: realSeasonCount > 1, seasons: out };
 }
 
 // --- next-up member of a Collection (mirrors queue_builder collection_items) --- //
@@ -1338,6 +1320,7 @@ export async function collectionNext(
   start: Start | null = null,
   opts: AccountScope = {},
   skipped: ReadonlySet<string> = NO_SKIPS,
+  includedSpecials: ReadonlySet<string> = NO_SKIPS,
 ): Promise<CollectionNextEp | null> {
   // Read as the SAME account the next-up below is resolved as. This used to be an admin read
   // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
@@ -1367,7 +1350,13 @@ export async function collectionNext(
       let ep = null;
       try {
         // The episode floor applies only to the member the start names, not to later ones.
-        ep = await nextEpisode(ch.ratingKey, floorAt === i ? start : null, opts, skipped);
+        ep = await nextEpisode(
+          ch.ratingKey,
+          floorAt === i ? start : null,
+          opts,
+          skipped,
+          includedSpecials,
+        );
       } catch {
         /* skip a show we can't read; try the next member */
       }

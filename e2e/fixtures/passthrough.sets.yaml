@@ -71,6 +71,7 @@ sets:
   kind: cartoons
   source: queue
   include_specials: true
+  included_specials: [140]
   sections: [5]
 
 # batch_stops_at — where a multi-episode batch may stop. Both sides str()+strip()+lower() it,
