@@ -53,8 +53,8 @@ export function activeBinding(
 
 /**
  * Ratings facet scoped to ONE binding: a `profiles[]` channel asks by the binding's
- * uuid + the channel's libraries, a legacy set by set id. Falls back to the static
- * list when Plex is unreachable.
+ * uuid, so Plex returns every rating available to that account. A legacy set asks by
+ * set id. Falls back to the static list when Plex is unreachable.
  */
 export async function fetchRatings(
   ch: RegistrySet | undefined,
@@ -70,8 +70,7 @@ export async function fetchRatings(
   if (ratingsCache.has(key)) return ratingsCache.get(key)!
 
   const url = ch.has_explicit_profiles
-    ? `/api/ratings?uuid=${encodeURIComponent(b.user_uuid || "")}` +
-      `&sections=${[...(ch.sections || []), ...(ch.item_sections || [])].join(",")}`
+    ? `/api/ratings?uuid=${encodeURIComponent(b.user_uuid || "")}`
     : `/api/ratings?set=${encodeURIComponent(ch.id)}`
 
   try {
@@ -95,16 +94,14 @@ export async function fetchRatings(
 export const cachedRatings = (key: string) =>
   ratingsCache.get(key) || FALLBACK_RATINGS
 
-/** Ask the ratings endpoint for one profile's restricted view of some sections. */
+/** Ask the ratings endpoint for one profile's complete restricted view. */
 export async function fetchScopedRatings(
   uuid: string,
-  sections: string,
 ): Promise<string[]> {
   try {
     const qs = new URLSearchParams()
 
     if (uuid) qs.set("uuid", uuid)
-    if (sections) qs.set("sections", sections)
 
     const r = await api<{ ratings: string[] }>(
       "GET",
