@@ -4,6 +4,10 @@ import {
   tableSize,
 } from "./boardGames"
 import type { PickSession } from "./pickSession"
+import {
+  defaultFilterValues,
+  type SurpriseScope,
+} from "./tonight"
 import type { TonightPreset } from "./tonightPreset"
 import { routeFor } from "./tonightRouting"
 import type {
@@ -29,8 +33,9 @@ import type {
  *
  *   * `board-games` draws from the SHELF (`POST /api/board-games/pick`) and is chosen by table
  *     size, which is why an empty table is refused rather than defaulted.
- *   * `narrow-first` (Surprise Me) is REFUSED. What it narrows by is not settled, and a
- *     plausible answer here would read as settled and get built on.
+ *   * `narrow-first` (Surprise Me) is handled by `drawSurprise` after its own screen has
+ *     supplied one of the three approved scopes. A bare preset remains refused because a
+ *     preset card cannot answer that second question.
  *   * everything else is QUEUE-FIRST (`POST /api/tonight/pick`): one queue is drawn for the
  *     activity and the people, and the queue's own engine chooses the item when it starts.
  *
@@ -63,7 +68,7 @@ export async function drawTonight(
     return {
       isDrawn: false,
       reason:
-        "Surprise Me narrows down first. What it narrows by is still being settled.",
+        "Surprise Me narrows down first. Choose Media, Games or Reading.",
     }
   }
 
@@ -150,5 +155,67 @@ export async function drawTonight(
       picks: answer.shortlist,
       savedAt,
     },
+  }
+}
+
+/**
+ * Draw after Surprise Me's second screen has supplied its approved scope.
+ *
+ * The scope chooses an ACTIVITY first, uniformly, then delegates to that activity's existing
+ * engine. That keeps the two real engines single-sourced: Board Games still uses the shelf,
+ * and every queue-first activity still uses `/api/tonight/pick`. When one activity has no
+ * eligible answer, the remaining activities in the scope are tried before the scope is called
+ * empty. The result session records the activity that actually won, so its card and reroll use
+ * the same established rules as a direct pick.
+ */
+export async function drawSurprise(
+  {
+    guestCount,
+    personIds,
+    scope,
+  }: {
+    guestCount: number
+    personIds: readonly string[]
+    scope: SurpriseScope
+  },
+  request: DrawRequest = api,
+  random: () => number = Math.random,
+): Promise<DrawOutcome> {
+  const activities = [...scope.activities]
+
+  for (
+    let index = activities.length - 1;
+    index > 0;
+    index -= 1
+  ) {
+    const swap = Math.min(
+      index,
+      Math.max(0, Math.floor(random() * (index + 1))),
+    )
+    const current = activities[index]!
+    activities[index] = activities[swap]!
+    activities[swap] = current
+  }
+
+  const reasons: string[] = []
+  for (const activity of activities) {
+    const outcome = await drawTonight(
+      {
+        activity,
+        filters: defaultFilterValues(activity),
+        guestCount,
+        personIds: [...personIds],
+      },
+      request,
+    )
+    if (outcome.isDrawn) return outcome
+    reasons.push(outcome.reason)
+  }
+
+  return {
+    isDrawn: false,
+    reason:
+      reasons[0] ??
+      `Nothing in ${scope.label} matches the people you ticked.`,
   }
 }
