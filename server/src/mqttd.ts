@@ -9,6 +9,7 @@ import * as engineRouting from './engine/routing.js';
 import * as adb from './adb.js';
 import * as devices from './devices.js';
 import * as topup from './topup.js';
+import { startTopupScheduler, type TopupScheduler } from './topupScheduler.js';
 import * as finished from './finished.js';
 import {
   MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
@@ -64,6 +65,7 @@ interface SoundtrackPayload {
 
 let client: MqttClient | null = null;
 let announceTimer: NodeJS.Timeout | null = null;
+let topupScheduler: TopupScheduler | null = null;
 
 // The one place anything in this file reaches the broker: JSON-encodes non-string payloads,
 // defaults to qos 1, and drops the message when the client is not connected.
@@ -130,8 +132,8 @@ async function handleAdvance(): Promise<void> {
 }
 
 /**
- * One top-up tick. Answers on `resp/topup` whatever happened, including "did nothing" —
- * silence would leave the automation unable to tell a working no-op from a dead app.
+ * One top-up tick. Answers on `resp/topup` whatever happened, including "did nothing".
+ * Home Assistant listens for a failure, but it no longer supplies the tick.
  *
  * TWO LINEUPS, ONE TICK. The live session's playQueue (there is at most one, and it is on the
  * screen), and every persistent reading list (which has no session at all — see
@@ -140,21 +142,29 @@ async function handleAdvance(): Promise<void> {
  * the automation this is one wake-up: "keep the lineups stocked".
  *
  * `ok` is the AND of everything attempted, so the failure branch in HA still means what it
- * said before — a reading list that cannot be reached surfaces, a no-op does not.
+ * said before — a reading list that cannot be reached surfaces, a no-op does not. The manual
+ * MQTT command runs both scopes and therefore keeps its established contract.
  *
  * Deliberately does NOT publish state: a top-up changes the lineup, not the session, and
  * stamping `T_STATE` (retained) on every tick would churn the retained payload every few
  * minutes for something no reader of that topic cares about.
  */
-async function handleTopup(): Promise<void> {
+async function handleTopup(scope: 'session' | 'pull' | 'all' = 'all'): Promise<void> {
   try {
-    const session = await topup.topup();
-    const lists = await topup.topupPullLists();
+    const sessionResult = scope === 'pull' ? null : await topup.topup();
+    const lists = scope === 'session' ? [] : await topup.topupPullLists();
+    const results = [...(sessionResult ? [sessionResult] : []), ...lists];
+    const failures = results.filter((result) => !result.ok);
+    const first = sessionResult ?? lists[0] ?? { ok: true, reason: 'no pull lists configured' };
     pub(T_RESP_TOPUP, {
-      ...session,
-      ok: session.ok && lists.every((r) => r.ok),
-      // Only when there is something to say: a deployment with no pull provider keeps the
-      // exact payload shape it has always published.
+      ...first,
+      ok: failures.length === 0,
+      scope,
+      ...(failures.length ? {
+        error: failures.map((result) => `${result.set ?? '(no set)'}: ${result.error ?? 'unknown error'}`).join('; '),
+      } : {}),
+      // Only when there is something to say: a deployment with no pull provider omits the
+      // optional list detail.
       ...(lists.length ? { lists } : {}),
     });
   } catch (e) {
@@ -229,8 +239,21 @@ function publishDiscovery(): void {
 }
 
 export function start(): MqttClient | null {
+  topupScheduler?.stop();
+  topupScheduler = startTopupScheduler({
+    // A push lineup exists only while a session is live. This is the in-process twin of the
+    // old HA state-attribute condition, without a broker round trip to ask the app about its
+    // own state.
+    runSession: async () => {
+      if (!session.SESSION.set) return;
+      await handleTopup('session');
+    },
+    // Pull artifacts outlive a TV session, so they keep their own slower cadence.
+    runPullLists: async () => handleTopup('pull'),
+  });
+
   if (!MQTT_HOST) {
-    console.log('[mqttd] MQTT_HOST unset — Node playback service not started');
+    console.log('[mqttd] MQTT_HOST unset — Node playback service not started; top-up results will not publish');
     return null;
   }
   // Bound to a const as well as to `client`, so the handlers below keep the narrowing that a
@@ -289,6 +312,8 @@ export function start(): MqttClient | null {
 
 export function stop(): void {
   if (announceTimer) clearInterval(announceTimer);
+  topupScheduler?.stop();
+  topupScheduler = null;
   if (client) client.end(true);
   client = null;
 }

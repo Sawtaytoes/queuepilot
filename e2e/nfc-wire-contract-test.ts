@@ -29,9 +29,8 @@
 //      card with it. Read off the broker's own subscribe event, not off `env.ts` — reading the
 //      constant back would be the app agreeing with itself.
 //   4. **The discovery config.** `sensor.queuepilot_status` is created by HA from this
-//      retained payload, and `automation.queuepilot_top_up_lineup` gates its 5-minute tick on
-//      that sensor's `set` attribute. If the object id or the state topic moves, the top-up
-//      stops and nothing says so.
+//      retained payload. QueuePilot owns its top-up timer, while HA still reads the sensor for
+//      dashboards and household automation state.
 //   5. **Every card's payload reaches its set.** Twelve card payloads, in the exact shape
 //      `script.control_plex` publishes, are put on the real broker and answered by the real
 //      `mqttd`. The failure being hunted is `set '<id>' not enabled` — the sentence the app
@@ -43,8 +42,9 @@
 //   7. **`set: "auto"` still routes.** The UC remote's screen buttons still send it, and the
 //      profile-driven branch is the one piece of the wire that resolves an id the card does
 //      NOT carry.
-//   8. **A top-up tick is answered.** HA publishes an empty `{}` every five minutes and treats
-//      silence as "the app is down". The reply topic is part of the contract.
+//   8. **A manual top-up tick is answered.** QueuePilot normally wakes itself and publishes
+//      each result. The MQTT command stays as the manual seam, and its reply topic is part of
+//      the contract.
 //
 // ## What it deliberately does not do
 //
@@ -344,7 +344,7 @@ async function main(): Promise<void> {
     );
     ok('discovery state topic is queuepilot/state', cfg?.state_topic === T_STATE);
     ok(
-      'discovery exposes the state as attributes (the top-up tick reads `set` off it)',
+      'discovery exposes the state as attributes for HA dashboards and household automations',
       cfg?.json_attributes_topic === T_STATE,
     );
 
@@ -420,7 +420,7 @@ async function main(): Promise<void> {
       if (topups.length > topupsBefore) break;
     }
     ok(
-      'an empty {} top-up tick is answered on resp/topup (HA reads silence as "the app is down")',
+      'an empty {} manual top-up is answered on resp/topup',
       topups.length > topupsBefore,
     );
 
