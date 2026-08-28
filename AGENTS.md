@@ -1023,8 +1023,13 @@ Four things about it are load-bearing:
 engine chooses the item when it starts and is the only thing that already knows what is left; a
 second opinion here could disagree with it. Board Games is the exception and keeps its own door
 (`POST /api/board-games/pick`), because a board game is on a shelf and not in a queue.
-**Surprise Me is REFUSED by name** — it narrows before it picks and the narrowings are not
-settled ([decision](docs/decisions/2026-08-25-pick-draws-a-queue-not-an-item.md)).
+**Surprise Me narrows to Media / Games / Reading**, settled 2026-08-28. Media is Movies +
+Shows (+ YouTube when built); Games is Video Games + Board Games; Reading is Reading. The
+browser chooses an activity uniformly inside the scope, then delegates to that activity's
+existing engine — no third picker. An activity with no eligible answer falls through to the
+next one in that scope. A bare Surprise Me preset remains refused because a fixed card cannot
+answer the second-screen question
+([decision](docs/decisions/2026-08-28-surprise-me-narrows-to-media-games-or-reading.md)).
 
 ## The cardboard: NFC cards and the MQTT wire
 

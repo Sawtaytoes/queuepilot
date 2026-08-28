@@ -34,11 +34,10 @@ import { readBody } from './readBody.js';
  *   * **Board Games** is a different engine and a different door. It draws from a SHELF, not
  *     from a queue, and `POST /api/board-games/pick` owns it. Routing it through here would
  *     mean two callers of one engine and no gain.
- *   * **Surprise Me** narrows before it picks, and the narrowings are **not settled**. The
- *     owner said "media" spans YouTube and Plex Movies/Shows, which is coarser than the tile
- *     row, and that is all that is known. So this refuses it by name. Filling in a plausible
- *     taxonomy is the one failure the decision spends a clause forbidding — it would read as
- *     settled and get built on.
+ *   * **Surprise Me** narrows before it picks. The browser's second screen owns the approved
+ *     Media / Games / Reading scopes, chooses an activity inside one, then calls that
+ *     activity's established door. A bare `activity: surprise` request is still incomplete
+ *     and is refused rather than treated as a one-tap random pick.
  *
  * Both refusals are 400s that say what to do instead. A route that answered them with
  * something would be worse than one that will not.
@@ -81,8 +80,8 @@ export function tonightRoutes(): Hono {
         return c.json(
           {
             error:
-              'Surprise Me narrows down first and chooses second, and what it narrows BY is '
-              + 'not settled yet. There is nothing to pick from until the groupings arrive.',
+              'Surprise Me narrows down first. Choose Media, Games or Reading on its '
+              + 'second screen.',
           },
           400,
         );

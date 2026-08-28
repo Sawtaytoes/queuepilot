@@ -69,8 +69,8 @@ export const isTonightTile = (value: unknown): value is TonightTile =>
  *   * `queue-first` — the pick draws one QUEUE, and the queue's own engine draws the item
  *     when it starts. See `WHY_QUEUE_FIRST` for why this is the answer for four tiles and
  *     not only for the two the plan names.
- *   * `narrow-first` — Surprise Me. It chooses nothing until you have narrowed, and the
- *     narrowings are not settled. Refused by name rather than faked.
+ *   * `narrow-first` — Surprise Me. It chooses nothing until the browser's second screen
+ *     supplies Media, Games or Reading, then delegates to the chosen activity's real engine.
  */
 export type PickEngine = 'board-games' | 'narrow-first' | 'queue-first';
 

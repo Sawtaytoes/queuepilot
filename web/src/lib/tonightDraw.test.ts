@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { drawTonight } from "./tonightDraw"
+import { SURPRISE_SCOPES } from "./tonight"
+import { drawSurprise, drawTonight } from "./tonightDraw"
 import type { TonightPreset } from "./tonightPreset"
 import type {
   BoardGame,
@@ -190,9 +191,9 @@ describe("drawTonight", () => {
     })
   })
 
-  // Surprise Me narrows on its own screen first, and what it narrows BY is not settled. A
-  // plausible answer here would read as settled and get built on.
-  it("refuses Surprise Me without asking any backend", async () => {
+  // A preset card still cannot answer the second-screen question for somebody standing in
+  // front of it. The interactive screen calls `drawSurprise` after the person chooses.
+  it("refuses bare Surprise Me without asking any backend", async () => {
     const stub = call()
 
     const outcome = await drawTonight(
@@ -207,5 +208,93 @@ describe("drawTonight", () => {
 
     expect(outcome).toMatchObject({ isDrawn: false })
     expect(stub.calls).toHaveLength(0)
+  })
+
+  it("chooses an activity inside Media, then uses that activity's existing engine", async () => {
+    const stub = call()
+    stub.reply({
+      backend: "plex",
+      notes: [],
+      pick: queuePick("shows"),
+      shortlist: [queuePick("shows")],
+    } satisfies TonightPickResponse)
+    const media = SURPRISE_SCOPES.find(
+      (scope) => scope.id === "media",
+    )!
+
+    const outcome = await drawSurprise(
+      {
+        guestCount: 0,
+        personIds: ["ada"],
+        scope: media,
+      },
+      stub.request,
+      // Swaps the two rows, so Shows is the deterministic first choice.
+      () => 0,
+    )
+
+    expect(stub.calls[0]?.body).toMatchObject({
+      activity: "shows",
+      personIds: ["ada"],
+    })
+    expect(outcome).toMatchObject({
+      isDrawn: true,
+      session: { activity: "shows", kind: "queue" },
+    })
+  })
+
+  it("tries the other Games activity when the first one has no answer", async () => {
+    const calls: { body: unknown; url: string }[] = []
+    const games = SURPRISE_SCOPES.find(
+      (scope) => scope.id === "games",
+    )!
+    const request = <T>(
+      _method: string,
+      url: string,
+      body?: unknown,
+    ): Promise<T> => {
+      calls.push({ body, url })
+      if (url === "/api/tonight/pick") {
+        return Promise.resolve({
+          backend: null,
+          pick: null,
+          reason: "No video-game queue matches.",
+          shortlist: [],
+        } as T)
+      }
+      return Promise.resolve({
+        result: null,
+        shortlist: [
+          {
+            game: game("compile"),
+            playCount: 0,
+            verdict: "best",
+          },
+        ],
+      } as T)
+    }
+
+    const outcome = await drawSurprise(
+      {
+        guestCount: 0,
+        personIds: ["ada", "linus"],
+        scope: games,
+      },
+      request,
+      // Leaves Video Games before Board Games.
+      () => 0.999,
+    )
+
+    expect(calls.map((one) => one.url)).toEqual([
+      "/api/tonight/pick",
+      "/api/board-games/pick",
+    ])
+    expect(outcome).toMatchObject({
+      isDrawn: true,
+      session: {
+        activity: "board-games",
+        kind: "board-game",
+      },
+    })
   })
 })
