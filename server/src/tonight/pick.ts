@@ -80,9 +80,10 @@ export interface TonightPick extends TonightCandidate {
 /**
  * Turn a queue's stored members into the shape `queueMatchesSelection()` reads.
  *
- * A PERSON member is themself and counts as one. A GROUP member is its REQUIRED roster and
- * counts as `effectiveMinPresent` of them — "at least one of the kids" is a set, a number and
- * a spare, and flattening a group to its people would lose the number.
+ * A PERSON member is themself and counts as one. A GROUP member carries its complete roster,
+ * with its required roster kept separately for `effectiveMinPresent` — "at least one of the
+ * kids" is a set, a number and a spare, and flattening a group to its people would lose the
+ * number.
  *
  * A group nothing knows about resolves to an EMPTY roster, and an empty required member can
  * never be satisfied, so the queue drops out of the filter rather than passing it by
@@ -95,14 +96,16 @@ export function toResolvedMembers(
 ): ResolvedMember[] {
   return members.map((member) => {
     if (member.kind === 'person') {
-      return { ...member, minPresent: 1, people: [member.id] };
+      return { ...member, minPresent: 1, people: [member.id], requiredPeople: [member.id] };
     }
     const membership = membershipFor(member.id);
-    if (!membership) return { ...member, minPresent: 1, people: [] };
+    if (!membership) return { ...member, minPresent: 1, people: [], requiredPeople: [] };
+    const required = requiredRoster(membership).map((row) => row.personId);
     return {
       ...member,
       minPresent: effectiveMinPresent(membership),
-      people: requiredRoster(membership).map((row) => row.personId),
+      people: membership.roster.map((row) => row.personId),
+      requiredPeople: required,
     };
   });
 }

@@ -357,9 +357,11 @@ try {
     ok('a group is at least one of them — Ada alone', same(boardGames(['ada']), ['game_night']));
     ok('…Grace alone', same(boardGames(['grace']), ['game_night']));
     ok('…and both together', same(boardGames(['ada', 'grace']), ['game_night']));
-    // Linus is the group's "may join", which is not on the queue. A flattened copy that
-    // unioned the whole roster would answer this one wrong in the other direction.
-    ok('…but the group\'s spare is not on the queue', same(boardGames(['linus']), []));
+    // Linus is the group's "may join". He is on the queue, but he does not satisfy the
+    // required half on his own. A flattened copy that unioned only the required roster would
+    // reject Ada and Linus together even though the optional person may join.
+    ok('…and the group\'s spare may join', same(boardGames(['ada', 'linus']), ['game_night']));
+    ok('…but the group\'s spare alone is not enough', same(boardGames(['linus']), []));
   }
 
   // ── 6. The two tiles this door REFUSES, by name ──────────────────────────────────── //
