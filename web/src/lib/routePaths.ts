@@ -14,7 +14,7 @@
  *   `/result`                       RESULT — the pick: one card, reroll, confirm
  *   `/result/<gameId>`              RESULT for one named game — a queue arrival, and it has NO reroll
  *   `/board-game-collection`        COLLECTION — the board-game shelf, and "we played this"
- *   `/queues`                       QUEUES configurator (poster shelves)
+ *   `/picks`                        Picks configurator (poster shelves)
  *   `/q/<id>`                       one curated queue / channel as a grid
  *   `/channels[/<id>]`              the rule-based rotation channels
  *
@@ -43,7 +43,7 @@
  *
  * These were `#/…` until 2026-08-16. They are real paths, so the server has to answer them —
  * `createStaticHandler` runs with `hasSpaFallback: true`, and the two facts move together or a
- * reload on `/queues` 404s
+ * reload on `/picks` 404s
  * ([decision](../../../docs/decisions/2026-08-16-routing-is-paths-not-hashes.md)).
  */
 
@@ -53,9 +53,9 @@ export const BOARD_GAME_COLLECTION_PATH =
   "/board-game-collection"
 
 /**
- * A trailing `/*` where the old parser said `startsWith`, so `/queues/anything` still opens
+ * A trailing `/*` where the old parser said `startsWith`, so `/picks/anything` still opens
  * the configurator rather than falling through to the landing. A splat also matches the bare
- * path, so `/queues` and `/queues/` are the same route without a strip step.
+ * path, so `/picks` and `/picks/` are the same route without a strip step.
  */
 export const ROUTE_PATHS = {
   admin: "/admin",
@@ -66,10 +66,11 @@ export const ROUTE_PATHS = {
   home: "/",
   legacyCollection: "/collection/*",
   legacyGroup: "/g/*",
+  legacyQueues: "/queues/*",
   legacyTonight: "/tonight/:step?",
   pending: "/pending/*",
   queue: "/q/:setId",
-  queues: "/queues/*",
+  picks: "/picks/*",
   result: "/result/:gameId?",
   watchPlay: `${WATCH_PLAY_PATH}/:step?`,
 } as const
@@ -114,7 +115,8 @@ export function labelForPath(p: string): string {
   )
     return "‹ Collection"
   if (p.startsWith("/result")) return "‹ What to Watch/Play"
-  if (p.startsWith("/queues")) return "‹ Picks"
+  if (p.startsWith("/picks") || p.startsWith("/queues"))
+    return "‹ Picks"
   if (p.startsWith("/channels")) return "‹ Rules"
   if (p.startsWith("/q/")) return "‹ Back"
   if (p === "/admin" || p.startsWith("/admin/"))

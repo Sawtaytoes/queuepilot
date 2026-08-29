@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/what-to-watch-play', '/what-to-watch-play/surprise', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -78,7 +78,7 @@ ok(
 
 for (const [path, want] of [
   ['/admin', 'Admin'],
-  ['/queues', 'Picks'],
+  ['/picks', 'Picks'],
   ['/q/bob', 'Bob — Movies'],
   ['/channels/shows', 'Rules'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
@@ -97,6 +97,13 @@ for (const [path, want] of [
     ok('the activity picker does not use Tonight as its visible name', !/\bTonight\b/.test(text));
   }
 }
+
+await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
+ok('the legacy /queues address renders "Picks"', await heading('Picks'));
+ok(
+  '…and its URL is rewritten to /picks',
+  (await page.evaluate(() => location.pathname)) === '/picks',
+);
 
 // The Surprise Me step really is the STEP and not the bare route — the heading is the same
 // on both, so the heading alone cannot tell them apart.
@@ -175,7 +182,7 @@ await page.reload({ waitUntil: 'domcontentloaded' });
 ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'));
 
 // A left-click routes CLIENT-side: no document load, no `#` in the URL. A regression to
-// bare `<a href="/queues">` still "works" for the user but refetches the whole app, so
+// bare `<a href="/picks">` still "works" for the user but refetches the whole app, so
 // count real page loads rather than trusting the URL alone.
 {
   await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
@@ -196,10 +203,11 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   // Admin's markup is gone the moment this link is followed. Reading it here is also the
   // honest order — the claim is about the control being clicked.
   const [tag, href] = await page.$eval('#goqueues', (e) => [e.tagName, e.getAttribute('href')]);
-  ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/queues');
+  ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/picks');
 
   await page.click('#goqueues');
-  ok('clicking "Configure ›" routes to /queues', await heading('Picks'));
+  ok('clicking "Configure ›" routes to /picks', await heading('Picks'));
+  ok('…and the path is /picks', (await page.evaluate(() => location.pathname)) === '/picks');
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);
   ok(
@@ -215,7 +223,7 @@ ok('browser Back returns to Admin', await heading('Admin'));
 // A route change is a new page, so it must not inherit the scroll position of the page that
 // led to it.
 {
-  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const scrollBeforeQueue = await page.evaluate(() => window.scrollY);
@@ -233,13 +241,13 @@ ok('browser Back returns to Admin', await heading('Admin'));
 // not a fixed parent (Bob's ask). That is tracked in web/src/state/route.ts, and it is the
 // one piece of the old hash router react-router does NOT replace.
 {
-  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
   await page.click('a.open');
   await page.waitForFunction(() => location.pathname.startsWith('/q/'));
-  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/queues', undefined, { timeout: 30000 })
-    .then(() => ok('in-app back targets the origin /queues, not a fixed parent', true),
-      async () => ok(`in-app back targets the origin /queues, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
+  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/picks', undefined, { timeout: 30000 })
+    .then(() => ok('in-app back targets the origin /picks, not a fixed parent', true),
+      async () => ok(`in-app back targets the origin /picks, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
 }
 
 await browser.close();

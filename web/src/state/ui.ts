@@ -11,25 +11,36 @@ import { useSyncExternalStore } from "react"
 
 const COLLAPSE_KEY = "pc.collapsedQueues"
 
-function readCollapsed(): Set<string> {
+function readCollapsed(): {
+  collapsed: Set<string>
+  hasCollapsePreference: boolean
+} {
   try {
-    return new Set(
-      JSON.parse(
-        localStorage.getItem(COLLAPSE_KEY) || "[]",
-      ),
-    )
+    const stored = localStorage.getItem(COLLAPSE_KEY)
+
+    return {
+      collapsed: new Set(JSON.parse(stored || "[]")),
+      hasCollapsePreference: stored !== null,
+    }
   } catch {
-    return new Set()
+    return {
+      collapsed: new Set(),
+      hasCollapsePreference: false,
+    }
   }
 }
 
 type UiState = {
   filter: string
   collapsed: Set<string>
+  /** No saved preference means every Picks shelf starts collapsed. */
+  hasCollapsePreference: boolean
 }
 
+const initialCollapse = readCollapsed()
+
 let state: UiState = {
-  collapsed: readCollapsed(),
+  ...initialCollapse,
   filter: "",
 }
 
@@ -59,7 +70,11 @@ export function setFilter(filter: string) {
 }
 
 export function setCollapsed(collapsed: Set<string>) {
-  state = { ...state, collapsed }
+  state = {
+    ...state,
+    collapsed,
+    hasCollapsePreference: true,
+  }
 
   try {
     localStorage.setItem(
