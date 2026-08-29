@@ -7,13 +7,15 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
 } from "react"
-import { Link } from "react-router"
+import { Link, useLocation } from "react-router"
 import {
   EditionChip,
   TypeBadge,
 } from "../components/badges"
+import { LandingFilterBar } from "../components/LandingFilterBar"
 import { isPullSet } from "../components/OpenQueueButton"
 import { PeopleRow } from "../components/PeopleRow"
 import { PosterTile } from "../components/PosterTile"
@@ -22,12 +24,18 @@ import { useHomeDrags } from "../hooks/useHomeDrags"
 import { isRandomOrder } from "../lib/kind"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { queueNumbers, queueTitle } from "../lib/people"
+import { ROUTE_PATHS } from "../lib/routePaths"
 import {
   isCompleted,
   progressLabel,
   runtimeLabel,
   tileFace,
 } from "../lib/tileFace"
+import {
+  membersMatchPeople,
+  resolveMembers,
+  rosterOrder,
+} from "../lib/tonight"
 import type {
   GroupWithRoster,
   NowState,
@@ -37,6 +45,10 @@ import type {
   RegistrySet,
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
+import {
+  parseOnly,
+  parsePeople,
+} from "../state/landingFilter"
 import {
   openPlayMenu,
   openSetModal,
@@ -669,6 +681,7 @@ export function QueuesView({
 }) {
   const { data, now, reg } = useStore()
   const people = usePeople()
+  const { search } = useLocation()
   const { collapsed, filter, hasCollapsePreference } =
     useUi()
   const shelvesRef = useRef<HTMLDivElement>(null)
@@ -687,6 +700,33 @@ export function QueuesView({
   }, [])
 
   const playingSet = activeSet(now, data)
+  const only = parseOnly(search)
+  const selected = parsePeople(search)
+
+  /** Every queue's audience, resolved through the SAME group rule the former queue landing
+   * used. A group remains one "at least N of these people" member; it must not be flattened
+   * into people here or the filter would require the whole group. */
+  const membersOf = useMemo(() => {
+    const out = new Map<
+      string,
+      ReturnType<typeof resolveMembers>
+    >()
+
+    for (const [setId, members] of Object.entries(
+      people.byQueue,
+    )) {
+      out.set(
+        setId,
+        resolveMembers(
+          members,
+          people.people,
+          people.groups,
+        ),
+      )
+    }
+
+    return out
+  }, [people])
 
   // WP-5. Two queues may share people and activity — "Allow, and add a number."
   //
@@ -698,6 +738,31 @@ export function QueuesView({
   // which is what left `Kevin — Anime` and nine others listed on the Rules page instead
   // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
   const shelfIds = curatedIds(data)
+  const kindOf = (id: string) =>
+    reg?.sets.find((set) => set.id === id)?.provider_kind ??
+    ""
+  const matches = (
+    id: string,
+    forPeople: readonly string[],
+    forOnly: string | null,
+  ) =>
+    (!forOnly || kindOf(id) === forOnly) &&
+    membersMatchPeople(membersOf.get(id) ?? [], forPeople)
+  const shownShelfIds = shelfIds.filter((id) =>
+    matches(id, selected, only),
+  )
+  const countFor = (
+    forPeople: readonly string[],
+    forOnly: string | null,
+  ) =>
+    shelfIds.filter((id) => matches(id, forPeople, forOnly))
+      .length
+  const providerKinds = [
+    ...new Set(shelfIds.map(kindOf).filter(Boolean)),
+  ]
+  const labelForKind = (kind: string) =>
+    reg?.sets.find((set) => set.provider_kind === kind)
+      ?.vocabulary?.name || kind
   const numbers = queueNumbers(
     shelfIds
       .map((id) => reg?.sets.find((s) => s.id === id))
@@ -708,8 +773,18 @@ export function QueuesView({
   return (
     <div className="view" id="home">
       <div id="gslot-narrow">{toolbar}</div>
+      <LandingFilterBar
+        basePath={ROUTE_PATHS.picks.replace("/*", "")}
+        countFor={countFor}
+        labelForKind={labelForKind}
+        only={only}
+        people={rosterOrder(people.people)}
+        providerKinds={providerKinds}
+        search={search}
+        selected={selected}
+      />
       <div id="shelves" ref={shelvesRef}>
-        {shelfIds.map((id) => {
+        {shownShelfIds.map((id) => {
           const q = data!.sets[id]!
           const registrySet = reg?.sets.find(
             (s) => s.id === id,
