@@ -72,7 +72,6 @@ export function SelectionBar({
   )
   const [weight, setWeight] = useState<number | null>(null)
   const [batchStop, setBatchStop] = useState(KEEP)
-  const [lane, setLane] = useState(KEEP)
 
   const picksSet = currentSet
     ? reg?.sets.find((x) => x.id === currentSet)
@@ -130,8 +129,7 @@ export function SelectionBar({
   const hasEdit =
     episodes !== null ||
     weight !== null ||
-    batchStop !== KEEP ||
-    lane !== KEEP
+    batchStop !== KEEP
 
   /** One PATCH for the whole selection — see the route's comment for why not N. */
   const applyBulk = async (
@@ -160,7 +158,6 @@ export function SelectionBar({
       setEpisodes(null)
       setWeight(null)
       setBatchStop(KEEP)
-      setLane(KEEP)
       await load()
 
       // A lane change also settles the ORDER: the bulk route writes `placement` and nothing
@@ -222,6 +219,40 @@ export function SelectionBar({
         </Button>
       )}
 
+      {/* Lane changes are direct GROUP actions. The old Lane picker plus Apply performed
+          this same bulk write, but hid the capability behind a generic settings form. The
+          order settle below keeps the checked entries together and in their existing order. */}
+      {isPicks ? (
+        <div className="bulklane-actions">
+          <Button
+            appearance="outline"
+            id="bulkpriority"
+            intent="accent"
+            onClick={() =>
+              void applyBulk(
+                { placement: "priority" },
+                "Moved to Priority",
+              )
+            }
+          >
+            {`Move ${count} to Priority`}
+          </Button>
+          <Button
+            appearance="outline"
+            id="bulkrandom"
+            intent="neutral"
+            onClick={() =>
+              void applyBulk(
+                { placement: "random" },
+                "Moved to Random pool",
+              )
+            }
+          >
+            {`Move ${count} to Random pool`}
+          </Button>
+        </div>
+      ) : null}
+
       {/* --- the settings, applied together --- */}
       <div className="bulkfield">
         <span>Episodes</span>
@@ -279,31 +310,6 @@ export function SelectionBar({
           value={batchStop}
         />
       </div>
-      {/* LANE — the promote/demote, for a whole selection.
-          Until this shipped, moving an entry between the Priority queue and the Random pool
-          was a drag across the lane divider and nothing else, so it was strictly one entry at
-          a time: "You can't switch priority of a group". A selection is exactly the case a
-          drag cannot serve.
-          (decision `2026-08-26-the-tile-menu-carries-what-the-card-cannot`) */}
-      {isPicks ? (
-        <div className="bulkfield">
-          <span>Lane</span>
-          <SelectListbox
-            id="bulklane"
-            label="Lane for the selection"
-            onChange={setLane}
-            options={[
-              { label: "— keep —", value: KEEP },
-              {
-                label: "Priority queue",
-                value: "priority",
-              },
-              { label: "Random pool", value: "random" },
-            ]}
-            value={lane}
-          />
-        </div>
-      ) : null}
       {/* The one `solid` control in the bar. This is what `primary` was asking for and
           never got. */}
       <Button
@@ -317,7 +323,6 @@ export function SelectionBar({
               ...(batchStop !== KEEP
                 ? { batch_stops_at: batchStop }
                 : {}),
-              ...(lane !== KEEP ? { placement: lane } : {}),
             },
             "Updated",
           )
