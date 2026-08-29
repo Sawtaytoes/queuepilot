@@ -171,9 +171,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/ui@npm:^3.24.0":
-  version: 3.24.0
-  resolution: "@charcuterie/ui@npm:3.24.0"
+"@charcuterie/ui@npm:^3.28.1":
+  version: 3.28.1
+  resolution: "@charcuterie/ui@npm:3.28.1"
   dependencies:
     "@charcuterie/logic": "npm:2.3.0"
     "@charcuterie/tokens": "npm:1.6.0"
@@ -205,7 +205,7 @@ __metadata:
       optional: true
     react-router:
       optional: true
-  checksum: 10c0/517b7e85eef9fa20109eb965fdbfee07fc10774c55a63435ac45760d10cb0b8963b18eb2fdfbeb7d057242287ec96eee7e098eb04fc9cac267e81ac5d5e581d5
+  checksum: 10c0/7802fb681019f8674439610dc40860815359873a0269f753e5700172962dfc48040e6f30308347017cba5ec19fb4af4708049c8814f7f9f908297a77555eb696
   languageName: node
   linkType: hard
 
@@ -2805,7 +2805,7 @@ __metadata:
     "@charcuterie/server": "npm:^0.4.0"
     "@charcuterie/tokens": "npm:^1.6.0"
     "@charcuterie/tsconfig": "npm:^1.0.0"
-    "@charcuterie/ui": "npm:^3.24.0"
+    "@charcuterie/ui": "npm:^3.28.1"
     "@charcuterie/vite-config": "npm:^1.1.0"
     "@charcuterie/vitest-config": "npm:^1.1.0"
     "@tailwindcss/vite": "npm:^4.3.0"
