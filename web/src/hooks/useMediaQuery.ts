@@ -1,9 +1,9 @@
 import { useSyncExternalStore } from "react"
 
 /**
- * A media query as a subscription. Used for the 760px breakpoint at which the Home
- * toolbar moves out of the sticky header (too tight in the Narrow View — Bob's
- * explicit ask) and into the top of the Home content.
+ * A media query as a subscription. The 760px breakpoint controls Narrow View-only
+ * layouts, including the Home toolbar's move out of the sticky header and the Rules
+ * page's collapsible eligibility filters.
  */
 export function useMediaQuery(query: string): boolean {
   return useSyncExternalStore(

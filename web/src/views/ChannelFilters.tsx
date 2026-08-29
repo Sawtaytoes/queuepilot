@@ -1,10 +1,11 @@
-import { Button } from "@charcuterie/ui"
+import { Accordion, Button } from "@charcuterie/ui"
 import { useEffect, useMemo, useState } from "react"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
 import { EditionBadge } from "../components/EditionBadge"
 import { Poster } from "../components/Poster"
 import { SearchDropdown } from "../components/SearchDropdown"
+import { useMediaQuery } from "../hooks/useMediaQuery"
 import { api } from "../lib/api"
 import {
   activeBinding,
@@ -46,6 +47,9 @@ export function ChannelFilters({
   onChanged: () => void
 }) {
   const { reg } = useStore()
+  // The filter panel becomes an accordion only in the Narrow View. The Wide View keeps the
+  // existing always-visible panel, while the narrow layout gets room for the eligible titles.
+  const isNarrow = useMediaQuery("(max-width: 760px)")
   const binding = activeBinding(channel, currentProfile)
 
   const stored = useMemo(
@@ -166,101 +170,95 @@ export function ChannelFilters({
 
   const excludes = binding.movie_excludes || []
 
-  return (
-    <aside id="chfilters">
-      <h2>Eligibility filters</h2>
+  // F5: the 7 fieldsets scroll inside here; `#ch-save` stays OUTSIDE as the aside's pinned
+  // footer, always on screen. Every fieldset id and `.showsonly` is untouched, so
+  // channels-test / verify-pr4-cutover keep passing.
+  const filterFields = (
+    <div className="chfilters-scroll">
+      <fieldset>
+        <legend>Allowed ratings</legend>
+        <CheckboxGroup
+          checked={ratings}
+          id="ch-ratings"
+          onToggle={(v, isChecked) =>
+            setRatings((prev) =>
+              isChecked
+                ? [...prev, v]
+                : prev.filter((x) => x !== v),
+            )
+          }
+          options={ratingOptions}
+          seedKey={profileKey}
+        />
+      </fieldset>
 
-      {/* F5: the 7 fieldsets scroll inside here; `#ch-save` stays OUTSIDE as the aside's
-          pinned footer, always on screen. Every fieldset id and `.showsonly` is untouched,
-          so channels-test / verify-pr4-cutover keep passing. */}
-      <div className="chfilters-scroll">
-        <fieldset>
-          <legend>Allowed ratings</legend>
-          <CheckboxGroup
-            checked={ratings}
-            id="ch-ratings"
-            onToggle={(v, isChecked) =>
-              setRatings((prev) =>
-                isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
-              )
-            }
-            options={ratingOptions}
-            seedKey={profileKey}
-          />
-        </fieldset>
-
-        <fieldset>
-          <legend>Show libraries</legend>
-          <CheckboxGroup
-            checked={showSections}
-            id="ch-showlibs"
-            onToggle={(v, isChecked) =>
-              setShowSections((prev) =>
-                isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
-              )
-            }
-            options={showLibs.map((l) => ({
-              label: l.title,
-              value: l.id,
-            }))}
-            seedKey={profileKey}
-          />
-          {/* On a rewatch channel a show library means its FILMS: entries scanned as a
+      <fieldset>
+        <legend>Show libraries</legend>
+        <CheckboxGroup
+          checked={showSections}
+          id="ch-showlibs"
+          onToggle={(v, isChecked) =>
+            setShowSections((prev) =>
+              isChecked
+                ? [...prev, v]
+                : prev.filter((x) => x !== v),
+            )
+          }
+          options={showLibs.map((l) => ({
+            label: l.title,
+            value: l.id,
+          }))}
+          seedKey={profileKey}
+        />
+        {/* On a rewatch channel a show library means its FILMS: entries scanned as a
             single-episode series (that is how anime movies land in Plex).
             (decision 2026-07-29-rewatch-pool-follows-the-channels-own-libraries) */}
-          <p className="moviesonly hint">
-            Films only — one-episode entries (anime movies).
-          </p>
-        </fieldset>
+        <p className="moviesonly hint">
+          Films only — one-episode entries (anime movies).
+        </p>
+      </fieldset>
 
-        <fieldset>
-          <legend>Movie libraries</legend>
-          <CheckboxGroup
-            checked={itemSections}
-            id="ch-movielibs"
-            onToggle={(v, isChecked) =>
-              setItemSections((prev) =>
-                isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
-              )
-            }
-            options={movieLibs.map((l) => ({
-              label: l.title,
-              value: l.id,
-            }))}
-            seedKey={profileKey}
-          />
-        </fieldset>
+      <fieldset>
+        <legend>Movie libraries</legend>
+        <CheckboxGroup
+          checked={itemSections}
+          id="ch-movielibs"
+          onToggle={(v, isChecked) =>
+            setItemSections((prev) =>
+              isChecked
+                ? [...prev, v]
+                : prev.filter((x) => x !== v),
+            )
+          }
+          options={movieLibs.map((l) => ({
+            label: l.title,
+            value: l.id,
+          }))}
+          seedKey={profileKey}
+        />
+      </fieldset>
 
-        <fieldset
-          hidden={!otherLibs.length}
-          id="ch-otherbox"
-        >
-          <legend>Other videos</legend>
-          <CheckboxGroup
-            checked={itemSections}
-            id="ch-otherlibs"
-            onToggle={(v, isChecked) =>
-              setItemSections((prev) =>
-                isChecked
-                  ? [...prev, v]
-                  : prev.filter((x) => x !== v),
-              )
-            }
-            options={otherLibs.map((l) => ({
-              label: l.title,
-              value: l.id,
-            }))}
-            seedKey={profileKey}
-          />
-        </fieldset>
+      <fieldset hidden={!otherLibs.length} id="ch-otherbox">
+        <legend>Other videos</legend>
+        <CheckboxGroup
+          checked={itemSections}
+          id="ch-otherlibs"
+          onToggle={(v, isChecked) =>
+            setItemSections((prev) =>
+              isChecked
+                ? [...prev, v]
+                : prev.filter((x) => x !== v),
+            )
+          }
+          options={otherLibs.map((l) => ({
+            label: l.title,
+            value: l.id,
+          }))}
+          seedKey={profileKey}
+        />
+      </fieldset>
 
-        {/* The three library groups are ONE scope, and it is optional (decision
+      {/* The three library groups are ONE scope, and it is optional (decision
             `2026-08-17-no-libraries-checked-means-every-library`).
 
             `hint`, not `subhint`. `.subhint` is only ever written `#startmodal .subhint`
@@ -275,176 +273,200 @@ export function ChannelFilters({
             scoped for it (`#chfilters .hint`), and is what the sibling note under "Show
             libraries" already wears.
             (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
-        <p className="hint" id="ch-alllibs">
-          {!showSections.length && !itemSections.length
-            ? "Every video library — check a box to narrow it."
-            : "Uncheck every box to draw from all of them."}
-        </p>
+      <p className="hint" id="ch-alllibs">
+        {!showSections.length && !itemSections.length
+          ? "Every video library — check a box to narrow it."
+          : "Uncheck every box to draw from all of them."}
+      </p>
 
-        <fieldset className="showsonly">
-          <legend>Blocked</legend>
-          <div className="add chmadd">
-            <SearchDropdown<SearchHit>
-              doSearch={async (q) => {
-                // Scoped to THIS channel's libraries + collections — you exclude from
-                // the channel's own pool, so there is no point offering titles it
-                // never draws from.
-                const { results } = await api<{
-                  results: SearchHit[]
-                }>(
-                  "GET",
-                  `/api/search?set=${channel.id}&q=${encodeURIComponent(q)}&collections=1`,
-                )
+      <fieldset className="showsonly">
+        <legend>Blocked</legend>
+        <div className="add chmadd">
+          <SearchDropdown<SearchHit>
+            doSearch={async (q) => {
+              // Scoped to THIS channel's libraries + collections — you exclude from
+              // the channel's own pool, so there is no point offering titles it
+              // never draws from.
+              const { results } = await api<{
+                results: SearchHit[]
+              }>(
+                "GET",
+                `/api/search?set=${channel.id}&q=${encodeURIComponent(q)}&collections=1`,
+              )
 
-                return results
-              }}
-              inputId="ch-blocksearch"
-              listId="ch-blockresults"
-              placeholder="Exclude a show or collection…"
-              rowFor={(hit, _index, close) => {
-                const isCollection =
-                  hit.type === "collection"
+              return results
+            }}
+            inputId="ch-blocksearch"
+            listId="ch-blockresults"
+            placeholder="Exclude a show or collection…"
+            rowFor={(hit, _index, close) => {
+              const isCollection = hit.type === "collection"
 
-                return {
-                  content: (
-                    <>
-                      <Poster
-                        cover={hit.cover}
-                        fallback={
-                          <span
-                            aria-hidden="true"
-                            className="noposter"
-                          />
-                        }
-                        // A collection with no artwork of its own has nothing to ask for.
-                        ratingKey={
-                          isCollection && !hit.hasThumb
-                            ? null
-                            : hit.ratingKey
-                        }
-                      />
-                      <span>
-                        {hit.title}{" "}
-                        {isCollection ? (
-                          <>
-                            <span className="collbadge">
-                              Collection
-                            </span>{" "}
-                            <span className="y">{`${hit.childCount || 0} items`}</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="y">
-                              {hit.year || ""}
-                            </span>
-                            {/* A movie library holds two editions of one film as two items
+              return {
+                content: (
+                  <>
+                    <Poster
+                      cover={hit.cover}
+                      fallback={
+                        <span
+                          aria-hidden="true"
+                          className="noposter"
+                        />
+                      }
+                      // A collection with no artwork of its own has nothing to ask for.
+                      ratingKey={
+                        isCollection && !hit.hasThumb
+                          ? null
+                          : hit.ratingKey
+                      }
+                    />
+                    <span>
+                      {hit.title}{" "}
+                      {isCollection ? (
+                        <>
+                          <span className="collbadge">
+                            Collection
+                          </span>{" "}
+                          <span className="y">{`${hit.childCount || 0} items`}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="y">
+                            {hit.year || ""}
+                          </span>
+                          {/* A movie library holds two editions of one film as two items
                                 with the same title and year. Blocking is by ratingKey, so it
                                 excludes exactly ONE of them — the row has to say which. */}
-                            <EditionBadge hit={hit} />
-                          </>
-                        )}
-                      </span>
-                    </>
-                  ),
-                  pick: async () => {
-                    close()
+                          <EditionBadge hit={hit} />
+                        </>
+                      )}
+                    </span>
+                  </>
+                ),
+                pick: async () => {
+                  close()
 
-                    // A collection blocks by NAME (expanded at scan time, so the whole
-                    // collection goes); a show/item blocks by ratingKey.
-                    const value = isCollection
-                      ? `Collection: ${hit.title}`
-                      : String(hit.ratingKey)
+                  // A collection blocks by NAME (expanded at scan time, so the whole
+                  // collection goes); a show/item blocks by ratingKey.
+                  const value = isCollection
+                    ? `Collection: ${hit.title}`
+                    : String(hit.ratingKey)
 
-                    if (
-                      (channel.blocklist || []).includes(
-                        value,
-                      )
-                    ) {
-                      setStatus(
-                        `Already excluded — “${hit.title}”`,
-                        "ok",
-                      )
+                  if (
+                    (channel.blocklist || []).includes(
+                      value,
+                    )
+                  ) {
+                    setStatus(
+                      `Already excluded — “${hit.title}”`,
+                      "ok",
+                    )
 
-                      return
-                    }
+                    return
+                  }
 
-                    setStatus(`Excluding ${hit.title}…`)
+                  setStatus(`Excluding ${hit.title}…`)
 
-                    try {
-                      await api(
-                        "PATCH",
-                        `/api/sets/${channel.id}`,
-                        {
-                          blocklist: [
-                            ...(channel.blocklist || []),
-                            value,
-                          ],
-                        },
-                      )
-                      await resync()
-                      setStatus(
-                        `Excluded “${hit.title}”`,
-                        "ok",
-                      )
-                    } catch (e) {
-                      setStatus(
-                        "Exclude failed: " +
-                          (e as Error).message,
-                        "err",
-                      )
-                    }
-                  },
-                }
-              }}
-            />
-          </div>
-          <ul id="ch-block">
-            {channel.blocklist.length === 0 ? (
-              <li className="empty">Nothing blocked.</li>
-            ) : (
-              channel.blocklist.map((entry) => (
-                <BlocklistRow
-                  channel={channel}
-                  entry={entry}
-                  key={entry}
-                  onChanged={resync}
-                />
-              ))
-            )}
-          </ul>
-        </fieldset>
-
-        <fieldset className="moviesonly">
-          <legend>Excluded from rewatch</legend>
-          <ul id="ch-movieexcludes">
-            {excludes.length === 0 ? (
-              <li className="empty">Nothing excluded.</li>
-            ) : (
-              excludes.map((rk) => (
-                <ExcludeRow
-                  channel={channel}
-                  currentProfile={currentProfile}
-                  excludes={excludes}
-                  key={rk}
-                  onChanged={resync}
-                  ratingKey={rk}
-                />
-              ))
-            )}
-          </ul>
-        </fieldset>
-
-        <fieldset>
-          <legend>Audio language</legend>
-          <input
-            id="ch-audio"
-            onChange={(e) => setAudio(e.target.value)}
-            placeholder="e.g. jpn, eng — blank = default"
-            type="text"
-            value={audio}
+                  try {
+                    await api(
+                      "PATCH",
+                      `/api/sets/${channel.id}`,
+                      {
+                        blocklist: [
+                          ...(channel.blocklist || []),
+                          value,
+                        ],
+                      },
+                    )
+                    await resync()
+                    setStatus(
+                      `Excluded “${hit.title}”`,
+                      "ok",
+                    )
+                  } catch (e) {
+                    setStatus(
+                      "Exclude failed: " +
+                        (e as Error).message,
+                      "err",
+                    )
+                  }
+                },
+              }
+            }}
           />
-        </fieldset>
-      </div>
+        </div>
+        <ul id="ch-block">
+          {channel.blocklist.length === 0 ? (
+            <li className="empty">Nothing blocked.</li>
+          ) : (
+            channel.blocklist.map((entry) => (
+              <BlocklistRow
+                channel={channel}
+                entry={entry}
+                key={entry}
+                onChanged={resync}
+              />
+            ))
+          )}
+        </ul>
+      </fieldset>
+
+      <fieldset className="moviesonly">
+        <legend>Excluded from rewatch</legend>
+        <ul id="ch-movieexcludes">
+          {excludes.length === 0 ? (
+            <li className="empty">Nothing excluded.</li>
+          ) : (
+            excludes.map((rk) => (
+              <ExcludeRow
+                channel={channel}
+                currentProfile={currentProfile}
+                excludes={excludes}
+                key={rk}
+                onChanged={resync}
+                ratingKey={rk}
+              />
+            ))
+          )}
+        </ul>
+      </fieldset>
+
+      <fieldset>
+        <legend>Audio language</legend>
+        <input
+          id="ch-audio"
+          onChange={(e) => setAudio(e.target.value)}
+          placeholder="e.g. jpn, eng — blank = default"
+          type="text"
+          value={audio}
+        />
+      </fieldset>
+    </div>
+  )
+
+  return (
+    <aside id="chfilters">
+      {isNarrow ? (
+        <Accordion
+          className="chfilters-accordion"
+          // One filter section is open by default. Accordion owns the state after the first
+          // render, so the person can collapse it without another state owner in this view.
+          expandedKeys={["filters"]}
+          headingLevel={2}
+          items={[
+            {
+              content: filterFields,
+              key: "filters",
+              label: "Eligibility filters",
+            },
+          ]}
+        />
+      ) : (
+        <>
+          <h2>Eligibility filters</h2>
+          {filterFields}
+        </>
+      )}
 
       {/* A Charcuterie `Button`. `#ch-save` painted a solid accent, full-width control by
           hand; that is `intent="accent"` plus `isFullWidth`. The id STAYS — the panel is a
