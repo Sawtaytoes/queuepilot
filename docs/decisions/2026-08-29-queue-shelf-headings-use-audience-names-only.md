@@ -4,7 +4,7 @@
 - **Date:** 2026-08-29
 - **Type:** UI
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [Queue shelf headings use avatar badges and one baseline](2026-08-29-queue-shelf-headings-use-avatar-badges-and-one-baseline.md)
 
 ## Decision
 
