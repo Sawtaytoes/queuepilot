@@ -638,7 +638,9 @@ picker option** cannot hold 26px faces, so it gets `queuePeopleLabel` instead â€
 Three call sites today: both Add-to menus (`Toolbar`, `PendingView`) and the selection bar's
 Move-to picker. **Add a fourth list of queues and it gets the chip too** â€” fixing one of three
 is how a rule becomes folklore. Required members only, three names then `+n`, `Anybody` for a
-queue nobody has filed.
+queue nobody has filed. The `/queues` shelf heading is the deliberate compact exception: it
+passes `isFaceVisible={false}` to `PeopleRow`, so it shows audience names without the initials
+marker or a provider label. Landing cards keep their face markers.
 
 ### The tile menu, and the long press that opens it
 
