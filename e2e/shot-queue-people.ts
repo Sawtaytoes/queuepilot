@@ -117,12 +117,28 @@ try {
   const titles = await page.$$eval('.shelf h2 .lbl', (nodes) =>
     nodes.slice(0, 4).map((n) => n.textContent ?? ''),
   );
+  const unfilteredShelves = await page.$$eval('.shelf', (nodes) => nodes.length);
+  const peopleChips = await page.$$eval('#peoplechips a', (nodes) => nodes.length);
+  if (peopleChips === 0)
+    throw new Error('Picks queues does not render the people filter');
+
+  await page.goto(`http://localhost:${PORT}/picks?people=linus`, {
+    waitUntil: 'domcontentloaded',
+  });
+  await settle('.shelf');
+  const filteredShelves = await page.$$eval('.shelf', (nodes) => nodes.length);
+  if (filteredShelves >= unfilteredShelves)
+    throw new Error(
+      `Picks people filter did not narrow shelves (${unfilteredShelves} → ${filteredShelves})`,
+    );
+
   console.log(
     faces > 0 && names > 0
       ? `${faces} avatar badges and ${names} audience names on the shelves — controls aligned with names`
       : `${faces} avatar badges and ${names} audience names on the shelves — unexpected state`,
   );
   console.log(`first four shelf titles: ${JSON.stringify(titles)}`);
+  console.log(`Linus narrows ${unfilteredShelves} shelves to ${filteredShelves}`);
 
   // ── 2. the editor, and 3. one audience move ────────────────────────────────────────── //
 
