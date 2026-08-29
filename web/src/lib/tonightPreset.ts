@@ -36,7 +36,7 @@ import {
  *
  * ## The grammar
  *
- *   /tonight/go?activity=board-games&people=ada,linus&guests=1&light=on
+ *   /tonight/go?activity=board-games&people=ada,linus&guests=1&categories=Roll%20'n%20Write
  *
  * `activity` names one of the six tiles. `people` is a comma-separated list of person ids —
  * the ids `GET /api/people` returns, not display names, because a name is not stable and an
@@ -126,11 +126,26 @@ export function parseTonightPreset(
   for (const filter of ACTIVITY_FILTERS[activity.id]) {
     const raw = params.get(filter.id)
     if (raw == null) continue
+    if (filter.control === "multiPicker") {
+      filters[filter.id] = readList(raw).join(",")
+      continue
+    }
     if (
       filter.options.some((option) => option.value === raw)
     ) {
       filters[filter.id] = raw
     }
+  }
+
+  // `light=on/off` was the old board-game control. Keep those saved addresses readable after
+  // the control becomes a Light / Medium / Heavy picker. An explicit new value wins.
+  if (
+    activity.id === "board-games" &&
+    !params.has("complexity")
+  ) {
+    const legacyLight = params.get("light")
+    if (legacyLight === "on") filters.complexity = "light"
+    if (legacyLight === "off") filters.complexity = "any"
   }
 
   const preset: TonightPreset = {

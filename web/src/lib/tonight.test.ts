@@ -1,6 +1,8 @@
 import { describe, expect, test } from "vitest"
 import {
   ACTIVITIES,
+  ACTIVITY_FILTERS,
+  defaultFilterValues,
   defaultModeFor,
   goLabel,
   isProviderWorthNaming,
@@ -132,6 +134,63 @@ describe("the activity tiles", () => {
         ).not.toContain(brand)
       }
     }
+  })
+})
+
+describe("the Board Game Picker filter contract", () => {
+  test("keeps interaction, playtime and categories in the Tonight form", () => {
+    const filters = ACTIVITY_FILTERS["board-games"]
+
+    expect(filters.map((filter) => filter.id)).toEqual([
+      "fit",
+      "knows",
+      "interactionType",
+      "maxPlaytime",
+      "categories",
+      "complexity",
+    ])
+    expect(
+      filters
+        .find((filter) => filter.id === "interactionType")
+        ?.options.map((option) => option.value),
+    ).toEqual([
+      "any",
+      "competitive",
+      "cooperative",
+      "semiCooperative",
+      "team",
+      "traitor",
+      "solo",
+    ])
+    expect(
+      filters
+        .find((filter) => filter.id === "maxPlaytime")
+        ?.options.map((option) => option.value),
+    ).toEqual(["any", "30", "60", "90", "120"])
+    expect(
+      filters.find((filter) => filter.id === "categories")
+        ?.control,
+    ).toBe("multiPicker")
+    expect(
+      filters
+        .find((filter) => filter.id === "complexity")
+        ?.options.map((option) => option.value),
+    ).toEqual(["any", "light", "medium", "heavy"])
+    expect(
+      filters.find((filter) => filter.id === "complexity")
+        ?.control,
+    ).toBe("picker")
+  })
+
+  test("opens those controls at their neutral values", () => {
+    expect(
+      defaultFilterValues("board-games"),
+    ).toMatchObject({
+      categories: "",
+      complexity: "light",
+      interactionType: "any",
+      maxPlaytime: "any",
+    })
   })
 })
 
