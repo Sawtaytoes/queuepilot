@@ -147,7 +147,7 @@ describe("the Board Game Picker filter contract", () => {
       "interactionType",
       "maxPlaytime",
       "categories",
-      "light",
+      "complexity",
     ])
     expect(
       filters
@@ -171,6 +171,15 @@ describe("the Board Game Picker filter contract", () => {
       filters.find((filter) => filter.id === "categories")
         ?.control,
     ).toBe("multiPicker")
+    expect(
+      filters
+        .find((filter) => filter.id === "complexity")
+        ?.options.map((option) => option.value),
+    ).toEqual(["any", "light", "medium", "heavy"])
+    expect(
+      filters.find((filter) => filter.id === "complexity")
+        ?.control,
+    ).toBe("picker")
   })
 
   test("opens those controls at their neutral values", () => {
@@ -178,6 +187,7 @@ describe("the Board Game Picker filter contract", () => {
       defaultFilterValues("board-games"),
     ).toMatchObject({
       categories: "",
+      complexity: "light",
       interactionType: "any",
       maxPlaytime: "any",
     })

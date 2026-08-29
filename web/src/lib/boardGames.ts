@@ -14,16 +14,18 @@ import type {
   PickCriteriaWire,
 } from "./types"
 
-/**
- * "Keep it light: On" means a complexity ceiling of 2.4.
- *
- * Not invented here: 2.4 is the top of the **medium-light** band in the vocabulary the
- * absorbed picker already used on its own complexity control, and re-picking the number would
- * have meant two apps disagreeing about the same word. It is a starting point and is meant to
- * move after a real game night, which is why it is a named constant and not a literal in a
- * mapping table.
- */
+/** The Light complexity choice keeps the existing 2.4 ceiling. */
 export const LIGHT_MAX_WEIGHT = 2.4
+
+/**
+ * Complexity choices are ceilings, using the boundaries from the absorbed Board Game Picker.
+ * Any complexity above 3.9 requires the neutral `Any` choice.
+ */
+export const COMPLEXITY_MAX_WEIGHTS = {
+  light: LIGHT_MAX_WEIGHT,
+  medium: 3.2,
+  heavy: 3.9,
+} as const
 
 /**
  * The head count for a pick: everybody ticked, plus the anonymous seats.
@@ -49,8 +51,8 @@ export const tableSize = (
  *   - **Interaction type**, **categories** and **maximum playtime** pass through to the
  *     corresponding engine fields. Their `Any` values become the engine's null or empty
  *     values.
- *   - **Keep it light** — a complexity ceiling, not a time limit. Time is its own axis and
- *     remains separate from this control.
+ *   - **Complexity** — `Any`, `Light`, `Medium` and `Heavy` are maximum-weight ceilings, not
+ *     strict bands. Time is its own axis and remains separate from this control.
  *
  * The ticked people go through as `personIds` as well as into the count. They are what the
  * familiarity bonus counts plays for and whose personal complexity ceilings apply — dropping
@@ -83,6 +85,15 @@ export function criteriaFromTonight({
     filters.maxPlaytime && filters.maxPlaytime !== "any"
       ? Number(filters.maxPlaytime)
       : null
+  const complexity = filters.complexity
+  const maxWeight =
+    complexity === "light" ||
+    complexity === "medium" ||
+    complexity === "heavy"
+      ? COMPLEXITY_MAX_WEIGHTS[complexity]
+      : filters.light === "on"
+        ? LIGHT_MAX_WEIGHT
+        : null
 
   return {
     categories: (filters.categories ?? "")
@@ -95,8 +106,7 @@ export function criteriaFromTonight({
         ? "bestOrRecommended"
         : "bestOnly",
     interactionType,
-    maxWeight:
-      filters.light === "on" ? LIGHT_MAX_WEIGHT : null,
+    maxWeight,
     maxPlaytime:
       maxPlaytimeValue !== null &&
       Number.isFinite(maxPlaytimeValue)

@@ -123,13 +123,14 @@ try {
           'Interaction type',
           'Maximum playtime',
           'Categories',
-          'Keep it light',
+          'Complexity',
         ]),
       JSON.stringify(boardGameFilterLabels),
     );
     ok('interaction type uses the shared picker', Boolean(await page.$('#tonight-interactionType')));
     ok('maximum playtime uses the shared picker', Boolean(await page.$('#tonight-maxPlaytime')));
     ok('categories uses a multi-select control', Boolean(await page.$('#tonight-categories')));
+    ok('complexity uses the shared picker', Boolean(await page.$('#tonight-complexity')));
 
     const categoriesResponse = await fetch(`${server.base}/api/board-games/categories`);
     const categoriesBody = (await categoriesResponse.json()) as { categories?: unknown };

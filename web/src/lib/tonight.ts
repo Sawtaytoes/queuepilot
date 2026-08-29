@@ -497,13 +497,9 @@ export function queuesForSurpriseScope(
  * (`2026-08-22-…-tonight-pick` §5).
  *
  * The set per activity, and each default, come from the settled mockup plus the full
- * Board Game Picker contract. Board games and video games open with **Keep it light: On**,
- * and both open with **knows-how: Someone** rather than Any. Reading opens with Keep it
- * light Off.
- *
- * Board-game complexity still uses the current binary control. The Light / Medium / Heavy
- * vocabulary is accepted, but its numeric mapping is intentionally not implemented until
- * the ceiling-versus-band semantics and boundaries are settled.
+ * Board Game Picker contract. Board games open with **Complexity: Light**, video games open
+ * with **Keep it light: On**, and both open with **knows-how: Someone** rather than Any.
+ * Reading opens with Keep it light Off.
  */
 export type ActivityFilter = {
   id: string
@@ -555,6 +551,19 @@ const BOARD_GAME_CATEGORIES: ActivityFilter = {
   options: [],
 }
 
+const BOARD_GAME_COMPLEXITY: ActivityFilter = {
+  control: "picker",
+  defaultValue: "light",
+  id: "complexity",
+  label: "Complexity",
+  options: [
+    { label: "Any", value: "any" },
+    { label: "Light", value: "light" },
+    { label: "Medium", value: "medium" },
+    { label: "Heavy", value: "heavy" },
+  ],
+}
+
 const KNOWS_HOW = (label: string): ActivityFilter => ({
   control: "segment",
   defaultValue: "someone",
@@ -599,7 +608,7 @@ export const ACTIVITY_FILTERS: Record<
     BOARD_GAME_INTERACTIONS,
     BOARD_GAME_PLAYTIME,
     BOARD_GAME_CATEGORIES,
-    KEEP_IT_LIGHT("on"),
+    BOARD_GAME_COMPLEXITY,
   ],
   movies: [
     {

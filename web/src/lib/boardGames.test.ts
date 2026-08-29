@@ -4,13 +4,13 @@
 import { describe, expect, test } from "vitest"
 
 import {
+  COMPLEXITY_MAX_WEIGHTS,
   boxArtUrl,
   criteriaFromTonight,
   filterCollection,
   knownHowFor,
   knownHowLabel,
   knownHowProposal,
-  LIGHT_MAX_WEIGHT,
   playCountLabel,
   playerCountLine,
   playtimeLabel,
@@ -59,7 +59,7 @@ describe("criteriaFromTonight", () => {
           fit: "best",
           interactionType: "cooperative",
           knows: "someone",
-          light: "on",
+          complexity: "medium",
           maxPlaytime: "60",
         },
         guestCount: 1,
@@ -70,7 +70,7 @@ describe("criteriaFromTonight", () => {
       excludedGameIds: [],
       fitness: "bestOnly",
       interactionType: "cooperative",
-      maxWeight: LIGHT_MAX_WEIGHT,
+      maxWeight: COMPLEXITY_MAX_WEIGHTS.medium,
       maxPlaytime: 60,
       personIds: ["ada", "grace"],
       playerCount: 3,
@@ -78,14 +78,14 @@ describe("criteriaFromTonight", () => {
     })
   })
 
-  test("OK widens the fit, and Keep it light Off lifts the ceiling", () => {
+  test("OK widens the fit, and Any lifts the complexity ceiling", () => {
     expect(
       criteriaFromTonight({
         filters: {
           fit: "ok",
           interactionType: "any",
           knows: "any",
-          light: "off",
+          complexity: "any",
           maxPlaytime: "any",
         },
         guestCount: 0,
@@ -99,6 +99,28 @@ describe("criteriaFromTonight", () => {
       maxPlaytime: null,
       rulesKnown: "any",
     })
+  })
+
+  test("maps each complexity choice to a maximum weight", () => {
+    for (const [complexity, maxWeight] of Object.entries(
+      COMPLEXITY_MAX_WEIGHTS,
+    )) {
+      expect(
+        criteriaFromTonight({
+          filters: { complexity },
+          guestCount: 0,
+          personIds: ["ada"],
+        }).maxWeight,
+      ).toBe(maxWeight)
+    }
+
+    expect(
+      criteriaFromTonight({
+        filters: { complexity: "any" },
+        guestCount: 0,
+        personIds: ["ada"],
+      }).maxWeight,
+    ).toBeNull()
   })
 
   test("All is the engine's `everyone` — the word the decision uses", () => {

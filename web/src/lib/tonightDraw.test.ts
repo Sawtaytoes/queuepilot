@@ -58,10 +58,10 @@ const boardGames: TonightPreset = {
   activity: "board-games",
   filters: {
     categories: "",
+    complexity: "light",
     fit: "best",
     interactionType: "any",
     knows: "someone",
-    light: "on",
     maxPlaytime: "any",
   },
   guestCount: 0,
@@ -126,10 +126,10 @@ describe("drawTonight", () => {
         ...boardGames,
         filters: {
           categories: "",
+          complexity: "any",
           fit: "ok",
           interactionType: "any",
           knows: "all",
-          light: "off",
           maxPlaytime: "any",
         },
       },

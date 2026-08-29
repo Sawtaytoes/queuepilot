@@ -137,6 +137,17 @@ export function parseTonightPreset(
     }
   }
 
+  // `light=on/off` was the old board-game control. Keep those saved addresses readable after
+  // the control becomes a Light / Medium / Heavy picker. An explicit new value wins.
+  if (
+    activity.id === "board-games" &&
+    !params.has("complexity")
+  ) {
+    const legacyLight = params.get("light")
+    if (legacyLight === "on") filters.complexity = "light"
+    if (legacyLight === "off") filters.complexity = "any"
+  }
+
   const preset: TonightPreset = {
     activity: activity.id,
     filters,
