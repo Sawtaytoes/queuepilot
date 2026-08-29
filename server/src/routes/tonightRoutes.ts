@@ -8,6 +8,7 @@ import { groupMembership } from '../store/db/people.js';
 import { membersByQueue } from '../store/db/queuePeople.js';
 import * as sets from '../sets.js';
 import * as engineRouting from '../engine/routing.js';
+import { isRandomOrder } from '../kind.js';
 import { displayFor } from '../tiles.js';
 import type { CandidateSet, TonightCandidate, TonightPick } from '../tonight/pick.js';
 import {
@@ -134,7 +135,8 @@ export function tonightRoutes(): Hono {
       const shortlist: TonightPick[] = [];
       for (const candidate of ordered) {
         if (shortlist.length >= 3) break;
-        const { isExhausted, ...resolved } = await withUpNext(candidate);
+        const orderCfg = registry.sets.find((set) => set.id === candidate.setId);
+        const { isExhausted, ...resolved } = await withUpNext(candidate, orderCfg);
         if (isExhausted) continue;
         shortlist.push(resolved);
       }
@@ -194,17 +196,21 @@ const notesFor = (tile: Parameters<typeof routeForTile>[0]): string[] => {
  *   1. **A PULL queue** — the real head of `pullLineup()`, the same lineup `GET /go/<id>` is
  *      about to build. One provider round trip, and it is the round trip the launch was
  *      going to make anyway.
- *   2. **A CURATED push queue** — the first entry not marked done, read out of this app's own
- *      store with no Plex call at all. That is the ENTRY and not the leaf episode, and the
- *      card says "first in the queue" rather than claiming an episode number it has not
- *      looked up.
+ *   2. **An ORDERED curated push queue** — the first entry not marked done, read out of this
+ *      app's own store with no Plex call at all. That is the ENTRY and not the leaf episode,
+ *      and the card says "first in the queue" rather than claiming an episode number it has
+ *      not looked up.
  *   3. **A RULES pool** — nothing, by name. Its lineup does not exist until it is drawn.
+ *   4. **A RANDOM curated queue** — also nothing, by name. The old answer called the first
+ *      stored entry "Up next", but playback shuffles the pool when Start is pressed. That
+ *      made the result card promise one film and then correctly start another.
  *
- * A failure is the fourth answer and it is also named: a provider that is NOT CONFIGURED
+ * A failure is the fifth answer and it is also named: a provider that is NOT CONFIGURED
  * reports itself here rather than producing a card whose Go dies later.
  */
 async function withUpNext(
   candidate: TonightCandidate,
+  orderCfg: { add_as?: unknown; kind?: unknown; source?: unknown } | undefined,
 ): Promise<TonightPick & { isExhausted: boolean }> {
   const launchUrl = candidate.delivery === 'pull'
     ? `/go/${encodeURIComponent(candidate.setId)}`
@@ -270,6 +276,23 @@ async function withUpNext(
   }
 
   try {
+    // A Random pool has MEMBERS, not a fixed head. `queues.listSet()` below returns storage
+    // order, while `nextQueue()` shuffles at playback. Calling the first stored row "Up next"
+    // therefore lies: the live report that found this showed one film, then correctly drew a
+    // different one when Start was pressed. Do not perform a speculative draw here either — a
+    // second draw at Start could still disagree, and pinning it would turn a queue pick into
+    // an item pick (the product decision says the QUEUE is the answer).
+    if (isRandomOrder(orderCfg)) {
+      return {
+        ...candidate,
+        isExhausted: false,
+        launchUrl,
+        upNext: null,
+        upNextReason:
+          'This queue draws from its Random pool when it starts, so it has no fixed next item yet.',
+      };
+    }
+
     const entries = await queues.listSet(candidate.setId);
     const display = firstUnfinishedEntry(
       entries.map((entry) => ({ display: displayFor(entry.value), done: Boolean(entry.done) })),
