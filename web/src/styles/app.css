@@ -4526,7 +4526,10 @@ body.rowdragging {
 /* ---- people-group editor (`GroupsModal.tsx`) ------------------------------------------ */
 .grouplayout {
   display: grid;
-  grid-template-columns: minmax(220px, 0.72fr) minmax(0, 1.5fr);
+  grid-template-columns: minmax(220px, 0.72fr) minmax(
+      0,
+      1.5fr
+    );
   gap: 20px;
   align-items: start;
 }
