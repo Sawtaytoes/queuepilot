@@ -145,9 +145,9 @@ export function ChannelsView({
           {/* "Pool" until 2026-08-26, and it was wrong twice over: the page's own heading
               says Rules, and `pool` is already the name of a LANE inside a Picks queue (the
               Random pool). The ADR that named the two kinds says not to spend the word on
-              both (decision `2026-08-23-kind-is-picks-or-rules`). "Eligible pool" further
-              down this page keeps it — that one IS a pool of candidates, which is the sense
-              the word still owns here. */}
+              both (decision `2026-08-23-kind-is-picks-or-rules`). The generated result below
+              is now "Eligible titles", so Pool has one meaning here: the Random pool lane
+              inside a Picks queue. */}
           Rules queue
           {/* `key={channel.id}` on BOTH pickers, for two different reasons, and
               neither is "the value changed".
@@ -291,7 +291,7 @@ export function ChannelsView({
         >
           Resample
         </Button>
-        <Tip label="Full pool config">
+        <Tip label="Full queue configuration">
           <Button
             appearance="outline"
             id="chconfigure"

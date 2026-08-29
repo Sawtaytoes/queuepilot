@@ -1,7 +1,6 @@
 import type { MenuItem } from "@charcuterie/ui"
 import { Button, Menu } from "@charcuterie/ui"
 import { useState } from "react"
-import { useNavigate } from "react-router"
 import { api } from "../lib/api"
 import { entryTitle } from "../lib/searchGroups"
 import type { RegistrySet, SearchHit } from "../lib/types"
@@ -13,17 +12,11 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
-import {
-  homeScroll,
-  setCollapsed,
-  setFilter,
-  useUi,
-} from "../state/ui"
+import { setCollapsed, setFilter, useUi } from "../state/ui"
 import { EditionBadge } from "./EditionBadge"
 import { Poster } from "./Poster"
 import { QueuePeopleBadge } from "./QueuePeopleBadge"
 import { SearchDropdown } from "./SearchDropdown"
-import { SelectListbox } from "./SelectListbox"
 
 /**
  * The Home toolbar: one search across every library any queue draws from, plus the
@@ -39,7 +32,6 @@ import { SelectListbox } from "./SelectListbox"
  * parent, so this must render inside the slot rather than merely look like it does.
  */
 export function Toolbar() {
-  const navigate = useNavigate()
   const { data, reg } = useStore()
   const people = usePeople()
   const { collapsed, filter, hasCollapsePreference } =
@@ -47,7 +39,6 @@ export function Toolbar() {
   const [openMenu, setOpenMenu] = useState<number | null>(
     null,
   )
-  const [addPosition, setAddPosition] = useState("top")
 
   /*
    * The document-level Escape listener that used to sit here is GONE, and its whole
@@ -116,7 +107,10 @@ export function Toolbar() {
                   "POST",
                   `/api/queues/${s.id}/items`,
                   {
-                    position: addPosition,
+                    // New titles append. The tile's lane button and the editable Priority
+                    // position are the direct controls after the add; a global Top/Bottom
+                    // mode displaced an existing plan before the title was even visible.
+                    position: "bottom",
                     value: {
                       ratingKey: hit.ratingKey,
                       title: label,
@@ -255,25 +249,7 @@ export function Toolbar() {
                 ),
             }
           }}
-        >
-          <label className="addpos">
-            <span className="addlbl">Add to</span>
-            {/* No `key`: `addPosition` is this toolbar's own `useState` and nothing
-                else writes it, so the DOM and React have one owner between them.
-                Keying it would remount the control on the user's own pick and take
-                their focus with it. */}
-            <SelectListbox
-              id="gaddpos"
-              label="Add to"
-              onChange={setAddPosition}
-              options={[
-                { label: "Top (plays next)", value: "top" },
-                { label: "Bottom", value: "bottom" },
-              ]}
-              value={addPosition}
-            />
-          </label>
-        </SearchDropdown>
+        ></SearchDropdown>
       </div>
 
       <input
@@ -312,19 +288,6 @@ export function Toolbar() {
         onClick={() => openSetModal(null, "priority")}
       >
         ＋ New queue
-      </Button>
-      <Button
-        appearance="outline"
-        id="channelslink"
-        intent="neutral"
-        onClick={() => {
-          homeScroll.y = window.scrollY
-          navigate("/channels")
-        }}
-      >
-        {/* The page it opens is headed Rules and its picker now lists rules queues alone —
-            "Pools ›" was the 2026-08-16 name, from when a Curated Pool was filed there too. */}
-        Rules ›
       </Button>
     </div>
   )

@@ -80,9 +80,9 @@ ok(
 for (const [path, want] of [
   ['/overview', 'Overview'],
   ['/people', 'People'],
-  ['/picks', 'Picks'],
+  ['/picks', 'Picks queues'],
   ['/q/bob', 'Bob — Movies'],
-  ['/channels/shows', 'Rules'],
+  ['/channels/shows', 'Rules queues'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
   ['/what-to-watch-play', 'What to Watch/Play'],
@@ -108,7 +108,7 @@ ok(
 );
 
 await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-ok('the legacy /queues address renders "Picks"', await heading('Picks'));
+ok('the legacy /queues address renders "Picks queues"', await heading('Picks queues'));
 ok(
   '…and its URL is rewritten to /picks',
   (await page.evaluate(() => location.pathname)) === '/picks',
@@ -215,7 +215,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/picks');
 
   await page.click('#goqueues');
-  ok('clicking "Configure ›" routes to /picks', await heading('Picks'));
+  ok('clicking "Configure ›" routes to /picks', await heading('Picks queues'));
   ok('…and the path is /picks', (await page.evaluate(() => location.pathname)) === '/picks');
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);

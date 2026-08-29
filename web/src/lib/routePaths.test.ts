@@ -178,9 +178,11 @@ describe("the legacy rewrites", () => {
 
 describe("labelForPath", () => {
   test("names where back actually goes", () => {
-    expect(labelForPath("/picks")).toBe("‹ Picks")
-    expect(labelForPath("/queues")).toBe("‹ Picks")
-    expect(labelForPath("/channels/movies")).toBe("‹ Rules")
+    expect(labelForPath("/picks")).toBe("‹ Picks queues")
+    expect(labelForPath("/queues")).toBe("‹ Picks queues")
+    expect(labelForPath("/channels/movies")).toBe(
+      "‹ Rules queues",
+    )
     expect(labelForPath("/q/bob")).toBe("‹ Back")
     expect(labelForPath("/board-game-collection")).toBe(
       "‹ Collection",

@@ -26,7 +26,7 @@ ok('no Refresh button', !(await page.$('#refresh')));
 // fixture's Picks queues on a page headed Rules. `channelSetIds` is gone with it, and a Picks
 // queue reaches its editor from the Picks page or from `/q/<id>`.
 // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`)
-await page.click('#channelslink');
+await page.click('a[href="/channels"]');
 await page.waitForSelector('#channels:not([hidden])');
 const channels = await readOptions(page, '[data-testid="chchannel"]');
 ok(`rules picker lists rules queues and nothing else (${channels.length}): ${JSON.stringify(channels)}`,
@@ -92,7 +92,7 @@ await page.goto('http://localhost:18768/q/bob_anime', { waitUntil: 'domcontentlo
 await page.waitForSelector('#queue:not([hidden])');
 ok('a random-lane Picks queue opens the grid editor in channel mode',
   await page.evaluate(() => document.body.classList.contains('channel-mode')));
-ok('channel mode: no top/bottom picker',
+ok('channel mode: queue-search filters stay hidden',
   await page.$eval('#queue .addpos', (e) => getComputedStyle(e).display === 'none'));
 ok('channel mode: random-order note shown', /random order/.test(await page.textContent('#sub') ?? ''));
 

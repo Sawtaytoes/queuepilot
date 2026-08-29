@@ -152,9 +152,9 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
   is the row: a `menuitem` **does** something, an `option` **is** something. The two Add-to
   menus (`PendingView.tsx`, `Toolbar.tsx`) POST an add and keep no selected value, so they
   are `Menu`s — do **not** "finish the picker migration" by converting them
-  ([decision](docs/decisions/2026-08-21-an-add-to-menu-is-a-menu-not-a-picker.md)). The
-  Add-to POSITION control one element away in the same toolbar does hold a value and is
-  correctly a `SelectListbox`. Two consequences: a `Menu` panel **portals to `<body>`**, so
+  ([decision](docs/decisions/2026-08-21-an-add-to-menu-is-a-menu-not-a-picker.md)). New
+  Picks always append to the end, so neither Add-to menu has a separate position control.
+  Two consequences: a `Menu` panel **portals to `<body>`**, so
   `#gresults .addtomenu` is wrong by construction and e2e reads `.addtomenu
   [role="menuitem"]` document-wide; and **no linter can catch a hand-rolled menu** — the ban
   below is on a native `<select>`, and a `<div>` full of `<button>`s trips nothing.
@@ -568,6 +568,14 @@ Four things to know before touching it:
   first promote has nothing to aim at.
 - **The pool saves no order.** A drag that starts and ends in `random` writes nothing —
   deliberate, because the pool is shuffled at playback.
+- **Priority numbers are the stored order.** Every Priority tile shows a one-based number.
+  Editing it calls `setPriorityPosition`, whose optimistic order comes from
+  `orderAtPriorityPosition`. The number and its maximum come from the complete queue, not a
+  filtered display, so a hidden neighbour never changes what a visible number means.
+- **Checked entries move lanes as one ordered group.** The selection bar offers direct
+  Priority and Random pool actions. `orderAfterLaneMove` preserves the selected entries'
+  file order and appends that group to the destination lane. Do not restore a separate lane
+  picker or a generic Apply button for this operation.
 
 Gate: `e2e/lane-drag-test.ts` (spawns its own server; browser, no Plex). ⚠️ **Run it with
 `PLEX_TOKEN=` blank.** It drives the DEGRADED path on purpose, and a workspace shell that has
@@ -641,7 +649,8 @@ Move-to picker. **Add a fourth list of queues and it gets the chip too** — fix
 is how a rule becomes folklore. Required members only, three names then `+n`, `Anybody` for a
 queue nobody has filed. The `/queues` shelf heading uses the same `PeopleRow` avatar badges and
 names as the landing cards, omits the provider label and audience chevron, and baseline-aligns
-the heading contents so the badges and names read as one row.
+the queue name and people badges. The collapse button is vertically centred on the queue-name
+row; it does not span the full three-row heading in Narrow View.
 
 ### The tile menu, and the long press that opens it
 

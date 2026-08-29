@@ -439,7 +439,7 @@ export function DynModal() {
         ? defaultProfile
         : ""
 
-    setStatus("Saving pool…")
+    setStatus("Saving Rules queue…")
 
     try {
       if (setId)
@@ -448,7 +448,9 @@ export function DynModal() {
 
       closeDynModal()
       setStatus(
-        setId ? "Pool updated" : "Pool created",
+        setId
+          ? "Rules queue updated"
+          : "Rules queue created",
         "ok",
       )
       await load()
@@ -471,7 +473,7 @@ export function DynModal() {
 
     if (
       !confirm(
-        `Delete the “${name}” filtered pool?\n\n` +
+        `Delete the “${name}” Rules queue?\n\n` +
           "This removes it permanently. Any NFC card or HA button set to play " +
           `"${setId}" will stop working until you repoint it — this app can't ` +
           "change Home Assistant.",
@@ -480,7 +482,7 @@ export function DynModal() {
       return
     }
 
-    setStatus("Deleting pool…")
+    setStatus("Deleting Rules queue…")
 
     try {
       await api(
@@ -488,7 +490,7 @@ export function DynModal() {
         `/api/sets/${encodeURIComponent(setId)}`,
       )
       closeDynModal()
-      setStatus("Pool deleted", "ok")
+      setStatus("Rules queue deleted", "ok")
       await load()
       navigate("/channels")
     } catch (e) {
@@ -534,7 +536,7 @@ export function DynModal() {
             intent="danger"
             onClick={() => void onDelete()}
           >
-            Delete pool
+            Delete Rules queue
           </Button>
           <span className="spacer" />
           <Button
@@ -581,7 +583,7 @@ export function DynModal() {
         />
       </label>
       <p className="subhint" id="dyn-label-hint">
-        Optional. Leave it empty and this pool is called
+        Optional. Leave it empty and this queue is called
         after its activity.
       </p>
       <label className="field">
@@ -639,7 +641,9 @@ export function DynModal() {
           A new rules queue is created, then filed. */}
       {editing ? (
         <div className="setpeople" id="dyn-people">
-          <p className="fieldlabel">Who is this pool for</p>
+          <p className="fieldlabel">
+            Who is this queue for
+          </p>
           <PeopleTrays
             groups={people.groups}
             members={members}
@@ -710,7 +714,7 @@ export function DynModal() {
         <p className="subhint" id="dyn-alllibs">
           {!showSections.length && !itemSections.length
             ? "Every video library — check a box to narrow it."
-            : "Uncheck every box to pool from all of them."}
+            : "Uncheck every box to draw from all of them."}
         </p>
       </div>
 
@@ -724,8 +728,8 @@ export function DynModal() {
       >
         A show library contributes its FILMS here —
         one-episode entries (that is how anime movies are
-        scanned). Multi-episode series never enter a rewatch
-        pool.
+        scanned). Multi-episode series are not eligible for
+        a rewatch queue.
       </p>
 
       {/* PLAYBACK LENGTH — how many things this pool plays before it stops.
@@ -771,9 +775,9 @@ export function DynModal() {
         </div>
         <p className="subhint" id="dyn-length-hint">
           {behavior === "rewatch"
-            ? `How many films this pool plays before it stops. Each one is drawn least-watched-first
+            ? `How many films this queue plays before it stops. Each one is drawn least-watched-first
                and never twice in the same sitting.`
-            : `How many episodes this pool plays before it stops. Infinite keeps going — it queues
+            : `How many episodes this queue plays before it stops. Infinite keeps going — it queues
                ${lineup.length} ahead and tops back up whenever ${lineup.topup_at} or fewer are left, so a
                card that is still playing never runs out.`}
         </p>
@@ -792,7 +796,7 @@ export function DynModal() {
           sitting ended and Home Assistant does the turning
           off — which is what lets the rule check who is
           still in the room. Nothing happens on an Infinite
-          pool: it never finishes.
+          queue: it never finishes.
         </p>
         {/* A Charcuterie `Field`, configured by props: the label and the control, wired
             together by the component. It replaces a `<label className="field">` wrapping a
@@ -843,13 +847,14 @@ export function DynModal() {
         <p className="subhint" id="dyn-on-complete-hint">
           Only fires when a show is genuinely finished — not
           when this lineup merely stopped drawing from it.
-          Letting it finish is what every pool has always
-          done: nothing is removed, and the show comes back
-          on its own when a new episode lands. Starting over
-          keeps a topped-up rotation from withering as the
-          kids finish shows, and on a shorts-only pool it
-          brings the whole library back around. Any single
-          show can override this from the pool grid.
+          Letting it finish is what every Rules queue has
+          always done: nothing is removed, and the show
+          comes back on its own when a new episode lands.
+          Starting over keeps a topped-up rotation from
+          withering as the kids finish shows, and on a
+          shorts-only queue it brings the whole library back
+          around. Any single show can override this from the
+          eligible-title grid.
         </p>
       </FieldGroup>
 
@@ -914,7 +919,7 @@ export function DynModal() {
       <fieldset className="field" id="dyn-profilesbox">
         <legend>Profiles &amp; ratings</legend>
         <p className="subhint">
-          One Plex Home profile this pool plays under, with
+          One Plex Home profile this queue plays under, with
           its own rating caps. The ratings list includes
           every rating allowed for that profile. Older
           queues with extra profile cards remain editable.
@@ -1191,8 +1196,8 @@ export function DynModal() {
             }
           />
           <span className="subhint">
-            The tier the Play and Pools dropdowns start on.
-            Leave unset to use the first.
+            The profile the Play and Rules queue pickers
+            start on. Leave unset to use the first.
           </span>
         </label>
       </fieldset>

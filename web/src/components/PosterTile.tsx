@@ -2,6 +2,7 @@ import { Skeleton } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 import { Poster } from "./Poster"
+import { PriorityPositionInput } from "./PriorityPositionInput"
 import { Tip } from "./Tip"
 
 /**
@@ -35,6 +36,12 @@ type Props = {
   posterRatingKey?: string | null
   /** A non-Plex entry's server-sent artwork URL (see `Poster`). */
   posterCover?: string | null
+  /** Editable one-based order, present only for a tile in the Priority queue. */
+  priorityPosition?: {
+    count: number
+    onChange: (position: number) => void
+    position: number
+  }
   title: string
   titleTooltip?: string
   /**
@@ -236,6 +243,7 @@ export function PosterTile({
   playTitle = "Play this now",
   posterCover,
   posterRatingKey,
+  priorityPosition,
   removeTitle = "Remove",
   runtime,
   title,
@@ -275,6 +283,14 @@ export function PosterTile({
           cover={posterCover}
           ratingKey={posterRatingKey}
         />
+        {priorityPosition ? (
+          <PriorityPositionInput
+            count={priorityPosition.count}
+            onChange={priorityPosition.onChange}
+            position={priorityPosition.position}
+            title={title}
+          />
+        ) : null}
         {/* Centred ON the artwork, unlike ✓/✕ — this one is about the thing in the picture,
             and it is the affordance Plex puts there too, so it is the one place the poster
             is worth covering. Inside `.thumb` so it centres on the poster in every density

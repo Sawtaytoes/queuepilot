@@ -287,7 +287,7 @@ try {
     `menu=${clicked.menu} sheet=${clicked.sheet} — the press settled as a tap and opened the sheet over it`,
   );
 
-  // ── The BULK lane picker: a selection is promoted together ──────────────────────────────
+  // ── The direct BULK lane action: a selection is promoted together ───────────────────────
   await page.goto(`${BASE}/q/${POOL_QUEUE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid-pool li.tile', { timeout: 30000 });
   await page.waitForTimeout(1500);
@@ -297,17 +297,13 @@ try {
   await page.waitForTimeout(400);
 
   check(
-    'the selection bar offers a Lane control on a Picks queue',
-    (await page.locator('#bulklane').count()) === 1,
+    'the selection bar offers a direct group Priority action on a Picks queue',
+    (await page.locator('#bulkpriority').count()) === 1,
     'a selection could be re-weighted and moved and removed, but not promoted',
   );
 
   writes.length = 0;
-  await page.locator('#bulklane').click();
-  await page.waitForTimeout(300);
-  await page.locator('[role="option"]', { hasText: 'Priority queue' }).first().click();
-  await page.waitForTimeout(300);
-  await page.locator('#bulkapply').click();
+  await page.locator('#bulkpriority').click();
   // The apply RE-READS the queue before it settles the order, and this harness has no Plex —
   // so that read waits on a resolve that has to time out. Poll for the promote landing rather
   // than guessing a duration.
@@ -325,7 +321,7 @@ try {
 
   const bulk = writes.find((w) => w.url.endsWith('/bulk'));
   check(
-    'Apply sends placement: priority for the whole selection',
+    'the direct action sends placement: priority for the whole selection',
     Boolean(bulk && JSON.parse(bulk.body).placement === 'priority'
       && JSON.parse(bulk.body).items?.length === 2),
     `bulk body was ${bulk?.body ?? '(not sent)'}`,
@@ -340,6 +336,43 @@ try {
     `document.querySelectorAll('#grid-priority li.tile').length`,
   ));
   check('both entries are in the Priority queue on screen', promoted === 2, `got ${promoted}`);
+
+  const positions = await page.$$eval<string[], HTMLInputElement>(
+    '#grid-priority .priority-position',
+    (inputs) => inputs.map((input) => input.value),
+  );
+  check(
+    'Priority tiles show their one-based positions',
+    JSON.stringify(positions) === JSON.stringify(['1', '2']),
+    `positions were ${JSON.stringify(positions)}`,
+  );
+
+  const beforePositionMove = await page.$$eval<(string | undefined)[], HTMLElement>(
+    '#grid-priority li.tile',
+    (tiles) => tiles.map((tile) => tile.dataset.key),
+  );
+  writes.length = 0;
+  const secondPosition = page.locator('#grid-priority .priority-position').nth(1);
+  await secondPosition.fill('1');
+  await page.keyboard.press('Enter');
+  for (let i = 0; i < 30 && !writes.some((w) => w.url.endsWith('/order')); i += 1) {
+    await page.waitForTimeout(200);
+  }
+  const afterPositionMove = await page.$$eval<(string | undefined)[], HTMLElement>(
+    '#grid-priority li.tile',
+    (tiles) => tiles.map((tile) => tile.dataset.key),
+  );
+  check(
+    'editing a Priority position moves that entry',
+    afterPositionMove[0] === beforePositionMove[1]
+      && afterPositionMove[1] === beforePositionMove[0],
+    `before=${JSON.stringify(beforePositionMove)} after=${JSON.stringify(afterPositionMove)}`,
+  );
+  check(
+    'the position edit persists the new queue order',
+    Boolean(writes.find((write) => write.url.endsWith('/order'))),
+    'no order PATCH followed the edited position',
+  );
 
   await browser.close();
 } finally {

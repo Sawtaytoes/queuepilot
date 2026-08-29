@@ -320,7 +320,7 @@ export function ChannelMembers({
               results,
               poolSections(channel),
               {
-                inPool: "In this pool's libraries",
+                inPool: "In this queue's libraries",
                 rest: "Other libraries",
               },
             )
@@ -470,10 +470,10 @@ export function ChannelMembers({
           instead of a poster-sized empty tile. */}
       <p className="chmhint muted">
         Optional manual includes — a show, Plex Collection,
-        movie, or short played ON TOP of the rule pool below
-        (the opposite of Blocked). Members can come from any
-        library, not just this pool&apos;s. Leave empty to
-        play purely by the rule.
+        movie, or short played before the eligible titles
+        below (the opposite of Blocked). Members can come
+        from any library, not just this queue&apos;s. Leave
+        empty to play purely by the rule.
       </p>
       <ul
         className="grid editable"
@@ -495,7 +495,7 @@ export function ChannelMembers({
                   <EditionChip face={face} />
                   {/* One control, not the queue editor's four: a member has no batch to cap
                       or stop, so weight is the only per-member number there is. */}
-                  <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the pool is shuffled.">
+                  <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the eligible titles are shuffled.">
                     <span className="eps">
                       <CountPicker
                         label={`Weight for ${m.title}`}
