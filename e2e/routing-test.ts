@@ -202,11 +202,32 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   ok('clicking "Configure ›" routes to /queues', await heading('Picks'));
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);
+  ok(
+    'the page scrollbar uses Charcuterie styling',
+    await page.evaluate(() => document.documentElement.classList.contains('charcuterie-scrollbar')),
+  );
 }
 
 // The browser's own Back must work — it did not exist as a question under the hash router.
 await page.goBack();
 ok('browser Back returns to Admin', await heading('Admin'));
+
+// A route change is a new page, so it must not inherit the scroll position of the page that
+// led to it.
+{
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('a.open');
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  const scrollBeforeQueue = await page.evaluate(() => window.scrollY);
+  ok('the Picks page can be scrolled before opening a queue', scrollBeforeQueue > 0);
+  await page.locator('.shelf a.open').last().click();
+  await page.waitForFunction(() => location.pathname.startsWith('/q/'));
+  await page.waitForSelector('#queue:not([hidden])');
+  ok(
+    'opening a queue resets the page scroll to the top',
+    await page.evaluate(() => window.scrollY === 0),
+  );
+}
 
 // The in-app back control points at the ORIGIN — where navigation into this view STARTED,
 // not a fixed parent (Bob's ask). That is tracked in web/src/state/route.ts, and it is the
