@@ -4287,14 +4287,6 @@ body.rowdragging {
   overflow: hidden;
   text-overflow: ellipsis;
 }
-/* The provider, once more than one serves the same activity. An ATTRIBUTE of the queue, so it
-   is quiet — it never groups anything and never reads as a heading. */
-.qprovider {
-  font-size: 0.72rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  opacity: 0.55;
-}
 
 /* ---- the roster editor (`PeopleModal.tsx`) ----
 
