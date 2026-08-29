@@ -136,11 +136,14 @@ type Overlays = {
   entryEditor: { setId: string; key: string } | null
   /** The roster editor. No payload — it always opens on the whole household. */
   peopleModal: boolean
+  /** The saved people-group rule editor. Null when closed; null selection means a new group. */
+  groupsModal: { selectedId: string | null } | null
 }
 
 let overlays: Overlays = {
   dynModal: null,
   entryEditor: null,
+  groupsModal: null,
   peopleModal: false,
   membersModal: null,
   playMenu: null,
@@ -251,10 +254,25 @@ export const openDynModal = (setId: string | null) =>
 export const closeDynModal = () => set({ dynModal: null })
 
 export const openPeopleModal = () =>
-  set({ peopleModal: true })
+  set({ groupsModal: null, peopleModal: true })
 
 export const closePeopleModal = () =>
   set({ peopleModal: false })
+
+export const openGroupsModal = (
+  selectedId: string | null = null,
+) =>
+  set({
+    groupsModal: { selectedId },
+    peopleModal: false,
+  })
+
+export const selectGroupInModal = (
+  selectedId: string | null,
+) => set({ groupsModal: { selectedId } })
+
+export const closeGroupsModal = () =>
+  set({ groupsModal: null })
 
 // Opening the entry panel closes the tile menu that usually launched it, the same way
 // openStartModal does — two overlays over one tile is never intended.

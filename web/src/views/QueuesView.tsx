@@ -112,7 +112,7 @@ function Shelf({
    * (decision `2026-08-25-a-queue-is-people-plus-an-activity` §4).
    */
   label: string
-  /** This queue's two trays. Empty is legal and means "Anybody". */
+  /** This queue's audience rows. Empty is legal and means "Anybody". */
   members: readonly QueueMember[]
   people: readonly Person[]
   groups: readonly GroupWithRoster[]

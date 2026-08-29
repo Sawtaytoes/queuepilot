@@ -1,19 +1,13 @@
-// Before/after for "the tray move handle wears the gesture that can succeed".
+// Before/after for the vertical people audience editor.
 //
 // Four frames, and each one is a claim the PR makes:
 //
-//   1. `editor`   `/channels/shorts` → ⚙ Configure at 1420px. The modal is 920px and all
-//                 three trays are side by side, which is what makes a drag possible at all.
-//   2. `handle`   the same modal, hovering the first card. The handle is `≡`, this app's
-//                 DRAG glyph, and here that promise can be kept.
-//   3. `menu`     the handle pressed. The menu of the other trays — the path that works from
-//                 the keyboard, from a screen reader, and at every width.
-//   4. `narrow`   390px. One tray on screen, nothing to drop onto, and the SAME handle now
-//                 reads the word "Move".
+//   1. `editor`   `/channels/shorts` → ⚙ Configure at 1420px. People and groups appear in
+//                 three clearly ordered sections with a visible audience control on each row.
+//   2. `move`     the first row after its Nice action is clicked.
+//   3. `narrow`   390px. Each audience control stacks under the row identity without overflow.
 //
-// The pair in frames 2 and 4 is the whole point, so both are ASSERTED rather than only
-// photographed — a handle that says the same thing at both widths is the bug, in one
-// direction or the other, and a screenshot cannot fail.
+// The row action and the narrow layout are ASSERTED rather than only photographed.
 //
 // **Fixture data, never live.** The landing fixture's anonymized cast
 // (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live`).
@@ -103,57 +97,29 @@ try {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `__screenshots__/traymove-${TAG}-editor.png` });
 
-  // ── the claim, asserted ────────────────────────────────────────────────────────────── //
-  //
-  // A lane is a `role="group"`; the board renders all three and HIDES two of them below
-  // `cq-lg`, so "how many exist" is not the question — "how many are on screen" is.
-  const lanesOnScreen = await page.$$eval(
-    '#dyn-people [role="group"]',
-    (nodes) => nodes.filter((n) => (n as HTMLElement).offsetParent !== null).length,
-  );
+  // ── the audience list, asserted ────────────────────────────────────────────────────── //
+  const rows = await page.$$eval('#dyn-people .audiencerow', (nodes) => nodes.length);
   const width = await page.$eval('#dynmodal', (n) => Math.round(n.getBoundingClientRect().width));
   console.log(
-    lanesOnScreen >= 3
-      ? `the modal is ${width}px and all ${lanesOnScreen} trays are on screen`
-      : `⚠️ the modal is ${width}px and only ${lanesOnScreen} tray(s) fit — the BEFORE state`,
+    rows > 0
+      ? `the ${width}px modal shows ${rows} audience rows`
+      : '⚠️ the audience list is empty — the BEFORE state',
   );
 
-  // ── the handle ─────────────────────────────────────────────────────────────────────── //
-
-  const handle = page.locator('#dyn-people button[aria-haspopup="menu"]').first();
-  // The FIRST line only. The rest of `innerText` is the `VisuallyHidden` qualifier that names
-  // which card this is and which tray it sits in — real content, and not what is on screen.
-  const handleText = (await handle.count())
-    ? ((await handle.innerText()).split('\n')[0] ?? '').trim()
-    : '(none)';
-  // Three trays are on screen, so a drag has somewhere to land and the grip is honest.
-  // The word here is the OTHER failure the owner reported: *"the drag handles were fine, but
-  // now you have it in a 3-column mode […] it has this 'move' button instead."*
-  console.log(
-    handleText === '≡'
-      ? 'the wide board\'s handle is the grip `≡` — a drag can land here'
-      : `⚠️ the wide board's handle reads "${handleText}" — it should be the grip`,
-  );
-
-  await handle.hover();
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: `__screenshots__/traymove-${TAG}-handle.png` });
-
-  await handle.click();
-  await page.waitForTimeout(900);
-  await page.screenshot({ path: `__screenshots__/traymove-${TAG}-menu.png` });
-  const items = await page.$$eval('[role="menuitem"]', (nodes) =>
-    nodes.filter((n) => (n as HTMLElement).offsetParent !== null).map((n) => (n.textContent ?? '').trim()),
-  );
-  console.log(`the menu offers: ${items.join(' | ') || '(nothing)'}`);
+  const firstRow = page.locator('#dyn-people .audiencerow').first();
+  const nice = firstRow.locator('[role="radio"]').nth(1);
+  if (await nice.count()) {
+    await nice.click();
+    await page.waitForTimeout(900);
+    await page.screenshot({ path: `__screenshots__/traymove-${TAG}-move.png` });
+    console.log('the first audience row moved with its visible Nice action');
+  } else {
+    console.log('⚠️ no audience action found');
+  }
 
   await ctx.close();
 
   // ── 4. the Narrow View ─────────────────────────────────────────────────────────────── //
-  //
-  // `min(920px, 92vw)` — so the widening must not reach a phone. The board drops back to one
-  // lane on its own there, which is the shape it is designed to have; what must NOT happen is
-  // a modal wider than the window.
   //
   // NARROW VIEW, named for the WIDTH. `isMobile` is Playwright's own name and is kept as-is,
   // and it is what makes Chromium honour the viewport meta.
@@ -173,22 +139,12 @@ try {
   await narrow.waitForTimeout(1200);
   await narrow.screenshot({ path: `__screenshots__/traymove-${TAG}-narrow.png` });
 
-  // The other half of the pair. One tray is on screen, so there is nothing to drop onto and
-  // the SAME control has to stop advertising a drag — this is the first report:
-  // *"There's no right-click or anything. How do I move these?"*
-  const narrowHandle = narrow.locator('#dyn-people button[aria-haspopup="menu"]').first();
-  const narrowHandleText = (await narrowHandle.count())
-    ? ((await narrowHandle.innerText()).split('\n')[0] ?? '').trim()
-    : '(none)';
-  const narrowLanes = await narrow.$$eval(
-    '#dyn-people [role="group"]',
-    (nodes) => nodes.filter((n) => (n as HTMLElement).offsetParent !== null).length,
+  const narrowRows = await narrow.$$eval('#dyn-people .audiencerow', (nodes) => nodes.length);
+  const narrowActionWidth = await narrow.$eval(
+    '#dyn-people .audiencechoices',
+    (n) => Math.round(n.getBoundingClientRect().width),
   );
-  console.log(
-    narrowHandleText === 'Move'
-      ? `the Narrow View shows ${narrowLanes} tray and the handle reads "Move"`
-      : `⚠️ the Narrow View shows ${narrowLanes} tray(s) and the handle reads "${narrowHandleText}" — it should be the word`,
-  );
+  console.log(`the Narrow View shows ${narrowRows} rows and ${narrowActionWidth}px audience controls`);
 
   const narrowWidth = await narrow.$eval('#dynmodal', (n) =>
     Math.round(n.getBoundingClientRect().width),

@@ -15,10 +15,9 @@ import type {
  * exercised by `people.test.ts`, which is why the trays and the shelf faces have no logic of
  * their own worth testing.
  *
- * ⚠️ **The LIBRARY owns the shape; this app owns the DATA.** The three trays are a
- * Charcuterie `Board` — lanes, cards, and a move handle that is a menu first and a drag
- * second. Nothing here paints a lane or implements a drag. What it does is turn people and
- * groups into `BoardItem`s and turn a `BoardMove` back into a member list.
+ * ⚠️ **The LIBRARY owns the shape; this app owns the DATA.** The queue editor is a vertical
+ * audience list with three placements. Nothing here paints a section or a control. What it
+ * does is turn people and groups into candidates and turn a placement back into a member list.
  */
 
 /** What each activity is called on screen. The queue's name IS this — there is no other. */
@@ -50,8 +49,8 @@ export const TRAYS = [
 
 export type TrayKey = (typeof TRAYS)[number]["key"]
 
-/** A person or a group, as one card in a tray. The editor shows both side by side because a
- *  group IS a saved set of people — a one-tap shortcut, not a second kind of thing. */
+/** A person or a group, as one row in the audience list. A group is a saved rule, not a second
+ * queue placement model. */
 export type Candidate = {
   kind: "person" | "group"
   id: string
@@ -122,20 +121,32 @@ export function describeRule(
   else if (required.length === 1)
     sentence = String(names[0])
   else if (minimum >= required.length)
-    sentence = `All of ${names.join(", ")}`
+    sentence = `All of ${joinNames(names, "and")}`
   else if (minimum === 1)
-    sentence = `At least one of ${names.join(", ")}`
+    sentence = `At least one of ${joinNames(names, "or")}`
   else
-    sentence = `At least ${minimum} of ${names.join(", ")}`
+    sentence = `At least ${minimum} of ${joinNames(names, "or")}`
 
   if (optional.length === 0) return sentence
-  return `${sentence}. ${optional
-    .map((m) => nameOf(m.personId))
-    .join(", ")} may join.`
+  return `${sentence}. ${joinNames(
+    optional.map((m) => nameOf(m.personId)),
+    "and",
+  )} may join.`
 }
 
-/** Every person and group in the house, as cards. This is what "the whole house at once"
- *  means — Option B's one advantage over the other two editors, and its one cost. */
+/** Join a short people list in the same words the rule uses: `or` for alternatives and `and`
+ * for people who all belong to the rule. */
+function joinNames(
+  names: readonly string[],
+  conjunction: "and" | "or",
+): string {
+  if (names.length < 2) return names[0] ?? ""
+  if (names.length === 2)
+    return `${names[0]} ${conjunction} ${names[1]}`
+  return `${names.slice(0, -1).join(", ")}, ${conjunction} ${names[names.length - 1]}`
+}
+
+/** Every person and group in the house, as rows in one audience list. */
 export function candidates(
   people: readonly Person[],
   groups: readonly GroupWithRoster[],
