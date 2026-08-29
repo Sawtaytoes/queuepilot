@@ -2,9 +2,9 @@
 //
 // Four frames, and each one is a claim the PR makes:
 //
-//   1. `queues`        the Ordered Queues page. On main a shelf is a hand-typed label;
-//                      on the branch it is the ACTIVITY with a row of faces beside it —
-//                      must-be-here large, nice-to-have small and dashed.
+//   1. `queues`        the Ordered Queues page. A shelf is the ACTIVITY (or its explicit name)
+//                      with audience names beside it. The shelf does not use the face marker,
+//                      because this heading is already dense; the editor and landing keep faces.
 //   2. `editor`        the queue editor's vertical audience list, with people and groups in
 //                      Must, Nice, and Everyone else sections.
 //   3. `move`          a row's audience choices, open in the screenshot after a move. Every
@@ -12,8 +12,9 @@
 //   4. `narrow`        the Narrow View at 390px: each row stacks its choices below its name.
 //                      No horizontal scroll at any width.
 //
-// The BEFORE run is expected to find no faces and no trays. It says so on stdout rather than
-// failing — that is the state it is documenting.
+// The BEFORE run is expected to find no faces and no audience names. The current run is
+// expected to find audience names and no face markers. The script says so on stdout rather
+// than failing because it is documenting the render states.
 //
 // **Fixture data, never live.** This repo is public and a PNG is opaque to every grep, so the
 // people in these frames are Ada, Grace and Linus and the queues are the landing fixture's
@@ -112,13 +113,14 @@ try {
   await page.screenshot({ path: `__screenshots__/queuepeople-${TAG}-queues.png` });
 
   const faces = await page.$$eval('.pface', (nodes) => nodes.length);
+  const names = await page.$$eval('.shelf h2 .qpname', (nodes) => nodes.length);
   const titles = await page.$$eval('.shelf h2 .lbl', (nodes) =>
     nodes.slice(0, 4).map((n) => n.textContent ?? ''),
   );
   console.log(
     faces === 0
-      ? 'no faces on any shelf — the BEFORE state'
-      : `${faces} faces on the shelves — the AFTER state`,
+      ? `${names} audience names on the shelves — names-only headings`
+      : `${faces} faces on the shelves — unexpected face markers`,
   );
   console.log(`first four shelf titles: ${JSON.stringify(titles)}`);
 

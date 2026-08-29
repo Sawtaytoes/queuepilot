@@ -69,6 +69,14 @@ const laneClauses = await page.$$eval('.shelf', (els) =>
 ok(`every non-empty shelf names its lane (${JSON.stringify(laneClauses)})`,
   laneClauses.some((c) => c.hasItems)
   && laneClauses.every((c) => (c.hasItems ? /priority|pool/.test(c.text) : c.text === '')));
+const shelfHeadingBranding = await page.$$eval('.shelf h2', (els) =>
+  els.map((el) => ({
+    hasFaceMarker: Boolean(el.querySelector('.pface')),
+    hasProviderLabel: Boolean(el.querySelector('.qprovider')),
+  })),
+);
+ok('queue shelf headings omit face markers and provider labels',
+  shelfHeadingBranding.every((heading) => !heading.hasFaceMarker && !heading.hasProviderLabel));
 
 // 2. Toolbar mounted in header on desktop.
 ok('tools in header (Wide View)', await page.$eval('#gslot-wide #tools', () => true).catch(() => false));

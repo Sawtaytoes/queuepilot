@@ -7,23 +7,28 @@ import type {
 import { PersonFace } from "./PersonFace"
 
 /**
- * WHO A QUEUE IS FOR, as a row of faces.
+ * WHO A QUEUE IS FOR, as a row of names with an optional face marker.
  *
- * The queue list inherits the trays: must-be-here faces large, nice-to-have faces small and
- * dashed (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster` §3).
- * This is what replaced the queue's name — every movies queue is called "Movies", and this row
- * is what tells two of them apart.
+ * The queue list inherits the trays: required members come first and optional members follow.
+ * The queue shelf uses names only because its heading is already dense; other surfaces can
+ * enable the face marker to draw required faces large and optional faces small and dashed
+ * (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster` §3). This is
+ * what replaced the queue's name — every movies queue is called "Movies", and this row is what
+ * tells two of them apart.
  *
- * Every face carries its name in text as well as in colour. The visible label is the name for
- * a required member and the initials-only circle for an optional one, and both are in the
- * accessible name — a row of coloured dots would say nothing to a screen reader and would fail
- * WCAG 1.4.1 outright.
+ * Every face carries its name in text as well as in colour when the caller enables it. The
+ * queue shelf does not use the face marker because its heading is already dense; it keeps the
+ * names as the audience distinction. Other surfaces keep the face marker. Optional members
+ * use visible names when the marker is off, and otherwise keep their initials-only circle with
+ * a visually hidden accessible name.
  */
 export function PeopleRow({
+  isFaceVisible = true,
   groups,
   members,
   people,
 }: {
+  isFaceVisible?: boolean
   members: readonly QueueMember[]
   people: readonly Person[]
   groups: readonly GroupWithRoster[]
@@ -55,10 +60,12 @@ export function PeopleRow({
           className="qperson req"
           key={`${member.kind}:${member.id}`}
         >
-          <PersonFace
-            id={member.id}
-            label={labelFor(member)}
-          />
+          {isFaceVisible ? (
+            <PersonFace
+              id={member.id}
+              label={labelFor(member)}
+            />
+          ) : null}
           <span className="qpname">{labelFor(member)}</span>
         </span>
       ))}
@@ -66,20 +73,28 @@ export function PeopleRow({
         <span
           className="qperson opt"
           key={`${member.kind}:${member.id}`}
-          // The one place the name is not also visible text, so it is the element's own
-          // accessible name instead. Optional faces are small on purpose — the row would stop
-          // being readable at four people otherwise.
+          // With the face marker on, the name is not also visible text, so it is the element's
+          // own accessible name instead. Optional faces are small on purpose — the row would
+          // stop being readable at four people otherwise.
           title={`${labelFor(member)} — nice to have`}
         >
-          <PersonFace
-            id={member.id}
-            isOptional
-            label={labelFor(member)}
-            size="sm"
-          />
-          <VisuallyHidden>
-            {labelFor(member)} — nice to have
-          </VisuallyHidden>
+          {isFaceVisible ? (
+            <>
+              <PersonFace
+                id={member.id}
+                isOptional
+                label={labelFor(member)}
+                size="sm"
+              />
+              <VisuallyHidden>
+                {labelFor(member)} — nice to have
+              </VisuallyHidden>
+            </>
+          ) : (
+            <span className="qpname">
+              {labelFor(member)}
+            </span>
+          )}
         </span>
       ))}
     </span>
