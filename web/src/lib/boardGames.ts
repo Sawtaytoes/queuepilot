@@ -9,20 +9,23 @@
 import type { ActivityId } from "./tonight"
 import type {
   BoardGameCard,
+  BoardGameInteractionType,
   KnownHowClaim,
   PickCriteriaWire,
 } from "./types"
 
-/**
- * "Keep it light: On" means a complexity ceiling of 2.4.
- *
- * Not invented here: 2.4 is the top of the **medium-light** band in the vocabulary the
- * absorbed picker already used on its own complexity control, and re-picking the number would
- * have meant two apps disagreeing about the same word. It is a starting point and is meant to
- * move after a real game night, which is why it is a named constant and not a literal in a
- * mapping table.
- */
+/** The Light complexity choice keeps the existing 2.4 ceiling. */
 export const LIGHT_MAX_WEIGHT = 2.4
+
+/**
+ * Complexity choices are ceilings, using the boundaries from the absorbed Board Game Picker.
+ * Any complexity above 3.9 requires the neutral `Any` choice.
+ */
+export const COMPLEXITY_MAX_WEIGHTS = {
+  light: LIGHT_MAX_WEIGHT,
+  medium: 3.2,
+  heavy: 3.9,
+} as const
 
 /**
  * The head count for a pick: everybody ticked, plus the anonymous seats.
@@ -39,14 +42,17 @@ export const tableSize = (
 /**
  * The Tonight form, as the pick engine's criteria.
  *
- * Three filters, and each maps to exactly one field:
+ * The board-game filters map to the engine's criteria fields:
  *
  *   - **Player-count fit** — `Best` is the community's `best` list only; `OK` widens to the
  *     counts it also recommends. Neither is the box range, which is a manufacturing claim.
  *   - **Knows the rules** — `Any` / `Someone` / `All`. The engine's third value is spelled
  *     `everyone`, which is the word the decision that created the fact uses.
- *   - **Keep it light** — a complexity ceiling, not a time limit. Time is its own axis and
- *     the form does not ask about it yet.
+ *   - **Interaction type**, **categories** and **maximum playtime** pass through to the
+ *     corresponding engine fields. Their `Any` values become the engine's null or empty
+ *     values.
+ *   - **Complexity** — `Any`, `Light`, `Medium` and `Heavy` are maximum-weight ceilings, not
+ *     strict bands. Time is its own axis and remains separate from this control.
  *
  * The ticked people go through as `personIds` as well as into the count. They are what the
  * familiarity bonus counts plays for and whose personal complexity ceilings apply — dropping
@@ -61,14 +67,51 @@ export function criteriaFromTonight({
   guestCount: number
   personIds: readonly string[]
 }): PickCriteriaWire {
+  const interactionTypes: readonly BoardGameInteractionType[] =
+    [
+      "competitive",
+      "cooperative",
+      "semiCooperative",
+      "team",
+      "traitor",
+      "solo",
+    ]
+  const interactionType = interactionTypes.includes(
+    filters.interactionType as BoardGameInteractionType,
+  )
+    ? (filters.interactionType as BoardGameInteractionType)
+    : null
+  const maxPlaytimeValue =
+    filters.maxPlaytime && filters.maxPlaytime !== "any"
+      ? Number(filters.maxPlaytime)
+      : null
+  const complexity = filters.complexity
+  const maxWeight =
+    complexity === "light" ||
+    complexity === "medium" ||
+    complexity === "heavy"
+      ? COMPLEXITY_MAX_WEIGHTS[complexity]
+      : filters.light === "on"
+        ? LIGHT_MAX_WEIGHT
+        : null
+
   return {
+    categories: (filters.categories ?? "")
+      .split(",")
+      .map((category) => category.trim())
+      .filter(Boolean),
     excludedGameIds: [],
     fitness:
       filters.fit === "ok"
         ? "bestOrRecommended"
         : "bestOnly",
-    maxWeight:
-      filters.light === "on" ? LIGHT_MAX_WEIGHT : null,
+    interactionType,
+    maxWeight,
+    maxPlaytime:
+      maxPlaytimeValue !== null &&
+      Number.isFinite(maxPlaytimeValue)
+        ? maxPlaytimeValue
+        : null,
     personIds: [...personIds],
     playerCount: tableSize(personIds, guestCount),
     rulesKnown:

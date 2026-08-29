@@ -15,13 +15,20 @@ import {
 describe("parseTonightPreset", () => {
   it("reads who is here, the activity and the filters", () => {
     const parsed = parseTonightPreset(
-      "?activity=board-games&people=ada,linus&guests=1&light=on&fit=ok",
+      "?activity=board-games&people=ada,linus&guests=1&complexity=medium&fit=ok&interactionType=cooperative&maxPlaytime=60&categories=Cooperative,Deckbuilder",
     )
 
     expect(parsed.isAccepted).toBe(true)
     expect(parsed.preset).toEqual({
       activity: "board-games",
-      filters: { fit: "ok", knows: "someone", light: "on" },
+      filters: {
+        categories: "Cooperative,Deckbuilder",
+        complexity: "medium",
+        fit: "ok",
+        interactionType: "cooperative",
+        knows: "someone",
+        maxPlaytime: "60",
+      },
       guestCount: 1,
       personIds: ["ada", "linus"],
     })
@@ -32,6 +39,22 @@ describe("parseTonightPreset", () => {
       parseTonightPreset("activity=movies&people=ada")
         .isAccepted,
     ).toBe(true)
+  })
+
+  it("reads the old board-game light flag as the new Light choice", () => {
+    const parsed = parseTonightPreset(
+      "?activity=board-games&people=ada&light=on",
+    )
+    const neutral = parseTonightPreset(
+      "?activity=board-games&people=ada&light=off",
+    )
+
+    expect(parsed.preset?.filters).toMatchObject({
+      complexity: "light",
+    })
+    expect(neutral.preset?.filters).toMatchObject({
+      complexity: "any",
+    })
   })
 
   // THE RULE (absorb decision §5, fourth row). A card is a fixed string on plastic and
@@ -92,7 +115,7 @@ describe("parseTonightPreset", () => {
       "?activity=board-games&people=ada&light=onn",
     )
 
-    expect(parsed.preset?.filters.light).toBe("on") // board games open with light ON
+    expect(parsed.preset?.filters.complexity).toBe("light") // board games open with Light
   })
 
   it("drops a filter id this activity does not declare", () => {
@@ -127,7 +150,14 @@ describe("parseTonightPreset", () => {
 describe("tonightPresetHref", () => {
   const preset: TonightPreset = {
     activity: "board-games",
-    filters: { fit: "ok", knows: "someone", light: "on" },
+    filters: {
+      categories: "Cooperative,Deckbuilder",
+      complexity: "medium",
+      fit: "ok",
+      interactionType: "cooperative",
+      knows: "someone",
+      maxPlaytime: "60",
+    },
     guestCount: 2,
     personIds: ["ada", "linus"],
   }
@@ -147,9 +177,12 @@ describe("tonightPresetHref", () => {
     const href = tonightPresetHref({
       ...preset,
       filters: {
+        categories: "",
+        complexity: "light",
         fit: "best",
+        interactionType: "any",
         knows: "someone",
-        light: "on",
+        maxPlaytime: "any",
       },
     })
 
@@ -162,9 +195,12 @@ describe("tonightPresetHref", () => {
     const href = tonightPresetHref({
       ...preset,
       filters: {
+        categories: "",
+        complexity: "light",
         fit: "best",
+        interactionType: "any",
         knows: "someone",
-        light: "on",
+        maxPlaytime: "any",
       },
       guestCount: 0,
       personIds: [],

@@ -16,6 +16,7 @@ import {
 } from '../store/db/boardgamePlays.js';
 import {
   getBoardGame,
+  listBoardGameCategories,
   listBoardGameKnownHow,
   listBoardGamePlays,
   listBoardGames,
@@ -104,6 +105,15 @@ export function boardGameRoutes(): Hono {
           personId: claim.playerId,
         })),
       });
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 500);
+    }
+  });
+
+  /** The owner's category vocabulary for the Tonight multi-select. */
+  app.get('/board-games/categories', (c) => {
+    try {
+      return c.json({ categories: listBoardGameCategories() });
     } catch (e) {
       return c.json({ error: errMessage(e) }, 500);
     }
@@ -304,4 +314,3 @@ const knownHowClaims = (
     gameId: claim.gameId,
     personId: claim.playerId,
   }));
-
