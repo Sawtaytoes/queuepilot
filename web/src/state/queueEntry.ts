@@ -11,6 +11,7 @@ import type { EntryActions, Lane } from "./overlays"
 import {
   effectiveLane,
   orderAfterLaneMove,
+  orderAtPriorityPosition,
 } from "./queueView"
 import { deselect } from "./selection"
 import {
@@ -464,4 +465,44 @@ export async function settleLanes(
   await api("PATCH", `/api/queues/${setId}/order`, {
     keys: set.items.map((it) => it.key),
   })
+}
+
+/** Move one entry to an explicit one-based position inside the Priority queue. */
+export async function setPriorityPosition(
+  setId: string,
+  item: QueueItem,
+  position: number,
+) {
+  const set = getState().data?.sets[setId]
+
+  if (!set) return
+
+  const next = orderAtPriorityPosition(
+    set.items,
+    defaultLaneOf(setId),
+    item.key,
+    position,
+  )
+
+  if (next === set.items) return
+
+  set.items = next
+  bumpRevision()
+  setStatus("Saving Priority position…")
+
+  try {
+    await api("PATCH", `/api/queues/${setId}/order`, {
+      keys: next.map((entry) => entry.key),
+    })
+    setStatus(
+      `Moved to Priority position ${position}`,
+      "ok",
+    )
+  } catch (error) {
+    setStatus(
+      `Reorder failed: ${(error as Error).message}`,
+      "err",
+    )
+    refreshData()
+  }
 }

@@ -60,6 +60,7 @@ import {
   moveEntryLane,
   queueEntryActions,
   removeQueueItem,
+  setPriorityPosition,
 } from "../state/queueEntry"
 import {
   applyFilters,
@@ -176,7 +177,6 @@ export function QueueView({
   const selected = useSelected()
   const lanesRef = useRef<HTMLDivElement>(null)
   const lastPaintedSet = useRef<string | null>(null)
-  const [addPosition, setAddPosition] = useState("top")
   // Density + filter, remembered per queue (state/queueView.ts).
   const view = useQueueView(setId)
   const { entryEditor } = useOverlays()
@@ -263,6 +263,16 @@ export function QueueView({
   // THE SPLIT. One stored list, drawn as two lanes — an entry's lane is its own
   // `placement`, else the queue's `add_as` (`state/queueView.splitLanes`).
   const lanes = splitLanes(items, setLane)
+  // Position numbers describe the stored Priority queue, not only the entries that a
+  // temporary view filter leaves visible. An item must keep its real number while a
+  // filter hides one of its neighbours.
+  const allLanes = splitLanes(allItems, setLane)
+  const priorityPositions = new Map(
+    allLanes.priority.map((item, index) => [
+      item.key,
+      index + 1,
+    ]),
+  )
 
   /*
    * FLIP is `@charcuterie/logic`'s now, not this repo's.
@@ -320,7 +330,10 @@ export function QueueView({
    * density, with the same chrome and the same handlers, and a copy per lane is two places
    * for that to stop being true.
    */
-  const renderTile = (item: QueueItem) => {
+  const renderTile = (
+    item: QueueItem,
+    priorityPosition?: number,
+  ) => {
     const face = tileFace(item)
     const isPlaying =
       setId === playingSet && isPlayingItem(now, item)
@@ -502,6 +515,20 @@ export function QueueView({
         }
         playTitle={`${verb} “${face.title}” now`}
         posterCover={item.cover}
+        priorityPosition={
+          priorityPosition && setId
+            ? {
+                count: allLanes.priority.length,
+                onChange: (position) =>
+                  void setPriorityPosition(
+                    setId,
+                    item,
+                    position,
+                  ),
+                position: priorityPosition,
+              }
+            : undefined
+        }
         // How long the next episode runs. The next-up leaf's runtime is the one Plex
         // sends for a show; a film reads its own. The batch is the entry's override,
         // else the queue's default — the same number the engine will queue.
@@ -572,7 +599,14 @@ export function QueueView({
                 : "Drag something here to let it come up at random"}
             </li>
           ) : (
-            laneItems.map(renderTile)
+            laneItems.map((item) =>
+              renderTile(
+                item,
+                isPriority
+                  ? priorityPositions.get(item.key)
+                  : undefined,
+              ),
+            )
           )}
         </ul>
       </section>
@@ -780,10 +814,7 @@ export function QueueView({
                 )
 
                 if (!isDuplicate) {
-                  set.items =
-                    addPosition === "bottom"
-                      ? [...set.items, optimistic]
-                      : [optimistic, ...set.items]
+                  set.items = [...set.items, optimistic]
                   bumpRevision()
                   flashTile(setId, optimistic.key)
                 }
@@ -797,7 +828,9 @@ export function QueueView({
 
                 try {
                   const body: Record<string, unknown> = {
-                    position: addPosition,
+                    // Adding is append-only. Priority positions and lane controls make the
+                    // resulting order directly editable after the title is visible.
+                    position: "bottom",
                   }
 
                   if (isCollection) {
@@ -912,19 +945,6 @@ export function QueueView({
               size="sm"
             />
           </div>
-          <label className="addpos">
-            <span className="addlbl">Add to</span>
-            <SelectListbox
-              id="addpos"
-              label="Add to"
-              onChange={setAddPosition}
-              options={[
-                { label: "Top (plays next)", value: "top" },
-                { label: "Bottom", value: "bottom" },
-              ]}
-              value={addPosition}
-            />
-          </label>
           {/* Actions live on the right (the search grows to push them there). */}
           {/* Charcuterie `Button`s, configured by props. `.ghost` is Charcuterie's
               `outline` — the app class paints a surface background AND a border, which is

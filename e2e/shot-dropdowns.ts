@@ -1,7 +1,7 @@
 // Ad-hoc screenshots of the picker changes, for the owner to eyeball over devshare:
 //  1. Play menu ("Play on ▾") — the full-width bug fixed (sized to its ~220px, not edge-to-edge).
 //  2. The tier picker open — a themed Listbox, not the native OS dropdown.
-//  3. The queue Add-to position picker open — same.
+//  3. The queue result-type picker open — same.
 import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 import { promises as fs } from 'node:fs';
@@ -52,15 +52,15 @@ try {
   await page.waitForTimeout(400); // let devices arrive
   await page.screenshot({ path: `${OUT}/dd-playmenu-width.png` });
 
-  // 3 — Queue Add-to position picker open.
+  // 3 — Queue result-type picker open.
   const qid = await page.evaluate(() => fetch('/api/queues').then((r) => r.json()).then((j) => Object.keys(j.sets)[0]));
   await page.goto(`${BASE}/q/${qid}`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('.add [data-testid="addpos"]', { timeout: 15000 }).catch(() => {});
-  const addpos = await page.$('[data-testid="addpos"]');
-  if (addpos) {
-    await addpos.click();
+  await page.waitForSelector('.add [data-testid="searchtype"]', { timeout: 15000 }).catch(() => {});
+  const searchtype = await page.$('[data-testid="searchtype"]');
+  if (searchtype) {
+    await searchtype.click();
     await page.waitForSelector('[role="listbox"] [role="option"]');
-    await page.screenshot({ path: `${OUT}/dd-addpos-listbox.png` });
+    await page.screenshot({ path: `${OUT}/dd-searchtype-listbox.png` });
   }
 
   await browser.close();

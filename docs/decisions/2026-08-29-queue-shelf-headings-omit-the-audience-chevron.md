@@ -4,7 +4,7 @@
 - **Date:** 2026-08-29
 - **Type:** UI
 - **Supersedes:** [Queue shelf headings use avatar badges and one baseline](2026-08-29-queue-shelf-headings-use-avatar-badges-and-one-baseline.md)
-- **Superseded by:** —
+- **Superseded by:** [Condensed controls use stable rows, and Rules filters stay first](2026-08-29-condensed-controls-use-stable-rows-and-rules-filters-stay-first.md) (alignment only; the heading contents remain)
 
 ## Decision
 

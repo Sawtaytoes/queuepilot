@@ -477,6 +477,8 @@ export function useHomeDrags(
     const onPosterDown = (e: PointerEvent) => {
       const target = e.target as HTMLElement
 
+      if (target.closest(".priority-position")) return
+
       // Posters only — headers/captions do their own thing.
       if (!target.closest(".thumb")) return
 

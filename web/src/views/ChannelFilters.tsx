@@ -168,7 +168,7 @@ export function ChannelFilters({
 
   return (
     <aside id="chfilters">
-      <h2>Pool filters</h2>
+      <h2>Eligibility filters</h2>
 
       {/* F5: the 7 fieldsets scroll inside here; `#ch-save` stays OUTSIDE as the aside's
           pinned footer, always on screen. Every fieldset id and `.showsonly` is untouched,
@@ -278,7 +278,7 @@ export function ChannelFilters({
         <p className="hint" id="ch-alllibs">
           {!showSections.length && !itemSections.length
             ? "Every video library — check a box to narrow it."
-            : "Uncheck every box to pool from all of them."}
+            : "Uncheck every box to draw from all of them."}
         </p>
 
         <fieldset className="showsonly">

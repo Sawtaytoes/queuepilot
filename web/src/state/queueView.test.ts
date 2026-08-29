@@ -6,6 +6,7 @@ import {
   effectiveLane,
   hasOverrides,
   orderAfterLaneMove,
+  orderAtPriorityPosition,
   splitLanes,
 } from "./queueView"
 
@@ -287,6 +288,43 @@ describe("orderAfterLaneMove", () => {
       "e",
       "f",
     ])
+  })
+})
+
+describe("orderAtPriorityPosition", () => {
+  const items = [
+    item({ key: "a", placement: "priority" }),
+    item({ key: "b", placement: "priority" }),
+    item({ key: "c", placement: "priority" }),
+    item({ key: "d" }),
+    item({ key: "e" }),
+  ]
+
+  test("moves by one-based position and keeps the pool after Priority", () => {
+    expect(
+      orderAtPriorityPosition(items, "random", "c", 1).map(
+        (entry) => entry.key,
+      ),
+    ).toEqual(["c", "a", "b", "d", "e"])
+  })
+
+  test("clamps positions beyond either end", () => {
+    expect(
+      orderAtPriorityPosition(items, "random", "a", 99).map(
+        (entry) => entry.key,
+      ),
+    ).toEqual(["b", "c", "a", "d", "e"])
+    expect(
+      orderAtPriorityPosition(items, "random", "c", 0).map(
+        (entry) => entry.key,
+      ),
+    ).toEqual(["c", "a", "b", "d", "e"])
+  })
+
+  test("a key outside Priority is a no-op", () => {
+    expect(
+      orderAtPriorityPosition(items, "random", "d", 1),
+    ).toBe(items)
   })
 })
 
