@@ -56,7 +56,14 @@ const game = (id: string): BoardGame =>
 
 const boardGames: TonightPreset = {
   activity: "board-games",
-  filters: { fit: "best", knows: "someone", light: "on" },
+  filters: {
+    categories: "",
+    complexity: "light",
+    fit: "best",
+    interactionType: "any",
+    knows: "someone",
+    maxPlaytime: "any",
+  },
   guestCount: 0,
   personIds: ["ada", "linus"],
 }
@@ -117,7 +124,14 @@ describe("drawTonight", () => {
     await drawTonight(
       {
         ...boardGames,
-        filters: { fit: "ok", knows: "all", light: "off" },
+        filters: {
+          categories: "",
+          complexity: "any",
+          fit: "ok",
+          interactionType: "any",
+          knows: "all",
+          maxPlaytime: "any",
+        },
       },
       stub.request,
     )

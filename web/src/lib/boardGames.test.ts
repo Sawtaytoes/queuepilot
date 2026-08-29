@@ -5,12 +5,12 @@ import { describe, expect, test } from "vitest"
 
 import {
   boxArtUrl,
+  COMPLEXITY_MAX_WEIGHTS,
   criteriaFromTonight,
   filterCollection,
   knownHowFor,
   knownHowLabel,
   knownHowProposal,
-  LIGHT_MAX_WEIGHT,
   playCountLabel,
   playerCountLine,
   playtimeLabel,
@@ -51,39 +51,76 @@ describe("the table", () => {
 })
 
 describe("criteriaFromTonight", () => {
-  test("maps the three board-game filters, one field each", () => {
+  test("maps the board-game filters, one field each", () => {
     expect(
       criteriaFromTonight({
         filters: {
+          categories: "Cooperative,Deckbuilder",
           fit: "best",
+          interactionType: "cooperative",
           knows: "someone",
-          light: "on",
+          complexity: "medium",
+          maxPlaytime: "60",
         },
         guestCount: 1,
         personIds: ["ada", "grace"],
       }),
     ).toEqual({
+      categories: ["Cooperative", "Deckbuilder"],
       excludedGameIds: [],
       fitness: "bestOnly",
-      maxWeight: LIGHT_MAX_WEIGHT,
+      interactionType: "cooperative",
+      maxWeight: COMPLEXITY_MAX_WEIGHTS.medium,
+      maxPlaytime: 60,
       personIds: ["ada", "grace"],
       playerCount: 3,
       rulesKnown: "someone",
     })
   })
 
-  test("OK widens the fit, and Keep it light Off lifts the ceiling", () => {
+  test("OK widens the fit, and Any lifts the complexity ceiling", () => {
     expect(
       criteriaFromTonight({
-        filters: { fit: "ok", knows: "any", light: "off" },
+        filters: {
+          fit: "ok",
+          interactionType: "any",
+          knows: "any",
+          complexity: "any",
+          maxPlaytime: "any",
+        },
         guestCount: 0,
         personIds: ["linus"],
       }),
     ).toMatchObject({
+      categories: [],
       fitness: "bestOrRecommended",
+      interactionType: null,
       maxWeight: null,
+      maxPlaytime: null,
       rulesKnown: "any",
     })
+  })
+
+  test("maps each complexity choice to a maximum weight", () => {
+    for (const [complexity, maxWeight] of Object.entries(
+      COMPLEXITY_MAX_WEIGHTS,
+    )) {
+      expect(
+        criteriaFromTonight({
+          filters: { complexity },
+          guestCount: 0,
+          personIds: ["ada"],
+        }).maxWeight,
+      ).toBe(maxWeight)
+    }
+
+    expect(
+      criteriaFromTonight({
+        filters: { complexity: "any" },
+        guestCount: 0,
+        personIds: ["ada"],
+      }).maxWeight,
+    ).toBeNull()
   })
 
   test("All is the engine's `everyone` — the word the decision uses", () => {
