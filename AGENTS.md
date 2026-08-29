@@ -639,8 +639,8 @@ Three call sites today: both Add-to menus (`Toolbar`, `PendingView`) and the sel
 Move-to picker. **Add a fourth list of queues and it gets the chip too** — fixing one of three
 is how a rule becomes folklore. Required members only, three names then `+n`, `Anybody` for a
 queue nobody has filed. The `/queues` shelf heading uses the same `PeopleRow` avatar badges and
-names as the landing cards, omits only the provider label, and baseline-aligns the heading
-contents so the chevron, badges and names read as one row.
+names as the landing cards, omits the provider label and audience chevron, and baseline-aligns
+the heading contents so the badges and names read as one row.
 
 ### The tile menu, and the long press that opens it
 
