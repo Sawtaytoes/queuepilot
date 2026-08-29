@@ -23,6 +23,7 @@ import { Poster } from "../components/Poster"
 import { QueuePeopleBadge } from "../components/QueuePeopleBadge"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
+import { titleWithYear } from "../lib/mediaTitle"
 import { asPreQueueStartEntry } from "../lib/preQueueStart"
 import { startLabel } from "../lib/tileFace"
 import type {
@@ -349,7 +350,7 @@ export function PendingView() {
           ? { title: item.title }
           : {
               ratingKey: item.ratingKey,
-              title: `${item.title}${item.year ? ` (${item.year})` : ""}`,
+              title: titleWithYear(item.title, item.year),
             },
       })
 

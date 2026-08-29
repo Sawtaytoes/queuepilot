@@ -1,3 +1,4 @@
+import { titleWithYear } from "./mediaTitle"
 import type {
   Library,
   RegistrySet,
@@ -98,11 +99,10 @@ export function libraryTitle(
  * only the tagged one names itself — so this is what makes them distinguishable at all.
  */
 export function hitLabel(hit: SearchHit): string {
-  const year = hit.year ? ` (${hit.year})` : ""
   const edition = hit.editionTitle
     ? ` — ${hit.editionTitle}`
     : ""
-  return `${hit.title}${year}${edition}`
+  return `${titleWithYear(hit.title, hit.year)}${edition}`
 }
 
 /**

@@ -35,6 +35,7 @@ import { useGridDrag } from "../hooks/useGridDrag"
 import { api } from "../lib/api"
 import { flashTile } from "../lib/flip"
 import { isRandomOrder } from "../lib/kind"
+import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { queueItemAddBody } from "../lib/searchGroups"
 import {
@@ -553,9 +554,7 @@ export function QueueView({
         posterRatingKey={
           item.resolved ? face.ratingKey : null
         }
-        title={
-          face.title + (face.year ? ` (${face.year})` : "")
-        }
+        title={titleWithYear(face.title, face.year)}
         // The item's own page in Plex / Kavita. `webUrl` is absent on an unresolved
         // entry, and the tile then renders the caption as plain text.
         titleHref={item.webUrl}
@@ -563,8 +562,7 @@ export function QueueView({
         titleTooltip={
           face.from
             ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-            : face.title +
-              (face.year ? ` (${face.year})` : "")
+            : titleWithYear(face.title, face.year)
         }
       />
     )
