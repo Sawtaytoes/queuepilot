@@ -416,22 +416,18 @@ function Shelf({
           ) : null}{" "}
           <span className="chev">›</span>
         </Link>
-        {/* THE LIST INHERITS THE TRAYS. Must-be-here faces large, nice-to-have faces small and
-            dashed — the queue list draws the same distinction the editor does, because it is
-            now the only thing telling two "Movies & Shows" apart
+        {/* THE LIST INHERITS THE TRAYS. Required names come first, and optional names follow —
+            the queue list draws the same audience distinction as the editor without adding a
+            face marker to this already-dense heading. It is now the only thing telling two
+            "Movies & Shows" queues apart
             (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster`
             §3). */}
         <PeopleRow
           groups={groups}
+          isFaceVisible={false}
           members={members}
           people={people}
         />
-        {/* The PROVIDER, once more than one serves the same activity — "show the provider
-            name in the queue list" (decision §1). It is an ATTRIBUTE of the queue, never a
-            heading over it, so it sits in the shelf's own row rather than grouping anything. */}
-        {providerKind ? (
-          <span className="qprovider">{providerKind}</span>
-        ) : null}
         <span className="livepill" hidden={!isLive}>
           {isLive && now.now?.state === "paused"
             ? "Paused"
