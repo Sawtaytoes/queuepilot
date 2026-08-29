@@ -583,7 +583,8 @@ export function QueuesView({
 }) {
   const { data, now, reg } = useStore()
   const people = usePeople()
-  const { collapsed, filter } = useUi()
+  const { collapsed, filter, hasCollapsePreference } =
+    useUi()
   const shelvesRef = useRef<HTMLDivElement>(null)
 
   useHomeDrags(shelvesRef)
@@ -643,7 +644,9 @@ export function QueuesView({
           return (
             <Shelf
               groups={people.groups}
-              isCollapsed={collapsed.has(id)}
+              isCollapsed={
+                !hasCollapsePreference || collapsed.has(id)
+              }
               isHiddenByFilter={
                 !shelfMatches(
                   filter,

@@ -713,7 +713,7 @@ export function PlayView() {
         <Link id="gochannels" to="/channels">
           Configure rules ›
         </Link>
-        <Link id="goqueues" to="/queues">
+        <Link id="goqueues" to="/picks">
           Configure picks ›
         </Link>
       </p>

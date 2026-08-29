@@ -140,7 +140,7 @@ export const appRouteElements = (
     />
     <Route
       element={<QueuesPage />}
-      path={ROUTE_PATHS.queues}
+      path={ROUTE_PATHS.picks}
     />
     <Route
       element={<ChannelsPage />}
@@ -154,6 +154,10 @@ export const appRouteElements = (
     <Route
       element={<LegacyGroupPage />}
       path={ROUTE_PATHS.legacyGroup}
+    />
+    <Route
+      element={<LegacyQueuesPage />}
+      path={ROUTE_PATHS.legacyQueues}
     />
     <Route
       element={<LegacyCollectionPage />}
@@ -461,8 +465,7 @@ function QueuePage() {
   }
   const playing = activeSet(now, data)
   const origin =
-    getRouteOrigin() ||
-    (isChannel ? "/channels" : "/queues")
+    getRouteOrigin() || (isChannel ? "/channels" : "/picks")
   const isPlayingThis = Boolean(
     playing && playing === setId,
   )
@@ -528,6 +531,12 @@ function LegacyGroupPage() {
   useCanonicalPath(ROUTE_PATHS.admin)
 
   return <AdminPage />
+}
+
+function LegacyQueuesPage() {
+  useCanonicalPath(ROUTE_PATHS.picks.replace("/*", ""))
+
+  return <QueuesPage />
 }
 
 function LegacyCollectionPage() {

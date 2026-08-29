@@ -56,8 +56,12 @@ describe("the route table", () => {
     expect(match("/g/bob/").route).toBe("legacyGroup")
   })
 
-  test("/queues is the shelf configurator", () => {
-    expect(match("/queues").route).toBe("queues")
+  test("/picks is the shelf configurator", () => {
+    expect(match("/picks").route).toBe("picks")
+  })
+
+  test("the retired /queues path has its own redirect route", () => {
+    expect(match("/queues").route).toBe("legacyQueues")
   })
 
   test("/q/<id> opens one set, id-decoded", () => {
@@ -84,7 +88,7 @@ describe("the route table", () => {
    * strip it by hand; react-router matches through it.
    */
   test("a trailing slash is the same route", () => {
-    expect(match("/queues/").route).toBe("queues")
+    expect(match("/picks/").route).toBe("picks")
     expect(match("/channels/").route).toBe("channels")
     expect(match("/q/bob_anime/").params.setId).toBe(
       "bob_anime",
@@ -169,6 +173,7 @@ describe("the legacy rewrites", () => {
 
 describe("labelForPath", () => {
   test("names where back actually goes", () => {
+    expect(labelForPath("/picks")).toBe("‹ Picks")
     expect(labelForPath("/queues")).toBe("‹ Picks")
     expect(labelForPath("/channels/movies")).toBe("‹ Rules")
     expect(labelForPath("/q/bob")).toBe("‹ Back")
