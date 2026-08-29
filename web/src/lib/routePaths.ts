@@ -15,6 +15,7 @@
  *   `/result/<gameId>`              RESULT for one named game — a queue arrival, and it has NO reroll
  *   `/board-game-collection`        COLLECTION — the board-game shelf, and "we played this"
  *   `/picks`                        Picks configurator (poster shelves)
+ *   `/people`                       roster and saved audience-group management
  *   `/q/<id>`                       one curated queue / channel as a grid
  *   `/channels[/<id>]`              the rule-based rotation channels
  *
@@ -70,6 +71,9 @@ export const ROUTE_PATHS = {
   legacyQueues: "/queues/*",
   legacyTonight: "/tonight/:step?",
   pending: "/pending/*",
+  people: "/people",
+  /** Unlinked compatibility surface for the card interactions that predate the task home. */
+  overview: "/overview",
   queue: "/q/:setId",
   picks: "/picks/*",
   result: "/result/:gameId?",
@@ -121,7 +125,7 @@ export function labelForPath(p: string): string {
   if (p.startsWith("/channels")) return "‹ Rules"
   if (p.startsWith("/q/")) return "‹ Back"
   if (p === "/admin" || p.startsWith("/admin/"))
-    return "‹ Admin"
+    return "‹ QueuePilot"
   if (p === "/") return "‹ QueuePilot"
 
   return "‹ QueuePilot"
