@@ -180,7 +180,31 @@ try {
     );
   }
 
-  // ── 2c. A finished queue is SKIPPED, not offered ─────────────────────────────────── //
+  // ── 2c. A RANDOM curated queue makes no false promise ───────────────────────────── //
+  // A random queue's stored first row is NOT its head. Playback draws the pool only when
+  // Start is pressed, so naming that row here promises a title the engine has not chosen.
+  {
+    const changed = await fetch(`${server.base}/api/sets/linus_shows`, {
+      body: JSON.stringify({ add_as: 'random' }),
+      headers: { 'content-type': 'application/json' },
+      method: 'PATCH',
+    });
+    const { body } = await post({
+      activity: 'shows',
+      excludedSetIds: ['after_dinner'],
+      personIds: [],
+    });
+    ok(
+      'a random curated queue does not call its first stored row Up next',
+      changed.ok
+        && body.pick?.setId === 'linus_shows'
+        && body.pick.upNext === null
+        && String(body.pick.upNextReason).includes('Random pool'),
+      `${changed.status} ${JSON.stringify(body.pick)}`,
+    );
+  }
+
+  // ── 2d. A finished queue is SKIPPED, not offered ─────────────────────────────────── //
   // `game_night` is the board-game queue and holds no entries, so it is the one set in the
   // fixture that reports itself finished. Board games do not come through this door, so the
   // rule is asserted on the closest thing that does: a queue whose provider says there is

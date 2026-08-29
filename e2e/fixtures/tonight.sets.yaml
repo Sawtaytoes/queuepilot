@@ -28,7 +28,7 @@ sets:
   # real state and not missing data. It must stay offered whoever is ticked.
   - id: after_dinner
     label: Anybody — Shows
-    kind: cartoons
+    kind: picks
     source: rotation
     behavior: progress
     sections: [5]
@@ -37,6 +37,7 @@ sets:
     label: Linus — Shows
     kind: cartoons
     source: queue
+    add_as: priority
     sections: [5]
 
   # ---- Reading. Kavita, and TWO of them: this is the pair the "two or more force a
