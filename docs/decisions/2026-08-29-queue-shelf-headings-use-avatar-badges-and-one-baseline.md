@@ -4,7 +4,7 @@
 - **Date:** 2026-08-29
 - **Type:** UI
 - **Supersedes:** [Queue shelf headings use audience names only](2026-08-29-queue-shelf-headings-use-audience-names-only.md)
-- **Superseded by:** —
+- **Superseded by:** [Queue shelf headings omit the audience chevron](2026-08-29-queue-shelf-headings-omit-the-audience-chevron.md)
 
 ## Decision
 

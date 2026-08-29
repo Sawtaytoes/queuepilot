@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-08-29 | [Queue shelf headings omit the audience chevron](2026-08-29-queue-shelf-headings-omit-the-audience-chevron.md) *(UI — `/queues` shelf headings keep the avatar badges and audience names, omit the provider label and the redundant audience chevron, and keep one baseline.)* |
 | 2026-08-29 | [Queue shelf headings use avatar badges and one baseline](2026-08-29-queue-shelf-headings-use-avatar-badges-and-one-baseline.md) *(UI — `/queues` shelf headings keep the queue title, count, lane summary, chevron, avatar badges and audience names, omit the provider kind label, and baseline-align the heading contents.)* |
 | 2026-08-29 | [Queue shelf headings use audience names only](2026-08-29-queue-shelf-headings-use-audience-names-only.md) *(UI — `/queues` shelf headings keep the queue title, count, lane summary and audience names, but omit the provider kind and initials face marker because the heading is already dense. Landing cards and editor surfaces keep face markers.)* |
 | 2026-08-29 | [People groups use explicit rules and the queue audience is one vertical list](2026-08-29-people-groups-use-explicit-rules-and-vertical-audience-editor.md) *(UX / data model — keep people groups as saved rules, show their rule in plain language, edit queue audiences in one vertical Must / Nice / Everyone else list, and restore group create/edit/delete.)* |

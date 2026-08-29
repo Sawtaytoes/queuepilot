@@ -414,12 +414,10 @@ function Shelf({
           {laneClause ? (
             <span className="lanes-sec">{laneClause}</span>
           ) : null}{" "}
-          <span className="chev">›</span>
         </Link>
         {/* THE LIST INHERITS THE TRAYS. Required people come first, and optional people follow.
             The shared avatar badge and visible name tell two same-activity queues apart. The
-            heading's content is baseline-aligned so the chevron, badges and names read as one
-            row. */}
+            heading's content is baseline-aligned so the badges and names read as one row. */}
         <PeopleRow
           groups={groups}
           members={members}
