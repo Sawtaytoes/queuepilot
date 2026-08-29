@@ -107,7 +107,7 @@ const TileMenu = lazy(async () => ({
  * against — so there is one table, not a table and a parser that have to agree
  * (decision `2026-08-27-the-route-table-is-react-router-not-a-parsed-pathname`).
  *
- * The three LEGACY routes each paint the page their address moved to and rewrite the URL
+ * The LEGACY routes each paint the page their address moved to and rewrite the URL
  * underneath, rather than redirecting first and painting second. A `<Navigate>` would blank
  * the screen for a frame, and these are addresses people bookmarked — `/g/<id>` for nine
  * days, `/collection` for a few hours, `/tonight` until it was renamed.
@@ -256,7 +256,7 @@ function AppFrame() {
   )
 }
 
-/** The front door: two cards, no header, no now-playing bar. */
+/** The task-based front door: two starts, five management links, and no work-page shell. */
 function ModeLandingPage() {
   usePageChrome({
     bodyClass: "mode-view",
