@@ -26,6 +26,10 @@ once at any width.
 is a legacy address: it paints the new home and replaces its address with `/` so old bookmarks
 keep working without preserving the cluttered management hub.
 
+The former card wall remains temporarily at the unlinked `/overview` compatibility address.
+Existing interaction gates still drive it while its card-only actions move to the focused
+pages. It is not on the home or the primary navigation, and `/admin` does not resolve to it.
+
 ## Context
 
 The management landing exposed every queue, person filter, provider filter, play control, and
@@ -57,4 +61,3 @@ management discoverable without putting their editors on every queue card.
 - Direct owner selection, 2026-08-29. Chat id: unavailable in this repository session.
 - Served HTML comparison: `__screenshots__/queuepilot-navigation-options.html` (local review
   artifact; ignored by git).
-
