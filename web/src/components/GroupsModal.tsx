@@ -103,6 +103,7 @@ export function GroupsModal() {
   const [isSaving, setIsSaving] = useState(false)
   const [isConfirmingDelete, setIsConfirmingDelete] =
     useState(false)
+  const labelRef = useRef<HTMLInputElement>(null)
   const selectedRef = useRef(selected)
   selectedRef.current = selected
 
@@ -112,6 +113,7 @@ export function GroupsModal() {
   useEffect(() => {
     setDraft(draftFrom(selectedRef.current))
     setIsConfirmingDelete(false)
+    if (selectedId === null) labelRef.current?.focus()
   }, [selectedId])
 
   const preview = useMemo(
@@ -128,26 +130,52 @@ export function GroupsModal() {
   const requiredCount = draft.roster.filter(
     (member) => member.role === "required",
   ).length
-  const minimumOptions = [
+  const ruleOptions = [
     {
-      label:
-        requiredCount === 0
-          ? "No required people"
-          : "Everyone marked Required",
-      value: "all",
+      label: "Anybody in this group",
+      value: "anybody",
     },
-    ...Array.from({ length: requiredCount }, (_, index) => {
-      const count = index + 1
-      return {
-        label: `At least ${count} ${count === 1 ? "person" : "people"}`,
-        value: String(count),
-      }
-    }),
+    ...(requiredCount === 0
+      ? Array.from(
+          { length: draft.roster.length },
+          (_, index) => {
+            const count = index + 1
+            return {
+              label:
+                count === draft.roster.length
+                  ? "All people in this group"
+                  : `At least ${count} ${count === 1 ? "person" : "people"}`,
+              value:
+                count === draft.roster.length
+                  ? "all"
+                  : String(count),
+            }
+          },
+        )
+      : [
+          ...Array.from(
+            { length: Math.max(requiredCount - 1, 0) },
+            (_, index) => {
+              const count = index + 1
+              return {
+                label: `At least ${count} ${count === 1 ? "person" : "people"}`,
+                value: String(count),
+              }
+            },
+          ),
+          {
+            label: "All required people",
+            value: "all",
+          },
+        ]),
   ]
-  const minimumValue =
-    draft.minPresent == null || requiredCount === 0
-      ? "all"
-      : String(Math.min(draft.minPresent, requiredCount))
+  const ruleValue =
+    requiredCount === 0
+      ? "anybody"
+      : draft.minPresent == null ||
+          draft.minPresent >= requiredCount
+        ? "all"
+        : String(Math.max(1, draft.minPresent))
   const queuesUsingGroup = useMemo(
     () =>
       selected
@@ -210,20 +238,47 @@ export function GroupsModal() {
     })
   }
 
-  const setMinimum = (value: string) => {
-    if (value === "all") {
+  const setRule = (value: string) => {
+    if (value === "anybody") {
       setDraft((current) => ({
         ...current,
         minPresent: null,
+        roster: current.roster.map((member) => ({
+          ...member,
+          role: "optional",
+        })),
       }))
       return
     }
-    const next = Number(value)
-    if (!Number.isInteger(next) || next < 1) return
+
     setDraft((current) => ({
       ...current,
-      minPresent: Math.min(next, requiredCount),
+      minPresent:
+        value === "all"
+          ? null
+          : (() => {
+              const next = Number(value)
+              if (!Number.isInteger(next) || next < 1)
+                return null
+              return Math.min(next, current.roster.length)
+            })(),
+      // An all-optional group has no people for a minimum to count. Choosing a minimum is an
+      // explicit request to make the current roster the counted half of the rule.
+      roster: current.roster.some(
+        (member) => member.role === "required",
+      )
+        ? current.roster
+        : current.roster.map((member) => ({
+            ...member,
+            role: "required",
+          })),
     }))
+  }
+
+  const startNewGroup = () => {
+    setDraft(draftFrom(null))
+    setIsConfirmingDelete(false)
+    selectGroupInModal(null)
   }
 
   const save = async () => {
@@ -318,14 +373,6 @@ export function GroupsModal() {
           >
             Close
           </Button>
-          <Button
-            id="groupsave"
-            intent="accent"
-            isDisabled={isSaving || isConfirmingDelete}
-            onClick={() => void save()}
-          >
-            {selected ? "Save" : "Create group"}
-          </Button>
         </>
       }
       id="groupsmodal"
@@ -387,7 +434,7 @@ export function GroupsModal() {
             aria-current={selectedId ? undefined : "true"}
             id="groupnew"
             intent="accent"
-            onClick={() => selectGroupInModal(null)}
+            onClick={startNewGroup}
           >
             + New people group
           </Button>
@@ -407,6 +454,7 @@ export function GroupsModal() {
                 }))
               }
               placeholder="e.g. Younger Kids"
+              ref={labelRef}
               type="text"
               value={draft.label}
             />
@@ -415,28 +463,41 @@ export function GroupsModal() {
             The group id stays the same after you rename it.
             Existing queues keep pointing to this group.
           </p>
+          <div className="groupformactions">
+            <Button
+              id="groupsave"
+              intent="accent"
+              isDisabled={isSaving || isConfirmingDelete}
+              onClick={() => void save()}
+            >
+              {selected ? "Save" : "Create group"}
+            </Button>
+          </div>
 
-          <section className="grouprule" aria-live="polite">
-            <h4>Rule</h4>
-            <p className="grouprulesummary">{preview}.</p>
-            <p className="groupformhint">
-              Required people count toward the rule. People
-              marked May join are part of the group but do
-              not block it.
-            </p>
-          </section>
-
-          <fieldset className="groupminimum">
-            <legend>Minimum required</legend>
+          <fieldset
+            className="grouprule"
+            aria-live="polite"
+          >
+            <legend>Rule</legend>
             <SelectListbox
               key={selectedId ?? "new"}
-              id="group-minimum"
-              isDisabled={isSaving || requiredCount === 0}
-              label="Minimum required"
-              onChange={setMinimum}
-              options={minimumOptions}
-              value={minimumValue}
+              id="group-rule"
+              isDisabled={
+                isSaving || ruleOptions.length < 2
+              }
+              label="Rule"
+              onChange={setRule}
+              options={ruleOptions}
+              value={ruleValue}
             />
+            <p className="grouprulesummary">{preview}.</p>
+            <p className="groupformhint">
+              Required people count toward the minimum.
+              People marked May join are part of the group
+              but do not block it. Choosing a minimum on an
+              all-optional group makes its current members
+              Required.
+            </p>
           </fieldset>
 
           <fieldset className="groupmembers">
