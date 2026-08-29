@@ -4,8 +4,8 @@
 import { describe, expect, test } from "vitest"
 
 import {
-  COMPLEXITY_MAX_WEIGHTS,
   boxArtUrl,
+  COMPLEXITY_MAX_WEIGHTS,
   criteriaFromTonight,
   filterCollection,
   knownHowFor,
