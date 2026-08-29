@@ -85,7 +85,7 @@ try {
   });
   const page = await ctx.newPage();
 
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#peoplechips', { timeout: 30000 });
   await page.waitForTimeout(1200);
 
@@ -200,7 +200,7 @@ try {
     }
   });
   const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await narrow.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await narrow.waitForSelector('#peoplechips', { timeout: 30000 });
   await narrow.waitForTimeout(1200);
   const narrowEntry = await narrow.$('#peopleedit');

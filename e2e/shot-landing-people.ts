@@ -2,7 +2,7 @@
 //
 // Two frames, and each one is a claim the PR makes:
 //
-//   1. `landing`  the Admin landing (`/admin`) at 1420px. On main a Picks card is a name, a count and a
+//   1. `landing`  the Admin landing (`/overview`) at 1420px. On main a Picks card is a name, a count and a
 //                 start button; on the branch it carries the same row of faces the Picks page
 //                 draws in a shelf heading. A card nobody is filed on says "Anybody" — which
 //                 is the state, not a blank.
@@ -101,7 +101,7 @@ try {
   await ctx.addInitScript(darkInit);
   const page = await ctx.newPage();
 
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `__screenshots__/landingpeople-${TAG}-landing.png` });
@@ -145,7 +145,7 @@ try {
   });
   await narrowCtx.addInitScript(darkInit);
   const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await narrow.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await narrow.waitForSelector('.playcard', { timeout: 30000 });
   await narrow.waitForTimeout(1500);
   // SCROLL TO A PICKS CARD FIRST. The fixture's Rules cards sort ahead of the Picks ones and

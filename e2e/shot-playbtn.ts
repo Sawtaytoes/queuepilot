@@ -129,7 +129,7 @@ try {
 
   // 3 — the landing card's play button, which also carries `.playcard .playbtn`'s
   //     `flex-shrink: 0`. That rule is LAYOUT and survives the swap; the skin does not.
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 30000 });
   await page.waitForTimeout(2000);
   const cardPlay = page.locator('#playgrid .playbtn').first();

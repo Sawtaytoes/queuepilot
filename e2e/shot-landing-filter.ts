@@ -2,11 +2,11 @@
 //
 // Three frames, and each one is a claim the PR makes:
 //
-//   1. `bar`       `/admin` at 1420px. On main the top row is a chip per GROUP — All, Bob,
+//   1. `bar`       `/overview` at 1420px. On main the top row is a chip per GROUP — All, Bob,
 //                  Demo, Older Kids, Younger Kids — each a single-select link to `/g/<id>`.
 //                  On the branch it is a chip per PERSON, multi-select, with Anyone at the
 //                  head and the ⚙ Edit people control at the tail.
-//   2. `filtered`  `/admin?people=linus`. On main the query is ignored and every card shows
+//   2. `filtered`  `/overview?people=linus`. On main the query is ignored and every card shows
 //                  — that IS the before state, and the frame documents it. On the branch the
 //                  grid narrows to the queues Linus is on, including the ones he reaches
 //                  through the Younger Kids group's "at least one of them" rule.
@@ -97,7 +97,7 @@ try {
 
   // ── 1. the bar ─────────────────────────────────────────────────────────────────────── //
 
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(1800);
   await page.screenshot({ path: `__screenshots__/landingfilter-${TAG}-bar.png` });
@@ -114,7 +114,7 @@ try {
 
   // ── 2. one person ticked ───────────────────────────────────────────────────────────── //
 
-  await page.goto(`http://localhost:${PORT}/admin?people=linus`, {
+  await page.goto(`http://localhost:${PORT}/overview?people=linus`, {
     waitUntil: 'domcontentloaded',
   });
   await page.waitForSelector('.playcard', { timeout: 30000 });
@@ -143,7 +143,7 @@ try {
   });
   await narrowCtx.addInitScript(darkInit);
   const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await narrow.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await narrow.waitForSelector('.playcard', { timeout: 30000 });
   await narrow.waitForTimeout(1500);
   await narrow.screenshot({ path: `__screenshots__/landingfilter-${TAG}-narrow.png` });

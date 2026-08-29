@@ -65,7 +65,7 @@ try {
     viewport: { width: 1400, height: 950 },
   });
 
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
   // Only a SHOW/collection entry can carry a start point, so hunt across the sets for
   // one — the first queue in the fixture is all movies.
   // …and specifically the one deepest into its run, so the list actually HAS watched

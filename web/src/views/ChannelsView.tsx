@@ -101,7 +101,7 @@ export function ChannelsView({
   }, [channel?.id])
 
   if (!channel) {
-    return <main className="view" id="channels" />
+    return <div className="view" id="channels" />
   }
 
   const binding = activeBinding(channel, currentProfile)
@@ -130,7 +130,7 @@ export function ChannelsView({
   const hasProfileChoice = profileOptions.length > 1
 
   return (
-    <main
+    <div
       className="view"
       // The pool editor wears its provider's accent, exactly as the queue grid does — this
       // page was the ONE view that forgot to, so a Plex pool's "▶ Play on ▾" came out in the
@@ -341,6 +341,6 @@ export function ChannelsView({
           onChanged={() => setReloadToken((n) => n + 1)}
         />
       </div>
-    </main>
+    </div>
   )
 }

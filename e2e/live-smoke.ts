@@ -4,7 +4,7 @@ const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 }, ignoreHTTPSErrors: true });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-await page.goto('https://plex-channels.example.com/admin', { waitUntil: 'domcontentloaded' });
+await page.goto('https://plex-channels.example.com/overview', { waitUntil: 'domcontentloaded' });
 
 // Landing = the Play list.
 await page.waitForSelector('.playcard', { timeout: 60000 });

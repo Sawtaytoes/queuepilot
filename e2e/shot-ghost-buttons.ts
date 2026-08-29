@@ -116,7 +116,7 @@ try {
   await shot('tools', '#tools');
 
   // 2 — the landing's link row (`.playlinks`), the second place `.accent` has a rule.
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playlinks', { timeout: 30000 });
   await page.waitForTimeout(2000);
   await shot('playlinks', '.playlinks');

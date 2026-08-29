@@ -580,7 +580,7 @@ export function QueueView({
   }
 
   return (
-    <main
+    <div
       className={`view editable${selected.size ? " move-mode" : ""}`}
       // The whole queue page wears its provider's accent — every ▶, ring, count and badge
       // under here is about THIS queue, so all of it is that service's colour. Page chrome
@@ -1188,6 +1188,6 @@ export function QueueView({
         onClose={closeEntryEditor}
         setId={setId}
       />
-    </main>
+    </div>
   )
 }

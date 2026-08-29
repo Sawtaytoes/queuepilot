@@ -4,7 +4,7 @@
 - **Date:** 2026-08-26
 - **Type:** Routing / naming / UI
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [The home is task-based, and work pages use the navigation rail](2026-08-29-the-home-is-task-based-and-work-pages-use-the-navigation-rail.md) (the two-mode landing and `/admin` as the management hub)
 
 ## Decision
 
