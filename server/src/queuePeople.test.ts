@@ -79,12 +79,12 @@ describe('a group carries its own membership rule', () => {
 
   it('says the rule in one sentence, because the tray is what a person reads', () => {
     const name = (id: string) => id.toUpperCase();
-    expect(describeMembership(kids, name)).toBe('At least one of ADA, GRACE. LINUS may join.');
+    expect(describeMembership(kids, name)).toBe('At least one of ADA or GRACE. LINUS may join.');
     expect(describeMembership({ ...kids, minPresent: null }, name)).toBe(
-      'All of ADA, GRACE. LINUS may join.',
+      'All of ADA and GRACE. LINUS may join.',
     );
     expect(describeMembership({ ...kids, minPresent: 2, roster: kids.roster.slice(0, 2) }, name)).toBe(
-      'All of ADA, GRACE',
+      'All of ADA and GRACE',
     );
   });
 

@@ -345,6 +345,19 @@ export function setGroupPeople(
   });
 }
 
+/** Remove the people rule for a group that was deleted from the groups store. */
+export function deleteGroupMembership(
+  groupId: string,
+  db: SqliteDatabase = bookOfRecord(),
+): void {
+  prepareChecked(db, 'DELETE FROM group_people WHERE group_id = :group_id').run({
+    group_id: groupId,
+  });
+  prepareChecked(db, 'DELETE FROM group_membership WHERE group_id = :group_id').run({
+    group_id: groupId,
+  });
+}
+
 /**
  * WP-5. How many of one group's REQUIRED roster are enough, or `null` for "all of them".
  *

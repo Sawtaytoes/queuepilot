@@ -828,6 +828,26 @@ export type PeopleResponse = {
   orphans: QueueMember[]
 }
 
+/** The stored part of a people group returned by `GET /api/groups`. */
+export type Group = {
+  /** Immutable. This id is also used by queue audience rows. */
+  id: string
+  label: string
+  /** Provider profile claims stay untouched when this editor changes the people rule. */
+  accounts: Record<string, string[]>
+  /** Legacy set filing. It is not edited from the people-group rule editor. */
+  sets: string[]
+  setIds: string[]
+  providerKinds: string[]
+  /** The server's built-in `all` group. It is not editable. */
+  isAll?: boolean
+}
+
+export type GroupsResponse = {
+  groups: Group[]
+  unassigned: string[]
+}
+
 // --- WP-5: a queue is people plus an activity ----------------------------------- //
 
 /** What you are DOING. Four values, and Movies & Shows is ONE of them — "Anime" and

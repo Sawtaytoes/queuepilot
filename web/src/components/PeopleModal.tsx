@@ -2,7 +2,10 @@ import { Button, EmptyState } from "@charcuterie/ui"
 import { useMemo, useState } from "react"
 
 import type { GroupWithRoster, Person } from "../lib/types"
-import { closePeopleModal } from "../state/overlays"
+import {
+  closePeopleModal,
+  openGroupsModal,
+} from "../state/overlays"
 import {
   createPerson,
   removePerson,
@@ -41,13 +44,25 @@ export function PeopleModal() {
   return (
     <Modal
       footer={
-        <Button
-          appearance="outline"
-          intent="neutral"
-          onClick={closePeopleModal}
-        >
-          Close
-        </Button>
+        <>
+          <Button
+            appearance="outline"
+            id="groupsedit"
+            intent="neutral"
+            onClick={() =>
+              openGroupsModal(groups[0]?.id ?? null)
+            }
+          >
+            Edit people groups
+          </Button>
+          <Button
+            appearance="outline"
+            intent="neutral"
+            onClick={closePeopleModal}
+          >
+            Close
+          </Button>
+        </>
       }
       id="peoplemodal"
       isOpen
@@ -56,8 +71,10 @@ export function PeopleModal() {
       titleId="peoplemodal-title"
     >
       <p className="subhint peoplehint">
-        Add, rename, or remove the people used to filter and
-        label queues.
+        People are individual members. People groups are
+        saved rules that can include several people. Edit
+        the group rules separately so a group can stay clear
+        when it is used on a queue.
       </p>
 
       <section className="peoplesec">

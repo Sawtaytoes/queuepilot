@@ -7,13 +7,16 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  deleteGroupMembership,
   deletePerson,
   getPerson,
   getPersonBySource,
+  groupMinPresent,
   groupPersonIds,
   listPeople,
   orphanGroupIds,
   rostersByGroup,
+  setGroupMinPresent,
   setGroupPeople,
   setPersonAccounts,
   upsertPerson,
@@ -211,6 +214,20 @@ describe('a group as a saved set of people', () => {
     expect(deletePerson('ada', db)).toBe(true);
     expect(groupPersonIds('lovelace', db)).toEqual(['grace']);
     expect(deletePerson('ada', db)).toBe(false);
+    db.close();
+  });
+
+  it('removes a deleted group from its roster rule tables', () => {
+    const db = fresh();
+    addGroup(db, 'kids', 'Kids');
+    upsertPerson({ displayName: 'Ada', id: 'ada' }, db);
+    setGroupPeople('kids', ['ada'], db);
+    setGroupMinPresent('kids', 1, db);
+
+    deleteGroupMembership('kids', db);
+
+    expect(groupPersonIds('kids', db)).toEqual([]);
+    expect(groupMinPresent('kids', db)).toBeNull();
     db.close();
   });
 });

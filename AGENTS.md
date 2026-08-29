@@ -117,13 +117,11 @@ Five things bite here.
   `optional_people:` are the two keys it gained. `min_present` ABSENT means **all of the
   required roster**, which is what every group written before WP-5 meant; defaulting the
   absence to 1 would quietly loosen all of them at once.
-- **The editor is a Charcuterie `Board`, and the tap fallback is the PRIMARY path.** Three
-  lanes — Must be here / Nice to have / Everyone else — and "Everyone else" is the ABSENCE of
-  a `queue_people` row, not a third role. The move handle is a button first and a drag second:
-  pressing it opens a menu of the other trays, which is the only path that works from a
-  tablet, from the keyboard, and in the Narrow View where the other trays are not on screen to
-  drop onto. Do not add a drag-and-drop dependency and do not "improve" the handle into a
-  drag-only affordance. `PersonFace` is the app's stand-in for an `Avatar`
+- **The editor is one vertical audience list.** It has three sections — Must be here / Nice to
+  have / Everyone else — and "Everyone else" is the ABSENCE of a `queue_people` row, not a
+  third role. Every person and group has a visible Must / Nice / Exclude control, so moving a
+  row does not depend on drag and drop or a hidden menu. A group keeps its own rule summary
+  beside this queue placement. `PersonFace` is the app's stand-in for an `Avatar`
   `@charcuterie/ui@3.10.0` does not have — a real library gap, and small enough to delete in
   one commit when it is filled.
 
@@ -690,11 +688,11 @@ redeploy has thrown the evidence away.
 
 ## People on a queue
 
-A queue's audience is three trays — **Must be here**, **Nice to have**, **Everyone else** —
-stored in `queue_people` and drawn by `PeopleTrays`
+A queue's audience is one vertical list with three sections — **Must be here**, **Nice to have**,
+**Everyone else** — stored in `queue_people` and drawn by `PeopleTrays`
 ([decision](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md)).
 
-**Both kinds carry them.** A `source: rotation` pool (Rules) has the same trays a
+**Both kinds carry them.** A `source: rotation` pool (Rules) has the same audience sections a
 `source: queue` queue (Picks) has, in the same component, written by the same endpoint —
 `#dyn-people` in `DynModal` beside `#set-people` in `SetModal`
 ([decision](docs/decisions/2026-08-26-a-rules-queue-carries-people-too.md)). Three things
@@ -703,28 +701,16 @@ follow:
 - **The server has no kind check and must not grow one.** `PUT /api/sets/:id/people` and
   `store/migrate/queuePeople.ts` have never consulted a set's kind; `e2e/queue-people-test.ts`
   gates a rotation pool through both so neither learns to.
-- **The trays are EDIT ONLY, in both editors.** `queue_people` is keyed on the set id and a
+- **The audience is EDIT ONLY, in both editors.** `queue_people` is keyed on the set id and a
   set being created has not got one. A new queue is created, then filed.
 - **A pool's provider ACCOUNT is not its audience.** The account in the card's meta line is
   which Plex profile the Shield signs in as; the faces beside it are who the pool is for. Both
   belong on the card, and folding either into the other is what made the Rules pools
   unreachable from every people-shaped control in the app.
-- **The move handle wears the gesture that can succeed, and the LIBRARY decides which.**
-  `PeopleTrays` passes `moveIcon="≡"` — this app's own grip, the shelf grip, the card grip,
-  `useHomeDrags`' own wording — and `@charcuterie/ui` paints it only while the three trays are
-  side by side. Under the board's `cq-lg` it swaps itself for the word "Move", because there
-  is nothing on screen to drop onto and the glyph would teach the one gesture that cannot
-  work. ⚠️ **Do not hard-code either half here.** Both were tried and both were reported: the
-  glyph everywhere gave "how do I move these?", and the word everywhere gave "the drag handles
-  were fine […] but it has this 'move' button instead"
-  ([decision](docs/decisions/2026-08-27-the-tray-move-handle-wears-the-gesture-that-can-succeed.md),
-  [library](https://github.com/Sawtaytoes/charcuterie/blob/master/docs/decisions/2026-08-27-the-move-handle-wears-the-gesture-that-can-succeed.md)).
-- **A modal that holds the trays is `min(920px, 92vw)`, and that number is not a taste call.**
-  The board picks three-lanes-across versus one-lane-plus-a-segmented-control from a CONTAINER
-  query at `cq-lg` (48rem / 768px) on its own box. Below it there is ONE tray on screen and
-  nowhere to drop, at any window width. `#setmodal` learned this on 2026-08-25; `#dynmodal`
-  shipped trays on 2026-08-26 at 520px and had to learn it again. **A new modal that gains
-  `PeopleTrays` gains this width in the same change.**
+- **The audience control is a Charcuterie `SegmentedControl`.** Its three choices are visible on
+  every row in both editors. In the Narrow View the row stacks the control below its identity;
+  the modal does not gain horizontal scrolling. Do not replace it with a drag-only affordance or
+  a native `<select>`.
 
 ## A queue's name
 
