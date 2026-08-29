@@ -1,4 +1,9 @@
-import { lazy, Suspense, useEffect } from "react"
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+} from "react"
 import {
   Outlet,
   Route,
@@ -187,6 +192,13 @@ function AppFrame() {
   // is a render-time call and why calling it twice at the same path is harmless. It belongs
   // here because this component renders above every page.
   trackRouteOrigin(path)
+
+  // React Router keeps the document scroll position when it swaps routes. Each route is a
+  // new page here, so start it at the top before the new page paints. QueuesView restores its
+  // saved position after this when somebody returns to Picks.
+  useLayoutEffect(() => {
+    window.scrollTo(0, 0)
+  }, [path])
 
   useEffect(() => {
     void load()
