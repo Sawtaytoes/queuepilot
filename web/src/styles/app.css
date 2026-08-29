@@ -3202,6 +3202,34 @@ body.name-editable #apphead h1 {
   #gslot-narrow #tools {
     margin: 0 0 16px;
   }
+  /* The Rules filter panel is an Accordion in the Narrow View. Keep its panel as the
+     existing `#chfilters` flex child so the scroller still leaves Save filters pinned at
+     the bottom. These rules only provide layout for the Accordion's one section; its trigger,
+     border and disclosure state remain owned by Charcuterie. */
+  #chfilters .chfilters-accordion {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    margin: -14px -16px 0;
+    border: 0;
+    border-radius: 0;
+  }
+  #chfilters .chfilters-accordion > div {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  #chfilters
+    .chfilters-accordion
+    > div
+    > div:not([hidden]) {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
   #setmodal .libs,
   #dynmodal .libs {
     grid-template-columns: 1fr;

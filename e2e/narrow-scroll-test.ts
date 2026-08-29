@@ -235,6 +235,46 @@ for (const width of WIDTHS) {
         `${width}px ${hash}: eligibility filters appear before the long title lists`,
         order.filtersTop < order.membersTop && order.filtersTop < order.eligibleTop,
       );
+
+      const filterTrigger = page.locator('#chfilters .chfilters-accordion h2 button');
+      const hasFilterAccordion = (await filterTrigger.count()) === 1;
+      ok(`${width}px ${hash}: narrow Eligibility filters has an accordion trigger`, hasFilterAccordion);
+
+      if (hasFilterAccordion) {
+        const panelState = () => page.evaluate(() => {
+          const trigger = document.querySelector<HTMLButtonElement>(
+            '#chfilters .chfilters-accordion h2 button',
+          );
+          const panelId = trigger?.getAttribute('aria-controls');
+          const panel = panelId ? document.getElementById(panelId) : null;
+          return {
+            expanded: trigger?.getAttribute('aria-expanded'),
+            hidden: panel?.hasAttribute('hidden'),
+          };
+        });
+
+        let state = await panelState();
+        ok(`${width}px ${hash}: Eligibility filters start expanded`,
+          state.expanded === 'true' && state.hidden === false);
+
+        await filterTrigger.click();
+        await page.waitForFunction(() =>
+          document.querySelector('#chfilters .chfilters-accordion h2 button')
+            ?.getAttribute('aria-expanded') === 'false');
+        state = await panelState();
+        ok(`${width}px ${hash}: Eligibility filters collapse`,
+          state.expanded === 'false' && state.hidden === true);
+        ok(`${width}px ${hash}: Save filters remains available when collapsed`,
+          await page.locator('#ch-save').isVisible());
+
+        await filterTrigger.click();
+        await page.waitForFunction(() =>
+          document.querySelector('#chfilters .chfilters-accordion h2 button')
+            ?.getAttribute('aria-expanded') === 'true');
+        state = await panelState();
+        ok(`${width}px ${hash}: Eligibility filters expand`,
+          state.expanded === 'true' && state.hidden === false);
+      }
     }
   }
 
@@ -296,6 +336,21 @@ for (const width of WIDTHS) {
 
   await page.close();
 }
+
+// The Wide View keeps the existing always-visible filter panel. This separate viewport check
+// makes the responsive boundary explicit instead of proving only the Narrow View branch.
+const widePage = await browser.newPage({ viewport: { width: 1400, height: 900 } });
+await widePage.goto(`http://localhost:${PORT}/channels/shows`, { waitUntil: 'domcontentloaded' });
+await widePage.waitForSelector('#chfilters', { timeout: 30000 });
+await widePage.waitForTimeout(500);
+const wideFilters = await widePage.evaluate(() => ({
+  hasAccordion: Boolean(document.querySelector('#chfilters .chfilters-accordion')),
+  hasHeading: Boolean(document.querySelector('#chfilters > h2')),
+  hasVisibleFields: document.querySelector<HTMLElement>('#chfilters .chfilters-scroll')?.hidden === false,
+}));
+ok('Wide View keeps Eligibility filters expanded without an accordion',
+  !wideFilters.hasAccordion && wideFilters.hasHeading && wideFilters.hasVisibleFields);
+await widePage.close();
 
 // 7. The same routes under REAL device emulation, which is a different test and not a
 //    redundant one.
