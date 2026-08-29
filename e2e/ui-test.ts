@@ -164,17 +164,19 @@ await page.fill('#qfilter', '');
 await page.$$eval('.shelf', (els) => els.forEach(() => {}));
 
 // 7. Collapse all / expand all.
-await page.click('#collapseall');
 let collapsed = await page.$$eval('.shelf', (els) => els.every((e) => e.classList.contains('collapsed')));
-ok('collapse all', collapsed);
-ok('button flips to Expand all', (await page.textContent('#collapseall')) === 'Expand all');
+ok('shelves start collapsed', collapsed);
+ok('the default action is Expand all', (await page.textContent('#collapseall')) === 'Expand all');
 await page.click('#collapseall');
 collapsed = await page.$$eval('.shelf', (els) => els.some((e) => e.classList.contains('collapsed')));
 ok('expand all', !collapsed);
-
-// 8. Shelf reorder: collapse all (long-list flow), then drag the last shelf's handle to
-// the top. Everything must be inside the viewport for real mouse events to hit.
+ok('button flips to Collapse all', (await page.textContent('#collapseall')) === 'Collapse all');
 await page.click('#collapseall');
+collapsed = await page.$$eval('.shelf', (els) => els.every((e) => e.classList.contains('collapsed')));
+ok('collapse all', collapsed);
+
+// 8. Shelf reorder: keep all collapsed (long-list flow), then drag the last shelf's handle to
+// the top. Everything must be inside the viewport for real mouse events to hit.
 await page.waitForTimeout(300);
 const handles = await page.$$('.shelf .shelfdrag');
 const last = handles.at(-1);

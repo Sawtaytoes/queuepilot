@@ -17,7 +17,7 @@ if (rootElement) {
       <QueryProvider client={queryClient}>
         {/* Real paths, not `#/…` — the server serves index.html for any unmatched
             extensionless path (`hasSpaFallback: true` in `server/src/buildServer.ts`),
-            and the two have to stay in step or a reload on `/queues` 404s. */}
+            and the two have to stay in step or a reload on `/picks` 404s. */}
         {/* The link seam. A Charcuterie `ButtonLink` renders a plain `<a href>` unless the
             app injects its router, and a plain `<a>` to an in-app path is a FULL RELOAD —
             the SPA boots again, the query cache is thrown away and the scroll position with
