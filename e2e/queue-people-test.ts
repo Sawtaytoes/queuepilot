@@ -171,6 +171,11 @@ const put = async (
   return { body: (await res.json()) as Record<string, unknown>, status: res.status };
 };
 
+const del = async (url: string): Promise<{ status: number; body: Record<string, unknown> }> => {
+  const res = await fetch(base + url, { method: 'DELETE' });
+  return { body: (await res.json()) as Record<string, unknown>, status: res.status };
+};
+
 const dir = await fs.mkdtemp(path.join(tmpdir(), 'qp-queue-people-'));
 await fs.writeFile(path.join(dir, 'sets.yaml'), SETS);
 await fs.writeFile(path.join(dir, 'queues.yaml'), QUEUES);
@@ -380,6 +385,20 @@ try {
     'dave',
     'two-profiles',
   ]);
+
+  // ── 8. deleting a group removes its rule and queue references ──────────────────────── //
+
+  const deleted = await del('/api/groups/dave');
+  ok('deleting a group answers 200', deleted.status === 200, `status ${deleted.status}`);
+  const groupsAfterDelete = await get<{ groups: { id: string }[] }>('/api/groups');
+  ok(
+    'the deleted group is no longer listed',
+    !groupsAfterDelete.groups.some((group) => group.id === 'dave'),
+  );
+  const traysAfterDelete = await get<{ queues: Record<string, { id: string; kind: string }[]> }>(
+    '/api/queue-people',
+  );
+  same('deleting a group removes its queue audience rows', traysAfterDelete.queues.dave_reading ?? [], []);
 } finally {
   await new Promise((resolve) => {
     child.once('exit', resolve);
