@@ -2,7 +2,7 @@
 //
 // Two frames, and each one is a claim the PR makes:
 //
-//   1. `landing`  the Admin landing (`/admin`) at 1420px. On main every Rules card is a name, a badge and
+//   1. `landing`  the Admin landing (`/overview`) at 1420px. On main every Rules card is a name, a badge and
 //                 a meta line; on the branch it carries the same row of faces a Picks card
 //                 does, because the rows were already in `queue_people` and only the UI was
 //                 refusing to read them.
@@ -103,7 +103,7 @@ try {
 
   // ── 1. the landing ─────────────────────────────────────────────────────────────────── //
 
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `__screenshots__/rulespeople-${TAG}-landing.png` });

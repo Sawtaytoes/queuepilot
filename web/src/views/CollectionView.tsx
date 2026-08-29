@@ -105,7 +105,7 @@ export function CollectionView() {
   })
 
   return (
-    <main className="view" id="collection">
+    <div className="view" id="collection">
       <section className="tsection" id="collection-find">
         <h2 className="tlabel">The collection</h2>
         <p className="subhint">
@@ -181,7 +181,7 @@ export function CollectionView() {
           </ul>
         )}
       </section>
-    </main>
+    </div>
   )
 }
 

@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -68,16 +68,18 @@ const modeLinks = await page.$$eval('#mode-landing a', (els) =>
   })),
 );
 ok(
-  'the root mode landing offers Admin and What to Watch/Play',
-  modeLinks.length === 2 &&
-    modeLinks[0]?.href === '/admin' &&
-    modeLinks[0].text?.startsWith('Admin') === true &&
-    modeLinks[1]?.href === '/what-to-watch-play' &&
-    modeLinks[1].text?.startsWith('What to Watch/Play') === true,
+  'the task home offers two starts and five management destinations',
+  modeLinks.length === 7 &&
+    modeLinks[0]?.href === '/what-to-watch-play' &&
+    modeLinks[0].text?.startsWith('What to Watch/Play') === true &&
+    modeLinks[1]?.href === '/picks' &&
+    modeLinks[1].text?.startsWith('Open a queue') === true &&
+    modeLinks.some((link) => link.href === '/people' && link.text?.startsWith('People')),
 );
 
 for (const [path, want] of [
-  ['/admin', 'Admin'],
+  ['/overview', 'Overview'],
+  ['/people', 'People'],
   ['/picks', 'Picks'],
   ['/q/bob', 'Bob — Movies'],
   ['/channels/shows', 'Rules'],
@@ -97,6 +99,13 @@ for (const [path, want] of [
     ok('the activity picker does not use Tonight as its visible name', !/\bTonight\b/.test(text));
   }
 }
+
+await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+ok('the legacy /admin address renders the task home', Boolean(await modeLanding()));
+ok(
+  '…and its URL is rewritten to /',
+  (await page.evaluate(() => location.pathname)) === '/',
+);
 
 await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
 ok('the legacy /queues address renders "Picks"', await heading('Picks'));
@@ -185,7 +194,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
 // bare `<a href="/picks">` still "works" for the user but refetches the whole app, so
 // count real page loads rather than trusting the URL alone.
 {
-  await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#goqueues');
   ok(
     'Admin no longer exposes the Groups editor',
@@ -218,7 +227,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
 
 // The browser's own Back must work — it did not exist as a question under the hash router.
 await page.goBack();
-ok('browser Back returns to Admin', await heading('Admin'));
+ok('browser Back returns to Overview', await heading('Overview'));
 
 // A route change is a new page, so it must not inherit the scroll position of the page that
 // led to it.

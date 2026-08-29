@@ -394,7 +394,7 @@ function Shelf({
           onClick={() => toggleCollapsed(setId)}
           size="sm"
         >
-          ▾
+          <ChevronDownIcon />
         </IconButton>
         {/* An anchor, so the shelf title can be middle-clicked / ⌘-clicked into a new tab
             like any other link. The handler stays but no longer navigates: it only records
@@ -409,11 +409,11 @@ function Shelf({
           }}
           to={`/q/${setId}`}
         >
-          <span className="lbl">{label}</span>{" "}
-          <span className="sec">{items.length}</span>{" "}
+          <span className="lbl">{label}</span>
+          <span className="sec">{items.length}</span>
           {laneClause ? (
             <span className="lanes-sec">{laneClause}</span>
-          ) : null}{" "}
+          ) : null}
         </Link>
         {/* THE LIST INHERITS THE TRAYS. Required people come first, and optional people follow.
             The shared avatar badge and visible name tell two same-activity queues apart. The
@@ -429,80 +429,82 @@ function Shelf({
             : "Playing"}
         </span>
         <span className="shelfspacer" />
-        {/* HOW this queue starts, never WHICH provider it is — the same rule
+        <span className="shelfactions">
+          {/* HOW this queue starts, never WHICH provider it is — the same rule
             `OpenQueueButton` follows on the queue's own page. This shelf used to open the
             device menu unconditionally, so a pull queue offered a Shield and a phone for
             something none of them can open; with no broker it simply answered "MQTT not
             connected" (reported 2026-08-17 on a Steam queue, and true for Kavita and the
             board-game picker since each of those shipped).
             (decision `2026-08-15-a-provider-carries-its-own-vocabulary`) */}
-        {isPullSet(set) ? (
-          <Tip
-            label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
-          >
-            <a
-              aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
-              className="shelfplay"
-              href={`/go/${encodeURIComponent(setId)}`}
-              rel="noreferrer"
-              // A new tab, so the shelf you launched from is still here on the way back —
-              // same reason `OpenQueueButton` does it.
-              target="_blank"
+          {isPullSet(set) ? (
+            <Tip
+              label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
             >
-              {set?.vocabulary?.startIcon ||
-                PLEX_WORDS.startIcon}
-            </a>
-          </Tip>
-        ) : (
-          <Tip label="Play this queue on a device">
-            {/* ⚠️ `.shelfplay` is LOAD-BEARING as a selector, not only as a hover state:
+              <a
+                aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
+                className="shelfplay"
+                href={`/go/${encodeURIComponent(setId)}`}
+                rel="noreferrer"
+                // A new tab, so the shelf you launched from is still here on the way back —
+                // same reason `OpenQueueButton` does it.
+                target="_blank"
+              >
+                {set?.vocabulary?.startIcon ||
+                  PLEX_WORDS.startIcon}
+              </a>
+            </Tip>
+          ) : (
+            <Tip label="Play this queue on a device">
+              {/* ⚠️ `.shelfplay` is LOAD-BEARING as a selector, not only as a hover state:
                 `PlayMenu`'s outside-click handler asks `t.closest(".shelfplay")`, so a
                 control that opens that menu and does not wear the class opens a menu that
                 shuts on the same click — measured, and the whole of #173. */}
+              <IconButton
+                appearance="ghost"
+                className="shelfplay"
+                intent="accent"
+                label="Play this queue on a device"
+                onClick={(e) =>
+                  openPlayMenu({
+                    anchor:
+                      e.currentTarget.getBoundingClientRect(),
+                    setId,
+                  })
+                }
+                size="sm"
+              >
+                <PlayIcon />
+              </IconButton>
+            </Tip>
+          )}
+          <Tip label="Edit queue">
             <IconButton
               appearance="ghost"
-              className="shelfplay"
-              intent="accent"
-              label="Play this queue on a device"
-              onClick={(e) =>
-                openPlayMenu({
-                  anchor:
-                    e.currentTarget.getBoundingClientRect(),
-                  setId,
-                })
-              }
+              className="shelfedit"
+              intent="neutral"
+              label="Edit queue"
+              onClick={() => openSetModal(setId)}
               size="sm"
             >
-              ▶
+              <SettingsIcon />
             </IconButton>
           </Tip>
-        )}
-        <Tip label="Edit queue">
-          <IconButton
-            appearance="ghost"
-            className="shelfedit"
-            intent="neutral"
-            label="Edit queue"
-            onClick={() => openSetModal(setId)}
-            size="sm"
-          >
-            ⚙
-          </IconButton>
-        </Tip>
-        <Tip label="Drag to reorder queues">
-          {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
+          <Tip label="Drag to reorder queues">
+            {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
               `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
               second. */}
-          <IconButton
-            appearance="ghost"
-            className="shelfdrag"
-            intent="neutral"
-            label="Drag to reorder queues"
-            size="sm"
-          >
-            ≡
-          </IconButton>
-        </Tip>
+            <IconButton
+              appearance="ghost"
+              className="shelfdrag"
+              intent="neutral"
+              label="Drag to reorder queues"
+              size="sm"
+            >
+              <DragIcon />
+            </IconButton>
+          </Tip>
+        </span>
       </h2>
       <div className="strip-wrap" ref={wrapRef}>
         <button
@@ -575,6 +577,74 @@ function Shelf({
   )
 }
 
+function ChevronDownIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="m6 9 6 6 6-6" />
+    </svg>
+  )
+}
+
+function PlayIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height="17"
+      viewBox="0 0 24 24"
+      width="17"
+    >
+      <path d="m8 5 11 7-11 7V5Z" />
+    </svg>
+  )
+}
+
+function SettingsIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <circle cx="12" cy="12" r="3" />
+      <path d="M19 12a7 7 0 0 0-.1-1l2-1.5-2-3.4-2.4 1A7 7 0 0 0 15 6l-.3-2.6h-4L10.4 6A7 7 0 0 0 8 7.1l-2.4-1-2 3.4 2 1.5a7 7 0 0 0 0 2l-2 1.5 2 3.4 2.4-1A7 7 0 0 0 10.4 18l.3 2.6h4L15 18a7 7 0 0 0 1.5-1.1l2.4 1 2-3.4-2-1.5a7 7 0 0 0 .1-1Z" />
+    </svg>
+  )
+}
+
+function DragIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height="18"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <circle cx="9" cy="5" r="1.5" />
+      <circle cx="15" cy="5" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="19" r="1.5" />
+      <circle cx="15" cy="19" r="1.5" />
+    </svg>
+  )
+}
+
 export function QueuesView({
   toolbar,
 }: {
@@ -620,7 +690,7 @@ export function QueuesView({
   )
 
   return (
-    <main className="view" id="home">
+    <div className="view" id="home">
       <div id="gslot-narrow">{toolbar}</div>
       <div id="shelves" ref={shelvesRef}>
         {shelfIds.map((id) => {
@@ -679,6 +749,6 @@ export function QueuesView({
           )
         })}
       </div>
-    </main>
+    </div>
   )
 }

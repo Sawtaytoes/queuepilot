@@ -637,7 +637,7 @@ export function PlayView() {
   useRowReorder(gridRef, commitOrder, true)
 
   return (
-    <main className="view" id="play">
+    <div className="view" id="play">
       <LandingFilterBar
         // `/admin` and nothing else. This page had three possible base paths while the
         // groups were routes; it has one now, and the filters ride in the query.
@@ -790,6 +790,6 @@ export function PlayView() {
           ),
         )}
       </ul>
-    </main>
+    </div>
   )
 }

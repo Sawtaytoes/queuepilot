@@ -18,7 +18,6 @@ import { Page, usePageChrome } from "./components/Page"
 import { PlayMenu } from "./components/PlayMenu"
 import { SelectionBar } from "./components/SelectionBar"
 import { Toolbar } from "./components/Toolbar"
-import { useMediaQuery } from "./hooks/useMediaQuery"
 import { isRandomOrder } from "./lib/kind"
 import { activeSet } from "./lib/nowPlaying"
 import {
@@ -51,6 +50,7 @@ import { ChannelsView } from "./views/ChannelsView"
 import { CollectionView } from "./views/CollectionView"
 import { ModeLandingView } from "./views/ModeLandingView"
 import { PendingView } from "./views/PendingView"
+import { PeopleView } from "./views/PeopleView"
 import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
 import { QueueView } from "./views/QueueView"
@@ -107,7 +107,7 @@ const TileMenu = lazy(async () => ({
  * against — so there is one table, not a table and a parser that have to agree
  * (decision `2026-08-27-the-route-table-is-react-router-not-a-parsed-pathname`).
  *
- * The three LEGACY routes each paint the page their address moved to and rewrite the URL
+ * The LEGACY routes each paint the page their address moved to and rewrite the URL
  * underneath, rather than redirecting first and painting second. A `<Navigate>` would blank
  * the screen for a frame, and these are addresses people bookmarked — `/g/<id>` for nine
  * days, `/collection` for a few hours, `/tonight` until it was renamed.
@@ -119,8 +119,16 @@ export const appRouteElements = (
       path={ROUTE_PATHS.home}
     />
     <Route
-      element={<AdminPage />}
+      element={<LegacyAdminPage />}
       path={ROUTE_PATHS.admin}
+    />
+    <Route
+      element={<PeoplePage />}
+      path={ROUTE_PATHS.people}
+    />
+    <Route
+      element={<OverviewPage />}
+      path={ROUTE_PATHS.overview}
     />
     <Route
       element={<PendingPage />}
@@ -248,7 +256,7 @@ function AppFrame() {
   )
 }
 
-/** The front door: two cards, no header, no now-playing bar. */
+/** The task-based front door: two starts, five management links, and no work-page shell. */
 function ModeLandingPage() {
   usePageChrome({
     bodyClass: "mode-view",
@@ -258,16 +266,39 @@ function ModeLandingPage() {
   return <ModeLandingView />
 }
 
-function AdminPage() {
+function PeoplePage() {
   return (
     <Page
       back={{ label: "‹ QueuePilot", target: "/" }}
-      bodyClass="queue-view play-view"
-      documentTitle="Admin — QueuePilot"
+      bodyClass="queue-view"
+      documentTitle="People — QueuePilot"
       editableSetId={null}
-      heading="Admin"
+      heading="People"
       isSubHidden={false}
-      sub="Manage queues, rules, people, and the content QueuePilot can choose."
+      sub="Manage the roster and the saved audience rules that queues can reuse."
+    >
+      <PeopleView />
+    </Page>
+  )
+}
+
+/**
+ * The former Admin card wall stays unlinked while its card interactions move to their
+ * focused pages. It is not a navigation destination and `/admin` does not resolve here.
+ */
+function OverviewPage() {
+  return (
+    <Page
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
+      bodyClass="queue-view play-view"
+      documentTitle="Overview — QueuePilot"
+      editableSetId={null}
+      heading="Overview"
+      isSubHidden={false}
+      sub="Compatibility view for queue and rules card actions."
     >
       <PlayView />
     </Page>
@@ -277,7 +308,10 @@ function AdminPage() {
 function PendingPage() {
   return (
     <Page
-      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
       // `queue-view` is what HIDES the Queues toolbar. Without it the landing's
       // add-to-any-queue search, queue filter and "New queue" all leak into this page's
       // header.
@@ -296,7 +330,10 @@ function PendingPage() {
 function CollectionPage() {
   return (
     <Page
-      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
       // `queue-view` is what HIDES the Queues toolbar — the same reuse Pending and What to
       // Watch/Play make of it.
       bodyClass="queue-view"
@@ -367,15 +404,13 @@ function watchPlayStep(
 }
 
 function QueuesPage() {
-  // The Narrow View puts the toolbar at the top of this page's content instead of in the
-  // header; `Page` asks the same question and renders nothing in the header when it is true,
-  // so exactly one `Toolbar` is mounted either way.
-  const isNarrow = useMediaQuery("(max-width: 760px)")
-
   return (
     <Page
       // Picks is a top-level configurator.
-      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
       bodyClass=""
       documentTitle="Picks — QueuePilot"
       editableSetId={null}
@@ -383,7 +418,7 @@ function QueuesPage() {
       isSubHidden={false}
       sub="Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues."
     >
-      <QueuesView toolbar={isNarrow ? <Toolbar /> : null} />
+      <QueuesView toolbar={<Toolbar />} />
     </Page>
   )
 }
@@ -407,12 +442,15 @@ function ChannelsPage() {
   // A redirect the vanilla render functions did with `location.assign`.
   useEffect(() => {
     if (reg && !rotationChannels(reg).length)
-      navigate(ROUTE_PATHS.admin)
+      navigate(ROUTE_PATHS.home)
   }, [navigate, reg])
 
   return (
     <Page
-      back={{ label: "‹ Admin", target: ROUTE_PATHS.admin }}
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
       // `queue-view` reuse: it hides the queues toolbar.
       bodyClass={
         isMovies
@@ -446,7 +484,7 @@ function QueuePage() {
     if (!data) return
 
     if (data.sets[setId]?.source !== "queue")
-      navigate(ROUTE_PATHS.admin)
+      navigate(ROUTE_PATHS.picks.replace("/*", ""))
   }, [data, navigate, setId])
 
   const q = data?.sets[setId]
@@ -483,6 +521,7 @@ function QueuePage() {
       // This queue is the running session — say what's on screen (the matching tile is
       // highlighted too, but a long queue can scroll it out of view).
       isSubHidden={isPlayingThis ? false : !isChannel}
+      navigationHref={origin}
       sub={
         isPlayingThis && n
           ? `${n.state === "paused" ? "⏸ Paused" : "▶ Now playing"}${n.title || n.showTitle ? ` — ${n.title || n.showTitle}` : ""}`
@@ -528,9 +567,15 @@ function useCanonicalPath(canonical: string): void {
  * assertion — so guessing one would be worse than landing on everything.
  */
 function LegacyGroupPage() {
-  useCanonicalPath(ROUTE_PATHS.admin)
+  useCanonicalPath(ROUTE_PATHS.people)
 
-  return <AdminPage />
+  return <PeoplePage />
+}
+
+function LegacyAdminPage() {
+  useCanonicalPath(ROUTE_PATHS.home)
+
+  return <ModeLandingPage />
 }
 
 function LegacyQueuesPage() {

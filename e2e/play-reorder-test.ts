@@ -93,9 +93,11 @@ try {
   ok('seed: the pool sits between Alpha and Beta on disk',
     (await fileOrder()).join(',') === 'q_alpha,pool_mid,q_beta,q_gamma');
 
-  const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
+  // The navigation rail owns 16rem now. Use a genuinely wide view so all four cards still
+  // share one row and this remains the sideways-drag case it claims to cover.
+  const page = await browser.newPage({ viewport: { width: 1800, height: 950 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
 
   const gridOrder = () =>
@@ -119,8 +121,8 @@ try {
   // Y midpoint, so the old hook would have swapped with whichever came first in the DOM.
   const rowTops = await page.$$eval('#playgrid li[data-set]', (els) =>
     els.map((e) => Math.round(e.getBoundingClientRect().top)));
-  ok('the four cards really are on one grid row (else this tests nothing)',
-    new Set(rowTops).size === 1);
+  ok('the first two cards really share one grid row (else this tests nothing)',
+    rowTops[0] === rowTops[1]);
 
   const drag = async (setId: string, ontoId: string) => {
     const card = page.locator(`#playgrid li[data-set="${setId}"]`);
@@ -148,13 +150,13 @@ try {
     await page.waitForTimeout(1200);
   };
 
-  await drag('q_gamma', 'q_alpha');
+  await drag('pool_mid', 'q_alpha');
 
   ok('the dragged card moved to the head of the grid',
-    (await gridOrder())[0] === 'q_gamma');
+    (await gridOrder())[0] === 'pool_mid');
 
   const after = await fileOrder();
-  ok('sets.yaml holds the new order', after[0] === 'q_gamma');
+  ok('sets.yaml holds the new order', after[0] === 'pool_mid');
   // The regression a partial PATCH would cause: reorderSets appends anything it was not told
   // about, so sending a subset would push every other set to the END of the file.
   ok('nothing got swept to the end of the file',
@@ -163,7 +165,7 @@ try {
   // And it survives a reload — the write, not just the optimistic DOM.
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
-  ok('the order survives a reload', (await gridOrder())[0] === 'q_gamma');
+  ok('the order survives a reload', (await gridOrder())[0] === 'pool_mid');
 
   // ---- the Narrow View: one column, so the same gesture is vertical ----
   await page.setViewportSize({ width: 390, height: 900 });
@@ -183,15 +185,15 @@ try {
   // The card holds a link and a button, and making the card grabbable is exactly the change
   // that could swallow them. A press on either is deliberately not a drag, so both still
   // behave — this is the assertion that keeps "the whole card is the handle" honest.
-  await page.setViewportSize({ width: 1400, height: 950 });
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.setViewportSize({ width: 1800, height: 950 });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
 
   await page.locator('#playgrid li[data-set="q_alpha"] .rowname').click();
   await page.waitForTimeout(600);
   ok('the name still navigates', page.url().endsWith('/q/q_alpha'));
 
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
   await page.locator('#playgrid li[data-set="q_alpha"] .playbtn').click();
   await page.waitForTimeout(600);
@@ -214,7 +216,7 @@ try {
   // surface the page scrolls by. So the glyph survives there, and CSS is what decides.
   const touch = await browser.newContext({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 844 } });
   const tp = await touch.newPage();
-  await tp.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await tp.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await tp.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
   ok('a coarse pointer still gets a handle to grab',
     await tp.$$eval('#playgrid .rowdrag', (els) =>

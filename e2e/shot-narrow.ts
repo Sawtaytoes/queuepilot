@@ -162,7 +162,7 @@ try {
   const base = `http://localhost:${PORT}`;
 
   await scene(page, '1-landing', async () => {
-    await page.goto(`${base}/admin`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${base}/overview`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector(ANY_CARD, { timeout: 30000 });
     await page.waitForTimeout(1500);
   });

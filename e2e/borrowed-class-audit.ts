@@ -252,7 +252,7 @@ try {
   // it renders unstyled while looking styled in the diff.
   await visit('/board-game-collection');
   await visit('/result');
-  await visit('/admin', async () => {
+  await visit('/overview', async () => {
     await page.click('#playnewqueue');
     await page.waitForTimeout(900);
   });

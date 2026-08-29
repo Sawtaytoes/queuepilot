@@ -70,10 +70,10 @@ try {
     }
   });
   const page = await context.newPage();
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#peoplechips', { timeout: 30000 });
+  await page.goto(`http://localhost:${PORT}/people`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#people', { timeout: 30000 });
   await page.waitForTimeout(1200);
-  await page.click('#peopleedit');
+  await page.getByRole('button', { name: 'Edit people' }).click();
   await page.waitForSelector('#peoplemodal', { timeout: 15000 });
   await page.click('#groupsedit');
   await page.waitForSelector('#groupsmodal', { timeout: 15000 });

@@ -246,18 +246,16 @@ body {
   padding-bottom: 80px;
 }
 
-/* MODE LANDING: the root route names the two jobs before either page opens. It follows the
-   same simple two-card entry shape as Mux-Magic and Gallery-Downloader, but keeps the cards
-   local because they are QueuePilot's own mode choices rather than a shared control. */
+/* TASK HOME: two things to start, then five quiet management destinations. */
 body.mode-view {
   padding-bottom: 0;
 }
 #mode-landing:not([hidden]) {
   display: block;
-  max-width: 1280px;
+  max-width: 1040px;
   min-height: 100vh;
   margin: 0 auto;
-  padding: 80px 24px 96px;
+  padding: 72px 24px 96px;
   position: relative;
 }
 #mode-landing .mode-landing-scheme {
@@ -266,10 +264,10 @@ body.mode-view {
   top: 24px;
 }
 #mode-landing .mode-landing-intro {
-  text-align: center;
+  max-width: 720px;
 }
 #mode-landing .mode-landing-intro h1 {
-  font-size: clamp(3rem, 5vw, 4.5rem);
+  font-size: clamp(2.35rem, 5vw, 3.8rem);
   font-weight: 700;
   letter-spacing: -0.035em;
   line-height: 1.1;
@@ -277,33 +275,47 @@ body.mode-view {
 }
 #mode-landing .mode-landing-intro p {
   color: var(--color-content-secondary);
-  font-size: 1.35rem;
-  margin: 16px 0 0;
+  font-size: 1.15rem;
+  margin: 14px 0 0;
 }
-#mode-landing .mode-landing-cards {
+#mode-landing .mode-landing-intro .mode-landing-eyebrow {
+  color: var(--color-intent-accent-content);
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 12px;
+  text-transform: uppercase;
+}
+.mode-primary-actions {
   display: grid;
-  gap: 28px;
+  gap: 16px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  margin: 64px auto 0;
+  margin-top: 40px;
 }
-#mode-landing .mode-card {
-  background: var(--color-surface-sunken);
+.mode-primary-action {
+  align-items: center;
+  background: var(--color-surface-raised);
   border: 1px solid var(--color-border-default);
-  border-radius: 16px;
+  border-radius: var(--radius-lg);
   color: var(--color-content-primary);
-  display: block;
-  min-height: 226px;
-  padding: 32px;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 132px;
+  padding: 22px;
   text-decoration: none;
   transition:
     background var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard);
+    border-color var(--duration-fast) var(--ease-standard),
+    transform var(--duration-fast) var(--ease-standard);
 }
-#mode-landing .mode-card:hover {
-  background: var(--color-surface-raised);
-  border-color: var(--color-border-strong);
+.mode-primary-action:hover {
+  background: var(--color-intent-neutral-surface);
+  border-color: var(--color-intent-accent-border);
+  transform: translateY(-2px);
 }
-#mode-landing .mode-card:focus-visible {
+.mode-primary-action:focus-visible,
+.mode-management-link:focus-visible {
   border-color: var(--color-border-focus);
   outline: 3px solid
     color-mix(
@@ -313,29 +325,85 @@ body.mode-view {
     );
   outline-offset: 3px;
 }
-#mode-landing .mode-card-heading {
-  align-items: center;
-  display: flex;
-  gap: 16px;
+.mode-primary-icon {
+  color: var(--color-intent-accent-content);
+  display: grid;
+  place-items: center;
 }
-#mode-landing .mode-card-heading h2 {
-  font-size: 1.9rem;
-  font-weight: 650;
-  line-height: 1.2;
+.mode-primary-icon svg {
+  height: 30px;
+  width: 30px;
+}
+.mode-primary-action strong,
+.mode-primary-action small {
+  display: block;
+}
+.mode-primary-action strong {
+  font-size: 1.15rem;
+}
+.mode-primary-action small {
+  color: var(--color-content-secondary);
+  font-size: 0.9rem;
+  margin-top: 5px;
+}
+.mode-action-arrow {
+  color: var(--color-content-muted);
+  font-size: 1.5rem;
+}
+.mode-management {
+  border-top: 1px solid var(--color-border-subtle);
+  margin-top: 48px;
+  padding-top: 28px;
+}
+.mode-management-heading {
+  align-items: baseline;
+  display: flex;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.mode-management-heading h2,
+.mode-management-heading p {
   margin: 0;
 }
-#mode-landing .mode-card p {
-  color: var(--color-content-secondary);
+.mode-management-heading h2 {
   font-size: 1.15rem;
-  line-height: 1.65;
-  margin: 22px 0 0;
-  max-width: 38rem;
 }
-#mode-landing .mode-card-admin .mode-card-icon {
-  color: var(--color-intent-accent-content);
+.mode-management-heading p {
+  color: var(--color-content-muted);
+  font-size: 0.9rem;
 }
-#mode-landing .mode-card-watch-play .mode-card-icon {
-  color: var(--color-intent-success-content);
+.mode-management-links {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(150px, 1fr)
+    );
+}
+.mode-management-link {
+  align-items: center;
+  background: var(--color-surface-base);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--color-content-primary);
+  display: grid;
+  gap: 9px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  min-height: 54px;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+.mode-management-link:hover {
+  background: var(--color-surface-raised);
+  border-color: var(--color-border-default);
+}
+.mode-management-icon {
+  color: var(--color-content-secondary);
+  display: grid;
+  place-items: center;
+}
+.mode-management-arrow {
+  color: var(--color-content-muted);
 }
 
 /* THE PAGE HEADER IS `#apphead`, NEVER THE BARE `header` ELEMENT. `<header>` is a landmark
@@ -347,16 +415,9 @@ body.mode-view {
    override a borrowed class name is (decision
    `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`); scope to the id.
    `h3` and `button` below stay bare on purpose and say why. */
-#apphead {
-  background: var(--color-surface-base);
-  border-bottom: 1px solid var(--color-border-default);
-  /* F4: tighter top/bottom (was 16/12) — with the toolbar merged onto the bar row and F2's
-     compact selects, the desktop header lands ~96px (target), ~74px when the toolbar fits
-     inline. The real height is measured into --header-h by Header.tsx's ResizeObserver. */
-  padding: 10px 24px 10px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+.app-header-content {
+  min-width: 0;
+  width: 100%;
 }
 /* PHASE 3's progress line, pinned to the header's bottom edge and spanning its full width —
    the header has 24px of side padding and this must sit ON the hairline, not inside it.
@@ -612,7 +673,17 @@ button {
 }
 
 .view {
-  padding: 20px 24px 40px;
+  min-width: 0;
+}
+
+.people-management {
+  display: grid;
+  gap: 16px;
+  max-width: 56rem;
+}
+.people-management p {
+  color: var(--color-content-secondary);
+  margin: 0;
 }
 
 /* ---- HOME: Plex-style horizontal shelves ---- */
@@ -684,6 +755,11 @@ button {
 }
 .shelf h2 .shelfspacer {
   flex: 1;
+}
+.shelfactions {
+  align-items: center;
+  display: flex;
+  gap: 2px;
 }
 /* `IconButton`s, `ghost`. The REVEAL is what these classes keep: the heading's controls
    are invisible until the shelf is hovered, so the Home page is posters and titles until
@@ -3000,34 +3076,26 @@ body.name-editable #apphead h1 {
     top: 14px;
   }
   #mode-landing .mode-landing-intro h1 {
-    font-size: 2.75rem;
+    font-size: 2.35rem;
   }
   #mode-landing .mode-landing-intro p {
     font-size: 1.15rem;
   }
-  #mode-landing .mode-landing-cards {
+  .mode-primary-actions {
     grid-template-columns: 1fr;
-    margin-top: 48px;
+    margin-top: 32px;
   }
-  #mode-landing .mode-card {
+  .mode-primary-action {
     min-height: 0;
-    padding: 24px;
+    padding: 18px;
   }
-  #mode-landing .mode-card-heading {
-    gap: 12px;
+  .mode-management-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
-  #mode-landing .mode-card-heading h2 {
-    font-size: 1.5rem;
-  }
-  #mode-landing .mode-card p {
-    font-size: 1rem;
-    margin-top: 16px;
-  }
-  #apphead {
-    padding: 10px 14px 8px;
-  }
-  .view {
-    padding: 16px 14px 40px;
+  .mode-management-links {
+    grid-template-columns: 1fr;
   }
   #apphead h1 {
     font-size: 1.2rem;
@@ -4861,6 +4929,48 @@ body.rowdragging {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+@media (max-width: 760px) {
+  #home .shelf h2 {
+    align-items: start;
+    display: grid;
+    column-gap: 8px;
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 5px;
+  }
+  #home .shelf .collapse-toggle {
+    grid-column: 1;
+    grid-row: 1 / span 3;
+  }
+  #home .shelf h2 .open {
+    display: grid;
+    gap: 3px 8px;
+    grid-column: 2;
+    grid-template-columns: minmax(0, 1fr) auto;
+    line-height: 1.2;
+    padding-block: 3px;
+    width: 100%;
+  }
+  #home .shelf h2 .lbl {
+    min-width: 0;
+  }
+  #home .shelf h2 .sec {
+    align-self: start;
+  }
+  #home .shelf h2 .lanes-sec {
+    border-left: 0;
+    grid-column: 1 / -1;
+    padding-left: 0;
+  }
+  #home .shelf h2 .qpeople,
+  #home .shelf h2 .livepill,
+  #home .shelf h2 .shelfactions {
+    grid-column: 2;
+  }
+  #home .shelf h2 .shelfspacer {
+    display: none;
+  }
 }
 
 /* ---- The result's own row of actions ---- */

@@ -6,8 +6,9 @@
  * pure test (`routePaths.test.ts` runs react-router's own `matchRoutes` over them) without
  * pulling nine views into a Node-environment test run.
  *
- *   `/`                             MODE LANDING — choose Admin or What to Watch/Play
- *   `/admin`                        ADMIN — every queue and pool, filtered by `?people=` / `?only=`
+ *   `/`                             TASK HOME — start something or open one management area
+ *   `/admin`                        legacy address rewritten to `/`
+ *   `/overview`                     unlinked compatibility view for the former card wall
  *   `/what-to-watch-play`           WHAT TO WATCH/PLAY — who's here, an activity, and Go
  *   `/what-to-watch-play/surprise`  …on Surprise Me's narrowing step
  *   `/what-to-watch-play/go?…`      …with the answers baked in
@@ -15,6 +16,7 @@
  *   `/result/<gameId>`              RESULT for one named game — a queue arrival, and it has NO reroll
  *   `/board-game-collection`        COLLECTION — the board-game shelf, and "we played this"
  *   `/picks`                        Picks configurator (poster shelves)
+ *   `/people`                       roster and saved audience-group management
  *   `/q/<id>`                       one curated queue / channel as a grid
  *   `/channels[/<id>]`              the rule-based rotation channels
  *
@@ -29,11 +31,11 @@
  * collected, so the tap draws and lands on `/result` instead of asking again. The grammar and
  * the rule that a card which names NOBODY is refused are both in `lib/tonightPreset.ts`.
  *
- * `/g/<group>` is GONE as of 2026-08-26 and redirects to `/admin`. It was the management page
+ * `/g/<group>` is GONE as of 2026-08-26 and redirects to `/people`. It was the management page
  * with a GROUP filter applied; that page filters by PEOPLE now — a multi-select in the query
  * string rather than a single group in the path
  * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`). Groups remain
- * compatibility data for queue audiences, but the app has no Groups editor. A redirect rather
+ * compatibility data for queue audiences, and its editor now opens from `/people`. A redirect rather
  * than a 404 because `/g/<id>` was bookmarkable for nine days and that was half the point of it.
  *
  * `/board-game-collection` and NOT `/collection`, since 2026-08-25. The shelf is one KIND of
@@ -70,6 +72,9 @@ export const ROUTE_PATHS = {
   legacyQueues: "/queues/*",
   legacyTonight: "/tonight/:step?",
   pending: "/pending/*",
+  people: "/people",
+  /** Unlinked compatibility surface for the card interactions that predate the task home. */
+  overview: "/overview",
   queue: "/q/:setId",
   picks: "/picks/*",
   result: "/result/:gameId?",
@@ -121,7 +126,7 @@ export function labelForPath(p: string): string {
   if (p.startsWith("/channels")) return "‹ Rules"
   if (p.startsWith("/q/")) return "‹ Back"
   if (p === "/admin" || p.startsWith("/admin/"))
-    return "‹ Admin"
+    return "‹ QueuePilot"
   if (p === "/") return "‹ QueuePilot"
 
   return "‹ QueuePilot"

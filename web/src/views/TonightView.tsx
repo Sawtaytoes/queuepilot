@@ -377,17 +377,17 @@ export function TonightView({
   // preset navigates to `/tonight` a moment later and renders it properly anyway.
   if (step === "go") {
     return (
-      <main className="view" id="tonight">
+      <div className="view" id="tonight">
         <EmptyState
           description="Reading the card, then drawing your pick."
           heading="Setting up your pick…"
         />
-      </main>
+      </div>
     )
   }
 
   return (
-    <main className="view" id="tonight">
+    <div className="view" id="tonight">
       {/* 0 — WHAT A PRESET CARD COULD NOT DO. Only ever present after a card sent somebody
           here, and it names the one answer that is missing. */}
       {presetNote ? (
@@ -630,7 +630,7 @@ export function TonightView({
           </section>
         </>
       )}
-    </main>
+    </div>
   )
 }
 

@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-08-29 | [The home is task-based, and work pages use the navigation rail](2026-08-29-the-home-is-task-based-and-work-pages-use-the-navigation-rail.md) *(product / routing / UI — `/` has two primary tasks and five focused management destinations; work pages use Charcuterie's responsive rail, icon rail, and one-menu Narrow View; `/admin` becomes a legacy address.)* |
 | 2026-08-29 | [Queue shelf headings omit the audience chevron](2026-08-29-queue-shelf-headings-omit-the-audience-chevron.md) *(UI — `/queues` shelf headings keep the avatar badges and audience names, omit the provider label and the redundant audience chevron, and keep one baseline.)* |
 | 2026-08-29 | [The Picks page is `/picks` and starts collapsed](2026-08-29-the-picks-page-is-picks-and-starts-collapsed.md) *(product / UI / routing — `/picks` is canonical, `/queues` redirects, every shelf starts collapsed before a preference exists, and the existing bulk toggle offers Expand all or Collapse all for the current state.)* |
 | 2026-08-29 | [Queue shelf headings use avatar badges and one baseline](2026-08-29-queue-shelf-headings-use-avatar-badges-and-one-baseline.md) *(UI — `/queues` shelf headings keep the queue title, count, lane summary, chevron, avatar badges and audience names, omit the provider kind label, and baseline-align the heading contents.)* |

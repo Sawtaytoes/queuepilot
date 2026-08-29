@@ -111,7 +111,7 @@ const offenders = (page: Page) => page.evaluate(() => {
 for (const width of WIDTHS) {
   const page = await browser.newPage({ viewport: { width, height: 844 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400); // let the header's ResizeObserver settle --header-h
 
@@ -181,8 +181,9 @@ for (const width of WIDTHS) {
   ok(`${width}px: found a queue id on the landing to visit`, Boolean(queueId));
 
   const routes = [
-    ['/', '#mode-landing:not([hidden]) .mode-card'],
-    ['/admin', '#play:not([hidden]) .playcard'],
+    ['/', '#mode-landing:not([hidden]) .mode-primary-action'],
+    ['/people', '#people'],
+    ['/overview', '#play:not([hidden]) .playcard'],
     ['/queues', '.playcard, #newqueue, .shelf'],
     ['/channels/shows', '#chbody'],
     // What to Watch/Play, added with the route (WP-6). It carries three grids and a stepper row, and
@@ -228,8 +229,8 @@ for (const width of WIDTHS) {
     // because this is the always-on browser gate: the Plex-gated suites are skipped on every
     // PR, so a landing that quietly loses its only create affordance again — which is how it
     // shipped for a month — would reach main unchallenged. The assertion is both halves at
-    // once: the trigger exists on `/admin`, and the modal it opens lands inside the screen.
-    ['/admin', '#playnewqueue', 'setmodal', 'New picks queue (admin)'],
+    // once: the trigger exists on `/overview`, and the modal it opens lands inside the screen.
+    ['/overview', '#playnewqueue', 'setmodal', 'New picks queue (admin)'],
     ['/queues', '#newqueue', 'setmodal', 'New queue'],
     // `#newcurated` — ＋ Picks queue on the RULES page — was here until 2026-08-26. The Rules
     // page lists rules queues alone now, so a page that cannot show you what you made no
@@ -303,11 +304,11 @@ for (const width of WIDTHS) {
     viewport: { width, height: 844 },
   });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400);
 
-  for (const hash of ['/', '/admin', '/queues', '/channels/shows'] as const) {
+  for (const hash of ['/', '/overview', '/people', '/queues', '/channels/shows'] as const) {
     await page.goto(`http://localhost:${PORT}${hash}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(700);
 
