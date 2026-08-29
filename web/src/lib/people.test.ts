@@ -78,11 +78,11 @@ describe("the whole house is one pool of cards", () => {
     const nameOf = (id: string) =>
       people.find((p) => p.id === id)?.displayName ?? id
     expect(describeRule(kids, nameOf)).toBe(
-      "At least one of Ada, Grace Hopper. Linus may join.",
+      "At least one of Ada or Grace Hopper. Linus may join.",
     )
     expect(
       describeRule({ ...kids, minPresent: null }, nameOf),
-    ).toBe("All of Ada, Grace Hopper. Linus may join.")
+    ).toBe("All of Ada and Grace Hopper. Linus may join.")
   })
 
   it('does not say "All of Ada" about a group of one', () => {

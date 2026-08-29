@@ -4,7 +4,7 @@
 - **Date:** 2026-08-27
 - **Type:** product scope / frontend
 - **Supersedes:** [The landing filters by PEOPLE, and the group chips go](2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md) §5's decision to keep the Groups editor; [The roster is edited in the app, not in a config file](2026-08-26-the-roster-is-edited-in-the-app-not-in-a-config-file.md) §1's Groups-editor link and §2's group-label editing
-- **Superseded by:** —
+- **Superseded by:** [People groups use explicit rules and the queue audience is one vertical list](2026-08-29-people-groups-use-explicit-rules-and-vertical-audience-editor.md)
 
 ## Decision
 

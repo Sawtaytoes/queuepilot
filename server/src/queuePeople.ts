@@ -147,12 +147,18 @@ export function describeMembership(membership: GroupMembership, nameOf: (id: str
   // One person is not a quantity. "All of Ada" reads as a mistake, and it is what a group of
   // one — which is most of them — would otherwise say on every card.
   else if (required.length === 1) sentence = String(names[0]);
-  else if (minimum >= required.length) sentence = `All of ${names.join(', ')}`;
-  else if (minimum === 1) sentence = `At least one of ${names.join(', ')}`;
-  else sentence = `At least ${minimum} of ${names.join(', ')}`;
+  else if (minimum >= required.length) sentence = `All of ${joinNames(names, 'and')}`;
+  else if (minimum === 1) sentence = `At least one of ${joinNames(names, 'or')}`;
+  else sentence = `At least ${minimum} of ${joinNames(names, 'or')}`;
 
   if (optional.length === 0) return sentence;
-  return `${sentence}. ${optional.map((member) => nameOf(member.personId)).join(', ')} may join.`;
+  return `${sentence}. ${joinNames(optional.map((member) => nameOf(member.personId)), 'and')} may join.`;
+}
+
+function joinNames(names: readonly string[], conjunction: 'and' | 'or'): string {
+  if (names.length < 2) return names[0] ?? '';
+  if (names.length === 2) return `${names[0]} ${conjunction} ${names[1]}`;
+  return `${names.slice(0, -1).join(', ')}, ${conjunction} ${names[names.length - 1]}`;
 }
 
 // ── The one provider profile ──────────────────────────────────────────────────────────── //

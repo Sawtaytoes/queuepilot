@@ -80,7 +80,7 @@ export function SetModal() {
    *
    * `POST /api/sets` still ACCEPTS a `group`, and `fileSetIntoGroup` is still gated by
    * `groups-test.ts`. Nothing about the server changed — the browser simply has nothing to
-   * name. A queue gets its audience from its trays, in the editor, one control below this.
+   * name. A queue gets its audience from the list in the editor below this.
    */
 
   const [label, setLabel] = useState("")
@@ -147,15 +147,15 @@ export function SetModal() {
   // `2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`).
   const modalKey = setModal ? (setId ?? "new") : "closed"
 
-  // WP-5. The roster and this queue's two trays. Its own slice, so a tray drag re-renders
+  // WP-5. The roster and this queue's audience. Its own slice, so an audience move re-renders
   // the editor and not every shelf poster behind it.
   const people = usePeople()
   const members = setId ? (people.byQueue[setId] ?? []) : []
 
-  /** Save the trays as they move, rather than on Submit.
+  /** Save the audience as it moves, rather than on Submit.
    *
-   * Deliberately NOT folded into `onSubmit`: a drag that only takes effect on Save reads as a
-   * drag that failed, and the write is its own idempotent endpoint. `saveQueuePeople` is
+   * Deliberately NOT folded into `onSubmit`: a move that only takes effect on Save reads as a
+   * move that failed, and the write is its own idempotent endpoint. `saveQueuePeople` is
    * optimistic and snaps back on a refusal — an unknown member, or a group offering two
    * provider profiles — so the screen never ends up disagreeing with the store. */
   const onPeopleChange = async (next: QueueMember[]) => {
@@ -616,8 +616,8 @@ export function SetModal() {
         />
       </label>
       {/* ── WHO IS THIS QUEUE FOR ────────────────────────────────────────────────────
-          Two trays plus the roster, the whole house visible at once
-          (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster`).
+          One vertical audience list, with the whole house visible in three ordered sections.
+          People groups show their own rule beside the queue placement.
 
           EDIT ONLY, and that is a real constraint rather than a shortcut: `queue_people` is
           keyed on the set id, and a set being created has not got one yet. The two-write

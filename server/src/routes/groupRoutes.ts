@@ -5,6 +5,15 @@ import {
   createGroup, deleteGroup, reorderGroups, resolveGroups, unassignedSetIds, updateGroup,
 } from '../groups.js';
 import * as sets from '../sets.js';
+import { bookOfRecord } from '../store/db/open.js';
+import {
+  bumpPeopleVersion,
+  deleteGroupMembership,
+} from '../store/db/people.js';
+import {
+  bumpQueuePeopleVersion,
+  forgetMember,
+} from '../store/db/queuePeople.js';
 import { readBody } from './readBody.js';
 
 /**
@@ -59,8 +68,22 @@ export function groupRoutes(): Hono {
   });
 
   app.delete('/groups/:id', async (c) => {
+    const id = c.req.param('id');
     try {
-      return c.json(await deleteGroup(c.req.param('id')));
+      const result = await deleteGroup(id);
+      if (result.deleted) {
+        // `group_people` and `queue_people` intentionally have no group foreign key. Clean
+        // both references after the YAML/SQLite group row is gone, or a deleted group would
+        // remain selectable in old queue audiences and in the next roster read.
+        const db = bookOfRecord();
+        db.withTransaction(() => {
+          deleteGroupMembership(id, db);
+          forgetMember('group', id, db);
+          bumpPeopleVersion(db);
+          bumpQueuePeopleVersion(db);
+        });
+      }
+      return c.json(result);
     } catch (e) {
       return c.json({ error: errMessage(e) }, 400);
     }

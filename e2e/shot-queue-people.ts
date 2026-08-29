@@ -5,12 +5,12 @@
 //   1. `queues`        the Ordered Queues page. On main a shelf is a hand-typed label;
 //                      on the branch it is the ACTIVITY with a row of faces beside it —
 //                      must-be-here large, nice-to-have small and dashed.
-//   2. `editor`        the queue editor's three trays, the whole house at once.
-//   3. `move`          the move handle's MENU, open. This is the tap fallback, and it is the
-//                      primary path — the household drives this from tablets, so a frame that
-//                      only showed a drag would be showing the wrong thing.
-//   4. `narrow`        the Narrow View at 390px: one tray at a time and a segmented control
-//                      naming the others. No horizontal scroll at any width.
+//   2. `editor`        the queue editor's vertical audience list, with people and groups in
+//                      Must, Nice, and Everyone else sections.
+//   3. `move`          a row's audience choices, open in the screenshot after a move. Every
+//                      row has the three choices visible, so there is no hidden move menu.
+//   4. `narrow`        the Narrow View at 390px: each row stacks its choices below its name.
+//                      No horizontal scroll at any width.
 //
 // The BEFORE run is expected to find no faces and no trays. It says so on stdout rather than
 // failing — that is the state it is documenting.
@@ -122,7 +122,7 @@ try {
   );
   console.log(`first four shelf titles: ${JSON.stringify(titles)}`);
 
-  // ── 2. the editor, and 3. the move menu ────────────────────────────────────────────── //
+  // ── 2. the editor, and 3. one audience move ────────────────────────────────────────── //
 
   // `family` is a Movies queue that `bob-others` claims, so it opens with a group already in
   // Must be here — the migration's own output, rather than a pose.
@@ -133,25 +133,18 @@ try {
     await page.waitForTimeout(1200);
     await page.screenshot({ path: `__screenshots__/queuepeople-${TAG}-editor.png` });
 
-    const trays = await page.$('#set-people');
-    if (trays) {
-      // THE TAP FALLBACK. `BoardCard`'s handle is a button first: pressing it opens a menu of
-      // the other trays. That is the path a tablet uses and the only one a keyboard or a
-      // screen reader can drive, so it is the frame worth having.
-      const handle = await page.$('#set-people button[aria-haspopup="menu"]');
-      if (handle) {
-        await handle.click();
-        await page.waitForTimeout(700);
-        await page.screenshot({ path: `__screenshots__/queuepeople-${TAG}-move.png` });
-        await page.keyboard.press('Escape');
-        await page.waitForTimeout(400);
-      } else {
-        console.log('no move handle found — the board rendered read-only');
-      }
+    const audience = await page.$('#set-people .audiencerow');
+    if (audience) {
+      // THE ONE-TAP MOVE. The row's segmented control says exactly which section it will use.
+      const nice = page.locator('#set-people .audiencerow').first().locator('[role="radio"]').nth(1);
+      await nice.click();
+      await page.waitForTimeout(700);
+      await page.screenshot({ path: `__screenshots__/queuepeople-${TAG}-move.png` });
+      console.log('the first audience row moved with its visible Nice action');
     } else {
-      console.log('no #set-people in the editor — the BEFORE state');
+      console.log('no audience rows in the editor — the BEFORE state');
     }
-    await page.keyboard.press('Escape');
+    await page.click('#setmodal .modalx');
     await page.waitForTimeout(600);
   } else {
     console.log('no `family` shelf — check the fixture');
