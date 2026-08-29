@@ -3,8 +3,8 @@
 // Four frames, and each one is a claim the PR makes:
 //
 //   1. `queues`        the Ordered Queues page. A shelf is the ACTIVITY (or its explicit name)
-//                      with audience names beside it. The shelf does not use the face marker,
-//                      because this heading is already dense; the editor and landing keep faces.
+//                      with avatar badges and audience names beside it. The provider label is
+//                      omitted, but the shared face marker remains part of the audience row.
 //   2. `editor`        the queue editor's vertical audience list, with people and groups in
 //                      Must, Nice, and Everyone else sections.
 //   3. `move`          a row's audience choices, open in the screenshot after a move. Every
@@ -13,7 +13,7 @@
 //                      No horizontal scroll at any width.
 //
 // The BEFORE run is expected to find no faces and no audience names. The current run is
-// expected to find audience names and no face markers. The script says so on stdout rather
+// expected to find both avatar badges and audience names. The script says so on stdout rather
 // than failing because it is documenting the render states.
 //
 // **Fixture data, never live.** This repo is public and a PNG is opaque to every grep, so the
@@ -112,15 +112,15 @@ try {
   await settle('.shelf');
   await page.screenshot({ path: `__screenshots__/queuepeople-${TAG}-queues.png` });
 
-  const faces = await page.$$eval('.pface', (nodes) => nodes.length);
+  const faces = await page.$$eval('.shelf h2 .pface', (nodes) => nodes.length);
   const names = await page.$$eval('.shelf h2 .qpname', (nodes) => nodes.length);
   const titles = await page.$$eval('.shelf h2 .lbl', (nodes) =>
     nodes.slice(0, 4).map((n) => n.textContent ?? ''),
   );
   console.log(
-    faces === 0
-      ? `${names} audience names on the shelves — names-only headings`
-      : `${faces} faces on the shelves — unexpected face markers`,
+    faces > 0 && names > 0
+      ? `${faces} avatar badges and ${names} audience names on the shelves — baseline headings`
+      : `${faces} avatar badges and ${names} audience names on the shelves — unexpected state`,
   );
   console.log(`first four shelf titles: ${JSON.stringify(titles)}`);
 
