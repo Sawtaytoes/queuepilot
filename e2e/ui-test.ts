@@ -87,14 +87,16 @@ ok('queue shelf headings use avatar badges and omit repeated labels',
   shelfHeadingBranding.every((heading) => heading.hasFaceMarker
     && !heading.hasProviderLabel
     && !heading.hasAudienceChevron));
-ok('queue shelf headings align their content to one baseline',
-  shelfHeadingBranding.every((heading) => heading.headingAlignment === 'baseline'
+ok('queue shelf controls align with the queue-name row',
+  shelfHeadingBranding.every((heading) => heading.headingAlignment === 'center'
     && heading.peopleAlignment === 'baseline'
     && heading.openAlignment === 'baseline'));
 
 // 2. The Picks controls stay with Picks instead of crowding the global header.
 ok('tools in Picks content (Wide View)', await page.$eval('#home #tools', () => true).catch(() => false));
 ok('the global header does not carry the Picks toolbar', (await page.locator('#apphead #tools').count()) === 0);
+ok('the Picks toolbar has no redundant Rules link or Add-to-position picker',
+  (await page.locator('#channelslink, #gaddpos').count()) === 0);
 
 // 3. Global search finds a Short; no compatible queue yet → notice.
 await page.fill('#gsearch', 'toy tinkers');

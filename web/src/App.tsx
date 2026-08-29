@@ -320,7 +320,7 @@ function PendingPage() {
       editableSetId={null}
       heading="Pending"
       isSubHidden={false}
-      sub="New in your libraries, and not picked up by any pool or queue yet."
+      sub="New in your libraries, and not picked up by any Picks or Rules queue yet."
     >
       <PendingView />
     </Page>
@@ -412,9 +412,9 @@ function QueuesPage() {
         target: ROUTE_PATHS.home,
       }}
       bodyClass=""
-      documentTitle="Picks — QueuePilot"
+      documentTitle="Picks queues — QueuePilot"
       editableSetId={null}
-      heading="Picks"
+      heading="Picks queues"
       isSubHidden={false}
       sub="Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues."
     >
@@ -457,9 +457,9 @@ function ChannelsPage() {
           ? "queue-view movies-channel"
           : "queue-view"
       }
-      documentTitle="Rules — QueuePilot"
+      documentTitle="Rules queues — QueuePilot"
       editableSetId={null}
-      heading="Rules"
+      heading="Rules queues"
       isSubHidden={false}
       sub={
         isMovies
@@ -531,7 +531,7 @@ function QueuePage() {
               // "how many episodes each show plays per visit", which is two wrong words in
               // one sentence. "contributes" is the neutral verb the type declarations already
               // use for this number, so the sentence needs no per-provider branch.
-              `A curated pool — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
+              `A Picks queue — members come up in random order; pick how many ${vocab.units} each ${vocab.member} contributes per visit.`
             : ""
       }
     >

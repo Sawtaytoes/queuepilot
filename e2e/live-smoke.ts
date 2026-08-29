@@ -27,9 +27,9 @@ await page.waitForFunction(() => document.querySelectorAll('#chpool li.tile').le
 const poolTitle = (await page.textContent('#chpool-title')) ?? '';
 ok(`channels preview renders (${poolTitle.trim()})`, /\d+ shows/.test(poolTitle));
 
-// Movies channel: rewatch pool renders with counts.
+// Movies Rules queue: eligible titles render with counts.
 await pickValue(page, '[data-testid="chchannel"]', 'movies');
-await page.waitForFunction(() => /rewatch pool/.test(document.querySelector('#chpool-title')?.textContent || ''), undefined, { timeout: 120000 });
+await page.waitForFunction(() => /Eligible titles/.test(document.querySelector('#chpool-title')?.textContent || ''), undefined, { timeout: 120000 });
 const mTitle = (await page.textContent('#chpool-title')) ?? '';
 ok(`movies channel pool renders (${mTitle.trim()})`, /\d+ movies/.test(mTitle));
 await pickValue(page, '[data-testid="chchannel"]', 'shows');

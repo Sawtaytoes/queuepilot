@@ -218,6 +218,24 @@ for (const width of WIDTHS) {
     const scrollers = await inlineScrollers(page);
     ok(`${width}px ${hash}: nothing scrolls sideways inside its own box`, scrollers.length === 0);
     if (scrollers.length) console.log('   inline scrollers:', scrollers.join(', '));
+
+    if (hash === '/channels/shows') {
+      const order = await page.evaluate(() => {
+        const filters = document.querySelector('#chfilters');
+        const members = document.querySelector('.chmembers');
+        const eligible = document.querySelector('.chpool');
+
+        return {
+          eligibleTop: eligible?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+          filtersTop: filters?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+          membersTop: members?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+        };
+      });
+      ok(
+        `${width}px ${hash}: eligibility filters appear before the long title lists`,
+        order.filtersTop < order.membersTop && order.filtersTop < order.eligibleTop,
+      );
+    }
   }
 
   // 6. The modals. A modal that renders half off the right edge of the screen is the

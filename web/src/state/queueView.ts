@@ -218,6 +218,39 @@ export function orderAfterLaneMove(
   return [...priority, ...random]
 }
 
+/** Move one Priority entry to a one-based position and keep the pool after the ordered run. */
+export function orderAtPriorityPosition(
+  items: QueueItem[],
+  setLane: Lane,
+  movedKey: string,
+  position: number,
+): QueueItem[] {
+  const priority = items.filter(
+    (item) => effectiveLane(item, setLane) === "priority",
+  )
+  const random = items.filter(
+    (item) => effectiveLane(item, setLane) === "random",
+  )
+  const from = priority.findIndex(
+    (item) => item.key === movedKey,
+  )
+
+  if (from < 0) return items
+
+  const [moved] = priority.splice(from, 1)
+  const requested = Number.isFinite(position)
+    ? Math.round(position) - 1
+    : from
+  const at = Math.max(
+    0,
+    Math.min(priority.length, requested),
+  )
+
+  priority.splice(at, 0, moved!)
+
+  return [...priority, ...random]
+}
+
 /** Apply one queue's filters to its entries. Order is the caller's; sort is applied last. */
 export function applyFilters(
   items: QueueItem[],

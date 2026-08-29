@@ -119,7 +119,7 @@ try {
   );
   console.log(
     faces > 0 && names > 0
-      ? `${faces} avatar badges and ${names} audience names on the shelves — baseline headings`
+      ? `${faces} avatar badges and ${names} audience names on the shelves — controls aligned with names`
       : `${faces} avatar badges and ${names} audience names on the shelves — unexpected state`,
   );
   console.log(`first four shelf titles: ${JSON.stringify(titles)}`);
