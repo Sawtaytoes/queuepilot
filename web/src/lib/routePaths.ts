@@ -66,6 +66,7 @@ export const ROUTE_PATHS = {
   home: "/",
   legacyCollection: "/collection/*",
   legacyGroup: "/g/*",
+  /** Retired public address; `LegacyQueuesPage` replaces it with `/picks`. */
   legacyQueues: "/queues/*",
   legacyTonight: "/tonight/:step?",
   pending: "/pending/*",
