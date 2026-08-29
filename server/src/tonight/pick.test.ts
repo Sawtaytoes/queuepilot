@@ -77,7 +77,7 @@ const membership = (
 describe('toResolvedMembers — a group is a set, a number and a spare', () => {
   it('makes a person themself, counting one', () => {
     expect(toResolvedMembers([person('ada')], () => null)).toEqual([
-      { ...person('ada'), minPresent: 1, people: ['ada'] },
+      { ...person('ada'), minPresent: 1, people: ['ada'], requiredPeople: ['ada'] },
     ]);
   });
 
@@ -86,7 +86,25 @@ describe('toResolvedMembers — a group is a set, a number and a spare', () => {
       membership('older-kids', ['grace', 'linus'], 1));
 
     expect(resolved[0]?.people).toEqual(['grace', 'linus']);
+    expect(resolved[0]?.requiredPeople).toEqual(['grace', 'linus']);
     expect(resolved[0]?.minPresent).toBe(1);
+  });
+
+  it('keeps an all-optional group in the people filter', () => {
+    const resolved = toResolvedMembers([group('older-kids')], () => ({
+      groupId: 'older-kids',
+      minPresent: null,
+      roster: [
+        { personId: 'grace', position: 0, role: 'optional' },
+        { personId: 'linus', position: 1, role: 'optional' },
+      ],
+    }));
+
+    expect(resolved[0]).toMatchObject({
+      people: ['grace', 'linus'],
+      requiredPeople: [],
+      minPresent: 0,
+    });
   });
 
   it('resolves `min_present: null` to all of them, not to one', () => {
@@ -102,6 +120,7 @@ describe('toResolvedMembers — a group is a set, a number and a spare', () => {
   it('drops a queue keyed on a group that no longer exists', () => {
     const resolved = toResolvedMembers([group('gone')], () => null);
     expect(resolved[0]?.people).toEqual([]);
+    expect(resolved[0]?.requiredPeople).toEqual([]);
   });
 });
 

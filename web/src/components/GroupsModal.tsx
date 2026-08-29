@@ -164,25 +164,6 @@ export function GroupsModal() {
 
   if (!groupsModal) return null
 
-  const updateRoster = (roster: DraftMember[]) => {
-    const nextRequiredCount = roster.filter(
-      (member) => member.role === "required",
-    ).length
-    setDraft((current) => ({
-      ...current,
-      minPresent:
-        current.minPresent == null
-          ? null
-          : nextRequiredCount === 0
-            ? null
-            : Math.min(
-                current.minPresent,
-                nextRequiredCount,
-              ),
-      roster,
-    }))
-  }
-
   const setMemberRole = (
     personId: string,
     value: string | null,
@@ -194,15 +175,39 @@ export function GroupsModal() {
     ) {
       return
     }
+    const role: MemberRole | null =
+      value === "none"
+        ? null
+        : value === "required"
+          ? "required"
+          : "optional"
 
-    const without = draft.roster.filter(
-      (member) => member.personId !== personId,
-    )
-    if (value === "none") {
-      updateRoster(without)
-      return
-    }
-    updateRoster([...without, { personId, role: value }])
+    setDraft((current) => {
+      const without = current.roster.filter(
+        (member) => member.personId !== personId,
+      )
+      const roster =
+        role == null
+          ? without
+          : [...without, { personId, role }]
+      const nextRequiredCount = roster.filter(
+        (member) => member.role === "required",
+      ).length
+
+      return {
+        ...current,
+        minPresent:
+          current.minPresent == null
+            ? null
+            : nextRequiredCount === 0
+              ? null
+              : Math.min(
+                  current.minPresent,
+                  nextRequiredCount,
+                ),
+        roster,
+      }
+    })
   }
 
   const setMinimum = (value: string) => {
@@ -424,6 +429,7 @@ export function GroupsModal() {
           <fieldset className="groupminimum">
             <legend>Minimum required</legend>
             <SelectListbox
+              key={selectedId ?? "new"}
               id="group-minimum"
               isDisabled={isSaving || requiredCount === 0}
               label="Minimum required"
