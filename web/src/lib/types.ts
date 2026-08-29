@@ -1009,9 +1009,21 @@ export type KnownHowClaim = {
   confirmedAt: string
 }
 
+export type BoardGameInteractionType =
+  | "competitive"
+  | "cooperative"
+  | "semiCooperative"
+  | "team"
+  | "traitor"
+  | "solo"
+
 export type BoardGamesResponse = {
   games: BoardGameCard[]
   knownHow: KnownHowClaim[]
+}
+
+export type BoardGameCategoriesResponse = {
+  categories: string[]
 }
 
 export type BoardGameResponse = {
@@ -1024,8 +1036,11 @@ export type BoardGameResponse = {
 export type PickCriteriaWire = {
   playerCount: number
   fitness: "any" | "bestOnly" | "bestOrRecommended"
+  interactionType: BoardGameInteractionType | null
+  categories: string[]
   rulesKnown: "any" | "everyone" | "someone"
   maxWeight: number | null
+  maxPlaytime: number | null
   personIds: string[]
   /** Reroll's memory — every game already offered and turned down. */
   excludedGameIds: string[]

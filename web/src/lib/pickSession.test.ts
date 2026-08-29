@@ -69,9 +69,12 @@ const session = (
     },
   ],
   criteria: {
+    categories: [],
     excludedGameIds: [],
     fitness: "bestOnly",
+    interactionType: null,
     maxWeight: null,
+    maxPlaytime: null,
     personIds: ["ada"],
     playerCount: 3,
     rulesKnown: "someone",
