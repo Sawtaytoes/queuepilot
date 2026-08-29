@@ -121,7 +121,9 @@ try {
   const count = () => page.textContent(`${shelf} .sec`);
   const away = () => page.mouse.move(0, 0);
 
-  await page.goto(`http://localhost:${PORT}/queues`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/picks`, { waitUntil: 'domcontentloaded' });
+  // Picks starts collapsed; this test needs the tile controls visible.
+  await page.click('#collapseall');
   await page.waitForSelector(`${shelf} li.tile`, { timeout: 30000 });
 
   ok('the shelf renders its three entries', (await tiles()) === 3);
