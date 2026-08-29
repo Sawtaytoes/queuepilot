@@ -73,6 +73,7 @@ const shelfHeadingBranding = await page.$$eval('.shelf h2', (els) =>
   els.map((el) => ({
     hasFaceMarker: Boolean(el.querySelector('.pface')),
     hasProviderLabel: Boolean(el.querySelector('.qprovider')),
+    hasAudienceChevron: Boolean(el.querySelector('.chev')),
     headingAlignment: getComputedStyle(el).alignItems,
     peopleAlignment: el.querySelector('.qpeople')
       ? getComputedStyle(el.querySelector('.qpeople')!).alignItems
@@ -82,8 +83,10 @@ const shelfHeadingBranding = await page.$$eval('.shelf h2', (els) =>
       : '',
   })),
 );
-ok('queue shelf headings use avatar badges and omit provider labels',
-  shelfHeadingBranding.every((heading) => heading.hasFaceMarker && !heading.hasProviderLabel));
+ok('queue shelf headings use avatar badges and omit repeated labels',
+  shelfHeadingBranding.every((heading) => heading.hasFaceMarker
+    && !heading.hasProviderLabel
+    && !heading.hasAudienceChevron));
 ok('queue shelf headings align their content to one baseline',
   shelfHeadingBranding.every((heading) => heading.headingAlignment === 'baseline'
     && heading.peopleAlignment === 'baseline'

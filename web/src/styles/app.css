@@ -682,12 +682,6 @@ button {
   padding-left: 10px;
   border-left: 1px solid var(--color-border-default);
 }
-.shelf h2 .chev {
-  color: var(--color-intent-accent-solid);
-  font-size: 1.05rem;
-  line-height: 1;
-  transform: translateY(0.06em);
-}
 .shelf h2 .shelfspacer {
   flex: 1;
 }
