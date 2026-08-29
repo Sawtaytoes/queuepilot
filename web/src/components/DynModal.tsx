@@ -154,17 +154,17 @@ export function DynModal() {
     [reg, setId],
   )
 
-  // WP-5's trays, on a RULES queue as well as a Picks one. `queue_people` is keyed on the
+  // WP-5's audience, on a RULES queue as well as a Picks one. `queue_people` is keyed on the
   // set id and knows nothing about a set's kind, so this is the same slice, the same
   // endpoint and the same component the picks editor uses — what was missing was a place to
   // put it (decision `2026-08-26-a-rules-queue-carries-people-too`).
   const people = usePeople()
   const members = setId ? (people.byQueue[setId] ?? []) : []
 
-  /** Save the trays as they move, not on Submit — identical to `SetModal`'s, and for the
-   *  same two reasons: a drag that waits for Save reads as a drag that failed, and
+  /** Save the audience as it moves, not on Submit — identical to `SetModal`'s, and for the
+   *  same two reasons: a move that waits for Save reads as a move that failed, and
    *  `saveQueuePeople` is optimistic and snaps back on a refusal. It is also what keeps the
-   *  trays out of `onSubmit`'s `PATCH /api/sets/:id` body, which carries rotation fields
+   *  audience rows out of `onSubmit`'s `PATCH /api/sets/:id` body, which carries rotation fields
    *  only and would otherwise need to learn about a table it does not own. */
   const onPeopleChange = async (next: QueueMember[]) => {
     if (!setId) return
@@ -623,13 +623,13 @@ export function DynModal() {
         />
       </label>
 
-      {/* WHO THIS POOL IS FOR — the same three trays the picks editor draws, because it is
-          the same question and the same table.
+      {/* WHO THIS POOL IS FOR — the same vertical audience list the picks editor draws, because
+          it is the same question and the same table.
 
           It was missing here, and the reason it was missing does not survive contact with
           the live app: a rotation pool is bound to one provider ACCOUNT, so the card's meta
-          line already named "Younger Kids", and the trays looked redundant. They are not.
-          An account is which profile Plex signs in as; the trays are WHO the pool is for,
+          line already named "Younger Kids", and the audience looked redundant. It is not.
+          An account is which profile Plex signs in as; the audience is WHO the pool is for,
           and those are two different facts about two different systems — reported as
           *"No way to add people to a Rules in QueuePilot. I can't add them here to Shorts
           nor Movies."*

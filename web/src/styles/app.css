@@ -2127,6 +2127,7 @@ body.queue-view #tools {
 #entrymodal,
 #membersmodal,
 #peoplemodal,
+#groupsmodal,
 #poweroffmodal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
@@ -2145,24 +2146,13 @@ body.queue-view #tools {
 #startmodal {
   width: min(460px, 92vw);
 }
-/* WIDER SINCE WP-5, and the number is not a taste call.
-   The editor now holds the three trays, which are a Charcuterie `Board`. That component
-   chooses three-lanes-across versus one-lane-plus-a-segmented-control from a CONTAINER query
-   at `cq-lg` (48rem / 768px) on its own box — so at the old 440px the board is permanently in
-   its narrow form and the "whole house at once" the editor exists for is never on screen at
-   any window width. 920px minus this padding clears 768px, which is the smallest width that
-   shows all three trays side by side. `92vw` still wins on a narrow window, and the board
-   drops back to one lane there on its own, which is the Narrow View this is meant to have. */
+/* WIDER SINCE WP-5. The queue editor contains the full audience list, so the rows can keep
+   their names, rule summaries, and three-way controls readable in the Wide View. */
 #setmodal {
   width: min(920px, 92vw);
 }
-/* WIDER SINCE 2026-08-27, and for the reason `#setmodal` is — the same number, the same
-   container query, the same editor gaining the same three trays. `#dyn-people` landed on
-   2026-08-26 and this width did not move with it, so the rules editor shipped with the
-   board permanently in its narrow form: one tray on screen, nowhere to drop, and a drag the
-   owner could not complete at any window width. 920px minus this modal's padding clears the
-   `cq-lg` (48rem / 768px) the board measures its own box against. `92vw` still wins on a
-   narrow window, and the board drops back to one lane there on its own. */
+/* Match the Picks editor so the same audience rows have the same reading width in a Rules
+   queue. */
 #dynmodal {
   width: min(920px, 92vw);
 }
@@ -2181,6 +2171,10 @@ body.queue-view #tools {
 #peoplemodal {
   width: min(560px, 92vw);
 }
+/* The people-group editor has a saved-group list beside its rule form in the Wide View. */
+#groupsmodal {
+  width: min(980px, 92vw);
+}
 /* A question and two buttons — narrower than every form here, because making it form-width
    would read as "there is something to fill in". */
 #poweroffmodal {
@@ -2194,6 +2188,7 @@ body.queue-view #tools {
 #entrymodal form,
 #membersmodal form,
 #peoplemodal form,
+#groupsmodal form,
 #poweroffmodal form {
   position: relative;
 }
@@ -2203,6 +2198,7 @@ body.queue-view #tools {
 #entrymodal h3,
 #membersmodal h3,
 #peoplemodal h3,
+#groupsmodal h3,
 #poweroffmodal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
@@ -3076,6 +3072,22 @@ body.name-editable #apphead h1 {
   #setmodal .libs,
   #dynmodal .libs {
     grid-template-columns: 1fr;
+  }
+  .grouplayout {
+    grid-template-columns: 1fr;
+  }
+  .audiencerow,
+  .groupmemberrow {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .audiencechoices,
+  .groupmemberchoices {
+    width: 100%;
+  }
+  .audiencechoices > [role="radio"],
+  .groupmemberchoices > [role="radio"] {
+    flex: 1 1 0;
   }
   /* One column, and the cards keep their own gap — `#play` is a block, so what needs
      narrowing is the GRID inside it, not the page. */
@@ -4213,8 +4225,9 @@ body.rowdragging {
 
    `PersonFace` is the app's stand-in for an `Avatar` that `@charcuterie/ui@3.10.0` does not
    have — a genuine library gap, not a decision to keep the shape local. It says so at the top
-   of its own file. Everything else on this screen IS a Charcuterie component: the three trays
-   are a `Board`, the empty states are `EmptyState`s, the activity control is a `Picker`. */
+   of its own file. Everything else on this screen IS a Charcuterie component: the audience
+   choices are a `SegmentedControl`, the empty states are `EmptyState`s, and the activity
+   control is a `Picker`. */
 
 .pface {
   --pface-size: 26px;
@@ -4390,8 +4403,7 @@ body.rowdragging {
   min-inline-size: 0;
 }
 
-/* The editor block. LAYOUT only — the gap between the label and the board, and nothing about
-   the board itself, which is one of the three exceptions the component rule names. */
+/* The editor block. LAYOUT only — the gap between the label and the audience list. */
 .setpeople {
   display: flex;
   flex-direction: column;
@@ -4404,12 +4416,286 @@ body.rowdragging {
   font-weight: 600;
   opacity: 0.85;
 }
-/* A group's own rule, in words, under its card. "At least one of Ada, Grace. Linus may join."
-   The count is the whole reason a group is one card instead of three, so it is never hidden
-   behind a hover. */
-.trayrule {
+/* ---- queue audience (`PeopleTrays.tsx`) ----------------------------------------------- */
+.audienceeditor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.audienceintro {
+  max-width: 72ch;
+  margin: 0;
+  color: var(--color-content-muted);
+  font-size: 0.84rem;
+}
+.audiencesections {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.audiencesection {
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  border-radius: 10px;
+  background: var(--color-surface-raised);
+}
+.audiencesectionhead {
+  padding: 11px 14px 9px;
+  border-bottom: 1px solid var(--color-border-subtle);
+  background: var(--color-surface-sunken);
+}
+.audiencesectionhead h5 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 0.98rem;
+}
+.audiencesectionhead p {
+  margin: 3px 0 0;
+  color: var(--color-content-muted);
   font-size: 0.78rem;
-  opacity: 0.75;
+}
+.audiencecount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.45rem;
+  height: 1.45rem;
+  padding: 0 5px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 999px;
+  color: var(--color-content-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+.audiencelist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.audiencerow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-inline-size: 0;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.audiencerow:last-child {
+  border-bottom: 0;
+}
+.audienceidentity {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-inline-size: 0;
+}
+.audiencecopy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-inline-size: 0;
+}
+.audiencecopy strong {
+  overflow: hidden;
+  color: var(--color-content-primary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.audiencesub {
+  max-width: 62ch;
+  color: var(--color-content-muted);
+  font-size: 0.77rem;
+  line-height: 1.35;
+}
+.audiencechoices {
+  flex: 0 0 auto;
+}
+.audienceempty {
+  padding: 14px;
+}
+.audienceempty .empty {
+  min-height: 0;
+  padding: 6px;
+}
+
+/* ---- people-group editor (`GroupsModal.tsx`) ------------------------------------------ */
+.grouplayout {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(
+      0,
+      1.5fr
+    );
+  gap: 20px;
+  align-items: start;
+}
+.grouplist,
+.groupform {
+  min-inline-size: 0;
+}
+.grouplisthead h4 {
+  margin: 0;
+  font-size: 0.98rem;
+}
+.grouplisthead p,
+.groupformhint {
+  margin: 4px 0 0;
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+  line-height: 1.4;
+}
+.grouplist > ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+.grouppick {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 5px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--color-content-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.grouppick:hover {
+  background: var(--color-surface-sunken);
+  color: var(--color-content-primary);
+}
+.grouppick[aria-current="true"] {
+  border-color: var(--color-intent-accent-border);
+  background: var(--color-intent-accent-surface);
+  color: var(--color-intent-accent-content);
+}
+.grouppickname {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-inline-size: 0;
+}
+.grouppickname strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.grouppickrule {
+  padding-inline-start: 34px;
+  color: var(--color-content-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.grouplist #groupnew {
+  width: 100%;
+}
+#groupsmodal .groupform .field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--color-content-muted);
+  font-size: 0.92rem;
+}
+#groupsmodal .groupform .field input[type="text"] {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  background: var(--color-surface-sunken);
+  color: var(--color-content-primary);
+  font: inherit;
+}
+.grouprule,
+.groupminimum,
+.groupmembers {
+  margin: 16px 0 0;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: 10px;
+}
+.grouprule {
+  background: var(--color-surface-sunken);
+}
+.grouprule h4 {
+  margin: 0;
+  color: var(--color-content-secondary);
+  font-size: 0.88rem;
+}
+.grouprulesummary {
+  margin: 7px 0 0;
+  color: var(--color-content-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.groupminimum {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.groupminimum legend,
+.groupmembers legend {
+  padding: 0 6px;
+  color: var(--color-content-secondary);
+  font-size: 0.88rem;
+}
+.groupminimum .qppicker {
+  width: 100%;
+  max-width: none;
+}
+.groupmemberlist {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.groupmemberrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-subtle);
+}
+.groupmemberrow:last-child {
+  border-bottom: 0;
+}
+.groupmemberidentity {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-inline-size: 0;
+}
+.groupmemberidentity strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.groupmemberchoices {
+  flex: 0 0 auto;
+}
+.groupdeleteconfirm {
+  margin: 14px 0 0;
+  padding: 10px 12px;
+  border: 1px solid var(--color-intent-danger-border);
+  border-radius: 8px;
+  background: var(--color-intent-danger-surface);
+  color: var(--color-intent-danger-content);
+  font-size: 0.82rem;
+  line-height: 1.4;
 }
 
 /* ===================================================================
