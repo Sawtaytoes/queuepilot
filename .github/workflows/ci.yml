@@ -526,6 +526,12 @@ jobs:
       - name: The roster editor (offline)
         run: $TSX e2e/roster-editor-test.ts
 
+      # THE PEOPLE-GROUP EDITOR GATE. This drives the saved-group form in a browser, because the
+      # route tests cannot see whether New resets the form, whether Create is reachable, or whether
+      # the Rule picker can change an all-optional group into a counted rule.
+      - name: The people-group editor (offline)
+        run: $TSX e2e/people-group-editor-test.ts
+
       # THE WP-4e GATE. The board-game provider stopped speaking HTTP; this is what says the
       # same queue still produces the same lineup. One invented shelf is expressed TWICE — as
       # hand-written objects behind a real http server running the sibling app's transcribed
