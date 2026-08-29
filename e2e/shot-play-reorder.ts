@@ -4,7 +4,7 @@ import { chromium } from './playwright.js';
 const PORT = process.env.WEB_PORT || 18768;
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 620 } });
-await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.playcard', { timeout: 30000 });
 await page.waitForTimeout(2000);
 // Hover one row so its handle is showing — it is quiet until then.

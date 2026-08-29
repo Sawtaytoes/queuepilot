@@ -301,16 +301,17 @@ parsed pathname any more** ([decision](docs/decisions/2026-08-27-the-route-table
     away from.** `routing-test.ts` did, and it now reads the link before clicking it.
   - The `#id:not([hidden])` selectors seventeen suites use still work — an element with no
     `hidden` attribute matches `:not([hidden])`.
-- **Each page states its own chrome.** `components/Page.tsx` takes the heading, sub-line, back
-  target, document title and body classes as props and renders `Header` + `NowPlayingBar`
-  above the view. The mode landing draws no header, so it calls `usePageChrome` on its own.
+- **Each work page states its own chrome.** `components/Page.tsx` takes the heading, sub-line,
+  back target, document title and body classes as props. It composes Charcuterie `Shell`,
+  `Header`, `Rail`, `Nav` and `Main`, then renders `NowPlayingBar` with the view. The task home
+  draws no work-page shell, so it calls `usePageChrome` on its own.
   There is no `computeChrome()` switch — that was the hand-rolled router wearing a different
   hat.
 - **`AppFrame` is the pathless layout route** and holds what outlives a page: the store load,
   the live subscription, the selection bar and the seven lazy overlays. It is also the one
   place `trackRouteOrigin` is called, because the back button's target is the page you came
   FROM and react-router does not expose that.
-- **A moved address keeps working.** `/g/<id>`, `/collection` and `/tonight` each have a
+- **A moved address keeps working.** `/admin`, `/g/<id>`, `/queues`, `/collection` and `/tonight` each have a
   LEGACY route that paints the page they moved to and rewrites the URL underneath
   (`replace`, never a push). A `<Navigate>` would blank the screen for a frame, and these are
   addresses people bookmarked.
@@ -739,9 +740,18 @@ Four traps, each of which has a comment at its site:
 
 Gate: `e2e/queue-name-test.ts`, 18 assertions, in CI.
 
-## The Admin landing's filter
+## The task home, navigation and compatibility overview
 
-`/admin` filters by **people** and by **provider**, both in the QUERY STRING
+`/` is the task home: What to Watch/Play, Open a queue, then the five focused management
+destinations. Work pages use one primary navigation list in this order: Watch/Play, Picks,
+Rules, Collection, Unqueued, People. Charcuterie's `useNavLayout` renders that list as a rail,
+an icon rail, or one Narrow View menu; do not copy it into width-specific trees.
+
+`/admin` is a legacy address that paints `/` and replaces the URL. `/g/<id>` now lands on
+`/people`. `/overview` is an unlinked compatibility surface for the former Admin card wall
+while its remaining card interactions move to focused pages. It is not a navigation
+destination. The compatibility overview still filters by **people** and by **provider**, both
+in the QUERY STRING
 (`?people=ada,grace&only=kavita`), and every chip is a real `<a href>` that keeps the other
 filter as it changes its own
 ([decision](docs/decisions/2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md)).
@@ -750,7 +760,7 @@ Four things that look like leftovers and are not:
 - **There is no group chip, no Groups editor, and no new group UI.** Existing group data
   remains a compatibility object because it holds "at least one of the kids", it is what a
   Must-be-here tray points at, and it resolves the one provider profile a queue signs in as.
-  `/g/<id>` remains a legacy redirect to `/admin`. Retiring the data model needs a separate
+  `/g/<id>` remains a legacy redirect to `/people`. Retiring the data model needs a separate
   migration that preserves those queue and provider semantics.
 - **`membersMatchPeople` has TWO callers and must keep exactly one implementation.** This
   page and What to Watch/Play ask the same question of the same rows; a second copy drifts,

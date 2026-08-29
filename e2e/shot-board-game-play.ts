@@ -53,7 +53,7 @@ try {
   };
 
   // ── 1. The landing, and the way in ──────────────────────────────────────────────── //
-  await goto('/admin', '#play:not([hidden])');
+  await goto('/overview', '#play:not([hidden])');
   await shot('landing');
 
   // ── 2. The shelf ────────────────────────────────────────────────────────────────── //
