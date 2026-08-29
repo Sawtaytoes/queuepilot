@@ -225,6 +225,8 @@ ok('browser Back returns to Admin', await heading('Admin'));
 {
   await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
+  // Picks starts collapsed. Expand it so this ROUTING check has a long page to scroll.
+  await page.click('#collapseall');
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const scrollBeforeQueue = await page.evaluate(() => window.scrollY);
   ok('the Picks page can be scrolled before opening a queue', scrollBeforeQueue > 0);
