@@ -1,7 +1,9 @@
+import { useVisibility } from "@charcuterie/logic"
 import {
   Badge,
   Button,
   ButtonLink,
+  Combobox,
   EmptyState,
   RadioGroup,
   SegmentedControl,
@@ -39,6 +41,7 @@ import {
 import { parseTonightPreset } from "../lib/tonightPreset"
 import { routeFor } from "../lib/tonightRouting"
 import type {
+  BoardGameCategoriesResponse,
   GroupWithRoster,
   PeopleResponse,
   Person,
@@ -118,6 +121,12 @@ export function TonightView({
   const [peopleError, setPeopleError] = useState<
     string | null
   >(null)
+  const [boardGameCategories, setBoardGameCategories] =
+    useState<string[] | null>(null)
+  const [
+    boardGameCategoriesError,
+    setBoardGameCategoriesError,
+  ] = useState<string | null>(null)
   const [selectedPeople, setSelectedPeople] = useState<
     string[]
   >([])
@@ -205,6 +214,35 @@ export function TonightView({
         // table yet" and "the request failed" look identical otherwise, and only one of
         // them is something to go and fix.
         setPeopleError(
+          e instanceof Error ? e.message : String(e),
+        )
+      })
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  // The category vocabulary is owner data, so it is loaded from the board-game store rather
+  // than copied into the activity definition. A failed request leaves the control present and
+  // reports the failure inside its own panel; it never turns a missing list into a guessed
+  // category.
+  useEffect(() => {
+    let isCancelled = false
+
+    void api<BoardGameCategoriesResponse>(
+      "GET",
+      "/api/board-games/categories",
+    )
+      .then((r) => {
+        if (isCancelled) return
+        setBoardGameCategories(r.categories ?? [])
+        setBoardGameCategoriesError(null)
+      })
+      .catch((e: unknown) => {
+        if (isCancelled) return
+        setBoardGameCategories([])
+        setBoardGameCategoriesError(
           e instanceof Error ? e.message : String(e),
         )
       })
@@ -488,6 +526,29 @@ export function TonightView({
                         }
                         size="sm"
                       />
+                    ) : filter.control === "multiPicker" ? (
+                      <CategoryFilter
+                        categories={
+                          boardGameCategories ?? []
+                        }
+                        error={boardGameCategoriesError}
+                        isLoading={
+                          boardGameCategories === null
+                        }
+                        key={`${session.activity}:${filter.id}`}
+                        onChange={(value) =>
+                          setSession((prev) => ({
+                            ...prev,
+                            filters: {
+                              ...prev.filters,
+                              [filter.id]: value,
+                            },
+                          }))
+                        }
+                        value={
+                          session.filters[filter.id] ?? ""
+                        }
+                      />
                     ) : (
                       <SelectListbox
                         id={`tonight-${filter.id}`}
@@ -706,6 +767,65 @@ function WhichQueue({
   )
 }
 
+function CategoryFilter({
+  categories,
+  error,
+  isLoading,
+  onChange,
+  value,
+}: {
+  categories: readonly string[]
+  error: string | null
+  isLoading: boolean
+  onChange: (value: string) => void
+  value: string
+}) {
+  const picker = useVisibility()
+  const selectedCategories = value
+    .split(",")
+    .map((category) => category.trim())
+    .filter(Boolean)
+  const selectedLabel =
+    selectedCategories.length > 0
+      ? selectedCategories.join(", ")
+      : "Any category"
+
+  return (
+    <Combobox
+      emptyLabel="No categories available"
+      error={error}
+      isLoading={isLoading}
+      isMultiple
+      isVisible={picker.isVisible}
+      onDismiss={picker.hide}
+      onSelect={(category) => {
+        const next = selectedCategories.includes(category)
+          ? selectedCategories.filter(
+              (selected) => selected !== category,
+            )
+          : [...selectedCategories, category]
+        onChange(next.join(","))
+      }}
+      options={categories.map((category) => ({
+        label: category,
+        value: category,
+      }))}
+      placeholder="Any category"
+      selectedValue={selectedCategories}
+      trigger={
+        <Button
+          appearance="outline"
+          aria-label={`Categories: ${selectedLabel}`}
+          id="tonight-categories"
+          onClick={picker.toggle}
+        >
+          {selectedLabel}
+        </Button>
+      }
+    />
+  )
+}
+
 /**
  * Go, and it does the real thing wherever the real thing exists today.
  *
@@ -718,9 +838,9 @@ function WhichQueue({
  * `t.closest(".playbtn")`, so a control that opens that menu without the class opens a menu
  * that shuts on the same click.
  *
- * On **Pick** there is nowhere to go yet. The pick engine and the result card are WP-7 and
- * WP-8, and a Go that navigated somewhere plausible would be worse than one that says it
- * cannot: this screen collects the answer, and the half that acts on it is not built.
+ * On **Pick**, this calls the same draw used by a preset card. The resulting criteria include
+ * every Board Game Picker filter that the Tonight form exposes, so the result and reroll keep
+ * the user's interaction, category and playtime choices.
  */
 function GoButton({
   activity,

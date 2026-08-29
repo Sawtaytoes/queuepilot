@@ -51,21 +51,27 @@ describe("the table", () => {
 })
 
 describe("criteriaFromTonight", () => {
-  test("maps the three board-game filters, one field each", () => {
+  test("maps the board-game filters, one field each", () => {
     expect(
       criteriaFromTonight({
         filters: {
+          categories: "Cooperative,Deckbuilder",
           fit: "best",
+          interactionType: "cooperative",
           knows: "someone",
           light: "on",
+          maxPlaytime: "60",
         },
         guestCount: 1,
         personIds: ["ada", "grace"],
       }),
     ).toEqual({
+      categories: ["Cooperative", "Deckbuilder"],
       excludedGameIds: [],
       fitness: "bestOnly",
+      interactionType: "cooperative",
       maxWeight: LIGHT_MAX_WEIGHT,
+      maxPlaytime: 60,
       personIds: ["ada", "grace"],
       playerCount: 3,
       rulesKnown: "someone",
@@ -75,13 +81,22 @@ describe("criteriaFromTonight", () => {
   test("OK widens the fit, and Keep it light Off lifts the ceiling", () => {
     expect(
       criteriaFromTonight({
-        filters: { fit: "ok", knows: "any", light: "off" },
+        filters: {
+          fit: "ok",
+          interactionType: "any",
+          knows: "any",
+          light: "off",
+          maxPlaytime: "any",
+        },
         guestCount: 0,
         personIds: ["linus"],
       }),
     ).toMatchObject({
+      categories: [],
       fitness: "bestOrRecommended",
+      interactionType: null,
       maxWeight: null,
+      maxPlaytime: null,
       rulesKnown: "any",
     })
   })

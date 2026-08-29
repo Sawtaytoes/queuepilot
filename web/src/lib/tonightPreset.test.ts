@@ -15,13 +15,20 @@ import {
 describe("parseTonightPreset", () => {
   it("reads who is here, the activity and the filters", () => {
     const parsed = parseTonightPreset(
-      "?activity=board-games&people=ada,linus&guests=1&light=on&fit=ok",
+      "?activity=board-games&people=ada,linus&guests=1&light=on&fit=ok&interactionType=cooperative&maxPlaytime=60&categories=Cooperative,Deckbuilder",
     )
 
     expect(parsed.isAccepted).toBe(true)
     expect(parsed.preset).toEqual({
       activity: "board-games",
-      filters: { fit: "ok", knows: "someone", light: "on" },
+      filters: {
+        categories: "Cooperative,Deckbuilder",
+        fit: "ok",
+        interactionType: "cooperative",
+        knows: "someone",
+        light: "on",
+        maxPlaytime: "60",
+      },
       guestCount: 1,
       personIds: ["ada", "linus"],
     })
@@ -127,7 +134,14 @@ describe("parseTonightPreset", () => {
 describe("tonightPresetHref", () => {
   const preset: TonightPreset = {
     activity: "board-games",
-    filters: { fit: "ok", knows: "someone", light: "on" },
+    filters: {
+      categories: "Cooperative,Deckbuilder",
+      fit: "ok",
+      interactionType: "cooperative",
+      knows: "someone",
+      light: "on",
+      maxPlaytime: "60",
+    },
     guestCount: 2,
     personIds: ["ada", "linus"],
   }
@@ -147,9 +161,12 @@ describe("tonightPresetHref", () => {
     const href = tonightPresetHref({
       ...preset,
       filters: {
+        categories: "",
         fit: "best",
+        interactionType: "any",
         knows: "someone",
         light: "on",
+        maxPlaytime: "any",
       },
     })
 
@@ -162,9 +179,12 @@ describe("tonightPresetHref", () => {
     const href = tonightPresetHref({
       ...preset,
       filters: {
+        categories: "",
         fit: "best",
+        interactionType: "any",
         knows: "someone",
         light: "on",
+        maxPlaytime: "any",
       },
       guestCount: 0,
       personIds: [],

@@ -496,22 +496,63 @@ export function queuesForSurpriseScope(
  * the thing the decision spends a clause forbidding
  * (`2026-08-22-…-tonight-pick` §5).
  *
- * The set per activity, and each default, come from the settled mockup rather than from
- * taste. Two are worth knowing because they are not the neutral answer: board games and
- * video games open with **Keep it light: On**, and both open with **knows-how: Someone**
- * rather than Any. Reading opens with Keep it light Off.
+ * The set per activity, and each default, come from the settled mockup plus the full
+ * Board Game Picker contract. Board games and video games open with **Keep it light: On**,
+ * and both open with **knows-how: Someone** rather than Any. Reading opens with Keep it
+ * light Off.
  *
- * ⚠️ **These are collected but not yet acted on.** The pick engine is WP-7 and WP-8; until
- * one of them lands, a filter's value goes nowhere and the screen says so under Go rather
- * than implying a pick it cannot make.
+ * Board-game complexity still uses the current binary control. The Light / Medium / Heavy
+ * vocabulary is accepted, but its numeric mapping is intentionally not implemented until
+ * the ceiling-versus-band semantics and boundaries are settled.
  */
 export type ActivityFilter = {
   id: string
   label: string
-  /** `segment` for two or three short answers; `picker` once the list wants a panel. */
-  control: "picker" | "segment"
+  /** `segment` for short answers; `picker` or `multiPicker` once the list wants a panel. */
+  control: "picker" | "segment" | "multiPicker"
   options: readonly { value: string; label: string }[]
   defaultValue: string
+}
+
+const BOARD_GAME_INTERACTIONS: ActivityFilter = {
+  control: "picker",
+  defaultValue: "any",
+  id: "interactionType",
+  label: "Interaction type",
+  options: [
+    { label: "Any", value: "any" },
+    { label: "Versus", value: "competitive" },
+    { label: "Co-op", value: "cooperative" },
+    { label: "Semi co-op", value: "semiCooperative" },
+    { label: "Teams", value: "team" },
+    { label: "Traitor", value: "traitor" },
+    { label: "Solo", value: "solo" },
+  ],
+}
+
+const BOARD_GAME_PLAYTIME: ActivityFilter = {
+  control: "picker",
+  defaultValue: "any",
+  id: "maxPlaytime",
+  label: "Maximum playtime",
+  options: [
+    { label: "Any length", value: "any" },
+    { label: "Under 30 min", value: "30" },
+    { label: "Under 60 min", value: "60" },
+    { label: "Under 90 min", value: "90" },
+    { label: "Under 2 hours", value: "120" },
+  ],
+}
+
+const BOARD_GAME_CATEGORIES: ActivityFilter = {
+  control: "multiPicker",
+  defaultValue: "",
+  id: "categories",
+  label: "Categories",
+  // The owner vocabulary is database data, so TonightView supplies the options after it
+  // loads them. Preset parsing treats this as a list instead of validating against this
+  // intentionally empty static array.
+  options: [],
 }
 
 const KNOWS_HOW = (label: string): ActivityFilter => ({
@@ -555,6 +596,9 @@ export const ACTIVITY_FILTERS: Record<
       ],
     },
     KNOWS_HOW("Knows the rules"),
+    BOARD_GAME_INTERACTIONS,
+    BOARD_GAME_PLAYTIME,
+    BOARD_GAME_CATEGORIES,
     KEEP_IT_LIGHT("on"),
   ],
   movies: [

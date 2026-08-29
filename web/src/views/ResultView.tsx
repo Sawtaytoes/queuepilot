@@ -130,9 +130,12 @@ export function ResultView({
             },
           ],
           criteria: {
+            categories: [],
             excludedGameIds: [],
             fitness: "bestOrRecommended",
+            interactionType: null,
             maxWeight: null,
+            maxPlaytime: null,
             personIds: [],
             playerCount: 1,
             rulesKnown: "any",

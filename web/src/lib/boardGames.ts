@@ -9,6 +9,7 @@
 import type { ActivityId } from "./tonight"
 import type {
   BoardGameCard,
+  BoardGameInteractionType,
   KnownHowClaim,
   PickCriteriaWire,
 } from "./types"
@@ -39,14 +40,17 @@ export const tableSize = (
 /**
  * The Tonight form, as the pick engine's criteria.
  *
- * Three filters, and each maps to exactly one field:
+ * The board-game filters map to the engine's criteria fields:
  *
  *   - **Player-count fit** — `Best` is the community's `best` list only; `OK` widens to the
  *     counts it also recommends. Neither is the box range, which is a manufacturing claim.
  *   - **Knows the rules** — `Any` / `Someone` / `All`. The engine's third value is spelled
  *     `everyone`, which is the word the decision that created the fact uses.
+ *   - **Interaction type**, **categories** and **maximum playtime** pass through to the
+ *     corresponding engine fields. Their `Any` values become the engine's null or empty
+ *     values.
  *   - **Keep it light** — a complexity ceiling, not a time limit. Time is its own axis and
- *     the form does not ask about it yet.
+ *     remains separate from this control.
  *
  * The ticked people go through as `personIds` as well as into the count. They are what the
  * familiarity bonus counts plays for and whose personal complexity ceilings apply — dropping
@@ -61,14 +65,43 @@ export function criteriaFromTonight({
   guestCount: number
   personIds: readonly string[]
 }): PickCriteriaWire {
+  const interactionTypes: readonly BoardGameInteractionType[] =
+    [
+      "competitive",
+      "cooperative",
+      "semiCooperative",
+      "team",
+      "traitor",
+      "solo",
+    ]
+  const interactionType = interactionTypes.includes(
+    filters.interactionType as BoardGameInteractionType,
+  )
+    ? (filters.interactionType as BoardGameInteractionType)
+    : null
+  const maxPlaytimeValue =
+    filters.maxPlaytime && filters.maxPlaytime !== "any"
+      ? Number(filters.maxPlaytime)
+      : null
+
   return {
+    categories: (filters.categories ?? "")
+      .split(",")
+      .map((category) => category.trim())
+      .filter(Boolean),
     excludedGameIds: [],
     fitness:
       filters.fit === "ok"
         ? "bestOrRecommended"
         : "bestOnly",
+    interactionType,
     maxWeight:
       filters.light === "on" ? LIGHT_MAX_WEIGHT : null,
+    maxPlaytime:
+      maxPlaytimeValue !== null &&
+      Number.isFinite(maxPlaytimeValue)
+        ? maxPlaytimeValue
+        : null,
     personIds: [...personIds],
     playerCount: tableSize(personIds, guestCount),
     rulesKnown:

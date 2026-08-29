@@ -111,6 +111,34 @@ try {
     ok('…so the filters render', Boolean(await page.$('#tonight-filters')));
     ok('…and there is NO queue chooser on Pick', !(await page.$('#tonight-queue')));
 
+    const boardGameFilterLabels = await page.$$eval('#tonight-filters .tfilterlbl', (els) =>
+      els.map((el) => el.textContent?.trim() ?? ''),
+    );
+    ok(
+      'the Board Game Picker filter contract is visible',
+      JSON.stringify(boardGameFilterLabels) ===
+        JSON.stringify([
+          'Player-count fit',
+          'Knows the rules',
+          'Interaction type',
+          'Maximum playtime',
+          'Categories',
+          'Keep it light',
+        ]),
+      JSON.stringify(boardGameFilterLabels),
+    );
+    ok('interaction type uses the shared picker', Boolean(await page.$('#tonight-interactionType')));
+    ok('maximum playtime uses the shared picker', Boolean(await page.$('#tonight-maxPlaytime')));
+    ok('categories uses a multi-select control', Boolean(await page.$('#tonight-categories')));
+
+    const categoriesResponse = await fetch(`${server.base}/api/board-games/categories`);
+    const categoriesBody = (await categoriesResponse.json()) as { categories?: unknown };
+    ok(
+      'the category endpoint answers the owner vocabulary',
+      categoriesResponse.ok && Array.isArray(categoriesBody.categories),
+      JSON.stringify(categoriesBody),
+    );
+
     await page.click(tile('Reading'));
     await page.waitForTimeout(300);
     ok('reading starts on Queues', (await checkedIn('#tonight-mode')) === 'Queues');
