@@ -42,7 +42,8 @@ export function Toolbar() {
   const navigate = useNavigate()
   const { data, reg } = useStore()
   const people = usePeople()
-  const { collapsed, filter } = useUi()
+  const { collapsed, filter, hasCollapsePreference } =
+    useUi()
   const [openMenu, setOpenMenu] = useState<number | null>(
     null,
   )
@@ -65,7 +66,9 @@ export function Toolbar() {
   // half was listed on the Rules page instead.
   const ids = curatedIds(data)
   const isAllCollapsed =
-    ids.length > 0 && ids.every((id) => collapsed.has(id))
+    ids.length > 0 &&
+    (!hasCollapsePreference ||
+      ids.every((id) => collapsed.has(id)))
 
   const libTitle = (sectionId: number) =>
     (reg?.libraries || []).find((x) => x.id === sectionId)
