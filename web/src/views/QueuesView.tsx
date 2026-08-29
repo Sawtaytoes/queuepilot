@@ -416,15 +416,12 @@ function Shelf({
           ) : null}{" "}
           <span className="chev">›</span>
         </Link>
-        {/* THE LIST INHERITS THE TRAYS. Required names come first, and optional names follow —
-            the queue list draws the same audience distinction as the editor without adding a
-            face marker to this already-dense heading. It is now the only thing telling two
-            "Movies & Shows" queues apart
-            (decision `2026-08-25-the-queue-editor-is-two-trays-not-a-sentence-or-a-roster`
-            §3). */}
+        {/* THE LIST INHERITS THE TRAYS. Required people come first, and optional people follow.
+            The shared avatar badge and visible name tell two same-activity queues apart. The
+            heading's content is baseline-aligned so the chevron, badges and names read as one
+            row. */}
         <PeopleRow
           groups={groups}
-          isFaceVisible={false}
           members={members}
           people={people}
         />

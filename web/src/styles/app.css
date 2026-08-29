@@ -630,7 +630,7 @@ button {
 .shelf h2 {
   margin: 0 0 10px;
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 2px;
 }
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
@@ -660,6 +660,7 @@ button {
   padding: 4px 2px;
   display: inline-flex;
   align-items: baseline;
+  line-height: 1;
   gap: 10px;
 }
 .shelf h2 .open:hover {
@@ -683,7 +684,9 @@ button {
 }
 .shelf h2 .chev {
   color: var(--color-intent-accent-solid);
-  font-size: 1.3rem;
+  font-size: 1.05rem;
+  line-height: 1;
+  transform: translateY(0.06em);
 }
 .shelf h2 .shelfspacer {
   flex: 1;
@@ -4265,7 +4268,7 @@ body.rowdragging {
 
 .qpeople {
   display: inline-flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   flex-wrap: wrap;
   min-inline-size: 0;
