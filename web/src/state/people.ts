@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react"
 
 import { api } from "../lib/api"
 import type {
+  GroupRosterMember,
   PeopleResponse,
   QueueMember,
   QueuePeopleResponse,
@@ -9,10 +10,10 @@ import type {
 import { uiBusy } from "./busy"
 
 /**
- * The people slice — the roster, every group's rule, and every queue's two trays.
+ * The people slice — the roster, every group's rule, and every queue's audience.
  *
  * A slice of its own rather than a field on `state/store.ts`, for the reason that file's own
- * header gives about search input: the queue editor writes trays on every drag, and putting
+ * header gives about search input: the queue editor writes audience changes on every move, and putting
  * them in the main snapshot would re-render every shelf and every poster on each one. The main
  * store stays the thing `uiBusy()` reads all at once.
  *
@@ -24,7 +25,7 @@ import { uiBusy } from "./busy"
 export type PeopleSnapshot = {
   people: PeopleResponse["people"]
   groups: PeopleResponse["groups"]
-  /** Set id -> its two trays. A set with no entry has nobody on it, which is legal and is what
+  /** Set id -> its required and optional audience rows. A set with no entry has nobody on it, which is legal and is what
    *  "Anybody" on a card means. */
   byQueue: Record<string, QueueMember[]>
   /** False until the first fetch lands, so a card can tell "nobody yet" from "not asked". */
@@ -106,9 +107,9 @@ export async function refreshPeople(): Promise<boolean> {
 }
 
 /**
- * Write one queue's trays, optimistically.
+ * Write one queue's audience, optimistically.
  *
- * Optimistic because a drag that waits for a round trip before the card moves reads as a drag
+ * Optimistic because a move that waits for a round trip before the row moves reads as a move
  * that failed. The server's answer replaces the guess, so a refusal — an unknown member, a
  * group offering two provider profiles — snaps the card back rather than leaving the screen
  * disagreeing with the store.
@@ -154,7 +155,7 @@ export const queuePeople = (setId: string): QueueMember[] =>
 // or renaming somebody meant editing YAML on the appliance and restarting the app. These
 // writes now live inside the app.
 //
-// ⚠️ **NOT optimistic, unlike `saveQueuePeople` above.** A tray drag is a gesture whose whole
+// ⚠️ **NOT optimistic, unlike `saveQueuePeople` above.** An audience move is a gesture whose whole
 // point is that the card moves NOW, and the round trip is the only thing between two states
 // the caller can already see. These three are form submits behind a button: the answer is a
 // server-generated id, a refused blank name or a list of what a delete un-filed, and guessing
@@ -198,4 +199,63 @@ export async function removePerson(id: string): Promise<{
   }>("DELETE", `/api/people/${encodeURIComponent(id)}`)
   await loadPeople()
   return answer.unfiled
+}
+
+// ── People-group editor writes ─────────────────────────────────────────────────────────── //
+
+/** Create the stored group shell. Its people rule is written separately by the editor. */
+export async function createPeopleGroup(
+  label: string,
+): Promise<string> {
+  const answer = await api<{ id: string }>(
+    "POST",
+    "/api/groups",
+    { label },
+  )
+  return answer.id
+}
+
+/** Rename only. The group keeps its provider profile and set claims. */
+export async function renamePeopleGroup(
+  id: string,
+  label: string,
+): Promise<void> {
+  await api(
+    "PATCH",
+    `/api/groups/${encodeURIComponent(id)}`,
+    { label },
+  )
+}
+
+/** The editor sends the complete people rule so removing a person is expressible. */
+export async function savePeopleGroupMembership(
+  id: string,
+  minPresent: number | null,
+  roster: readonly Pick<
+    GroupRosterMember,
+    "personId" | "role"
+  >[],
+): Promise<void> {
+  await api(
+    "PUT",
+    `/api/groups/${encodeURIComponent(id)}/membership`,
+    {
+      minPresent,
+      roster: roster.map((member) => ({
+        personId: member.personId,
+        role: member.role,
+      })),
+    },
+  )
+}
+
+/** Delete the group and the queue/group-roster references it owns. */
+export async function deletePeopleGroup(
+  id: string,
+): Promise<void> {
+  await api(
+    "DELETE",
+    `/api/groups/${encodeURIComponent(id)}`,
+  )
+  await loadPeople()
 }

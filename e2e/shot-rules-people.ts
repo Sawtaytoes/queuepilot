@@ -9,7 +9,7 @@
 //   2. `editor`   `/channels/shorts` with the ⚙ Configure modal open. On main the modal has
 //                 Name, Behavior, Kind tag and then goes straight to the libraries — there is
 //                 nowhere at all to put a person, which is what the owner reported. On the
-//                 branch the three trays sit under Kind tag.
+//                 branch the vertical audience list sits under Kind tag.
 //
 // The BEFORE run is expected to find no faces and no `#dyn-people`. It says so on stdout
 // rather than failing — that is the state it is documenting.
@@ -136,7 +136,7 @@ try {
   console.log(
     trays === 0
       ? 'the rules editor has no people trays — the BEFORE state'
-      : 'the rules editor draws the three trays',
+      : 'the rules editor draws the vertical audience list',
   );
 
   await ctx.close();

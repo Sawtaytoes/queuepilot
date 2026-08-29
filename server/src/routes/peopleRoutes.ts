@@ -65,7 +65,7 @@ import { readBody } from './readBody.js';
 
 /**
  * The roster and every group's rule, in one call — what the Tonight checklist and the queue
- * editor's three trays are both built from. Two endpoints would let the trays paint a person
+ * editor's audience list is built from. Two endpoints would let the list paint a person
  * the rules no longer know about.
  *
  * `people` keeps the shape WP-6 shipped, so both screens hold one contract; WP-5 adds `groups`

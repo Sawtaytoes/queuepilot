@@ -156,6 +156,29 @@ try {
         ? `the rename round-tripped — the list now reads ${JSON.stringify(names.slice(0, 3))}`
         : `⚠️ the rename did not stick — ${JSON.stringify(names.slice(0, 3))}`,
     );
+
+    // ── the people-group rule editor ────────────────────────────────────────────────
+    // The old People modal exposed no way to edit a group's roster. The entry now opens a
+    // second modal with the rule summary and one Required / May join / Not in group control
+    // for every person.
+    const groupsEdit = await page.$('#groupsedit');
+    if (groupsEdit) {
+      await groupsEdit.click();
+      await page.waitForSelector('#groupsmodal', { timeout: 15000 });
+      await page.waitForTimeout(900);
+      await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-groups.png` });
+      const groupCount = await page.$$eval('#groupsmodal .grouppick', (n) => n.length);
+      const ruleCount = await page.$$eval('#groupsmodal .grouprulesummary', (n) => n.length);
+      const memberControls = await page.$$eval('#groupsmodal .groupmemberchoices', (n) => n.length);
+      console.log(`${groupCount} editable people groups, ${ruleCount} visible rule, ${memberControls} member controls`);
+      const savedGroup = await page.$('#groupsmodal .grouppick');
+      await savedGroup?.click();
+      await page.waitForTimeout(400);
+      await page.click('#groupsmodal .modalx');
+      await page.waitForTimeout(500);
+    } else {
+      console.log('no people-group editor entry found');
+    }
   }
   await ctx.close();
 
