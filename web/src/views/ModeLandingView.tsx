@@ -1,12 +1,13 @@
 import { ColorSchemeSwitcher } from "@charcuterie/ui"
 import { Link } from "react-router"
 
+import { PRIMARY_NAVIGATION_ITEMS } from "../components/PrimaryNavigation"
 import { schemeIcons } from "../components/SchemeIcons"
 
-/**
- * The app entry point. QueuePilot has two different jobs, so the root route names both
- * before it opens either one.
- */
+const [watchPlayItem, picksItem, ...managementItems] =
+  PRIMARY_NAVIGATION_ITEMS
+
+/** The front door answers what to do next. It does not render the work itself. */
 export function ModeLandingView() {
   return (
     <main className="mode-landing" id="mode-landing">
@@ -15,106 +16,88 @@ export function ModeLandingView() {
       </div>
 
       <div className="mode-landing-intro">
-        <h1>QueuePilot</h1>
-        <p>Choose a mode.</p>
+        <p className="mode-landing-eyebrow">QueuePilot</p>
+        <h1>What do you want to do?</h1>
+        <p>
+          Start something, or go directly to one management
+          area.
+        </p>
       </div>
 
-      <div className="mode-landing-cards">
+      <div className="mode-primary-actions">
         <Link
-          className="mode-card mode-card-admin"
-          id="mode-admin"
-          to="/admin"
+          className="mode-primary-action"
+          to={watchPlayItem.href}
         >
-          <div className="mode-card-heading">
-            <AdminIcon />
-            <h2>Admin</h2>
-          </div>
-          <p>
-            Manage queues, rules, people, and the content
-            QueuePilot can choose.
-          </p>
+          <span className="mode-primary-icon">
+            {watchPlayItem.icon}
+          </span>
+          <span>
+            <strong>What to Watch/Play</strong>
+            <small>
+              Choose who is here and get one answer.
+            </small>
+          </span>
+          <span
+            aria-hidden="true"
+            className="mode-action-arrow"
+          >
+            →
+          </span>
         </Link>
 
         <Link
-          className="mode-card mode-card-watch-play"
-          id="mode-watch-play"
-          to="/what-to-watch-play"
+          className="mode-primary-action"
+          to={picksItem.href}
         >
-          <div className="mode-card-heading">
-            <WatchPlayIcon />
-            <h2>What to Watch/Play</h2>
-          </div>
-          <p>
-            Choose what to watch or play, then start it.
-          </p>
+          <span className="mode-primary-icon">
+            {picksItem.icon}
+          </span>
+          <span>
+            <strong>Open a queue</strong>
+            <small>
+              Browse your saved picks and open one queue.
+            </small>
+          </span>
+          <span
+            aria-hidden="true"
+            className="mode-action-arrow"
+          >
+            →
+          </span>
         </Link>
       </div>
+
+      <section
+        className="mode-management"
+        aria-labelledby="manage-heading"
+      >
+        <div className="mode-management-heading">
+          <h2 id="manage-heading">Manage</h2>
+          <p>Change one part of QueuePilot.</p>
+        </div>
+
+        <div className="mode-management-links">
+          {[picksItem, ...managementItems].map((item) => (
+            <Link
+              className="mode-management-link"
+              key={item.href}
+              to={item.href}
+            >
+              <span className="mode-management-icon">
+                {item.icon}
+              </span>
+              <span>{item.label}</span>
+              <span
+                aria-hidden="true"
+                className="mode-management-arrow"
+              >
+                ›
+              </span>
+            </Link>
+          ))}
+        </div>
+      </section>
     </main>
-  )
-}
-
-function AdminIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="mode-card-icon"
-      fill="none"
-      focusable="false"
-      height="36"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="36"
-    >
-      <path d="M4 6h16M4 12h16M4 18h16" />
-      <circle
-        cx="8"
-        cy="6"
-        fill="currentColor"
-        r="2"
-        stroke="none"
-      />
-      <circle
-        cx="16"
-        cy="12"
-        fill="currentColor"
-        r="2"
-        stroke="none"
-      />
-      <circle
-        cx="10"
-        cy="18"
-        fill="currentColor"
-        r="2"
-        stroke="none"
-      />
-    </svg>
-  )
-}
-
-function WatchPlayIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="mode-card-icon"
-      fill="none"
-      focusable="false"
-      height="36"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="2"
-      viewBox="0 0 24 24"
-      width="36"
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path
-        d="m10 8 6 4-6 4V8Z"
-        fill="currentColor"
-        stroke="none"
-      />
-    </svg>
   )
 }

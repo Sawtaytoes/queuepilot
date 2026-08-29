@@ -46,8 +46,13 @@ describe("the route table", () => {
     expect(match("/").route).toBe("home")
   })
 
-  test("/admin is the management page", () => {
+  test("/admin is its own legacy route", () => {
     expect(match("/admin").route).toBe("admin")
+  })
+
+  test("the focused people page and unlinked overview have routes", () => {
+    expect(match("/people").route).toBe("people")
+    expect(match("/overview").route).toBe("overview")
   })
 
   test("a retired group page is its own legacy route", () => {
@@ -188,7 +193,7 @@ describe("labelForPath", () => {
     expect(labelForPath("/tonight")).toBe(
       "‹ What to Watch/Play",
     )
-    expect(labelForPath("/admin")).toBe("‹ Admin")
+    expect(labelForPath("/admin")).toBe("‹ QueuePilot")
     expect(labelForPath("/")).toBe("‹ QueuePilot")
   })
 })

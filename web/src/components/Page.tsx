@@ -1,9 +1,17 @@
-import { useEffect } from "react"
+import {
+  IconButton,
+  Main,
+  Nav,
+  Rail,
+  Shell,
+  useNavLayout,
+} from "@charcuterie/ui"
+import { useEffect, useState } from "react"
+import { useLocation } from "react-router"
 
-import { useMediaQuery } from "../hooks/useMediaQuery"
 import { Header } from "./Header"
 import { NowPlayingBar } from "./NowPlayingBar"
-import { Toolbar } from "./Toolbar"
+import { PRIMARY_NAVIGATION_ITEMS } from "./PrimaryNavigation"
 
 /**
  * ONE PAGE OF THE APP: its chrome, and the view under it.
@@ -31,6 +39,8 @@ type Props = {
   heading: string
   isSubHidden: boolean
   sub: string
+  /** The section to mark current when this route is a detail address such as `/q/<id>`. */
+  navigationHref?: string
 }
 
 /**
@@ -78,6 +88,7 @@ export function Page({
   editableSetId,
   heading,
   isSubHidden,
+  navigationHref,
   sub,
 }: Props) {
   usePageChrome({
@@ -86,35 +97,131 @@ export function Page({
     isNameEditable: Boolean(editableSetId),
   })
 
-  // Wide View: the toolbar lives in the sticky header. Narrow View: at the top of the Home
-  // content, because the header is far too tight to carry it — Bob's explicit ask. The one
-  // page that wants it in the content (`QueuesPage`) asks the same question and puts a
-  // `Toolbar` there, so exactly one is ever mounted.
-  //
-  // `isNarrow`, not `isMobile`: the trigger is the WIDTH and nothing else. A docked Surface
-  // is touch-capable and never narrow; a half-width desktop window is the Narrow View on a
-  // machine nobody would call mobile.
-  // (root decision `2026-08-17-the-cramped-layout-is-the-narrow-view-not-mobile`)
-  const isNarrow = useMediaQuery("(max-width: 760px)")
+  const { pathname } = useLocation()
+  const navLayout = useNavLayout({
+    storageKey: "queuepilot-primary-navigation",
+  })
+  const [isNavVisible, setIsNavVisible] = useState(false)
+  const activeHref = navigationHref ?? pathname
+
+  useEffect(() => {
+    setIsNavVisible(false)
+  }, [pathname])
+
+  const menuNavigation =
+    navLayout.layout === "menu" ? (
+      <Nav
+        activeHref={activeHref}
+        isVisible={isNavVisible}
+        items={PRIMARY_NAVIGATION_ITEMS}
+        label="QueuePilot sections"
+        layout="menu"
+        onDismiss={() => setIsNavVisible(false)}
+        trigger={
+          <IconButton
+            appearance="outline"
+            label="Open navigation"
+            onClick={() =>
+              setIsNavVisible((value) => !value)
+            }
+          >
+            <MenuIcon />
+          </IconButton>
+        }
+      />
+    ) : null
 
   return (
-    <>
+    <Shell contentWidth="full">
       <Header
         back={back}
         editableSetId={editableSetId}
         heading={heading}
         isSubHidden={isSubHidden}
+        navigation={menuNavigation}
         sub={sub}
-      >
-        {isNarrow ? null : <Toolbar />}
-      </Header>
+      ></Header>
 
-      {/* Directly under the header, and only while something is on screen: the owner asked
-          for the controls "at the top". It renders null when nothing is playing, so it costs
-          no space the rest of the time. */}
-      <NowPlayingBar />
+      {navLayout.layout === "menu" ? null : (
+        <Rail
+          label="QueuePilot sections"
+          landmark="navigation"
+          style={{
+            width: navLayout.isCollapsed
+              ? "5rem"
+              : undefined,
+          }}
+        >
+          <Nav
+            activeHref={activeHref}
+            items={PRIMARY_NAVIGATION_ITEMS}
+            label="QueuePilot sections"
+            layout={navLayout.layout}
+          />
+          <div className="mt-auto hidden justify-end md:flex">
+            <IconButton
+              appearance="ghost"
+              label={
+                navLayout.isCollapsed
+                  ? "Expand navigation"
+                  : "Collapse navigation"
+              }
+              onClick={navLayout.toggle}
+            >
+              <CollapseIcon
+                isCollapsed={navLayout.isCollapsed}
+              />
+            </IconButton>
+          </div>
+        </Rail>
+      )}
 
-      {children}
-    </>
+      <Main contentWidth="full">
+        {/* Directly under the header, and only while something is on screen. */}
+        <NowPlayingBar />
+        {children}
+      </Main>
+    </Shell>
+  )
+}
+
+function MenuIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  )
+}
+
+function CollapseIcon({
+  isCollapsed,
+}: {
+  isCollapsed: boolean
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="20"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="20"
+    >
+      <path
+        d={isCollapsed ? "m9 6 6 6-6 6" : "m15 6-6 6 6 6"}
+      />
+    </svg>
   )
 }

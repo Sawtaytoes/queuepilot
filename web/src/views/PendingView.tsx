@@ -573,7 +573,7 @@ export function PendingView() {
   }
 
   return (
-    <main className="view" id="pending">
+    <div className="view" id="pending">
       <div className="pendinghead">
         <p className="muted">
           Added to the libraries below, and{" "}
@@ -969,6 +969,6 @@ export function PendingView() {
           </div>
         </>
       )}
-    </main>
+    </div>
   )
 }

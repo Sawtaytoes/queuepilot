@@ -211,7 +211,7 @@ export function ResultView({
   const rest = cards.rest
 
   return (
-    <main className="view" id="result">
+    <div className="view" id="result">
       {error ? (
         <p className="subhint" role="alert">
           Could not read that: {error}
@@ -375,7 +375,7 @@ export function ResultView({
           ) : null}
         </>
       )}
-    </main>
+    </div>
   )
 }
 

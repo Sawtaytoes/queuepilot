@@ -96,7 +96,7 @@ try {
     };
 
     // 1. Play landing (desktop).
-    await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.playcard', { timeout: 30000 });
     await page.waitForTimeout(600);
     await shot('01-play');
@@ -160,7 +160,7 @@ try {
     await shot('09-phone-nav-menu');
     await page.keyboard.press('Escape').catch(() => {});
 
-    await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
     await page.waitForSelector('.playcard', { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(800);
     await shot('10-phone-play');

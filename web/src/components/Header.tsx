@@ -3,6 +3,7 @@ import {
   ButtonLink,
   ColorSchemeSwitcher,
   IconButton,
+  Header as PageFrameHeader,
   ProgressBar,
 } from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
@@ -11,7 +12,7 @@ import { useEffect, useRef, useState } from "react"
  * a left "nav" menu (back / rename) and a right "actions" menu (undo / redo / scheme).
  * These are the MOBILE mechanism — on desktop the same controls sit inline on the bar
  * and the toggles are `display:none`. */
-type OpenMenu = "nav" | "actions" | null
+type OpenMenu = "actions" | null
 
 import { api } from "../lib/api"
 import { busy } from "../state/busy"
@@ -47,6 +48,7 @@ type Props = {
   back: { target: string; label: string } | null
   /** The set whose label the heading edits, or null. */
   editableSetId: string | null
+  navigation?: React.ReactNode
   children?: React.ReactNode
 }
 
@@ -56,6 +58,7 @@ export function Header({
   editableSetId,
   heading,
   isSubHidden,
+  navigation,
   sub,
 }: Props) {
   const { history, isRevalidating, status } = useStore()
@@ -210,85 +213,70 @@ export function Header({
   }
 
   return (
-    <header id="apphead" ref={headerRef}>
-      <div className="bar">
-        {/* Narrow-View-only left toggle → the nav popover (back / rename). Hidden when it
-            would open empty (the Play landing has neither). Desktop shows #back inline. */}
-        <IconButton
-          appearance="outline"
-          aria-expanded={openMenu === "nav"}
-          aria-haspopup="menu"
-          className="menu-toggle"
-          hidden={!back && !editableSetId}
-          id="menu-nav"
-          intent="neutral"
-          label="Navigation menu"
-          onClick={() =>
-            setOpenMenu((m) => (m === "nav" ? null : "nav"))
-          }
-        >
-          ☰
-        </IconButton>
-        {/* "‹ Play" goes to a page, so it is a link too — same reasoning as the landing rows.
+    <PageFrameHeader id="apphead" ref={headerRef}>
+      <div className="app-header-content">
+        <div className="bar">
+          {navigation}
+          {/* "‹ Play" goes to a page, so it is a link too — same reasoning as the landing rows.
             `href` falls back to `/` only while `hidden`, since an anchor with no href is not
             focusable and would silently drop out of the tab order the moment `back` is null.
             A `ButtonLink` rather than a router `Link` in a borrowed skin: it is still an
             `<a href>` (middle-click, ⌘-click, "copy link address") and it still routes,
             because `main.tsx` injects react-router into the link seam. */}
-        <ButtonLink
-          appearance="outline"
-          hidden={!back}
-          href={back?.target ?? "/"}
-          id="back"
-          intent="neutral"
-        >
-          {back?.label ?? "← All queues"}
-        </ButtonLink>
-        <h1 id="heading" onClick={begin}>
-          {isEditing ? (
-            <input
-              id="headingedit"
-              maxLength={60}
-              onBlur={() => void finish(true)}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  void finish(true)
-                } else if (e.key === "Escape") {
-                  e.preventDefault()
-                  void finish(false)
-                }
-              }}
-              ref={inputRef}
-              type="text"
-              value={draft}
-            />
-          ) : (
-            heading
-          )}
-        </h1>
-        <Tip label="Rename">
-          <IconButton
+          <ButtonLink
             appearance="outline"
-            className="namepen"
-            hidden={!editableSetId}
-            id="editname"
+            hidden={!back}
+            href={back?.target ?? "/"}
+            id="back"
             intent="neutral"
-            label="Rename"
-            onClick={begin}
           >
-            ✎
-          </IconButton>
-        </Tip>
-        {/* The desktop chrome cluster: undo / redo / scheme / the Home toolbar slot,
+            {back?.label ?? "← All queues"}
+          </ButtonLink>
+          <h1 id="heading" onClick={begin}>
+            {isEditing ? (
+              <input
+                id="headingedit"
+                maxLength={60}
+                onBlur={() => void finish(true)}
+                onChange={(e) => setDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    void finish(true)
+                  } else if (e.key === "Escape") {
+                    e.preventDefault()
+                    void finish(false)
+                  }
+                }}
+                ref={inputRef}
+                type="text"
+                value={draft}
+              />
+            ) : (
+              heading
+            )}
+          </h1>
+          <Tip label="Rename">
+            <IconButton
+              appearance="outline"
+              className="namepen"
+              hidden={!editableSetId}
+              id="editname"
+              intent="neutral"
+              label="Rename"
+              onClick={begin}
+            >
+              <PencilIcon />
+            </IconButton>
+          </Tip>
+          {/* The desktop chrome cluster: undo / redo / scheme / the Home toolbar slot,
             pushed right with `margin-left: auto`. The h1 has `flex:1; min-width:0` and
             ellipsises, so it yields to this width. In the Narrow View the whole cluster is
             `display:none` and the right popover below mirrors it — the header is far too
             tight in the Narrow View to carry it inline (that was the 300px-tall header bug).
             `ui-test` reads `#gslot-wide #tools`, so that id and its child stay put. */}
-        <div className="chrome">
-          {/* Charcuterie `IconButton`s, and this pair is the component's OWN worked example:
+          <div className="chrome">
+            {/* Charcuterie `IconButton`s, and this pair is the component's OWN worked example:
               its docstring names "plex-channels renders raw glyphs (`↶`, `↷`, `▶`, `⚙`, `≡`)
               straight into a `<button>`" as the reason it exists. `label` is required and
               becomes the `aria-label`, so the name cannot go missing the way it can on a
@@ -297,162 +285,125 @@ export function Header({
               `.ghost` is Charcuterie's `outline`; `disabled` becomes `isDisabled`, which is
               the prop `ButtonProps` deliberately keeps instead of the native one.
               (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
-          <Tip label="Undo last change">
-            <IconButton
-              appearance="outline"
-              id="undo"
-              intent="neutral"
-              isDisabled={!history.undo}
-              label="Undo last change"
-              onClick={() => void runHistory("undo")}
-            >
-              ↶
-            </IconButton>
-          </Tip>
-          <Tip label="Redo">
-            <IconButton
-              appearance="outline"
-              id="redo"
-              intent="neutral"
-              isDisabled={!history.redo}
-              label="Redo"
-              onClick={() => void runHistory("redo")}
-            >
-              ↷
-            </IconButton>
-          </Tip>
-          {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
+            <Tip label="Undo last change">
+              <IconButton
+                appearance="outline"
+                id="undo"
+                intent="neutral"
+                isDisabled={!history.undo}
+                label="Undo last change"
+                onClick={() => void runHistory("undo")}
+              >
+                <UndoIcon />
+              </IconButton>
+            </Tip>
+            <Tip label="Redo">
+              <IconButton
+                appearance="outline"
+                id="redo"
+                intent="neutral"
+                isDisabled={!history.redo}
+                label="Redo"
+                onClick={() => void runHistory("redo")}
+              >
+                <RedoIcon />
+              </IconButton>
+            </Tip>
+            {/* Follows the OS light/dark scheme; cycles light → dark → system, persists
               the pick to localStorage (`charcuterie-scheme`) and writes `data-scheme`
               on `<html>`. */}
-          <ColorSchemeSwitcher icons={schemeIcons} />
-          <div id="gslot-wide">{children}</div>
-        </div>
+            <ColorSchemeSwitcher icons={schemeIcons} />
+            <div id="gslot-wide">{children}</div>
+          </div>
 
-        {/* Narrow-View-only right toggle → the actions popover. */}
-        <IconButton
-          appearance="outline"
-          aria-expanded={openMenu === "actions"}
-          aria-haspopup="menu"
-          className="menu-toggle"
-          id="menu-actions"
-          intent="neutral"
-          label="Actions menu"
-          onClick={() =>
-            setOpenMenu((m) =>
-              m === "actions" ? null : "actions",
-            )
-          }
-        >
-          ⋮
-        </IconButton>
+          {/* Narrow-View-only right toggle → the actions popover. */}
+          <IconButton
+            appearance="outline"
+            aria-expanded={openMenu === "actions"}
+            aria-haspopup="menu"
+            className="menu-toggle"
+            id="menu-actions"
+            intent="neutral"
+            label="Actions menu"
+            onClick={() =>
+              setOpenMenu((m) =>
+                m === "actions" ? null : "actions",
+              )
+            }
+          >
+            <MoreIcon />
+          </IconButton>
 
-        {/* LEFT popover (nav). Mounted in both states so it can transition; `.hmenu` is
-            `display:none` on desktop entirely. */}
-        <div
-          aria-hidden={openMenu !== "nav"}
-          className={`hmenu hmenu-left${openMenu === "nav" ? " open" : ""}`}
-          role="menu"
-        >
-          {back ? (
-            <ButtonLink
-              appearance="outline"
-              className="hmenu-item"
-              href={back.target}
-              intent="neutral"
-              isFullWidth
-              onClick={() => setOpenMenu(null)}
-              role="menuitem"
-            >
-              {back.label}
-            </ButtonLink>
-          ) : null}
-          {editableSetId ? (
+          {/* RIGHT popover (actions) — the Narrow View mirror of `.chrome`. Undo/redo here carry
+            no id: the canonical `#undo`/`#redo` live inline in `.chrome` (the e2e suite
+            clicks those at desktop width), and duplicate ids would be invalid. */}
+          <div
+            aria-hidden={openMenu !== "actions"}
+            className={`hmenu hmenu-right${openMenu === "actions" ? " open" : ""}`}
+            role="menu"
+          >
             <Button
               appearance="outline"
               className="hmenu-item"
               intent="neutral"
+              isDisabled={!history.undo}
               isFullWidth
               onClick={() => {
                 setOpenMenu(null)
-                begin()
+                void runHistory("undo")
               }}
               role="menuitem"
             >
-              ✎ Rename
+              ↶ Undo
             </Button>
-          ) : null}
-        </div>
-
-        {/* RIGHT popover (actions) — the Narrow View mirror of `.chrome`. Undo/redo here carry
-            no id: the canonical `#undo`/`#redo` live inline in `.chrome` (the e2e suite
-            clicks those at desktop width), and duplicate ids would be invalid. */}
-        <div
-          aria-hidden={openMenu !== "actions"}
-          className={`hmenu hmenu-right${openMenu === "actions" ? " open" : ""}`}
-          role="menu"
-        >
-          <Button
-            appearance="outline"
-            className="hmenu-item"
-            intent="neutral"
-            isDisabled={!history.undo}
-            isFullWidth
-            onClick={() => {
-              setOpenMenu(null)
-              void runHistory("undo")
-            }}
-            role="menuitem"
-          >
-            ↶ Undo
-          </Button>
-          <Button
-            appearance="outline"
-            className="hmenu-item"
-            intent="neutral"
-            isDisabled={!history.redo}
-            isFullWidth
-            onClick={() => {
-              setOpenMenu(null)
-              void runHistory("redo")
-            }}
-            role="menuitem"
-          >
-            ↷ Redo
-          </Button>
-          <div className="hmenu-scheme">
-            <ColorSchemeSwitcher icons={schemeIcons} />
+            <Button
+              appearance="outline"
+              className="hmenu-item"
+              intent="neutral"
+              isDisabled={!history.redo}
+              isFullWidth
+              onClick={() => {
+                setOpenMenu(null)
+                void runHistory("redo")
+              }}
+              role="menuitem"
+            >
+              ↷ Redo
+            </Button>
+            <div className="hmenu-scheme">
+              <ColorSchemeSwitcher icons={schemeIcons} />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* The info line: the sub help/now-playing text, and the status toast beside it.
+        {/* The info line: the sub help/now-playing text, and the status toast beside it.
           `#status` used to sit on the `.bar` pinned to `width: 9ch`, so a real message
           ("Play failed on … Connection refused") wrapped into a ~12-line column that
           forced the header ~300px tall. Here it shares the full-width row with `#sub`,
           each on ONE ellipsised line (full text on hover via a `Tooltip`), so the header
           height is stable no matter the message. Kept as two elements so `#sub` always
           carries its own text (channels-test reads it) independent of any active toast. */}
-      <div className="infoline">
-        <p className="sub" hidden={isSubHidden} id="sub">
-          {sub}
-        </p>
-        <Tip label={status.msg}>
-          <span
-            id="status"
-            style={{
-              color:
-                status.kind === "err"
-                  ? "var(--color-intent-danger-content)"
-                  : status.kind === "ok"
-                    ? "var(--color-intent-success-content)"
-                    : "var(--color-content-muted)",
-            }}
-          >
-            {status.msg}
-          </span>
-        </Tip>
-      </div>
-      {/* PHASE 3 in progress: the page is painted from cache and the providers are being
+        <div className="infoline">
+          <p className="sub" hidden={isSubHidden} id="sub">
+            {sub}
+          </p>
+          <Tip label={status.msg}>
+            <span
+              id="status"
+              style={{
+                color:
+                  status.kind === "err"
+                    ? "var(--color-intent-danger-content)"
+                    : status.kind === "ok"
+                      ? "var(--color-intent-success-content)"
+                      : "var(--color-content-muted)",
+              }}
+            >
+              {status.msg}
+            </span>
+          </Tip>
+        </div>
+        {/* PHASE 3 in progress: the page is painted from cache and the providers are being
           re-read behind it. A line at the top edge of the header rather than a chip beside
           the title, because the tiles that are about to change are BELOW it and at every
           scroll position — the owner asked to be told before they move, not after.
@@ -461,15 +412,86 @@ export function Header({
           is one request that either lands or does not), and an empty determinate bar reads as
           stalled. It is REMOVED from the DOM rather than hidden, so there is no permanent
           rule under the header that a later layout change has to work around. */}
-      {isRevalidating ? (
-        <ProgressBar
-          id="revalidating"
-          intent="accent"
-          isIndeterminate
-          label="Checking Plex and Kavita for changes"
-          size="sm"
-        />
-      ) : null}
-    </header>
+        {isRevalidating ? (
+          <ProgressBar
+            id="revalidating"
+            intent="accent"
+            isIndeterminate
+            label="Checking Plex and Kavita for changes"
+            size="sm"
+          />
+        ) : null}
+      </div>
+    </PageFrameHeader>
+  )
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z" />
+    </svg>
+  )
+}
+
+function UndoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="m9 7-5 5 5 5M4 12h9a6 6 0 0 1 6 6" />
+    </svg>
+  )
+}
+
+function RedoIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="18"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="2"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <path d="m15 7 5 5-5 5M20 12h-9a6 6 0 0 0-6 6" />
+    </svg>
+  )
+}
+
+function MoreIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height="18"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <circle cx="12" cy="5" r="1.7" />
+      <circle cx="12" cy="12" r="1.7" />
+      <circle cx="12" cy="19" r="1.7" />
+    </svg>
   )
 }

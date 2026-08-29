@@ -24,7 +24,7 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
 page.on('request', (r) => { if (r.url().includes('/api/') && r.method() !== 'GET') console.log('  >>', r.method(), r.url().replace(BASE, ''), (r.postData() || '').slice(0, 200)); });
 
-await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
 
 // 0. Landing = the Play list: Rules (2 generic) + Picks (3 anime + 3 movie wishlists).
 // no posters. (decision `2026-08-23-kind-is-picks-or-rules` — Ordered and Curated share Picks.)
@@ -92,8 +92,9 @@ ok('queue shelf headings align their content to one baseline',
     && heading.peopleAlignment === 'baseline'
     && heading.openAlignment === 'baseline'));
 
-// 2. Toolbar mounted in header on desktop.
-ok('tools in header (Wide View)', await page.$eval('#gslot-wide #tools', () => true).catch(() => false));
+// 2. The Picks controls stay with Picks instead of crowding the global header.
+ok('tools in Picks content (Wide View)', await page.$eval('#home #tools', () => true).catch(() => false));
+ok('the global header does not carry the Picks toolbar', (await page.locator('#apphead #tools').count()) === 0);
 
 // 3. Global search finds a Short; no compatible queue yet → notice.
 await page.fill('#gsearch', 'toy tinkers');
@@ -273,7 +274,7 @@ ok('K: toast auto-dismissed', (await page.textContent('#status')) === '');
 // Routing is real paths now, so an in-page `location.hash = …` is no longer a
 // navigation — `page.goto` is. The reload is harmless here: everything asserted
 // below is re-fetched from the server, and the rename above already persisted.
-await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#playgrid li[data-kind="rules"]', { timeout: 20000 });
 const dyn = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
 const picks = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));

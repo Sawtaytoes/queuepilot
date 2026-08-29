@@ -114,10 +114,11 @@ await page.waitForFunction(() => /MQTT/i.test(document.querySelector('.playmenu 
 ok('play menu shows MQTT-down message', true);
 await page.click('#heading');
 
-// Back to the Play landing; rows have play buttons; queue view has one too.
-await page.click('#back');
+// The unlinked compatibility overview still carries the card play controls while their
+// interactions move to the focused work pages; queue view has one too.
+await page.goto('http://localhost:18768/overview', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#play:not([hidden]) .playcard');
-ok('channels back out to Play landing', true);
+ok('the compatibility overview still opens', true);
 ok('landing rows have play buttons', (await page.$$('.playcard .playbtn')).length >= 5);
 await page.click('#goqueues');
 await page.waitForSelector('#home:not([hidden]) .shelf');

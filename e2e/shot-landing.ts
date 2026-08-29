@@ -77,7 +77,7 @@ try {
     await page.waitForTimeout(1800);
   };
 
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-wide.png`, fullPage: true });
 
@@ -85,13 +85,13 @@ try {
   // for it with a blank column.
   //
   // THE GROUP PAGES ARE GONE. This used to shoot `/g/bob` and `/g/younger-kids` — a group
-  // filter, and a group whose NAME was also the account its rule pools bind to. `/admin`
+  // filter, and a group whose NAME was also the account its rule pools bind to. `/overview`
   // filters by PEOPLE now and neither address exists
   // (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`), so the two
   // frames are dropped rather than pointed somewhere that only looks similar.
 
   await page.setViewportSize({ width: 390, height: 900 });
-  await page.goto(`http://localhost:${PORT}/admin`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await settle();
   await page.screenshot({ path: `__screenshots__/landing-${TAG}-narrow.png`, fullPage: true });
 
