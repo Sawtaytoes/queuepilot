@@ -222,9 +222,11 @@ function dedupeAccounts(names: readonly string[]): string[] {
 
 /** What a caller has to know about one member to decide whether a queue matches. */
 export interface ResolvedMember extends QueueMember {
-  /** For a group: the required roster and the number. For a person: just themself. */
+  /** For a group: the complete saved roster, including people marked May join. */
   people: string[];
-  /** How many of `people` count as this member being present. 1 for a person. */
+  /** For a group: only the required roster. For a person: just themself. */
+  requiredPeople: string[];
+  /** How many of `requiredPeople` count as this member being present. 1 for a person. */
   minPresent: number;
 }
 
@@ -281,7 +283,7 @@ export function queueMatchesSelection(
 
   for (const member of members) {
     if (member.role !== 'required') continue;
-    const present = member.people.filter((personId) => selected.has(personId)).length;
+    const present = member.requiredPeople.filter((personId) => selected.has(personId)).length;
     if (present < member.minPresent) return false;
   }
 

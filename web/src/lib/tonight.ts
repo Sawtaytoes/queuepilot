@@ -145,9 +145,11 @@ export type TonightMember = {
   role: MemberRole
   /** The badge's text — a person's display name, or the group's label. */
   label: string
-  /** For a GROUP: its required roster. For a PERSON: just themself. */
+  /** For a GROUP: its complete roster, including people marked May join. */
   people: readonly string[]
-  /** How many of `people` count as this member being present. 1 for a person. */
+  /** For a GROUP: its required roster. For a PERSON: just themself. */
+  requiredPeople: readonly string[]
+  /** How many of `requiredPeople` count as this member being present. 1 for a person. */
   minPresent: number
 }
 
@@ -185,9 +187,9 @@ export type TonightQueue = {
 /**
  * Turn a queue's stored trays into the shape the filter reads.
  *
- * A PERSON member is themself and counts as one. A GROUP member is its REQUIRED roster and
- * counts as `minPresent` of them — a set, a number and a spare, and collapsing any two of
- * them loses the rule.
+ * A PERSON member is themself and counts as one. A GROUP member carries its complete roster
+ * and counts `minPresent` from its required roster — a set, a number and a spare, and
+ * collapsing any two of them loses the rule.
  *
  * A group nothing knows about resolves to an EMPTY roster, and an empty required member can
  * never be satisfied, so the queue drops out of the filter rather than passing it by
@@ -208,6 +210,7 @@ export function resolveMembers(
       const required = (group?.roster ?? []).filter(
         (row) => row.role === "required",
       )
+      const roster = group?.roster ?? []
 
       return {
         id: member.id,
@@ -225,7 +228,8 @@ export function resolveMembers(
                   required.length,
                 ),
               ),
-        people: required.map((row) => row.personId),
+        people: roster.map((row) => row.personId),
+        requiredPeople: required.map((row) => row.personId),
         role: member.role,
       }
     }
@@ -238,6 +242,7 @@ export function resolveMembers(
           ?.displayName ?? member.id,
       minPresent: 1,
       people: [member.id],
+      requiredPeople: [member.id],
       role: member.role,
     }
   })
@@ -363,8 +368,8 @@ export function membersMatchPeople(
 
   for (const member of members) {
     if (member.role !== "required") continue
-    const present = member.people.filter((personId) =>
-      selected.has(personId),
+    const present = member.requiredPeople.filter(
+      (personId) => selected.has(personId),
     ).length
     if (present < member.minPresent) return false
   }

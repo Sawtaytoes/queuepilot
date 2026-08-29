@@ -52,6 +52,7 @@ const person = (
   label: id,
   minPresent: 1,
   people: [id],
+  requiredPeople: [id],
   role,
 })
 
@@ -67,6 +68,7 @@ const group = (
   label: id,
   minPresent,
   people,
+  requiredPeople: people,
   role,
 })
 
@@ -253,6 +255,33 @@ describe("the people filter", () => {
     )
   })
 
+  test("an all-optional group matches people in its roster", () => {
+    const olderKids = withPeople("older-kids-movies", [
+      {
+        id: "older-kids",
+        kind: "group",
+        label: "Older Kids",
+        minPresent: 0,
+        people: ["ada", "grace"],
+        requiredPeople: [],
+        role: "required",
+      },
+    ])
+
+    expect(queueMatchesPeople(olderKids, ["ada"])).toBe(
+      true,
+    )
+    expect(queueMatchesPeople(olderKids, ["grace"])).toBe(
+      true,
+    )
+    expect(
+      queueMatchesPeople(olderKids, ["ada", "grace"]),
+    ).toBe(true)
+    expect(queueMatchesPeople(olderKids, ["linus"])).toBe(
+      false,
+    )
+  })
+
   test("a person beside a group has to be there as well", () => {
     const family = withPeople("family-movies", [
       person("ada"),
@@ -337,12 +366,13 @@ describe("resolveMembers", () => {
         label: "Ada",
         minPresent: 1,
         people: ["ada"],
+        requiredPeople: ["ada"],
         role: "required",
       },
     ])
   })
 
-  test("a group is its REQUIRED roster, carrying its own count", () => {
+  test("a group carries its full roster and its required count", () => {
     const [resolved] = resolveMembers(
       [member("group", "kids")],
       people,
@@ -351,9 +381,61 @@ describe("resolveMembers", () => {
 
     expect(resolved?.label).toBe("Kids")
     expect(resolved?.minPresent).toBe(1)
-    // The optional half is not on the queue — that is the server's own answer, and the two
-    // have to agree.
-    expect(resolved?.people).toEqual(["ada", "grace"])
+    expect(resolved?.people).toEqual([
+      "ada",
+      "grace",
+      "linus",
+    ])
+    expect(resolved?.requiredPeople).toEqual([
+      "ada",
+      "grace",
+    ])
+  })
+
+  test("an all-optional group has a usable people filter", () => {
+    const [resolved] = resolveMembers(
+      [member("group", "older-kids")],
+      people,
+      [
+        ...groups,
+        {
+          id: "older-kids",
+          label: "Older Kids",
+          minPresent: null,
+          roster: [
+            {
+              personId: "grace",
+              position: 0,
+              role: "optional",
+            },
+            {
+              personId: "linus",
+              position: 1,
+              role: "optional",
+            },
+          ],
+        },
+      ],
+    )
+
+    expect(resolved).toMatchObject({
+      minPresent: 0,
+      people: ["grace", "linus"],
+      requiredPeople: [],
+    })
+
+    const queueWithGroup = withPeople("older-kids", [
+      resolved!,
+    ])
+    expect(
+      queueMatchesPeople(queueWithGroup, ["grace"]),
+    ).toBe(true)
+    expect(
+      queueMatchesPeople(queueWithGroup, ["linus"]),
+    ).toBe(true)
+    expect(
+      queueMatchesPeople(queueWithGroup, ["ada"]),
+    ).toBe(false)
   })
 
   test("no number means ALL of them, never one", () => {
@@ -364,6 +446,10 @@ describe("resolveMembers", () => {
     )
 
     expect(resolved?.minPresent).toBe(2)
+    expect(resolved?.requiredPeople).toEqual([
+      "ada",
+      "grace",
+    ])
   })
 
   /**
