@@ -48,7 +48,7 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
           <path d="M8 9h8M8 12h8M8 15h5" />
         </NavigationIcon>
       ),
-      label: "Picks",
+      label: "Picks queues",
     },
     {
       href: "/channels",
@@ -59,7 +59,7 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
           <circle cx="15" cy="17" r="2" />
         </NavigationIcon>
       ),
-      label: "Rules",
+      label: "Rules queues",
     },
     {
       href: "/board-game-collection",

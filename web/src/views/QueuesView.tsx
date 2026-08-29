@@ -47,6 +47,7 @@ import {
   moveEntryLane,
   queueEntryActions,
   removeQueueItem,
+  setPriorityPosition,
 } from "../state/queueEntry"
 import { splitLanes } from "../state/queueView"
 import { curatedIds, useStore } from "../state/store"
@@ -233,6 +234,7 @@ function Shelf({
   const renderTile = (
     item: QueueItem,
     lane: "priority" | "random",
+    priorityPosition?: number,
   ) => {
     const face = tileFace(item)
     const isPlaying = isLive && isPlayingItem(now, item)
@@ -344,6 +346,20 @@ function Shelf({
         // (decision `2026-08-21-any-tile-in-an-editable-grid-gets-the-remove-control`)
         onRemove={() => removeQueueItem(setId, item)}
         posterCover={item.cover}
+        priorityPosition={
+          priorityPosition
+            ? {
+                count: lanes.priority.length,
+                onChange: (position) =>
+                  void setPriorityPosition(
+                    setId,
+                    item,
+                    position,
+                  ),
+                position: priorityPosition,
+              }
+            : undefined
+        }
         // The runtime line, the same as the queue grid's — the shelf shows the
         // same entries and answers the same question about them.
         runtime={runtimeLabel(
@@ -536,8 +552,8 @@ function Shelf({
             </li>
           ) : (
             <>
-              {lanes.priority.map((item) =>
-                renderTile(item, "priority"),
+              {lanes.priority.map((item, index) =>
+                renderTile(item, "priority", index + 1),
               )}
               {/* THE DIVIDER, and it is deliberately not a `li.tile`: `useHomeDrags` builds
                   the queue's new order from `strip.querySelectorAll("li.tile")` and hit-tests

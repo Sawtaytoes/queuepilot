@@ -493,6 +493,7 @@ export function useGridDrag(
         target.closest(".tilechrome") ||
         target.closest(".remove") ||
         target.closest(".check") ||
+        target.closest(".priority-position") ||
         // `.editbtn` is in the badge row (inside `.cap`), so the thumb test below would
         // already skip it — named anyway so a future move back onto the poster cannot
         // open the sheet under the pencil.

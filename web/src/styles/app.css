@@ -701,8 +701,11 @@ button {
 .shelf h2 {
   margin: 0 0 10px;
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 2px;
+}
+#shelves {
+  padding-top: 8px;
 }
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
    Tailwind v4 scans source for class tokens it emits that utility the moment the
@@ -1255,6 +1258,36 @@ body.gdrag .dropstrip {
   user-select: none;
   -webkit-user-select: none;
 }
+/* A Priority tile's editable one-based play order. It belongs on the artwork because it
+   describes the tile's slot, and it stays opposite the trailing remove/select/lane stack. */
+.tile .priority-position {
+  appearance: textfield;
+  position: absolute;
+  left: 6px;
+  top: 6px;
+  z-index: 3;
+  inline-size: 32px;
+  block-size: 28px;
+  padding: 0 3px;
+  border: 2px solid var(--color-border-strong);
+  border-radius: 999px;
+  background: var(--color-scrim);
+  color: var(--color-content-primary);
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-align: center;
+}
+.tile .priority-position::-webkit-inner-spin-button,
+.tile .priority-position::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.tile .priority-position:hover,
+.tile .priority-position:focus-visible {
+  border-color: var(--color-intent-accent-solid);
+  outline: none;
+}
 .tile.unresolved .thumb {
   border-color: var(--color-intent-danger-solid);
 }
@@ -1794,6 +1827,12 @@ body.sdrag .shelf:not(.dragging) {
   gap: 6px;
   align-items: center;
 }
+.bulklane-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 /* The five `#selbar button…` skin rules that used to live here are GONE, not moved. Every
    control in that bar is a Charcuterie `Button` now and says what it is with `appearance`
    and `intent` (`components/SelectionBar.tsx`). Two things went wrong while they existed,
@@ -1810,11 +1849,17 @@ body.sdrag .shelf:not(.dragging) {
    (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */
 
 /* ---- Home toolbar (global add-search + filter + queue management) ---- */
+#gslot-narrow {
+  container: queue-tools / inline-size;
+}
 #tools {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(18rem, 2fr) minmax(
+      10rem,
+      1fr
+    ) auto auto;
   gap: 10px;
   align-items: center;
-  flex-wrap: wrap;
   margin-top: 10px;
 }
 body.queue-view #tools {
@@ -1833,13 +1878,11 @@ body.queue-view #tools {
   display: flex;
   gap: 10px;
   align-items: center;
-  flex: 2 1 320px;
-  flex-wrap: wrap;
   min-width: 0;
 }
 .gsearch-wrap input[type="search"] {
   flex: 1;
-  min-width: 200px;
+  min-width: 0;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
@@ -1848,14 +1891,35 @@ body.queue-view #tools {
   font-size: 0.95rem;
 }
 #qfilter {
-  flex: 0 1 190px;
-  min-width: 130px;
+  min-width: 0;
+  width: 100%;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
   color: var(--color-content-primary);
   padding: 9px 12px;
   font-size: 0.95rem;
+}
+@container queue-tools (max-width: 58rem) {
+  #tools {
+    grid-template-columns: minmax(0, 1fr) auto auto;
+  }
+  .gsearch-wrap {
+    grid-column: 1 / -1;
+  }
+}
+@container queue-tools (max-width: 34rem) {
+  #tools {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .gsearch-wrap,
+  #qfilter {
+    grid-column: 1 / -1;
+  }
+  #collapseall,
+  #newqueue {
+    width: 100%;
+  }
 }
 /* The toolbar's three buttons are Charcuterie `Button`s now, so their skin is props:
    `appearance="outline"` for what `.ghost` painted, and `intent="accent"` for the accent
@@ -2181,11 +2245,15 @@ body.queue-view #tools {
   #chfilters {
     position: static;
     grid-column: auto;
-    grid-row: auto;
+    grid-row: 1;
   }
-  .chmembers,
+  .chmembers {
+    grid-column: auto;
+    grid-row: 2;
+  }
   #chbody .chpool {
     grid-column: auto;
+    grid-row: 3;
   }
 }
 
@@ -4940,8 +5008,9 @@ body.rowdragging {
     row-gap: 5px;
   }
   #home .shelf .collapse-toggle {
+    align-self: center;
     grid-column: 1;
-    grid-row: 1 / span 3;
+    grid-row: 1;
   }
   #home .shelf h2 .open {
     display: grid;

@@ -122,8 +122,8 @@ export function labelForPath(p: string): string {
     return "‹ Collection"
   if (p.startsWith("/result")) return "‹ What to Watch/Play"
   if (p.startsWith("/picks") || p.startsWith("/queues"))
-    return "‹ Picks"
-  if (p.startsWith("/channels")) return "‹ Rules"
+    return "‹ Picks queues"
+  if (p.startsWith("/channels")) return "‹ Rules queues"
   if (p.startsWith("/q/")) return "‹ Back"
   if (p === "/admin" || p.startsWith("/admin/"))
     return "‹ QueuePilot"

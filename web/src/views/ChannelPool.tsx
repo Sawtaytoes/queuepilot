@@ -105,7 +105,7 @@ export function ChannelPool({
 }) {
   const [preview, setPreview] =
     useState<PreviewResponse | null>(null)
-  const [heading, setHeading] = useState("Eligible pool")
+  const [heading, setHeading] = useState("Eligible titles")
   // The load state drives the indicator. `#chpool-title` text stays STABLE at "Eligible
   // pool" while loading — `live-smoke.mjs` and `verify-shorts-pool.mjs` read its
   // textContent and match on the LOADED counts, and a heading that changes mid-load is
@@ -132,7 +132,7 @@ export function ChannelPool({
     setPreview(null)
     setIsLoading(true)
     setShowSlowHint(false)
-    setHeading("Eligible pool")
+    setHeading("Eligible titles")
     const slowTimer = setTimeout(() => {
       if (req === reqRef.current) setShowSlowHint(true)
     }, 3000)
@@ -176,8 +176,8 @@ export function ChannelPool({
 
           setHeading(
             movies.length
-              ? `Eligible rewatch pool — ${movies.length} movies (least-watched first)`
-              : "Eligible rewatch pool — empty (this tier has no watched movies in its ratings)",
+              ? `Eligible titles — ${movies.length} movies (least-watched first)`
+              : "Eligible titles — empty (this queue has no watched movies in its allowed ratings)",
           )
 
           return
@@ -197,7 +197,7 @@ export function ChannelPool({
         )
 
         setHeading(
-          `Eligible pool — ${shows.length} shows` +
+          `Eligible titles — ${shows.length} shows` +
             (itemBuckets.length
               ? ` + ${itemCount} shorts`
               : ""),
@@ -205,7 +205,7 @@ export function ChannelPool({
       } catch (e) {
         if (req !== reqRef.current) return // a newer load owns the pool now
 
-        setHeading("Eligible pool")
+        setHeading("Eligible titles")
         setIsLoading(false)
         setStatus(
           `Preview failed: ${(e as Error).message}`,
@@ -452,7 +452,7 @@ export function ChannelPool({
                 Applies to a Shorts bucket too: it is keyed `section-<id>` in the map exactly
                 as the engine keys it, and "bring the whole section back round" is the same
                 question for it as for a series. */}
-            <Tip label="What this one does when it has nothing left to watch. Follow pool uses the pool's own setting; the other two override it for this show only.">
+            <Tip label="What this one does when it has nothing left to watch. Follow queue uses the queue's own setting; the other two override it for this show only.">
               <span className="eps">
                 <SelectListbox
                   label={`When ${b.show} is finished`}
@@ -463,7 +463,7 @@ export function ChannelPool({
                     )
                   }
                   options={[
-                    { label: "Follow pool", value: "" },
+                    { label: "Follow queue", value: "" },
                     {
                       label: "Start over",
                       value: "restart",
@@ -488,7 +488,7 @@ export function ChannelPool({
                 onExclude={() =>
                   excludeFromBlocklist(b.ratingKey, b.show)
                 }
-                title={`Exclude ${b.show} from this pool`}
+                title={`Exclude ${b.show} from eligible titles`}
               />
             )}
             {start && entry ? (
@@ -552,7 +552,7 @@ export function ChannelPool({
             stays stable, so this is what a screen reader hears. */}
         {isLoading ? (
           <Spinner
-            label="Loading the eligible pool…"
+            label="Loading eligible titles…"
             size="sm"
           />
         ) : null}
@@ -610,7 +610,7 @@ export function ChannelPool({
                                 it.title,
                               )
                             }
-                            title={`Exclude ${it.title} from this pool`}
+                            title={`Exclude ${it.title} from eligible titles`}
                           />
                         }
                         dataKey={String(it.ratingKey)}
@@ -665,7 +665,7 @@ export function ChannelPool({
                   onExclude={() =>
                     excludeFromRewatch(m.ratingKey, m.title)
                   }
-                  title="Exclude from the rewatch pool"
+                  title="Exclude from eligible titles"
                 />
               </>
             }
