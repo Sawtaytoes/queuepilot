@@ -138,15 +138,15 @@ describe('a group still resolves to exactly ONE provider profile', () => {
 
 describe('choosing people is a FILTER, not a claim about who is in the room', () => {
   const solo: ResolvedMember[] = [
-    { id: 'ada', kind: 'person', minPresent: 1, people: ['ada'], position: 0, role: 'required' },
+    { id: 'ada', kind: 'person', minPresent: 1, people: ['ada'], requiredPeople: ['ada'], position: 0, role: 'required' },
   ];
   const adaAndGrace: ResolvedMember[] = [
-    { id: 'ada', kind: 'person', minPresent: 1, people: ['ada'], position: 0, role: 'required' },
-    { id: 'grace', kind: 'person', minPresent: 1, people: ['grace'], position: 1, role: 'required' },
+    { id: 'ada', kind: 'person', minPresent: 1, people: ['ada'], requiredPeople: ['ada'], position: 0, role: 'required' },
+    { id: 'grace', kind: 'person', minPresent: 1, people: ['grace'], requiredPeople: ['grace'], position: 1, role: 'required' },
   ];
   const adaWithGraceOptional: ResolvedMember[] = [
-    { id: 'ada', kind: 'person', minPresent: 1, people: ['ada'], position: 0, role: 'required' },
-    { id: 'grace', kind: 'person', minPresent: 1, people: ['grace'], position: 0, role: 'optional' },
+    { id: 'ada', kind: 'person', minPresent: 1, people: ['ada'], requiredPeople: ['ada'], position: 0, role: 'required' },
+    { id: 'grace', kind: 'person', minPresent: 1, people: ['grace'], requiredPeople: ['grace'], position: 0, role: 'optional' },
   ];
 
   it('shows everything when nobody is selected', () => {
@@ -189,6 +189,7 @@ describe('choosing people is a FILTER, not a claim about who is in the room', ()
         kind: 'group',
         minPresent: 1,
         people: ['ada', 'grace'],
+        requiredPeople: ['ada', 'grace'],
         position: 0,
         role: 'required',
       },
@@ -207,11 +208,31 @@ describe('choosing people is a FILTER, not a claim about who is in the room', ()
         kind: 'group',
         minPresent: 1,
         people: ['ada', 'grace', 'linus'],
+        requiredPeople: ['ada', 'grace', 'linus'],
         position: 0,
         role: 'required',
       },
     ];
     expect(queueMatchesSelection(kidsOnly, ['linus'])).toBe(true);
+  });
+
+  it('keeps May join people on the queue without counting them as required', () => {
+    const olderKids: ResolvedMember[] = [
+      {
+        id: 'older-kids',
+        kind: 'group',
+        minPresent: 0,
+        people: ['ada', 'grace'],
+        requiredPeople: [],
+        position: 0,
+        role: 'required',
+      },
+    ];
+
+    expect(queueMatchesSelection(olderKids, ['ada'])).toBe(true);
+    expect(queueMatchesSelection(olderKids, ['grace'])).toBe(true);
+    expect(queueMatchesSelection(olderKids, ['ada', 'grace'])).toBe(true);
+    expect(queueMatchesSelection(olderKids, ['linus'])).toBe(false);
   });
 });
 
