@@ -4609,7 +4609,6 @@ body.rowdragging {
   font: inherit;
 }
 .grouprule,
-.groupminimum,
 .groupmembers {
   margin: 16px 0 0;
   padding: 12px 14px;
@@ -4617,34 +4616,32 @@ body.rowdragging {
   border-radius: 10px;
 }
 .grouprule {
-  background: var(--color-surface-sunken);
-}
-.grouprule h4 {
-  margin: 0;
-  color: var(--color-content-secondary);
-  font-size: 0.88rem;
-}
-.grouprulesummary {
-  margin: 7px 0 0;
-  color: var(--color-content-primary);
-  font-size: 1rem;
-  font-weight: 600;
-  line-height: 1.45;
-}
-.groupminimum {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  background: var(--color-surface-sunken);
 }
-.groupminimum legend,
+.grouprule legend,
 .groupmembers legend {
   padding: 0 6px;
   color: var(--color-content-secondary);
   font-size: 0.88rem;
 }
-.groupminimum .qppicker {
+.grouprule .qppicker {
   width: 100%;
   max-width: none;
+}
+.grouprulesummary {
+  margin: 1px 0 0;
+  color: var(--color-content-primary);
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.groupformactions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 12px;
 }
 .groupmemberlist {
   display: flex;
