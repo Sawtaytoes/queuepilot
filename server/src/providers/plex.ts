@@ -288,6 +288,15 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
           binding.watch_count_accounts, token ?? null,
         );
         const excludes = new Set((binding.movie_excludes || []).map(String));
+        const rewatchWeights = await rotation.mergeManualMoviesIntoRewatch(
+          c,
+          cfg,
+          binding,
+          counts,
+          titles,
+          excludes,
+          cfg.weights || {},
+        );
         // A rewatch pool used to `return { play: [item] }` — exactly one film, forever, and the
         // one kind of set whose length was not merely un-configurable but hardcoded. It now
         // draws its playback length like everything else (owner, 2026-08-17: "Movies are gonna
@@ -304,7 +313,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         for (let i = 0; i < want; i += 1) {
           // The exclusion of the previously-played film is SESSION state, threaded in by the
           // caller — a provider is stateless across starts and must not hold it.
-          const pick = pickRewatch(counts, titles, drawn, lastMovieRk, cfg.weights || {});
+          const pick = pickRewatch(counts, titles, drawn, lastMovieRk, rewatchWeights);
 
           // The pool ran out of films it has not already drawn. A real terminator, not an
           // error: a sitting can come up shorter than its length asked for.

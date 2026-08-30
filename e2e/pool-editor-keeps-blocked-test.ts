@@ -59,6 +59,22 @@ const SETS_SEED = `sets:
     movie_ratings: [ TV-PG, PG ]
     movie_excludes: [ "515151" ]
     watch_count_accounts: [ 22222222 ]
+- id: moviepool
+  label: Movies
+  kind: rules
+  source: rotation
+  behavior: rewatch
+  sections: [ 1 ]
+  item_sections: [ 1 ]
+  blocklist: []
+  profiles:
+  - plex_user: Older Kids
+    account_id: 22222222
+    user_uuid: "2222222222222222"
+    allowed_ratings: [ PG ]
+    movie_ratings: [ PG ]
+    movie_excludes: [ "616161" ]
+    watch_count_accounts: [ 22222222 ]
 `;
 
 // The two lists sit at DIFFERENT levels, which is the whole reason one Save could lose both
@@ -149,6 +165,15 @@ try {
   };
   const fresh = reg.sets.find((s) => s.id === created.id);
   ok('a newly created pool blocks nothing', fresh?.blocklist?.length === 0);
+
+  // Shows and Movies are both Rules queues. Their exclude storage differs, but both screens
+  // expose a direct exclude search and the same manual-members editor.
+  await page.goto(`http://localhost:${PORT}/channels/moviepool`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#channels:not([hidden])');
+  ok('Movies Rules has a direct exclusion search',
+    await page.locator('#ch-movieexclude-search').isVisible());
+  ok('Movies Rules has the manual Members editor',
+    await page.locator('#chmembers-box').isVisible());
 } finally {
   await browser.close();
   if (server) killServer(server);
