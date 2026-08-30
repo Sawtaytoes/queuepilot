@@ -209,6 +209,10 @@ export interface ResolvedItem {
   queueEntryKey?: string;
   /** True when completion belongs to QueuePilot's private ledger, not provider history. */
   queueOwnHistory?: boolean;
+  /** Queue-owned resume point in milliseconds. It outranks the shared provider offset. */
+  queueResumeOffset?: number;
+  /** Provider play count before this queue-owned replay starts. Completion increments it. */
+  queueProviderViewCount?: number;
 }
 
 /** One resolved member — `resolveMember()`'s return. Empty `items` = FINISHED, null = UNRESOLVED. */
@@ -562,6 +566,7 @@ async function headResumeOffset(
   item: ResolvedItem,
   token: Token,
 ): Promise<number> {
+  if (item.queueOwnHistory) return Math.max(0, Number(item.queueResumeOffset) || 0);
   if (item.viewOffset != null) {
     return inProgress(item.viewOffset, item.viewCount) ? item.viewOffset : 0;
   }
@@ -1043,7 +1048,9 @@ export async function nextQueue(
   token: Token,
   rng: Rng | null = null,
   canLead: LeadGate | null = null,
-  ownHistory: ((entryKey: string) => ReadonlySet<string>) | null = null,
+  ownProgress: ((entryKey: string) => ReadonlyMap<string, {
+    isCompleted: boolean; positionMs: number;
+  }>) | null = null,
 ): Promise<QueueResult> {
   if (!entries.length) return emptyResult(setName);
   const newlyDone: string[] = [];
@@ -1054,13 +1061,20 @@ export async function nextQueue(
   const batches: Batch[] = [];
   for (const desc of entries) {
     const isOwnHistory = desc.start?.history === 'queue';
-    const entryWatched = isOwnHistory && desc.key && ownHistory
-      ? ownHistory(desc.key)
+    const progress = isOwnHistory && desc.key && ownProgress
+      ? ownProgress(desc.key)
+      : null;
+    const entryWatched = progress
+      ? new Set([...progress].filter(([, row]) => row.isCompleted).map(([key]) => key))
       : watched;
     const res = await resolveMember(client, desc, cfg, entryWatched, token, setBatch(cfg), true);
     if (res && isOwnHistory && desc.key) {
       res.items = res.items.map((item) => ({
-        ...item, queueEntryKey: desc.key as string, queueOwnHistory: true,
+        ...item,
+        queueEntryKey: desc.key as string,
+        queueOwnHistory: true,
+        queueResumeOffset: progress?.get(String(item.ratingKey))?.positionMs ?? 0,
+        queueProviderViewCount: Number(item.viewCount) || 0,
       }));
     }
     if (desc.done) {

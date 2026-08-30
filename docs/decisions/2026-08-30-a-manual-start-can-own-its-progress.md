@@ -5,7 +5,7 @@
 - **Type:** playback semantics / durable data / UI
 - **Supersedes:** The single-mode clause of
   [`2026-07-31-per-entry-start-episode-override`](2026-07-31-per-entry-start-episode-override.md)
-- **Superseded by:** —
+- **Superseded by:** [`2026-08-30-plex-decides-completion-and-the-queue-owns-the-resume-point`](2026-08-30-plex-decides-completion-and-the-queue-owns-the-resume-point.md) (the fixed completion threshold only)
 
 ## Decision
 
