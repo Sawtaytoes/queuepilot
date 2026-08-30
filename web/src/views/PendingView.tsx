@@ -164,7 +164,10 @@ const asStartEntry = (
   item: PendingItem,
   start: StartPoint | null,
 ): ChannelMember => ({
-  childCount: null,
+  childCount:
+    item.type === "collection"
+      ? (item.childCount ?? null)
+      : null,
   cover: null,
   index: -1,
   nextEp: null,
@@ -202,7 +205,7 @@ export function PendingView() {
     null,
   )
   /**
-   * The start episode chosen for an item that is not in a queue yet, keyed by ratingKey.
+   * The start point chosen for an item that is not in a queue yet, keyed by ratingKey.
    *
    * Held here and written on the add, which is the order the owner asked for: *"You pick the
    * episode first, then Add to writes it."* It is deliberately NOT persisted — a choice you
@@ -733,8 +736,11 @@ export function PendingView() {
               renderItem={(item) => {
                 const compatible = queuesFor(item.sectionId)
                 const start = starts[item.ratingKey]
-                // Only a SHOW has an episode to start at. A film starts where films start.
-                const isStartable = item.type === "show"
+                // Shows and collections can choose a start point. A film starts where films
+                // start, so it has no separate control.
+                const isStartable =
+                  item.type === "show" ||
+                  item.type === "collection"
 
                 /*
                   The Add-to menu, shared by both views because it is the same menu — only
