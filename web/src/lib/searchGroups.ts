@@ -135,20 +135,20 @@ export function entryTitle(hit: SearchHit): string {
  * an ordinary item.
  */
 export function queueItemAddBody(hit: SearchHit): {
-  position: "bottom"
+  position: "top"
   type?: "collection"
   value: string | { ratingKey: string; title: string }
 } {
   if (hit.type === "collection") {
     return {
-      position: "bottom",
+      position: "top",
       type: "collection",
       value: hit.title,
     }
   }
 
   return {
-    position: "bottom",
+    position: "top",
     value: {
       ratingKey: hit.ratingKey,
       title: entryTitle(hit),

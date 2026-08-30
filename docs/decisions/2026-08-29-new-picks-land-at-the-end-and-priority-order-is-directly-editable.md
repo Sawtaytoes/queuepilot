@@ -4,7 +4,7 @@
 - **Date:** 2026-08-29
 - **Type:** Interaction / queue ordering
 - **Supersedes:** the visible Add-to-position controls in the Picks toolbar and queue search
-- **Superseded by:** —
+- **Superseded by:** [New Picks land at the top](2026-08-29-new-picks-land-at-the-top.md) (addition placement only)
 - **Builds on:**
   - [the queue page is two lanes](2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote.md)
   - [the tile menu carries what the card cannot](2026-08-26-the-tile-menu-carries-what-the-card-cannot.md)

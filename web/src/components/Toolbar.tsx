@@ -103,9 +103,9 @@ export function Toolbar() {
                 await api(
                   "POST",
                   `/api/queues/${s.id}/items`,
-                  // New titles append. Collections use the same explicit typed payload as
-                  // the queue page, so the server stores `{collection: <name>}` rather than
-                  // treating the collection's rating key as an ordinary movie or show.
+                  // New titles lead the queue. Collections use the same explicit typed
+                  // payload as the queue page, so the server stores `{collection: <name>}`
+                  // rather than treating the collection's rating key as an ordinary item.
                   queueItemAddBody(hit),
                 )
                 setStatus(
