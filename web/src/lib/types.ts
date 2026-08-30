@@ -163,6 +163,8 @@ export type QueueItem = {
    */
   weight: number
   start: StartPoint | null
+  /** Custom collection member ratingKeys. Empty means follow Plex order. */
+  collectionOrder?: string[]
   done: boolean
   /**
    * The same thing `done` records, judged LIVE instead of read off `queues.yaml`: the next

@@ -102,6 +102,7 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     lead: leadOf(v),
     promote_window: v && v.promote_window ? String(v.promote_window).trim().toLowerCase() : null,
     batch_stops_at: batchStopsAt === 'member' || batchStopsAt === 'season' ? batchStopsAt : null,
+    collectionOrder: v && Array.isArray(v.collection_order) ? v.collection_order.map(String) : [],
     start: startOf(e),
     // A finished-but-kept entry (Python tagged it done); the grid greys it and the
     // "Remove all completed" button targets these. False for every plain entry.
@@ -644,6 +645,23 @@ export function queuesRoutes(): Hono {
     const { start } = await readBody(c);
     try {
       return c.json(await queues.setStart(set, decodeURIComponent(c.req.param('key')), start));
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // Custom order for one Plex collection entry. An empty array restores Plex order.
+  app.patch('/queues/:set/items/:key/collection-order', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    const { collection_order } = await readBody(c);
+    if (!Array.isArray(collection_order)) return c.json({ error: 'collection_order[] required' }, 400);
+    try {
+      const result = await queues.setCollectionOrder(
+        set, decodeURIComponent(c.req.param('key')), collection_order,
+      );
+      await cache.bumpGeneration();
+      return c.json(result);
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }
