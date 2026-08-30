@@ -30,6 +30,8 @@ import type { PlexClient, PlexMetadata, RoutingRotationCfg, RoutingSetCfg } from
 
 export interface PendingItem {
   ratingKey: string;
+  /** The item's own page in Plex. Added by the HTTP route, not the pending resolver. */
+  webUrl?: string | null;
   title: string;
   year: number | null;
   /**
