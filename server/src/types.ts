@@ -647,6 +647,11 @@ export interface EntryExtras {
   /** How many episodes this entry contributes per visit. */
   episodes?: number;
   /**
+   * Order of playable leaves inside this show or Collection. `shuffle` includes watched
+   * items; absence is the existing next-unwatched, in-order behavior.
+   */
+  item_order?: string;
+  /**
    * How many VOLUMES this entry contributes per visit. Independent of `episodes:` —
    * a volume is a collection of chapters, not a chapter, so the chapter count must
    * not apply to a volume-based series. Absent / 1 = one volume.
@@ -1204,6 +1209,8 @@ export interface CuratedEntryRef {
    * The entry's explicit Picks lane. Absent / null follows the set's `add_as` default.
    */
   placement?: 'priority' | 'random' | null;
+  /** Plex-only today: order of items inside one show or Collection entry. */
+  itemOrder?: 'shuffle' | null;
   batch?: number | null;
   /**
    * Epoch seconds this entry was queued — `EntryExtras.queued_at`. Providers that count

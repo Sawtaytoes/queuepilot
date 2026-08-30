@@ -32,6 +32,7 @@ import {
 } from '../env.js';
 import { store } from '../store/index.js';
 import { legacyEntryMessage } from '../entryFormat.js';
+import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import { isNodeError } from '../errors.js';
 import type { Rng } from './weight.js';
 import type { PlexClient, PlexMetadata, Start } from '../types.js';
@@ -101,6 +102,7 @@ type RawEntryObject = {
   collection?: unknown;
   title?: unknown;
   episodes?: unknown;
+  item_order?: unknown;
   start?: unknown;
   weight?: unknown;
   done?: unknown;
@@ -139,6 +141,8 @@ export interface EntryDescriptor {
   guid: string | null;
   collection: string | null;
   episodes: number | null;
+  /** Item order inside this show or Collection. `shuffle` includes watched items. */
+  itemOrder: 'in-order' | 'shuffle';
   start: Start | null;
   /** Custom collection member order. Empty means follow Plex. */
   collectionOrder: string[];
@@ -341,6 +345,7 @@ export function describe(entry: unknown): EntryDescriptor {
       guid,
       collection: coll ? String(coll).trim() : null,
       episodes: (entry.episodes ?? null) as number | null,
+      itemOrder: normalizeEntryItemOrder(entry.item_order),
       // Per-entry override of the set's `batch_stops_at` ("none"|"member"|"season"): where this
       // entry's batch may stop. Lets one OVA collection roll straight through on a channel that
       // otherwise stops at season boundaries. Raw — batchStop() does the normalizing.
@@ -371,6 +376,7 @@ export function describe(entry: unknown): EntryDescriptor {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
+      itemOrder: 'in-order',
       collectionOrder: [],
       placement: null, lead: null, promoteWindow: null,
       weight: 1, done: false, doneAt: null, raw: entry, legacy: true,
@@ -382,6 +388,7 @@ export function describe(entry: unknown): EntryDescriptor {
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
     collection: coll, episodes: null, batch_stops_at: null, start: null, collectionOrder: [],
+    itemOrder: 'in-order',
     placement: null, lead: null, promoteWindow: null, weight: 1, done: false,
     doneAt: null, raw: entry, legacy: true,
   };
@@ -686,6 +693,7 @@ export async function collectionItems(
   start: Start | null = null,
   resume = false,
   collectionOrder: readonly string[] = [],
+  includeWatched = false,
 ): Promise<ResolvedItem[] | null> {
   let collRk: string | null = null;
   let children: PlexMetadata[] = [];
@@ -719,7 +727,9 @@ export async function collectionItems(
       );
       for (const e of ordered) {
         if (skipped.has(e.ratingKey)) continue;
-        if ((!watched.has(e.ratingKey) || (resume && inProgress(e.viewOffset, e.viewCount)))
+        if (includeWatched
+          || !watched.has(e.ratingKey)
+          || (resume && inProgress(e.viewOffset, e.viewCount))
         ) {
           // Which collection CHILD this leaf came from, so a `batch_stops_at` cut can see the
           // member boundary (segmentKey). showEpisodes builds fresh objects per call, so
@@ -729,14 +739,18 @@ export async function collectionItems(
         }
       }
     } else {
-      if (watched.has(rk)
-        && !(resume && inProgress(...await itemViewState(client, rk, token)))) continue;
+      const [viewOffset, viewCount] = resume || includeWatched
+        ? await itemViewState(client, rk, token)
+        : [int0(ch.viewOffset), int0(ch.viewCount)];
+      if (!includeWatched && watched.has(rk)
+        && !(resume && inProgress(viewOffset, viewCount))) continue;
       items.push({
         ratingKey: rk, title: ch.title, show: ch.grandparentTitle || name,
         // Its OWN member_key: `show` is the collection name for a movie member, so keying a
         // boundary on that would fuse every movie in the collection into one segment.
         member_key: rk,
         season: ch.parentIndex, episode: ch.index, duration: ch.duration,
+        ...(includeWatched ? { viewOffset, viewCount } : {}),
       });
     }
   }
@@ -831,6 +845,29 @@ function applyBatch(items: ResolvedItem[], batch: unknown, stop: string): Resolv
   return out;
 }
 
+type EntryProgress = ReadonlyMap<string, { isCompleted: boolean; positionMs: number }>;
+
+/**
+ * Shuffle one entry's leaves without replacement, while keeping its one active resume point
+ * first. A queue-owned resume outranks the provider's viewOffset because that is the progress
+ * source the entry explicitly selected.
+ */
+function shuffleEntryItems(
+  items: ResolvedItem[],
+  rng: Rng | null,
+  progress: EntryProgress | null,
+): ResolvedItem[] {
+  const resumeIndex = items.findIndex((item) => {
+    const own = progress?.get(String(item.ratingKey));
+    if (own) return !own.isCompleted && own.positionMs > 0;
+    return inProgress(item.viewOffset, item.viewCount);
+  });
+  const head = resumeIndex >= 0 ? items[resumeIndex]! : null;
+  const rest = items.filter((_, index) => index !== resumeIndex);
+  if (rng) rng.shuffle(rest);
+  return head ? [head, ...rest] : rest;
+}
+
 // Resolve ONE member descriptor into a play batch. Port of resolve_member. Returns null when
 // UNRESOLVED; otherwise {title, type, ratingKey?, items, multi_season?} (empty items = FINISHED).
 // The count cap says how many; batchStop says where the batch may end (see batchStop above).
@@ -842,12 +879,15 @@ export async function resolveMember(
   token: Token,
   defaultBatch: number | null = null,
   resume = false,
+  rng: Rng | null = null,
+  progress: EntryProgress | null = null,
 ): Promise<ResolvedMember | null> {
   const skipped = skippedKeys(cfg);
+  const isShuffled = desc.itemOrder === 'shuffle';
   if (desc.collection) {
     const name = desc.collection;
     let items = await collectionItems(
-      client, cfg, name, watched, token, desc.start, resume, desc.collectionOrder,
+      client, cfg, name, watched, token, desc.start, resume, desc.collectionOrder, isShuffled,
     );
     if (items == null) return null;
     // A collection is ONE member, so it contributes ONE batch — the same cap the show branch
@@ -861,7 +901,12 @@ export async function resolveMember(
     // still receives the full ordered list and advances a member across rounds as before.
     // `batch_stops_at` additionally forbids the batch from spanning a member (or season)
     // boundary, so a season finale isn't followed by ep 1 of the next member show.
-    items = applyBatch(items, desc.episodes || defaultBatch, batchStop(desc, cfg));
+    if (isShuffled) items = shuffleEntryItems(items, rng, progress);
+    items = applyBatch(
+      items,
+      desc.episodes || defaultBatch,
+      isShuffled ? 'none' : batchStop(desc, cfg),
+    );
     return { title: `Collection: ${name}`, type: 'collection', items, weight: toWeight(desc.weight) };
   }
   const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
@@ -884,15 +929,22 @@ export async function resolveMember(
   }
   const allEps: ResolvedItem[] = await showEpisodes(client, rk, token);
   const start = desc.start;
-  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg, resume), start)
-    .filter((e) => !watched.has(e.ratingKey)
+  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg, resume), start);
+  if (!isShuffled) {
+    eps = eps.filter((e) => !watched.has(e.ratingKey)
       || (resume && inProgress(e.viewOffset, e.viewCount)));
+  }
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE
   // the batch cap — so skipping E5 makes an `episodes: 2` entry queue E6 + E7, not E6 alone.
   eps = eps.filter((e) => !skipped.has(e.ratingKey));
+  if (isShuffled) eps = shuffleEntryItems(eps, rng, progress);
   // A `season` stop also cuts at a season boundary, so `episodes: 2` on a show sitting at its
   // finale queues S1E12 alone instead of S1E12 + S2E01.
-  eps = applyBatch(eps, desc.episodes || defaultBatch, batchStop(desc, cfg));
+  eps = applyBatch(
+    eps,
+    desc.episodes || defaultBatch,
+    isShuffled ? 'none' : batchStop(desc, cfg),
+  );
   return {
     title: title as string, type: 'show', ratingKey: rk, items: eps, multi_season: multiSeason(allEps),
     weight: toWeight(desc.weight),
@@ -1067,7 +1119,17 @@ export async function nextQueue(
     const entryWatched = progress
       ? new Set([...progress].filter(([, row]) => row.isCompleted).map(([key]) => key))
       : watched;
-    const res = await resolveMember(client, desc, cfg, entryWatched, token, setBatch(cfg), true);
+    const res = await resolveMember(
+      client,
+      desc,
+      cfg,
+      entryWatched,
+      token,
+      setBatch(cfg),
+      true,
+      rng,
+      progress,
+    );
     if (res && isOwnHistory && desc.key) {
       res.items = res.items.map((item) => ({
         ...item,
