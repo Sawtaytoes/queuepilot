@@ -4284,10 +4284,24 @@ ul.skipgrid.rows .skippedtile .skiprestore span {
   margin: 10px 0;
   color: var(--color-content-secondary);
 }
-#membersmodal .membermove {
-  display: flex;
-  gap: 2px;
+#membersmodal .rowdrag {
+  flex: 0 0 auto;
   margin-left: auto;
+  cursor: grab;
+  touch-action: none;
+}
+#membersmodal .memberlist > li.dragging {
+  position: relative;
+  z-index: 2;
+  background: var(--color-surface-raised);
+  box-shadow: 0 8px 20px rgb(0 0 0 / 30%);
+  cursor: grabbing;
+}
+body.rowdragging
+  #membersmodal
+  .memberlist
+  > li:not(.dragging) {
+  transition: transform 140ms ease;
 }
 #membersmodal .memberlist {
   list-style: none;

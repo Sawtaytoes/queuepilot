@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-08-30 | [Pending series configuration includes what plays and drag order](2026-08-30-pending-series-configuration-includes-what-plays-and-drag-order.md) *(UI / interaction — Pending configures the start and What plays before Add to; collection rows use drag handles with Up/Down keyboard movement instead of Earlier/Later buttons.)* |
 | 2026-08-30 | [Queue entries sort by queue arrival, and global search can pick a start](2026-08-30-queue-entries-sort-by-queue-arrival-and-global-search-can-pick-a-start.md) *(queue data / UI — every add stamps `queued_at`; Recently added sorts both lanes newest-first; global search can hold a show or collection start choice until a real add.)* |
 | 2026-08-30 | [Skipped items follow the queue view](2026-08-30-skipped-items-follow-the-queue-view.md) *(UI / correction — Skipped moves to the bottom and reuses Posters, Cards or List with artwork, Plex links, source badges and Restore in the play position.)* |
 | 2026-08-30 | [Selection mode owns item clicks and Shift selects the range](2026-08-30-selection-mode-owns-item-clicks-and-shift-selects-the-range.md) *(interaction / correction — after one entry is selected, any item's non-control surface toggles it in every density; Shift-click adds the inclusive visible range from the prior anchor.)* |

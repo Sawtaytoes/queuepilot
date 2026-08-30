@@ -1,11 +1,16 @@
-import { Badge, Button, Checkbox } from "@charcuterie/ui"
+import {
+  Badge,
+  Button,
+  Checkbox,
+  IconButton,
+} from "@charcuterie/ui"
 import {
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react"
-
+import { useRowReorder } from "../hooks/useRowReorder"
 import { api } from "../lib/api"
 import { runtimeLabel, seLabel } from "../lib/tileFace"
 import type {
@@ -218,13 +223,44 @@ export function MembersModal() {
   const skippedRef = useRef<readonly string[]>([])
   const includedSpecialsRef = useRef<readonly string[]>([])
   const collectionOrderRef = useRef<readonly string[]>([])
+  const listRef = useRef<HTMLUListElement>(null)
 
   skippedRef.current =
-    reg?.sets.find((s) => s.id === setId)?.skipped || []
+    entry?.memberDraft?.skipped ??
+    reg?.sets.find((s) => s.id === setId)?.skipped ??
+    []
   includedSpecialsRef.current =
+    entry?.memberDraft?.includedSpecials ??
     reg?.sets.find((s) => s.id === setId)
-      ?.included_specials || []
+      ?.included_specials ??
+    []
   collectionOrderRef.current = collectionOrder
+
+  const reorderCollection = useCallback(
+    (order: string[]) => {
+      setRows((current) => {
+        if (!current) return current
+        const byKey = new Map(
+          current
+            .filter((row) => row.ratingKey)
+            .map((row) => [row.ratingKey as string, row]),
+        )
+        const ordered = order
+          .map((key) => byKey.get(key))
+          .filter((row): row is MemberRow => Boolean(row))
+        const unnamed = current.filter(
+          (row) => !row.ratingKey,
+        )
+        const next = [...ordered, ...unnamed]
+
+        setCollectionOrder(order)
+        return next
+      })
+    },
+    [],
+  )
+
+  useRowReorder(listRef, reorderCollection, isCollection)
 
   const applyCollectionOrder = useCallback(
     (source: MemberRow[], order: readonly string[]) => {
@@ -257,8 +293,9 @@ export function MembersModal() {
 
     setRows(null)
     setPlexRows([])
-    const storedOrder =
-      isCollection && item && "collectionOrder" in item
+    const storedOrder = entry?.memberDraft
+      ? entry.memberDraft.collectionOrder
+      : isCollection && item && "collectionOrder" in item
         ? item.collectionOrder || []
         : []
     collectionOrderRef.current = storedOrder
@@ -463,6 +500,18 @@ export function MembersModal() {
 
     setIsSaving(true)
     void (async () => {
+      if (entry.saveMembers) {
+        await entry.saveMembers({
+          collectionOrder,
+          includedSpecials: [...includedSpecials],
+          managed,
+          managedSpecials,
+          skipped: [...skips],
+        })
+        setIsSaving(false)
+        closeMembersModal()
+        return
+      }
       const isSelectionOk = await saveMemberSelection(
         setId,
         {
@@ -526,7 +575,11 @@ export function MembersModal() {
       isOpen
       onClose={closeMembersModal}
       onSubmit={onSave}
-      title={`What plays in “${item.title}”`}
+      title={
+        entry.saveMembers
+          ? `Configure “${item.title}” — what plays`
+          : `What plays in “${item.title}”`
+      }
       titleId="membersmodal-title"
     >
       <p className="subhint">{t(HINT)}</p>
@@ -577,7 +630,11 @@ export function MembersModal() {
               </Button>
             </div>
           ) : null}
-          <ul className="memberlist" id="memberlist">
+          <ul
+            className="memberlist"
+            id="memberlist"
+            ref={listRef}
+          >
             {rows.map((row, i) => (
               <MemberListRow
                 key={row.ratingKey || `row-${i}`}
@@ -610,22 +667,20 @@ export function MembersModal() {
                 row={row}
                 position={i + 1}
                 isCollection={isCollection}
-                isLast={i === rows.length - 1}
                 onMove={
-                  isCollection
+                  isCollection && row.ratingKey
                     ? (offset) => {
+                        const next = [...rows]
                         const nextIndex = i + offset
                         if (
                           nextIndex < 0 ||
-                          nextIndex >= rows.length
+                          nextIndex >= next.length
                         )
                           return
-                        const next = [...rows]
                         const [moved] = next.splice(i, 1)
                         if (!moved) return
                         next.splice(nextIndex, 0, moved)
-                        setRows(next)
-                        setCollectionOrder(
+                        reorderCollection(
                           next
                             .map(
                               (member) => member.ratingKey,
@@ -667,7 +722,6 @@ export function MembersModal() {
 /** One row, plus the season heading that opens its group. */
 function MemberListRow({
   isCollection,
-  isLast,
   isSkipped,
   onMove,
   onToggle,
@@ -678,7 +732,6 @@ function MemberListRow({
   t,
 }: {
   isCollection: boolean
-  isLast: boolean
   isSkipped: boolean
   onMove?: (offset: number) => void
   onToggle: (isPlaying: boolean) => void
@@ -704,7 +757,9 @@ function MemberListRow({
           </h4>
         </li>
       ) : null}
-      <li>
+      <li
+        data-set={isCollection ? row.ratingKey : undefined}
+      >
         {row.ratingKey ? (
           <Checkbox
             description={row.detail || undefined}
@@ -743,30 +798,45 @@ function MemberListRow({
           </Badge>
         ) : null}
         {onMove ? (
-          <span className="membermove">
-            <Button
-              appearance="ghost"
-              intent="neutral"
-              isDisabled={position === 1}
-              onClick={() => onMove(-1)}
-              size="sm"
-              type="button"
-            >
-              Earlier
-            </Button>
-            <Button
-              appearance="ghost"
-              intent="neutral"
-              isDisabled={isLast}
-              onClick={() => onMove(1)}
-              size="sm"
-              type="button"
-            >
-              Later
-            </Button>
-          </span>
+          <IconButton
+            appearance="ghost"
+            className="rowdrag"
+            intent="neutral"
+            label={`Drag ${row.label} to reorder. Use the up and down arrow keys to move it.`}
+            onKeyDown={(event) => {
+              if (event.key === "ArrowUp") {
+                event.preventDefault()
+                onMove(-1)
+              } else if (event.key === "ArrowDown") {
+                event.preventDefault()
+                onMove(1)
+              }
+            }}
+            size="sm"
+          >
+            <DragIcon />
+          </IconButton>
         ) : null}
       </li>
     </>
+  )
+}
+
+function DragIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="currentColor"
+      height="18"
+      viewBox="0 0 24 24"
+      width="18"
+    >
+      <circle cx="9" cy="5" r="1.5" />
+      <circle cx="15" cy="5" r="1.5" />
+      <circle cx="9" cy="12" r="1.5" />
+      <circle cx="15" cy="12" r="1.5" />
+      <circle cx="9" cy="19" r="1.5" />
+      <circle cx="15" cy="19" r="1.5" />
+    </svg>
   )
 }
