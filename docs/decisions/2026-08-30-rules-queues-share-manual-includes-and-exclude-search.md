@@ -43,4 +43,3 @@ first in a sampled eligible grid.
 
 The owner said: *"For the Rules queues"* and *"we do have that, but only for shows, not
 movies????? It should be consistent."* (T3 Code chat, 2026-08-30.)
-
