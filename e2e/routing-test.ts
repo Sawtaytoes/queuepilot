@@ -47,6 +47,23 @@ for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play'
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+// Rules shelves load their generated membership only when expanded. Keep this route test
+// offline and deterministic while pinning the index shape: one show is enough to prove the
+// expanded region is a poster shelf rather than the former summary card.
+await page.route('**/api/generic/*/preview*', (route) =>
+  route.fulfill({
+    contentType: 'application/json',
+    body: JSON.stringify({
+      buckets: [
+        {
+          ratingKey: 'rules-preview-show',
+          show: 'Fixture eligible show',
+          unwatched: 3,
+        },
+      ],
+    }),
+  }),
+);
 
 /** The chrome lands a render AFTER the location commits — always wait for the heading. */
 const heading = (want: string) =>
@@ -96,6 +113,23 @@ for (const [path, want] of [
     ok('the activity picker does not use Tonight as its visible name', !/\bTonight\b/.test(text));
   }
 }
+
+// Both queue kinds use the same collapsible shelf shape. Rules posters are a read-only
+// eligibility preview, so none of the Picks mutation affordances may leak into this shelf.
+await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
+const rulesShelves = page.locator('.rules-shelf');
+await rulesShelves.first().waitFor({ timeout: 30000 });
+ok('Rules queues render as collapsible shelves', (await rulesShelves.count()) > 0);
+await rulesShelves.first().locator('.collapse-toggle').click();
+await rulesShelves.first().locator('li.tile').waitFor({ timeout: 30000 });
+ok(
+  'an expanded Rules shelf shows eligible poster tiles',
+  (await rulesShelves.first().locator('li.tile').count()) === 1,
+);
+ok(
+  'Rules preview posters have no Picks mutation controls',
+  (await rulesShelves.first().locator('.shelfdrag, .lanebtn, .remove').count()) === 0,
+);
 
 await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
 ok(
@@ -262,8 +296,8 @@ ok('browser Back returns to Overview', await heading('Overview'));
 // one piece of the old hash router react-router does NOT replace.
 {
   await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('a.open');
-  await page.click('a.open');
+  await page.waitForSelector('#shelves a.open');
+  await page.click('#shelves a.open');
   await page.waitForFunction(() => location.pathname.startsWith('/q/'));
   await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/queues', undefined, { timeout: 30000 })
     .then(() => ok('in-app back targets the origin /queues, not a fixed parent', true),
