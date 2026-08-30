@@ -138,8 +138,16 @@ try {
 
     // The Add-to menu, open: the queues that draw from this library, a rule, then the row
     // that makes a new one.
-    await page.locator('[data-testid="pending-addto"]').first().click();
+    const addTrigger = page.locator('[data-testid="pending-addto"]').first();
+    const triggerRect = await addTrigger.boundingBox();
+    await addTrigger.click();
     await page.waitForSelector('.addtomenu [role="menuitem"]', { timeout: 15000 });
+    const menuRect = await page.locator('.addtomenu').boundingBox();
+    if (!triggerRect || !menuRect
+      || Math.abs(menuRect.x - triggerRect.x) > 2
+      || Math.abs(menuRect.y - (triggerRect.y + triggerRect.height + 4)) > 2) {
+      throw new Error(`pending Add-to menu is not anchored to its trigger: ${JSON.stringify({ menuRect, triggerRect })}`);
+    }
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${OUT}/pending-views-menu.png` });
     console.log('shot:', `${OUT}/pending-views-menu.png`);
