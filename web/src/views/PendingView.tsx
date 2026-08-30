@@ -592,7 +592,10 @@ export function PendingView() {
       await api("POST", "/api/pending/dismiss", {
         ratingKey: item.ratingKey,
       })
-      setStatus(`Removed “${item.title}” from Pending`, "ok")
+      setStatus(
+        `Removed “${item.title}” from Pending`,
+        "ok",
+      )
     } catch (e) {
       setStatus(
         `Dismiss failed: ${(e as Error).message}`,
