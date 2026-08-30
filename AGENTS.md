@@ -948,6 +948,8 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/lane-drag-test.ts     # dragging across the lane divider
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/tile-menu-test.ts     # the tile menu + the long press
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/pending-dismiss-test.ts # Dismiss removes the card now and after reload
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
@@ -990,6 +992,7 @@ there rather than in the gated block. All fourteen of them, in the order `ci.yml
 | `drag-stability-test.ts` | a drag's PATH, not its result — reversals, re-inserts, style writes |
 | `lane-drag-test.ts` | dragging across the lane divider — the promote and the demote |
 | `tile-lane-test.ts` | the tile's three controls: the select mark PAINTS when checked, and the lane button promotes / demotes |
+| `pending-dismiss-test.ts` | Pending Dismiss removes the pressed card immediately and keeps it absent after reload |
 | `routing-test.ts` | the client router and the server's SPA fallback, together |
 | `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
 | `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |

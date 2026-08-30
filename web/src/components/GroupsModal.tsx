@@ -109,7 +109,6 @@ export function GroupsModal() {
 
   // Do not reseed on every people refresh. The open form owns unsaved typing until the user
   // chooses another group.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: selectedRef intentionally reads the latest selected group without reseeding on a background refresh.
   useEffect(() => {
     setDraft(draftFrom(selectedRef.current))
     setIsConfirmingDelete(false)
