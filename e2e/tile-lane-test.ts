@@ -82,6 +82,18 @@ const check = (name: string, ok: boolean, detail = '') => {
   if (!ok) failed += 1;
 };
 
+const waitForWrite = async (
+  writes: readonly { url: string }[],
+  suffix: string,
+  ms = 20000,
+) => {
+  const end = Date.now() + ms;
+  while (!writes.some((write) => write.url.endsWith(suffix))) {
+    if (Date.now() > end) throw new Error(`write did not start: ${suffix}`);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+};
+
 try {
   await waitReady(`${BASE}/api/queues`);
 
@@ -101,7 +113,11 @@ try {
   // ── The pool queue: the stack, the mark, and a promote ──────────────────────────────────
   await page.goto(`${BASE}/q/${POOL_QUEUE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid-pool li.tile', { timeout: 30000 });
-  await page.waitForTimeout(1200);
+  // Do not move a shelf-skeleton tile while the full `/api/queues` request is still active.
+  // That response replaces the skeleton wholesale and can briefly undo the optimistic lane
+  // move even though both writes succeed. The reload assertion then passes, which made this
+  // look like a lane-write defect instead of a test that interacted before phase 2 completed.
+  await page.waitForSelector('#grid-pool li.tile:not(.pending)', { timeout: 30000 });
 
   const firstTile = page.locator('#grid-pool li.tile').first();
   const controls = await firstTile.evaluate((el) =>
@@ -176,7 +192,7 @@ try {
     promotedTitle,
     { timeout: 20000 },
   );
-  await page.waitForTimeout(600);
+  await waitForWrite(writes, '/order');
 
   const placementWrite = writes.find((w) => w.url.includes('/placement'));
   check(
@@ -224,7 +240,7 @@ try {
   // ── The ordered queue: the same control is a DEMOTE, and it writes no order ─────────────
   await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid-priority li.tile', { timeout: 30000 });
-  await page.waitForTimeout(1200);
+  await page.waitForSelector('#grid-priority li.tile:not(.pending)', { timeout: 30000 });
 
   const promoted = page.locator('#grid-priority li.tile').first();
   const demoteLabel = await promoted.locator('.lanebtn').getAttribute('aria-label');
@@ -242,7 +258,7 @@ try {
     undefined,
     { timeout: 20000 },
   );
-  await page.waitForTimeout(600);
+  await waitForWrite(writes, '/order');
 
   const demoteWrite = writes.find((w) => w.url.includes('/placement'));
   check(

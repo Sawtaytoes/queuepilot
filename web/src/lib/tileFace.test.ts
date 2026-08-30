@@ -155,6 +155,58 @@ describe("withoutCollectionPrefix", () => {
 })
 
 describe("tileFace", () => {
+  test("a shuffled show names the mode instead of a false next episode", () => {
+    const face = tileFace(
+      item({
+        item_order: "shuffle",
+        nextEp: {
+          episode: 5,
+          multiSeason: true,
+          season: 3,
+          title: "The Duel",
+        },
+      }),
+    )
+
+    expect(face.next).toBe("Any episode")
+    expect(face.nextDone).toBe(false)
+  })
+
+  test("a hand-finished shuffled show still reports that it is finished", () => {
+    const face = tileFace(
+      item({
+        done: true,
+        item_order: "shuffle",
+        nextEp: null,
+      }),
+    )
+
+    expect(face.next).toBe("All watched")
+    expect(face.nextDone).toBe(true)
+  })
+
+  test("a shuffled Collection keeps its own face and names any item", () => {
+    const face = tileFace(
+      item({
+        childCount: 8,
+        item_order: "shuffle",
+        nextEp: {
+          kind: "movie",
+          member: "Ponyo",
+          memberRatingKey: "42",
+          position: 3,
+        },
+        title: "Ghibli",
+        type: "collection",
+      }),
+    )
+
+    expect(face.title).toBe("Ghibli")
+    expect(face.ratingKey).toBe("1")
+    expect(face.next).toBe("Any item")
+    expect(face.from).toBeNull()
+  })
+
   test("a series tile reads episode + episode title", () => {
     const face = tileFace(
       item({

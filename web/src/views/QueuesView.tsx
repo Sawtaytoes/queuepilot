@@ -675,10 +675,14 @@ function Shelf({
         }
         // The runtime line, the same as the queue grid's — the shelf shows the
         // same entries and answers the same question about them.
-        runtime={runtimeLabel(
-          item.nextEp?.duration || item.duration,
-          item.episodes ?? set?.episodes ?? 1,
-        )}
+        runtime={
+          item.item_order === "shuffle"
+            ? null
+            : runtimeLabel(
+                item.nextEp?.duration || item.duration,
+                item.episodes ?? set?.episodes ?? 1,
+              )
+        }
         posterRatingKey={
           item.resolved ? face.ratingKey : null
         }
