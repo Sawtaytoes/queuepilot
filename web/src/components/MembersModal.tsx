@@ -19,7 +19,10 @@ import {
   closeMembersModal,
   useOverlays,
 } from "../state/overlays"
-import { saveMemberSelection } from "../state/queueEntry"
+import {
+  saveCollectionOrder,
+  saveMemberSelection,
+} from "../state/queueEntry"
 import {
   fetchAll,
   setState,
@@ -106,7 +109,7 @@ function toMemberRows(
   children: CollectionChild[],
   t: (s: string) => string,
 ): MemberRow[] {
-  return children.map((child, i) => ({
+  return children.map((child) => ({
     detail: memberDetail(child, t),
     isDone:
       child.type === "show"
@@ -117,7 +120,7 @@ function toMemberRows(
           )
         : Boolean(child.watched),
     isSpecial: false,
-    label: `${i + 1}. ${child.title}`,
+    label: child.title,
     ratingKey: String(child.ratingKey),
     season: null,
   }))
@@ -175,6 +178,10 @@ export function MembersModal() {
       ?.provider_kind === "plex"
 
   const [rows, setRows] = useState<MemberRow[] | null>(null)
+  const [plexRows, setPlexRows] = useState<MemberRow[]>([])
+  const [collectionOrder, setCollectionOrder] = useState<
+    string[]
+  >([])
   const [note, setNote] = useState("")
   const [isSaving, setIsSaving] = useState(false)
   /**
@@ -210,12 +217,38 @@ export function MembersModal() {
    */
   const skippedRef = useRef<readonly string[]>([])
   const includedSpecialsRef = useRef<readonly string[]>([])
+  const collectionOrderRef = useRef<readonly string[]>([])
 
   skippedRef.current =
     reg?.sets.find((s) => s.id === setId)?.skipped || []
   includedSpecialsRef.current =
     reg?.sets.find((s) => s.id === setId)
       ?.included_specials || []
+  collectionOrderRef.current = collectionOrder
+
+  const applyCollectionOrder = useCallback(
+    (source: MemberRow[], order: readonly string[]) => {
+      if (!order.length) return source
+      const rank = new Map(
+        order.map((key, index) => [key, index]),
+      )
+      return source
+        .map((row, plexIndex) => ({
+          row,
+          plexIndex,
+          rank: row.ratingKey
+            ? rank.get(row.ratingKey)
+            : undefined,
+        }))
+        .sort(
+          (a, b) =>
+            (a.rank ?? order.length + a.plexIndex) -
+            (b.rank ?? order.length + b.plexIndex),
+        )
+        .map(({ row }) => row)
+    },
+    [],
+  )
 
   useEffect(() => {
     if (!ratingKey) return
@@ -223,6 +256,13 @@ export function MembersModal() {
     let isStale = false
 
     setRows(null)
+    setPlexRows([])
+    const storedOrder =
+      isCollection && item && "collectionOrder" in item
+        ? item.collectionOrder || []
+        : []
+    collectionOrderRef.current = storedOrder
+    setCollectionOrder(storedOrder)
     setNote("")
     setRecheck(null)
 
@@ -298,7 +338,13 @@ export function MembersModal() {
             .filter((k): k is string => Boolean(k)),
         )
 
-        setRows(next)
+        setPlexRows(next)
+        setRows(
+          applyCollectionOrder(
+            next,
+            collectionOrderRef.current,
+          ),
+        )
         // The user's own ticks OUTRANK the seed on this pass — they may have been editing
         // while it was in flight. Only keys the re-read dropped leave the set; a member Plex
         // has since ADDED seeds from the set's stored list, exactly as pass 1 does.
@@ -337,7 +383,8 @@ export function MembersModal() {
             .filter((k): k is string => Boolean(k)),
         )
 
-        setRows(next)
+        setPlexRows(next)
+        setRows(applyCollectionOrder(next, storedOrder))
         setSkips(
           new Set(
             skippedRef.current.filter((k) => owned.has(k)),
@@ -415,20 +462,37 @@ export function MembersModal() {
     if (isSaving || !rows) return
 
     setIsSaving(true)
-    void saveMemberSelection(setId, {
-      includedSpecials,
-      // Own every row here so a special skipped under the legacy all-specials switch loses
-      // that old exclusion when it moves to the explicit inclusion model.
-      managed,
-      managedSpecials,
-      skipped: skips,
-    })
-      .then((isOk) => {
+    void (async () => {
+      const isSelectionOk = await saveMemberSelection(
+        setId,
+        {
+          includedSpecials,
+          // Own every row here so a special skipped under the legacy all-specials switch loses
+          // that old exclusion when it moves to the explicit inclusion model.
+          managed,
+          managedSpecials,
+          skipped: skips,
+        },
+      )
+      if (!isSelectionOk) {
         setIsSaving(false)
-
-        if (isOk) closeMembersModal()
-      })
-      .catch(() => setIsSaving(false))
+        return
+      }
+      const isOrderOk =
+        !isCollection ||
+        !("key" in item) ||
+        (await saveCollectionOrder(
+          setId,
+          item,
+          collectionOrder,
+        ))
+      setIsSaving(false)
+      if (isOrderOk) {
+        const [data, reg] = await fetchAll()
+        setState({ data, reg })
+        closeMembersModal()
+      }
+    })().catch(() => setIsSaving(false))
   }
 
   return (
@@ -491,6 +555,28 @@ export function MembersModal() {
               </Badge>
             ) : null}
           </p>
+          {isCollection ? (
+            <div className="collectionorderbar">
+              <span>
+                {collectionOrder.length
+                  ? "Custom order"
+                  : "Plex order"}
+              </span>
+              <Button
+                appearance="outline"
+                intent="neutral"
+                isDisabled={!collectionOrder.length}
+                onClick={() => {
+                  setCollectionOrder([])
+                  setRows(plexRows)
+                }}
+                size="sm"
+                type="button"
+              >
+                Reset to Plex order
+              </Button>
+            </div>
+          ) : null}
           <ul className="memberlist" id="memberlist">
             {rows.map((row, i) => (
               <MemberListRow
@@ -522,6 +608,35 @@ export function MembersModal() {
                 }}
                 previous={rows[i - 1] ?? null}
                 row={row}
+                position={i + 1}
+                isCollection={isCollection}
+                isLast={i === rows.length - 1}
+                onMove={
+                  isCollection
+                    ? (offset) => {
+                        const nextIndex = i + offset
+                        if (
+                          nextIndex < 0 ||
+                          nextIndex >= rows.length
+                        )
+                          return
+                        const next = [...rows]
+                        const [moved] = next.splice(i, 1)
+                        if (!moved) return
+                        next.splice(nextIndex, 0, moved)
+                        setRows(next)
+                        setCollectionOrder(
+                          next
+                            .map(
+                              (member) => member.ratingKey,
+                            )
+                            .filter((key): key is string =>
+                              Boolean(key),
+                            ),
+                        )
+                      }
+                    : undefined
+                }
                 seedKey={seedKey}
                 t={t}
                 isSkipped={Boolean(
@@ -551,15 +666,23 @@ export function MembersModal() {
 
 /** One row, plus the season heading that opens its group. */
 function MemberListRow({
+  isCollection,
+  isLast,
   isSkipped,
+  onMove,
   onToggle,
+  position,
   previous,
   row,
   seedKey,
   t,
 }: {
+  isCollection: boolean
+  isLast: boolean
   isSkipped: boolean
+  onMove?: (offset: number) => void
   onToggle: (isPlaying: boolean) => void
+  position: number
   previous: MemberRow | null
   row: MemberRow
   seedKey: string
@@ -590,7 +713,11 @@ function MemberListRow({
             // landing — and never on `isSkipped`, which changes on their click and would
             // remount the box under their finger.
             key={`${seedKey}:${row.ratingKey}`}
-            label={row.label}
+            label={
+              isCollection
+                ? `${position}. ${row.label}`
+                : row.label
+            }
             onChange={onToggle}
             size="sm"
             value={row.ratingKey}
@@ -614,6 +741,30 @@ function MemberListRow({
               ? "Skipped by default"
               : "Skipped"}
           </Badge>
+        ) : null}
+        {onMove ? (
+          <span className="membermove">
+            <Button
+              appearance="ghost"
+              intent="neutral"
+              isDisabled={position === 1}
+              onClick={() => onMove(-1)}
+              size="sm"
+              type="button"
+            >
+              Earlier
+            </Button>
+            <Button
+              appearance="ghost"
+              intent="neutral"
+              isDisabled={isLast}
+              onClick={() => onMove(1)}
+              size="sm"
+              type="button"
+            >
+              Later
+            </Button>
+          </span>
         ) : null}
       </li>
     </>

@@ -62,6 +62,10 @@ export async function resolveTile(
   skipped: ReadonlySet<string> = new Set<string>(),
   includedSpecials: ReadonlySet<string> = new Set<string>(),
 ): Promise<ResolvedTile> {
+  const collectionOrder = value && typeof value === 'object'
+    && Array.isArray((value as { collection_order?: unknown }).collection_order)
+    ? (value as { collection_order: unknown[] }).collection_order.map(String)
+    : [];
   let resolved: ResolvedItem | null = null;
   try {
     resolved = await plex.resolveValue(sections, value, opts);
@@ -100,6 +104,7 @@ export async function resolveTile(
         opts,
         skipped,
         includedSpecials,
+        collectionOrder,
       );
     } catch {
       isNextEpFailed = true;
