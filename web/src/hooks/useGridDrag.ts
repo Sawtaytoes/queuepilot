@@ -3,7 +3,7 @@ import { type RefObject, useEffect } from "react"
 import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
 import { busy } from "../state/busy"
-import { toggleSelect } from "../state/selection"
+import { toggleSelectThrough } from "../state/selection"
 import {
   bumpRevision,
   getState,
@@ -119,6 +119,7 @@ export function useGridDrag(
     if (!grid) return
 
     let press: Press | null = null
+    let selectionClickCard: HTMLElement | null = null
 
     const beginDrag = () => {
       if (!press) return
@@ -404,7 +405,7 @@ export function useGridDrag(
       })
     }
 
-    async function onUp() {
+    async function onUp(event: PointerEvent) {
       if (!press) return
 
       const {
@@ -425,7 +426,26 @@ export function useGridDrag(
         // "Move mode": once something is checked, a plain poster tap toggles it
         // too, so a whole run can be selected without hunting for checkboxes.
         if (busy.selectedCount > 0) {
-          toggleSelect(set, key)
+          // The browser emits `click` after this pointerup. In Cards/Rows density the tap can
+          // have landed on the title link, but selection mode owns the item tap, so suppress
+          // that later navigation after recording which card it belongs to.
+          selectionClickCard = card
+          toggleSelectThrough(
+            set,
+            key,
+            lanesOf(grid!).flatMap((lane) =>
+              [
+                ...lane.querySelectorAll<HTMLElement>(
+                  "li.tile",
+                ),
+              ]
+                .map((tile) => tile.dataset.key)
+                .filter((tileKey): tileKey is string =>
+                  Boolean(tileKey),
+                ),
+            ),
+            event.shiftKey,
+          )
 
           return
         }
@@ -578,7 +598,14 @@ export function useGridDrag(
         target.closest(".tileplay")
       )
         return // their own clicks
-      if (!target.closest(".thumb")) return // drag/select only from the poster
+      // Outside selection mode, the poster stays the open/drag surface. Once selection is
+      // active, the whole non-control part of a card toggles it. This is important in Cards
+      // and Rows density, where the poster is only a small part of the item.
+      if (
+        !target.closest(".thumb") &&
+        busy.selectedCount === 0
+      )
+        return
       // PRIMARY button only. `pointerdown` fires for the right button too, so a right-click
       // on the poster opened a press that its own `pointerup` then settled as a TAP — which
       // opens the entry sheet. The tile menu the right-click had just opened went under it,
@@ -633,6 +660,14 @@ export function useGridDrag(
     // by default; a native image drag pre-empts the pointer-drag with a
     // pointercancel).
     const onDragStart = (e: Event) => e.preventDefault()
+    const onClickCapture = (e: MouseEvent) => {
+      if (selectionClickCard?.contains(e.target as Node)) {
+        e.preventDefault()
+        e.stopPropagation()
+      }
+
+      selectionClickCard = null
+    }
     // A long press is the MENU or the DRAG, never both.
     //
     // This event IS the long press on touch, so by the time it fires the gesture has
@@ -679,12 +714,18 @@ export function useGridDrag(
       passive: false,
     })
     grid.addEventListener("dragstart", onDragStart)
+    grid.addEventListener("click", onClickCapture, true)
     grid.addEventListener("contextmenu", onContextMenu)
 
     return () => {
       grid.removeEventListener("pointerdown", onPointerDown)
       grid.removeEventListener("touchmove", onTouchMove)
       grid.removeEventListener("dragstart", onDragStart)
+      grid.removeEventListener(
+        "click",
+        onClickCapture,
+        true,
+      )
       grid.removeEventListener("contextmenu", onContextMenu)
       endPress()
     }
