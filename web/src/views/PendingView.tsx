@@ -23,9 +23,9 @@ import { Poster } from "../components/Poster"
 import { QueuePeopleBadge } from "../components/QueuePeopleBadge"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
+import { asPreQueueStartEntry } from "../lib/preQueueStart"
 import { startLabel } from "../lib/tileFace"
 import type {
-  ChannelMember,
   Library,
   PendingItem,
   PendingResponse,
@@ -160,25 +160,6 @@ const CrossGlyph = () => (
  * a channel's stored array, and the only writer this entry ever gets is the local `save`
  * below.
  */
-const asStartEntry = (
-  item: PendingItem,
-  start: StartPoint | null,
-): ChannelMember => ({
-  childCount:
-    item.type === "collection"
-      ? (item.childCount ?? null)
-      : null,
-  cover: null,
-  index: -1,
-  nextEp: null,
-  ratingKey: item.ratingKey,
-  resolved: true,
-  start,
-  title: item.title,
-  type: item.type,
-  year: item.year,
-})
-
 /**
  * PENDING — what arrived in the libraries that nothing is going to play.
  *
@@ -516,7 +497,7 @@ export function PendingView() {
    */
   const pickStart = (item: PendingItem) => {
     openStartModal({
-      item: asStartEntry(
+      item: asPreQueueStartEntry(
         item,
         starts[item.ratingKey] ?? null,
       ),
