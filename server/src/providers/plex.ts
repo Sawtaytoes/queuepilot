@@ -265,7 +265,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         return resolve.nextQueue(
           c, setName, cfg, entries, watched, token, defaultRng,
           (entryKey, windowMs) => promote.canLeadOnce(setName, entryKey, windowMs),
-          (entryKey) => queueEntryHistory.completedFor(setName, entryKey),
+          (entryKey) => queueEntryHistory.progressFor(setName, entryKey),
         );
       }
 
