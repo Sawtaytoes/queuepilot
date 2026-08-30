@@ -4,7 +4,7 @@
 - **Date:** 2026-08-22
 - **Type:** UI / behaviour
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [Pending collections can pick a start point before the add](2026-08-30-pending-collections-can-pick-a-start-point.md) *(show-only scope; the write order and local-before-add behaviour remain)*
 
 ## Decision
 

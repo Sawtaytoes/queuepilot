@@ -113,16 +113,26 @@ try {
     console.log('shot:', `${OUT}/pending-views-list.png`);
 
     /*
-      A third frame for the control the other two cannot show: "Start at…" appears on a SHOW
-      and the fixture's films outnumber its serials thousands to one on the first screenful.
-      Narrowing the libraries to Serials is the cheapest way to a page made of shows, and it
-      exercises the library filter on the way past.
+      A third frame for the control the other two cannot show: "Start at…" appears on SHOWS and
+      COLLECTIONS, and the fixture's films outnumber its serials thousands to one on the first
+      screenful. Narrowing the libraries to Serials is the cheapest way to a page made of shows,
+      and it exercises the library filter on the way past.
     */
     await page.getByRole('checkbox', { name: 'Films' }).click();
     await page.waitForTimeout(800);
     await page.getByRole('checkbox', { name: 'Documentaries' }).click();
     await page.waitForSelector('#pendinggrid li', { timeout: 60000 });
     await page.waitForTimeout(1500);
+    const collectionCard = page.locator('#pendinggrid li', { has: page.locator('.pcollection') }).first();
+    if (await collectionCard.locator('[data-testid="pending-start"]').count() !== 1) {
+      throw new Error('pending collection does not expose the start control');
+    }
+    await collectionCard.locator('[data-testid="pending-start"]').click();
+    await page.waitForSelector('#startmodal[data-open]', { timeout: 15000 });
+    if (!await page.locator('#start-seriesbox').isVisible()) {
+      throw new Error('pending collection start control did not open the member picker');
+    }
+    await page.locator('#start-cancel').click();
     await page.screenshot({ path: `${OUT}/pending-views-start.png` });
     console.log('shot:', `${OUT}/pending-views-start.png`);
 
