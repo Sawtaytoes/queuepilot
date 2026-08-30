@@ -1,4 +1,5 @@
 import { Checkbox } from "@charcuterie/ui"
+import type { ReactNode } from "react"
 
 /**
  * A flat list of labelled checkboxes inside a `.libs` grid. Used by the set modal's
@@ -35,7 +36,7 @@ export function CheckboxGroup<T extends string | number>({
   seedKey = "",
 }: {
   id?: string
-  options: { value: T; label: string }[]
+  options: { value: T; label: ReactNode }[]
   checked: T[]
   onToggle: (value: T, isChecked: boolean) => void
   /**
