@@ -1,16 +1,12 @@
 import { Button } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router"
 import {
   isPullSet,
   OpenQueueButton,
 } from "../components/OpenQueueButton"
 import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
-import {
-  activeBinding,
-  channelAccountLabel,
-} from "../lib/channels"
+import { activeBinding } from "../lib/channels"
 import type { RegistrySet } from "../lib/types"
 import {
   resolveChannel,
@@ -21,7 +17,7 @@ import {
   openDynModal,
   openPlayMenu,
 } from "../state/overlays"
-import { rotationChannels, useStore } from "../state/store"
+import { useStore } from "../state/store"
 import { ChannelFilters } from "./ChannelFilters"
 import { ChannelMembers } from "./ChannelMembers"
 import { ChannelPool } from "./ChannelPool"
@@ -30,9 +26,8 @@ import { ChannelPool } from "./ChannelPool"
  * CHANNELS — the rule-based rotations: a computed pool plus its filter knobs,
  * deliberately distinct from the hand-ordered queues (it is a filter, not a list).
  *
- * The picker lists EVERY rules queue by id, and NOTHING else — a Picks queue is on the
- * Picks screen, whichever lane it defaults to. The tier picker lists only THIS channel's
- * bindings, so a tier never appears more than once.
+ * The `/queues` index lists every Rules queue. This view shows the one named by its route;
+ * the only picker left here is the profile picker for a queue with several bindings.
  * (decision `2026-07-29-dynamic-channels-first-class-and-deletable`)
  *
  * `currentChannelKind` derives from the channel's `behavior` rather than from a
@@ -66,7 +61,6 @@ export function ChannelsView({
 }: {
   routeId: string | null
 }) {
-  const navigate = useNavigate()
   const { reg } = useStore()
   const {
     channelId: currentChannel,
@@ -79,7 +73,6 @@ export function ChannelsView({
   // preview cache, so this cheap re-read returns the excluded show already gone.
   const [reloadToken, setReloadToken] = useState(0)
 
-  const all = rotationChannels(reg)
   const channel = resolveChannel(
     reg,
     routeId,
@@ -141,68 +134,6 @@ export function ChannelsView({
       id="channels"
     >
       <div className="chhead">
-        <label>
-          {/* "Pool" until 2026-08-26, and it was wrong twice over: the page's own heading
-              says Rules, and `pool` is already the name of a LANE inside a Picks queue (the
-              Random pool). The ADR that named the two kinds says not to spend the word on
-              both (decision `2026-08-23-kind-is-picks-or-rules`). The generated result below
-              is now "Eligible titles", so Pool has one meaning here: the Random pool lane
-              inside a Picks queue. */}
-          Rules queue
-          {/* `key={channel.id}` on BOTH pickers, for two different reasons, and
-              neither is "the value changed".
-
-              A picker is uncontrolled by decision — `value` seeds the `Listbox`,
-              which owns the selection thereafter (it was a native `Select` seeding
-              `defaultValue` when this was written; the reasoning survived the
-              2026-08-07 move to `Listbox` unchanged) — so a key is needed exactly
-              where a SECOND writer exists.
-
-              - Channel: the second writer is the router. Picking here navigates,
-                and the DOM is already right; but a back button or a typed
-                `/channels/movies` changes `channel.id` with nobody having touched
-                the control, and without the key the picker would keep naming the
-                channel you left.
-              - Profile: its OPTIONS belong to the channel, so they must be
-                re-seeded when the channel changes. Keying it on the channel rather
-                than on `profileValueNow` is the point — picking a profile leaves
-                `channel.id` alone, so the user's own change never remounts the
-                control under their focus. */}
-          <SelectListbox
-            id="chchannel"
-            key={channel.id}
-            label="Rules queue"
-            onChange={(v) => navigate(`/channels/${v}`)}
-            /**
-             * RULES QUEUES ONLY.
-             *
-             * This list used to append every Picks queue whose `add_as` is `random`, under a
-             * `q:` prefix that routed the pick to `/q/<id>`. That was the last of the old
-             * three-way taxonomy: a "Curated Pool" was filed with the pools because both were
-             * shuffled, so ten of the household's Picks queues — `Kevin — Anime`,
-             * `Manga & Webtoons`, `Younger Kids — Shows` — sat in a dropdown on a page whose
-             * heading says Rules, between `Shorts` and `Movies`.
-             *
-             * `add_as` is a lane default INSIDE a Picks queue, not a product kind. Every Picks
-             * queue is on the Picks screen now, both lanes together
-             * (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
-             */
-            options={all.map((s) => ({
-              // WHOSE pool this is, as the row's trailing chip. `Shows` and `Shows & Shorts`
-              // are the same words until you know one is Younger Kids and the other Older
-              // Kids — the Play landing's card has said so in its meta line since 2026-08-17,
-              // and this picker never had a version of it (owner, 2026-08-26).
-              //
-              // `?? undefined` and not `?? ""`: `SelectListbox` draws the `Badge` on any
-              // truthy value, so an empty string would put a blank pill on a legacy flat set
-              // rather than no pill at all.
-              badge: channelAccountLabel(s) ?? undefined,
-              label: s.label,
-              value: s.id,
-            }))}
-            value={channel.id}
-          />
-        </label>
         {hasProfileChoice ? (
           <label>
             Profile
@@ -301,14 +232,6 @@ export function ChannelsView({
             ⚙ Configure
           </Button>
         </Tip>
-        <Button
-          appearance="outline"
-          id="newdyn"
-          intent="accent"
-          onClick={() => openDynModal(null)}
-        >
-          ＋ Rules queue
-        </Button>
         {/* ＋ Picks queue used to stand here too, seeded `random`, because a random-lane
             Picks queue was LISTED here. It is not any more, so a page that cannot show you
             what you just made must not offer to make it: Picks are created from the Play

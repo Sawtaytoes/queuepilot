@@ -5,7 +5,10 @@ import { api } from "../lib/api"
 import { queueItemAddBody } from "../lib/searchGroups"
 import type { RegistrySet, SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
-import { openSetModal } from "../state/overlays"
+import {
+  openDynModal,
+  openSetModal,
+} from "../state/overlays"
 import { usePeople } from "../state/people"
 import {
   curatedIds,
@@ -14,6 +17,7 @@ import {
 } from "../state/store"
 import { setCollapsed, setFilter, useUi } from "../state/ui"
 import { EditionBadge } from "./EditionBadge"
+import { Modal } from "./Modal"
 import { Poster } from "./Poster"
 import { QueuePeopleBadge } from "./QueuePeopleBadge"
 import { SearchDropdown } from "./SearchDropdown"
@@ -39,6 +43,8 @@ export function Toolbar() {
   const [openMenu, setOpenMenu] = useState<number | null>(
     null,
   )
+  const [isChoosingType, setIsChoosingType] =
+    useState(false)
 
   /*
    * The document-level Escape listener that used to sit here is GONE, and its whole
@@ -291,10 +297,52 @@ export function Toolbar() {
         appearance="outline"
         id="newqueue"
         intent="accent"
-        onClick={() => openSetModal(null, "priority")}
+        onClick={() => setIsChoosingType(true)}
       >
-        ＋ New queue
+        + New queue
       </Button>
+      <Modal
+        footer={null}
+        id="queue-type-modal"
+        isOpen={isChoosingType}
+        onClose={() => setIsChoosingType(false)}
+        title="Queue type"
+        titleId="queue-type-title"
+      >
+        <p>Choose how QueuePilot fills this queue.</p>
+        <div className="queue-type-options">
+          <Button
+            appearance="outline"
+            intent="accent"
+            onClick={() => {
+              setIsChoosingType(false)
+              openSetModal(null, "priority")
+            }}
+            type="button"
+          >
+            <strong>Picks</strong>
+            <span>
+              Choose titles yourself, then arrange them in
+              priority and random lanes.
+            </span>
+          </Button>
+          <Button
+            appearance="outline"
+            intent="accent"
+            onClick={() => {
+              setIsChoosingType(false)
+              openDynModal(null)
+            }}
+            type="button"
+          >
+            <strong>Rules</strong>
+            <span>
+              Set eligibility filters and let QueuePilot
+              select matching titles.
+            </span>
+          </Button>
+        </div>
+      </Modal>
     </div>
   )
 }
