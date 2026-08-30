@@ -68,8 +68,8 @@ const modeLinks = await page.$$eval('#mode-landing a', (els) =>
   })),
 );
 ok(
-  'the task home offers two starts and five management destinations',
-  modeLinks.length === 7 &&
+  'the task home offers two starts and four management destinations',
+  modeLinks.length === 6 &&
     modeLinks[0]?.href === '/what-to-watch-play' &&
     modeLinks[0].text?.startsWith('What to Watch/Play') === true &&
     modeLinks[1]?.href === '/queues' &&
@@ -87,10 +87,8 @@ for (const [path, want] of [
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
   ['/what-to-watch-play', 'What to Watch/Play'],
   ['/what-to-watch-play/surprise', 'What to Watch/Play'],
-  // The board-game shelf. A LONG path on purpose: `/collection` claimed a generic word for
-  // one specific shelf, and "collection" already means a row of films everywhere else in
-  // this app (decision `2026-08-25-the-board-game-shelf-is-board-game-collection`).
-  ['/board-game-collection', 'Collection'],
+  ['/collection', 'Collection'],
+  ['/collection/board-games', 'Board Games'],
 ] as const) {
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
   ok(`deep link ${path} renders "${want}"`, await heading(want));
