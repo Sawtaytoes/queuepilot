@@ -1035,6 +1035,11 @@ export function QueuesView({
   // which is what left `Kevin — Anime` and nine others listed on the Rules page instead
   // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
   const shelfIds = curatedIds(data)
+  const rulesChannels = rotationChannels(reg)
+  const queueIds = [
+    ...shelfIds,
+    ...rulesChannels.map((channel) => channel.id),
+  ]
   const kindOf = (id: string) =>
     reg?.sets.find((set) => set.id === id)?.provider_kind ??
     ""
@@ -1048,14 +1053,17 @@ export function QueuesView({
   const shownShelfIds = shelfIds.filter((id) =>
     matches(id, selected, only),
   )
+  const shownRulesChannels = rulesChannels.filter(
+    (channel) => matches(channel.id, selected, only),
+  )
   const countFor = (
     forPeople: readonly string[],
     forOnly: string | null,
   ) =>
-    shelfIds.filter((id) => matches(id, forPeople, forOnly))
+    queueIds.filter((id) => matches(id, forPeople, forOnly))
       .length
   const providerKinds = [
-    ...new Set(shelfIds.map(kindOf).filter(Boolean)),
+    ...new Set(queueIds.map(kindOf).filter(Boolean)),
   ]
   const labelForKind = (kind: string) =>
     reg?.sets.find((set) => set.provider_kind === kind)
@@ -1080,35 +1088,6 @@ export function QueuesView({
         search={search}
         selected={selected}
       />
-      {rotationChannels(reg).length ? (
-        <section
-          aria-labelledby="rules-queues-heading"
-          className="rules-queue-picker"
-        >
-          <div className="queue-section-heading">
-            <div>
-              <h2 id="rules-queues-heading">Rules</h2>
-              <p>Queues filled from eligibility filters.</p>
-            </div>
-          </div>
-          <div className="rules-queue-shelves">
-            {rotationChannels(reg).map((channel) => (
-              <RulesShelf
-                channel={channel}
-                filter={filter}
-                groups={people.groups}
-                isCollapsed={
-                  !hasCollapsePreference ||
-                  collapsed.has(channel.id)
-                }
-                key={channel.id}
-                members={people.byQueue[channel.id] ?? []}
-                people={people.people}
-              />
-            ))}
-          </div>
-        </section>
-      ) : null}
       <div className="queue-section-heading picks-queue-heading">
         <div>
           <h2>Picks</h2>
@@ -1172,6 +1151,35 @@ export function QueuesView({
           )
         })}
       </div>
+      {rulesChannels.length ? (
+        <section
+          aria-labelledby="rules-queues-heading"
+          className="rules-queue-picker"
+        >
+          <div className="queue-section-heading">
+            <div>
+              <h2 id="rules-queues-heading">Rules</h2>
+              <p>Queues filled from eligibility filters.</p>
+            </div>
+          </div>
+          <div className="rules-queue-shelves">
+            {shownRulesChannels.map((channel) => (
+              <RulesShelf
+                channel={channel}
+                filter={filter}
+                groups={people.groups}
+                isCollapsed={
+                  !hasCollapsePreference ||
+                  collapsed.has(channel.id)
+                }
+                key={channel.id}
+                members={people.byQueue[channel.id] ?? []}
+                people={people.people}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   )
 }
