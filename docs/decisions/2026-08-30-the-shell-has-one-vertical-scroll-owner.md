@@ -17,6 +17,9 @@ view's `.move-mode` padding. It does not reserve permanent space on `body`.
 Edge auto-scroll for queue and shelf drags follows the same nearest vertical scroll region.
 It does not call `window.scrollBy` when `Main` owns the page.
 
+Route changes reset `Main`, and the Picks page saves and restores `Main.scrollTop`. These
+behaviours do not read or write the document scroll position.
+
 The always-on browser layout gate measures both document axes on every route. A work page
 fails when `documentElement.scrollHeight` exceeds `documentElement.clientHeight`.
 

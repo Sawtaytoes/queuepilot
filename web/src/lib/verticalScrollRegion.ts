@@ -33,6 +33,18 @@ export const scrollRegionTop = (
   document.scrollingElement?.scrollTop ??
   window.scrollY
 
+export const scrollRegionTo = (
+  region: HTMLElement | null,
+  top: number,
+) => {
+  if (region) region.scrollTop = top
+  else window.scrollTo(0, top)
+}
+
+/** The work-page scroll owner installed by Charcuterie's viewport-height `Shell`. */
+export const pageScrollRegion = () =>
+  document.querySelector<HTMLElement>("main")
+
 /** Viewport coordinates for the visible part of a vertical scroll owner. */
 export const scrollRegionBounds = (
   region: HTMLElement | null,

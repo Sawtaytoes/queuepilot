@@ -302,8 +302,8 @@ ok('browser Back returns to Overview', await heading('Overview'));
   await page.waitForSelector('a.open');
   // Picks starts collapsed. Expand it so this ROUTING check has a long page to scroll.
   await page.click('#collapseall');
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  const scrollBeforeQueue = await page.evaluate(() => window.scrollY);
+  await page.locator('main').evaluate((main) => { main.scrollTop = main.scrollHeight; });
+  const scrollBeforeQueue = await page.locator('main').evaluate((main) => main.scrollTop);
   ok('the Picks page can be scrolled before opening a queue', scrollBeforeQueue > 0);
   // Rules now follow Picks, so scope this queue-detail assertion to the Picks region.
   await page.locator('#shelves .shelf a.open').last().click();
@@ -311,7 +311,7 @@ ok('browser Back returns to Overview', await heading('Overview'));
   await page.waitForSelector('#queue:not([hidden])');
   ok(
     'opening a queue resets the page scroll to the top',
-    await page.evaluate(() => window.scrollY === 0),
+    await page.locator('main').evaluate((main) => main.scrollTop === 0),
   );
 }
 
