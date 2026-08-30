@@ -13,6 +13,7 @@ import { useLocation, useNavigate } from "react-router"
 
 import { CheckboxGroup } from "../components/CheckboxGroup"
 import { GuestStepper } from "../components/GuestStepper"
+import { PersonFace } from "../components/PersonFace"
 import { SelectListbox } from "../components/SelectListbox"
 import { api } from "../lib/api"
 import { tableSize } from "../lib/boardGames"
@@ -428,7 +429,16 @@ export function TonightView({
                 )
               }}
               options={people.map((person) => ({
-                label: person.displayName,
+                label: (
+                  <span className="tonightperson">
+                    <PersonFace
+                      id={person.id}
+                      label={person.displayName}
+                      size="sm"
+                    />
+                    <span>{person.displayName}</span>
+                  </span>
+                ),
                 value: person.id,
               }))}
               // The ROSTER is this group's second writer — the user's own clicks write
