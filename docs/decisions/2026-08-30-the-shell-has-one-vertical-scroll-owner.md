@@ -14,6 +14,9 @@ work page. `html` and `body` do not add height or bottom clearance outside that 
 The fixed selection bar reserves space only while it is visible, through the selected
 view's `.move-mode` padding. It does not reserve permanent space on `body`.
 
+Edge auto-scroll for queue and shelf drags follows the same nearest vertical scroll region.
+It does not call `window.scrollBy` when `Main` owns the page.
+
 The always-on browser layout gate measures both document axes on every route. A work page
 fails when `documentElement.scrollHeight` exceeds `documentElement.clientHeight`.
 

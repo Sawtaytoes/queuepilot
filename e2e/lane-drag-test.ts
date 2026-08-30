@@ -261,8 +261,22 @@ try {
     'the number press passed through to the poster action',
   );
 
-  const touchTile = page.locator('#grid-priority li.tile .thumb').first();
-  await touchTile.scrollIntoViewIfNeeded();
+  const main = page.locator('main');
+  await main.evaluate((element) => {
+    element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+  });
+  const touchTiles = page.locator('#grid-priority li.tile .thumb');
+  const visibleTileIndex = await touchTiles.evaluateAll((elements) => {
+    const mainBox = document.querySelector('main')?.getBoundingClientRect();
+    if (!mainBox) return -1;
+
+    return elements.findIndex((element) => {
+      const box = element.getBoundingClientRect();
+      return box.top >= mainBox.top && box.bottom <= mainBox.bottom;
+    });
+  });
+  assert.ok(visibleTileIndex >= 0, 'need a Priority poster inside the Main viewport');
+  const touchTile = touchTiles.nth(visibleTileIndex);
   const touchBox = await touchTile.boundingBox();
   assert.ok(touchBox, 'need a visible Priority poster for the touch gesture');
   const touchStart = {
@@ -303,7 +317,27 @@ try {
     'the Play / lane menu opened over the drag',
   );
 
-  const scrollBefore = await page.evaluate(() => window.scrollY);
+  const scrollBefore = await main.evaluate((element) => element.scrollTop);
+  const scrollOwnerState = await touchTile.evaluate((element) => {
+    const owners = [];
+    let ancestor = element.parentElement;
+
+    while (ancestor) {
+      const overflowY = getComputedStyle(ancestor).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') {
+        owners.push({
+          className: ancestor.className,
+          clientHeight: ancestor.clientHeight,
+          scrollHeight: ancestor.scrollHeight,
+          scrollTop: ancestor.scrollTop,
+          tagName: ancestor.tagName,
+        });
+      }
+      ancestor = ancestor.parentElement;
+    }
+
+    return owners;
+  });
   await page.evaluate(({ x, y }) => {
     window.dispatchEvent(new PointerEvent('pointermove', {
       bubbles: true,
@@ -316,11 +350,11 @@ try {
     }));
   }, { x: touchStart.x, y: 638 });
   await page.waitForTimeout(500);
-  const scrollAfter = await page.evaluate(() => window.scrollY);
+  const scrollAfter = await main.evaluate((element) => element.scrollTop);
   check(
     'holding a dragged tile at the viewport edge scrolls to later items',
     scrollAfter > scrollBefore,
-    `scroll stayed at ${scrollBefore} (after ${scrollAfter})`,
+    `scroll stayed at ${scrollBefore} (after ${scrollAfter}); owners ${JSON.stringify(scrollOwnerState)}`,
   );
 
   await page.evaluate(({ x, y }) => {
