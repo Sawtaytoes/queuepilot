@@ -908,6 +908,8 @@ export interface ItemLabel {
   show: string | null;
   season: number | null;
   episode: number | null;
+  posterRatingKey: string | null;
+  sourceTitle: string | null;
 }
 
 /**
@@ -921,7 +923,7 @@ export async function itemLabel(ratingKey: string | number): Promise<ItemLabel> 
   const rk = String(ratingKey);
   const missing: ItemLabel = {
     ratingKey: rk, type: null, title: `#${rk}`, year: null, editionTitle: null,
-    show: null, season: null, episode: null,
+    show: null, season: null, episode: null, posterRatingKey: null, sourceTitle: null,
   };
   let md;
   try {
@@ -940,6 +942,8 @@ export async function itemLabel(ratingKey: string | number): Promise<ItemLabel> 
     show: md.grandparentTitle ?? null,
     season: md.parentIndex ?? null,
     episode: md.index ?? null,
+    posterRatingKey: md.grandparentRatingKey ? String(md.grandparentRatingKey) : rk,
+    sourceTitle: md.grandparentTitle ?? md.Collection?.[0]?.tag ?? null,
   };
 }
 
