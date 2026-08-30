@@ -9,6 +9,7 @@ import * as providerTiles from '../providers/tiles.js';
 import * as queues from '../queues.js';
 import * as sets from '../sets.js';
 import * as tiles from '../tiles.js';
+import { normalizeAddAs } from '../kind.js';
 import { mapLimit } from './mapLimit.js';
 import { deleteQueueMembers } from '../store/db/queuePeople.js';
 import { readBody } from './readBody.js';
@@ -94,7 +95,22 @@ export function setsRoutes(): Hono {
   app.patch('/sets/:id', async (c) => {
     try {
       const body = await readBody(c);
-      const out = await sets.updateSet(c.req.param('id'), body);
+      const id = c.req.param('id');
+      const current = await sets.getSet(id);
+      if (!current) throw new Error(`unknown set ${id}`);
+      if (current.source === 'queue' && 'add_as' in body) {
+        const oldDefault = normalizeAddAs(current.add_as, current);
+        const newDefault = normalizeAddAs(body.add_as, {
+          kind: body.kind ?? current.kind,
+          source: current.source,
+        });
+        if (oldDefault !== newDefault) {
+          // The default describes NEW additions. Materialise the old fallback first so a
+          // settings edit cannot silently move every existing sparse entry to another lane.
+          await queues.preserveInheritedPlacements(id, oldDefault);
+        }
+      }
+      const out = await sets.updateSet(id, body);
       // Config mutation → cache invalidation (B3.3), cheapest useful thing: bump the generation
       // so open browsers' /api/queues ETags bust, and if the libraries a set draws from changed,
       // drop those section listings so the next read reflects the new pool.
