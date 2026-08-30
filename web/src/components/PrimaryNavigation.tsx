@@ -41,28 +41,17 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
       label: "Watch/Play",
     },
     {
-      href: ROUTE_PATHS.picks.replace("/*", ""),
+      href: ROUTE_PATHS.queues.replace("/*", ""),
       icon: (
         <NavigationIcon>
           <path d="M5 5h14v14H5z" />
           <path d="M8 9h8M8 12h8M8 15h5" />
         </NavigationIcon>
       ),
-      label: "Picks queues",
+      label: "Queues",
     },
     {
-      href: "/channels",
-      icon: (
-        <NavigationIcon>
-          <path d="M4 7h16M4 17h16" />
-          <circle cx="9" cy="7" r="2" />
-          <circle cx="15" cy="17" r="2" />
-        </NavigationIcon>
-      ),
-      label: "Rules queues",
-    },
-    {
-      href: "/board-game-collection",
+      href: ROUTE_PATHS.collection,
       icon: (
         <NavigationIcon>
           <path d="M5 4h14v16H5z" />

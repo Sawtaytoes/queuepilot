@@ -707,6 +707,67 @@ button {
 #shelves {
   padding-top: 8px;
 }
+.queue-section-heading {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin: 24px 0 12px;
+}
+.queue-section-heading h2,
+.queue-section-heading p {
+  margin: 0;
+}
+.queue-section-heading p,
+.rules-queue-card a > span:last-child {
+  color: var(--color-content-muted);
+}
+.rules-queue-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(100%, 18rem), 1fr)
+    );
+}
+.rules-queue-card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+.rules-queue-card a {
+  color: var(--color-content-primary);
+  display: grid;
+  gap: 8px;
+  text-decoration: none;
+}
+.rules-queue-card a:hover strong {
+  color: var(--color-intent-accent-solid);
+}
+.queue-type-options {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.queue-type-options button {
+  align-items: start;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  text-align: left;
+  white-space: normal;
+}
+.queue-type-options button span {
+  color: var(--color-content-secondary);
+  font-weight: 400;
+}
+@media (max-width: 560px) {
+  .queue-type-options {
+    grid-template-columns: 1fr;
+  }
+}
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
    Tailwind v4 scans source for class tokens it emits that utility the moment the
    word appears, hiding this very button. `-toggle` keeps us off the reserved name. */
@@ -1951,13 +2012,27 @@ body.queue-view #tools {
 .results li {
   position: relative;
 }
-/* The Add-to menus (a Pending tile's, and a search row's) are Charcuterie `Menu`s, and a
-   `Menu` brings its own surface, its own rows and its own POSITION — floating-ui writes
-   `position: fixed` plus a transform straight onto the panel. So there is nothing to lay
-   out here and exactly one thing to say: cap the width, because the panel sizes to its
-   content and the no-compatible-queue row is a whole sentence. */
+/* The Add-to menus (a Pending tile's, and a search row's) are Charcuterie `Menu`s. The
+   panel can contain every queue in the house, so it scrolls within the viewport instead of
+   extending past its bottom edge. The small row gap keeps adjacent audiences distinct. */
 .addtomenu {
-  max-width: 18rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(36rem, calc(100dvh - 24px));
+  max-width: min(26rem, calc(100dvw - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.addtomenu [role="separator"] {
+  margin-block: 2px;
+}
+.addtomenu-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* `.qmenu` is now the PLAY menu's only home — the two Add-to menus moved to Charcuterie's
@@ -2271,7 +2346,8 @@ body.queue-view #tools {
 #membersmodal,
 #peoplemodal,
 #groupsmodal,
-#poweroffmodal {
+#poweroffmodal,
+#queue-type-modal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
   border: 1px solid var(--color-border-default);
@@ -2323,6 +2399,10 @@ body.queue-view #tools {
 #poweroffmodal {
   width: min(400px, 92vw);
 }
+/* One first-step choice with two descriptive cards. */
+#queue-type-modal {
+  width: min(720px, 92vw);
+}
 /* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
    native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
 #startmodal form,
@@ -2332,7 +2412,8 @@ body.queue-view #tools {
 #membersmodal form,
 #peoplemodal form,
 #groupsmodal form,
-#poweroffmodal form {
+#poweroffmodal form,
+#queue-type-modal form {
   position: relative;
 }
 #startmodal h3,
@@ -2342,7 +2423,8 @@ body.queue-view #tools {
 #membersmodal h3,
 #peoplemodal h3,
 #groupsmodal h3,
-#poweroffmodal h3 {
+#poweroffmodal h3,
+#queue-type-modal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
 }
@@ -2691,6 +2773,12 @@ html.modal-open {
   align-items: center;
   gap: 8px 18px;
   margin: 0 0 4px;
+}
+/* The Queues picker must not touch the toolbar above it. The same filter component also
+   appears on the overview, so the spacing belongs to this page placement rather than to the
+   reusable filter shape. */
+#home > .filterbar {
+  margin-top: 16px;
 }
 .filterchips {
   list-style: none;
@@ -3376,19 +3464,32 @@ body.name-editable #apphead h1 {
 [role="option"] > span:has(> .optionbadge) > .optionbadge {
   margin-left: auto;
 }
-/* The same chip, on a MENU row — the two Add-to menus name a queue by its activity, so the
-   people chip is what tells four "Movies & Shows" rows apart. A menu item is a
-   `role="menuitem"` and never a `role="option"`, so it needs its own pair of rules rather
-   than a looser selector: widening the ones above to any element holding a chip would reach
-   the Start-from picker's rows and the count picker's, both of which are already right. */
-[role="menuitem"]:has(.optionbadge) {
+/* The Add-to menu uses the same faces as the queue cards. A compact overlapping stack makes
+   repeated audiences easy to scan while the full text label stays visible and accessible. */
+[role="menuitem"]:has(.optionpeople) {
   display: flex;
   align-items: center;
   width: 100%;
 }
-[role="menuitem"] > .optionbadge,
-[role="menuitem"] .optionbadge {
+.optionpeople {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
+  min-width: 0;
+}
+.optionfaces {
+  display: inline-flex;
+  flex: none;
+  padding-left: 5px;
+}
+.optionfaces .pface + .pface {
+  margin-left: -5px;
+}
+.optionpeople-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ================================================================================
