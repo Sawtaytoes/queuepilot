@@ -28,6 +28,10 @@ import {
   WATCH_PLAY_PATH,
 } from "./lib/routePaths"
 import {
+  pageScrollRegion,
+  scrollRegionTo,
+} from "./lib/verticalScrollRegion"
+import {
   resolveChannel,
   useChannelSelection,
 } from "./state/channelSelection"
@@ -218,7 +222,7 @@ function AppFrame() {
   // new page here, so start it at the top before the new page paints. QueuesView restores its
   // saved position after this when somebody returns to Picks.
   useLayoutEffect(() => {
-    window.scrollTo(0, 0)
+    scrollRegionTo(pageScrollRegion(), 0)
   }, [path])
 
   useEffect(() => {

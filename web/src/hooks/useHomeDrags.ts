@@ -2,6 +2,11 @@ import { type RefObject, useEffect } from "react"
 
 import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
+import {
+  findVerticalScrollRegion,
+  scrollRegionBounds,
+  scrollRegionBy,
+} from "../lib/verticalScrollRegion"
 import { busy } from "../state/busy"
 import { refreshData } from "../state/live"
 import {
@@ -64,6 +69,18 @@ export function useHomeDrags(
 
     if (!shelvesEl) return
 
+    const scrollRegion = findVerticalScrollRegion(shelvesEl)
+
+    const autoScroll = (pointerY: number, edge: number) => {
+      const { bottom, top } =
+        scrollRegionBounds(scrollRegion)
+
+      if (pointerY < top + edge)
+        scrollRegionBy(scrollRegion, -24)
+      else if (pointerY > bottom - edge)
+        scrollRegionBy(scrollRegion, 24)
+    }
+
     // --- shelf (queue) reorder: drag the ≡ handle vertically ------------------ //
     let shelfDrag: ShelfDrag | null = null
 
@@ -72,11 +89,9 @@ export function useHomeDrags(
 
       e.preventDefault()
 
-      // Dragging near the viewport edge scrolls the page so a shelf can travel
+      // Dragging near the scroll-region edge moves it so a shelf can travel
       // further than one screen (collapse-all also makes long hauls easy).
-      if (e.clientY < 80) window.scrollBy(0, -24)
-      else if (e.clientY > window.innerHeight - 80)
-        window.scrollBy(0, 24)
+      autoScroll(e.clientY, 80)
 
       const others = [
         ...shelvesEl!.querySelectorAll<HTMLElement>(
@@ -269,9 +284,7 @@ export function useHomeDrags(
       e.preventDefault()
 
       // Page auto-scroll for cross-shelf hauls.
-      if (e.clientY < 90) window.scrollBy(0, -24)
-      else if (e.clientY > window.innerHeight - 90)
-        window.scrollBy(0, 24)
+      autoScroll(e.clientY, 90)
 
       // Which shelf is the pointer over (a little vertical slack so the gap rows
       // count)?

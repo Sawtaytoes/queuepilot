@@ -51,6 +51,11 @@ import type {
   QueueMember,
   RegistrySet,
 } from "../lib/types"
+import {
+  pageScrollRegion,
+  scrollRegionTo,
+  scrollRegionTop,
+} from "../lib/verticalScrollRegion"
 import { PLEX_WORDS } from "../lib/vocab"
 import {
   parseOnly,
@@ -728,7 +733,11 @@ function Shelf({
         <Link
           className="open"
           onClick={() => {
-            homeScroll.y = window.scrollY // restore this position when we come back
+            // Restore this `Main` position when we come back. The document does not scroll
+            // outside Charcuterie's viewport-height shell.
+            homeScroll.y = scrollRegionTop(
+              pageScrollRegion(),
+            )
           }}
           to={`/q/${setId}`}
         >
@@ -989,7 +998,9 @@ export function QueuesView({
   useEffect(() => {
     const y = homeScroll.y
 
-    requestAnimationFrame(() => window.scrollTo(0, y))
+    requestAnimationFrame(() =>
+      scrollRegionTo(pageScrollRegion(), y),
+    )
     // Only on entering the view, which is now the same thing as mounting it.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
