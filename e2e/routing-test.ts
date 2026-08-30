@@ -120,6 +120,20 @@ await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
 const rulesShelves = page.locator('.rules-shelf');
 await rulesShelves.first().waitFor({ timeout: 30000 });
 ok('Rules queues render as collapsible shelves', (await rulesShelves.count()) > 0);
+ok(
+  'Picks appear before Rules on the queue index',
+  await page.locator('.picks-queue-heading').evaluate((picks, rulesId) => {
+    const rules = document.getElementById(rulesId);
+    return Boolean(rules && (picks.compareDocumentPosition(rules) & Node.DOCUMENT_POSITION_FOLLOWING));
+  }, 'rules-queues-heading'),
+);
+const anyoneCount = Number(
+  await page.locator('#peoplechips a').first().locator('.filtercount').innerText(),
+);
+ok(
+  'the unfiltered count includes Picks and Rules queues',
+  anyoneCount === (await page.locator('.shelf').count()),
+);
 await rulesShelves.first().locator('.collapse-toggle').click();
 await rulesShelves.first().locator('li.tile').waitFor({ timeout: 30000 });
 ok(
@@ -129,6 +143,15 @@ ok(
 ok(
   'Rules preview posters have no Picks mutation controls',
   (await rulesShelves.first().locator('.shelfdrag, .lanebtn, .remove').count()) === 0,
+);
+
+// The people filter used to reach only Picks. A value that matches no audience is a compact
+// regression case: every Picks shelf was hidden while every Rules shelf incorrectly remained.
+await page.goto(`${BASE}/queues?people=nobody-in-this-fixture`, { waitUntil: 'domcontentloaded' });
+await page.waitForSelector('#peoplechips', { timeout: 30000 });
+ok(
+  'the people filter applies to Rules as well as Picks',
+  (await page.locator('.shelf:visible').count()) === 0,
 );
 
 await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
@@ -282,7 +305,8 @@ ok('browser Back returns to Overview', await heading('Overview'));
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
   const scrollBeforeQueue = await page.evaluate(() => window.scrollY);
   ok('the Picks page can be scrolled before opening a queue', scrollBeforeQueue > 0);
-  await page.locator('.shelf a.open').last().click();
+  // Rules now follow Picks, so scope this queue-detail assertion to the Picks region.
+  await page.locator('#shelves .shelf a.open').last().click();
   await page.waitForFunction(() => location.pathname.startsWith('/q/'));
   await page.waitForSelector('#queue:not([hidden])');
   ok(
