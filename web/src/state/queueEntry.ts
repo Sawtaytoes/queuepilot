@@ -249,6 +249,29 @@ export async function saveMemberSelection(
   }
 }
 
+/** Save one collection entry's member order. Empty restores the current Plex order. */
+export async function saveCollectionOrder(
+  setId: string | null | undefined,
+  item: Pick<QueueItem, "key">,
+  collectionOrder: readonly string[],
+): Promise<boolean> {
+  if (!setId) return false
+  try {
+    await api(
+      "PATCH",
+      `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/collection-order`,
+      { collection_order: collectionOrder },
+    )
+    return true
+  } catch (e) {
+    setStatus(
+      `Order save failed: ${(e as Error).message}`,
+      "err",
+    )
+    return false
+  }
+}
+
 /** Put one leaf back — the Skipped panel's ✕, and the only way a skip ever ends. */
 export async function unskipItem(
   setId: string,

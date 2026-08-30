@@ -1321,13 +1321,21 @@ export async function collectionNext(
   opts: AccountScope = {},
   skipped: ReadonlySet<string> = NO_SKIPS,
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
+  collectionOrder: readonly string[] = [],
 ): Promise<CollectionNextEp | null> {
   // Read as the SAME account the next-up below is resolved as. This used to be an admin read
   // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
   // admin view" — which meant a collection whose next member is a MOVIE skipped it on the
   // strength of someone else having seen it. Shows were already per-account via nextEpisode.
-  const children = await collectionChildren(collectionRatingKey, opts);
+  let children = await collectionChildren(collectionRatingKey, opts);
   if (!children) return null;
+  if (collectionOrder.length) {
+    const rank = new Map(collectionOrder.map((key, index) => [String(key), index]));
+    children = children
+      .map((child, plexIndex) => ({ child, plexIndex, rank: rank.get(String(child.ratingKey)) }))
+      .sort((a, b) => (a.rank ?? collectionOrder.length + a.plexIndex) - (b.rank ?? collectionOrder.length + b.plexIndex))
+      .map(({ child }) => child);
+  }
   const floorAt = startMemberIndex(children, start);
   // Which member the manual start names — the tile's start chip says so in its tooltip (the
   // member that plays NEXT can be a later one, once the start member is fully watched).
