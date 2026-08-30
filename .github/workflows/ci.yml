@@ -340,6 +340,12 @@ jobs:
       - name: Product kind + lane write side (offline)
         run: $TSX e2e/kind-normalize-test.ts
 
+      # A queue's Type is the lane DEFAULT for future additions. Existing entries that
+      # inherit the old default are materialised before it changes, so the settings form
+      # cannot silently turn a Priority plan into a Random pool (or the reverse).
+      - name: Queue default preserves existing lanes (offline)
+        run: $TSX e2e/default-lane-change-test.ts
+
       # THE TWO LANES inside a Picks queue — Priority queue and Random pool. Half of this file
       # is not about the feature at all: an Ordered Queue is `add_as: priority`, so every one
       # of its entries is in the Priority lane by INHERITANCE, and the first two cases pin that

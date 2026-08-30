@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-08-30 | [Changing a queue default preserves every existing lane](2026-08-30-changing-a-queue-default-preserves-existing-lanes.md) *(queue semantics / correction — `add_as` controls future additions only; the writer materialises inherited lanes before changing it, so existing Priority and Random assignments do not move.)* |
 | 2026-08-30 | [Pending collections can pick a start point before the add](2026-08-30-pending-collections-can-pick-a-start-point.md) *(UI / behaviour — collection cards get the same start picker as show cards; choose the member, then its episode when applicable, before adding.)* |
 | 2026-08-30 | [Rules follow Picks and share the queue filters](2026-08-30-rules-follow-picks-and-share-the-queue-filters.md) *(UI / correction — the people and provider filters and counts cover both queue kinds; Picks precede the less frequently changed Rules.)* |
 | 2026-08-30 | [A collection order can override and reset to Plex](2026-08-30-a-collection-order-can-override-and-reset-to-plex.md) *(product / data model — a collection entry can override Plex member order; Reset deletes the override; new Plex members append in Plex order.)* |
