@@ -132,7 +132,18 @@ try {
     if (!await page.locator('#start-seriesbox').isVisible()) {
       throw new Error('pending collection start control did not open the member picker');
     }
-    await page.locator('#start-cancel').click();
+    await page.locator('#start-save').click();
+    await page.waitForSelector('#membersmodal[data-open] #memberlist > li[data-set]', { timeout: 15000 });
+    const firstMember = page.locator('#memberlist > li[data-set]').first();
+    const firstKey = await firstMember.getAttribute('data-set');
+    const dragHandle = firstMember.locator('button[aria-label^="Drag "]');
+    await dragHandle.evaluate((element) => (element as HTMLElement).focus());
+    await page.keyboard.press('ArrowDown');
+    const movedKey = await page.locator('#memberlist > li[data-set]').nth(1).getAttribute('data-set');
+    if (!firstKey || movedKey !== firstKey) {
+      throw new Error('pending collection ordering is not keyboard operable');
+    }
+    await page.getByRole('button', { name: 'Cancel' }).click();
     await page.screenshot({ path: `${OUT}/pending-views-start.png` });
     console.log('shot:', `${OUT}/pending-views-start.png`);
 
