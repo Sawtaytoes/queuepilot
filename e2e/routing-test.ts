@@ -315,17 +315,23 @@ ok('browser Back returns to Overview', await heading('Overview'));
   );
 }
 
-// The in-app back control points at the ORIGIN — where navigation into this view STARTED,
-// not a fixed parent (Bob's ask). That is tracked in web/src/state/route.ts, and it is the
-// one piece of the old hash router react-router does NOT replace.
+// Rules and Picks are configured from the unified Queues index. Back from either detail
+// page therefore returns to that index, even when the detail URL was opened directly.
 {
-  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#shelves a.open');
-  await page.click('#shelves a.open');
-  await page.waitForFunction(() => location.pathname.startsWith('/q/'));
-  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/queues', undefined, { timeout: 30000 })
-    .then(() => ok('in-app back targets the origin /queues, not a fixed parent', true),
-      async () => ok(`in-app back targets the origin /queues, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
+  for (const [path, kind] of [
+    ['/q/bob', 'Picks'],
+    ['/channels/younger', 'Rules'],
+  ] as const) {
+    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(
+      () => document.querySelector('#back')?.getAttribute('href') === '/queues',
+      undefined,
+      { timeout: 30000 },
+    ).then(
+      () => ok(`${kind} Back targets the Queues index`, true),
+      async () => ok(`${kind} Back targets the Queues index (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false),
+    );
+  }
 }
 
 await browser.close();
