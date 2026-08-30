@@ -1142,12 +1142,6 @@ export function QueueView({
         </span>
       </div>
 
-      {/* SKIPPED — between the toolbar and the grid, because that is where it is ABOUT
-          something: it explains why a tile below names the episode it names. Collapsed, and
-          absent entirely on a queue that has never skipped anything, so the common case pays
-          nothing for it. */}
-      {setId ? <SkippedPanel setId={setId} /> : null}
-
       {/* TWO LANES, and the drag across the divider is the promote
           (decision `2026-08-26-the-queue-page-is-two-lanes-and-the-drag-is-the-promote`).
           Both are always drawn, even when one is empty: a lane you cannot see is a lane you
@@ -1180,6 +1174,13 @@ export function QueueView({
           </>
         )}
       </div>
+
+      {setId ? (
+        <SkippedPanel
+          density={view.density}
+          setId={setId}
+        />
+      ) : null}
 
       {/* One panel for the whole grid, addressed by entry key — see state/overlays.ts for why
           it holds the key rather than the item. */}
