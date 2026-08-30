@@ -481,7 +481,12 @@ export function PendingView() {
     { key: "sep", type: "separator" },
     {
       key: "new",
-      label: "New queue…",
+      label: (
+        <span className="addtomenu-new">
+          <span aria-hidden="true">＋</span>
+          <span>Add new queue</span>
+        </span>
+      ),
       onSelect: () =>
         openSetModal(null, undefined, {
           // The item's own library, ticked. Without it the new queue draws from nothing and

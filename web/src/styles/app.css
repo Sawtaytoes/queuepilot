@@ -1951,13 +1951,27 @@ body.queue-view #tools {
 .results li {
   position: relative;
 }
-/* The Add-to menus (a Pending tile's, and a search row's) are Charcuterie `Menu`s, and a
-   `Menu` brings its own surface, its own rows and its own POSITION — floating-ui writes
-   `position: fixed` plus a transform straight onto the panel. So there is nothing to lay
-   out here and exactly one thing to say: cap the width, because the panel sizes to its
-   content and the no-compatible-queue row is a whole sentence. */
+/* The Add-to menus (a Pending tile's, and a search row's) are Charcuterie `Menu`s. The
+   panel can contain every queue in the house, so it scrolls within the viewport instead of
+   extending past its bottom edge. The small row gap keeps adjacent audiences distinct. */
 .addtomenu {
-  max-width: 18rem;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(36rem, calc(100dvh - 24px));
+  max-width: min(26rem, calc(100dvw - 24px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.addtomenu [role="separator"] {
+  margin-block: 2px;
+}
+.addtomenu-new {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 /* `.qmenu` is now the PLAY menu's only home — the two Add-to menus moved to Charcuterie's
@@ -3376,19 +3390,32 @@ body.name-editable #apphead h1 {
 [role="option"] > span:has(> .optionbadge) > .optionbadge {
   margin-left: auto;
 }
-/* The same chip, on a MENU row — the two Add-to menus name a queue by its activity, so the
-   people chip is what tells four "Movies & Shows" rows apart. A menu item is a
-   `role="menuitem"` and never a `role="option"`, so it needs its own pair of rules rather
-   than a looser selector: widening the ones above to any element holding a chip would reach
-   the Start-from picker's rows and the count picker's, both of which are already right. */
-[role="menuitem"]:has(.optionbadge) {
+/* The Add-to menu uses the same faces as the queue cards. A compact overlapping stack makes
+   repeated audiences easy to scan while the full text label stays visible and accessible. */
+[role="menuitem"]:has(.optionpeople) {
   display: flex;
   align-items: center;
   width: 100%;
 }
-[role="menuitem"] > .optionbadge,
-[role="menuitem"] .optionbadge {
+.optionpeople {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
   margin-left: auto;
+  min-width: 0;
+}
+.optionfaces {
+  display: inline-flex;
+  flex: none;
+  padding-left: 5px;
+}
+.optionfaces .pface + .pface {
+  margin-left: -5px;
+}
+.optionpeople-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* ================================================================================

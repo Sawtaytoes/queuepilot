@@ -1,4 +1,3 @@
-import { Badge } from "@charcuterie/ui"
 import type { ReactNode } from "react"
 
 import { queuePeopleLabel } from "../lib/people"
@@ -7,14 +6,14 @@ import type {
   Person,
   QueueMember,
 } from "../lib/types"
+import { PersonFace } from "./PersonFace"
 
 /**
- * WHO A QUEUE IS FOR, as a chip on a row of text.
+ * WHO A QUEUE IS FOR, as compact faces and a label on a menu row.
  *
  * The third form of the same fact. A shelf heading and a landing card draw `PeopleRow`, the
- * queue editor draws the trays, and a MENU row draws this — a menu item is a line, and a row
- * of 26px faces would set its height from the faces and make every other row in the panel
- * look short.
+ * queue editor draws the trays, and an Add-to menu draws this compact form. The same face
+ * marker makes a long list easier to scan than a wall of text-only chips.
  *
  * It exists because the queue's displayed name is its ACTIVITY now
  * (decision `2026-08-25-a-queue-is-people-plus-an-activity`), so an Add-to menu listing four
@@ -22,9 +21,8 @@ import type {
  * some badge or something of who's involved in them because it's not clear now that we're
  * using auto-names."*
  *
- * `.optionbadge` is the same class `SelectListbox` puts on a picker option's chip, and it
- * carries the right-align — one rule, both list shapes. It is a layout class on a Charcuterie
- * `Badge`, which is the app-layout exception the component rule names, not a skin.
+ * The visible label remains. Colour and initials supplement the words; they never replace
+ * them. Optional people keep the smaller dashed face used by `PeopleRow`.
  */
 export function QueuePeopleBadge({
   groups,
@@ -35,14 +33,31 @@ export function QueuePeopleBadge({
   people: readonly Person[]
   groups: readonly GroupWithRoster[]
 }): ReactNode {
+  const labelFor = (member: QueueMember): string =>
+    member.kind === "group"
+      ? (groups.find((group) => group.id === member.id)
+          ?.label ?? member.id)
+      : (people.find((person) => person.id === member.id)
+          ?.displayName ?? member.id)
+
   return (
-    <Badge
-      appearance="outline"
-      className="optionbadge"
-      intent="neutral"
-      size="sm"
-    >
-      {queuePeopleLabel(members, people, groups)}
-    </Badge>
+    <span className="optionpeople">
+      {members.length > 0 ? (
+        <span aria-hidden="true" className="optionfaces">
+          {members.map((member) => (
+            <PersonFace
+              id={member.id}
+              isOptional={member.role === "optional"}
+              key={`${member.kind}:${member.id}`}
+              label={labelFor(member)}
+              size="sm"
+            />
+          ))}
+        </span>
+      ) : null}
+      <span className="optionpeople-label">
+        {queuePeopleLabel(members, people, groups)}
+      </span>
+    </span>
   )
 }
