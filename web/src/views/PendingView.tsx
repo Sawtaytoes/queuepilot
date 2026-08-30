@@ -774,7 +774,17 @@ export function PendingView() {
                 const words = (
                   <>
                     <span className="ptitle">
-                      {item.title}
+                      {item.webUrl ? (
+                        <a
+                          href={item.webUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {item.title}
+                        </a>
+                      ) : (
+                        item.title
+                      )}
                       {item.year ? (
                         <span className="y">
                           {" "}

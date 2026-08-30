@@ -4,6 +4,7 @@ import * as pending from '../pending.js';
 import { liveClient } from '../engine/plex-live.js';
 import * as plex from '../plex.js';
 import { readBody } from './readBody.js';
+import { plexWebUrl } from '../webLinks.js';
 import type { PlexMetadata } from '../types.js';
 
 /**
@@ -54,6 +55,13 @@ export function pendingRoutes(): Hono {
       const { items, state } = await pending.pendingItems(
         liveClient(), libs, listSection, listCollections,
       );
+      // Match queue tiles: the title is a direct link to the item in the configured Plex
+      // web client. Resolve these in sequence so one request warms machineIdentifier's cache
+      // before the rest reuse it.
+      const linkedItems = [];
+      for (const item of items) {
+        linkedItems.push({ ...item, webUrl: await plexWebUrl(item.ratingKey) });
+      }
       // The filter panel is drawn from THIS response rather than from `/api/sets`, and the
       // two differ in the way that matters: `libraries` here is every video library the
       // screen COULD draw from, and `selected` is the ids it did. Sending the resolved
@@ -61,7 +69,7 @@ export function pendingRoutes(): Hono {
       // as checked boxes instead of as an empty set the owner would read as "nothing".
       const choosable = libs.filter((l) => l.video);
       return c.json({
-        items,
+        items: linkedItems,
         seen_through: state.seen_through,
         dismissed: state.dismissed.length,
         libraries: choosable,

@@ -3995,6 +3995,23 @@ body.rowdragging {
 .pendingrow .ptitle {
   font-weight: 600;
 }
+.pendingrow .ptitle a,
+.pendingtile .ptitle a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: color-mix(
+    in srgb,
+    currentColor 40%,
+    transparent
+  );
+  text-underline-offset: 3px;
+}
+.pendingrow .ptitle a:hover,
+.pendingrow .ptitle a:focus-visible,
+.pendingtile .ptitle a:hover,
+.pendingtile .ptitle a:focus-visible {
+  text-decoration-color: currentColor;
+}
 .pendingrow .glib {
   color: var(--color-content-muted);
   font-size: 0.8rem;
