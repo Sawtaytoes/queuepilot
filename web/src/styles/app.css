@@ -4321,6 +4321,14 @@ body.rowdragging {
     );
   gap: 8px;
 }
+/* The roster uses the same small avatar that identifies a person in the Queues filters.
+   This wrapper owns only the avatar/name alignment; the checkbox remains the Charcuterie
+   control and keeps its own box, focus ring and checked state. */
+.tonightperson {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
 /* The guests row: a number field with its two steppers beside it. `align-items: end`
    puts the buttons on the INPUT's baseline, which only works because the hint moved out
    of `Field`'s description slot and under the whole row — see `GuestStepper.tsx`. */
