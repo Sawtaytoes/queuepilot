@@ -291,6 +291,9 @@ export type SkippedItem = {
   show: string | null
   season: number | null
   episode: number | null
+  posterRatingKey?: string | null
+  sourceTitle?: string | null
+  webUrl?: string | null
 }
 
 /** Anything the poster tile can render. */
