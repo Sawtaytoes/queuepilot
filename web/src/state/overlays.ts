@@ -6,6 +6,14 @@ import type { StartPoint, TileEntry } from "../lib/types"
 /** The two lanes a Picks queue is drawn in. Mirrors `AddAs` on the wire. */
 export type Lane = "priority" | "random"
 
+export type MemberDraft = {
+  collectionOrder: string[]
+  includedSpecials: string[]
+  managed: string[]
+  managedSpecials: string[]
+  skipped: string[]
+}
+
 /**
  * The five things that float above a view: the tile context menu, the "Start
  * from…" picker, the "Play on ▾" device menu, the queue/channel modal and the
@@ -24,6 +32,11 @@ export type Lane = "priority" | "random"
 export type EntryActions = {
   item: TileEntry
   save: (start: StartPoint | null) => Promise<unknown>
+  /** Pending items keep this whole answer locally until Add to chooses a queue. */
+  memberDraft?: MemberDraft
+  saveMembers?: (draft: MemberDraft) => Promise<unknown>
+  /** Continue one configuration flow after the start point is accepted. */
+  afterStart?: () => void
   refresh: () => void
   /**
    * How to remove the entry.

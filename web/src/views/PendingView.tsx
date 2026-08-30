@@ -35,6 +35,9 @@ import type {
 } from "../lib/types"
 import { refreshData } from "../state/live"
 import {
+  type EntryActions,
+  type MemberDraft,
+  openMembersModal,
   openSetModal,
   openStartModal,
 } from "../state/overlays"
@@ -196,6 +199,9 @@ export function PendingView() {
    */
   const [starts, setStarts] = useState<
     Record<string, StartPoint>
+  >({})
+  const [memberDrafts, setMemberDrafts] = useState<
+    Record<string, MemberDraft>
   >({})
   const [openMenu, setOpenMenu] = useState<string | null>(
     null,
@@ -376,6 +382,48 @@ export function PendingView() {
         )
       }
 
+      const memberDraft = memberDrafts[item.ratingKey]
+
+      if (added !== false && key && memberDraft) {
+        const registrySet = reg?.sets.find(
+          (candidate) => candidate.id === set.id,
+        )
+        const managed = new Set(memberDraft.managed)
+        const managedSpecials = new Set(
+          memberDraft.managedSpecials,
+        )
+        const skipped = [
+          ...(registrySet?.skipped ?? []).filter(
+            (value) => !managed.has(value),
+          ),
+          ...memberDraft.skipped,
+        ]
+        const includedSpecials = [
+          ...(registrySet?.included_specials ?? []).filter(
+            (value) => !managedSpecials.has(value),
+          ),
+          ...memberDraft.includedSpecials,
+        ]
+
+        await api("PATCH", `/api/sets/${set.id}`, {
+          included_specials: includedSpecials,
+          skipped,
+        })
+
+        if (
+          isCollection &&
+          memberDraft.collectionOrder.length
+        ) {
+          await api(
+            "PATCH",
+            `/api/queues/${set.id}/items/${encodeURIComponent(key)}/collection-order`,
+            {
+              collection_order: memberDraft.collectionOrder,
+            },
+          )
+        }
+      }
+
       setStatus(
         added === false
           ? `“${item.title}” is already in ${set.label}`
@@ -394,6 +442,9 @@ export function PendingView() {
         ),
       )
       setStarts(
+        ({ [item.ratingKey]: _gone, ...rest }) => rest,
+      )
+      setMemberDrafts(
         ({ [item.ratingKey]: _gone, ...rest }) => rest,
       )
     } catch (e) {
@@ -490,18 +541,18 @@ export function PendingView() {
   ]
 
   /**
-   * Open the start picker for an item that is not in a queue yet.
+   * Configure an item that is not in a queue yet.
    *
-   * The same modal every other start point goes through — same episode list, same watched
-   * marks, same "picked, never typed" rule — pointed at a local `save` instead of a PATCH.
-   * Clearing (the modal's own "Start automatically") drops the pending choice.
+   * Start is step one. What plays and collection order are step two. Both stay local until
+   * Add to names the destination queue; cancelling either step writes nothing.
    */
-  const pickStart = (item: PendingItem) => {
-    openStartModal({
+  const configure = (item: PendingItem) => {
+    const actions: EntryActions = {
       item: asPreQueueStartEntry(
         item,
         starts[item.ratingKey] ?? null,
       ),
+      memberDraft: memberDrafts[item.ratingKey],
       refresh: () => {},
       save: async (start: StartPoint | null) => {
         setStarts((prev) => {
@@ -514,11 +565,20 @@ export function PendingView() {
         // `commitStart` closes the modal before calling `save`; this resolves so its
         // success toast is the one that lands. Nothing is written until the add.
       },
+      saveMembers: async (draft: MemberDraft) => {
+        setMemberDrafts((prev) => ({
+          ...prev,
+          [item.ratingKey]: draft,
+        }))
+        setStatus(`Configured “${item.title}”`, "ok")
+      },
       // No set: this item belongs to none yet, so the picker loads episodes from Plex
       // directly and speaks Plex's vocabulary. Every library Pending draws from is a Plex
       // video library, so there is no provider to choose.
       setId: null,
-    })
+    }
+    actions.afterStart = () => openMembersModal(actions)
+    openStartModal(actions)
   }
 
   const dismiss = async (item: PendingItem) => {
@@ -691,7 +751,7 @@ export function PendingView() {
           `minColumnInlineSize` is the density's own: 158px for the poster wall (the width
           this page already had — without it the grid takes `AdaptiveGrid`'s 384px floor and
           a 2:3 poster in a 600px column is 900px tall), and 400px for a list row, which is
-          what fits "Add to ▾ / Start at… / Dismiss" beside an 84px poster on one line.
+          what fits "Add to ▾ / Configure… / Dismiss" beside an 84px poster on one line.
 
           `key={density}` remounts on the switch. The grid measures rows and caches what it
           measured; a 340px poster tile and a 132px list row share nothing, and reusing the
@@ -864,13 +924,13 @@ export function PendingView() {
                               data-testid="pending-start"
                               intent="neutral"
                               onClick={() =>
-                                pickStart(item)
+                                configure(item)
                               }
                               size="sm"
                             >
                               {start
                                 ? "Change start…"
-                                : "Start at…"}
+                                : "Configure…"}
                             </Button>
                           ) : null}
                           {/*
@@ -930,8 +990,8 @@ export function PendingView() {
                         <Tip
                           label={
                             start
-                              ? `Starts at ${startLabel(start).replace(/^Start /, "")} — change it`
-                              : "Choose the episode this starts at"
+                              ? `Configured to start at ${startLabel(start).replace(/^Start /, "")} — change it`
+                              : "Configure start, skip list and order"
                           }
                         >
                           <IconButton
@@ -942,10 +1002,10 @@ export function PendingView() {
                             }
                             label={
                               start
-                                ? "Change the start episode"
-                                : "Choose the start episode"
+                                ? "Change this series configuration"
+                                : "Configure this series"
                             }
-                            onClick={() => pickStart(item)}
+                            onClick={() => configure(item)}
                             size="sm"
                           >
                             <StartGlyph />

@@ -4,7 +4,7 @@
 - **Date:** 2026-08-30
 - **Type:** UI / behaviour
 - **Supersedes:** The show-only scope in [Pending picks the start episode before the add, and the add writes it](2026-08-22-pending-picks-the-start-episode-before-the-add.md)
-- **Superseded by:** —
+- **Superseded by:** [Pending series configuration includes what plays and drag order](2026-08-30-pending-series-configuration-includes-what-plays-and-drag-order.md) *(start-only dialog scope; the pre-add start choice and deferred write remain)*
 
 ## Decision
 

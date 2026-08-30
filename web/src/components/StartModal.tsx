@@ -399,7 +399,7 @@ export function StartModal() {
             intent="accent"
             type="submit"
           >
-            Save
+            {entry.afterStart ? "Next: what plays" : "Save"}
           </Button>
         </>
       }
@@ -407,7 +407,11 @@ export function StartModal() {
       isOpen
       onClose={closeStartModal}
       onSubmit={() => void commitStart(entry, readForm())}
-      title={`Start “${item.title}” from…`}
+      title={
+        entry.afterStart
+          ? `Configure “${item.title}”`
+          : `Start “${item.title}” from…`
+      }
       titleId="startmodal-title"
     >
       <p className="subhint">{t(START_HINT)}</p>
