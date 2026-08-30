@@ -162,6 +162,8 @@ export type QueueItem = {
    * one a 1x entry takes, spread through the queue rather than back to back.
    */
   weight: number
+  /** Epoch seconds when this entry joined this queue. Null on entries created before stamps. */
+  queuedAt?: number | null
   start: StartPoint | null
   /** Custom collection member ratingKeys. Empty means follow Plex order. */
   collectionOrder?: string[]

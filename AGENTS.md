@@ -569,6 +569,11 @@ Four things to know before touching it:
   first promote has nothing to aim at.
 - **The pool saves no order.** A drag that starts and ends in `random` writes nothing —
   deliberate, because the pool is shuffled at playback.
+- **Recently added means `queued_at`, the time the entry joined THIS queue.** Every
+  `queues.addItem()` stamps it. It is not Plex's library `addedAt`, and old unstamped entries
+  stay unknown rather than receiving an invented migration date. An explicit view sort is
+  preserved inside both lanes; without one, Priority keeps playback order and Random stays
+  alphabetical.
 - **Priority numbers are the stored order.** Every Priority tile shows a one-based number.
   Editing it calls `setPriorityPosition`, whose optimistic order comes from
   `orderAtPriorityPosition`. The number and its maximum come from the complete queue, not a

@@ -103,6 +103,7 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     promote_window: v && v.promote_window ? String(v.promote_window).trim().toLowerCase() : null,
     batch_stops_at: batchStopsAt === 'member' || batchStopsAt === 'season' ? batchStopsAt : null,
     collectionOrder: v && Array.isArray(v.collection_order) ? v.collection_order.map(String) : [],
+    queuedAt: v && Number.isFinite(Number(v.queued_at)) ? Number(v.queued_at) : null,
     start: startOf(e),
     // A finished-but-kept entry (Python tagged it done); the grid greys it and the
     // "Remove all completed" button targets these. False for every plain entry.
