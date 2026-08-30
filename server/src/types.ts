@@ -478,6 +478,8 @@ export interface MemberObject {
   /** Slots per round. 1 is the default and is never written. */
   weight?: number;
   start?: Start;
+  /** Plex collection member ratingKeys in the owner's custom order. Absent means Plex order. */
+  collection_order?: string[];
 }
 
 // --- the set registry (sets.yaml, ENGINE side) ------------------------------- //

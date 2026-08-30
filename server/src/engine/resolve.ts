@@ -114,6 +114,7 @@ type RawEntryObject = {
   lead?: unknown;
   /** This entry's override of the set's lead cooldown — see `EntryDescriptor.promoteWindow`. */
   promote_window?: unknown;
+  collection_order?: unknown;
 };
 
 /** Anything the episode filters below probe. Both spellings of season/episode, because a raw
@@ -139,6 +140,8 @@ export interface EntryDescriptor {
   collection: string | null;
   episodes: number | null;
   start: Start | null;
+  /** Custom collection member order. Empty means follow Plex. */
+  collectionOrder: string[];
   weight: number;
   done: boolean;
   /**
@@ -340,6 +343,9 @@ export function describe(entry: unknown): EntryDescriptor {
       lead: entry.lead ?? null,
       promoteWindow: entry.promote_window ?? null,
       start: (entry.start ?? null) as Start | null,
+      collectionOrder: Array.isArray(entry.collection_order)
+        ? [...new Set(entry.collection_order.map(String).filter(Boolean))]
+        : [],
       // How OFTEN this entry comes up when the set is randomized — slots per round, not a
       // probability. Absent = 1 (see select.js toWeight); only the shuffled paths read it.
       weight: toWeight(entry.weight),
@@ -357,6 +363,7 @@ export function describe(entry: unknown): EntryDescriptor {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
+      collectionOrder: [],
       placement: null, lead: null, promoteWindow: null,
       weight: 1, done: false, doneAt: null, raw: entry, legacy: true,
     };
@@ -366,7 +373,7 @@ export function describe(entry: unknown): EntryDescriptor {
   const coll = cm ? cm[1]!.trim() : null;
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
-    collection: coll, episodes: null, batch_stops_at: null, start: null,
+    collection: coll, episodes: null, batch_stops_at: null, start: null, collectionOrder: [],
     placement: null, lead: null, promoteWindow: null, weight: 1, done: false,
     doneAt: null, raw: entry, legacy: true,
   };
@@ -669,6 +676,7 @@ export async function collectionItems(
   token: Token,
   start: Start | null = null,
   resume = false,
+  collectionOrder: readonly string[] = [],
 ): Promise<ResolvedItem[] | null> {
   let collRk: string | null = null;
   let children: PlexMetadata[] = [];
@@ -681,6 +689,7 @@ export async function collectionItems(
     }
   }
   if (!collRk) return null;
+  children = orderCollectionChildren(children, collectionOrder);
   const floorAt = startMemberIndex(children, start);
   const skipped = skippedKeys(cfg);
   const items: ResolvedItem[] = [];
@@ -723,6 +732,19 @@ export async function collectionItems(
     }
   }
   return items;
+}
+
+/** Put named members first in the stored order, then append new Plex members in Plex order. */
+export function orderCollectionChildren<T extends { ratingKey?: unknown }>(
+  children: readonly T[],
+  order: readonly string[] = [],
+): T[] {
+  if (!order.length) return [...children];
+  const rank = new Map(order.map((key, index) => [String(key), index]));
+  return children
+    .map((child, plexIndex) => ({ child, plexIndex, rank: rank.get(String(child.ratingKey)) }))
+    .sort((a, b) => (a.rank ?? order.length + a.plexIndex) - (b.rank ?? order.length + b.plexIndex))
+    .map(({ child }) => child);
 }
 
 // --------------------------------------------------------------------------- //
@@ -815,7 +837,9 @@ export async function resolveMember(
   const skipped = skippedKeys(cfg);
   if (desc.collection) {
     const name = desc.collection;
-    let items = await collectionItems(client, cfg, name, watched, token, desc.start, resume);
+    let items = await collectionItems(
+      client, cfg, name, watched, token, desc.start, resume, desc.collectionOrder,
+    );
     if (items == null) return null;
     // A collection is ONE member, so it contributes ONE batch — the same cap the show branch
     // applies below, honoring a per-entry `episodes:` override the same way. Without this a
@@ -894,7 +918,9 @@ export async function buildReel(
     if (play.length >= limit) break;
     if (desc.done) continue; // a hand-tagged skip is still honored
     if (desc.collection) {
-      const items = await collectionItems(client, cfg, desc.collection, new Set(), token, desc.start);
+      const items = await collectionItems(
+        client, cfg, desc.collection, new Set(), token, desc.start, false, desc.collectionOrder,
+      );
       if (!items || !items.length) {
         unresolved.push(`Collection: ${desc.collection}`);
         continue;

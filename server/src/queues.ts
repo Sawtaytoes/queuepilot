@@ -753,6 +753,22 @@ export async function setStart(
   return ok ? { ok: true, start: s } : { ok: false };
 }
 
+/** Set a collection entry's member order. An empty list restores Plex order. */
+export async function setCollectionOrder(
+  setName: string,
+  key: string,
+  value: unknown,
+): Promise<{ ok: true; collection_order: string[] | null } | { ok: false }> {
+  const order = Array.isArray(value)
+    ? [...new Set(value.map(String).map((v) => v.trim()).filter(Boolean))]
+    : [];
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (order.length) e.extras.collection_order = order;
+    else delete e.extras.collection_order;
+  });
+  return ok ? { ok: true, collection_order: order.length ? order : null } : { ok: false };
+}
+
 // Drop a deleted queue's whole YAML key (used by DELETE /api/sets/:id so a removed queue
 // doesn't leave an orphaned list behind). Missing key = fine.
 export async function deleteSetKey(setName: string): Promise<{ deleted: boolean }> {
