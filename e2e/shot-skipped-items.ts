@@ -2,7 +2,7 @@
 //
 // Three frames, and the middle one is the whole feature: the queue grid, the tile menu with
 // its new Skip row, and the queue grid again after the skip — where the tile's next-up has
-// moved on to the following episode and the Skipped panel has appeared above the grid.
+// moved on to the following episode and the Skipped panel has appeared below the grid.
 //
 // `--tag=` names the output, so the same script shoots BEFORE on `main` and AFTER on the
 // branch and the frames are comparable pixel for pixel. The web bundle is what the server
@@ -114,6 +114,9 @@ const plexStub = http.createServer((req, res) => {
     return res.end(posterSvg(rk));
   }
   res.setHeader('Content-Type', 'application/json');
+  if (url === '/') {
+    return res.end(JSON.stringify({ MediaContainer: { machineIdentifier: 'fixture-server' } }));
+  }
   const leaves = /\/library\/metadata\/(\d+)\/allLeaves/.exec(url);
   if (leaves) {
     const rk = leaves[1] as string;
@@ -207,7 +210,7 @@ try {
     try { localStorage.setItem('charcuterie-scheme', 'dark'); } catch { /* private mode */ }
   };
 
-  const ctx = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  const ctx = await browser.newContext({ viewport: { width: 1280, height: 1200 } });
   await ctx.addInitScript(seedScheme);
   const page = await ctx.newPage();
   await page.goto(`http://localhost:${PORT}/q/demo`, { waitUntil: 'domcontentloaded' });
@@ -233,7 +236,18 @@ try {
     await page.waitForTimeout(2500);
     // Expand it, so the frame shows WHAT is skipped and not only that something is.
     await page.locator('.skippanel button').first().click();
-    await page.waitForSelector('.skiplist li', { timeout: 10000 });
+    await page.waitForSelector('.skipgrid li', { timeout: 10000 });
+    const panel = page.locator('.skippanel');
+    if (!(await page.locator('#grid ~ .skippanel').count())) throw new Error('Skipped is not after the active queue grid');
+    await panel.locator('a', { hasText: 'Harbour Nine' }).waitFor();
+    await panel.locator('.badges', { hasText: 'From Harbour Nine' }).waitFor();
+    await panel.locator('button[aria-label^="Restore"]').waitFor();
+    for (const [label, density] of [['Posters', 'posters'], ['List', 'rows'], ['Cards', 'cards']] as const) {
+      await page.getByRole('radio', { name: label }).click();
+      if (!(await page.locator('.skipgrid').evaluate((el, expected) => el.classList.contains(expected), density))) {
+        throw new Error(`Skipped did not follow the ${label} density`);
+      }
+    }
     await page.mouse.move(2, 2);
     await page.waitForTimeout(800);
   } else {
