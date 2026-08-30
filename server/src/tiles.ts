@@ -147,7 +147,7 @@ export async function resolveTile(
     ratingKey: resolved ? resolved.ratingKey : null,
     // The item's own Plex page. Built from the tile's OWN ratingKey, so a collection links
     // to the collection and a show to the show — not to the next-up leaf the caption names.
-    webUrl: resolved ? await plexWebUrl(resolved.ratingKey) : null,
+    webUrl: resolved ? await plexWebUrl(resolved.ratingKey, resolved.type) : null,
     type: resolved ? resolved.type : null,
     title: resolved ? resolved.title : displayFor(value),
     year: resolved ? resolved.year : null,

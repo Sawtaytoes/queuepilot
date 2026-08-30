@@ -185,7 +185,7 @@ export function setsRoutes(): Hono {
       // `plex.itemLabel`), so a deleted library item can be cleared from the panel.
       const items = await mapLimit(keys, 6, async (rk) => {
         const item = await plex.itemLabel(rk);
-        return { ...item, webUrl: await plexWebUrl(item.ratingKey) };
+        return { ...item, webUrl: await plexWebUrl(item.ratingKey, item.type) };
       });
       return c.json({ items });
     } catch (e) {

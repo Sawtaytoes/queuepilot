@@ -30,12 +30,17 @@ import { machineIdentifier } from './playback.js';
  */
 export async function plexWebUrl(
   ratingKey: string | null | undefined,
+  type?: string | null,
 ): Promise<string | null> {
   if (!ratingKey) return null;
 
   const machineId = await machineIdentifier();
   if (!machineId) return null;
 
-  const key = encodeURIComponent(`/library/metadata/${ratingKey}`);
+  // Plex collection preplay pages use a different route from ordinary metadata items.
+  // Plex Web used to recover when a collection ratingKey arrived through /metadata, but
+  // 4.160 loops on its loading view instead. Use the route Plex writes for the collection.
+  const resource = type === 'collection' ? 'collections' : 'metadata';
+  const key = encodeURIComponent(`/library/${resource}/${ratingKey}`);
   return `${PLEX_URL}/web/index.html#!/server/${machineId}/details?key=${key}`;
 }

@@ -60,7 +60,7 @@ export function pendingRoutes(): Hono {
       // before the rest reuse it.
       const linkedItems = [];
       for (const item of items) {
-        linkedItems.push({ ...item, webUrl: await plexWebUrl(item.ratingKey) });
+        linkedItems.push({ ...item, webUrl: await plexWebUrl(item.ratingKey, item.type) });
       }
       // The filter panel is drawn from THIS response rather than from `/api/sets`, and the
       // two differ in the way that matters: `libraries` here is every video library the

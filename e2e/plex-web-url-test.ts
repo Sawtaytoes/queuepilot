@@ -6,6 +6,7 @@
 // pins both halves of that correction:
 //   * the host is `PLEX_API_SERVER_URL` (placeholder-safe; never a hard-coded household host)
 //   * the path is `/web/index.html#!/server/{machineId}/details?key=…`
+//   * collections use `/library/collections/{ratingKey}`; other items use `/library/metadata/…`
 //   * a missing rating key or a blank machine id returns null (no dead link)
 //
 // Self-contained: stubs `./playback.js` under webLinks so nothing reaches a live Plex.
@@ -63,6 +64,12 @@ check(
   'https://plex.example.com/web/index.html#!/server/server-mid/details?key=%2Flibrary%2Fmetadata%2F12345',
 );
 check('webUrl does not point at app.plex.tv', url?.includes('app.plex.tv') ?? false, false);
+
+check(
+  'collection webUrl uses the Plex collection route',
+  await plexWebUrl('341063', 'collection'),
+  'https://plex.example.com/web/index.html#!/server/server-mid/details?key=%2Flibrary%2Fcollections%2F341063',
+);
 
 check('null rating key → null', await plexWebUrl(null), null);
 check('empty rating key → null', await plexWebUrl(''), null);
