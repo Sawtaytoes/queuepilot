@@ -12,9 +12,9 @@ import {
   collectionChildren, findCollection, iterHistory, unwatchedBuckets,
 } from './select.js';
 import { setSections } from './routing.js';
-import { describe, resolveMember } from './resolve.js';
+import { describe, resolveMember, resolveQueueEntry } from './resolve.js';
 import type { EntryDescriptor } from './resolve.js';
-import { weightedInterleave } from './weight.js';
+import { toWeight, weightedInterleave } from './weight.js';
 import type { Rng } from './weight.js';
 import { WATCH_COUNT_ACCOUNTS, ROTATION_LENGTH, ROTATION_LENGTH_MAX } from '../env.js';
 import type {
@@ -120,6 +120,83 @@ export function memberDescs(cfg: { members?: readonly MemberValue[] | null }): E
     if (desc.key != null) out.push(desc);
   }
   return out;
+}
+
+export interface ManualMovieMember {
+  ratingKey: string;
+  title: string;
+  weight: number;
+}
+
+/**
+ * The direct movie entries manually included in a rewatch Rules queue.
+ *
+ * The ordinary `memberBuckets()` path intentionally removes watched movies because it serves
+ * progress queues. A rewatch queue has the opposite contract: its rule pool is made from
+ * watched movies, so using that path would discard every useful manual movie. Resolve only
+ * the identity here. The rewatch picker supplies the watch-count weighting.
+ *
+ * Collections and shows stay out. A rewatch exclusion and pick address the playable movie
+ * leaf, while a show search result or a collection names a parent whose key cannot be used by
+ * that picker. The web editor applies the same movie-only rule to new members.
+ */
+export async function manualMovieMembers(
+  client: PlexClient,
+  cfg: RotationCfg,
+  binding: EngineBinding,
+): Promise<ManualMovieMember[]> {
+  const token = await client.accountToken(binding.user_uuid);
+  const out: ManualMovieMember[] = [];
+
+  for (const desc of memberDescs(cfg)) {
+    if (desc.collection) continue;
+
+    const [ratingKey, type, title] = await resolveQueueEntry(
+      client,
+      desc,
+      cfg,
+      token,
+    );
+
+    if (type !== 'movie' || !ratingKey) continue;
+
+    out.push({
+      ratingKey: String(ratingKey),
+      title: String(title || desc.title || ratingKey),
+      weight: toWeight(desc.weight),
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Add manual movie members to the rewatch candidate maps in place.
+ *
+ * A member outside the rule's libraries has no history row in `counts`, so it enters at the
+ * least-watched floor of 1. A member already in the rule pool keeps its real count. Manual
+ * include wins over Excluded from rewatch, matching the progress path where members are
+ * resolved separately from the rule pool's blocklist and then win the ratingKey dedupe.
+ */
+export async function mergeManualMoviesIntoRewatch(
+  client: PlexClient,
+  cfg: RotationCfg,
+  binding: EngineBinding,
+  counts: Map<string, number>,
+  titles: Map<string, string | undefined>,
+  excludes: Set<string>,
+  weights: Record<string, number>,
+): Promise<Record<string, number>> {
+  const nextWeights = { ...weights };
+
+  for (const member of await manualMovieMembers(client, cfg, binding)) {
+    if (!counts.has(member.ratingKey)) counts.set(member.ratingKey, 1);
+    if (!titles.has(member.ratingKey)) titles.set(member.ratingKey, member.title);
+    excludes.delete(member.ratingKey);
+    nextWeights[member.ratingKey] = member.weight;
+  }
+
+  return nextWeights;
 }
 
 // Buckets for a channel's explicit `members:` list, shaped like unwatchedBuckets. Each member
