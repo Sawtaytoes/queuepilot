@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/younger', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -82,7 +82,7 @@ for (const [path, want] of [
   ['/people', 'People'],
   ['/queues', 'Queues'],
   ['/q/bob', 'Bob — Movies'],
-  ['/channels/shows', 'Shows'],
+  ['/channels/younger', 'Younger Kids'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
   ['/what-to-watch-play', 'What to Watch/Play'],
@@ -232,7 +232,7 @@ ok('browser Back returns to Overview', await heading('Overview'));
 // A route change is a new page, so it must not inherit the scroll position of the page that
 // led to it.
 {
-  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
   // Picks starts collapsed. Expand it so this ROUTING check has a long page to scroll.
   await page.click('#collapseall');
@@ -252,13 +252,13 @@ ok('browser Back returns to Overview', await heading('Overview'));
 // not a fixed parent (Bob's ask). That is tracked in web/src/state/route.ts, and it is the
 // one piece of the old hash router react-router does NOT replace.
 {
-  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
   await page.click('a.open');
   await page.waitForFunction(() => location.pathname.startsWith('/q/'));
-  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/picks', undefined, { timeout: 30000 })
-    .then(() => ok('in-app back targets the origin /picks, not a fixed parent', true),
-      async () => ok(`in-app back targets the origin /picks, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
+  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/queues', undefined, { timeout: 30000 })
+    .then(() => ok('in-app back targets the origin /queues, not a fixed parent', true),
+      async () => ok(`in-app back targets the origin /queues, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
 }
 
 await browser.close();
