@@ -24,6 +24,7 @@ import {
 } from "../lib/searchGroups"
 import {
   byTitle,
+  collectionOrderCount,
   isStartable,
   runtimeLabel,
   startLabel,
@@ -543,8 +544,9 @@ export function ChannelMembers({
                   : undefined,
                 text: face.next,
                 tooltip: `${
-                  face.from && m.childCount != null
-                    ? `${face.next} — ${m.childCount} in order`
+                  face.from &&
+                  collectionOrderCount(m) != null
+                    ? `${face.next} — ${collectionOrderCount(m)} in order`
                     : face.next
                 }${
                   isStartable(m)

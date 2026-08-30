@@ -1461,10 +1461,12 @@ body.gdrag .dropstrip {
    one leaves a green chip in an otherwise neutral row.
    (decision `2026-08-15-badge-intent-means-one-thing`) */
 .badge .badgekind {
+  flex: 0 0 auto;
   padding: 1px 7px;
   background: var(--color-surface-overlay);
   color: var(--color-content-muted);
   border-right: 1px solid var(--color-border-default);
+  white-space: nowrap;
 }
 .badge .badgename {
   padding: 1px 8px;
