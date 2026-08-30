@@ -232,7 +232,7 @@ describe("queueItemAddBody", () => {
         year: 2008,
       }),
     ).toEqual({
-      position: "bottom",
+      position: "top",
       type: "collection",
       value: "Blender Open Movies",
     })
@@ -247,7 +247,7 @@ describe("queueItemAddBody", () => {
         year: 2001,
       }),
     ).toEqual({
-      position: "bottom",
+      position: "top",
       value: {
         ratingKey: "42",
         title: "A Fixture Film (2001) — Extended",
