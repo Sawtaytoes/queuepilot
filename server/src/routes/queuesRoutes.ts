@@ -347,15 +347,21 @@ export function queuesRoutes(): Hono {
           // carries. `new Set` per tile rather than per set because the fan-out is keyed on
           // (set, entry) pairs and the lists are a handful of keys; the alternative is a
           // second map to keep in step with `scopes`.
-          : await tiles.resolveTile(
-            s.sections, e.value, startOf(e),
-            scopes.get(s.requires_profile || '') ?? {},
-            new Set(s.skipped || []),
-            new Set(s.included_specials || []),
-            startOf(e)?.history === 'queue'
-              ? queueEntryHistory.completedFor(s.id, e.key)
-              : null,
-          );
+          : await (async () => {
+            const progress = startOf(e)?.history === 'queue'
+              ? queueEntryHistory.progressFor(s.id, e.key)
+              : null;
+            return tiles.resolveTile(
+              s.sections, e.value, startOf(e),
+              scopes.get(s.requires_profile || '') ?? {},
+              new Set(s.skipped || []),
+              new Set(s.included_specials || []),
+              progress
+                ? new Set([...progress].filter(([, row]) => row.isCompleted).map(([key]) => key))
+                : null,
+              progress,
+            );
+          })();
         return { setId: s.id, tile: queueTile(e, core) };
       });
       // What the next scan would call finished, said now — one pass over the flat list, so

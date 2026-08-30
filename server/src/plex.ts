@@ -1100,6 +1100,7 @@ export async function nextEpisode(
   skipped: ReadonlySet<string> = NO_SKIPS,
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
   completed: ReadonlySet<string> | null = null,
+  queueProgress: ReadonlyMap<string, { positionMs: number }> | null = null,
 ): Promise<NextEp | null> {
   const eps = await allLeaves(showRatingKey, opts);
   if (!eps) return null;
@@ -1127,7 +1128,9 @@ export async function nextEpisode(
     // This next-up leaf is unwatched; a viewOffset means it was STARTED (mid-episode resume
     // point), which the tile surfaces as its "In Progress" badge (same predicate as the
     // engine's resume_offset: viewOffset > 0 AND unwatched).
-    const viewOffset = Number(e.viewOffset) || 0;
+    const viewOffset = queueProgress
+      ? Number(queueProgress.get(String(e.ratingKey))?.positionMs) || 0
+      : Number(e.viewOffset) || 0;
     return {
       ratingKey: String(e.ratingKey),
       season: e.parentIndex ?? null, episode: e.index ?? null, title: e.title || '',
@@ -1330,6 +1333,7 @@ export async function collectionNext(
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
   collectionOrder: readonly string[] = [],
   completed: ReadonlySet<string> | null = null,
+  queueProgress: ReadonlyMap<string, { positionMs: number }> | null = null,
 ): Promise<CollectionNextEp | null> {
   // Read as the SAME account the next-up below is resolved as. This used to be an admin read
   // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
@@ -1377,6 +1381,7 @@ export async function collectionNext(
           skipped,
           includedSpecials,
           completed,
+          queueProgress,
         );
       } catch {
         /* skip a show we can't read; try the next member */
@@ -1385,7 +1390,9 @@ export async function collectionNext(
     } else {
       // movie / episode / standalone member: unwatched unless it carries a viewCount.
       if (completed ? completed.has(String(ch.ratingKey)) : ch.watched) continue;
-      const viewOffset = Number(ch.viewOffset) || 0;
+      const viewOffset = queueProgress
+        ? Number(queueProgress.get(String(ch.ratingKey))?.positionMs) || 0
+        : Number(ch.viewOffset) || 0;
       return {
         // A movie child IS the leaf, so the skippable key and the member key are the same one.
         ...where, kind: 'movie', ratingKey: ch.ratingKey, title: ch.title,

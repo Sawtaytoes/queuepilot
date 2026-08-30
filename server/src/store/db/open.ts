@@ -55,7 +55,7 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * list. `role` is a plain `NOT NULL DEFAULT 'required'`, so an existing roster row keeps the
  * only meaning it had.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;

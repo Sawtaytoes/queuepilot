@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { isPlaybackComplete } from './finished.js';
+import { nowPlayingMs, providerProgressVerdict } from './finished.js';
 import { normalizeStart } from './queues.js';
 
 describe('queue-owned progress', () => {
@@ -19,9 +19,16 @@ describe('queue-owned progress', () => {
     });
   });
 
-  it('advances only after at least 90 percent played', () => {
-    expect(isPlaybackComplete({ position: 899, duration: 1000 })).toBe(false);
-    expect(isPlaybackComplete({ position: 900, duration: 1000 })).toBe(true);
-    expect(isPlaybackComplete({ position: null, duration: null })).toBe(false);
+  it('converts the live player seconds to Plex seek milliseconds', () => {
+    expect(nowPlayingMs(12.345)).toBe(12_345);
+    expect(nowPlayingMs(null)).toBe(0);
+  });
+
+  it('lets Plex decide completion by observing the play-count increment', () => {
+    expect(providerProgressVerdict(1, 2, 0)).toEqual({ isCompleted: true, positionMs: 0 });
+    expect(providerProgressVerdict(1, 1, 456_789)).toEqual({
+      isCompleted: false, positionMs: 456_789,
+    });
+    expect(providerProgressVerdict(1, 1, 0)).toEqual({ isCompleted: false, positionMs: 0 });
   });
 });
