@@ -718,33 +718,11 @@ button {
   margin: 0;
 }
 .queue-section-heading p,
-.rules-queue-card a > span:last-child {
+.rules-shelf .lanes-sec {
   color: var(--color-content-muted);
 }
-.rules-queue-grid {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(
-      auto-fit,
-      minmax(min(100%, 18rem), 1fr)
-    );
-}
-.rules-queue-card {
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
-  display: grid;
-  gap: 8px;
-  padding: 16px;
-}
-.rules-queue-card a {
-  color: var(--color-content-primary);
-  display: grid;
-  gap: 8px;
-  text-decoration: none;
-}
-.rules-queue-card a:hover strong {
-  color: var(--color-intent-accent-solid);
+.rules-queue-shelves {
+  padding-top: 8px;
 }
 .queue-type-options {
   display: grid;
