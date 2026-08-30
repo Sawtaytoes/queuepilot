@@ -81,6 +81,10 @@ ok('movies channel hides the shows-only blocklist',
   await page.$eval('#chfilters .showsonly', (e) => getComputedStyle(e).display === 'none'));
 ok('movies channel shows the library pickers',
   await page.$eval('#ch-movielibs', (e) => getComputedStyle(e).display !== 'none'));
+ok('movies channel has a search box for rewatch exclusions',
+  await page.$eval('#ch-movieexclude-search', (e) => getComputedStyle(e).display !== 'none'));
+ok('movies channel has the same manual Members editor as shows',
+  await page.$eval('#chmembers-box', (e) => getComputedStyle(e).display !== 'none'));
 ok('movies channel prefills its own library (Movies=1)',
   await page.$eval<boolean, HTMLInputElement>('#ch-movielibs input[value="1"]', (i) => i.checked));
 const mratings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input', (is) => is.filter((i) => i.checked).map((i) => i.value));
