@@ -5,6 +5,7 @@ import {
   groupHits,
   hitLabel,
   poolSections,
+  queueItemAddBody,
 } from "./searchGroups"
 import type { SearchHit } from "./types"
 
@@ -219,5 +220,38 @@ describe("entryTitle", () => {
         year: 2019,
       }),
     ).toBe("A Fixture Series (2019)")
+  })
+})
+
+describe("queueItemAddBody", () => {
+  it("writes a collection as an explicitly typed name", () => {
+    expect(
+      queueItemAddBody({
+        ...hit("77", 15, "collection"),
+        title: "Blender Open Movies",
+        year: 2008,
+      }),
+    ).toEqual({
+      position: "bottom",
+      type: "collection",
+      value: "Blender Open Movies",
+    })
+  })
+
+  it("writes an item by rating key with its full printable title", () => {
+    expect(
+      queueItemAddBody({
+        ...hit("42", 15),
+        editionTitle: "Extended",
+        title: "A Fixture Film",
+        year: 2001,
+      }),
+    ).toEqual({
+      position: "bottom",
+      value: {
+        ratingKey: "42",
+        title: "A Fixture Film (2001) — Extended",
+      },
+    })
   })
 })
