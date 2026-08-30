@@ -40,3 +40,6 @@ that are already in a queue.
 - Owner request and screenshot, 2026-08-30.
 - `StartModal` already lists collection members and handles movie and show members.
 - `server/src/plex.ts` already applies `{series, season, episode}` as a collection start floor.
+- Screenshots: [`2026-08-30-pending-collection-start-before.png`](../images/2026-08-30-pending-collection-start-before.png)
+  against [`2026-08-30-pending-collection-start-after.png`](../images/2026-08-30-pending-collection-start-after.png),
+  both from the stub-Plex fixture in `e2e/shot-pending-views.ts`.
