@@ -714,7 +714,9 @@ function Shelf({
           className="collapse-toggle"
           intent="neutral"
           label="collapse queue"
-          onClick={() => toggleCollapsed(setId, isCollapsed)}
+          onClick={() =>
+            toggleCollapsed(setId, isCollapsed)
+          }
           size="sm"
         >
           <ChevronDownIcon />
