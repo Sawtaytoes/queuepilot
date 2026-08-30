@@ -3,6 +3,13 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
 page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+// Hold the provider-backed response after Undo. The store-only `/api/shelves` repaint must make
+// the change visible without waiting for this slower request (several seconds against live Plex).
+let isHoldingQueues = false;
+await page.route('**/api/queues*', async (route) => {
+  if (isHoldingQueues) await new Promise((resolve) => setTimeout(resolve, 3000));
+  await route.continue();
+});
 await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf');
 
@@ -50,9 +57,11 @@ await page.waitForFunction(() => {
 }, undefined, { timeout: 15000 });
 await page.waitForTimeout(2500); // let the deferred refresh land
 const kcount = await page.textContent('.shelf[data-set="bob"] .sec');
+isHoldingQueues = true;
 await page.click('#undo');
-await page.waitForFunction((k) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === String(Number(k) - 1), kcount, { timeout: 30000 });
-ok('undo reverts the add', true);
+await page.waitForFunction((k) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === String(Number(k) - 1), kcount, { timeout: 1000 });
+ok('undo repaints before provider resolution finishes', true);
+isHoldingQueues = false;
 await page.waitForFunction(() => {
   const redo = document.querySelector<HTMLButtonElement>('#redo');
   return redo !== null && !redo.disabled;
