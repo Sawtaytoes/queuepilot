@@ -174,7 +174,11 @@ describe("tileFace", () => {
 
   test("a hand-finished shuffled show still reports that it is finished", () => {
     const face = tileFace(
-      item({ done: true, item_order: "shuffle", nextEp: null }),
+      item({
+        done: true,
+        item_order: "shuffle",
+        nextEp: null,
+      }),
     )
 
     expect(face.next).toBe("All watched")
