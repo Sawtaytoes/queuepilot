@@ -1,5 +1,5 @@
 import { Skeleton } from "@charcuterie/ui"
-import type { ReactNode } from "react"
+import type { MouseEvent, ReactNode } from "react"
 
 import { Poster } from "./Poster"
 import { PriorityPositionInput } from "./PriorityPositionInput"
@@ -74,7 +74,7 @@ type Props = {
   runtime?: string | null
   badges?: ReactNode
   /** The multi-select checkbox — queue grid only. Stacks under ✕ in `.tilechrome`. */
-  onCheck?: () => void
+  onCheck?: (event: MouseEvent<HTMLButtonElement>) => void
   /**
    * Is this tile in the selection? The control is a real `aria-pressed` button, so the state
    * has to reach it — the CSS used to read `.tile.selected` on an ancestor instead, and it
