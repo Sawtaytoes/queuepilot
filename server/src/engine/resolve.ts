@@ -205,6 +205,10 @@ export interface ResolvedItem {
   viewCount?: number;
   viewOffset?: number;
   member_key?: string;
+  /** Internal attribution for queue-owned progress. Never sent to Plex. */
+  queueEntryKey?: string;
+  /** True when completion belongs to QueuePilot's private ledger, not provider history. */
+  queueOwnHistory?: boolean;
 }
 
 /** One resolved member — `resolveMember()`'s return. Empty `items` = FINISHED, null = UNRESOLVED. */
@@ -1039,6 +1043,7 @@ export async function nextQueue(
   token: Token,
   rng: Rng | null = null,
   canLead: LeadGate | null = null,
+  ownHistory: ((entryKey: string) => ReadonlySet<string>) | null = null,
 ): Promise<QueueResult> {
   if (!entries.length) return emptyResult(setName);
   const newlyDone: string[] = [];
@@ -1048,7 +1053,16 @@ export async function nextQueue(
   let remaining = 0;
   const batches: Batch[] = [];
   for (const desc of entries) {
-    const res = await resolveMember(client, desc, cfg, watched, token, setBatch(cfg), true);
+    const isOwnHistory = desc.start?.history === 'queue';
+    const entryWatched = isOwnHistory && desc.key && ownHistory
+      ? ownHistory(desc.key)
+      : watched;
+    const res = await resolveMember(client, desc, cfg, entryWatched, token, setBatch(cfg), true);
+    if (res && isOwnHistory && desc.key) {
+      res.items = res.items.map((item) => ({
+        ...item, queueEntryKey: desc.key as string, queueOwnHistory: true,
+      }));
+    }
     if (desc.done) {
       // Stale-done recovery. An entry is marked done when its live resolution comes back
       // EMPTY, so anything still playable in it means the flag no longer describes reality —

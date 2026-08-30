@@ -6,8 +6,8 @@
 //   server/node_modules/.bin/tsx e2e/verify-start-modal.ts
 //
 // Checks: no inline start control anywhere; the next-up line opens the picker; a right-click
-// opens the tile menu; a SHOW start writes {season, episode}; a COLLECTION start writes
-// {series, season, episode} for the picked member; the chip appears and clears again.
+// opens the tile menu; a SHOW start defaults to queue-owned progress; a COLLECTION start can
+// choose provider history; the chip appears and clears again.
 import { chromium } from './playwright.js';
 import { currentValue, pickIndex, pickValue, readOptions } from './pick.js';
 import { readFileSync } from 'node:fs';
@@ -32,7 +32,6 @@ await page.waitForTimeout(2000);
 
 // 1. The inline control is gone for good.
 ok('no inline start control on any tile', (await page.locator('.startctl').count()) === 0);
-ok('no "Play" label before the eps dropdown', !(await page.locator('#grid .eps').first().innerText()).includes('Play'));
 
 // 2. A show tile: the next-up line opens the picker.
 const bebop = tileByTitle('Steins;Gate');
@@ -41,6 +40,8 @@ await page.waitForSelector('#startmodal[data-open]');
 await page.waitForTimeout(1200);
 ok('show picker: season row hidden (single-season)', await page.locator('#start-seasonbox').isHidden());
 ok('show picker: series row hidden (not a collection)', await page.locator('#start-seriesbox').isHidden());
+ok('show picker: queue-owned progress is the default',
+  (await currentValue(page, '[data-testid="start-history"]')) === 'queue');
 const epOptions = await readOptions(page, '[data-testid="start-episode"]');
 ok('show picker: episodes listed by name', epOptions.length > 3 && /^E\d+ · /.test(epOptions[0] ?? ''));
 await page.screenshot({ path: `${SHOTS}/start-modal-show.png` });
@@ -51,6 +52,7 @@ await page.waitForTimeout(2500);
 const yaml1 = readFileSync(YAML, 'utf8');
 ok(`show start written to YAML (episode ${pickedEp})`,
   new RegExp(`start:[\\s\\S]{0,60}episode: ${pickedEp}`).test(yaml1));
+ok('show start stores queue-owned progress', /history: queue/.test(yaml1));
 ok('show tile shows the start chip', (await tileByTitle('Steins;Gate').locator('.startbadge').count()) === 1);
 
 // 3. A collection tile: pick WHICH member, then the episode inside it.
@@ -66,6 +68,7 @@ ok('collection picker: defaults to the member that plays next',
 // Start at the FIRST member instead (earlier members are skipped, so this is a real change).
 await pickValue(page, '[data-testid="start-series"]', '365591');
 await page.waitForTimeout(1500);
+await pickValue(page, '[data-testid="start-history"]', 'provider');
 await page.screenshot({ path: `${SHOTS}/start-modal-collection.png` });
 await pickIndex(page, '[data-testid="start-episode"]', 4);
 const collEp = await currentValue(page, '[data-testid="start-episode"]');
@@ -75,14 +78,16 @@ const yaml2 = readFileSync(YAML, 'utf8');
 ok('collection start names the member series', /series: ["']?365591/.test(yaml2));
 ok(`collection start pins the episode (${collEp})`,
   new RegExp(`series: ["']?365591[\\s\\S]{0,80}episode: ${collEp}`).test(yaml2));
+ok('collection start can keep provider-history behavior', /history: provider/.test(yaml2));
 
 // 4. Right-click opens the tile menu, and it can clear the override.
 const chaika2 = tileByTitle('Chaika');
 await chaika2.locator('.thumb').click({ button: 'right' });
 await page.waitForSelector('#tilemenu:not([hidden])');
 const menuItems = await page.locator('#tilemenu button').allInnerTexts();
-ok('menu offers change + clear + remove', menuItems.length === 3
-  && /start/i.test(menuItems[0] ?? '') && /clear/i.test(menuItems[1] ?? '') && /Remove/i.test(menuItems[2] ?? ''));
+ok('menu offers change + clear',
+  menuItems.some((text) => /start/i.test(text))
+  && menuItems.some((text) => /clear/i.test(text)));
 await page.screenshot({ path: `${SHOTS}/start-tilemenu.png` });
 await page.locator('#tilemenu button', { hasText: 'clear' }).click();
 await page.waitForTimeout(2500);

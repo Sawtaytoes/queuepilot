@@ -32,6 +32,7 @@ import * as promote from '../promote.js';
 import * as rotation from '../engine/rotation.js';
 import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
 import * as select from '../engine/select.js';
+import * as queueEntryHistory from '../store/db/queueEntryHistory.js';
 import * as routing from '../engine/routing.js';
 import { liveClient } from '../engine/plex-live.js';
 import { profileUser, sections as plexSections, showEpisodes } from '../plex.js';
@@ -264,6 +265,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         return resolve.nextQueue(
           c, setName, cfg, entries, watched, token, defaultRng,
           (entryKey, windowMs) => promote.canLeadOnce(setName, entryKey, windowMs),
+          (entryKey) => queueEntryHistory.completedFor(setName, entryKey),
         );
       }
 
