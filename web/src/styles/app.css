@@ -4227,6 +4227,19 @@ body.rowdragging {
   font-size: 0.82rem;
   margin: 0 0 8px;
 }
+#membersmodal .collectionorderbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 10px 0;
+  color: var(--color-content-secondary);
+}
+#membersmodal .membermove {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
 #membersmodal .memberlist {
   list-style: none;
   margin: 0;
