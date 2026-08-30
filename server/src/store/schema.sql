@@ -188,6 +188,10 @@ CREATE TABLE IF NOT EXISTS queue_entry_history (
   entry_key    TEXT NOT NULL,
   item_key     TEXT NOT NULL,
   completed_at INTEGER NOT NULL,
+  -- Existing rows predate position tracking and are completed rows, hence DEFAULT 1.
+  is_completed INTEGER NOT NULL DEFAULT 1 CHECK (is_completed IN (0, 1)),
+  position_ms  INTEGER NOT NULL DEFAULT 0,
+  duration_ms  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (set_id, entry_key, item_key)
 ) WITHOUT ROWID;
 

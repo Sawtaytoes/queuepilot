@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-08-30 | [Plex decides completion, and the queue owns the resume point](2026-08-30-plex-decides-completion-and-the-queue-owns-the-resume-point.md) *(playback semantics / correction / durable data — QueuePilot stores the queue entry's live position, seeks from it, and observes Plex's play-count/viewOffset result instead of copying its configurable percentage-and-credits completion rule.)* |
 | 2026-08-30 | [A manual start can own its progress](2026-08-30-a-manual-start-can-own-its-progress.md) *(playback semantics / durable data / UI — a start chooses a per-queue completion ledger or the original provider-history filter; new starts default to queue-owned progress, older mode-less starts remain compatible, and saving a queue-owned start begins a new run.)* |
 | 2026-08-30 | [Pending series configuration includes what plays and drag order](2026-08-30-pending-series-configuration-includes-what-plays-and-drag-order.md) *(UI / interaction — Pending configures the start and What plays before Add to; collection rows use drag handles with Up/Down keyboard movement instead of Earlier/Later buttons.)* |
 | 2026-08-30 | [Rules queues share manual includes and exclude search](2026-08-30-rules-queues-share-manual-includes-and-exclude-search.md) *(product / UI / playback correction — Shows and Movies Rules queues both expose an exclusion search and manual includes; movie members join the rewatch candidates instead of being saved and ignored.)* |

@@ -21,6 +21,7 @@ import * as adb from './adb.js';
 import * as playback from './playback.js';
 import * as driver from './driver.js';
 import * as resume from './resume.js';
+import { liveClient } from './engine/plex-live.js';
 import {
   PLAYBACK_FSM, ADB_ENABLED, RESUME_ON_ADVANCE,
 } from './env.js';
@@ -46,6 +47,7 @@ interface SessionQueueItem {
   episode?: number | null | undefined;
   queueEntryKey?: string | undefined;
   queueOwnHistory?: boolean | undefined;
+  queueProviderViewCount?: number | undefined;
 }
 
 /** The mutable module-level singleton. Declared as an interface so `this` inside `asDict()`
@@ -377,6 +379,24 @@ export async function startSession(
   const cap = cfg.max_items;
   if (typeof cap === 'number' && cap > 0) playItems = playItems.slice(0, cap);
 
+  // A cached allLeaves row is enough to choose an episode, but not enough to baseline a
+  // REWATCH completion: another device may have incremented viewCount since that row was
+  // cached. Read each queue-owned head directly before handoff, so only THIS play can make
+  // the final count larger than the captured count.
+  await Promise.all(playItems.map(async (item) => {
+    const it = item as PlexPlayItem & {
+      queueOwnHistory?: boolean; queueProviderViewCount?: number;
+    };
+    if (!it.queueOwnHistory) return;
+    try {
+      const mc = await liveClient().container(`/library/metadata/${it.ratingKey}`, tok);
+      it.queueProviderViewCount = Math.max(0, Number(mc.Metadata?.[0]?.viewCount) || 0);
+    } catch {
+      // Keep the resolver's count. A failed baseline read must not block playback; the final
+      // read then fails the same way and preserves the live QueuePilot position.
+    }
+  }));
+
   // The Plex-only read the `PlayItem` union exists to make visible: `String(it.ratingKey)` is
   // `'undefined'` for a Kavita item and `season`/`episode` are simply absent. Left exactly as
   // it was — the pull path does not reach `startSession`, so this stays unreachable.
@@ -389,6 +409,8 @@ export async function startSession(
       episode: it.episode,
       queueEntryKey: (it as PlexPlayItem & { queueEntryKey?: string }).queueEntryKey,
       queueOwnHistory: (it as PlexPlayItem & { queueOwnHistory?: boolean }).queueOwnHistory,
+      queueProviderViewCount: (it as PlexPlayItem & { queueProviderViewCount?: number })
+        .queueProviderViewCount,
     };
   });
 
