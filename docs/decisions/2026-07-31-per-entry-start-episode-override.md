@@ -7,7 +7,7 @@
 - **Date:** 2026-07-31
 - **Type:** behavior / data model
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [`2026-08-30-a-manual-start-can-own-its-progress`](2026-08-30-a-manual-start-can-own-its-progress.md) (the single-mode clause only)
 
 ## Decision
 

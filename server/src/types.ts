@@ -145,6 +145,9 @@ export interface Start {
   series?: string;
   season?: number;
   episode?: number;
+  /** `queue` uses this queue entry's private completion ledger. Absent/`provider` keeps the
+   * historical behavior: skip anything Plex/Kavita already marks complete. */
+  history?: 'queue' | 'provider';
 }
 
 // --- bindings ---------------------------------------------------------------- //

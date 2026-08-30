@@ -44,6 +44,8 @@ interface SessionQueueItem {
   title?: string | undefined;
   season?: number | null | undefined;
   episode?: number | null | undefined;
+  queueEntryKey?: string | undefined;
+  queueOwnHistory?: boolean | undefined;
 }
 
 /** The mutable module-level singleton. Declared as an interface so `this` inside `asDict()`
@@ -385,6 +387,8 @@ export async function startSession(
       title: it.title,
       season: it.season,
       episode: it.episode,
+      queueEntryKey: (it as PlexPlayItem & { queueEntryKey?: string }).queueEntryKey,
+      queueOwnHistory: (it as PlexPlayItem & { queueOwnHistory?: boolean }).queueOwnHistory,
     };
   });
 

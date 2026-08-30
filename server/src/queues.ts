@@ -765,7 +765,9 @@ export async function setBatchStop(
 // start" — i.e. back to automatic next-unwatched.
 export function normalizeStart(start: unknown): Start | null {
   if (!start || typeof start !== 'object') return null;
-  const src = start as { series?: unknown; season?: unknown; episode?: unknown };
+  const src = start as {
+    series?: unknown; season?: unknown; episode?: unknown; history?: unknown;
+  };
   const hasSeries = src.series != null && String(src.series).trim() !== '';
   if (!hasSeries && src.episode == null) return null;
   const s: Start = {};
@@ -774,6 +776,7 @@ export function normalizeStart(start: unknown): Start | null {
     s.season = Math.max(1, parseInt(String(src.season), 10) || 1);
     s.episode = Math.max(1, parseInt(String(src.episode), 10) || 1);
   }
+  if (src.history === 'queue' || src.history === 'provider') s.history = src.history;
   return s;
 }
 
