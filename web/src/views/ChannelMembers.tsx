@@ -15,6 +15,7 @@ import { SearchDropdown } from "../components/SearchDropdown"
 import { Tip } from "../components/Tip"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
+import { titleWithYear } from "../lib/mediaTitle"
 import {
   entryTitle,
   type GroupedHit,
@@ -573,18 +574,14 @@ export function ChannelMembers({
               posterRatingKey={
                 m.resolved ? face.ratingKey : null
               }
-              title={
-                face.title +
-                (face.year ? ` (${face.year})` : "")
-              }
+              title={titleWithYear(face.title, face.year)}
               // The member's own page in Plex / Kavita — the same link the queue grid's
               // tiles carry, because it is the same tile component and the same entry.
               titleHref={m.webUrl}
               titleTooltip={
                 face.from
                   ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-                  : face.title +
-                    (face.year ? ` (${face.year})` : "")
+                  : titleWithYear(face.title, face.year)
               }
             />
           )

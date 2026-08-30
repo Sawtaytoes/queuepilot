@@ -73,9 +73,10 @@ export const collectionOrderCount = (
  * shared prefix off the title line.
  *
  * Left whole when the member doesn't lead with the collection name, is named
- * exactly for it, or the only thing left after the prefix is a bare season/sequel
- * ordinal — "Trapped in a Dating Sim 2" must not shrink to a naked "2 (2026)"; a
- * lone number names no show, so keep the whole title.
+ * exactly for it, or the only thing left after the prefix is a release year or a bare
+ * season/sequel ordinal — "Aldnoah.Zero (2015)" must not shrink to "(2015)", and
+ * "Trapped in a Dating Sim 2" must not shrink to "2 (2026)". Neither remainder names
+ * a show, so keep the whole title.
  * (decision `2026-07-31-collection-tiles-are-member-first`)
  */
 export function withoutCollectionPrefix(
@@ -97,10 +98,11 @@ export function withoutCollectionPrefix(
     .slice(c.length)
     .replace(/^\s*[-–—:·]?\s*/, "")
 
-  // A remainder that is only a sequel/season ordinal ("2", "II", "Season 3",
-  // "Part 2") identifies no show on its own — the prefix WAS the show name. Keep
-  // the full member title so the tile still reads as a show, not a number.
+  // A remainder that is only a release year or sequel/season ordinal ("2", "II",
+  // "Season 3", "Part 2") identifies no show on its own — the prefix WAS the show
+  // name. Keep the full member title so the tile still reads as a show.
   if (
+    /^\(\d{4}\)$/.test(rest) ||
     /^(?:season|part|s)?\s*(?:\d+|[ivxlcdm]+)$/i.test(rest)
   ) {
     return m

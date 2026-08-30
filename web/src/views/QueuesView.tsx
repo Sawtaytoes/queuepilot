@@ -26,6 +26,7 @@ import { useHomeDrags } from "../hooks/useHomeDrags"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import { isRandomOrder } from "../lib/kind"
+import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { queueNumbers, queueTitle } from "../lib/people"
 import { ROUTE_PATHS } from "../lib/routePaths"
@@ -676,9 +677,7 @@ function Shelf({
         posterRatingKey={
           item.resolved ? face.ratingKey : null
         }
-        title={
-          face.title + (face.year ? ` (${face.year})` : "")
-        }
+        title={titleWithYear(face.title, face.year)}
         // The item's own page in Plex / Kavita — see QueueView.
         titleHref={item.webUrl}
         titleHrefLabel={
@@ -687,8 +686,7 @@ function Shelf({
         titleTooltip={
           face.from
             ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
-            : face.title +
-              (face.year ? ` (${face.year})` : "")
+            : titleWithYear(face.title, face.year)
         }
       />
     )

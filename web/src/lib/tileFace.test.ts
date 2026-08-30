@@ -117,6 +117,15 @@ describe("withoutCollectionPrefix", () => {
     ).toBe("Trapped in a Dating Sim 2")
   })
 
+  test("keeps the full title when the prefix leaves only a release year", () => {
+    expect(
+      withoutCollectionPrefix(
+        "Aldnoah.Zero (2015)",
+        "Aldnoah.Zero",
+      ),
+    ).toBe("Aldnoah.Zero (2015)")
+  })
+
   test("keeps the full title for spelled-out season / part / roman ordinals", () => {
     expect(
       withoutCollectionPrefix(
