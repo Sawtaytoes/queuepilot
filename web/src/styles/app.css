@@ -4200,8 +4200,6 @@ body.rowdragging {
 /* ---- Skipped: the queue's final section, in the queue's current density. ---- */
 .skippanel {
   margin: 32px 0 0;
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: 14px;
 }
 .skipgrid {
   margin-top: 12px;
