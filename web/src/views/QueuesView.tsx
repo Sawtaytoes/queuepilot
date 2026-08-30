@@ -52,8 +52,8 @@ import {
   parsePeople,
 } from "../state/landingFilter"
 import {
-  openPlayMenu,
   openDynModal,
+  openPlayMenu,
   openSetModal,
   openTileMenu,
 } from "../state/overlays"
@@ -805,13 +805,19 @@ export function QueuesView({
             {rotationChannels(reg).map((channel) => (
               <article
                 className="rules-queue-card"
-                data-provider={channel.provider_kind || undefined}
+                data-provider={
+                  channel.provider_kind || undefined
+                }
                 key={channel.id}
               >
-                <Link to={`/channels/${encodeURIComponent(channel.id)}`}>
+                <Link
+                  to={`/channels/${encodeURIComponent(channel.id)}`}
+                >
                   <Badge intent="accent">Rules</Badge>
                   <strong>{channel.label}</strong>
-                  <span>View eligible titles and queue controls.</span>
+                  <span>
+                    View eligible titles and queue controls.
+                  </span>
                 </Link>
                 <Button
                   appearance="ghost"

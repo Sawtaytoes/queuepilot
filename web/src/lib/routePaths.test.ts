@@ -21,7 +21,7 @@ import {
  * The patterns come from `ROUTE_PATHS`, which is what `App.tsx` renders — one source, and no
  * second table to drift.
  *
- * `/g/<id>` and `/collection` and `/tonight` are still LIVE addresses. Each one matches its
+ * `/g/<id>`, `/board-game-collection`, and `/tonight` are still LIVE addresses. Each one matches its
  * own legacy route, which paints the page it moved to and rewrites the URL underneath; the
  * rewrite itself is pinned by `e2e/routing-test.ts`, because it needs a browser.
  */
@@ -131,21 +131,19 @@ describe("the route table", () => {
     )
   })
 
-  test("the board-game shelf answers to its long name", () => {
-    expect(match("/board-game-collection").route).toBe(
-      "boardGameCollection",
-    )
-    expect(match("/board-game-collection/").route).toBe(
+  test("the collection picker and board-game detail have specific routes", () => {
+    expect(match("/collection").route).toBe("collection")
+    expect(match("/collection/board-games").route).toBe(
       "boardGameCollection",
     )
   })
 
-  test("the old /collection is its own legacy route", () => {
-    expect(match("/collection").route).toBe(
-      "legacyCollection",
+  test("the old board-game address is its own legacy route", () => {
+    expect(match("/board-game-collection").route).toBe(
+      "legacyBoardGameCollection",
     )
-    expect(match("/collection/").route).toBe(
-      "legacyCollection",
+    expect(match("/board-game-collection/").route).toBe(
+      "legacyBoardGameCollection",
     )
     // …and a longer word that merely starts the same way is NOT the shelf.
     expect(match("/collections").route).toBe("fallback")
@@ -165,10 +163,10 @@ describe("the legacy rewrites", () => {
       "/what-to-watch-play",
     )
     expect(canonicalCollectionPath("x")).toBe(
-      "/board-game-collection/x",
+      "/collection/board-games/x",
     )
     expect(canonicalCollectionPath()).toBe(
-      "/board-game-collection",
+      "/collection/board-games",
     )
   })
 })
@@ -177,12 +175,14 @@ describe("labelForPath", () => {
   test("names where back actually goes", () => {
     expect(labelForPath("/picks")).toBe("‹ Queues")
     expect(labelForPath("/queues")).toBe("‹ Queues")
-    expect(labelForPath("/channels/movies")).toBe("‹ Queues")
+    expect(labelForPath("/channels/movies")).toBe(
+      "‹ Queues",
+    )
     expect(labelForPath("/q/bob")).toBe("‹ Back")
     expect(labelForPath("/board-game-collection")).toBe(
       "‹ Collection",
     )
-    // The old address, which is still a live link and still names the same page.
+    // The picker and its detail both return to the collection index.
     expect(labelForPath("/collection")).toBe("‹ Collection")
     expect(labelForPath("/what-to-watch-play")).toBe(
       "‹ What to Watch/Play",

@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -141,15 +141,18 @@ ok(
   );
 }
 
-// The board-game shelf, both halves of the 2026-08-25 rename.
-//
-// A rename is the one change where "it works" and "the old link works" are different claims,
-// and neither is implied by a unit test: `parsePath` can be perfect while the SERVER 404s the
-// new path (a hyphenated segment is still extensionless, but nothing had proved the fallback
-// answers one) and while the redirect never fires.
+// The collection picker, its Board Games detail, and the legacy shelf address.
 {
-  await page.goto(`${BASE}/board-game-collection`, { waitUntil: 'domcontentloaded' });
-  ok('deep link /board-game-collection renders the shelf', await heading('Collection'));
+  await page.goto(`${BASE}/collection`, { waitUntil: 'domcontentloaded' });
+  ok('deep link /collection renders the picker', await heading('Collection'));
+
+  const isPicker = await page
+    .waitForSelector('#collection-picker:not([hidden])', { timeout: 30000 })
+    .then(() => true, () => false);
+  ok('…the picker view itself, not just the chrome', isPicker);
+
+  await page.goto(`${BASE}/collection/board-games`, { waitUntil: 'domcontentloaded' });
+  ok('deep link /collection/board-games renders the shelf', await heading('Board Games'));
 
   const isShelf = await page
     .waitForSelector('#collection:not([hidden])', { timeout: 30000 })
@@ -157,24 +160,23 @@ ok(
   ok('…the shelf view itself, not just the chrome', isShelf);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  ok('…and a RELOAD on it still renders the shelf', await heading('Collection'));
+  ok('…and a RELOAD on it still renders the shelf', await heading('Board Games'));
   ok(
     '…still on the new path after the reload',
-    (await page.evaluate(() => location.pathname)) === '/board-game-collection',
+    (await page.evaluate(() => location.pathname)) === '/collection/board-games',
   );
 
-  // The legacy address. `/collection` was live for a few hours on 2026-08-25, so it
-  // REDIRECTS rather than 404ing or falling through to the landing.
+  // The old specific address redirects to the new detail route.
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await modeLanding();
-  await page.goto(`${BASE}/collection`, { waitUntil: 'domcontentloaded' });
-  ok('the legacy /collection still renders the shelf', await heading('Collection'));
+  await page.goto(`${BASE}/board-game-collection`, { waitUntil: 'domcontentloaded' });
+  ok('the legacy board-game address still renders the shelf', await heading('Board Games'));
 
   const redirected = await page
-    .waitForFunction(() => location.pathname === '/board-game-collection', undefined, { timeout: 30000 })
+    .waitForFunction(() => location.pathname === '/collection/board-games', undefined, { timeout: 30000 })
     .then(() => true, () => false);
   ok(
-    `…and the URL is rewritten to /board-game-collection (got ${await page.evaluate(() => location.pathname)})`,
+    `…and the URL is rewritten to /collection/board-games (got ${await page.evaluate(() => location.pathname)})`,
     redirected,
   );
 

@@ -47,6 +47,7 @@ import {
   useStore,
 } from "./state/store"
 import { ChannelsView } from "./views/ChannelsView"
+import { CollectionLandingView } from "./views/CollectionLandingView"
 import { CollectionView } from "./views/CollectionView"
 import { ModeLandingView } from "./views/ModeLandingView"
 import { PendingView } from "./views/PendingView"
@@ -135,7 +136,11 @@ export const appRouteElements = (
       path={ROUTE_PATHS.pending}
     />
     <Route
-      element={<CollectionPage />}
+      element={<CollectionLandingPage />}
+      path={ROUTE_PATHS.collection}
+    />
+    <Route
+      element={<BoardGameCollectionPage />}
       path={ROUTE_PATHS.boardGameCollection}
     />
     <Route
@@ -172,8 +177,8 @@ export const appRouteElements = (
       path={ROUTE_PATHS.legacyChannels}
     />
     <Route
-      element={<LegacyCollectionPage />}
-      path={ROUTE_PATHS.legacyCollection}
+      element={<LegacyBoardGameCollectionPage />}
+      path={ROUTE_PATHS.legacyBoardGameCollection}
     />
     <Route
       element={<LegacyWatchPlayPage />}
@@ -331,7 +336,7 @@ function PendingPage() {
   )
 }
 
-function CollectionPage() {
+function CollectionLandingPage() {
   return (
     <Page
       back={{
@@ -344,6 +349,25 @@ function CollectionPage() {
       documentTitle="Collection — QueuePilot"
       editableSetId={null}
       heading="Collection"
+      isSubHidden={false}
+      sub="Choose which QueuePilot-maintained collection to view."
+    >
+      <CollectionLandingView />
+    </Page>
+  )
+}
+
+function BoardGameCollectionPage() {
+  return (
+    <Page
+      back={{
+        label: "‹ Collection",
+        target: ROUTE_PATHS.collection,
+      }}
+      bodyClass="queue-view"
+      documentTitle="Board Games — QueuePilot"
+      editableSetId={null}
+      heading="Board Games"
       isSubHidden={false}
       sub="Every board game on the shelf. Mark one played, and say who was at the table."
     >
@@ -594,12 +618,12 @@ function LegacyChannelsPage() {
   return <QueuesPage />
 }
 
-function LegacyCollectionPage() {
+function LegacyBoardGameCollectionPage() {
   const params = useParams()
 
   useCanonicalPath(canonicalCollectionPath(params["*"]))
 
-  return <CollectionPage />
+  return <BoardGameCollectionPage />
 }
 
 function LegacyWatchPlayPage() {

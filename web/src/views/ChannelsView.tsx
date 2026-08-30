@@ -6,9 +6,7 @@ import {
 } from "../components/OpenQueueButton"
 import { SelectListbox } from "../components/SelectListbox"
 import { Tip } from "../components/Tip"
-import {
-  activeBinding,
-} from "../lib/channels"
+import { activeBinding } from "../lib/channels"
 import type { RegistrySet } from "../lib/types"
 import {
   resolveChannel,

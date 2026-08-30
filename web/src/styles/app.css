@@ -724,7 +724,10 @@ button {
 .rules-queue-grid {
   display: grid;
   gap: 12px;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  grid-template-columns: repeat(
+      auto-fit,
+      minmax(min(100%, 18rem), 1fr)
+    );
 }
 .rules-queue-card {
   background: var(--color-surface-raised);
@@ -2763,6 +2766,12 @@ html.modal-open {
   align-items: center;
   gap: 8px 18px;
   margin: 0 0 4px;
+}
+/* The Queues picker must not touch the toolbar above it. The same filter component also
+   appears on the overview, so the spacing belongs to this page placement rather than to the
+   reusable filter shape. */
+#home > .filterbar {
+  margin-top: 16px;
 }
 .filterchips {
   list-style: none;

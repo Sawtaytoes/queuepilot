@@ -17,10 +17,10 @@ import {
 } from "../state/store"
 import { setCollapsed, setFilter, useUi } from "../state/ui"
 import { EditionBadge } from "./EditionBadge"
+import { Modal } from "./Modal"
 import { Poster } from "./Poster"
 import { QueuePeopleBadge } from "./QueuePeopleBadge"
 import { SearchDropdown } from "./SearchDropdown"
-import { Modal } from "./Modal"
 
 /**
  * The Home toolbar: one search across every library any queue draws from, plus the
@@ -43,7 +43,8 @@ export function Toolbar() {
   const [openMenu, setOpenMenu] = useState<number | null>(
     null,
   )
-  const [isChoosingType, setIsChoosingType] = useState(false)
+  const [isChoosingType, setIsChoosingType] =
+    useState(false)
 
   /*
    * The document-level Escape listener that used to sit here is GONE, and its whole
@@ -320,7 +321,10 @@ export function Toolbar() {
             type="button"
           >
             <strong>Picks</strong>
-            <span>Choose titles yourself, then arrange them in priority and random lanes.</span>
+            <span>
+              Choose titles yourself, then arrange them in
+              priority and random lanes.
+            </span>
           </Button>
           <Button
             appearance="outline"
@@ -332,7 +336,10 @@ export function Toolbar() {
             type="button"
           >
             <strong>Rules</strong>
-            <span>Set eligibility filters and let QueuePilot select matching titles.</span>
+            <span>
+              Set eligibility filters and let QueuePilot
+              select matching titles.
+            </span>
           </Button>
         </div>
       </Modal>

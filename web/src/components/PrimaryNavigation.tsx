@@ -51,7 +51,7 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
       label: "Queues",
     },
     {
-      href: "/board-game-collection",
+      href: ROUTE_PATHS.collection,
       icon: (
         <NavigationIcon>
           <path d="M5 4h14v16H5z" />

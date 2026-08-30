@@ -14,7 +14,8 @@
  *   `/what-to-watch-play/go?…`      …with the answers baked in
  *   `/result`                       RESULT — the pick: one card, reroll, confirm
  *   `/result/<gameId>`              RESULT for one named game — a queue arrival, and it has NO reroll
- *   `/board-game-collection`        COLLECTION — the board-game shelf, and "we played this"
+ *   `/collection`                   COLLECTION — choose one maintained collection
+ *   `/collection/board-games`       BOARD GAMES — the shelf, and "we played this"
  *   `/queues`                       all Picks and Rules queues
  *   `/people`                       roster and saved audience-group management
  *   `/q/<id>`                       one curated queue / channel as a grid
@@ -38,10 +39,8 @@
  * compatibility data for queue audiences, and its editor now opens from `/people`. A redirect rather
  * than a 404 because `/g/<id>` was bookmarkable for nine days and that was half the point of it.
  *
- * `/board-game-collection` and NOT `/collection`, since 2026-08-25. The shelf is one KIND of
- * collection, and the generic word is already Plex's in this app — `type: "collection"` is a
- * row of films, in `tiles.ts`, `plex.ts`, `sets.ts` and thirty other places
- * ([decision](../../../docs/decisions/2026-08-25-the-board-game-shelf-is-board-game-collection.md)).
+ * `/collection` is the QueuePilot-maintained collection picker. Board Games keeps its specific
+ * name at `/collection/board-games`; `/board-game-collection` is the legacy bookmark.
  *
  * These were `#/…` until 2026-08-16. They are real paths, so the server has to answer them —
  * `createStaticHandler` runs with `hasSpaFallback: true`, and the two facts move together or a
@@ -51,8 +50,9 @@
 
 export const WATCH_PLAY_PATH = "/what-to-watch-play"
 
-export const BOARD_GAME_COLLECTION_PATH =
-  "/board-game-collection"
+export const COLLECTION_PATH = "/collection"
+
+export const BOARD_GAME_COLLECTION_PATH = `${COLLECTION_PATH}/board-games`
 
 /**
  * A trailing `/*` where the old parser said `startsWith`, so `/picks/anything` still opens
@@ -62,11 +62,12 @@ export const BOARD_GAME_COLLECTION_PATH =
 export const ROUTE_PATHS = {
   admin: "/admin",
   boardGameCollection: `${BOARD_GAME_COLLECTION_PATH}/*`,
+  collection: COLLECTION_PATH,
   channels: "/channels/:channelId",
   /** Anything unrecognised paints the mode landing rather than a blank page. */
   fallback: "*",
   home: "/",
-  legacyCollection: "/collection/*",
+  legacyBoardGameCollection: "/board-game-collection/*",
   legacyGroup: "/g/*",
   /** Retired queue-kind indexes; both replace their address with `/queues`. */
   legacyChannels: "/channels",
@@ -118,7 +119,8 @@ export function labelForPath(p: string): string {
     return "‹ What to Watch/Play"
   if (
     p.startsWith(BOARD_GAME_COLLECTION_PATH) ||
-    p.startsWith("/collection")
+    p.startsWith(COLLECTION_PATH) ||
+    p.startsWith("/board-game-collection")
   )
     return "‹ Collection"
   if (p.startsWith("/result")) return "‹ What to Watch/Play"
