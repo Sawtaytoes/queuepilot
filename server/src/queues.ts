@@ -265,6 +265,10 @@ export async function addItem(
     // same key the raw value has always produced — spelled once, from what actually gets
     // written, rather than trusting the two to agree.
     const entry = toEntryObject(value);
+    // Every new entry gets one honest queue-arrival timestamp. `queued_at` already drives
+    // provider progress, so it is also the durable answer for the queue view's "Recently
+    // added" sort. Preserve an explicit stamp for imports/tests; ordinary API adds omit it.
+    if (entry.queued_at == null) entry.queued_at = Math.floor(Date.now() / 1000);
     const key = entryKey(entry);
     if (!key) throw new Error('empty entry');
     if (seq.items.some((n) => entryKey(plain(n)) === key)) return { added: false, key };

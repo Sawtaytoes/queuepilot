@@ -206,7 +206,9 @@ ok('addItem(title) writes a mapping', written[0]?.title === 'A Typed Title' && t
 ok('addItem(ratingKey) writes a mapping', written[1]?.ratingKey === 12345, JSON.stringify(written[1]));
 ok('addItem("Collection: …") writes {collection}', written[2]?.collection === 'A Franchise',
   JSON.stringify(written[2]));
-ok('addItem(mapping) is unchanged', written[3]?.ratingKey === '77', JSON.stringify(written[3]));
+ok('addItem stamps when each entry joined the queue', written.every((entry) =>
+  typeof entry.queued_at === 'number' && Number(entry.queued_at) > 0), JSON.stringify(written));
+ok('addItem(mapping) keeps its identity', written[3]?.ratingKey === '77', JSON.stringify(written[3]));
 ok('nothing written is a scalar entry', !hasScalarEntry(), readQueues());
 
 // The collapse that used to happen: clearing the LAST override turned the entry back into a
