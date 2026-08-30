@@ -9,7 +9,7 @@ import type {
   StatusKind,
 } from "../lib/types"
 import { uiBusy } from "./busy"
-import { loadPeople } from "./people"
+import { loadPeople, refreshPeople } from "./people"
 
 /**
  * One module-level store, read through `useSyncExternalStore`.
@@ -230,6 +230,39 @@ function shelvesAsQueues(
   }
 
   return { order: shelves.order, sets }
+}
+
+/**
+ * Repaint an undo/redo from the store-only endpoints before provider resolution runs.
+ *
+ * `/api/queues` can spend several seconds resolving entries against Plex and Kavita. Undo has
+ * already committed by then, so leaving the old snapshot on screen for that whole read makes a
+ * successful undo look broken. The shelf endpoint reads the restored store directly and costs no
+ * provider calls; it gives the page its restored queue order, lanes and counts immediately. The
+ * normal live refresh replaces its pending tiles with resolved ones afterward.
+ *
+ * Best effort because the history write itself is already complete. A failed cosmetic read must
+ * not turn the truthful "Undone" status into "Undo failed".
+ */
+export async function refreshHistorySnapshot(): Promise<void> {
+  const [shelvesResult, registryResult] =
+    await Promise.allSettled([
+      api<ShelvesResponse>("GET", "/api/shelves"),
+      api<SetsResponse>("GET", "/api/sets"),
+      refreshPeople(),
+    ])
+
+  if (uiBusy()) return
+
+  const patch: Partial<Snapshot> = {}
+
+  if (shelvesResult.status === "fulfilled")
+    patch.data = shelvesAsQueues(shelvesResult.value)
+
+  if (registryResult.status === "fulfilled")
+    patch.reg = registryResult.value
+
+  if (patch.data || patch.reg) setState(patch)
 }
 
 /**

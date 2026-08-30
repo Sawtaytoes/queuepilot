@@ -15,12 +15,14 @@ import { useEffect, useRef, useState } from "react"
 type OpenMenu = "actions" | null
 
 import { api } from "../lib/api"
+import { queryClient } from "../lib/queryClient"
 import { busy } from "../state/busy"
 import { refreshData } from "../state/live"
 import {
   bumpRevision,
   getState,
   refreshHistoryButtons,
+  refreshHistorySnapshot,
   setStatus,
   useStore,
 } from "../state/store"
@@ -200,8 +202,14 @@ export function Header({
 
       if (!out.ok) throw new Error(out.error)
 
+      // Undo restores the whole store, not only queues.yaml. Repaint the store-backed shelf,
+      // registry and people slices before the slower provider-backed refresh, and invalidate any
+      // route-local server queries that may also describe the restored rows.
+      await refreshHistorySnapshot()
+      void queryClient.invalidateQueries()
       setStatus(dir === "undo" ? "Undone" : "Redone", "ok")
-      // The file write pings SSE too, but refresh immediately for snappy feedback.
+      // The file write pings SSE too. Resolve the lightweight snapshot's tiles immediately rather
+      // than waiting for that event, which may already have fired while undo was writing.
       refreshData()
       void refreshHistoryButtons()
     } catch (e) {
