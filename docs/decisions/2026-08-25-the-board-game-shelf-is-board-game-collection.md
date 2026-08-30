@@ -6,7 +6,7 @@
 - **Supersedes:** — (narrows one detail of
   [A play cannot be logged without answering who played](2026-08-25-a-play-cannot-be-logged-without-answering-who-played.md),
   which shipped the shelf at `/collection` earlier the same day)
-- **Superseded by:** —
+- **Superseded by:** [Collection is a picker with one route per maintained collection](2026-08-29-collection-is-a-picker-with-one-route-per-maintained-collection.md)
 
 ## Decision
 

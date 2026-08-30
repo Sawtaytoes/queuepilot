@@ -108,7 +108,7 @@ try {
 
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
   page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-  await page.goto(`http://localhost:${PORT}/channels`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`http://localhost:${PORT}/channels/blockpool`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])');
   // The pool editor, opened on the seeded pool — the exact gesture that used to wipe both.
   await page.waitForSelector('#chconfigure');

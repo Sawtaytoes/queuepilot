@@ -47,6 +47,7 @@ import {
   useStore,
 } from "./state/store"
 import { ChannelsView } from "./views/ChannelsView"
+import { CollectionLandingView } from "./views/CollectionLandingView"
 import { CollectionView } from "./views/CollectionView"
 import { ModeLandingView } from "./views/ModeLandingView"
 import { PendingView } from "./views/PendingView"
@@ -135,7 +136,11 @@ export const appRouteElements = (
       path={ROUTE_PATHS.pending}
     />
     <Route
-      element={<CollectionPage />}
+      element={<CollectionLandingPage />}
+      path={ROUTE_PATHS.collection}
+    />
+    <Route
+      element={<BoardGameCollectionPage />}
       path={ROUTE_PATHS.boardGameCollection}
     />
     <Route
@@ -148,7 +153,7 @@ export const appRouteElements = (
     />
     <Route
       element={<QueuesPage />}
-      path={ROUTE_PATHS.picks}
+      path={ROUTE_PATHS.queues}
     />
     <Route
       element={<ChannelsPage />}
@@ -164,12 +169,16 @@ export const appRouteElements = (
       path={ROUTE_PATHS.legacyGroup}
     />
     <Route
-      element={<LegacyQueuesPage />}
-      path={ROUTE_PATHS.legacyQueues}
+      element={<LegacyPicksPage />}
+      path={ROUTE_PATHS.legacyPicks}
     />
     <Route
-      element={<LegacyCollectionPage />}
-      path={ROUTE_PATHS.legacyCollection}
+      element={<LegacyChannelsPage />}
+      path={ROUTE_PATHS.legacyChannels}
+    />
+    <Route
+      element={<LegacyBoardGameCollectionPage />}
+      path={ROUTE_PATHS.legacyBoardGameCollection}
     />
     <Route
       element={<LegacyWatchPlayPage />}
@@ -327,7 +336,7 @@ function PendingPage() {
   )
 }
 
-function CollectionPage() {
+function CollectionLandingPage() {
   return (
     <Page
       back={{
@@ -340,6 +349,25 @@ function CollectionPage() {
       documentTitle="Collection — QueuePilot"
       editableSetId={null}
       heading="Collection"
+      isSubHidden={false}
+      sub="Choose which QueuePilot-maintained collection to view."
+    >
+      <CollectionLandingView />
+    </Page>
+  )
+}
+
+function BoardGameCollectionPage() {
+  return (
+    <Page
+      back={{
+        label: "‹ Collection",
+        target: ROUTE_PATHS.collection,
+      }}
+      bodyClass="queue-view"
+      documentTitle="Board Games — QueuePilot"
+      editableSetId={null}
+      heading="Board Games"
       isSubHidden={false}
       sub="Every board game on the shelf. Mark one played, and say who was at the table."
     >
@@ -412,11 +440,11 @@ function QueuesPage() {
         target: ROUTE_PATHS.home,
       }}
       bodyClass=""
-      documentTitle="Picks queues — QueuePilot"
+      documentTitle="Queues — QueuePilot"
       editableSetId={null}
-      heading="Picks queues"
+      heading="Queues"
       isSubHidden={false}
-      sub="Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues."
+      sub="Choose a Picks or Rules queue to view it, or create a new queue."
     >
       <QueuesView toolbar={<Toolbar />} />
     </Page>
@@ -457,9 +485,9 @@ function ChannelsPage() {
           ? "queue-view movies-channel"
           : "queue-view"
       }
-      documentTitle="Rules queues — QueuePilot"
+      documentTitle={`${channel?.label ?? "Rules queue"} — QueuePilot`}
       editableSetId={null}
-      heading="Rules queues"
+      heading={channel?.label ?? "Rules queue"}
       isSubHidden={false}
       sub={
         isMovies
@@ -484,7 +512,7 @@ function QueuePage() {
     if (!data) return
 
     if (data.sets[setId]?.source !== "queue")
-      navigate(ROUTE_PATHS.picks.replace("/*", ""))
+      navigate(ROUTE_PATHS.queues.replace("/*", ""))
   }, [data, navigate, setId])
 
   const q = data?.sets[setId]
@@ -578,18 +606,24 @@ function LegacyAdminPage() {
   return <ModeLandingPage />
 }
 
-function LegacyQueuesPage() {
-  useCanonicalPath(ROUTE_PATHS.picks.replace("/*", ""))
+function LegacyPicksPage() {
+  useCanonicalPath(ROUTE_PATHS.queues.replace("/*", ""))
 
   return <QueuesPage />
 }
 
-function LegacyCollectionPage() {
+function LegacyChannelsPage() {
+  useCanonicalPath(ROUTE_PATHS.queues.replace("/*", ""))
+
+  return <QueuesPage />
+}
+
+function LegacyBoardGameCollectionPage() {
   const params = useParams()
 
   useCanonicalPath(canonicalCollectionPath(params["*"]))
 
-  return <CollectionPage />
+  return <BoardGameCollectionPage />
 }
 
 function LegacyWatchPlayPage() {

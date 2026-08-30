@@ -704,7 +704,10 @@ export function PlayView() {
         </Link>
         {/* THE COLLECTION, beside What to Watch/Play rather than under Configure: marking a
             game played is an activity, not a setting you change. */}
-        <Link id="gocollection" to="/board-game-collection">
+        <Link
+          id="gocollection"
+          to="/collection/board-games"
+        >
           Board game collection &rsaquo;
         </Link>
         <Link id="gopending" to="/pending">
