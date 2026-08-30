@@ -61,6 +61,7 @@ export async function resolveTile(
   opts: AccountScope = {},
   skipped: ReadonlySet<string> = new Set<string>(),
   includedSpecials: ReadonlySet<string> = new Set<string>(),
+  completed: ReadonlySet<string> | null = null,
 ): Promise<ResolvedTile> {
   const collectionOrder = value && typeof value === 'object'
     && Array.isArray((value as { collection_order?: unknown }).collection_order)
@@ -92,6 +93,7 @@ export async function resolveTile(
         opts,
         skipped,
         includedSpecials,
+        completed,
       );
     } catch {
       isNextEpFailed = true;
@@ -105,6 +107,7 @@ export async function resolveTile(
         skipped,
         includedSpecials,
         collectionOrder,
+        completed,
       );
     } catch {
       isNextEpFailed = true;

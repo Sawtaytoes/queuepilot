@@ -14,6 +14,7 @@ import type { ProviderTile } from '../providers/tiles.js';
 import * as queues from '../queues.js';
 import * as sets from '../sets.js';
 import { store } from '../store/index.js';
+import * as queueEntryHistory from '../store/db/queueEntryHistory.js';
 import * as tiles from '../tiles.js';
 import type { ResolvedTile } from '../tiles.js';
 import type { EntryObject, QueueEntry, Start } from '../types.js';
@@ -351,6 +352,9 @@ export function queuesRoutes(): Hono {
             scopes.get(s.requires_profile || '') ?? {},
             new Set(s.skipped || []),
             new Set(s.included_specials || []),
+            startOf(e)?.history === 'queue'
+              ? queueEntryHistory.completedFor(s.id, e.key)
+              : null,
           );
         return { setId: s.id, tile: queueTile(e, core) };
       });
@@ -645,7 +649,13 @@ export function queuesRoutes(): Hono {
     // queues.normalizeStart() treats as a clear, same as null).
     const { start } = await readBody(c);
     try {
-      return c.json(await queues.setStart(set, decodeURIComponent(c.req.param('key')), start));
+      const key = decodeURIComponent(c.req.param('key'));
+      const result = await queues.setStart(set, key, start);
+      if (result.ok && start && typeof start === 'object'
+          && (start as { history?: unknown }).history === 'queue') {
+        queueEntryHistory.clearCompleted(set, key);
+      }
+      return c.json(result);
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

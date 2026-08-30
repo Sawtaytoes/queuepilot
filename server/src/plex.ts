@@ -1099,6 +1099,7 @@ export async function nextEpisode(
   opts: AccountScope = {},
   skipped: ReadonlySet<string> = NO_SKIPS,
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
+  completed: ReadonlySet<string> | null = null,
 ): Promise<NextEp | null> {
   const eps = await allLeaves(showRatingKey, opts);
   if (!eps) return null;
@@ -1116,7 +1117,9 @@ export async function nextEpisode(
   );
   for (const e of ordered) {
     // viewCount is OMITTED by Plex at 0, so a missing count is unwatched here — never watched.
-    if (e.viewCount && e.viewCount > 0) continue; // already watched by Bob
+    if (completed ? completed.has(String(e.ratingKey)) : Boolean(e.viewCount && e.viewCount > 0)) {
+      continue;
+    }
     // On the set's SKIP list. Applied here as well as in the engine, or the tile would keep
     // naming an episode the next scan is never going to play — the caption and the playback
     // disagreeing is the whole failure this guards.
@@ -1326,6 +1329,7 @@ export async function collectionNext(
   skipped: ReadonlySet<string> = NO_SKIPS,
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
   collectionOrder: readonly string[] = [],
+  completed: ReadonlySet<string> | null = null,
 ): Promise<CollectionNextEp | null> {
   // Read as the SAME account the next-up below is resolved as. This used to be an admin read
   // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
@@ -1372,6 +1376,7 @@ export async function collectionNext(
           opts,
           skipped,
           includedSpecials,
+          completed,
         );
       } catch {
         /* skip a show we can't read; try the next member */
@@ -1379,7 +1384,7 @@ export async function collectionNext(
       if (ep) return { ...where, kind: 'show', ...ep };
     } else {
       // movie / episode / standalone member: unwatched unless it carries a viewCount.
-      if (ch.watched) continue;
+      if (completed ? completed.has(String(ch.ratingKey)) : ch.watched) continue;
       const viewOffset = Number(ch.viewOffset) || 0;
       return {
         // A movie child IS the leaf, so the skippable key and the member key are the same one.

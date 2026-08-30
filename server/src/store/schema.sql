@@ -179,6 +179,21 @@ CREATE TABLE IF NOT EXISTS queue_entries (
 CREATE INDEX IF NOT EXISTS queue_entries_rating_key ON queue_entries (rating_key);
 CREATE INDEX IF NOT EXISTS queue_entries_done       ON queue_entries (set_id, done);
 
+-- Queue-owned episode history. This is deliberately separate from Plex history: one person
+-- can watch later episodes under the same Plex profile while a different queue continues its
+-- own run from an earlier point. `entry_key` is the stable `rk:…` / `title:…` identity used by
+-- every queue mutation. A start-point reset deletes this entry's rows and begins a new run.
+CREATE TABLE IF NOT EXISTS queue_entry_history (
+  set_id       TEXT NOT NULL,
+  entry_key    TEXT NOT NULL,
+  item_key     TEXT NOT NULL,
+  completed_at INTEGER NOT NULL,
+  PRIMARY KEY (set_id, entry_key, item_key)
+) WITHOUT ROWID;
+
+CREATE INDEX IF NOT EXISTS queue_entry_history_entry
+  ON queue_entry_history (set_id, entry_key, completed_at);
+
 -- ── Groups — who is watching ─────────────────────────────────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS groups (

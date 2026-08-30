@@ -32,6 +32,7 @@ import * as mqttc from './mqttc.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as queues from './queues.js';
+import * as queueEntryHistory from './store/db/queueEntryHistory.js';
 import * as sets from './sets.js';
 import { SESSION } from './session.js';
 import type {
@@ -50,6 +51,13 @@ const WATCHED_TTL_MS = 60 * 1000;
 
 /** How long after playback ends before the queue is reconciled — see `watchPlaybackEnd()`. */
 const RECONCILE_DELAY_MS = 5000;
+
+/** Queue-owned history uses the playback position, never the provider's pre-existing mark. */
+export function isPlaybackComplete(now: NowPlaying | null): boolean {
+  const position = Number(now?.position ?? 0);
+  const duration = Number(now?.duration ?? 0);
+  return duration > 0 && position / duration >= 0.9;
+}
 
 interface WatchedMemo {
   at: number;
@@ -231,6 +239,7 @@ export interface FinishedPayload {
 
 export function watchPlaybackEnd(): void {
   let wasOn: string | null = null;
+  let previous: NowPlaying | null = null;
   let timer: NodeJS.Timeout | undefined;
   mqttc.onNowPlaying((now: NowPlaying | null) => {
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
@@ -238,12 +247,24 @@ export function watchPlaybackEnd(): void {
     // NOTHING is on screen now, and something was a moment ago — the SITTING ended, as
     // opposed to one item ending and the next starting (which is `ended` with a new `nowRk`).
     const isIdle = Boolean(wasOn) && nowRk == null;
+    const endedNow = ended ? previous : null;
     wasOn = nowRk;
+    previous = nowRk ? now : null;
     if (isIdle) announceFinished();
     if (!ended) return;
     const state = mqttc.lastState();
     const setName = state && state.set ? String(state.set) : null;
     if (!setName) return;
+
+    // Queue-owned history advances only after the item reaches the same practical completion
+    // boundary Plex uses for an automatic next episode. A manual Next near the beginning does
+    // not consume it; stopping early leaves it at the head for the next sitting.
+    const completed = isPlaybackComplete(endedNow);
+    const queued = SESSION.queue.find((item) => item.ratingKey === String(ended));
+    if (completed && queued?.queueOwnHistory && queued.queueEntryKey) {
+      queueEntryHistory.markCompleted(setName, queued.queueEntryKey, String(ended));
+      console.log(`[progress] ${setName}: completed ${ended} for ${queued.queueEntryKey}`);
+    }
     const profile = state && state.profile ? String(state.profile) : null;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
