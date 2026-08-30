@@ -620,6 +620,10 @@ jobs:
           # in the pool as standalone shows too — it played them both ways at once, the
           # collection in order and the same shows again at random.
           "$TSX" e2e/collection-covers-its-shows-test.ts
+          # Movies Rules queues use the same manual-member control as Shows. The rewatch
+          # branch must merge direct movie members into its candidate maps; otherwise the
+          # editor saves a member that playback silently ignores.
+          "$TSX" e2e/rewatch-members-test.ts
           # PENDING is a SUBTRACTION, and the subtraction is the feature: pool rules,
           # queue entries, a named collection's children, the watermark, per-item
           # dismissals. Hermetic — both Plex reads are parameters.

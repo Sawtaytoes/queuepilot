@@ -642,6 +642,22 @@ and the option's text lives in `.optionlabel` so it can ellipsise beside it — 
 next to a `Badge` becomes an anonymous flex item, which takes no `min-width: 0`. Skip either
 half and the Rules header scrolls sideways at 390px. `narrow-scroll-test` is the gate.
 
+### Rules queues share direct include and exclude controls
+
+Shows and Movies Rules queues both render `ChannelMembers` and both put an exclusion search
+inside Eligibility filters
+([decision](docs/decisions/2026-08-30-rules-queues-share-manual-includes-and-exclude-search.md)).
+The storage stays behavior-specific: Shows write the set's `blocklist`; Movies write the
+active binding's `movie_excludes`. A movie search result must be a direct movie leaf. A show
+result names its parent while the rewatch engine excludes the one playable episode, so storing
+that parent key makes an exclusion that never matches.
+
+Movie members are not display-only. `engine/rotation.ts mergeManualMoviesIntoRewatch()` adds
+them to the rewatch candidate maps, preserves a real history count when present, and removes
+their keys from the exclusion set because a manual include wins. Do not restore the
+`isShown={!isMovies}` gate, and do not expose movie members without preserving that playback
+merge.
+
 ### A list of queues names its PEOPLE
 
 A queue's displayed name is its ACTIVITY
@@ -937,6 +953,7 @@ server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/tile-lane-test.ts     # the tile's three controls
 server/node_modules/.bin/tsx e2e/collection-reorder-test.ts  # a re-ordered collection reaches the panel
+server/node_modules/.bin/tsx e2e/rewatch-members-test.ts  # Movies Rules manual members reach playback
 server/node_modules/.bin/tsx e2e/provider-cache-test.ts  # a warm page makes no provider call
 server/node_modules/.bin/tsx e2e/store-backend-parity-test.ts  # both store backends agree
 server/node_modules/.bin/tsx e2e/people-test.ts          # the people confirmation gate

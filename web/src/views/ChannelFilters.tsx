@@ -416,6 +416,89 @@ export function ChannelFilters({
 
         <fieldset className="moviesonly">
           <legend>Excluded from rewatch</legend>
+          <div className="add chmadd">
+            <SearchDropdown<SearchHit>
+              doSearch={async (q) => {
+                // A rewatch exclusion addresses the playable MOVIE leaf. Limit this
+                // picker to movie hits because a show-library search result names the
+                // parent show, while the rewatch engine addresses its one episode.
+                const { results } = await api<{
+                  results: SearchHit[]
+                }>(
+                  "GET",
+                  `/api/search?set=${channel.id}&q=${encodeURIComponent(q)}`,
+                )
+
+                return results.filter(
+                  (hit) => hit.type === "movie",
+                )
+              }}
+              inputId="ch-movieexclude-search"
+              listId="ch-movieexclude-results"
+              placeholder="Exclude a movie from rewatch…"
+              rowFor={(hit, _index, close) => ({
+                content: (
+                  <>
+                    <Poster
+                      cover={hit.cover}
+                      fallback={
+                        <span
+                          aria-hidden="true"
+                          className="noposter"
+                        />
+                      }
+                      ratingKey={hit.ratingKey}
+                    />
+                    <span>
+                      {hit.title}{" "}
+                      <span className="y">
+                        {hit.year || ""}
+                      </span>
+                      <EditionBadge hit={hit} />
+                    </span>
+                  </>
+                ),
+                pick: async () => {
+                  close()
+                  const ratingKey = String(hit.ratingKey)
+
+                  if (excludes.includes(ratingKey)) {
+                    setStatus(
+                      `Already excluded — “${hit.title}”`,
+                      "ok",
+                    )
+
+                    return
+                  }
+
+                  setStatus(`Excluding ${hit.title}…`)
+
+                  try {
+                    await patchActiveBinding(
+                      channel,
+                      currentProfile,
+                      {
+                        movie_excludes: [
+                          ...excludes,
+                          ratingKey,
+                        ],
+                      },
+                    )
+                    await resync()
+                    setStatus(
+                      `Excluded “${hit.title}”`,
+                      "ok",
+                    )
+                  } catch (e) {
+                    setStatus(
+                      `Exclude failed: ${(e as Error).message}`,
+                      "err",
+                    )
+                  }
+                },
+              })}
+            />
+          </div>
           <ul id="ch-movieexcludes">
             {excludes.length === 0 ? (
               <li className="empty">Nothing excluded.</li>
