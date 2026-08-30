@@ -1,9 +1,9 @@
 # The shell has one vertical scroll owner
 
-**Status:** Accepted  
-**Date:** 2026-08-30  
-**Type:** UI / layout  
-**Supersedes:** None  
+**Status:** Accepted
+**Date:** 2026-08-30
+**Type:** UI / layout
+**Supersedes:** None
 **Superseded by:** None
 
 ## Decision
