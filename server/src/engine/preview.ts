@@ -204,6 +204,15 @@ export async function previewRotation(
         tok,
       );
       const excludes = new Set((binding.movie_excludes || []).map(String));
+      await rotation.mergeManualMoviesIntoRewatch(
+        c,
+        cfg,
+        binding,
+        counts,
+        titles,
+        excludes,
+        cfg.weights || {},
+      );
       const pool = [...counts.entries()]
         .filter(([rk]) => !excludes.has(String(rk)))
         .sort((a, b) => a[1] - b[1])

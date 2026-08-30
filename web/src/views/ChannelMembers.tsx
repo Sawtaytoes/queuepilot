@@ -73,14 +73,11 @@ import {
 export function ChannelMembers({
   channel,
   currentProfile,
-  isShown,
 }: {
   channel: RegistrySet
   /** The selected tier, so member tiles' next-up "watched" state is scoped to THAT
    * profile's account (matching the pool below), not the admin's. */
   currentProfile: string | null
-  /** Only a `progress` channel has a member grid. */
-  isShown: boolean
 }) {
   // The active binding's Plex Home uuid — threaded to the members fetch (so tile next-up is
   // per-account) and onto each entry (so the start picker's watched marks match). Null on a
@@ -89,6 +86,7 @@ export function ChannelMembers({
     channel,
     currentProfile,
   ).user_uuid
+  const isRewatch = channel.behavior === "rewatch"
   const [members, setMembers] = useState<ChannelMember[]>(
     [],
   )
@@ -105,7 +103,7 @@ export function ChannelMembers({
    * read elsewhere in this view.
    */
   const flipRef = useFlipList<HTMLUListElement>({
-    isAnimating: isShown && isSamePaint,
+    isAnimating: isSamePaint,
     itemSelector: "li.tile",
     keyAttribute: "data-key",
     signature: `${channel.id}:${members.map((m) => m.ratingKey ?? m.title).join("|")}`,
@@ -149,8 +147,6 @@ export function ChannelMembers({
   const memberCount = (channel.members || []).length
 
   useEffect(() => {
-    if (!isShown) return
-
     if (!memberCount) {
       reqRef.current += 1
       setMembers([])
@@ -161,7 +157,7 @@ export function ChannelMembers({
 
     void reload(channel.id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.id, isShown, memberCount, accountUuid])
+  }, [channel.id, memberCount, accountUuid])
 
   /**
    * OPTIMISTIC write: put the new array into the local registry FIRST (so the grid
@@ -295,7 +291,6 @@ export function ChannelMembers({
   return (
     <section
       className={`chmembers${members.length ? "" : " no-members"}`}
-      hidden={!isShown}
       id="chmembers-box"
     >
       <h2 id="chmembers-title">
@@ -319,7 +314,11 @@ export function ChannelMembers({
             // Grouped HERE rather than in `rowFor`, because the order is a property of the
             // whole result set and a row cannot see its neighbours.
             return groupHits(
-              results,
+              isRewatch
+                ? results.filter(
+                    (hit) => hit.type === "movie",
+                  )
+                : results,
               poolSections(channel),
               {
                 inPool: "In this queue's libraries",
@@ -329,7 +328,11 @@ export function ChannelMembers({
           }}
           inputId="chmsearch"
           listId="chmresults"
-          placeholder="Add a member — search every library…"
+          placeholder={
+            isRewatch
+              ? "Add a movie — search every library…"
+              : "Add a member — search every library…"
+          }
           rowFor={({ hit, separator }, _index, close) => {
             const isCollection = hit.type === "collection"
             // `entryTitle` adds the EDITION when Plex gave the item one — two editions of a
@@ -471,11 +474,12 @@ export function ChannelMembers({
       {/* Shown only when the channel has no curated members: a slim one-liner
           instead of a poster-sized empty tile. */}
       <p className="chmhint muted">
-        Optional manual includes — a show, Plex Collection,
-        movie, or short played before the eligible titles
-        below (the opposite of Blocked). Members can come
-        from any library, not just this queue&apos;s. Leave
-        empty to play purely by the rule.
+        {isRewatch
+          ? "Optional manual movie includes — the opposite of Excluded from rewatch. "
+          : "Optional manual includes — a show, Plex Collection, movie, or short; the opposite of Blocked. "}
+        Members can come from any library, not just this
+        queue&apos;s. Leave empty to play purely by the
+        rule.
       </p>
       <ul
         className="grid editable"

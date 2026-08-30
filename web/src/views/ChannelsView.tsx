@@ -246,7 +246,6 @@ export function ChannelsView({
         <ChannelMembers
           channel={channel}
           currentProfile={currentProfile}
-          isShown={!isMovies}
         />
         <ChannelPool
           channel={channel}
