@@ -2,6 +2,7 @@ import { Accordion, Badge } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
 
 import { api } from "../lib/api"
+import { titleWithYear } from "../lib/mediaTitle"
 import type { SkippedItem } from "../lib/types"
 import { unskipItem } from "../state/queueEntry"
 import type { Density } from "../state/queueView"
@@ -166,9 +167,7 @@ export function skippedLabel(item: SkippedItem): string {
         : `S${item.season} · E${item.episode ?? "?"}`
     return `${item.show} — ${se}${item.title ? ` — ${item.title}` : ""}`
   }
-  const named = item.year
-    ? `${item.title} (${item.year})`
-    : item.title
+  const named = titleWithYear(item.title, item.year)
   return item.editionTitle
     ? `${named} — ${item.editionTitle}`
     : named
