@@ -4,7 +4,7 @@
 - **Date:** 2026-08-26
 - **Type:** Bugfix / interaction
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [A touch hold is the drag, and it scrolls](2026-08-29-a-touch-hold-is-the-drag-and-it-scrolls.md)
 
 ## Decision
 

@@ -36,6 +36,12 @@ export function PriorityPositionInput({
       onBlur={commit}
       onChange={(event) => setDraft(event.target.value)}
       onClick={(event) => event.stopPropagation()}
+      onContextMenu={(event) => {
+        // A touch hold on this input belongs to the numeric editor. Without both calls the
+        // event bubbles to PosterTile and opens its Play / lane menu over the keyboard.
+        event.preventDefault()
+        event.stopPropagation()
+      }}
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={(event) => {
         if (event.key === "Enter")

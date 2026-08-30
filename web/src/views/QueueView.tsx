@@ -814,7 +814,7 @@ export function QueueView({
                 )
 
                 if (!isDuplicate) {
-                  set.items = [...set.items, optimistic]
+                  set.items = [optimistic, ...set.items]
                   bumpRevision()
                   flashTile(setId, optimistic.key)
                 }

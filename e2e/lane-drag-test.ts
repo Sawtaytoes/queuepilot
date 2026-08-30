@@ -241,6 +241,101 @@ try {
     `patched ${demote?.url.split('/items/')[1]}, dragged ${demotedKey}`,
   );
 
+  // ── TOUCH: the number owns its hold, and a poster hold always becomes a drag ───────────
+  await page.setViewportSize({ width: 390, height: 640 });
+  await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
+  await page.waitForSelector('#grid-priority li.tile .priority-position', { timeout: 30000 });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const input = document.querySelector('#grid-priority .priority-position');
+    input?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+    }));
+  });
+  check(
+    'a hold on the Priority number does not open the tile menu',
+    !await page.locator('#tilemenu:not([hidden])').count(),
+    'the number press passed through to the poster action',
+  );
+
+  const touchTile = page.locator('#grid-priority li.tile .thumb').first();
+  await touchTile.scrollIntoViewIfNeeded();
+  const touchBox = await touchTile.boundingBox();
+  assert.ok(touchBox, 'need a visible Priority poster for the touch gesture');
+  const touchStart = {
+    x: touchBox.x + touchBox.width / 2,
+    y: touchBox.y + touchBox.height / 2,
+  };
+
+  await touchTile.evaluate((element, start) => {
+    element.dispatchEvent(new PointerEvent('pointerdown', {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: start.x,
+      clientY: start.y,
+      pointerId: 41,
+      pointerType: 'touch',
+    }));
+  }, touchStart);
+  await page.waitForTimeout(250);
+
+  check(
+    'a touch hold picks up the tile without a just-right movement window',
+    await touchTile.evaluate((element) => element.closest('li.tile')?.classList.contains('dragging') === true),
+    'the tile was not dragging after the 200 ms hold',
+  );
+
+  await touchTile.evaluate((element) => {
+    element.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      button: 2,
+      cancelable: true,
+    }));
+  });
+  check(
+    'the later touch contextmenu cannot replace an armed drag',
+    !await page.locator('#tilemenu:not([hidden])').count()
+      && await touchTile.evaluate((element) => element.closest('li.tile')?.classList.contains('dragging') === true),
+    'the Play / lane menu opened over the drag',
+  );
+
+  const scrollBefore = await page.evaluate(() => window.scrollY);
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new PointerEvent('pointermove', {
+      bubbles: true,
+      button: 0,
+      buttons: 1,
+      clientX: x,
+      clientY: y,
+      pointerId: 41,
+      pointerType: 'touch',
+    }));
+  }, { x: touchStart.x, y: 638 });
+  await page.waitForTimeout(500);
+  const scrollAfter = await page.evaluate(() => window.scrollY);
+  check(
+    'holding a dragged tile at the viewport edge scrolls to later items',
+    scrollAfter > scrollBefore,
+    `scroll stayed at ${scrollBefore} (after ${scrollAfter})`,
+  );
+
+  await page.evaluate(({ x, y }) => {
+    window.dispatchEvent(new PointerEvent('pointerup', {
+      bubbles: true,
+      button: 0,
+      buttons: 0,
+      clientX: x,
+      clientY: y,
+      pointerId: 41,
+      pointerType: 'touch',
+    }));
+  }, { x: touchStart.x, y: 638 });
+  await page.waitForTimeout(500);
+
   await browser.close();
 } finally {
   killServer(srv);
