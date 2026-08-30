@@ -450,6 +450,42 @@ async function rewriteEntry(setName: string, key: string, mutate: (e: SplitEntry
   });
 }
 
+/**
+ * Give every entry that currently INHERITS its lane an explicit placement.
+ *
+ * Call this before changing a queue's `add_as`. The setting is the lane for NEW entries,
+ * not a bulk move: without this materialisation, every sparse entry changes lanes merely
+ * because the fallback it reads changed. One locked rewrite keeps the existing queue intact
+ * while later additions inherit the new default.
+ */
+export async function preserveInheritedPlacements(
+  setName: string,
+  placement: 'priority' | 'random',
+): Promise<{ changed: number }> {
+  return withLock(async () => {
+    const doc = await readDoc();
+    const seq = doc.get(setName);
+    if (!(seq instanceof YAMLSeq)) return { changed: 0 };
+    let changed = 0;
+    for (let i = 0; i < seq.items.length; i += 1) {
+      const split = splitEntry(plain(seq.items[i]));
+      if (split.extras.placement === 'priority' || split.extras.placement === 'random') continue;
+      split.extras.placement = placement;
+      if (placement === 'random') {
+        delete split.extras.lead;
+        delete split.extras.promote_window;
+      }
+      seq.items[i] = entryNode(doc, split);
+      changed += 1;
+    }
+    if (changed) {
+      seq.flow = false;
+      await writeDoc(doc);
+    }
+    return { changed };
+  });
+}
+
 
 /**
  * Stamp `queued_at` (epoch seconds) on one entry, unless it already carries one.
