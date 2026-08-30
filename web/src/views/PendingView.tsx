@@ -359,7 +359,7 @@ export function PendingView() {
         added?: boolean
         key?: string
       }>("POST", `/api/queues/${set.id}/items`, {
-        position: "bottom",
+        position: "top",
         type: isCollection ? "collection" : undefined,
         value: isCollection
           ? { title: item.title }

@@ -153,7 +153,8 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
   menus (`PendingView.tsx`, `Toolbar.tsx`) POST an add and keep no selected value, so they
   are `Menu`s — do **not** "finish the picker migration" by converting them
   ([decision](docs/decisions/2026-08-21-an-add-to-menu-is-a-menu-not-a-picker.md)). New
-  Picks always append to the end, so neither Add-to menu has a separate position control.
+  Picks always insert at the top, so they stay beside the search that added them; neither
+  Add-to menu has a separate position control.
   Two consequences: a `Menu` panel **portals to `<body>`**, so
   `#gresults .addtomenu` is wrong by construction and e2e reads `.addtomenu
   [role="menuitem"]` document-wide; and **no linter can catch a hand-rolled menu** — the ban
