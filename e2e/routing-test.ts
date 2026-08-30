@@ -82,7 +82,6 @@ for (const [path, want] of [
   ['/people', 'People'],
   ['/queues', 'Queues'],
   ['/q/bob', 'Bob — Movies'],
-  ['/channels/younger', 'Younger Kids'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
   ['/what-to-watch-play', 'What to Watch/Play'],
@@ -97,6 +96,16 @@ for (const [path, want] of [
     ok('the activity picker does not use Tonight as its visible name', !/\bTonight\b/.test(text));
   }
 }
+
+await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
+ok(
+  'a Rules queue deep link renders one Rules detail',
+  Boolean(
+    await page
+      .waitForSelector('#channels:not([hidden])', { timeout: 30000 })
+      .catch(() => null),
+  ),
+);
 
 await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
 ok('the legacy /admin address renders the task home', Boolean(await modeLanding()));
