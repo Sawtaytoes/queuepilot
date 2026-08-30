@@ -266,15 +266,17 @@ try {
     element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
   });
   const touchTiles = page.locator('#grid-priority li.tile .thumb');
-  const visibleTileIndex = await touchTiles.evaluateAll((elements) => {
-    const mainBox = document.querySelector('main')?.getBoundingClientRect();
-    if (!mainBox) return -1;
-
-    return elements.findIndex((element) => {
-      const box = element.getBoundingClientRect();
-      return box.top >= mainBox.top && box.bottom <= mainBox.bottom;
-    });
-  });
+  const mainBox = await main.boundingBox();
+  assert.ok(mainBox, 'need the Main scroll region');
+  let visibleTileIndex = -1;
+  for (let index = 0; index < await touchTiles.count(); index += 1) {
+    const box = await touchTiles.nth(index).boundingBox();
+    if (box && box.y >= mainBox.y
+      && box.y + box.height <= mainBox.y + mainBox.height) {
+      visibleTileIndex = index;
+      break;
+    }
+  }
   assert.ok(visibleTileIndex >= 0, 'need a Priority poster inside the Main viewport');
   const touchTile = touchTiles.nth(visibleTileIndex);
   const touchBox = await touchTile.boundingBox();
