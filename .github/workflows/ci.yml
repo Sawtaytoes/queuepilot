@@ -718,6 +718,12 @@ jobs:
       - name: Tile menu — lane rows, and a long press that is not also a drag
         run: $TSX e2e/tile-menu-test.ts
 
+      # Dismiss is a decision and a visible list action. The server-only Pending gate proves
+      # the saved ratingKey is subtracted, but it cannot prove the pressed card leaves the
+      # windowed grid. This fixture gate pins both the immediate removal and the reload.
+      - name: Pending Dismiss removes the card (browser, stub Plex)
+        run: $TSX e2e/pending-dismiss-test.ts
+
       # Path routing: the client router and the server's SPA fallback, pinned together.
       # ALWAYS runs, like the narrow-view gate above and for the same reason — the
       # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression
