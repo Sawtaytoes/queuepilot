@@ -6,7 +6,7 @@
 - **Supersedes:**
   - [The Picks page is `/picks` and starts collapsed](2026-08-29-the-picks-page-is-picks-and-starts-collapsed.md) (route only; collapsed shelves remain)
   - [Navigation names the two queue kinds, and Rules show eligible titles](2026-08-29-navigation-names-the-two-queue-kinds-and-rules-show-eligible-titles.md) (navigation only; the Rules terminology remains)
-- **Superseded by:** —
+- **Superseded by:** [Rules and Picks use the same collapsible queue region](2026-08-29-rules-and-picks-use-the-same-collapsible-queue-region.md) (Rules-card clause only)
 
 ## Decision
 

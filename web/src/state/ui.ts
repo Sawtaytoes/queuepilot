@@ -88,10 +88,13 @@ export function setCollapsed(collapsed: Set<string>) {
   emit()
 }
 
-export function toggleCollapsed(id: string) {
+export function toggleCollapsed(
+  id: string,
+  isCurrentlyCollapsed = state.collapsed.has(id),
+) {
   const next = new Set(state.collapsed)
 
-  if (next.has(id)) next.delete(id)
+  if (isCurrentlyCollapsed) next.delete(id)
   else next.add(id)
 
   setCollapsed(next)
