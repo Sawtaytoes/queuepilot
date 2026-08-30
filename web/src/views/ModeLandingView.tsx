@@ -4,7 +4,7 @@ import { Link } from "react-router"
 import { PRIMARY_NAVIGATION_ITEMS } from "../components/PrimaryNavigation"
 import { schemeIcons } from "../components/SchemeIcons"
 
-const [watchPlayItem, picksItem, ...managementItems] =
+const [watchPlayItem, queuesItem, ...managementItems] =
   PRIMARY_NAVIGATION_ITEMS
 
 /** The front door answers what to do next. It does not render the work itself. */
@@ -48,10 +48,10 @@ export function ModeLandingView() {
 
         <Link
           className="mode-primary-action"
-          to={picksItem.href}
+          to={queuesItem.href}
         >
           <span className="mode-primary-icon">
-            {picksItem.icon}
+            {queuesItem.icon}
           </span>
           <span>
             <strong>Open a queue</strong>
@@ -78,7 +78,7 @@ export function ModeLandingView() {
         </div>
 
         <div className="mode-management-links">
-          {[picksItem, ...managementItems].map((item) => (
+          {[queuesItem, ...managementItems].map((item) => (
             <Link
               className="mode-management-link"
               key={item.href}

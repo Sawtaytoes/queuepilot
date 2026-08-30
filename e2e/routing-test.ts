@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/shows', '/channels', '/tonight', '/tonight/surprise', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/younger', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -68,11 +68,11 @@ const modeLinks = await page.$$eval('#mode-landing a', (els) =>
   })),
 );
 ok(
-  'the task home offers two starts and five management destinations',
-  modeLinks.length === 7 &&
+  'the task home offers two starts and four management destinations',
+  modeLinks.length === 6 &&
     modeLinks[0]?.href === '/what-to-watch-play' &&
     modeLinks[0].text?.startsWith('What to Watch/Play') === true &&
-    modeLinks[1]?.href === '/picks' &&
+    modeLinks[1]?.href === '/queues' &&
     modeLinks[1].text?.startsWith('Open a queue') === true &&
     modeLinks.some((link) => link.href === '/people' && link.text?.startsWith('People')),
 );
@@ -80,17 +80,14 @@ ok(
 for (const [path, want] of [
   ['/overview', 'Overview'],
   ['/people', 'People'],
-  ['/picks', 'Picks queues'],
+  ['/queues', 'Queues'],
   ['/q/bob', 'Bob — Movies'],
-  ['/channels/shows', 'Rules queues'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
   ['/what-to-watch-play', 'What to Watch/Play'],
   ['/what-to-watch-play/surprise', 'What to Watch/Play'],
-  // The board-game shelf. A LONG path on purpose: `/collection` claimed a generic word for
-  // one specific shelf, and "collection" already means a row of films everywhere else in
-  // this app (decision `2026-08-25-the-board-game-shelf-is-board-game-collection`).
-  ['/board-game-collection', 'Collection'],
+  ['/collection', 'Collection'],
+  ['/collection/board-games', 'Board Games'],
 ] as const) {
   await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
   ok(`deep link ${path} renders "${want}"`, await heading(want));
@@ -100,6 +97,16 @@ for (const [path, want] of [
   }
 }
 
+await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
+ok(
+  'a Rules queue deep link renders one Rules detail',
+  Boolean(
+    await page
+      .waitForSelector('#channels:not([hidden])', { timeout: 30000 })
+      .catch(() => null),
+  ),
+);
+
 await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
 ok('the legacy /admin address renders the task home', Boolean(await modeLanding()));
 ok(
@@ -107,11 +114,11 @@ ok(
   (await page.evaluate(() => location.pathname)) === '/',
 );
 
-await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-ok('the legacy /queues address renders "Picks queues"', await heading('Picks queues'));
+await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
+ok('the legacy /picks address renders "Queues"', await heading('Queues'));
 ok(
-  '…and its URL is rewritten to /picks',
-  (await page.evaluate(() => location.pathname)) === '/picks',
+  '…and its URL is rewritten to /queues',
+  (await page.evaluate(() => location.pathname)) === '/queues',
 );
 
 // The Surprise Me step really is the STEP and not the bare route — the heading is the same
@@ -141,15 +148,18 @@ ok(
   );
 }
 
-// The board-game shelf, both halves of the 2026-08-25 rename.
-//
-// A rename is the one change where "it works" and "the old link works" are different claims,
-// and neither is implied by a unit test: `parsePath` can be perfect while the SERVER 404s the
-// new path (a hyphenated segment is still extensionless, but nothing had proved the fallback
-// answers one) and while the redirect never fires.
+// The collection picker, its Board Games detail, and the legacy shelf address.
 {
-  await page.goto(`${BASE}/board-game-collection`, { waitUntil: 'domcontentloaded' });
-  ok('deep link /board-game-collection renders the shelf', await heading('Collection'));
+  await page.goto(`${BASE}/collection`, { waitUntil: 'domcontentloaded' });
+  ok('deep link /collection renders the picker', await heading('Collection'));
+
+  const isPicker = await page
+    .waitForSelector('#collection-picker:not([hidden])', { timeout: 30000 })
+    .then(() => true, () => false);
+  ok('…the picker view itself, not just the chrome', isPicker);
+
+  await page.goto(`${BASE}/collection/board-games`, { waitUntil: 'domcontentloaded' });
+  ok('deep link /collection/board-games renders the shelf', await heading('Board Games'));
 
   const isShelf = await page
     .waitForSelector('#collection:not([hidden])', { timeout: 30000 })
@@ -157,24 +167,23 @@ ok(
   ok('…the shelf view itself, not just the chrome', isShelf);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  ok('…and a RELOAD on it still renders the shelf', await heading('Collection'));
+  ok('…and a RELOAD on it still renders the shelf', await heading('Board Games'));
   ok(
     '…still on the new path after the reload',
-    (await page.evaluate(() => location.pathname)) === '/board-game-collection',
+    (await page.evaluate(() => location.pathname)) === '/collection/board-games',
   );
 
-  // The legacy address. `/collection` was live for a few hours on 2026-08-25, so it
-  // REDIRECTS rather than 404ing or falling through to the landing.
+  // The old specific address redirects to the new detail route.
   await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
   await modeLanding();
-  await page.goto(`${BASE}/collection`, { waitUntil: 'domcontentloaded' });
-  ok('the legacy /collection still renders the shelf', await heading('Collection'));
+  await page.goto(`${BASE}/board-game-collection`, { waitUntil: 'domcontentloaded' });
+  ok('the legacy board-game address still renders the shelf', await heading('Board Games'));
 
   const redirected = await page
-    .waitForFunction(() => location.pathname === '/board-game-collection', undefined, { timeout: 30000 })
+    .waitForFunction(() => location.pathname === '/collection/board-games', undefined, { timeout: 30000 })
     .then(() => true, () => false);
   ok(
-    `…and the URL is rewritten to /board-game-collection (got ${await page.evaluate(() => location.pathname)})`,
+    `…and the URL is rewritten to /collection/board-games (got ${await page.evaluate(() => location.pathname)})`,
     redirected,
   );
 
@@ -215,8 +224,8 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/picks');
 
   await page.click('#goqueues');
-  ok('clicking "Configure ›" routes to /picks', await heading('Picks queues'));
-  ok('…and the path is /picks', (await page.evaluate(() => location.pathname)) === '/picks');
+  ok('clicking "Configure ›" routes to the Queues index', await heading('Queues'));
+  ok('…and the path is /queues', (await page.evaluate(() => location.pathname)) === '/queues');
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);
   ok(
@@ -232,7 +241,7 @@ ok('browser Back returns to Overview', await heading('Overview'));
 // A route change is a new page, so it must not inherit the scroll position of the page that
 // led to it.
 {
-  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
   // Picks starts collapsed. Expand it so this ROUTING check has a long page to scroll.
   await page.click('#collapseall');
@@ -252,13 +261,13 @@ ok('browser Back returns to Overview', await heading('Overview'));
 // not a fixed parent (Bob's ask). That is tracked in web/src/state/route.ts, and it is the
 // one piece of the old hash router react-router does NOT replace.
 {
-  await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('a.open');
   await page.click('a.open');
   await page.waitForFunction(() => location.pathname.startsWith('/q/'));
-  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/picks', undefined, { timeout: 30000 })
-    .then(() => ok('in-app back targets the origin /picks, not a fixed parent', true),
-      async () => ok(`in-app back targets the origin /picks, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
+  await page.waitForFunction(() => document.querySelector('#back')?.getAttribute('href') === '/queues', undefined, { timeout: 30000 })
+    .then(() => ok('in-app back targets the origin /queues, not a fixed parent', true),
+      async () => ok(`in-app back targets the origin /queues, not a fixed parent (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false));
 }
 
 await browser.close();
