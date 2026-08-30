@@ -89,6 +89,23 @@ describe('prepareChecked', () => {
 });
 
 describe('migrate', () => {
+  it('keeps schema-5 completion rows completed while adding resume columns', () => {
+    const db = openSqlite(':memory:');
+    db.exec(`CREATE TABLE queue_entry_history (
+      set_id TEXT NOT NULL, entry_key TEXT NOT NULL, item_key TEXT NOT NULL,
+      completed_at INTEGER NOT NULL,
+      PRIMARY KEY (set_id, entry_key, item_key)
+    ) WITHOUT ROWID;
+    INSERT INTO queue_entry_history VALUES ('q', 'rk:show', 'episode', 123);`);
+
+    migrate(db);
+    const row = db.prepare<{
+      is_completed: number; position_ms: number; duration_ms: number;
+    }>(`SELECT is_completed, position_ms, duration_ms FROM queue_entry_history`).get();
+    expect(row).toEqual({ is_completed: 1, position_ms: 0, duration_ms: 0 });
+    db.close();
+  });
+
   it('brings an older file forward by ALTERing in the columns it is missing', () => {
     // The stale-scratch-database case, which is how this was found: a suite that passes on a
     // fresh CI runner throws `no such column` locally, against a file an earlier run left.

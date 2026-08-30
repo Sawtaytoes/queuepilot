@@ -52,11 +52,10 @@ const WATCHED_TTL_MS = 60 * 1000;
 /** How long after playback ends before the queue is reconciled — see `watchPlaybackEnd()`. */
 const RECONCILE_DELAY_MS = 5000;
 
-/** Queue-owned history uses the playback position, never the provider's pre-existing mark. */
-export function isPlaybackComplete(now: NowPlaying | null): boolean {
-  const position = Number(now?.position ?? 0);
-  const duration = Number(now?.duration ?? 0);
-  return duration > 0 && position / duration >= 0.9;
+/** HA reports seconds; Plex play queues and viewOffset use milliseconds. */
+export function nowPlayingMs(value: unknown): number {
+  const seconds = Number(value);
+  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
 }
 
 interface WatchedMemo {
@@ -237,12 +236,85 @@ export interface FinishedPayload {
   power_off: boolean;
 }
 
+interface OwnedQueueItem {
+  ratingKey: string;
+  queueEntryKey?: string;
+  queueOwnHistory?: boolean;
+  queueProviderViewCount?: number;
+}
+
+export function providerProgressVerdict(
+  initialViewCount: unknown,
+  providerViewCount: unknown,
+  providerOffset: unknown,
+): { isCompleted: boolean; positionMs: number } {
+  const initial = Math.max(0, Number(initialViewCount) || 0);
+  const count = Math.max(0, Number(providerViewCount) || 0);
+  return {
+    isCompleted: count > initial,
+    positionMs: count > initial ? 0 : Math.max(0, Number(providerOffset) || 0),
+  };
+}
+
+/**
+ * Let Plex decide whether the play completed. Its server setting may use a credits marker,
+ * a percentage, or the earlier of both; reproducing that rule here would drift. Completion
+ * increments viewCount and clears viewOffset. A partial stop retains viewOffset. The count
+ * comparison is essential for a REWATCH, whose viewCount was already non-zero before play.
+ */
+async function finalizeQueueProgress(
+  setName: string,
+  profileTitle: string | null,
+  item: OwnedQueueItem,
+  durationMs: number,
+): Promise<void> {
+  if (!item.queueOwnHistory || !item.queueEntryKey) return;
+  try {
+    const cfg = routing.loadSets()?.sets[setName];
+    if (!cfg) return;
+    const binding = routing.bindingFor(cfg, profileTitle);
+    const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+    const token = await provider.profileToken!(binding.user_uuid);
+    const mc = await liveClient().container(`/library/metadata/${item.ratingKey}`, token);
+    const md = mc.Metadata?.[0];
+    if (!md) throw new Error('Plex returned no item metadata');
+    const verdict = providerProgressVerdict(
+      item.queueProviderViewCount, md.viewCount, md.viewOffset,
+    );
+    if (verdict.isCompleted) {
+      queueEntryHistory.markCompleted(setName, item.queueEntryKey, item.ratingKey);
+      console.log(`[progress] ${setName}: Plex completed ${item.ratingKey} for ${item.queueEntryKey}`);
+    } else {
+      // Plex retained a resume point for a partial play. Zero means the play was too short to
+      // count as progress; clear QueuePilot's transient position as Plex did.
+      queueEntryHistory.savePosition(
+        setName, item.queueEntryKey, item.ratingKey, verdict.positionMs, durationMs,
+      );
+      console.log(`[progress] ${setName}: ${item.ratingKey} resumes at ${verdict.positionMs}ms`);
+    }
+  } catch (e) {
+    // Keep the last position captured from the live player. A failed provider read must not
+    // turn an incomplete episode into a completed one or erase a usable resume point.
+    console.log(`[progress] could not finalize ${setName}/${item.ratingKey} (${errMessage(e)})`);
+  }
+}
+
 export function watchPlaybackEnd(): void {
   let wasOn: string | null = null;
   let previous: NowPlaying | null = null;
   let timer: NodeJS.Timeout | undefined;
   mqttc.onNowPlaying((now: NowPlaying | null) => {
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
+    const activeSet = SESSION.set;
+    const active = nowRk ? SESSION.queue.find((item) => item.ratingKey === nowRk) : null;
+    if (activeSet && active?.queueOwnHistory && active.queueEntryKey) {
+      const positionMs = nowPlayingMs(now?.position);
+      if (positionMs > 0) {
+        queueEntryHistory.savePosition(
+          activeSet, active.queueEntryKey, nowRk!, positionMs, nowPlayingMs(now?.duration),
+        );
+      }
+    }
     const ended = wasOn && wasOn !== nowRk;
     // NOTHING is on screen now, and something was a moment ago — the SITTING ended, as
     // opposed to one item ending and the next starting (which is `ended` with a new `nowRk`).
@@ -256,16 +328,13 @@ export function watchPlaybackEnd(): void {
     const setName = state && state.set ? String(state.set) : null;
     if (!setName) return;
 
-    // Queue-owned history advances only after the item reaches the same practical completion
-    // boundary Plex uses for an automatic next episode. A manual Next near the beginning does
-    // not consume it; stopping early leaves it at the head for the next sitting.
-    const completed = isPlaybackComplete(endedNow);
     const queued = SESSION.queue.find((item) => item.ratingKey === String(ended));
-    if (completed && queued?.queueOwnHistory && queued.queueEntryKey) {
-      queueEntryHistory.markCompleted(setName, queued.queueEntryKey, String(ended));
-      console.log(`[progress] ${setName}: completed ${ended} for ${queued.queueEntryKey}`);
-    }
     const profile = state && state.profile ? String(state.profile) : null;
+    if (queued?.queueOwnHistory) {
+      setTimeout(() => {
+        void finalizeQueueProgress(setName, profile, queued, nowPlayingMs(endedNow?.duration));
+      }, RECONCILE_DELAY_MS);
+    }
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       void reconcileQueue(setName, profile);
