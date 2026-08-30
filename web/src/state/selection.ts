@@ -13,6 +13,7 @@ import { busy } from "./busy"
 export type Selected = { fromSet: string; key: string }
 
 let selected = new Map<string, Selected>()
+let anchor: Selected | null = null
 
 const listeners = new Set<() => void>()
 
@@ -47,6 +48,52 @@ export function toggleSelect(set: string, key: string) {
   if (next.has(k)) next.delete(k)
   else next.set(k, { fromSet: set, key })
 
+  anchor = { fromSet: set, key }
+  commit(next)
+}
+
+/**
+ * Toggle one entry, or add the inclusive range from the last selection anchor.
+ *
+ * `orderedKeys` is the order on screen, not the queue file's order. This matters while a
+ * view filter is active and because the Priority queue and Random pool are two rendered
+ * lanes. Shift-selection must select what the person can see between the two clicks.
+ */
+export function toggleSelectThrough(
+  set: string,
+  key: string,
+  orderedKeys: readonly string[],
+  isRange: boolean,
+) {
+  if (!isRange || anchor?.fromSet !== set) {
+    toggleSelect(set, key)
+
+    return
+  }
+
+  const from = orderedKeys.indexOf(anchor.key)
+  const to = orderedKeys.indexOf(key)
+
+  if (from < 0 || to < 0) {
+    toggleSelect(set, key)
+
+    return
+  }
+
+  const next = new Map(selected)
+  const start = Math.min(from, to)
+  const end = Math.max(from, to)
+
+  for (const rangeKey of orderedKeys.slice(
+    start,
+    end + 1,
+  )) {
+    next.set(selKey(set, rangeKey), {
+      fromSet: set,
+      key: rangeKey,
+    })
+  }
+
   commit(next)
 }
 
@@ -62,6 +109,7 @@ export function deselect(set: string, key: string) {
 }
 
 export function clearSelection() {
+  anchor = null
   if (!selected.size) return
 
   commit(new Map())

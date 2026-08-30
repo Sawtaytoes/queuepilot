@@ -70,7 +70,7 @@ import {
   useQueueView,
 } from "../state/queueView"
 import {
-  toggleSelect,
+  toggleSelectThrough,
   useSelected,
 } from "../state/selection"
 import {
@@ -469,8 +469,16 @@ export function QueueView({
         isPriority={
           (item.placement ?? setLane) === "priority"
         }
-        onCheck={() =>
-          setId && toggleSelect(setId, item.key)
+        onCheck={(event) =>
+          setId &&
+          toggleSelectThrough(
+            setId,
+            item.key,
+            [...lanes.priority, ...lanes.random].map(
+              (visibleItem) => visibleItem.key,
+            ),
+            event.shiftKey,
+          )
         }
         // The third control in the stack: into the Priority queue, or back out to the pool.
         // The drag across the divider does the same thing and stays — this is the answer for
