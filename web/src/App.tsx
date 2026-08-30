@@ -148,7 +148,7 @@ export const appRouteElements = (
     />
     <Route
       element={<QueuesPage />}
-      path={ROUTE_PATHS.picks}
+      path={ROUTE_PATHS.queues}
     />
     <Route
       element={<ChannelsPage />}
@@ -164,8 +164,12 @@ export const appRouteElements = (
       path={ROUTE_PATHS.legacyGroup}
     />
     <Route
-      element={<LegacyQueuesPage />}
-      path={ROUTE_PATHS.legacyQueues}
+      element={<LegacyPicksPage />}
+      path={ROUTE_PATHS.legacyPicks}
+    />
+    <Route
+      element={<LegacyChannelsPage />}
+      path={ROUTE_PATHS.legacyChannels}
     />
     <Route
       element={<LegacyCollectionPage />}
@@ -412,11 +416,11 @@ function QueuesPage() {
         target: ROUTE_PATHS.home,
       }}
       bodyClass=""
-      documentTitle="Picks queues — QueuePilot"
+      documentTitle="Queues — QueuePilot"
       editableSetId={null}
-      heading="Picks queues"
+      heading="Queues"
       isSubHidden={false}
-      sub="Titles you add by hand. Tap a queue to open it, reorder, or move titles between queues."
+      sub="Choose a Picks or Rules queue to view it, or create a new queue."
     >
       <QueuesView toolbar={<Toolbar />} />
     </Page>
@@ -457,9 +461,9 @@ function ChannelsPage() {
           ? "queue-view movies-channel"
           : "queue-view"
       }
-      documentTitle="Rules queues — QueuePilot"
+      documentTitle={`${channel?.label ?? "Rules queue"} — QueuePilot`}
       editableSetId={null}
-      heading="Rules queues"
+      heading={channel?.label ?? "Rules queue"}
       isSubHidden={false}
       sub={
         isMovies
@@ -484,7 +488,7 @@ function QueuePage() {
     if (!data) return
 
     if (data.sets[setId]?.source !== "queue")
-      navigate(ROUTE_PATHS.picks.replace("/*", ""))
+      navigate(ROUTE_PATHS.queues.replace("/*", ""))
   }, [data, navigate, setId])
 
   const q = data?.sets[setId]
@@ -578,8 +582,14 @@ function LegacyAdminPage() {
   return <ModeLandingPage />
 }
 
-function LegacyQueuesPage() {
-  useCanonicalPath(ROUTE_PATHS.picks.replace("/*", ""))
+function LegacyPicksPage() {
+  useCanonicalPath(ROUTE_PATHS.queues.replace("/*", ""))
+
+  return <QueuesPage />
+}
+
+function LegacyChannelsPage() {
+  useCanonicalPath(ROUTE_PATHS.queues.replace("/*", ""))
 
   return <QueuesPage />
 }

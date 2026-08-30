@@ -72,7 +72,7 @@ ok(
   modeLinks.length === 7 &&
     modeLinks[0]?.href === '/what-to-watch-play' &&
     modeLinks[0].text?.startsWith('What to Watch/Play') === true &&
-    modeLinks[1]?.href === '/picks' &&
+    modeLinks[1]?.href === '/queues' &&
     modeLinks[1].text?.startsWith('Open a queue') === true &&
     modeLinks.some((link) => link.href === '/people' && link.text?.startsWith('People')),
 );
@@ -80,9 +80,9 @@ ok(
 for (const [path, want] of [
   ['/overview', 'Overview'],
   ['/people', 'People'],
-  ['/picks', 'Picks queues'],
+  ['/queues', 'Queues'],
   ['/q/bob', 'Bob — Movies'],
-  ['/channels/shows', 'Rules queues'],
+  ['/channels/shows', 'Shows'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
   ['/what-to-watch-play', 'What to Watch/Play'],
@@ -107,11 +107,11 @@ ok(
   (await page.evaluate(() => location.pathname)) === '/',
 );
 
-await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-ok('the legacy /queues address renders "Picks queues"', await heading('Picks queues'));
+await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
+ok('the legacy /picks address renders "Queues"', await heading('Queues'));
 ok(
-  '…and its URL is rewritten to /picks',
-  (await page.evaluate(() => location.pathname)) === '/picks',
+  '…and its URL is rewritten to /queues',
+  (await page.evaluate(() => location.pathname)) === '/queues',
 );
 
 // The Surprise Me step really is the STEP and not the bare route — the heading is the same
@@ -215,8 +215,8 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/picks');
 
   await page.click('#goqueues');
-  ok('clicking "Configure ›" routes to /picks', await heading('Picks queues'));
-  ok('…and the path is /picks', (await page.evaluate(() => location.pathname)) === '/picks');
+  ok('clicking "Configure ›" routes to the Queues index', await heading('Queues'));
+  ok('…and the path is /queues', (await page.evaluate(() => location.pathname)) === '/queues');
   ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
   ok('…client-side, with no full page load', loads === 0);
   ok(

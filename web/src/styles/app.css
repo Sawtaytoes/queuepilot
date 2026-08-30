@@ -707,6 +707,64 @@ button {
 #shelves {
   padding-top: 8px;
 }
+.queue-section-heading {
+  align-items: end;
+  display: flex;
+  justify-content: space-between;
+  margin: 24px 0 12px;
+}
+.queue-section-heading h2,
+.queue-section-heading p {
+  margin: 0;
+}
+.queue-section-heading p,
+.rules-queue-card a > span:last-child {
+  color: var(--color-content-muted);
+}
+.rules-queue-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+}
+.rules-queue-card {
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-lg);
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+}
+.rules-queue-card a {
+  color: var(--color-content-primary);
+  display: grid;
+  gap: 8px;
+  text-decoration: none;
+}
+.rules-queue-card a:hover strong {
+  color: var(--color-intent-accent-solid);
+}
+.queue-type-options {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.queue-type-options button {
+  align-items: start;
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  text-align: left;
+  white-space: normal;
+}
+.queue-type-options button span {
+  color: var(--color-content-secondary);
+  font-weight: 400;
+}
+@media (max-width: 560px) {
+  .queue-type-options {
+    grid-template-columns: 1fr;
+  }
+}
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
    Tailwind v4 scans source for class tokens it emits that utility the moment the
    word appears, hiding this very button. `-toggle` keeps us off the reserved name. */

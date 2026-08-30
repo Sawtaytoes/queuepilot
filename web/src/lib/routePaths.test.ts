@@ -61,12 +61,13 @@ describe("the route table", () => {
     expect(match("/g/bob/").route).toBe("legacyGroup")
   })
 
-  test("/picks is the shelf configurator", () => {
-    expect(match("/picks").route).toBe("picks")
+  test("/queues is the unified queue index", () => {
+    expect(match("/queues").route).toBe("queues")
   })
 
-  test("the retired /queues path has its own redirect route", () => {
-    expect(match("/queues").route).toBe("legacyQueues")
+  test("the retired queue-kind indexes have redirect routes", () => {
+    expect(match("/picks").route).toBe("legacyPicks")
+    expect(match("/channels").route).toBe("legacyChannels")
   })
 
   test("/q/<id> opens one set, id-decoded", () => {
@@ -77,11 +78,7 @@ describe("the route table", () => {
     expect(match("/q/a%20b").params.setId).toBe("a b")
   })
 
-  test("/channels names a rotation channel, or none", () => {
-    expect(match("/channels")).toEqual({
-      params: {},
-      route: "channels",
-    })
+  test("/channels names one rotation channel", () => {
     expect(match("/channels/shows_shorts").params).toEqual({
       channelId: "shows_shorts",
     })
@@ -93,8 +90,8 @@ describe("the route table", () => {
    * strip it by hand; react-router matches through it.
    */
   test("a trailing slash is the same route", () => {
-    expect(match("/picks/").route).toBe("picks")
-    expect(match("/channels/").route).toBe("channels")
+    expect(match("/queues/").route).toBe("queues")
+    expect(match("/channels/").route).toBe("legacyChannels")
     expect(match("/q/bob_anime/").params.setId).toBe(
       "bob_anime",
     )
@@ -178,11 +175,9 @@ describe("the legacy rewrites", () => {
 
 describe("labelForPath", () => {
   test("names where back actually goes", () => {
-    expect(labelForPath("/picks")).toBe("‹ Picks queues")
-    expect(labelForPath("/queues")).toBe("‹ Picks queues")
-    expect(labelForPath("/channels/movies")).toBe(
-      "‹ Rules queues",
-    )
+    expect(labelForPath("/picks")).toBe("‹ Queues")
+    expect(labelForPath("/queues")).toBe("‹ Queues")
+    expect(labelForPath("/channels/movies")).toBe("‹ Queues")
     expect(labelForPath("/q/bob")).toBe("‹ Back")
     expect(labelForPath("/board-game-collection")).toBe(
       "‹ Collection",

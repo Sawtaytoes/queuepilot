@@ -1,5 +1,6 @@
 import {
   Badge,
+  Button,
   EmptyState,
   IconButton,
 } from "@charcuterie/ui"
@@ -52,6 +53,7 @@ import {
 } from "../state/landingFilter"
 import {
   openPlayMenu,
+  openDynModal,
   openSetModal,
   openTileMenu,
 } from "../state/overlays"
@@ -63,7 +65,11 @@ import {
   setPriorityPosition,
 } from "../state/queueEntry"
 import { splitLanes } from "../state/queueView"
-import { curatedIds, useStore } from "../state/store"
+import {
+  curatedIds,
+  rotationChannels,
+  useStore,
+} from "../state/store"
 import {
   homeScroll,
   toggleCollapsed,
@@ -775,7 +781,7 @@ export function QueuesView({
     <div className="view" id="home">
       <div id="gslot-narrow">{toolbar}</div>
       <LandingFilterBar
-        basePath={ROUTE_PATHS.picks.replace("/*", "")}
+        basePath={ROUTE_PATHS.queues.replace("/*", "")}
         countFor={countFor}
         labelForKind={labelForKind}
         only={only}
@@ -784,6 +790,48 @@ export function QueuesView({
         search={search}
         selected={selected}
       />
+      {rotationChannels(reg).length ? (
+        <section
+          aria-labelledby="rules-queues-heading"
+          className="rules-queue-picker"
+        >
+          <div className="queue-section-heading">
+            <div>
+              <h2 id="rules-queues-heading">Rules</h2>
+              <p>Queues filled from eligibility filters.</p>
+            </div>
+          </div>
+          <div className="rules-queue-grid">
+            {rotationChannels(reg).map((channel) => (
+              <article
+                className="rules-queue-card"
+                data-provider={channel.provider_kind || undefined}
+                key={channel.id}
+              >
+                <Link to={`/channels/${encodeURIComponent(channel.id)}`}>
+                  <Badge intent="accent">Rules</Badge>
+                  <strong>{channel.label}</strong>
+                  <span>View eligible titles and queue controls.</span>
+                </Link>
+                <Button
+                  appearance="ghost"
+                  intent="neutral"
+                  onClick={() => openDynModal(channel.id)}
+                  size="sm"
+                >
+                  Edit queue
+                </Button>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
+      <div className="queue-section-heading picks-queue-heading">
+        <div>
+          <h2>Picks</h2>
+          <p>Queues whose titles you choose and arrange.</p>
+        </div>
+      </div>
       <div id="shelves" ref={shelvesRef}>
         {shownShelfIds.map((id) => {
           const q = data!.sets[id]!

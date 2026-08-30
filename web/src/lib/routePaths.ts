@@ -15,12 +15,12 @@
  *   `/result`                       RESULT — the pick: one card, reroll, confirm
  *   `/result/<gameId>`              RESULT for one named game — a queue arrival, and it has NO reroll
  *   `/board-game-collection`        COLLECTION — the board-game shelf, and "we played this"
- *   `/picks`                        Picks configurator (poster shelves)
+ *   `/queues`                       all Picks and Rules queues
  *   `/people`                       roster and saved audience-group management
  *   `/q/<id>`                       one curated queue / channel as a grid
- *   `/channels[/<id>]`              the rule-based rotation channels
+ *   `/channels/<id>`                one rule-based queue
  *
- * `:step?` and `:channelId?` are OPTIONAL SEGMENTS, and that is the point of using a router
+ * `:step?` is an OPTIONAL SEGMENT, and that is the point of using a router
  * rather than a chain of `startsWith` tests: `/what-to-watch-play/surprise` is a STEP of one
  * view, not a view of its own, and react-router ranks the specific pattern above the general
  * one for us. The hand-rolled parser this replaced carried a "longest first" comment because
@@ -62,21 +62,22 @@ export const BOARD_GAME_COLLECTION_PATH =
 export const ROUTE_PATHS = {
   admin: "/admin",
   boardGameCollection: `${BOARD_GAME_COLLECTION_PATH}/*`,
-  channels: "/channels/:channelId?",
+  channels: "/channels/:channelId",
   /** Anything unrecognised paints the mode landing rather than a blank page. */
   fallback: "*",
   home: "/",
   legacyCollection: "/collection/*",
   legacyGroup: "/g/*",
-  /** Retired public address; `LegacyQueuesPage` replaces it with `/picks`. */
-  legacyQueues: "/queues/*",
+  /** Retired queue-kind indexes; both replace their address with `/queues`. */
+  legacyChannels: "/channels",
+  legacyPicks: "/picks/*",
   legacyTonight: "/tonight/:step?",
   pending: "/pending/*",
   people: "/people",
   /** Unlinked compatibility surface for the card interactions that predate the task home. */
   overview: "/overview",
   queue: "/q/:setId",
-  picks: "/picks/*",
+  queues: "/queues/*",
   result: "/result/:gameId?",
   watchPlay: `${WATCH_PLAY_PATH}/:step?`,
 } as const
@@ -121,9 +122,12 @@ export function labelForPath(p: string): string {
   )
     return "‹ Collection"
   if (p.startsWith("/result")) return "‹ What to Watch/Play"
-  if (p.startsWith("/picks") || p.startsWith("/queues"))
-    return "‹ Picks queues"
-  if (p.startsWith("/channels")) return "‹ Rules queues"
+  if (
+    p.startsWith("/picks") ||
+    p.startsWith("/queues") ||
+    p.startsWith("/channels")
+  )
+    return "‹ Queues"
   if (p.startsWith("/q/")) return "‹ Back"
   if (p === "/admin" || p.startsWith("/admin/"))
     return "‹ QueuePilot"
