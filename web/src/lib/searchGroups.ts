@@ -125,3 +125,33 @@ export function entryTitle(hit: SearchHit): string {
     ? hit.title
     : hitLabel(hit)
 }
+
+/**
+ * The queue-item payload shared by every search box that can add an item.
+ *
+ * A collection is addressed by NAME and must carry its explicit type. A movie or show is
+ * addressed by rating key and stores its printable title. Keeping that branch here prevents
+ * an additive collection search from rendering a valid result that its caller then writes as
+ * an ordinary item.
+ */
+export function queueItemAddBody(hit: SearchHit): {
+  position: "bottom"
+  type?: "collection"
+  value: string | { ratingKey: string; title: string }
+} {
+  if (hit.type === "collection") {
+    return {
+      position: "bottom",
+      type: "collection",
+      value: hit.title,
+    }
+  }
+
+  return {
+    position: "bottom",
+    value: {
+      ratingKey: hit.ratingKey,
+      title: entryTitle(hit),
+    },
+  }
+}

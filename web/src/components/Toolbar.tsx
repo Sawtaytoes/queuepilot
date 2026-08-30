@@ -2,7 +2,7 @@ import type { MenuItem } from "@charcuterie/ui"
 import { Button, Menu } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
-import { entryTitle } from "../lib/searchGroups"
+import { queueItemAddBody } from "../lib/searchGroups"
 import type { RegistrySet, SearchHit } from "../lib/types"
 import { refreshData } from "../state/live"
 import { openSetModal } from "../state/overlays"
@@ -79,7 +79,7 @@ export function Toolbar() {
               results: SearchHit[]
             }>(
               "GET",
-              `/api/search?q=${encodeURIComponent(q)}`,
+              `/api/search?q=${encodeURIComponent(q)}&collections=1`,
             )
 
             return results
@@ -89,10 +89,7 @@ export function Toolbar() {
           onClose={() => setOpenMenu(null)}
           placeholder="Add to any queue — search all libraries…"
           rowFor={(hit, index) => {
-            // `entryTitle` appends the EDITION when Plex gave the item one — this menu adds
-            // to a QUEUE, so it writes the same entry the in-queue add box does and must
-            // name the item the same way.
-            const label = entryTitle(hit)
+            const isCollection = hit.type === "collection"
             const compatible = (reg?.sets ?? []).filter(
               (s) =>
                 s.source === "queue" &&
@@ -106,16 +103,10 @@ export function Toolbar() {
                 await api(
                   "POST",
                   `/api/queues/${s.id}/items`,
-                  {
-                    // New titles append. The tile's lane button and the editable Priority
-                    // position are the direct controls after the add; a global Top/Bottom
-                    // mode displaced an existing plan before the title was even visible.
-                    position: "bottom",
-                    value: {
-                      ratingKey: hit.ratingKey,
-                      title: label,
-                    },
-                  },
+                  // New titles append. Collections use the same explicit typed payload as
+                  // the queue page, so the server stores `{collection: <name>}` rather than
+                  // treating the collection's rating key as an ordinary movie or show.
+                  queueItemAddBody(hit),
                 )
                 setStatus(
                   `Added “${hit.title}” to ${s.label}`,
@@ -173,17 +164,32 @@ export function Toolbar() {
                 <>
                   <Poster
                     cover={hit.cover}
-                    ratingKey={hit.ratingKey}
+                    ratingKey={
+                      isCollection && !hit.hasThumb
+                        ? null
+                        : hit.ratingKey
+                    }
                   />
                   <span className="ginfo">
                     {/* `.gtitle` keeps title, year and edition on ONE line — `.ginfo` is a
                         flex column, so each of them would otherwise stack. */}
                     <span className="gtitle">
                       {hit.title}{" "}
-                      <span className="y">
-                        {hit.year || ""}
-                      </span>
-                      <EditionBadge hit={hit} />
+                      {isCollection ? (
+                        <>
+                          <span className="collbadge">
+                            Collection
+                          </span>{" "}
+                          <span className="y">{`${hit.childCount || 0} items`}</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="y">
+                            {hit.year || ""}
+                          </span>
+                          <EditionBadge hit={hit} />
+                        </>
+                      )}
                     </span>
                     <span className="glib">
                       {libTitle(hit.sectionId)}
