@@ -73,7 +73,9 @@ try {
   const cardElement = await firstCard.elementHandle();
   if (!cardElement) throw new Error('fixture Pending card has no element');
   await firstCard.locator('[data-testid="pending-dismiss"]').click();
-  await page.getByText(`Dismissed “${title.replace(/\s+\d{4}$/, '')}”`).waitFor({ timeout: 15_000 });
+  await page
+    .getByText(`Removed “${title.replace(/\s+\d{4}$/, '')}” from Pending`)
+    .waitFor({ timeout: 15_000 });
   if (await cardElement.evaluate((element) => element.isConnected)) {
     throw new Error('Dismissed Pending card stayed visible');
   }
