@@ -1,3 +1,4 @@
+import { IconButton } from "@charcuterie/ui"
 import {
   type ReactNode,
   useCallback,
@@ -58,6 +59,23 @@ export type SearchRow = {
   className?: string
 }
 
+const ClearIcon = () => (
+  <svg
+    aria-hidden="true"
+    fill="none"
+    height="18"
+    viewBox="0 0 18 18"
+    width="18"
+  >
+    <path
+      d="m4.5 4.5 9 9m0-9-9 9"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeWidth="2"
+    />
+  </svg>
+)
+
 type Props<T> = {
   inputId: string
   listId: string
@@ -89,6 +107,7 @@ export function SearchDropdown<T>({
   )
   const [activeIndex, setActiveIndex] = useState(-1)
   const [isOpen, setIsOpen] = useState(false)
+  const [hasInput, setHasInput] = useState(false)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLUListElement>(null)
@@ -105,6 +124,7 @@ export function SearchDropdown<T>({
   const clearInput = useCallback(() => {
     if (inputRef.current) inputRef.current.value = ""
 
+    setHasInput(false)
     setHits([])
     setNoMatch(null)
     close()
@@ -162,7 +182,10 @@ export function SearchDropdown<T>({
 
     if (!el) return
 
-    const listener = () => handlerRef.current(el.value)
+    const listener = () => {
+      setHasInput(el.value.length > 0)
+      handlerRef.current(el.value)
+    }
 
     el.addEventListener("input", listener)
 
@@ -229,32 +252,51 @@ export function SearchDropdown<T>({
 
   return (
     <>
-      <input
-        defaultValue=""
-        id={inputId}
-        onBlur={() => {
-          // NOT an immediate close: a click on a row has to land first, and a
-          // nested menu inside a row needs focus time.
-          setTimeout(() => {
-            const focused = document.activeElement
+      <div className="searchinput">
+        <input
+          defaultValue=""
+          id={inputId}
+          onBlur={() => {
+            // NOT an immediate close: a click on a row has to land first, and a
+            // nested menu inside a row needs focus time.
+            setTimeout(() => {
+              const focused = document.activeElement
 
-            // A row's Add-to menu is a Charcuterie `Menu`, and a `Menu` PORTALS its
-            // panel to <body>. So the element that now holds focus is inside the
-            // dropdown on screen and outside it in the DOM, and a containment test
-            // against the list alone reads it as "focus left" — which closed the
-            // results the instant the menu opened, taking the menu with them.
-            const isFocusHeld =
-              listRef.current?.contains(focused) ||
-              focused?.closest('[role="menu"]') != null
+              // A row's Add-to menu is a Charcuterie `Menu`, and a `Menu` PORTALS its
+              // panel to <body>. So the element that now holds focus is inside the
+              // dropdown on screen and outside it in the DOM, and a containment test
+              // against the list alone reads it as "focus left" — which closed the
+              // results the instant the menu opened, taking the menu with them.
+              const isFocusHeld =
+                listRef.current?.contains(focused) ||
+                focused?.closest('[role="menu"]') != null
 
-            if (!isFocusHeld) close()
-          }, 250)
-        }}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        ref={inputRef}
-        type="search"
-      />
+              if (!isFocusHeld) close()
+            }, 250)
+          }}
+          onKeyDown={onKeyDown}
+          placeholder={placeholder}
+          ref={inputRef}
+          type="search"
+        />
+        {hasInput ? (
+          <span className="searchinput-clear">
+            <IconButton
+              appearance="ghost"
+              label="Clear search"
+              onClick={() => {
+                clearInput()
+                inputRef.current?.focus()
+              }}
+              onPointerDown={(event) =>
+                event.preventDefault()
+              }
+            >
+              <ClearIcon />
+            </IconButton>
+          </span>
+        ) : null}
+      </div>
       {children}
       <ul
         className={`results${isOpen ? " open" : ""}`}
