@@ -2,12 +2,19 @@ import type { MenuItem } from "@charcuterie/ui"
 import { Button, Menu } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
+import { asPreQueueStartEntry } from "../lib/preQueueStart"
 import { queueItemAddBody } from "../lib/searchGroups"
-import type { RegistrySet, SearchHit } from "../lib/types"
+import { startLabel } from "../lib/tileFace"
+import type {
+  RegistrySet,
+  SearchHit,
+  StartPoint,
+} from "../lib/types"
 import { refreshData } from "../state/live"
 import {
   openDynModal,
   openSetModal,
+  openStartModal,
 } from "../state/overlays"
 import { usePeople } from "../state/people"
 import {
@@ -46,6 +53,9 @@ export function Toolbar() {
   )
   const [isChoosingType, setIsChoosingType] =
     useState(false)
+  const [starts, setStarts] = useState<
+    Record<string, StartPoint>
+  >({})
 
   /*
    * The document-level Escape listener that used to sit here is GONE, and its whole
@@ -109,7 +119,10 @@ export function Toolbar() {
               setStatus(`Adding to ${s.label}…`)
 
               try {
-                await api(
+                const { added, key } = await api<{
+                  added?: boolean
+                  key?: string
+                }>(
                   "POST",
                   `/api/queues/${s.id}/items`,
                   // New titles lead the queue. Collections use the same explicit typed
@@ -117,8 +130,20 @@ export function Toolbar() {
                   // rather than treating the collection's rating key as an ordinary item.
                   queueItemAddBody(hit),
                 )
+                const start = starts[hit.ratingKey]
+                if (added !== false && key && start) {
+                  await api(
+                    "PATCH",
+                    `/api/queues/${s.id}/items/${encodeURIComponent(key)}/start`,
+                    { start },
+                  )
+                }
                 setStatus(
-                  `Added “${hit.title}” to ${s.label}`,
+                  added === false
+                    ? `“${hit.title}” is already in ${s.label}`
+                    : start
+                      ? `Added “${hit.title}” to ${s.label}, starting at ${startLabel(start).replace(/^Start /, "")}`
+                      : `Added “${hit.title}” to ${s.label}`,
                   "ok",
                 )
                 // Background: update the shelves but keep the results open for the
@@ -246,6 +271,48 @@ export function Toolbar() {
                       </Button>
                     }
                   />
+                  {hit.type === "show" ||
+                  hit.type === "collection" ? (
+                    <Button
+                      appearance="outline"
+                      data-testid="results-start"
+                      intent={
+                        starts[hit.ratingKey]
+                          ? "accent"
+                          : "neutral"
+                      }
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openStartModal({
+                          item: asPreQueueStartEntry(
+                            hit,
+                            starts[hit.ratingKey] ?? null,
+                          ),
+                          refresh: () => {},
+                          save: async (start) => {
+                            setStarts((current) => {
+                              const {
+                                [hit.ratingKey]: _removed,
+                                ...rest
+                              } = current
+                              return start
+                                ? {
+                                    ...rest,
+                                    [hit.ratingKey]: start,
+                                  }
+                                : rest
+                            })
+                          },
+                          setId: null,
+                        })
+                      }}
+                      size="sm"
+                    >
+                      {starts[hit.ratingKey]
+                        ? "Change start…"
+                        : "Start at…"}
+                    </Button>
+                  ) : null}
                 </>
               ),
               // The Add-to button owns its own clicks; a row pick is "open my menu", so
@@ -256,7 +323,7 @@ export function Toolbar() {
               // longer wears `.addto` — this selector is BEHAVIOUR, not a test hook: miss
               // it and a click on Add-to also fires the row's own pick.
               ignoreSelector:
-                '[data-testid="results-addto"]',
+                '[data-testid="results-addto"], [data-testid="results-start"]',
               // Row pick (click anywhere on it, or Enter) = open its Add-to menu.
               pick: () =>
                 setOpenMenu((cur) =>

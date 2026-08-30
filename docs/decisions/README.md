@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-08-30 | [Queue entries sort by queue arrival, and global search can pick a start](2026-08-30-queue-entries-sort-by-queue-arrival-and-global-search-can-pick-a-start.md) *(queue data / UI — every add stamps `queued_at`; Recently added sorts both lanes newest-first; global search can hold a show or collection start choice until a real add.)* |
 | 2026-08-30 | [Skipped items follow the queue view](2026-08-30-skipped-items-follow-the-queue-view.md) *(UI / correction — Skipped moves to the bottom and reuses Posters, Cards or List with artwork, Plex links, source badges and Restore in the play position.)* |
 | 2026-08-30 | [Changing a queue default preserves every existing lane](2026-08-30-changing-a-queue-default-preserves-existing-lanes.md) *(queue semantics / correction — `add_as` controls future additions only; the writer materialises inherited lanes before changing it, so existing Priority and Random assignments do not move.)* |
 | 2026-08-30 | [Pending collections can pick a start point before the add](2026-08-30-pending-collections-can-pick-a-start-point.md) *(UI / behaviour — collection cards get the same start picker as show cards; choose the member, then its episode when applicable, before adding.)* |

@@ -156,6 +156,7 @@ function optimisticItem(hit: SearchHit): QueueItem {
     done: false,
     episodes: null,
     weight: 1,
+    queuedAt: Math.floor(Date.now() / 1000),
     key: isCollection
       ? `title:Collection: ${hit.title}`
       : `rk:${hit.ratingKey}`,
@@ -263,7 +264,11 @@ export function QueueView({
 
   // THE SPLIT. One stored list, drawn as two lanes — an entry's lane is its own
   // `placement`, else the queue's `add_as` (`state/queueView.splitLanes`).
-  const lanes = splitLanes(items, setLane)
+  const lanes = splitLanes(
+    items,
+    setLane,
+    view.filters.sort,
+  )
   // Position numbers describe the stored Priority queue, not only the entries that a
   // temporary view filter leaves visible. An item must keep its real number while a
   // filter hides one of its neighbours.
@@ -1096,6 +1101,10 @@ export function QueueView({
                   { label: "Queue order", value: "queue" },
                   { label: "A → Z", value: "title" },
                 ]),
+            {
+              label: "Recently added",
+              value: "recent",
+            },
             {
               label: "Weight, high first",
               value: "weight",
