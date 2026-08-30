@@ -2,6 +2,12 @@ import { type RefObject, useEffect } from "react"
 
 import { api } from "../lib/api"
 import { flipMove } from "../lib/flip"
+import {
+  findVerticalScrollRegion,
+  scrollRegionBounds,
+  scrollRegionBy,
+  scrollRegionTop,
+} from "../lib/verticalScrollRegion"
 import { busy } from "../state/busy"
 import { toggleSelectThrough } from "../state/selection"
 import {
@@ -117,6 +123,8 @@ export function useGridDrag(
     const grid = gridRef.current
 
     if (!grid) return
+
+    const scrollRegion = findVerticalScrollRegion(grid)
 
     let press: Press | null = null
     let selectionClickCard: HTMLElement | null = null
@@ -350,7 +358,7 @@ export function useGridDrag(
     }
 
     /**
-     * Scroll the document while the pointer rests near a viewport edge.
+     * Scroll the grid's vertical owner while the pointer rests near its visible edge.
      *
      * A phone only shows a few cards at once. A drag therefore has to move the page as well
      * as the tile, or every destination below that first viewport is unreachable. Slot boxes
@@ -359,10 +367,8 @@ export function useGridDrag(
     const autoScroll = () => {
       if (!press?.isDragging || !press.at) return false
 
-      const viewport = window.visualViewport
-      const top = viewport?.offsetTop ?? 0
-      const height = viewport?.height ?? window.innerHeight
-      const bottom = top + height
+      const { bottom, top } =
+        scrollRegionBounds(scrollRegion)
       const y = press.at.y
       let delta = 0
 
@@ -377,10 +383,9 @@ export function useGridDrag(
 
       if (!delta) return false
 
-      const scroller = document.scrollingElement
-      const before = scroller?.scrollTop ?? window.scrollY
-      window.scrollBy(0, delta)
-      const after = scroller?.scrollTop ?? window.scrollY
+      const before = scrollRegionTop(scrollRegion)
+      scrollRegionBy(scrollRegion, delta)
+      const after = scrollRegionTop(scrollRegion)
 
       if (after === before) return false
 

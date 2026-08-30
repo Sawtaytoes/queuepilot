@@ -243,13 +243,14 @@ body {
   color: var(--color-content-primary);
   font: 1rem / 1.5 var(--font-sans);
   margin: 0;
-  padding-bottom: 80px;
 }
 
+/* `Shell` is exactly one dynamic viewport high and `Main` owns its vertical overflow.
+   The old app put 80px on BODY for its fixed selection bar. The selected view now owns
+   that clearance through `.view.move-mode`, so the body padding only added a second
+   document scrollbar and 80px of dead space below the shell. */
+
 /* TASK HOME: two things to start, then five quiet management destinations. */
-body.mode-view {
-  padding-bottom: 0;
-}
 #mode-landing:not([hidden]) {
   display: block;
   max-width: 1040px;
