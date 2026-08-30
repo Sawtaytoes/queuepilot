@@ -6,6 +6,7 @@ import * as routing from '../engine/routing.js';
 import { toWeight } from '../engine/weight.js';
 import { COLLECTION_PREFIX_RE, isLegacyScalarEntry } from '../entryFormat.js';
 import { findDuplicateItem } from '../entryIdentity.js';
+import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import * as finished from '../finished.js';
 import * as plex from '../plex.js';
 import type { AccountScope } from '../plex.js';
@@ -82,6 +83,7 @@ function leadOf(v: EntryObject | null): 'once' | 'always' | null {
  */
 function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
   const v = e.value && typeof e.value === 'object' ? e.value : null;
+  const itemOrder = normalizeEntryItemOrder(v?.item_order) === 'shuffle' ? 'shuffle' : null;
   // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may stop,
   // as opposed to `episodes` = how long it is.
   const batchStopsAt = v && v.batch_stops_at ? String(v.batch_stops_at).trim().toLowerCase() : null;
@@ -92,6 +94,7 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     // null = follow the set. Never coerce a missing key to 1: the set default may
     // be 2, and a stored 1 is then a real override (queues.storedCount).
     episodes: queues.storedCount(v ? v.episodes : null),
+    item_order: itemOrder,
     volumes: queues.storedCount(v ? v.volumes : null),
     // How often this entry comes up when the set is randomized (1 = normal; the editor shows
     // a tag only above 1).
@@ -239,6 +242,10 @@ export function queuesRoutes(): Hono {
             // divider — plus the run of tiles either side of it — moves when /api/queues
             // lands. That is precisely the layout shift this endpoint exists to prevent.
             placement: placementOf(e.value && typeof e.value === 'object' ? e.value : null),
+            item_order: e.value && typeof e.value === 'object'
+              && normalizeEntryItemOrder(e.value.item_order) === 'shuffle'
+              ? 'shuffle'
+              : null,
           })),
         };
       }
@@ -544,12 +551,14 @@ export function queuesRoutes(): Hono {
           await queues.setEpisodes(set, key, chapterDefault);
           await queues.setVolumes(set, key, volumeDefault);
           await queues.setWeight(set, key, 1);
+          await queues.setItemOrder(set, key, null);
           await queues.setBatchStop(set, key, null);
           await queues.setStart(set, key, null);
         }
         if (wants('episodes')) await queues.setEpisodes(set, key, body.episodes);
         if (wants('volumes')) await queues.setVolumes(set, key, body.volumes);
         if (wants('weight')) await queues.setWeight(set, key, body.weight);
+        if (wants('item_order')) await queues.setItemOrder(set, key, body.item_order);
         if (wants('batch_stops_at')) await queues.setBatchStop(set, key, body.batch_stops_at);
         // LANE, for a whole selection. `setPlacement` keeps the sparse rule — anything that
         // is not "priority"/"random" clears the entry's own placement, so it goes back to
@@ -586,6 +595,23 @@ export function queuesRoutes(): Hono {
     const { episodes } = await readBody(c);
     try {
       return c.json(await queues.setEpisodes(set, decodeURIComponent(c.req.param('key')), episodes));
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // Order of playable leaves inside a Plex show or Collection. Body: {item_order: "shuffle"}.
+  // Blank/unknown removes the override and restores next-unwatched, in-order play.
+  app.patch('/queues/:set/items/:key/item-order', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    const { item_order } = await readBody(c);
+    try {
+      return c.json(await queues.setItemOrder(
+        set,
+        decodeURIComponent(c.req.param('key')),
+        item_order,
+      ));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }
