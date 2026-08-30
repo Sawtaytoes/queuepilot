@@ -151,6 +151,14 @@ export function SettingTags({
               "neutral",
             )
           : null}
+      {item.item_order === "shuffle"
+        ? tag(
+            "Shuffle",
+            "Chooses any playable item inside this show or Collection, including watched items",
+            "shuffletag",
+            "accent",
+          )
+        : null}
       {item.placement === "priority"
         ? tag(
             item.lead === "once"
@@ -171,7 +179,7 @@ export function SettingTags({
             "success",
           )
         : null}
-      {item.batch_stops_at
+      {item.batch_stops_at && item.item_order !== "shuffle"
         ? tag(
             item.batch_stops_at === "season"
               ? "Ends at season"
@@ -269,6 +277,22 @@ export const setEntryEpisodes = (
           ?.episodes ?? 1
       hit.episodes =
         episodes === setDefault ? null : episodes
+    },
+  )
+
+export const setEntryItemOrder = (
+  setId: string,
+  item: QueueItem,
+  itemOrder: string,
+) =>
+  patchEntry(
+    setId,
+    item,
+    "item-order",
+    { item_order: itemOrder },
+    (hit) => {
+      hit.item_order =
+        itemOrder === "shuffle" ? "shuffle" : null
     },
   )
 
@@ -402,6 +426,9 @@ export function EntryEditor({
   const isVolume = item.unit === "volume"
   const isSeries =
     item.type === "show" || item.type === "collection"
+  const canShuffleItems =
+    isSeries &&
+    (item.unit == null || item.unit === "episode")
 
   // ── THE LANE, resolved ────────────────────────────────────────────────────────────────
   // Three values collapse into two here, and the panel has to keep them apart: what the
@@ -601,6 +628,43 @@ export function EntryEditor({
           </div>
         ) : null}
 
+        {canShuffleItems ? (
+          <div className="field">
+            <span className="fieldlabel">
+              {item.type === "show"
+                ? "Episode order"
+                : "Item order"}
+            </span>
+            <SelectListbox
+              label={
+                item.type === "show"
+                  ? "Episode order"
+                  : "Collection item order"
+              }
+              onChange={(value) =>
+                void setEntryItemOrder(setId, item, value)
+              }
+              options={[
+                {
+                  label: "In order — next unwatched",
+                  value: "",
+                },
+                {
+                  label: "Shuffle — any item",
+                  value: "shuffle",
+                },
+              ]}
+              value={item.item_order || ""}
+            />
+            <span className="fieldhint">
+              Shuffle includes watched items and chooses
+              without replacement for this sitting. Skipped
+              items stay out, and a manual start still
+              limits the pool.
+            </span>
+          </div>
+        ) : null}
+
         {/* THE LANE. It sits above Weight deliberately: weight only biases the Random
             pool, so "which lane is this in" is the question that decides whether the
             control below it means anything at all
@@ -697,7 +761,10 @@ export function EntryEditor({
           </span>
         </div>
 
-        {isSeries && !isVolume && episodes > 1 ? (
+        {isSeries &&
+        !isVolume &&
+        episodes > 1 &&
+        item.item_order !== "shuffle" ? (
           <div className="field">
             <span className="fieldlabel">
               Where the batch may stop

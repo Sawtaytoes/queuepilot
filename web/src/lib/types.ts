@@ -130,6 +130,8 @@ export type QueueItem = {
    * is a real override when the set default is not 1.
    */
   episodes: number | null
+  /** `shuffle` draws from all playable items inside this Plex show or Collection. */
+  item_order?: "shuffle" | null
   /**
    * Per-entry override of the set's volume batch. Independent of `episodes` —
    * a volume is a collection of chapters. `null`/absent = follow the set.
@@ -333,6 +335,7 @@ export type ShelfItem = {
   /** The entry's stored lane, or null for "follow the set's `add_as`" — see `QueueItem`.
    *  Carried by the skeleton so the shelf draws its two lanes at final geometry. */
   placement?: "priority" | "random" | null
+  item_order?: "shuffle" | null
 }
 
 export type ShelfSet = {

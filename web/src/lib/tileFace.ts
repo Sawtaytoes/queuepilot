@@ -314,6 +314,19 @@ export function tileFace(item: TileEntry): TileFace {
     year: item.year,
   }
 
+  if (
+    "item_order" in item &&
+    item.item_order === "shuffle" &&
+    !item.done &&
+    (item.type === "show" || item.type === "collection")
+  ) {
+    base.next =
+      item.type === "show" ? "Any episode" : "Any item"
+    base.nextDone = false
+
+    return base
+  }
+
   if (item.type === "show") {
     const unit = item.unit ?? "episode"
 

@@ -15,6 +15,7 @@ import { parsePromoteWindow } from './leadWindow.js';
 import * as promote from './promote.js';
 import * as sets from './sets.js';
 import { toEntryObject } from './entryFormat.js';
+import { normalizeEntryItemOrder } from './entryItemOrder.js';
 import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
 
 /**
@@ -642,6 +643,23 @@ export async function setEpisodes(
     else e.extras.episodes = n;
   });
   return ok ? { ok: true, episodes: n } : { ok: false };
+}
+
+/**
+ * Set the order of playable leaves inside one show or Collection. `shuffle` is the only
+ * stored value; everything else removes the key and restores next-unwatched, in-order play.
+ */
+export async function setItemOrder(
+  setName: string,
+  key: string,
+  value: unknown,
+): Promise<{ ok: true; item_order: 'shuffle' | null } | { ok: false }> {
+  const order = normalizeEntryItemOrder(value);
+  const ok = await rewriteEntry(setName, key, (entry) => {
+    if (order === 'shuffle') entry.extras.item_order = 'shuffle';
+    else delete entry.extras.item_order;
+  });
+  return ok ? { ok: true, item_order: order === 'shuffle' ? 'shuffle' : null } : { ok: false };
 }
 
 // How many VOLUMES a volume-based series contributes per visit. Independent of
