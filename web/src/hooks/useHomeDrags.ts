@@ -71,10 +71,7 @@ export function useHomeDrags(
 
     const scrollRegion = findVerticalScrollRegion(shelvesEl)
 
-    const autoScroll = (
-      pointerY: number,
-      edge: number,
-    ) => {
+    const autoScroll = (pointerY: number, edge: number) => {
       const { bottom, top } =
         scrollRegionBounds(scrollRegion)
 
