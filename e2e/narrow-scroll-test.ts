@@ -48,10 +48,15 @@ const WIDTHS = [390, 320];
 
 const browser = await chromium.launch();
 
-/** documentElement scroll vs client width — the one number this suite exists to hold. */
+/** Document scroll vs viewport size. The shell must never delegate either axis to it. */
 const measure = (page: Page) => page.evaluate(() => {
   const de = document.documentElement;
-  return { scrollWidth: de.scrollWidth, clientWidth: de.clientWidth };
+  return {
+    scrollWidth: de.scrollWidth,
+    clientWidth: de.clientWidth,
+    scrollHeight: de.scrollHeight,
+    clientHeight: de.clientHeight,
+  };
 });
 
 /**
@@ -184,6 +189,7 @@ for (const width of WIDTHS) {
     ['/', '#mode-landing:not([hidden]) .mode-primary-action'],
     ['/people', '#people'],
     ['/overview', '#play:not([hidden]) .playcard'],
+    ['/pending', '#pending:not([hidden])'],
     ['/queues', '.playcard, #newqueue, .shelf'],
     ['/channels/shows', '#chbody'],
     // What to Watch/Play, added with the route (WP-6). It carries three grids and a stepper row, and
@@ -210,10 +216,20 @@ for (const width of WIDTHS) {
     await page.waitForSelector(ready, { timeout: 30000 }).catch(() => {});
     await page.waitForTimeout(500); // the view swap + the header's ResizeObserver
 
-    const { scrollWidth, clientWidth } = await measure(page);
+    const {
+      scrollWidth, clientWidth, scrollHeight, clientHeight,
+    } = await measure(page);
     ok(`${width}px ${hash}: no horizontal scroll (${scrollWidth} <= ${clientWidth})`,
       scrollWidth <= clientWidth);
     if (scrollWidth > clientWidth) console.log('   overflowing:', (await offenders(page)).join(', '));
+
+    if (hash === '/pending') {
+      // Pending's unbounded virtual grid scrolls in `Main`. If the document is taller than
+      // the viewport too, the page has the two vertical scrollbars this gate was added for.
+      // This caught the obsolete 80px body padding left from the pre-Shell selection bar.
+      ok(`${width}px ${hash}: Main is the only vertical scroll owner (${scrollHeight} <= ${clientHeight})`,
+        scrollHeight <= clientHeight);
+    }
 
     const scrollers = await inlineScrollers(page);
     ok(`${width}px ${hash}: nothing scrolls sideways inside its own box`, scrollers.length === 0);
