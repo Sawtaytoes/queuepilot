@@ -18,6 +18,8 @@ export type StartPoint = {
   series?: string
   season?: number
   episode?: number
+  /** Queue-owned history lets this entry advance independently of the provider profile. */
+  history?: "queue" | "provider"
 }
 
 /** `plex.nextEpisode()` for a show, `plex.collectionNext()` for a collection. */
