@@ -248,15 +248,15 @@ for (const width of WIDTHS) {
     // PR, so a landing that quietly loses its only create affordance again — which is how it
     // shipped for a month — would reach main unchallenged. The assertion is both halves at
     // once: the trigger exists on `/overview`, and the modal it opens lands inside the screen.
-    ['/overview', '#playnewqueue', 'setmodal', 'New picks queue (admin)'],
-    ['/queues', '#newqueue', 'setmodal', 'New queue'],
+    ['/overview', '#playnewqueue', 'setmodal', 'New picks queue (admin)', null],
+    ['/queues', '#newqueue', 'setmodal', 'New queue', '#queue-type-modal button:has-text("Picks")'],
     // `#newcurated` — ＋ Picks queue on the RULES page — was here until 2026-08-26. The Rules
     // page lists rules queues alone now, so a page that cannot show you what you made no
     // longer offers to make it; the two rows above are the app's Picks create affordances.
-    ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a rules queue'],
+    ['/channels/shows', '#chconfigure', 'dynmodal', 'Configure a rules queue', null],
   ] as const;
 
-  for (const [hash, trigger, boxId, label] of modals) {
+  for (const [hash, trigger, boxId, label, nextTrigger] of modals) {
     await page.goto(`http://localhost:${PORT}${hash}`, { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(700);
     // `waitForSelector`, not a bare `$` after a fixed sleep. The channels view renders its
@@ -273,6 +273,10 @@ for (const width of WIDTHS) {
     if (!isTriggerThere) continue;
 
     await page.click(trigger);
+    if (nextTrigger) {
+      await page.waitForSelector(nextTrigger, { timeout: 15000 });
+      await page.click(nextTrigger);
+    }
     await page.waitForSelector(`#${boxId}`, { timeout: 15000 }).catch(() => {});
     await page.waitForTimeout(400); // the overlay's own mount + position
 
@@ -346,6 +350,7 @@ for (const width of WIDTHS) {
   await page.goto(`http://localhost:${PORT}/queues`, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(700);
   await page.click('#newqueue');
+  await page.click('#queue-type-modal button:has-text("Picks")');
   await page.waitForSelector('#setmodal', { timeout: 15000 }).catch(() => {});
   await page.waitForTimeout(400);
 
