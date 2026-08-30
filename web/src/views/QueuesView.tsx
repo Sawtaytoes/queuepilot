@@ -26,6 +26,7 @@ import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { queueNumbers, queueTitle } from "../lib/people"
 import { ROUTE_PATHS } from "../lib/routePaths"
 import {
+  collectionOrderCount,
   isCompleted,
   progressLabel,
   runtimeLabel,
@@ -334,8 +335,8 @@ function Shelf({
           isDone: face.nextDone,
           text: face.next,
           tooltip:
-            face.from && item.childCount != null
-              ? `${face.next} — ${item.childCount} in order`
+            face.from && collectionOrderCount(item) != null
+              ? `${face.next} — ${collectionOrderCount(item)} in order`
               : face.next,
         }}
         // The same per-entry menu the queue grid opens. It was already

@@ -1332,6 +1332,7 @@ export async function collectionNext(
   // Which member the manual start names — the tile's start chip says so in its tooltip (the
   // member that plays NEXT can be a later one, once the start member is fully watched).
   const startMember = floorAt >= 0 ? children[floorAt]?.title ?? null : null;
+  let position = 0;
   for (let i = 0; i < children.length; i++) {
     if (floorAt >= 0 && i < floorAt) continue; // member is before the manual start
     const ch = children[i];
@@ -1339,12 +1340,15 @@ export async function collectionNext(
     // A skipped CHILD goes whole, matching `resolve.collectionItems`: the collection is the
     // member, its children are the items inside it.
     if (skipped.has(String(ch.ratingKey))) continue;
+    // Position is in the collection that can still play. A skipped child is absent from that
+    // collection, so it cannot consume a place in the "N of M" progress readout.
+    position += 1;
     const where = {
       member: ch.title, memberRatingKey: ch.ratingKey, memberYear: ch.year,
       // The member's own edition, so the tile can say WHICH cut it is about to play. A show
       // member has none, and passing the collection's would be a different item's label.
       memberEdition: ch.type === 'show' ? null : ch.editionTitle,
-      position: i + 1, startMember,
+      position, startMember,
     };
     if (ch.type === 'show') {
       let ep = null;

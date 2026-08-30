@@ -38,6 +38,7 @@ import { isRandomOrder } from "../lib/kind"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { entryTitle } from "../lib/searchGroups"
 import {
+  collectionOrderCount,
   isCompleted,
   isStartable,
   progressLabel,
@@ -449,8 +450,8 @@ export function QueueView({
             : undefined,
           text: face.next,
           tooltip: `${
-            face.from && item.childCount != null
-              ? `${face.next} — ${item.childCount} in order`
+            face.from && collectionOrderCount(item) != null
+              ? `${face.next} — ${collectionOrderCount(item)} in order`
               : face.next
           }${
             isStartable(item)

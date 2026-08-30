@@ -54,6 +54,17 @@ export const byTitle = (
     },
   )
 
+/** The collection size that can still play. Explicitly skipped direct members are absent. */
+export const collectionOrderCount = (
+  item: Pick<TileEntry, "childCount" | "skippedCount">,
+): number | null =>
+  item.childCount == null
+    ? null
+    : Math.max(
+        0,
+        item.childCount - (item.skippedCount ?? 0),
+      )
+
 /**
  * A collection's members are usually named after it ("Chaika: The Coffin Princess -
  * Avenging Battle" inside the "Chaika: The Coffin Princess" collection), and a tile
@@ -326,6 +337,8 @@ export function tileFace(item: TileEntry): TileFace {
 
   if (item.type !== "collection") return base
 
+  const orderCount = collectionOrderCount(item)
+
   if (!n?.member) {
     // No next-up member: fall back to the collection's own poster/name. A collection
     // that is simply FINISHED reads exactly like a finished show ("All watched") —
@@ -342,8 +355,8 @@ export function tileFace(item: TileEntry): TileFace {
     }
 
     base.next =
-      item.childCount != null
-        ? `${item.childCount} in order`
+      orderCount != null
+        ? `${orderCount} in order`
         : "plays in order"
 
     return base
@@ -366,8 +379,8 @@ export function tileFace(item: TileEntry): TileFace {
         ? n.title
           ? `${seLabel(n)} · ${n.title}`
           : seLabel(n)
-        : n.position && item.childCount
-          ? `${n.position} of ${item.childCount}`
+        : n.position && orderCount
+          ? `${n.position} of ${orderCount}`
           : "",
     nextDone: false,
     ratingKey: n.memberRatingKey || item.ratingKey,

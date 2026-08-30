@@ -445,6 +445,24 @@ describe("tileFace", () => {
     expect(face.nextDone).toBe(false)
   })
 
+  test("a collection position and total exclude skipped members", () => {
+    const face = tileFace(
+      item({
+        childCount: 6,
+        nextEp: {
+          kind: "movie",
+          member: "The Fellowship of the Ring",
+          position: 1,
+        },
+        skippedCount: 3,
+        title: "The Lord of the Rings",
+        type: "collection",
+      }),
+    )
+
+    expect(face.next).toBe("1 of 3")
+  })
+
   test("an unresolved collection falls back to its size", () => {
     expect(
       tileFace(

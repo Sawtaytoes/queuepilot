@@ -194,6 +194,12 @@ ok('collectionNext advances past the ED-only series to S4', next != null && next
 ok('collectionNext returns S4 episode 1', next != null && next.kind === 'show' && Number(next.episode) === 1);
 ok('collectionNext reports S4 as member position 4', next != null && next.position === 4);
 
+const nextAfterSkips = await collectionNext('COLL1', null, {}, new Set(['100', '200', '300']));
+ok(
+  'collectionNext counts position among unskipped collection members',
+  nextAfterSkips != null && nextAfterSkips.memberRatingKey === '400' && nextAfterSkips.position === 1,
+);
+
 // A genuinely-unwatched NORMAL episode in an earlier member BLOCKS the advance: reseed S2 with
 // one real unwatched episode → next-up must stop at S2, not skip ahead to S4.
 const s2WithUnwatched = [...normalEps('200', 25, { watched: true }), s1('200u', 26, false), s0('200e1', 301, 'Ending A')];
