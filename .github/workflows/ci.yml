@@ -355,6 +355,14 @@ jobs:
       - name: Priority queue + Random pool lanes (offline)
         run: $TSX e2e/priority-lane-test.ts
 
+      # The Picks Random pool shuffles entries, while this setting shuffles playable leaves
+      # INSIDE one show or Collection. It includes watched items for reruns, preserves skips
+      # and manual-start floors, resumes an in-progress leaf first, and caps after shuffling.
+      - name: Per-entry show and Collection Shuffle (offline)
+        run: $TSX e2e/per-entry-shuffle-test.ts
+      - name: Per-entry Shuffle write side (offline)
+        run: $TSX e2e/per-entry-shuffle-write-test.ts
+
       # PLAYBACK LENGTH — how many things a set plays before it stops, for every kind of set.
       # The claim this exists to hold is not "the number is read" but "no existing set moves on
       # deploy": three of the four paths hardcoded their length and two hardcoded it
@@ -708,6 +716,12 @@ jobs:
       # Reuses the chromium the narrow-view step installed — keep it AFTER that step.
       - name: Tile chrome — the select mark paints, and the lane button moves (browser, no Plex needed)
         run: $TSX e2e/tile-lane-test.ts
+
+      # The entry-level Shuffle picker is a different axis from the Random pool lane. This
+      # gate opens the real entry sheet, changes the picker, and pins the tag, neutral
+      # "Any episode" caption, and YAML write against synthetic show data.
+      - name: Per-entry Shuffle editor (browser, no Plex needed)
+        run: $TSX e2e/per-entry-shuffle-ui-test.ts
 
       # THE TILE MENU, and the long press that opens it. The menu carries only what the card
       # cannot (the lane moves, the start point, Skip) and a long press is one gesture, not
