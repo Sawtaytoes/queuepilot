@@ -36,7 +36,7 @@ import { api } from "../lib/api"
 import { flashTile } from "../lib/flip"
 import { isRandomOrder } from "../lib/kind"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { entryTitle } from "../lib/searchGroups"
+import { queueItemAddBody } from "../lib/searchGroups"
 import {
   collectionOrderCount,
   isCompleted,
@@ -693,12 +693,11 @@ export function QueueView({
           }
           rowFor={(hit, _index, close) => {
             const isCollection = hit.type === "collection"
-            // `entryTitle` appends the EDITION when Plex gave the item one. Two editions of a
+            // `queueItemAddBody` appends the EDITION when Plex gave the item one. Two editions of a
             // film are two library items with the same title and the same year, so without it
             // the two rows are identical AND the two entries this box writes are stored under
             // one indistinguishable title. The pool member picker has done this since #139;
             // the queue box was simply never carried across.
-            const label = entryTitle(hit)
             const queuedKey = keyOfHit(hit)
             const isQueued = queuedKey in queuedKeys
 
@@ -828,26 +827,10 @@ export function QueueView({
                 )
 
                 try {
-                  const body: Record<string, unknown> = {
-                    // Adding is append-only. Priority positions and lane controls make the
-                    // resulting order directly editable after the title is visible.
-                    position: "bottom",
-                  }
-
-                  if (isCollection) {
-                    body.value = hit.title
-                    body.type = "collection"
-                  } else {
-                    body.value = {
-                      ratingKey: hit.ratingKey,
-                      title: label,
-                    }
-                  }
-
                   await api(
                     "POST",
                     `/api/queues/${setId}/items`,
-                    body,
+                    queueItemAddBody(hit),
                   )
                   // Background, non-blocking: swap the stand-in for the resolved
                   // entry (its poster + ratingKey already resolve, so only nextEp
