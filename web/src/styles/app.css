@@ -1086,6 +1086,28 @@ ul.grid .empty {
   position: relative;
   flex-wrap: wrap;
 }
+.searchinput {
+  position: relative;
+  flex: 1;
+  min-width: min(220px, 100%);
+}
+.searchinput > input[type="search"] {
+  width: 100%;
+  padding-inline-end: 48px;
+}
+/* The browser glyph is a small text-shaped target. SearchDropdown supplies the same
+   action as a labelled Charcuterie IconButton with a full control-sized target. */
+.searchinput
+> input[type="search"]::-webkit-search-cancel-button {
+  appearance: none;
+}
+.searchinput-clear {
+  position: absolute;
+  inset-inline-end: 4px;
+  top: 50%;
+  display: flex;
+  transform: translateY(-50%);
+}
 /* `:not([type="checkbox"])` because this is the ADD-BAR'S SEARCH FIELD, and a descendant
    selector cannot say so on its own.
 
@@ -1106,7 +1128,7 @@ ul.grid .empty {
      where a hard 220px floor plus 26px of padding is wider than the space there is —
      and a `min-width` floor is precisely the thing that turns "a bit tight" into a
      scrollbar. It still wants 220px wherever 220px exists. */
-  min-width: min(220px, 100%);
+  min-width: 0;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border-default);
   border-radius: 8px;
@@ -1930,6 +1952,9 @@ body.queue-view #tools {
   color: var(--color-content-primary);
   padding: 9px 12px;
   font-size: 0.95rem;
+}
+.gsearch-wrap .searchinput {
+  min-width: 0;
 }
 #qfilter {
   min-width: 0;
