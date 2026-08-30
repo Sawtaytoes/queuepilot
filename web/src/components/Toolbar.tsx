@@ -12,6 +12,7 @@ import {
 import { usePeople } from "../state/people"
 import {
   curatedIds,
+  rotationChannels,
   setStatus,
   useStore,
 } from "../state/store"
@@ -58,10 +59,12 @@ export function Toolbar() {
    * from anywhere else. Outside-press dismissal came with it.
    */
 
-  // Every Picks queue, which is every shelf this page draws — so Collapse all collapses
-  // all of them. It was the priority-lane half until 2026-08-26, back when the random-lane
-  // half was listed on the Rules page instead.
-  const ids = curatedIds(data)
+  // Every Picks and Rules queue. Both kinds use the same collapsible shelf shape on the
+  // unified Queues page, so the page-wide control changes both kinds together.
+  const ids = [
+    ...rotationChannels(reg).map((set) => set.id),
+    ...curatedIds(data),
+  ]
   const isAllCollapsed =
     ids.length > 0 &&
     (!hasCollapsePreference ||
