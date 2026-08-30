@@ -483,7 +483,7 @@ export function PendingView() {
       key: "new",
       label: (
         <span className="addtomenu-new">
-          <span aria-hidden="true">＋</span>
+          <span aria-hidden="true">+</span>
           <span>Add new queue</span>
         </span>
       ),

@@ -2346,7 +2346,8 @@ body.queue-view #tools {
 #membersmodal,
 #peoplemodal,
 #groupsmodal,
-#poweroffmodal {
+#poweroffmodal,
+#queue-type-modal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
   border: 1px solid var(--color-border-default);
@@ -2398,6 +2399,10 @@ body.queue-view #tools {
 #poweroffmodal {
   width: min(400px, 92vw);
 }
+/* One first-step choice with two descriptive cards. */
+#queue-type-modal {
+  width: min(720px, 92vw);
+}
 /* No `::backdrop` any more — the modal is a Charcuterie body-portalled overlay (not a
    native <dialog>), so the scrim is its own `SharedBackdrop`. See components/Modal.tsx. */
 #startmodal form,
@@ -2407,7 +2412,8 @@ body.queue-view #tools {
 #membersmodal form,
 #peoplemodal form,
 #groupsmodal form,
-#poweroffmodal form {
+#poweroffmodal form,
+#queue-type-modal form {
   position: relative;
 }
 #startmodal h3,
@@ -2417,7 +2423,8 @@ body.queue-view #tools {
 #membersmodal h3,
 #peoplemodal h3,
 #groupsmodal h3,
-#poweroffmodal h3 {
+#poweroffmodal h3,
+#queue-type-modal h3 {
   margin: 0 0 14px;
   padding-right: 28px;
 }

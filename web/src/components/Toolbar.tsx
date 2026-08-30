@@ -299,7 +299,7 @@ export function Toolbar() {
         intent="accent"
         onClick={() => setIsChoosingType(true)}
       >
-        ＋ New queue
+        + New queue
       </Button>
       <Modal
         footer={null}
