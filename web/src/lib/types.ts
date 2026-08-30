@@ -923,6 +923,8 @@ export type PendingResponse = {
 
 export type PendingItem = {
   ratingKey: string
+  /** The item's page in the configured Plex web client, or null when it cannot be addressed. */
+  webUrl: string | null
   title: string
   year: number | null
   /** A COLLECTION is a row of its own, beside the films inside it — never instead of them
