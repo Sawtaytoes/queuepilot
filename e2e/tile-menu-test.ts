@@ -1,18 +1,17 @@
-// THE TILE MENU CARRIES WHAT THE CARD CANNOT — AND A LONG PRESS IS ONE GESTURE, NOT TWO.
+// THE TILE MENU CARRIES WHAT THE CARD CANNOT — AND TOUCH HOLD MEANS DRAG.
 //
 // Two decisions, one screen, and every assertion here started as something the owner saw on a
 // tablet (decisions `2026-08-26-the-tile-menu-carries-what-the-card-cannot`,
-// `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`).
+// `2026-08-29-a-touch-hold-is-the-drag-and-it-scrolls`).
 //
 // What it pins, and what each one cost before it existed:
 //
 //   1. THE MENU HOLDS THE LANE MOVES, and no Remove. On a queue tile the menu used to open
 //      with one row — "Remove from this queue" — which the ✕ on the same card already did.
-//   2. A LONG PRESS DOES NOT ARM THE DRAG. The hold armed a reorder at 200 ms, the browser
-//      fired its own long-press menu at ~500 ms, and the menu opened over a tile that had
-//      been picked up out of its card. One hold, two gestures, both half-done.
-//   3. …AND THE DRAG STILL WORKS. The fix defers the pick-up to the first MOVE, so the
-//      gesture that made the bug has to keep working: hold, then move, and the tile lifts.
+//   2. A TOUCH HOLD ALWAYS ARMS THE DRAG. A later browser `contextmenu` cannot reinterpret
+//      the same hold as the tile menu. The old split created the "hold just right" interval.
+//   3. …AND A STATIONARY HOLD SAVES NOTHING. The tile lifts at 200 ms, but without movement
+//      the release writes no order and opens no second action.
 //   4. A RIGHT-CLICK ON THE POSTER OPENS THE MENU, NOT THE ENTRY SHEET. `pointerdown` fires
 //      for the right button too, so the press its own `pointerup` settled as a TAP — which
 //      opens the sheet, on top of the menu the same click had just opened.
@@ -142,39 +141,55 @@ try {
     + ` return JSON.stringify([r.x + 8, r.y + 8]); })()`,
   ))) as [number, number] | null;
 
-  // ── 1 + 2: the long press opens the MENU and picks nothing up ───────────────────────────
+  // ── 2 + 3: a touch hold is the DRAG, never the later context menu ───────────────────────
   await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid-priority li.tile', { timeout: 30000 });
-  // Let the page SETTLE before the gesture, and do not scroll to the tile: the first one is
-  // already in view at this viewport, and a scroll that is still coming to rest closes the
-  // menu — correctly, because the menu is pinned to where the tile was.
+  // Let the page settle before the gesture. The first tile is already in view.
   await page.waitForTimeout(2500);
 
   const grab = await thumbBox();
   if (!grab) throw new Error('no tile to press');
 
   await pointer('pointerdown', grab[0], grab[1], '#grid-priority li.tile .thumb');
-  // Past the 200 ms hold that arms the gesture, and short of the ~500 ms at which a real
-  // browser fires its long-press `contextmenu`.
+  // Past the 200 ms hold that picks the tile up, and short of the ~500 ms at which a real
+  // browser can fire its long-press `contextmenu`.
   await page.waitForTimeout(350);
 
   const held = await state();
   check(
-    'a held finger does not pick the tile up',
-    held.dragging === 0 && !held.gdrag,
-    'the drag armed during the hold, so the menu would open over a tile lifted out of its card',
+    'a touch hold picks the tile up at the stable arm point',
+    held.dragging === 1 && held.gdrag,
+    'the drag still waited for a just-right movement interval',
   );
 
   await dispatchContextMenu(grab[0], grab[1], '#grid-priority li.tile .thumb');
   await page.waitForTimeout(600);
 
-  const open = await state();
-  check('the long press opens the tile menu', open.menu, `rows: ${JSON.stringify(open.rows)}`);
+  const heldAfterMenuEvent = await state();
   check(
-    'and the tile is still in its card',
-    open.dragging === 0 && !open.gdrag,
-    'a menu over a mid-drag tile is the bug this pins',
+    'the later contextmenu cannot replace the touch drag',
+    !heldAfterMenuEvent.menu && heldAfterMenuEvent.dragging === 1 && heldAfterMenuEvent.gdrag,
+    `menu=${heldAfterMenuEvent.menu} dragging=${heldAfterMenuEvent.dragging}`,
   );
+
+  await pointer('pointerup', grab[0], grab[1]);
+  await page.waitForTimeout(500);
+
+  const released = await state();
+  check(
+    'a stationary held release saves nothing and opens no second action',
+    !released.menu && !released.sheet && writes.length === 0,
+    `menu=${released.menu} sheet=${released.sheet} writes=${writes.length}`,
+  );
+
+  // The menu remains available to a mouse right-click. Open it before the lane-row checks.
+  await page.mouse.move(grab[0], grab[1]);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.up({ button: 'right' });
+  await page.waitForTimeout(600);
+
+  const open = await state();
+  check('a right-click opens the tile menu', open.menu, `rows: ${JSON.stringify(open.rows)}`);
   check(
     'the menu offers the lane moves',
     open.rows.includes('Move to the Random pool'),
@@ -184,16 +199,6 @@ try {
     'and NOT Remove — the ✕ on the card is the remove',
     !open.rows.some((r) => r.toLowerCase().includes('remove')),
     `rows: ${JSON.stringify(open.rows)}`,
-  );
-
-  await pointer('pointerup', grab[0], grab[1]);
-  await page.waitForTimeout(500);
-
-  const lifted = await state();
-  check(
-    'lifting the finger leaves the menu open and opens no entry sheet',
-    lifted.menu && !lifted.sheet,
-    `menu=${lifted.menu} sheet=${lifted.sheet}`,
   );
 
   // ── 5: the lane row writes placement, then the order ────────────────────────────────────
@@ -245,7 +250,7 @@ try {
     `order was ${headOrder ? JSON.stringify(JSON.parse(headOrder.body).keys?.slice(0, 3)) : 'not written'}`,
   );
 
-  // ── 3: hold, then MOVE, and the drag still arms ─────────────────────────────────────────
+  // ── Hold, then MOVE, and the armed drag reorders ────────────────────────────────────────
   await page.goto(`${BASE}/q/${ORDERED_QUEUE}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid-priority li.tile', { timeout: 30000 });
   await page.waitForTimeout(2500);
@@ -262,9 +267,9 @@ try {
 
   const dragging = await state();
   check(
-    'a hold followed by a move still arms the reorder drag',
+    'a hold followed by a move keeps the reorder drag active',
     dragging.dragging === 1 && dragging.gdrag,
-    'the deferred pick-up broke the gesture it was meant to keep',
+    'the touch move cancelled the armed drag',
   );
 
   await pointer('pointerup', grab2[0], grab2[1] + 150);

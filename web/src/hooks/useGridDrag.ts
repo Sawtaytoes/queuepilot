@@ -56,6 +56,8 @@ import {
  */
 
 const DRAG_THRESHOLD = 6
+const AUTO_SCROLL_EDGE = 72
+const AUTO_SCROLL_MAX_STEP = 18
 
 type Press = {
   card: HTMLElement
@@ -63,7 +65,8 @@ type Press = {
   y: number
   type: string
   isDragging: boolean
-  isArmed: boolean
+  hasMoved: boolean
+  pointerId: number
   holdTimer?: ReturnType<typeof setTimeout>
   /** The latest pointer position, read once per frame instead of once per event. */
   at?: { x: number; y: number }
@@ -121,6 +124,15 @@ export function useGridDrag(
       if (!press) return
 
       press.isDragging = true
+      // Keep the pointer routed here after the browser starts moving the page beneath it.
+      // This is especially important while edge scrolling carries the original tile out of
+      // the viewport.
+      try {
+        press.card.setPointerCapture?.(press.pointerId)
+      } catch {
+        // The pointer may have been cancelled in the same frame as the hold timer. The
+        // window listeners still own the gesture, so capture is useful but not required.
+      }
       // BEFORE the dragging class lands: the class lifts the tile (scale/rotate on .thumb) but
       // not its slot, and capturing first keeps the snapshot free of any of the drag's own
       // styling.
@@ -136,6 +148,9 @@ export function useGridDrag(
       if (press?.frame != null)
         cancelAnimationFrame(press.frame)
 
+      if (press?.card.hasPointerCapture?.(press.pointerId))
+        press.card.releasePointerCapture(press.pointerId)
+
       document.body.classList.remove("gdrag")
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
@@ -147,26 +162,18 @@ export function useGridDrag(
     function onMove(e: PointerEvent) {
       if (!press) return
 
+      const isFar =
+        Math.hypot(
+          e.clientX - press.x,
+          e.clientY - press.y,
+        ) > DRAG_THRESHOLD
+
       if (!press.isDragging) {
-        const isFar =
-          Math.hypot(
-            e.clientX - press.x,
-            e.clientY - press.y,
-          ) > DRAG_THRESHOLD
-
         if (press.type === "touch") {
-          // Moved before the long-press armed → it's a scroll, let go.
-          if (!press.isArmed) {
-            if (isFar) endPress()
+          // The hold timer starts a touch drag. Any earlier movement belongs to the page.
+          if (isFar) endPress()
 
-            return
-          }
-
-          // Armed and now moving: THIS is the drag. Held still instead and the long-press
-          // menu takes the press (see `onPointerDown`).
-          if (!isFar) return
-
-          beginDrag()
+          return
         } else if (isFar) {
           beginDrag()
         } else {
@@ -176,6 +183,10 @@ export function useGridDrag(
         if (!press.isDragging) return
       }
 
+      // Ignore normal finger jitter after the tile lifts. This keeps a stationary hold from
+      // mutating the DOM or saving an unchanged order when the pointer wanders by one pixel.
+      if (!press.hasMoved && !isFar) return
+
       e.preventDefault()
 
       // COALESCE to one reposition per animation frame. `pointermove` fires far faster than
@@ -184,14 +195,9 @@ export function useGridDrag(
       // running. The gesture cannot look settled if it is restarted more often than it is
       // drawn, so the handler now only records where the pointer IS and the work happens once
       // per frame.
+      press.hasMoved = true
       press.at = { x: e.clientX, y: e.clientY }
-
-      if (press.frame != null) return
-
-      press.frame = requestAnimationFrame(() => {
-        if (press) press.frame = undefined
-        reposition()
-      })
+      queueReposition()
     }
 
     /**
@@ -342,11 +348,72 @@ export function useGridDrag(
       )
     }
 
+    /**
+     * Scroll the document while the pointer rests near a viewport edge.
+     *
+     * A phone only shows a few cards at once. A drag therefore has to move the page as well
+     * as the tile, or every destination below that first viewport is unreachable. Slot boxes
+     * are viewport-relative, so each actual scroll refreshes them before the next hit test.
+     */
+    const autoScroll = () => {
+      if (!press?.isDragging || !press.at) return false
+
+      const viewport = window.visualViewport
+      const top = viewport?.offsetTop ?? 0
+      const height = viewport?.height ?? window.innerHeight
+      const bottom = top + height
+      const y = press.at.y
+      let delta = 0
+
+      if (y < top + AUTO_SCROLL_EDGE)
+        delta =
+          -AUTO_SCROLL_MAX_STEP *
+          (1 - Math.max(0, y - top) / AUTO_SCROLL_EDGE)
+      else if (y > bottom - AUTO_SCROLL_EDGE)
+        delta =
+          AUTO_SCROLL_MAX_STEP *
+          (1 - Math.max(0, bottom - y) / AUTO_SCROLL_EDGE)
+
+      if (!delta) return false
+
+      const scroller = document.scrollingElement
+      const before = scroller?.scrollTop ?? window.scrollY
+      window.scrollBy(0, delta)
+      const after = scroller?.scrollTop ?? window.scrollY
+
+      if (after === before) return false
+
+      captureSlots()
+
+      return true
+    }
+
+    const queueReposition = () => {
+      if (!press || press.frame != null) return
+
+      press.frame = requestAnimationFrame(() => {
+        if (!press) return
+
+        press.frame = undefined
+        const didScroll = autoScroll()
+        reposition()
+
+        // Continue without another pointermove. The finger is stationary at the viewport
+        // edge while the page and its newly reachable destinations move underneath it.
+        if (didScroll) queueReposition()
+      })
+    }
+
     async function onUp() {
       if (!press) return
 
-      const { card, isDragging, nextSibling, parent } =
-        press
+      const {
+        card,
+        hasMoved,
+        isDragging,
+        nextSibling,
+        parent,
+      } = press
 
       endPress()
 
@@ -371,6 +438,10 @@ export function useGridDrag(
       }
 
       card.classList.remove("dragging")
+
+      // A stationary touch hold only armed the drag. It did not move anything, so it must
+      // not save the existing order or open the tile menu as a second gesture.
+      if (!hasMoved) return
 
       // WHERE IT LANDED, read off the DOM before React is handed it back.
       const landedLane =
@@ -527,10 +598,11 @@ export function useGridDrag(
 
       press = {
         card,
-        isArmed: e.pointerType !== "touch",
+        hasMoved: false,
         isDragging: false,
         nextSibling: card.nextSibling,
         parent: card.parentElement,
+        pointerId: e.pointerId,
         type: e.pointerType,
         x: e.clientX,
         y: e.clientY,
@@ -538,17 +610,15 @@ export function useGridDrag(
       busy.gridPress = true
 
       if (e.pointerType === "touch") {
-        // ARM only — the pick-up waits for the first MOVE.
-        //
-        // `beginDrag()` used to run here, so a finger held still lifted the tile out of its
-        // card at 200 ms. The browser then fires its own long-press `contextmenu` at ~500 ms,
-        // and the tile menu opened on top of a tile that was mid-drag, with the card it came
-        // from left empty behind it. One hold, two gestures, both half-done. Deferring the
-        // pick-up makes the two exclusive: move and it is a drag, stay still and it is the
-        // menu (`onContextMenu` below cancels the press outright).
-        // (decision `2026-08-26-a-long-press-is-the-menu-or-the-drag-never-both`)
+        // A touch hold has ONE meaning on the poster: pick it up. Starting at the arm point
+        // removes the narrow interval between "not armed yet" and the later contextmenu.
+        // Tap still opens the entry sheet because it releases before this timer. The entry
+        // sheet carries the same Play / lane actions the old stationary long press exposed.
+        // (decision `2026-08-29-a-touch-hold-is-the-drag-and-it-scrolls`)
         press.holdTimer = setTimeout(() => {
-          if (press) press.isArmed = true
+          if (!press) return
+
+          beginDrag()
         }, 200)
       }
 
@@ -576,6 +646,15 @@ export function useGridDrag(
     // menu (Save image, Copy image) must not pop over it. A right-click elsewhere on the
     // tile opens OUR menu.
     const onContextMenu = (e: MouseEvent) => {
+      // A browser can synthesize `contextmenu` later in the same touch hold. Once the tile
+      // is armed, suppress that second interpretation and keep the drag alive.
+      if (press?.type === "touch" && press.isDragging) {
+        e.preventDefault()
+        e.stopPropagation()
+
+        return
+      }
+
       if (press) {
         // Put the node back where React last rendered it before dropping the press, the
         // same restore `onUp` does. With the pick-up deferred a still finger is never
