@@ -26,7 +26,7 @@ export type EntryState =
   | "priority"
   | "start"
 
-export type Sort = "queue" | "title" | "weight"
+export type Sort = "queue" | "title" | "recent" | "weight"
 
 export type QueueFilters = {
   text: string
@@ -155,6 +155,7 @@ export const hasOverrides = (it: QueueItem) =>
 export function splitLanes(
   items: QueueItem[],
   setLane: Lane,
+  sort: Sort = "queue",
 ): { priority: QueueItem[]; random: QueueItem[] } {
   const priority: QueueItem[] = []
   const random: QueueItem[] = []
@@ -165,7 +166,14 @@ export function splitLanes(
     else random.push(it)
   }
 
-  return { priority, random: random.sort(byTitle) }
+  // `applyFilters` has already applied an explicit sort to the complete list. Preserve that
+  // stable order inside both lanes. With no explicit sort, Priority keeps playback order and
+  // the pool keeps its long-standing alphabetical lookup order.
+  return {
+    priority,
+    random:
+      sort === "queue" ? random.sort(byTitle) : random,
+  }
 }
 
 /** Which lane ONE entry is in: its own `placement`, else the queue's default. */
@@ -299,6 +307,13 @@ export function applyFilters(
     // then everything else as it sits" rather than an arbitrary reshuffle.
     return [...out].sort(
       (a, b) => (b.weight ?? 1) - (a.weight ?? 1),
+    )
+  }
+  if (f.sort === "recent") {
+    // Newest first. Old entries have no honest timestamp, so they follow every stamped entry
+    // and keep their existing relative order instead of receiving an invented date.
+    return [...out].sort(
+      (a, b) => (b.queuedAt ?? 0) - (a.queuedAt ?? 0),
     )
   }
   return out

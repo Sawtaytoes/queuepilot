@@ -167,6 +167,48 @@ describe("splitLanes", () => {
     expect(splitLanes(plain, "priority").random).toEqual([])
     expect(splitLanes(plain, "random").priority).toEqual([])
   })
+
+  test("an explicit sort is preserved inside both lanes", () => {
+    const recent = [
+      item({
+        key: "old-priority",
+        placement: "priority",
+        queuedAt: 10,
+      }),
+      item({
+        key: "new-pool",
+        placement: "random",
+        queuedAt: 40,
+      }),
+      item({
+        key: "new-priority",
+        placement: "priority",
+        queuedAt: 30,
+      }),
+      item({
+        key: "old-pool",
+        placement: "random",
+        queuedAt: 20,
+      }),
+    ]
+
+    const sorted = applyFilters(recent, {
+      sort: "recent",
+      state: "",
+      text: "",
+      type: "",
+    })
+    const lanes = splitLanes(sorted, "random", "recent")
+
+    expect(lanes.priority.map((it) => it.key)).toEqual([
+      "new-priority",
+      "old-priority",
+    ])
+    expect(lanes.random.map((it) => it.key)).toEqual([
+      "new-pool",
+      "old-pool",
+    ])
+  })
 })
 
 describe("orderAfterLaneMove", () => {
