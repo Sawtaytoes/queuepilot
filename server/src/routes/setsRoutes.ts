@@ -13,6 +13,7 @@ import { normalizeAddAs } from '../kind.js';
 import { mapLimit } from './mapLimit.js';
 import { deleteQueueMembers } from '../store/db/queuePeople.js';
 import { readBody } from './readBody.js';
+import { plexWebUrl } from '../webLinks.js';
 
 /** The set REGISTRY surface: create/edit/delete/reorder a set, and a channel's members. */
 export function setsRoutes(): Hono {
@@ -175,13 +176,17 @@ export function setsRoutes(): Hono {
         return c.json({
           items: keys.map((ratingKey) => ({
             ratingKey, type: null, title: `#${ratingKey}`, year: null, editionTitle: null,
-            show: null, season: null, episode: null,
+            show: null, season: null, episode: null, posterRatingKey: null,
+            sourceTitle: null, webUrl: null,
           })),
         });
       }
       // Bounded like every other Plex fan-out here. A dead key still yields a row (see
       // `plex.itemLabel`), so a deleted library item can be cleared from the panel.
-      const items = await mapLimit(keys, 6, (rk) => plex.itemLabel(rk));
+      const items = await mapLimit(keys, 6, async (rk) => {
+        const item = await plex.itemLabel(rk);
+        return { ...item, webUrl: await plexWebUrl(item.ratingKey) };
+      });
       return c.json({ items });
     } catch (e) {
       return c.json({ error: String(e) }, 500);
