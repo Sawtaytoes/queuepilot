@@ -4,7 +4,7 @@ Status: Accepted
 Date: 2026-08-30
 Type: UI consistency
 Supersedes: None
-Superseded by: None
+Superseded by: [2026-08-31](2026-08-31-search-fields-use-the-large-clear-target.md)
 
 ## Decision
 
