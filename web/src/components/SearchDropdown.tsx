@@ -1,4 +1,4 @@
-import { IconButton } from "@charcuterie/ui"
+import { SearchInput } from "@charcuterie/ui"
 import {
   type ReactNode,
   useCallback,
@@ -8,6 +8,7 @@ import {
 } from "react"
 
 import { setStatus } from "../state/store"
+import { ClearIcon } from "./ClearIcon"
 
 /**
  * The search-as-you-type dropdown, shared by the in-queue add box, the Home
@@ -58,23 +59,6 @@ export type SearchRow = {
   ignoreSelector?: string
   className?: string
 }
-
-const ClearIcon = () => (
-  <svg
-    aria-hidden="true"
-    fill="none"
-    height="18"
-    viewBox="0 0 18 18"
-    width="18"
-  >
-    <path
-      d="m4.5 4.5 9 9m0-9-9 9"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeWidth="2"
-    />
-  </svg>
-)
 
 type Props<T> = {
   inputId: string
@@ -252,51 +236,35 @@ export function SearchDropdown<T>({
 
   return (
     <>
-      <div className="searchinput">
-        <input
-          defaultValue=""
-          id={inputId}
-          onBlur={() => {
-            // NOT an immediate close: a click on a row has to land first, and a
-            // nested menu inside a row needs focus time.
-            setTimeout(() => {
-              const focused = document.activeElement
+      <SearchInput
+        className="searchinput"
+        clearIcon={<ClearIcon />}
+        defaultValue=""
+        id={inputId}
+        isClearVisible={hasInput}
+        onBlur={() => {
+          // NOT an immediate close: a click on a row has to land first, and a
+          // nested menu inside a row needs focus time.
+          setTimeout(() => {
+            const focused = document.activeElement
 
-              // A row's Add-to menu is a Charcuterie `Menu`, and a `Menu` PORTALS its
-              // panel to <body>. So the element that now holds focus is inside the
-              // dropdown on screen and outside it in the DOM, and a containment test
-              // against the list alone reads it as "focus left" — which closed the
-              // results the instant the menu opened, taking the menu with them.
-              const isFocusHeld =
-                listRef.current?.contains(focused) ||
-                focused?.closest('[role="menu"]') != null
+            // A row's Add-to menu is a Charcuterie `Menu`, and a `Menu` PORTALS its
+            // panel to <body>. So the element that now holds focus is inside the
+            // dropdown on screen and outside it in the DOM, and a containment test
+            // against the list alone reads it as "focus left" — which closed the
+            // results the instant the menu opened, taking the menu with them.
+            const isFocusHeld =
+              listRef.current?.contains(focused) ||
+              focused?.closest('[role="menu"]') != null
 
-              if (!isFocusHeld) close()
-            }, 250)
-          }}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          ref={inputRef}
-          type="search"
-        />
-        {hasInput ? (
-          <span className="searchinput-clear">
-            <IconButton
-              appearance="ghost"
-              label="Clear search"
-              onClick={() => {
-                clearInput()
-                inputRef.current?.focus()
-              }}
-              onPointerDown={(event) =>
-                event.preventDefault()
-              }
-            >
-              <ClearIcon />
-            </IconButton>
-          </span>
-        ) : null}
-      </div>
+            if (!isFocusHeld) close()
+          }, 250)
+        }}
+        onKeyDown={onKeyDown}
+        onClear={clearInput}
+        placeholder={placeholder}
+        ref={inputRef}
+      />
       {children}
       <ul
         className={`results${isOpen ? " open" : ""}`}

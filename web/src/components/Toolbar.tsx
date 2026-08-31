@@ -1,5 +1,5 @@
 import type { MenuItem } from "@charcuterie/ui"
-import { Button, Menu } from "@charcuterie/ui"
+import { Button, Menu, SearchInput } from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
 import { asPreQueueStartEntry } from "../lib/preQueueStart"
@@ -24,6 +24,7 @@ import {
   useStore,
 } from "../state/store"
 import { setCollapsed, setFilter, useUi } from "../state/ui"
+import { ClearIcon } from "./ClearIcon"
 import { EditionBadge } from "./EditionBadge"
 import { Modal } from "./Modal"
 import { Poster } from "./Poster"
@@ -334,11 +335,14 @@ export function Toolbar() {
         ></SearchDropdown>
       </div>
 
-      <input
+      <SearchInput
+        className="queue-filter"
+        clearIcon={<ClearIcon />}
         id="qfilter"
         onChange={(e) => setFilter(e.target.value.trim())}
+        onClear={() => setFilter("")}
         placeholder="Filter queues…"
-        type="search"
+        size="sm"
         value={filter}
       />
       {/* Three Charcuterie `Button`s, configured by props. `.ghost` here is Charcuterie's

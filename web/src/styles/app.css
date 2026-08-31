@@ -1092,51 +1092,6 @@ ul.grid .empty {
   flex: 1;
   min-width: min(220px, 100%);
 }
-.searchinput > input[type="search"] {
-  width: 100%;
-  padding-inline-end: 48px;
-}
-/* The browser glyph is a small text-shaped target. SearchDropdown supplies the same
-   action as a labelled Charcuterie IconButton with a full control-sized target. */
-.searchinput
-> input[type="search"]::-webkit-search-cancel-button {
-  appearance: none;
-}
-.searchinput-clear {
-  position: absolute;
-  inset-inline-end: 4px;
-  top: 50%;
-  display: flex;
-  transform: translateY(-50%);
-}
-/* `:not([type="checkbox"])` because this is the ADD-BAR'S SEARCH FIELD, and a descendant
-   selector cannot say so on its own.
-
-   Everything below is text-field styling - a 220px floor, `flex: 1` to eat the row, 11px of
-   padding, a border and a background. It was landing on the "Hide what's already here"
-   checkbox too, which sits in the same bar: a 14px box rendered 28px wide with its own label
-   shoved 37px away, measured. That gap predates the Charcuterie migration (it looked
-   identical on the raw browser checkbox) and survived it, because the box was never the
-   problem - the rule reaching it was.
-
-   Scoped by exclusion rather than by naming `[type="search"]`: the three real targets in this
-   bar are all `search` today, but a future text field here should still be a field, and only
-   a checkbox should be spared. */
-.add input:not([type="checkbox"]) {
-  flex: 1;
-  /* `min(220px, 100%)`, not a flat 220px. The same `.add` block is reused inside the
-     266px `#chfilters` Blocked box and inside the queue view at a 320px width,
-     where a hard 220px floor plus 26px of padding is wider than the space there is —
-     and a `min-width` floor is precisely the thing that turns "a bit tight" into a
-     scrollbar. It still wants 220px wherever 220px exists. */
-  min-width: 0;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-primary);
-  padding: 11px 13px;
-  font-size: 1rem;
-}
 .addpos {
   color: var(--color-content-muted);
   display: flex;
@@ -1944,28 +1899,12 @@ body.queue-view #tools {
   align-items: center;
   min-width: 0;
 }
-.gsearch-wrap input[type="search"] {
-  flex: 1;
-  min-width: 0;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-primary);
-  padding: 9px 12px;
-  font-size: 0.95rem;
-}
 .gsearch-wrap .searchinput {
   min-width: 0;
 }
-#qfilter {
+.queue-filter {
   min-width: 0;
   width: 100%;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-primary);
-  padding: 9px 12px;
-  font-size: 0.95rem;
 }
 @container queue-tools (max-width: 58rem) {
   #tools {
@@ -1980,7 +1919,7 @@ body.queue-view #tools {
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   }
   .gsearch-wrap,
-  #qfilter {
+  .queue-filter {
     grid-column: 1 / -1;
   }
   #collapseall,
@@ -3513,12 +3452,6 @@ body.name-editable #apphead h1 {
 }
 .qtoolbar .qfilter {
   width: 220px;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: 8px;
-  color: var(--color-content-primary);
-  padding: 7px 11px;
-  font-size: 0.92rem;
 }
 .qtoolbar :has(> select) {
   flex: 0 0 auto;
@@ -5059,19 +4992,8 @@ body.rowdragging
   gap: 6px;
   min-width: min(320px, 100%);
 }
-/* A search box, not a picker: it holds free text rather than one of a closed list, so
-   the native input is the right control and the Listbox rule does not reach it. */
 .cfindbox {
-  padding: 8px 10px;
-  border: 1px solid var(--color-border-subtle);
-  border-radius: 8px;
-  background: var(--color-surface-raised);
-  color: var(--color-content-primary);
-  font: inherit;
-}
-.cfindbox:focus-visible {
-  outline: 2px solid var(--color-intent-accent-solid);
-  outline-offset: 1px;
+  width: 100%;
 }
 .cloading {
   display: flex;

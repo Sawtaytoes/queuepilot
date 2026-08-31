@@ -5,6 +5,7 @@ import {
   Button,
   Checkbox,
   EmptyState,
+  SearchInput,
   SegmentedControl,
 } from "@charcuterie/ui"
 import { useRef, useState } from "react"
@@ -12,6 +13,7 @@ import {
   EditionChip,
   TypeBadge,
 } from "../components/badges"
+import { ClearIcon } from "../components/ClearIcon"
 import { EditionBadge } from "../components/EditionBadge"
 import {
   EntryEditor,
@@ -1027,15 +1029,17 @@ export function QueueView({
           ever narrows what is already here, and conflating the two is what made "filter" and
           "search" feel like one broken control. */}
       <div className="qtoolbar" id="qtoolbar">
-        <input
+        <SearchInput
           aria-label="Filter this queue"
           className="qfilter"
+          clearIcon={<ClearIcon />}
           id="qfilter"
           onChange={(e) =>
             view.setFilters({ text: e.target.value })
           }
+          onClear={() => view.setFilters({ text: "" })}
           placeholder="Filter this queue…"
-          type="search"
+          size="sm"
           value={view.filters.text}
         />
         <SelectListbox
