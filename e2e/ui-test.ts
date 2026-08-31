@@ -165,6 +165,9 @@ ok(`filter "anime" → the anime queues, and only those (${JSON.stringify(shown)
   shown.length > 0 && shown.every((id) => id?.includes('anime')));
 const queueFilterClear = page.locator('.queue-filter').getByRole('button', { name: 'Clear search' });
 ok('queue filter exposes a labelled clear icon button', await queueFilterClear.count() === 1);
+ok('queue filter uses the large clear target',
+  await queueFilterClear.evaluate((button) =>
+    button.classList.contains('size-(--control-height-lg)')));
 await queueFilterClear.click();
 ok('queue filter clear button empties and refocuses the field',
   await page.inputValue('#qfilter') === '' && await page.evaluate(() => document.activeElement?.id === 'qfilter'));

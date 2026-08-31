@@ -342,7 +342,7 @@ export function Toolbar() {
         onChange={(e) => setFilter(e.target.value.trim())}
         onClear={() => setFilter("")}
         placeholder="Filter queues…"
-        size="sm"
+        size="lg"
         value={filter}
       />
       {/* Three Charcuterie `Button`s, configured by props. `.ghost` here is Charcuterie's

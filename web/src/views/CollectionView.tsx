@@ -129,6 +129,7 @@ export function CollectionView() {
               onChange={(e) => setQuery(e.target.value)}
               onClear={() => setQuery("")}
               placeholder="Type part of a name"
+              size="lg"
               value={query}
             />
           </label>
