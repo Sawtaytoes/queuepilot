@@ -65,7 +65,7 @@ const pick = (
   )
 
 const START_HINT =
-  "Playback begins here and keeps going automatically. Choose whether this queue keeps its own progress or skips episodes already watched in Plex."
+  "Playback begins here and keeps going automatically. Watch history is controlled by the queue and this entry’s settings."
 
 function unitOf(
   item: { unit?: EntryUnit } | null,
@@ -88,7 +88,6 @@ export function StartModal() {
   const item = entry?.item ?? null
   const isCollection = item?.type === "collection"
   const unit = unitOf(item, vocab)
-  const isQueueHistorySupported = vocab.name === "Plex"
 
   const [note, setNote] = useState("")
   const [children, setChildren] = useState<
@@ -99,9 +98,6 @@ export function StartModal() {
     useState<ShowEpisodes | null>(null)
   const [seasonValue, setSeasonValue] = useState("")
   const [episodeValue, setEpisodeValue] = useState("")
-  const [historyValue, setHistoryValue] = useState<
-    "queue" | "provider"
-  >("queue")
   const [isEpisodeShown, setIsEpisodeShown] =
     useState(false)
   const [isLoadingEpisodes, setIsLoadingEpisodes] =
@@ -221,7 +217,6 @@ export function StartModal() {
     setEpisodeData(null)
     setSeasonValue("")
     setEpisodeValue("")
-    setHistoryValue(item.start?.history ?? "queue")
     setIsEpisodeShown(false)
 
     const run = async () => {
@@ -360,10 +355,6 @@ export function StartModal() {
       }
     }
 
-    if (isQueueHistorySupported && unit === "episode") {
-      start.history = historyValue
-    }
-
     return start.series != null || start.episode != null
       ? start
       : null
@@ -424,33 +415,6 @@ export function StartModal() {
       titleId="startmodal-title"
     >
       <p className="subhint">{t(START_HINT)}</p>
-
-      <label
-        className="field"
-        hidden={!isQueueHistorySupported}
-        id="start-historybox"
-      >
-        Progress
-        <SelectListbox
-          id="start-history"
-          label="Progress"
-          onChange={(value) =>
-            setHistoryValue(value as "queue" | "provider")
-          }
-          options={[
-            {
-              label: "Keep progress in this queue",
-              value: "queue",
-            },
-            {
-              label:
-                "Skip episodes already watched in Plex",
-              value: "provider",
-            },
-          ]}
-          value={historyValue}
-        />
-      </label>
 
       <label
         className="field"

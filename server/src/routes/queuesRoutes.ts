@@ -8,6 +8,7 @@ import { COLLECTION_PREFIX_RE, isLegacyScalarEntry } from '../entryFormat.js';
 import { findDuplicateItem } from '../entryIdentity.js';
 import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import * as finished from '../finished.js';
+import * as mqttc from '../mqttc.js';
 import * as plex from '../plex.js';
 import type { AccountScope } from '../plex.js';
 import * as providerTiles from '../providers/tiles.js';
@@ -17,6 +18,9 @@ import * as sets from '../sets.js';
 import { store } from '../store/index.js';
 import * as queueEntryHistory from '../store/db/queueEntryHistory.js';
 import * as tiles from '../tiles.js';
+import {
+  effectiveWatchHistory, storedEntryWatchHistory, type WatchHistorySource,
+} from '../watchHistory.js';
 import type { ResolvedTile } from '../tiles.js';
 import type { EntryObject, QueueEntry, Start } from '../types.js';
 import { mapLimit } from './mapLimit.js';
@@ -81,7 +85,14 @@ function leadOf(v: EntryObject | null): 'once' | 'always' | null {
  * answered — Plex's tiles.ts or the provider's) plus the per-entry knobs, which are stored on
  * the entry and so are identical whatever resolved it.
  */
-function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
+function queueTile(
+  e: QueueEntry,
+  core: ResolvedTile | ProviderTile,
+  history: {
+    effective: WatchHistorySource;
+    progress: ReturnType<typeof queueEntryHistory.progressFor> | null;
+  } = { effective: 'provider', progress: null },
+) {
   const v = e.value && typeof e.value === 'object' ? e.value : null;
   const itemOrder = normalizeEntryItemOrder(v?.item_order) === 'shuffle' ? 'shuffle' : null;
   // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may stop,
@@ -109,12 +120,19 @@ function queueTile(e: QueueEntry, core: ResolvedTile | ProviderTile) {
     collectionOrder: v && Array.isArray(v.collection_order) ? v.collection_order.map(String) : [],
     queuedAt: v && Number.isFinite(Number(v.queued_at)) ? Number(v.queued_at) : null,
     start: startOf(e),
+    watch_history: storedEntryWatchHistory(e.value),
+    effective_watch_history: history.effective,
+    queue_history_completed_count: history.progress
+      ? [...history.progress.values()].filter((row) => row.isCompleted).length
+      : 0,
     // A finished-but-kept entry (Python tagged it done); the grid greys it and the
     // "Remove all completed" button targets these. False for every plain entry.
     done: Boolean(e.done),
     // The same thing judged LIVE rather than read off the file — see `tagFinishedMovies`.
     // Overwritten there; false here so the field is never absent on a tile.
-    isFinished: false,
+    isFinished: history.effective === 'queue' && core.type === 'movie' && core.ratingKey
+      ? Boolean(history.progress?.get(String(core.ratingKey))?.isCompleted)
+      : false,
     // The opposite prediction — see `isRevivedEntry`.
     isRevived: isRevivedEntry(e, core),
   };
@@ -155,7 +173,8 @@ async function tagFinishedMovies(
 ): Promise<void> {
   const engineReg = routing.loadSets();
   if (!engineReg) return;
-  const movies = rows.filter((r) => r.tile.type === 'movie' && r.tile.ratingKey);
+  const movies = rows.filter((r) => r.tile.type === 'movie' && r.tile.ratingKey
+    && r.tile.effective_watch_history !== 'queue');
   if (!movies.length) return;
 
   const setIds = [...new Set(movies.map((r) => r.setId))];
@@ -192,6 +211,27 @@ async function tagFinishedMovies(
 async function isQueueSet(id: string): Promise<boolean> {
   const s = await sets.getSet(id);
   return Boolean(s && s.source === 'queue');
+}
+
+/** Does this Plex leaf belong to this stored entry? Used to validate manual history writes. */
+async function entryOwnsPlexItem(entry: QueueEntry, itemKey: string): Promise<boolean> {
+  const value = entry.value && typeof entry.value === 'object' ? entry.value : null;
+  const context = await plex.playingContext(itemKey);
+  if (!context) return false;
+  const ratingKey = value?.ratingKey == null ? null : String(value.ratingKey);
+  if (ratingKey && (ratingKey === context.ratingKey || ratingKey === context.showRatingKey)) {
+    return true;
+  }
+  const collection = value?.collection ? String(value.collection).trim() : null;
+  return Boolean(collection && context.collections.includes(collection));
+}
+
+async function historyTarget(setId: string, key: string) {
+  const set = await sets.getSet(setId);
+  if (!set || set.source !== 'queue') return null;
+  const entry = (await queues.listSet(setId)).find((row) => row.key === key) ?? null;
+  if (!entry) return null;
+  return { entry, set, source: effectiveWatchHistory(entry.value, set.watch_history) };
 }
 
 export function queuesRoutes(): Hono {
@@ -348,6 +388,13 @@ export function queuesRoutes(): Hono {
         // (`loadEntries`), so resolving it here would paint a normal poster for a line that
         // never plays — the one genuinely dangerous failure of a per-entry refusal. An
         // unresolved tile is what the grid already paints red.
+        const historySource = effectiveWatchHistory(
+          e.value,
+          s.source === 'queue' ? s.watch_history : 'provider',
+        );
+        const progress = historySource === 'queue'
+          ? queueEntryHistory.progressFor(s.id, e.key)
+          : null;
         const core = isLegacyScalarEntry(e.value)
           ? tiles.unresolvedTile(e.value)
           // The set's SKIP list, built per tile off the registry row the work item already
@@ -355,9 +402,6 @@ export function queuesRoutes(): Hono {
           // (set, entry) pairs and the lists are a handful of keys; the alternative is a
           // second map to keep in step with `scopes`.
           : await (async () => {
-            const progress = startOf(e)?.history === 'queue'
-              ? queueEntryHistory.progressFor(s.id, e.key)
-              : null;
             return tiles.resolveTile(
               s.sections, e.value, startOf(e),
               scopes.get(s.requires_profile || '') ?? {},
@@ -369,7 +413,10 @@ export function queuesRoutes(): Hono {
               progress,
             );
           })();
-        return { setId: s.id, tile: queueTile(e, core) };
+        return {
+          setId: s.id,
+          tile: queueTile(e, core, { effective: historySource, progress }),
+        };
       });
       // What the next scan would call finished, said now — one pass over the flat list, so
       // the watched-history reads and the view-state call are shared across every set.
@@ -688,6 +735,79 @@ export function queuesRoutes(): Hono {
         queueEntryHistory.clearCompleted(set, key);
       }
       return c.json(result);
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // The entry's watch-history source. null/blank means follow the queue default.
+  app.patch('/queues/:set/items/:key/watch-history', async (c) => {
+    const set = c.req.param('set');
+    const key = decodeURIComponent(c.req.param('key'));
+    if (!(await historyTarget(set, key))) return c.json({ error: 'unknown entry' }, 404);
+    const { watch_history: source } = await readBody(c);
+    try {
+      const result = await queues.setWatchHistory(set, key, source);
+      const updated = await historyTarget(set, key);
+      if (updated) await finished.reconcileQueue(set, updated.set.requires_profile || null);
+      await cache.bumpGeneration();
+      return c.json(result);
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // Manual control for a queue-owned ledger: complete one leaf, then let the ordinary
+  // reconcile decide whether that completes the whole entry.
+  app.post('/queues/:set/items/:key/watch-history/completions', async (c) => {
+    const setId = c.req.param('set');
+    const key = decodeURIComponent(c.req.param('key'));
+    const target = await historyTarget(setId, key);
+    if (!target) return c.json({ error: 'unknown entry' }, 404);
+    if (target.source !== 'queue') return c.json({ error: 'entry uses provider history' }, 400);
+    const body = await readBody(c);
+    const itemKey = String(body.item_key ?? '').trim();
+    if (!itemKey || !(await entryOwnsPlexItem(target.entry, itemKey))) {
+      return c.json({ error: 'item does not belong to this entry' }, 400);
+    }
+    queueEntryHistory.markCompleted(setId, key, itemKey);
+    await finished.reconcileQueue(setId, target.set.requires_profile || null);
+    await cache.bumpGeneration();
+    return c.json({ completed: itemKey });
+  });
+
+  app.delete('/queues/:set/items/:key/watch-history/completions/latest', async (c) => {
+    const setId = c.req.param('set');
+    const key = decodeURIComponent(c.req.param('key'));
+    const target = await historyTarget(setId, key);
+    if (!target) return c.json({ error: 'unknown entry' }, 404);
+    if (target.source !== 'queue') return c.json({ error: 'entry uses provider history' }, 400);
+    const undone = queueEntryHistory.undoLatestCompleted(setId, key);
+    if (undone) await queues.clearDone(setId, [key]);
+    await cache.bumpGeneration();
+    return c.json({ undone });
+  });
+
+  // A play started directly in Plex has no QueuePilot attribution. Attach the retained live
+  // item to this entry so its position and Plex completion verdict update the private ledger.
+  app.post('/queues/:set/items/:key/watch-history/track-current', async (c) => {
+    const setId = c.req.param('set');
+    const key = decodeURIComponent(c.req.param('key'));
+    const target = await historyTarget(setId, key);
+    if (!target) return c.json({ error: 'unknown entry' }, 404);
+    if (target.source !== 'queue') return c.json({ error: 'entry uses provider history' }, 400);
+    const now = mqttc.lastNowPlaying();
+    const itemKey = now?.ratingKey ? String(now.ratingKey) : '';
+    if (!itemKey || !['playing', 'paused', 'buffering'].includes(String(now?.state))) {
+      return c.json({ error: 'nothing is playing in Plex' }, 400);
+    }
+    if (!(await entryOwnsPlexItem(target.entry, itemKey))) {
+      return c.json({ error: 'the current Plex item does not belong to this entry' }, 400);
+    }
+    try {
+      return c.json(await finished.adoptQueuePlayback(
+        setId, key, target.set.requires_profile || null, itemKey,
+      ));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

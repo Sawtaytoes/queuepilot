@@ -15,6 +15,7 @@ import {
   leadWindowLabel,
   normalizeAddAs,
 } from "../lib/kind"
+import { isPlayingItem } from "../lib/nowPlaying"
 import {
   hasMemberList,
   startLabel,
@@ -377,6 +378,47 @@ export const setEntryBatchStop = (
     },
   )
 
+export const setEntryWatchHistory = (
+  setId: string,
+  item: QueueItem,
+  value: string,
+) =>
+  patchEntry(
+    setId,
+    item,
+    "watch-history",
+    { watch_history: value },
+    (hit) => {
+      hit.watch_history =
+        value === "provider" || value === "queue"
+          ? value
+          : null
+      const queueDefault =
+        getState().reg?.sets.find((s) => s.id === setId)
+          ?.watch_history ?? "provider"
+      hit.effective_watch_history =
+        hit.watch_history ?? queueDefault
+    },
+  )
+
+async function changeQueueHistory(
+  method: "POST" | "DELETE",
+  path: string,
+  body?: Record<string, unknown>,
+) {
+  setStatus("Saving watch history…")
+  try {
+    await api(method, path, body)
+    setStatus("Watch history updated", "ok")
+    refreshData()
+  } catch (e) {
+    setStatus(
+      `Watch history failed: ${(e as Error).message}`,
+      "err",
+    )
+  }
+}
+
 /**
  * The settings panel for ONE entry.
  *
@@ -399,7 +441,7 @@ export function EntryEditor({
 }) {
   // Re-read from the store every render: the panel stays correct while an SSE update, another
   // device, or the bulk bar changes this entry underneath it.
-  const { data, reg } = useStore()
+  const { data, now, reg } = useStore()
   const item = setId
     ? data?.sets[setId]?.items.find(
         (it) => it.key === itemKey,
@@ -475,6 +517,17 @@ export function EntryEditor({
   // already fixed: a Shield, a Plex Dash and a phone for a manga chapter.
   const isPull = isPullSet(setInfo)
   const verb = vocab.verb
+  const queueHistoryDefault =
+    setInfo?.watch_history ?? "provider"
+  const effectiveHistory =
+    item.effective_watch_history ??
+    item.watch_history ??
+    queueHistoryDefault
+  const historyItemKey =
+    item.type === "movie"
+      ? item.ratingKey
+      : item.nextEp?.ratingKey
+  const isCurrentPlexItem = isPlayingItem(now, item)
 
   return (
     <Modal
@@ -839,6 +892,96 @@ export function EntryEditor({
                 vocab,
               )}
             </span>
+          </div>
+        ) : null}
+
+        {vocab.name === "Plex" ? (
+          <div className="field">
+            <span className="fieldlabel">
+              Watch history
+            </span>
+            <SelectListbox
+              label="Watch history for this entry"
+              onChange={(value) =>
+                void setEntryWatchHistory(
+                  setId,
+                  item,
+                  value,
+                )
+              }
+              options={[
+                {
+                  label: `Follow the queue (${queueHistoryDefault === "queue" ? "QueuePilot" : "Plex"})`,
+                  value: "",
+                },
+                {
+                  label: "Use Plex watch history",
+                  value: "provider",
+                },
+                {
+                  label: "Keep separate QueuePilot history",
+                  value: "queue",
+                },
+              ]}
+              value={item.watch_history || ""}
+            />
+            <span className="fieldhint">
+              Plex history notices a play from any Plex
+              client. Separate history advances only for
+              this entry in this queue and does not change
+              the Plex profile.
+            </span>
+            {effectiveHistory === "queue" ? (
+              <div className="fieldrow">
+                {isCurrentPlexItem ? (
+                  <Button
+                    appearance="outline"
+                    intent="accent"
+                    onClick={() =>
+                      void changeQueueHistory(
+                        "POST",
+                        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/watch-history/track-current`,
+                      )
+                    }
+                    size="sm"
+                  >
+                    Track the current Plex play here
+                  </Button>
+                ) : null}
+                {historyItemKey ? (
+                  <Button
+                    appearance="outline"
+                    intent="neutral"
+                    onClick={() =>
+                      void changeQueueHistory(
+                        "POST",
+                        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/watch-history/completions`,
+                        { item_key: historyItemKey },
+                      )
+                    }
+                    size="sm"
+                  >
+                    Mark next item completed
+                  </Button>
+                ) : null}
+                {(item.queue_history_completed_count ?? 0) >
+                0 ? (
+                  <Button
+                    appearance="outline"
+                    intent="neutral"
+                    onClick={() =>
+                      void changeQueueHistory(
+                        "DELETE",
+                        `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/watch-history/completions/latest`,
+                      )
+                    }
+                    size="sm"
+                  >
+                    Undo latest completion
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         ) : null}
 

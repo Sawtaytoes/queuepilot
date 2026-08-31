@@ -520,6 +520,24 @@ Three things follow, and each has cost something already:
 - **A fixture with a bare string fails the gate that reads it.** They were all rewritten; a new
   one must be written as a mapping.
 
+### Watch history is queue-defaulted and entry-overridden
+
+**Provider history is the product default.** A curated set may store
+`watch_history: queue`; an entry may store `watch_history: provider|queue`, and absence on the
+entry means follow the set. The first implementation nested this choice under `start.history`;
+that location is read-compatible only. A related entry write promotes it to the top level, and a
+new writer never puts it back. Do not tie the source to a start point again: movies have no start
+picker, and clearing a floor must not change an entry's progress source
+([decision](docs/decisions/2026-08-30-provider-watch-history-is-the-default-and-entries-can-opt-out.md)).
+
+Queue-owned progress is keyed by `(set_id, entry_key, item_key)` in `queue_entry_history`. It
+owns both completion and position. Plex still JUDGES whether a play completed: capture the play
+count before handoff or manual adoption, then compare it after the item leaves the player. A
+provider view offset must never revive a queue-owned completed item, and a queue position must
+win when the random pool chooses its in-progress head. A play started directly in Plex has no
+queue identity; the entry sheet's **Track the current Plex play here** action supplies it. The
+same sheet can mark the next item complete and undo the latest completion.
+
 The one-shot upgrade is `server/src/tools/migrate-entry-objects.ts` — dry run by default, backup
 first, idempotent. **It runs BEFORE the new code deploys**, never after.
 
