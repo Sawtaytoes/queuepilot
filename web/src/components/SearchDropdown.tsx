@@ -264,6 +264,7 @@ export function SearchDropdown<T>({
         onClear={clearInput}
         placeholder={placeholder}
         ref={inputRef}
+        size="lg"
       />
       {children}
       <ul
