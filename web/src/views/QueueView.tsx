@@ -1039,7 +1039,7 @@ export function QueueView({
           }
           onClear={() => view.setFilters({ text: "" })}
           placeholder="Filter this queue…"
-          size="sm"
+          size="lg"
           value={view.filters.text}
         />
         <SelectListbox
