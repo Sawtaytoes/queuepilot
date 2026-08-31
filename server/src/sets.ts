@@ -42,6 +42,7 @@ import type {
   Start,
   WritableProviderBlock,
 } from './types.js';
+import { normalizeWatchHistory } from './watchHistory.js';
 
 /**
  * One binding AS READ OFF THE YAML — what `normalizeBinding()` accepts, from either a
@@ -92,6 +93,7 @@ interface RawSet extends RawBinding {
   keep_completed?: boolean;
   reel?: boolean;
   remove_completed_after?: string | null;
+  watch_history?: unknown;
   batch_stops_at?: string | null;
   /** Anything else the file carries, verbatim — and what makes a RawSet usable as
    * `providers/blocks.ts`'s `BlockSourceCfg` without a cast. */
@@ -414,7 +416,8 @@ function toWeights(v: unknown): Record<string, number> {
  * `SetRegistryCommon`, which it declares but does not export, so it is reconstructed here
  * from the queue arm rather than duplicated.
  */
-type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel' | 'remove_completed_after' | 'batch_stops_at' | 'episodes' | 'volumes'>;
+type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel'
+  | 'remove_completed_after' | 'batch_stops_at' | 'episodes' | 'volumes' | 'watch_history'>;
 
 function normalize(ent: RawSet): SetRegistryEntry | null {
   const id = String(ent.id || '').trim();
@@ -584,6 +587,7 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
         ? String(ent.promote_window).trim()
         : null,
     keep_completed: Boolean(ent.keep_completed || ent.reel),
+    watch_history: normalizeWatchHistory(ent.watch_history) ?? 'provider',
     reel: Boolean(ent.reel),
     remove_completed_after:
       ent.remove_completed_after != null && String(ent.remove_completed_after).trim()
@@ -879,6 +883,7 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       // engine treats reel as keep_completed regardless. Prefer an explicit true so a
       // playlist-without-reel writes cleanly without a phantom reel key.
       if (body.keep_completed || body.reel) curated.keep_completed = true;
+      if (normalizeWatchHistory(body.watch_history) === 'queue') curated.watch_history = 'queue';
       const rca = body.remove_completed_after == null ? '' : String(body.remove_completed_after).trim();
       if (rca && !['0', 'never', 'off', 'none', 'disabled'].includes(rca.toLowerCase())) {
         curated.remove_completed_after = rca;
@@ -937,7 +942,7 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // Picks-only lane default + lead cooldown (rejected below on rotation).
       'add_as', 'promote_window',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
-      'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at',
+      'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at', 'watch_history',
       // The items this queue never plays. Queue-only (rejected below on rotation, where
       // `blocklist` is the same feature under the name the pool editor already uses).
       'skipped',
@@ -1038,6 +1043,16 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         if (k === 'reel' && !node.get('keep_completed')) {
           setKeepingComment(node, 'keep_completed', doc.createNode(true));
         }
+        continue;
+      }
+      if (k === 'watch_history') {
+        if (isRotation) throw new Error('watch_history is only valid on curated queues');
+        const source = normalizeWatchHistory(v);
+        if (!source || source === 'provider') {
+          node.delete('watch_history');
+          continue;
+        }
+        setKeepingComment(node, 'watch_history', doc.createNode(source));
         continue;
       }
       if (k === 'remove_completed_after') {

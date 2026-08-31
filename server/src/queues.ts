@@ -16,6 +16,7 @@ import * as promote from './promote.js';
 import * as sets from './sets.js';
 import { toEntryObject } from './entryFormat.js';
 import { normalizeEntryItemOrder } from './entryItemOrder.js';
+import { normalizeWatchHistory } from './watchHistory.js';
 import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
 
 /**
@@ -808,10 +809,42 @@ export async function setStart(
 ): Promise<{ ok: true; start: Start | null } | { ok: false }> {
   const s = normalizeStart(start);
   const ok = await rewriteEntry(setName, key, (e) => {
-    if (s) e.extras.start = s;
+    // Promote the first model's `start.history` to the entry. History is independent of the
+    // floor now, so clearing or moving a start must not silently change its source.
+    const source = normalizeWatchHistory(s?.history)
+      ?? normalizeWatchHistory(e.extras.start?.history);
+    if (source && !normalizeWatchHistory(e.extras.watch_history)) {
+      e.extras.watch_history = source;
+    }
+    if (s) {
+      const next = { ...s };
+      delete next.history;
+      e.extras.start = next;
+    }
     else delete e.extras.start;
   });
   return ok ? { ok: true, start: s } : { ok: false };
+}
+
+/** Set an entry's history source, or clear it so the entry follows its queue. */
+export async function setWatchHistory(
+  setName: string,
+  key: string,
+  value: unknown,
+): Promise<{ ok: true; watch_history: 'provider' | 'queue' | null } | { ok: false }> {
+  const source = normalizeWatchHistory(value);
+  const ok = await rewriteEntry(setName, key, (e) => {
+    if (source) e.extras.watch_history = source;
+    else delete e.extras.watch_history;
+    // One source of truth after this entry is edited. The compatibility read remains for
+    // untouched rows, but a new writer never leaves the old nested override behind.
+    if (e.extras.start?.history) {
+      const next = { ...e.extras.start };
+      delete next.history;
+      e.extras.start = next;
+    }
+  });
+  return ok ? { ok: true, watch_history: source } : { ok: false };
 }
 
 /** Set a collection entry's member order. An empty list restores Plex order. */

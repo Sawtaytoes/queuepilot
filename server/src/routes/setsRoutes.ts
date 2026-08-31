@@ -3,6 +3,7 @@ import * as cache from '../cache.js';
 import { ROTATION_LENGTH, ROTATION_LENGTH_MAX, TOPUP_AT } from '../env.js';
 import { toWeight } from '../engine/weight.js';
 import { errMessage } from '../errors.js';
+import * as finished from '../finished.js';
 import { fileSetIntoGroup } from '../groups.js';
 import * as plex from '../plex.js';
 import * as providerTiles from '../providers/tiles.js';
@@ -111,6 +112,10 @@ export function setsRoutes(): Hono {
         }
       }
       const out = await sets.updateSet(id, body);
+      if ('watch_history' in body) {
+        const updated = await sets.getSet(id);
+        await finished.reconcileQueue(id, updated?.requires_profile || null);
+      }
       // Config mutation → cache invalidation (B3.3), cheapest useful thing: bump the generation
       // so open browsers' /api/queues ETags bust, and if the libraries a set draws from changed,
       // drop those section listings so the next read reflects the new pool.

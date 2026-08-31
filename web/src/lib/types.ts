@@ -169,6 +169,12 @@ export type QueueItem = {
   /** Epoch seconds when this entry joined this queue. Null on entries created before stamps. */
   queuedAt?: number | null
   start: StartPoint | null
+  /** Stored entry override; null means follow the queue. */
+  watch_history?: "provider" | "queue" | null
+  /** Entry override resolved against the queue default. */
+  effective_watch_history?: "provider" | "queue"
+  /** Queue-owned completed leaves, for the manual Undo control. */
+  queue_history_completed_count?: number
   /** Custom collection member ratingKeys. Empty means follow Plex order. */
   collectionOrder?: string[]
   done: boolean
@@ -374,6 +380,8 @@ export type RegistrySet = {
    * Effective value from the server (legacy movies → priority, anime → random).
    */
   add_as?: "priority" | "random"
+  /** Effective default for entries in this queue. */
+  watch_history?: "provider" | "queue"
   /** Default lead cooldown (`24h`, …). Picks only. */
   promote_window?: string | null
   source: "queue" | "rotation" | string
