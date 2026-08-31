@@ -73,3 +73,18 @@ export function clearCompleted(setId: string, entryKey: string): number {
   ).run({ set_id: setId, entry_key: entryKey });
   return Number(result.changes);
 }
+
+/** Undo the most recent manual/observed completion for one entry. Partial positions stay. */
+export function undoLatestCompleted(setId: string, entryKey: string): string | null {
+  const row = prepareChecked<{ item_key: string }>(bookOfRecord(),
+    `SELECT item_key FROM queue_entry_history
+     WHERE set_id = :set_id AND entry_key = :entry_key AND is_completed = 1
+     ORDER BY completed_at DESC, item_key DESC LIMIT 1`)
+    .get({ set_id: setId, entry_key: entryKey });
+  if (!row) return null;
+  prepareChecked(bookOfRecord(),
+    `DELETE FROM queue_entry_history
+     WHERE set_id = :set_id AND entry_key = :entry_key AND item_key = :item_key`)
+    .run({ set_id: setId, entry_key: entryKey, item_key: row.item_key });
+  return String(row.item_key);
+}

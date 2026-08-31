@@ -2,15 +2,36 @@ import { describe, expect, it } from 'vitest';
 
 import { nowPlayingMs, providerProgressVerdict } from './finished.js';
 import { normalizeStart } from './queues.js';
+import { effectiveWatchHistory, storedEntryWatchHistory } from './watchHistory.js';
 
 describe('queue-owned progress', () => {
-  it('stores queue history as part of a manual start point', () => {
+  it('keeps reading the first model where history lived inside a manual start', () => {
     expect(normalizeStart({ season: 1, episode: 1, history: 'queue' })).toEqual({
       season: 1, episode: 1, history: 'queue',
     });
     expect(normalizeStart({ season: 1, episode: 1, history: 'provider' })).toEqual({
       season: 1, episode: 1, history: 'provider',
     });
+  });
+
+  it('defaults to provider history and lets the queue reverse the default', () => {
+    expect(effectiveWatchHistory({ ratingKey: '1' }, null)).toBe('provider');
+    expect(effectiveWatchHistory({ ratingKey: '1' }, 'queue')).toBe('queue');
+  });
+
+  it('lets the entry override either queue default independently of its start', () => {
+    expect(effectiveWatchHistory(
+      { ratingKey: '1', watch_history: 'queue' },
+      'provider',
+    )).toBe('queue');
+    expect(effectiveWatchHistory(
+      { ratingKey: '1', watch_history: 'provider' },
+      'queue',
+    )).toBe('provider');
+    expect(storedEntryWatchHistory({
+      ratingKey: '1',
+      start: { season: 1, episode: 2, history: 'queue' },
+    })).toBe('queue');
   });
 
   it('does not accept an unknown history mode', () => {

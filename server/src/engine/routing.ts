@@ -12,6 +12,7 @@ import { SEC_MOVIES } from '../env.js';
 import { store } from '../store/index.js';
 import { setForProfile } from '../profiles.js';
 import { errMessage, isNodeError } from '../errors.js';
+import { normalizeWatchHistory } from '../watchHistory.js';
 import type {
   EngineBinding, MemberValue, RoutingQueueCfg, RoutingRegistry, RoutingRotationCfg, RoutingSetCfg,
   Start,
@@ -71,6 +72,7 @@ type RawSetEntry = BindingSource & {
   audio_language?: unknown;
   max_items?: unknown;
   providers?: unknown;
+  watch_history?: unknown;
 };
 
 /**
@@ -228,6 +230,7 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         // queue. reel implies keep_completed. Both gate next_queue's D4 mark-done persistence.
         reel: Boolean(ent.reel),
         keep_completed: Boolean(ent.keep_completed || ent.reel),
+        watch_history: normalizeWatchHistory(ent.watch_history) ?? 'provider',
       };
     }
     cfg.label = (ent.label || sid) as string;

@@ -99,6 +99,9 @@ export function SetModal() {
   const [isKeepCompleted, setIsKeepCompleted] =
     useState(false)
   const [isReel, setIsReel] = useState(false)
+  const [watchHistory, setWatchHistory] = useState<
+    "provider" | "queue"
+  >("provider")
   const [removeCompletedAfter, setRemoveCompletedAfter] =
     useState("")
   /**
@@ -196,6 +199,7 @@ export function SetModal() {
         : false,
     )
     setIsReel(editing ? Boolean(editing.reel) : false)
+    setWatchHistory(editing?.watch_history ?? "provider")
     setBatchStopsAt(
       editing ? editing.batch_stops_at || "none" : "none",
     )
@@ -393,6 +397,7 @@ export function SetModal() {
         : requiresProfile,
       keep_completed: isKeepCompleted || isReel,
       reel: isReel,
+      watch_history: watchHistory,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
       // Empty string drops the key and falls back to the 24h product default; `never`/`0`
@@ -733,6 +738,49 @@ export function SetModal() {
           can be collapsed by hand; and storage stays a list, so nothing migrates. */}
       <fieldset className="field flags" id="set-flags">
         <legend>Playback &amp; completion</legend>
+        {hasPlexSource ? (
+          <>
+            <label className="field">
+              Watch history
+              <SelectListbox
+                id="set-watch-history"
+                key={`${modalKey}-watch-history`}
+                label="Default watch history"
+                onChange={(value) =>
+                  setWatchHistory(
+                    value === "queue"
+                      ? "queue"
+                      : "provider",
+                  )
+                }
+                options={[
+                  {
+                    label:
+                      "Use Plex watch history (default)",
+                    value: "provider",
+                  },
+                  {
+                    label:
+                      "Keep separate QueuePilot history",
+                    value: "queue",
+                  },
+                ]}
+                value={watchHistory}
+              />
+            </label>
+            <p
+              className="subhint"
+              id="set-watch-history-hint"
+            >
+              Plex is the safe default: a play started in
+              Plex, on another client, or while QueuePilot
+              is unavailable still counts. Use separate
+              history only when this queue must advance
+              independently of the Plex profile. Each entry
+              can override this default.
+            </p>
+          </>
+        ) : null}
         {/* PLAYBACK LENGTH. Counted in ENTRIES here and not items, which is the one place the
             unit differs — a rule-based pool has no entries to count. It has to be: a show
             entry's batch is already the control right below this one, so counting items would

@@ -34,6 +34,7 @@ import { store } from '../store/index.js';
 import { legacyEntryMessage } from '../entryFormat.js';
 import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import { isNodeError } from '../errors.js';
+import { normalizeWatchHistory } from '../watchHistory.js';
 import type { Rng } from './weight.js';
 import type { PlexClient, PlexMetadata, Start } from '../types.js';
 
@@ -91,6 +92,8 @@ export type ResolveCfg = {
   length?: unknown;
   /** Legacy spelling of `length: infinite`; read, never written. */
   refill?: unknown;
+  /** The queue's default history source. Absent means provider. */
+  watch_history?: unknown;
   source?: unknown;
   behavior?: unknown;
   mode?: unknown;
@@ -104,6 +107,7 @@ type RawEntryObject = {
   episodes?: unknown;
   item_order?: unknown;
   start?: unknown;
+  watch_history?: unknown;
   weight?: unknown;
   done?: unknown;
   /** Epoch seconds, written by `markDone` beside `done: true`; absent on a hand-marked entry. */
@@ -144,6 +148,8 @@ export interface EntryDescriptor {
   /** Item order inside this show or Collection. `shuffle` includes watched items. */
   itemOrder: 'in-order' | 'shuffle';
   start: Start | null;
+  /** Per-entry override. `start.history` remains the compatibility read. */
+  watchHistory: 'provider' | 'queue' | null;
   /** Custom collection member order. Empty means follow Plex. */
   collectionOrder: string[];
   weight: number;
@@ -356,6 +362,8 @@ export function describe(entry: unknown): EntryDescriptor {
       lead: entry.lead ?? null,
       promoteWindow: entry.promote_window ?? null,
       start: (entry.start ?? null) as Start | null,
+      watchHistory: normalizeWatchHistory(entry.watch_history)
+        ?? normalizeWatchHistory((entry.start as Start | null | undefined)?.history),
       collectionOrder: Array.isArray(entry.collection_order)
         ? [...new Set(entry.collection_order.map(String).filter(Boolean))]
         : [],
@@ -376,6 +384,7 @@ export function describe(entry: unknown): EntryDescriptor {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
+      watchHistory: null,
       itemOrder: 'in-order',
       collectionOrder: [],
       placement: null, lead: null, promoteWindow: null,
@@ -388,6 +397,7 @@ export function describe(entry: unknown): EntryDescriptor {
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
     collection: coll, episodes: null, batch_stops_at: null, start: null, collectionOrder: [],
+    watchHistory: null,
     itemOrder: 'in-order',
     placement: null, lead: null, promoteWindow: null, weight: 1, done: false,
     doneAt: null, raw: entry, legacy: true,
@@ -918,7 +928,12 @@ export async function resolveMember(
     // `skipped` exists to avoid. The tile agrees: a movie has no next-up leaf, so the grid
     // offers Remove there and Skip only where there is an item inside a member.
     let keepMovie = !watched.has(rk);
-    if (!keepMovie && resume) keepMovie = inProgress(...await itemViewState(client, rk, token));
+    if (!keepMovie && resume) {
+      const own = progress?.get(String(rk));
+      keepMovie = progress
+        ? Boolean(own && !own.isCompleted && own.positionMs > 0)
+        : inProgress(...await itemViewState(client, rk, token));
+    }
     const items: ResolvedItem[] = keepMovie
       // `show: null` is kept LITERALLY — the curated-parity oracle compares this JSON, and
       // `undefined` would drop the key entirely. The cast is only how `PlexPlayItem`'s
@@ -932,7 +947,9 @@ export async function resolveMember(
   let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg, resume), start);
   if (!isShuffled) {
     eps = eps.filter((e) => !watched.has(e.ratingKey)
-      || (resume && inProgress(e.viewOffset, e.viewCount)));
+      || (resume && (progress
+        ? Boolean(progress.get(String(e.ratingKey))?.positionMs)
+        : inProgress(e.viewOffset, e.viewCount))));
   }
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE
   // the batch cap — so skipping E5 makes an `episodes: 2` entry queue E6 + E7, not E6 alone.
@@ -1112,7 +1129,8 @@ export async function nextQueue(
   let remaining = 0;
   const batches: Batch[] = [];
   for (const desc of entries) {
-    const isOwnHistory = desc.start?.history === 'queue';
+    const isOwnHistory = (desc.watchHistory ?? normalizeWatchHistory(cfg.watch_history)
+      ?? 'provider') === 'queue';
     const progress = isOwnHistory && desc.key && ownProgress
       ? ownProgress(desc.key)
       : null;
@@ -1199,7 +1217,8 @@ export async function nextQueue(
 
   const leadsInProgress = (b: Batch): boolean => {
     const it = b.items.length ? b.items[0] : null;
-    return Boolean(it && inProgress(it.viewOffset, it.viewCount));
+    return Boolean(it && ((it.queueResumeOffset ?? 0) > 0
+      || inProgress(it.viewOffset, it.viewCount)));
   };
 
   // ── THE TWO LANES ─────────────────────────────────────────────────────────────────────

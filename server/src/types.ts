@@ -145,8 +145,7 @@ export interface Start {
   series?: string;
   season?: number;
   episode?: number;
-  /** `queue` uses this queue entry's private completion ledger. Absent/`provider` keeps the
-   * historical behavior: skip anything Plex/Kavita already marks complete. */
+  /** Legacy location of the entry's history override. New writes use EntryExtras.watch_history. */
   history?: 'queue' | 'provider';
 }
 
@@ -380,6 +379,8 @@ interface SetRegistryCommon {
 /** A curated queue as the web API reports it (`source: 'queue'`). */
 export interface QueueSet extends SetRegistryCommon {
   source: 'queue';
+  /** Effective history default. Absent on disk is reported as provider. */
+  watch_history: 'provider' | 'queue';
   /** Never mark entries done (a non-consuming / playlist queue). `reel` implies it, and
    * normalize() reports both so the UI prefill matches the engine. */
   keep_completed: boolean;
@@ -591,6 +592,8 @@ export interface RoutingQueueCfg extends RoutingSetCfgCommon {
   item_sections: [];
   reel: boolean;
   keep_completed: boolean;
+  /** Effective queue default. Absent on disk is normalized to provider. */
+  watch_history: 'provider' | 'queue';
   /**
    * The ratingKeys this queue never plays — a rotation's `blocklist`, for a curated set.
    * Always a list (possibly empty), like `blocklist` and unlike the nullable ratings caps.
@@ -660,6 +663,8 @@ export interface EntryExtras {
   /** Slots per round when the set is randomized. */
   weight?: number;
   start?: Start;
+  /** Per-entry history override. Absent means follow the queue's watch_history default. */
+  watch_history?: 'provider' | 'queue';
   /** Written only for 'member'/'season'; "none" DROPS the key. */
   batch_stops_at?: string;
   /** The Python service's keep-and-tag marker for a finished entry. */

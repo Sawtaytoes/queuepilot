@@ -243,6 +243,13 @@ interface OwnedQueueItem {
   queueProviderViewCount?: number;
 }
 
+interface AdoptedQueuePlay extends OwnedQueueItem {
+  setName: string;
+  profileTitle: string | null;
+}
+
+let adoptedQueuePlay: AdoptedQueuePlay | null = null;
+
 export function providerProgressVerdict(
   initialViewCount: unknown,
   providerViewCount: unknown,
@@ -299,6 +306,42 @@ async function finalizeQueueProgress(
   }
 }
 
+/**
+ * Attach a Plex play that QueuePilot did not start to one queue-owned entry. The retained
+ * now-playing feed supplies the live position; Plex still supplies the completion verdict.
+ */
+export async function adoptQueuePlayback(
+  setName: string,
+  entryKey: string,
+  profileTitle: string | null,
+  ratingKey: string,
+): Promise<{ tracking: true; ratingKey: string }> {
+  const cfg = routing.loadSets()?.sets[setName];
+  if (!cfg) throw new Error(`unknown set ${setName}`);
+  const binding = routing.bindingFor(cfg, profileTitle);
+  const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+  const token = await provider.profileToken!(binding.user_uuid);
+  const mc = await liveClient().container(`/library/metadata/${ratingKey}`, token);
+  const md = mc.Metadata?.[0];
+  if (!md) throw new Error('Plex returned no item metadata');
+  adoptedQueuePlay = {
+    setName,
+    profileTitle,
+    ratingKey,
+    queueEntryKey: entryKey,
+    queueOwnHistory: true,
+    queueProviderViewCount: Math.max(0, Number(md.viewCount) || 0),
+  };
+  const now = mqttc.lastNowPlaying();
+  const positionMs = nowPlayingMs(now?.position);
+  if (positionMs > 0) {
+    queueEntryHistory.savePosition(
+      setName, entryKey, ratingKey, positionMs, nowPlayingMs(now?.duration),
+    );
+  }
+  return { tracking: true, ratingKey };
+}
+
 export function watchPlaybackEnd(): void {
   let wasOn: string | null = null;
   let previous: NowPlaying | null = null;
@@ -307,11 +350,14 @@ export function watchPlaybackEnd(): void {
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
     const activeSet = SESSION.set;
     const active = nowRk ? SESSION.queue.find((item) => item.ratingKey === nowRk) : null;
-    if (activeSet && active?.queueOwnHistory && active.queueEntryKey) {
+    const adopted = nowRk && adoptedQueuePlay?.ratingKey === nowRk ? adoptedQueuePlay : null;
+    const trackedSet = adopted?.setName ?? activeSet;
+    const tracked = adopted ?? active;
+    if (trackedSet && tracked?.queueOwnHistory && tracked.queueEntryKey) {
       const positionMs = nowPlayingMs(now?.position);
       if (positionMs > 0) {
         queueEntryHistory.savePosition(
-          activeSet, active.queueEntryKey, nowRk!, positionMs, nowPlayingMs(now?.duration),
+          trackedSet, tracked.queueEntryKey, nowRk!, positionMs, nowPlayingMs(now?.duration),
         );
       }
     }
@@ -324,17 +370,19 @@ export function watchPlaybackEnd(): void {
     previous = nowRk ? now : null;
     if (isIdle) announceFinished();
     if (!ended) return;
+    const manual = adoptedQueuePlay?.ratingKey === String(ended) ? adoptedQueuePlay : null;
     const state = mqttc.lastState();
-    const setName = state && state.set ? String(state.set) : null;
+    const setName = manual?.setName ?? (state && state.set ? String(state.set) : null);
     if (!setName) return;
 
-    const queued = SESSION.queue.find((item) => item.ratingKey === String(ended));
-    const profile = state && state.profile ? String(state.profile) : null;
+    const queued = manual ?? SESSION.queue.find((item) => item.ratingKey === String(ended));
+    const profile = manual?.profileTitle ?? (state && state.profile ? String(state.profile) : null);
     if (queued?.queueOwnHistory) {
       setTimeout(() => {
         void finalizeQueueProgress(setName, profile, queued, nowPlayingMs(endedNow?.duration));
       }, RECONCILE_DELAY_MS);
     }
+    if (manual) adoptedQueuePlay = null;
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       void reconcileQueue(setName, profile);
