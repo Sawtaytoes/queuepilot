@@ -3,10 +3,11 @@ import {
   Button,
   Card,
   EmptyState,
+  SearchInput,
   Spinner,
 } from "@charcuterie/ui"
 import { useEffect, useState } from "react"
-
+import { ClearIcon } from "../components/ClearIcon"
 import { MarkPlayed } from "../components/MarkPlayed"
 import { Poster } from "../components/Poster"
 import { api } from "../lib/api"
@@ -120,13 +121,14 @@ export function CollectionView() {
             htmlFor="collection-search"
           >
             <span className="tfilterlbl">Find a game</span>
-            <input
+            <SearchInput
               autoComplete="off"
               className="cfindbox"
+              clearIcon={<ClearIcon />}
               id="collection-search"
               onChange={(e) => setQuery(e.target.value)}
+              onClear={() => setQuery("")}
               placeholder="Type part of a name"
-              type="search"
               value={query}
             />
           </label>

@@ -163,7 +163,11 @@ const shown = await page.$$eval('.shelf', (els) =>
   els.filter((e) => !(e as HTMLElement).hidden).map((e) => (e as HTMLElement).dataset.set));
 ok(`filter "anime" → the anime queues, and only those (${JSON.stringify(shown)})`,
   shown.length > 0 && shown.every((id) => id?.includes('anime')));
-await page.fill('#qfilter', '');
+const queueFilterClear = page.locator('.queue-filter').getByRole('button', { name: 'Clear search' });
+ok('queue filter exposes a labelled clear icon button', await queueFilterClear.count() === 1);
+await queueFilterClear.click();
+ok('queue filter clear button empties and refocuses the field',
+  await page.inputValue('#qfilter') === '' && await page.evaluate(() => document.activeElement?.id === 'qfilter'));
 await page.$$eval('.shelf', (els) => els.forEach(() => {}));
 
 // 7. Collapse all / expand all.
