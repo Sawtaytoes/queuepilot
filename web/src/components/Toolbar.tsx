@@ -1,5 +1,13 @@
-import type { MenuItem } from "@charcuterie/ui"
-import { Button, Menu, SearchInput } from "@charcuterie/ui"
+import type {
+  ActionTileItem,
+  MenuItem,
+} from "@charcuterie/ui"
+import {
+  ActionTiles,
+  Button,
+  Menu,
+  SearchInput,
+} from "@charcuterie/ui"
 import { useState } from "react"
 import { api } from "../lib/api"
 import { asPreQueueStartEntry } from "../lib/preQueueStart"
@@ -30,6 +38,26 @@ import { Modal } from "./Modal"
 import { Poster } from "./Poster"
 import { QueuePeopleBadge } from "./QueuePeopleBadge"
 import { SearchDropdown } from "./SearchDropdown"
+
+/**
+ * The two ways a queue gets filled, as the modal's first step. Module scope
+ * rather than inline, so the array identity does not change on every render.
+ *
+ * The wording is the product's, not the library's: "Picks" and "Rules" are the
+ * words every other surface uses for these two kinds of queue.
+ */
+const QUEUE_TYPE_TILES: ActionTileItem[] = [
+  {
+    hint: "Choose titles yourself, then arrange them in priority and random lanes.",
+    label: "Picks",
+    value: "picks",
+  },
+  {
+    hint: "Set eligibility filters and let QueuePilot select matching titles.",
+    label: "Rules",
+    value: "rules",
+  },
+]
 
 /**
  * The Home toolbar: one search across every library any queue draws from, plus the
@@ -383,39 +411,38 @@ export function Toolbar() {
         title="Queue type"
         titleId="queue-type-title"
       >
-        <p>Choose how QueuePilot fills this queue.</p>
-        <div className="queue-type-options">
-          <Button
-            appearance="outline"
-            intent="accent"
-            onClick={() => {
-              setIsChoosingType(false)
+        <p className="subhint">
+          Choose how QueuePilot fills this queue.
+        </p>
+        {/* An `ActionTiles`, because a press here OPENS THE NEXT STEP rather than
+            recording a value — the editor for the type you press appears and these
+            tiles cease to exist. The Tonight activity filter is the other case and
+            stays a `RadioGroup itemShape="tile"`; the two share one box.
+
+            This was two `Button`s with `.queue-type-options button { height: auto }`,
+            which is why it shipped with NO block padding at all: a `Button` is sized
+            by `h-(--control-height-md)` and carries only `px-*`, so removing the
+            height leaves `padding: 0` down the block axis and the title lands flush
+            against the top border. Nothing reported it — the class really was in the
+            DOM, tsc never reads the CSS, and unstyled markup passes axe. The rule is
+            deleted, not adjusted (`@charcuterie/ui@3.32.0`).
+            (decision `2026-09-01-the-queue-type-chooser-is-an-actiontiles-not-two-buttons`) */}
+        <ActionTiles
+          items={QUEUE_TYPE_TILES}
+          label="Queue type"
+          minTileInlineSize={260}
+          onChoose={(value) => {
+            setIsChoosingType(false)
+
+            if (value === "picks") {
               openSetModal(null, "priority")
-            }}
-            type="button"
-          >
-            <strong>Picks</strong>
-            <span>
-              Choose titles yourself, then arrange them in
-              priority and random lanes.
-            </span>
-          </Button>
-          <Button
-            appearance="outline"
-            intent="accent"
-            onClick={() => {
-              setIsChoosingType(false)
-              openDynModal(null)
-            }}
-            type="button"
-          >
-            <strong>Rules</strong>
-            <span>
-              Set eligibility filters and let QueuePilot
-              select matching titles.
-            </span>
-          </Button>
-        </div>
+
+              return
+            }
+
+            openDynModal(null)
+          }}
+        />
       </Modal>
     </div>
   )
