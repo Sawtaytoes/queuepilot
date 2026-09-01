@@ -725,28 +725,24 @@ button {
 .rules-queue-shelves {
   padding-top: 8px;
 }
-.queue-type-options {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.queue-type-options button {
-  align-items: start;
-  display: flex;
-  flex-direction: column;
-  height: auto;
-  text-align: left;
-  white-space: normal;
-}
-.queue-type-options button span {
-  color: var(--color-content-secondary);
-  font-weight: 400;
-}
-@media (max-width: 560px) {
-  .queue-type-options {
-    grid-template-columns: 1fr;
-  }
-}
+/* `.queue-type-options` WAS HERE, and it is deleted rather than adjusted.
+
+   It painted the queue-type chooser's two cards onto Charcuterie `Button`s —
+   `height: auto`, a column flex, a `span` recoloured — and that is exactly the
+   silent override this file's own rule bans. A `Button` is sized by
+   `h-(--control-height-md)` and carries only `px-*`: no block padding at all,
+   because a one-line control on a form row is sized by the density axis. So
+   `height: auto` computed to `padding: 0px 17px` and shipped a card whose title
+   sat flush against its top border. Nothing could report it — the class really
+   was in the DOM, tsc never reads the CSS, and unstyled-but-present markup
+   passes axe.
+
+   The shape is `ActionTiles` (`@charcuterie/ui@3.32.0`) — the same tile box the
+   Tonight surface's `RadioGroup itemShape="tile"` draws, from one
+   `tileStyles.ts`, with the radio taken away because a press here opens the next
+   step rather than recording a value. The grid, the card, the name, the hint and
+   the gap are all the library's.
+   (decision `2026-09-01-the-queue-type-chooser-is-an-actiontiles-not-two-buttons`) */
 /* Not `.collapse`: that is a Tailwind utility (`visibility: collapse`), and since
    Tailwind v4 scans source for class tokens it emits that utility the moment the
    word appears, hiding this very button. `-toggle` keeps us off the reserved name. */
@@ -2371,8 +2367,16 @@ body.queue-view #tools {
   margin: 0 0 14px;
   padding-right: 28px;
 }
-/* The sentence that says what goes off with it. Same treatment as #startmodal's hint. */
-#poweroffmodal .subhint {
+/* The sentence that says what goes off with it, and the one above the queue-type
+   tiles. Same treatment as #startmodal's hint.
+
+   `#queue-type-modal` is here rather than leaning on a bare `.subhint`, because every
+   `.subhint` rule in this file is scoped to a modal or a view id: the class on its own
+   paints NOTHING, which is how the chooser's line came to sit flat against the tiles
+   below it with `margin: 0` (Tailwind preflight strips the UA margin and no rule put one
+   back). Same trap as decision `2026-08-21-a-class-name-is-not-a-style`. */
+#poweroffmodal .subhint,
+#queue-type-modal .subhint {
   color: var(--color-content-muted);
   font-size: 0.86rem;
   margin: 0 0 18px;

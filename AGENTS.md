@@ -255,6 +255,23 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
   press and a tag you cannot are now the same pill; they were different sizes before.
   **✕ and ✓ share one trailing stack** (✕ on top); Edit sits with the labels, not next to ✕
   ([decision](docs/decisions/2026-08-25-checkmark-under-x-edit-by-the-labels.md)).
+- **A card you can press is `ActionTiles`; a card that stays chosen is `RadioGroup
+  itemShape="tile"`. This app has both, on purpose — do not unify them.** Ask what a press
+  does. Tonight's activity and queue choosers HOLD a value that the Go button reads, so they
+  are radios. The "Queue type" modal's *Picks* / *Rules* cards OPEN THE NEXT STEP and then
+  cease to exist, so they are `ActionTiles`. Both draw the same box, from one
+  `tileStyles.ts` upstream. ⚠️ **Never reach for a `Button` with `height: auto` to get a
+  wrapping card** — a `Button` is sized by `h-(--control-height-md)` and carries **only
+  `px-*`**, so removing the height leaves `padding: 0` down the block axis and the title
+  lands flush against the top border. That is exactly how this modal shipped, and nothing
+  here could report it: the class really was in the DOM, tsc never reads the CSS, and
+  unstyled markup passes axe
+  ([decision](docs/decisions/2026-09-01-the-queue-type-chooser-is-an-actiontiles-not-two-buttons.md)).
+- **`.subhint` is scoped to a modal or view id — every single rule for it.** A new modal's
+  hint paragraph needs `#<id> .subhint` added to the matching rule, or the class paints
+  nothing and Tailwind preflight leaves the paragraph at `margin: 0`, flat against whatever
+  is below it. The queue-type chooser shipped that way. This is the `.subhint` instance of
+  [a class name is not a style](docs/decisions/2026-08-21-a-class-name-is-not-a-style.md).
 - Pickers go through **`SelectListbox`** (`web/src/components/SelectListbox.tsx`), a thin
   adapter over `@charcuterie/ui`'s `Picker`, so a call site is one element with
   `options`/`value`/`onChange`. Two things in it are this app's and must survive any
