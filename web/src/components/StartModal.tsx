@@ -1,6 +1,7 @@
 import { Button } from "@charcuterie/ui"
 import { useCallback, useEffect, useState } from "react"
 import { api } from "../lib/api"
+import { startNamesUnit, withUnit } from "../lib/section"
 import {
   defaultStartPoint,
   memberPreset,
@@ -334,30 +335,37 @@ export function StartModal() {
   const isSeasonShown =
     Boolean(episodeData?.multiSeason) && isEpisodeShown
 
-  /** Read the pickers back out as the value to persist (null = automatic). */
+  /**
+   * Read the pickers back out as the value to persist (null = automatic).
+   *
+   * ⚠️ **Carries the entry's SECTION offset through, and must.** `start.position_ms` lives on
+   * this same mapping — it says where inside the chosen unit playback begins — and
+   * `PATCH …/start` replaces the mapping WHOLE. This modal draws no offset, so returning a
+   * bare `{season, episode}` would delete a section every time somebody changed the episode,
+   * with nothing on screen to notice it by. `withUnit` puts the two facts back together
+   * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+   */
   const readForm = (): StartPoint | null => {
-    const start: StartPoint = {}
+    const unit: StartPoint = {}
 
     if (isCollection) {
-      if (!seriesValue) return null
+      if (!seriesValue) return withUnit(item.start, null)
 
-      start.series = seriesValue
+      unit.series = seriesValue
     }
 
     if (isEpisodeShown) {
       const ep = parseInt(episodeValue, 10)
 
       if (!Number.isNaN(ep)) {
-        start.episode = ep
+        unit.episode = ep
         // The season is tracked even when its row is hidden — a single-season show
         // stores its sole season, which is what the engine's floor compares against.
-        start.season = Number(seasonValue || 1)
+        unit.season = Number(seasonValue || 1)
       }
     }
 
-    return start.series != null || start.episode != null
-      ? start
-      : null
+    return withUnit(item.start, unit)
   }
 
   return (
@@ -378,10 +386,18 @@ export function StartModal() {
             (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
           <Button
             appearance="outline"
-            hidden={!item.start}
+            hidden={!startNamesUnit(item.start)}
             id="start-clear"
             intent="neutral"
-            onClick={() => void commitStart(entry, null)}
+            onClick={() =>
+              // Clears the UNIT this modal picked and keeps any section offset, for the
+              // reason `readForm` states: the two facts share one mapping and only one of
+              // them is on screen here.
+              void commitStart(
+                entry,
+                withUnit(item.start, null),
+              )
+            }
           >
             Clear — start automatically
           </Button>

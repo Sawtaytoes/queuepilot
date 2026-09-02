@@ -1,3 +1,4 @@
+import { startNamesUnit } from "../lib/section"
 import { startLabel } from "../lib/tileFace"
 import type { StartPoint } from "../lib/types"
 import {
@@ -18,15 +19,24 @@ export async function commitStart(
   if (!entry) return
 
   closeStartModal()
+
+  // ⚠️ The question is whether the start names a UNIT, not whether the mapping is null. A
+  // cleared start on an entry that also carries a SECTION comes back as `{position_ms}` —
+  // the offset survives the clear on purpose — and reading that as "a start point was set"
+  // toasts "Starts at " with nothing after it.
+  const isUnitSet = startNamesUnit(start)
+
   setStatus(
-    start ? "Saving start point…" : "Clearing start point…",
+    isUnitSet
+      ? "Saving start point…"
+      : "Clearing start point…",
   )
 
   try {
     await entry.save(start)
 
     setStatus(
-      start
+      isUnitSet
         ? `Starts at ${startLabel(start, entry.item.unit).replace(/^Start /, "")}`
         : "Start cleared — plays automatically",
       "ok",
