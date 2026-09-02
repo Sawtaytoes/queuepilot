@@ -25,12 +25,26 @@
 //
 // Every one is printed with the results, and the whole table is re-run with TARGET_COST_MS
 // at zero as well, so no conclusion rests on that one guess.
+//
+// SINCE 2026-09-02 IT MEASURES A SECOND NUMBER: the OVERSHOOT past a section's end mark —
+// from the millisecond the item's position crosses `end.position_ms` to the millisecond the
+// `skipNext` goes out. Same harness, same virtual clock, same real `startWatch()`, and it is
+// deliberately not a second file: the two numbers share every modelled cost, and splitting
+// them would let the two sets of assumptions drift.
+//
+// One modelled number is the section's own, and it dominates the answer:
+//
+//   POSITION_GRAIN_MS  how coarsely /status/sessions reports `viewOffset`. Plex updates it
+//                      from the player's timeline, not continuously, so a read landing exactly
+//                      on the mark can still answer with a position up to one grain old. This
+//                      is the floor: no scheduling can beat what the source will not report.
 import assert from 'node:assert/strict';
 
 process.env.RESUME_MIN_MS = '30000';
 process.env.RESUME_MAX_FRACTION = '0.95';
 process.env.RESUME_START_WINDOW_MS = '120000';
 const resume = await import('../server/src/resume.js');
+const section = await import('../server/src/section.js');
 
 // --- the modelled world ------------------------------------------------------- //
 
@@ -38,6 +52,8 @@ const SESSIONS_COST_MS = 25;
 const TARGET_COST_MS = 250;
 const STALE_WINDOW_MS = 1_000;
 const PUSH_DELAY_MS = 300;
+/** How coarsely /status/sessions reports a position. See the header. */
+const POSITION_GRAIN_MS = 1_000;
 
 /** The planned episode's own resume marker — the ms the seek is going to ask for. */
 const MARKER_MS = 189_000;
@@ -369,6 +385,157 @@ const stale = await runPush([RK_PLANNED], { isSettled: false });
 check('a push that lands on a stale position seeks nothing and keeps the item eligible',
   stale.seeks.length === 0 && stale.pending === 1,
   `seeks ${JSON.stringify(stale.seeks)}, pending ${stale.pending}`);
+
+// --- the SECTION end mark: how far past it does the item run? ------------------ //
+//
+// The stop-at is not a poll. The read before it says "the end is 87 s away at this position",
+// so the next read is BOOKED for then — the `mark` trigger. What is left is therefore not the
+// cadence at all; it is the two round trips either side of the decision, plus however stale
+// the position that decision was made on can be.
+//
+// The sweep is over the PHASE of the end mark against the booked read, the same way the seek
+// sweep is over the phase of the advance against the poll, so the number below is a mean over
+// a uniformly-sampled offset rather than one lucky alignment.
+
+const SECTION_START_MS = 3_660_000;
+const SECTION_END_MS = 3_960_000;
+
+/**
+ * Measure one section's stop. Returns the ms between the item's TRUE position crossing the
+ * end mark and the `skipNext` going out.
+ *
+ * `phaseMs` shifts where the item's position sits when the watcher's first read lands, which
+ * is what makes the booked read fall at every possible offset across the sweep.
+ */
+async function measureOvershoot(
+  { intervalMs, retryMs, grainMs, phaseMs }: {
+    intervalMs: number; retryMs: number; grainMs: number; phaseMs: number;
+  },
+): Promise<number | null> {
+  clock.reset();
+  resume.arm({ plan: new Map(), device: null, setName: 'reel' });
+  section.arm({
+    plan: section.sectionPlan([{
+      ratingKey: RK_PLANNED,
+      duration: 7_200_000,
+      sectionStartMs: SECTION_START_MS,
+      sectionEndMs: SECTION_END_MS,
+    }], { isHeadStartApplied: true }),
+    setName: 'reel',
+  });
+
+  // The item plays in real time from `SECTION_START_MS` at t=0, offset by the phase.
+  const trueAt = (t: number): number => SECTION_START_MS + t + phaseMs;
+  // The mark is crossed when trueAt(t) === SECTION_END_MS.
+  const crossesAtMs = SECTION_END_MS - SECTION_START_MS - phaseMs;
+
+  let advancedAtMs: number | null = null;
+  const fetchSession = async (): Promise<{ ratingKey: string; viewOffset: number }> => {
+    clock.consume(SESSIONS_COST_MS);
+    const truth = trueAt(clock.now());
+    // What Plex will actually SAY: the last multiple of the grain at or below the truth.
+    return { ratingKey: RK_PLANNED, viewOffset: Math.floor(truth / grainMs) * grainMs };
+  };
+
+  resume.startWatch({
+    fetchSession,
+    seek: async () => ({ seeked: true }),
+    advance: async () => {
+      clock.consume(SESSIONS_COST_MS); // the skipNext is one LAN round trip, same order
+      if (advancedAtMs == null) advancedAtMs = clock.now();
+      return { ok: true };
+    },
+    intervalMs,
+    retryMs,
+    now: clock.now,
+    log: () => {},
+  });
+
+  await clock.runTo(crossesAtMs + 60_000);
+  resume.disarm();
+  section.disarm();
+  return advancedAtMs == null ? null : advancedAtMs - crossesAtMs;
+}
+
+async function sweepOvershoot(
+  { intervalMs, retryMs, grainMs }: { intervalMs: number; retryMs: number; grainMs: number },
+): Promise<Measurement> {
+  const results: number[] = [];
+  // One full grain of phase, finely sampled — the grain is what the answer turns on.
+  for (let phase = 0; phase < grainMs; phase += 50) {
+    const overshoot = await measureOvershoot({ intervalMs, retryMs, grainMs, phaseMs: phase });
+    assert.notEqual(overshoot, null, `no skipNext went out for a phase of ${phase}ms`);
+    results.push(overshoot!);
+  }
+  const total = results.reduce((a, b) => a + b, 0);
+  return {
+    meanMs: Math.round(total / results.length),
+    worstMs: Math.max(...results),
+    samples: results.length,
+  };
+}
+
+console.log('\nsection end mark: the position crosses `end.position_ms` -> skipNext goes out\n');
+console.log(`modelled: /status/sessions and skipNext ${SESSIONS_COST_MS}ms each, `
+  + `position reported to the nearest ${POSITION_GRAIN_MS}ms`);
+
+const booked = await sweepOvershoot({ intervalMs: 1_500, retryMs: 400, grainMs: POSITION_GRAIN_MS });
+// The same stop with the mark NOT booked — a plain 1 500 ms cadence grinding up to it — which
+// is what this would have cost if the boundary were treated as one more thing to poll for.
+const polled = await sweepOvershoot({ intervalMs: 1_500, retryMs: 1_500, grainMs: POSITION_GRAIN_MS });
+// And with a position source that answers exactly, to separate the SCHEDULING from the grain.
+const exact = await sweepOvershoot({ intervalMs: 1_500, retryMs: 400, grainMs: 1 });
+
+console.log('\n| Stopping at the end mark | Mean | Worst case |');
+console.log('| --- | --- | --- |');
+console.log(`| the read is BOOKED for the mark (shipped) | ${booked.meanMs} ms | ${booked.worstMs} ms |`);
+console.log(`| the same stop on a plain 1 500 ms poll | ${polled.meanMs} ms | ${polled.worstMs} ms |`);
+console.log(`| booked, with an exact position source | ${exact.meanMs} ms | ${exact.worstMs} ms |`);
+console.log('');
+
+check('the item runs under a second and a half past its end mark, worst case',
+  booked.worstMs < 1_500, `worst ${booked.worstMs}ms`);
+check('booking the read beats polling up to the mark',
+  booked.meanMs < polled.meanMs, `${booked.meanMs}ms vs ${polled.meanMs}ms`);
+check('with an exact position source the overshoot is the two round trips and nothing else',
+  exact.worstMs <= 2 * SESSIONS_COST_MS + 50, `worst ${exact.worstMs}ms`);
+check('…so what is left is the POSITION GRAIN, not the schedule',
+  booked.meanMs - exact.meanMs > POSITION_GRAIN_MS / 4,
+  `booked ${booked.meanMs}ms, exact ${exact.meanMs}ms`);
+
+// The end mark must not fire EARLY. A clip cut short is a worse bug than one that runs long,
+// and the position a decision is made on is always at or behind the truth.
+check('the advance never goes out before the mark is actually crossed',
+  booked.worstMs >= 0 && booked.meanMs >= 0, `mean ${booked.meanMs}ms`);
+
+// A PAUSE at the mark must re-book rather than fire. The booked read finds the position
+// standing still, and stands still with it.
+clock.reset();
+resume.arm({ plan: new Map(), device: null, setName: 'reel' });
+section.arm({
+  plan: section.sectionPlan([{
+    ratingKey: RK_PLANNED, duration: 7_200_000, sectionEndMs: SECTION_END_MS,
+  }], { isHeadStartApplied: true }),
+  setName: 'reel',
+});
+let advances = 0;
+resume.startWatch({
+  fetchSession: async () => {
+    clock.consume(SESSIONS_COST_MS);
+    return { ratingKey: RK_PLANNED, viewOffset: SECTION_END_MS - 5_000 }; // paused, 5 s short
+  },
+  seek: async () => ({ seeked: true }),
+  advance: async () => { advances += 1; return { ok: true }; },
+  intervalMs: 1_500,
+  retryMs: 400,
+  now: clock.now,
+  log: () => {},
+});
+await clock.runTo(120_000);
+check('a player paused five seconds short of the mark is never advanced',
+  advances === 0, `${advances} advance(s)`);
+resume.disarm();
+section.disarm();
 
 globals.setTimeout = realSetTimeout;
 globals.clearTimeout = realClearTimeout;

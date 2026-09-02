@@ -21,6 +21,7 @@ import * as adb from './adb.js';
 import * as playback from './playback.js';
 import * as driver from './driver.js';
 import * as resume from './resume.js';
+import * as section from './section.js';
 import { liveClient } from './engine/plex-live.js';
 import * as mqttc from './mqttc.js';
 import {
@@ -427,50 +428,101 @@ export async function startSession(
   // it either way. The union is the honest type; resolving it here would be the fix, and the
   // fix is a behaviour change.
   const device: string | Device | null = payload.target || null;
+
+  // PLAYING A SECTION IS A PROVIDER CAPABILITY, and this is the guard. Only Plex can serve one
+  // — a section is a seek plus a stop on a timeline this app can command, and every other
+  // provider is `delivery: 'pull'`, so control leaves with the artifact. A backend that cannot
+  // serve a section offers NO section rather than accepting one and playing the item in full
+  // (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+  const playsSections = provider.playsSections === true;
+
+  // The head's start is FREE. Companion `playMedia` already takes an `offset` that applies to
+  // the item it starts on, and that offset IS the section start — no poll, no seek, no delay.
+  // An AUTHORED section start outranks the INFERRED resume marker this line used to carry,
+  // including the private ledger's position on a `watch_history: queue` entry.
+  const head = playItems.length ? section.asCandidate(playItems[0] as PlexPlayItem) : null;
+  resumeMs = section.headStartOffsetMs(head, resumeMs, { playsSections });
+
   // Arm resume-on-advance for THIS lineup before playing: playMedia resumes only the head, so
   // every other episode needs a seek once the player reaches it. Re-arming replaces any plan
   // left over from the previous scan.
-  if (RESUME_ON_ADVANCE) {
-    // `ResumeCandidate` is an index-signature shape, which an interface is never implicitly
-    // assignable to — the cast is that rule. `device` is the `SessionStartPayload.target`
-    // union noted above: resume/playback/driver all read `.uri`/`.mode`/`.name` off it, and a
-    // string id reaching them is the latent bug, not something to normalise here.
-    const plan = resume.resumePlan(playItems as resume.ResumeCandidate[], { headRatingKey: ratingKeys[0] });
-    // Resolve the Companion target ONCE, here. It used to be re-derived on every poll and
-    // again on every seek, and on a player advertising no connection each of those was a
-    // plex.tv WAN round trip — on the exact path that has to be fast. A failure is not fatal:
-    // null means the watcher resolves it per call, exactly as it always did.
-    let client: playback.ClientTarget | null = null;
+  //
+  // Two plans, ONE watcher (see `section.ts`). The section plan is keyed by playQueue INDEX
+  // because one queue can hold the same file twice; the resume plan stays keyed by ratingKey,
+  // which is all an inferred marker has ever needed.
+  //
+  // `ResumeCandidate` is an index-signature shape, which an interface is never implicitly
+  // assignable to — the cast is that rule. `device` is the `SessionStartPayload.target` union
+  // noted above: resume/playback/driver all read `.uri`/`.mode`/`.name` off it, and a string
+  // id reaching them is the latent bug, not something to normalise here.
+  const plan = RESUME_ON_ADVANCE
+    ? resume.resumePlan(playItems as resume.ResumeCandidate[], { headRatingKey: ratingKeys[0] })
+    : new Map<string, number>();
+  // `isHeadStartApplied` because the line above just put the head's start on playMedia. Its
+  // END still belongs in the plan — stopping the first clip of a demo reel is the point.
+  const sections = section.sectionPlan(
+    playItems.map((item) => section.asCandidate(item as PlexPlayItem)),
+    { isHeadStartApplied: true, playsSections },
+  );
+  // Resolve the Companion target ONCE, here. It used to be re-derived on every poll and
+  // again on every seek, and on a player advertising no connection each of those was a
+  // plex.tv WAN round trip — on the exact path that has to be fast. A failure is not fatal:
+  // null means the watcher resolves it per call, exactly as it always did.
+  let client: playback.ClientTarget | null = null;
+  if (plan.size || sections.size) {
     try {
       client = await playback.findClient(device as Device | null);
     } catch {
       client = null;
     }
-    resume.arm({ plan, device: device as Device | null, setName, client });
-    if (plan.size) {
-      console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance: `
-        + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
-      resume.startWatch({
-        fetchSession: () => playback.currentSession({ device: device as Device | null, client }),
-        seek: (ms: number) => playback.seekTo(ms, {
-          device: device as Device | null, client, setName, userUuid: SESSION.userUuid,
-        }),
-        // The now-playing wake-up. resume.js takes a subscriber rather than importing mqttc
-        // itself, which is the same seam `fetchSession`/`seek` use: the watcher stays
-        // drivable without a broker, a player or Plex.
-        subscribePush: RESUME_PUSH_TRIGGER
-          ? (onEvent) => {
-            const listener = (nowPlaying: NowPlaying | null): void => {
-              onEvent(nowPlaying?.ratingKey ? String(nowPlaying.ratingKey) : null);
-            };
-            mqttc.onNowPlaying(listener);
-            return () => { mqttc.offNowPlaying(listener); };
-          }
-          : null,
-      });
-    }
+  }
+  resume.arm({ plan, device: device as Device | null, setName, client });
+  section.arm({ plan: sections, setName });
+  section.forgetBoundaries(); // a new sitting never inherits the last one's stop-and-advance
+  if (plan.size) {
+    console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance: `
+      + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
+  }
+  if (sections.size) {
+    console.log(`[section] armed ${sections.size} window(s): `
+      + [...sections.entries()].map(([i, row]) => `#${i} rk=${row.ratingKey} `
+        + `${row.startMs == null ? 'start' : `${Math.round(row.startMs / 1000)}s`}`
+        + `->${row.endMs == null ? 'end' : `${Math.round(row.endMs / 1000)}s`}`).join(' '));
+  }
+  if (plan.size || sections.size) {
+    resume.startWatch({
+      fetchSession: () => playback.currentSession({ device: device as Device | null, client }),
+      seek: (ms: number) => playback.seekTo(ms, {
+        device: device as Device | null, client, setName, userUuid: SESSION.userUuid,
+      }),
+      // WHICH OCCURRENCE is playing. Read lazily off the session because the playQueue does
+      // not exist yet — `handoff()` below is what creates it — and called by the watcher only
+      // when two pending windows name the same file, which is the only case it can settle.
+      fetchPlace: async () => {
+        const pqId = SESSION.playQueueID;
+        if (pqId == null) return null;
+        const live = await playback.readPlayQueue(pqId, { token: tok });
+        return live ? { index: live.selectedOffset, ratingKeys: live.ratingKeys } : null;
+      },
+      // The stop-at. Companion `skipNext`, NOT `advanceSession()` — that rebuilds the whole
+      // playQueue and restarts playback, which `topup.ts` names as the thing to avoid.
+      advance: () => playback.transport('next', device as Device | null),
+      // The now-playing wake-up. resume.js takes a subscriber rather than importing mqttc
+      // itself, which is the same seam `fetchSession`/`seek` use: the watcher stays
+      // drivable without a broker, a player or Plex.
+      subscribePush: RESUME_PUSH_TRIGGER
+        ? (onEvent) => {
+          const listener = (nowPlaying: NowPlaying | null): void => {
+            onEvent(nowPlaying?.ratingKey ? String(nowPlaying.ratingKey) : null);
+          };
+          mqttc.onNowPlaying(listener);
+          return () => { mqttc.offNowPlaying(listener); };
+        }
+        : null,
+    });
   } else {
     resume.disarm();
+    section.disarm();
   }
   const setLabel = cfg.label || setName;
 

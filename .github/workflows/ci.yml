@@ -726,6 +726,11 @@ jobs:
           # trip and not one per call, a plex.tv FAILURE is still re-asked, a stale handed-in
           # target re-resolves, and Companion commands carry increasing ids.
           "$TSX" e2e/companion-target-cache-test.ts
+          # PLAYING a section: start at start.position_ms, stop at end.position_ms, advance.
+          # Built around the case the old ratingKey-keyed design could not represent at all —
+          # two sections of ONE file in one lineup — and it drives the real startWatch() with
+          # both plans armed, so the precedence between them is asserted rather than argued.
+          "$TSX" e2e/section-playback-test.ts
 
       # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.
       #
