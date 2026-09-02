@@ -22,12 +22,13 @@ import * as playback from './playback.js';
 import * as driver from './driver.js';
 import * as resume from './resume.js';
 import { liveClient } from './engine/plex-live.js';
+import * as mqttc from './mqttc.js';
 import {
-  PLAYBACK_FSM, ADB_ENABLED, RESUME_ON_ADVANCE,
+  PLAYBACK_FSM, ADB_ENABLED, RESUME_ON_ADVANCE, RESUME_PUSH_TRIGGER,
 } from './env.js';
 import { errMessage, isCancelled } from './errors.js';
 import type {
-  CancelFlag, Device, HandoffResult, PlayItem, PlexPlayItem,
+  CancelFlag, Device, HandoffResult, NowPlaying, PlayItem, PlexPlayItem,
   ProviderArtifact, PublishedStateExtra, SessionStartPayload, SessionState,
 } from './types.js';
 
@@ -435,15 +436,37 @@ export async function startSession(
     // union noted above: resume/playback/driver all read `.uri`/`.mode`/`.name` off it, and a
     // string id reaching them is the latent bug, not something to normalise here.
     const plan = resume.resumePlan(playItems as resume.ResumeCandidate[], { headRatingKey: ratingKeys[0] });
-    resume.arm({ plan, device: device as Device | null, setName });
+    // Resolve the Companion target ONCE, here. It used to be re-derived on every poll and
+    // again on every seek, and on a player advertising no connection each of those was a
+    // plex.tv WAN round trip — on the exact path that has to be fast. A failure is not fatal:
+    // null means the watcher resolves it per call, exactly as it always did.
+    let client: playback.ClientTarget | null = null;
+    try {
+      client = await playback.findClient(device as Device | null);
+    } catch {
+      client = null;
+    }
+    resume.arm({ plan, device: device as Device | null, setName, client });
     if (plan.size) {
       console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance: `
         + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
       resume.startWatch({
-        fetchSession: () => playback.currentSession({ device: device as Device | null }),
+        fetchSession: () => playback.currentSession({ device: device as Device | null, client }),
         seek: (ms: number) => playback.seekTo(ms, {
-          device: device as Device | null, setName, userUuid: SESSION.userUuid,
+          device: device as Device | null, client, setName, userUuid: SESSION.userUuid,
         }),
+        // The now-playing wake-up. resume.js takes a subscriber rather than importing mqttc
+        // itself, which is the same seam `fetchSession`/`seek` use: the watcher stays
+        // drivable without a broker, a player or Plex.
+        subscribePush: RESUME_PUSH_TRIGGER
+          ? (onEvent) => {
+            const listener = (nowPlaying: NowPlaying | null): void => {
+              onEvent(nowPlaying?.ratingKey ? String(nowPlaying.ratingKey) : null);
+            };
+            mqttc.onNowPlaying(listener);
+            return () => { mqttc.offNowPlaying(listener); };
+          }
+          : null,
       });
     }
   } else {
