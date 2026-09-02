@@ -33,6 +33,7 @@ import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as queues from './queues.js';
 import * as queueEntryHistory from './store/db/queueEntryHistory.js';
+import * as section from './section.js';
 import * as sets from './sets.js';
 import { SESSION } from './session.js';
 import type {
@@ -307,6 +308,48 @@ async function finalizeQueueProgress(
 }
 
 /**
+ * Record the outcome of a play THIS APP stopped at a section's end mark.
+ *
+ * ⚠️ THIS IS THE SUBTLE ONE. Everywhere else in this file, "where playback stopped" is the
+ * evidence: a play that ends at 40% ended because somebody walked away. A section entry ends
+ * at 40% BY DESIGN, and the two are indistinguishable from the position alone. Left to the
+ * ordinary path, a two-minute clip of a two-hour film would be filed as an abandonment — the
+ * queue's ledger would keep a 40% resume position, `leadsInProgress` would hoist that entry to
+ * the front of the pool every sitting, and the entry sheet would offer to resume something
+ * nobody stopped.
+ *
+ * So the fact that decides it is not the position. It is WHO stopped it. `section.ts` records
+ * a boundary only when the watcher itself issued the `skipNext`, and this claims that record.
+ *
+ * WHAT IT DECIDES, and why each half is the way it is:
+ *
+ *  - `watch_history: queue` — the entry's own ledger records the item COMPLETED. The window
+ *    played to the end of what the entry asked for, so the line is finished. This is the
+ *    ledger that exists precisely because Plex has nowhere to put a second position for one
+ *    file, and "completed" is what stops the phantom resume and lets the entry leave the queue.
+ *  - `watch_history: provider` — NOTHING is written, here or anywhere. That queue asked Plex to
+ *    be the judge, and Plex judges a 40% play as unwatched; the entry stays. That is the
+ *    queue's call and not this feature's, per the decision record, and force-marking a
+ *    `viewCount` would be this feature inventing a rule the owner did not ask for. The
+ *    consequence is real and deliberate: a windowed entry on provider history replays every
+ *    sitting, from its section start, until the queue is switched to `watch_history: queue`.
+ */
+function finalizeSectionBoundary(
+  setName: string,
+  boundary: section.Boundary,
+  ratingKey: string,
+): void {
+  if (!boundary.isOwnHistory || !boundary.entryKey) {
+    console.log(`[section] ${setName}: ${ratingKey} stopped at its end mark — provider history `
+      + 'judges this one, so nothing is written');
+    return;
+  }
+  queueEntryHistory.markCompleted(setName, boundary.entryKey, ratingKey);
+  console.log(`[section] ${setName}: ${ratingKey} played its whole window for `
+    + `${boundary.entryKey} — the line is complete, not abandoned`);
+}
+
+/**
  * Attach a Plex play that QueuePilot did not start to one queue-owned entry. The retained
  * now-playing feed supplies the live position; Plex still supplies the completion verdict.
  */
@@ -353,7 +396,14 @@ export function watchPlaybackEnd(): void {
     const adopted = nowRk && adoptedQueuePlay?.ratingKey === nowRk ? adoptedQueuePlay : null;
     const trackedSet = adopted?.setName ?? activeSet;
     const tracked = adopted ?? active;
-    if (trackedSet && tracked?.queueOwnHistory && tracked.queueEntryKey) {
+    // A WINDOWED item saves no live position, and that is a correctness rule rather than a
+    // saving. `SESSION.queue.find()` matches by ratingKey, so while the SECOND section of a
+    // file is playing this writer would address the FIRST section's ledger row — and
+    // `savePosition` clears `is_completed`, undoing the completion that section had just
+    // earned. A windowed entry has no use for a position either way: it begins at its own
+    // start mark every sitting.
+    const isWindowed = Boolean(nowRk) && section.isWindowed(nowRk!);
+    if (trackedSet && tracked?.queueOwnHistory && tracked.queueEntryKey && !isWindowed) {
       const positionMs = nowPlayingMs(now?.position);
       if (positionMs > 0) {
         queueEntryHistory.savePosition(
@@ -375,9 +425,23 @@ export function watchPlaybackEnd(): void {
     const setName = manual?.setName ?? (state && state.set ? String(state.set) : null);
     if (!setName) return;
 
-    const queued = manual ?? SESSION.queue.find((item) => item.ratingKey === String(ended));
+    // Did THIS APP stop it at a section's end mark, or did the play simply end? Claimed once,
+    // so a later ordinary play of the same file goes down the ordinary path.
+    const boundary = manual ? null : section.takeBoundary(String(ended));
+    // Its entry key is the authority for WHICH line just played: with two sections of one file
+    // in one lineup, `SESSION.queue.find()` returns the first of them for both.
+    const queued = manual
+      ?? (boundary?.entryKey
+        ? SESSION.queue.find((item) => item.ratingKey === String(ended)
+          && item.queueEntryKey === boundary.entryKey)
+        : undefined)
+      ?? SESSION.queue.find((item) => item.ratingKey === String(ended));
     const profile = manual?.profileTitle ?? (state && state.profile ? String(state.profile) : null);
-    if (queued?.queueOwnHistory) {
+    if (boundary) {
+      // No RECONCILE_DELAY_MS: that delay exists to let Plex write a history row this then
+      // reads back, and a section's verdict needs no read — we know why it stopped.
+      finalizeSectionBoundary(boundary.setName ?? setName, boundary, String(ended));
+    } else if (queued?.queueOwnHistory) {
       setTimeout(() => {
         void finalizeQueueProgress(setName, profile, queued, nowPlayingMs(endedNow?.duration));
       }, RECONCILE_DELAY_MS);

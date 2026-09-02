@@ -291,6 +291,34 @@ still answers with the previous item's position, which no amount of polling can 
 that number needs to come down, the lever is PMS's own `/:/websockets/notifications` timeline
 feed, not a faster poll.
 
+### Measured — the stop at the end mark (2026-09-02)
+
+The section path shipped on top of the latency work above. The stop is not a poll: the read
+before the mark says "the end is 87 s away at this position", so the next read is BOOKED for
+then — the `mark` trigger. What is left is the two round trips either side of the decision,
+plus however stale the position that decision was made on can be.
+
+One number is modelled and it dominates the answer: `/status/sessions` reports `viewOffset`
+from the player's timeline rather than continuously, so a read landing exactly on the mark can
+answer with a position up to **one grain** old. Modelled at 1 000 ms, and printed with the
+results. From `e2e/resume-latency-test.ts`, sweeping the phase of the mark against the booked
+read.
+
+| Stopping at the end mark | Mean | Worst case |
+| --- | --- | --- |
+| the read is BOOKED for the mark (shipped) | **475 ms** | **900 ms** |
+| the same stop on a plain 1 500 ms poll | 925 ms | 1 400 ms |
+| booked, with an exact position source | 50 ms | 50 ms |
+
+**The scheduling is not what is left.** With an exact position source the overshoot is 50 ms —
+the `/status/sessions` GET and the `skipNext`, and nothing else. The other ~425 ms is the grain,
+which no cadence can shorten. If that number ever needs to come down, the lever is the same one
+the seek latency has: PMS's own `/:/websockets/notifications` timeline feed.
+
+**It never fires early.** The position a decision is made on is at or behind the truth, so the
+overshoot floor is zero and a clip is never cut short. A player PAUSED short of the mark is
+re-booked rather than advanced, which the harness pins separately.
+
 ## Provider capability
 
 A section is a seek plus a stop on a **timeline held by a player QueuePilot can command**. Only
@@ -347,8 +375,10 @@ written up in `docs/todos/music-queue-sections.md` rather than built here.
 | the wire | `server/src/routes/queuesRoutes.ts:29` `startOf` + the `queueTile` literal at `:95` |
 | the descriptor | `server/src/engine/resolve.ts:334` `describe()` — **all three arms**, or `tsc` fails |
 | head offset | `server/src/engine/resolve.ts:1306` `headResumeOffset`, `server/src/providers/plex.ts:362` `PlexArtifact.offset` |
-| the section plan | new, beside `server/src/resume.ts`, keyed by playQueue index |
-| stop + advance | `server/src/playback.ts:871` `transport('next')` |
+| the section plan | `server/src/section.ts`, keyed by playQueue index — SHIPPED |
+| the window on the first unit | `server/src/engine/resolve.ts` `sectionOf()`, applied in `nextQueue` and `buildReel` — SHIPPED |
+| stop + advance | `server/src/playback.ts` `transport('next')`, wired from `session.ts` — SHIPPED |
+| completion at a boundary | `server/src/section.ts` `recordBoundary`/`takeBoundary` + `finished.ts finalizeSectionBoundary()` — SHIPPED |
 | capability | `server/src/types.ts:1309` (interface) + `server/src/providers/config.ts:82` (kind map) |
 | store | **nothing.** `queue_entries.data` is the whole mapping as JSON; `start` has no generated column and neither does `end` |
 

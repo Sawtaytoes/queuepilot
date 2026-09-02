@@ -237,6 +237,13 @@ export interface ResolvedItem {
   queueResumeOffset?: number;
   /** Provider play count before this queue-owned replay starts. Completion increments it. */
   queueProviderViewCount?: number;
+  /**
+   * Where this item's playback BEGINS, from the entry's `start.position_ms`. Stamped on the
+   * FIRST unit an entry contributes and on nothing else — see `sectionOf()`.
+   */
+  sectionStartMs?: number | null;
+  /** Where it STOPS, from the entry's `end.position_ms`. Same first-unit rule. */
+  sectionEndMs?: number | null;
 }
 
 /** One resolved member — `resolveMember()`'s return. Empty `items` = FINISHED, null = UNRESOLVED. */
@@ -1025,6 +1032,32 @@ export async function resolveMember(
 // --------------------------------------------------------------------------- //
 // Play-list builders — port of plex.py
 // --------------------------------------------------------------------------- //
+
+/**
+ * This entry's section window, or null when it names none.
+ *
+ * ⚠️ THE WINDOW APPLIES TO THE FIRST PLAYED UNIT ONLY. An entry contributing three episodes
+ * per visit takes the offsets on episode one; episodes two and three play in full. That is
+ * not a simplification — it is the only reading that serves both asks the feature came from:
+ * "start season 2 episode 4 at 12:30" means THAT episode, and a film section is one unit by
+ * construction. An entry wanting three separately-windowed sections is three entries, which
+ * is what the `id:` key from #300 exists to allow
+ * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+ *
+ * So the two callers below both stamp exactly one item — `items[0]` of what the entry
+ * contributed — and this function returns the fields rather than applying them, so neither
+ * caller can quietly stamp a second one.
+ */
+export function sectionOf(desc: EntryDescriptor): {
+  sectionStartMs: number | null;
+  sectionEndMs: number | null;
+} | null {
+  const sectionStartMs = desc.start?.position_ms ?? null;
+  const sectionEndMs = desc.end?.position_ms ?? null;
+  if (sectionStartMs == null && sectionEndMs == null) return null;
+  return { sectionStartMs, sectionEndMs };
+}
+
 const emptyResult = (setName: string): QueueResult => ({
   set: setName, play: [], last: null, done: [], unresolved: [], remaining: 0, offset: 0,
 });
@@ -1049,6 +1082,11 @@ export async function buildReel(
   for (const desc of entries) {
     if (play.length >= limit) break;
     if (desc.done) continue; // a hand-tagged skip is still honored
+    // Where this entry's own contribution begins, so its window lands on the FIRST unit it
+    // pushes and on nothing after it. A reel is the case the whole feature came from: every
+    // line of the Theater Demo Reel is a pre-clipped file that exists only because a section
+    // could not be written down.
+    const mine = play.length;
     if (desc.collection) {
       const items = await collectionItems(
         client, cfg, desc.collection, new Set(), token, desc.start, false, desc.collectionOrder,
@@ -1058,6 +1096,9 @@ export async function buildReel(
         continue;
       }
       play.push(...items.slice(0, Math.max(0, limit - play.length)));
+      const collectionSection = sectionOf(desc);
+      const collectionFirst = play[mine];
+      if (collectionSection && collectionFirst) play[mine] = { ...collectionFirst, ...collectionSection };
       continue;
     }
     const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
@@ -1073,6 +1114,9 @@ export async function buildReel(
         QUEUE_SERIES_LENGTH));
       for (const e of eps.slice(0, batch)) play.push({ title: e.title || title, ratingKey: e.ratingKey });
     }
+    const section = sectionOf(desc);
+    const first = play[mine];
+    if (section && first) play[mine] = { ...first, ...section };
   }
   const last = play.length
     ? { title: play[0]!.title as string, type: 'movie', ratingKey: play[0]!.ratingKey } : null;
@@ -1202,6 +1246,13 @@ export async function nextQueue(
       rng,
       progress,
     );
+    // The entry's window, on the FIRST unit it contributes and on nothing after it. Stamped
+    // before the own-history pass below so both spreads survive, and outside it because a
+    // section is not a history concern — an entry on provider history has one too.
+    const section = res ? sectionOf(desc) : null;
+    if (res && section && res.items.length) {
+      res.items = res.items.map((item, i) => (i === 0 ? { ...item, ...section } : item));
+    }
     if (res && isOwnHistory && desc.key) {
       res.items = res.items.map((item) => ({
         ...item,
@@ -1271,6 +1322,11 @@ export async function nextQueue(
 
   const leadsInProgress = (b: Batch): boolean => {
     const it = b.items.length ? b.items[0] : null;
+    // An entry with a SECTION is never "in the middle of" anything: it begins at its own
+    // start mark every single sitting, so a resume marker left behind by the last one says
+    // nothing about it. Without this, an entry that stops at 40% by design reads as
+    // half-watched and hoists itself to the front of the random pool every night, forever.
+    if (sectionOf(b.desc)) return false;
     return Boolean(it && ((it.queueResumeOffset ?? 0) > 0
       || inProgress(it.viewOffset, it.viewCount)));
   };
