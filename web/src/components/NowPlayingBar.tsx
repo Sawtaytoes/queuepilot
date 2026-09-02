@@ -1,8 +1,16 @@
-import { Button, IconButton, Slider } from "@charcuterie/ui"
+import {
+  Button,
+  formatTimecode,
+  IconButton,
+  Slider,
+} from "@charcuterie/ui"
 import { useEffect, useRef, useState } from "react"
 
 import { api } from "../lib/api"
-import { isNowLive } from "../lib/nowPlaying"
+import {
+  isNowLive,
+  nowPlayingPositionMs,
+} from "../lib/nowPlaying"
 import { setStatus, useStore } from "../state/store"
 import { Modal } from "./Modal"
 import { Tip } from "./Tip"
@@ -37,22 +45,20 @@ import { Tip } from "./Tip"
  * scrubber off the end of a paused episode.
  */
 
-/** mm:ss, or h:mm:ss once there is an hour to show. */
-const toClock = (seconds: number): string => {
-  const whole = Math.max(0, Math.round(seconds))
-
-  const hrs = Math.floor(whole / 3_600)
-
-  const mins = Math.floor((whole % 3_600) / 60)
-
-  const secs = whole % 60
-
-  const pad = (n: number) => String(n).padStart(2, "0")
-
-  return hrs > 0
-    ? `${hrs}:${pad(mins)}:${pad(secs)}`
-    : `${mins}:${pad(secs)}`
-}
+/**
+ * `mm:ss`, or `hh:mm:ss` once there is an hour to show.
+ *
+ * `formatTimecode` from `@charcuterie/ui`, not the hand-rolled printer that used to sit here.
+ * The library counted five of those across the fleet — two of them in this repo, this one and
+ * `tileFace.clock` — each with its own answer to whether the hour is shown and whether the
+ * minute is padded. The one visible difference is that the minute IS padded now, which is
+ * what makes two readings of the same value the same picture.
+ */
+const toClock = (seconds: number): string =>
+  formatTimecode(Math.max(0, seconds) * 1_000, {
+    isHoursShown: seconds >= 3_600,
+    millisecondDigits: 0,
+  })
 
 type ControlAction =
   | "next"
@@ -132,17 +138,11 @@ export function NowPlayingBar() {
 
   const reported = Number(payload.position) || 0
 
-  const reportedAt = Number(payload.positionAt) || 0
-
-  const elapsed =
-    isPaused || !reportedAt
-      ? 0
-      : Math.max(0, Date.now() / 1_000 - reportedAt)
-
-  const live = Math.min(
-    duration || Number.POSITIVE_INFINITY,
-    reported + elapsed,
-  )
+  // The extrapolation moved to `lib/nowPlaying.nowPlayingPositionMs` — the ONE client-side
+  // converter from the payload's seconds to the milliseconds everything else here speaks.
+  // The section editor's "Start here" / "End here" buttons ask the same question, and two
+  // extrapolators that drift would put a mark somewhere this bar never showed.
+  const live = (nowPlayingPositionMs(now) ?? 0) / 1_000
 
   // A new payload means the server has caught up, so the override is
   // spent: its signature no longer matches and it evaporates.
