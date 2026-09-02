@@ -49,6 +49,7 @@ import {
   tileFace,
 } from "../lib/tileFace"
 import type { QueueItem, SearchHit } from "../lib/types"
+import { usePlaysSections } from "../state/capabilities"
 import { refreshData } from "../state/live"
 import {
   closeEntryEditor,
@@ -214,6 +215,10 @@ export function QueueView({
   // `vocabulary` renders exactly as it used to rather than rendering "undefined".
   const vocab = regSet?.vocabulary ?? PLEX_WORDS
   const verb = vocab.verb
+  // Can this queue's backend play PART of an item? Plex alone today. A reading queue or a
+  // board-game queue therefore carries no section tag and no section filter — nothing
+  // disabled, nothing to explain (`state/capabilities.usePlaysSections`).
+  const hasSections = usePlaysSections(regSet)
 
   // The fourth argument is the poster tap: with no selection running, tapping a poster
   // opens that entry's sheet. See the hook for why the gesture is resolved there.
@@ -332,6 +337,59 @@ export function QueueView({
     queueEntryActions(setId, item)
 
   /**
+   * Add a SECOND line for something this queue already holds, and open its settings.
+   *
+   * `allow_duplicate: true` is the flag the server made the caller type, so this is the one
+   * place in the app that sends it.
+   *
+   * It paints optimistically like the ordinary add, but only AFTER the answer, and that is
+   * forced rather than chosen: the server MINTS an `id` for the new line and that id is what
+   * keys it, so the browser cannot name the tile before it asks. The same round trip is what
+   * makes the next step possible — a second line exists to carry a second SECTION, so the
+   * entry sheet opens straight onto it rather than leaving somebody to work out which of two
+   * identical tiles is the new one.
+   */
+  const addAnother = async (hit: SearchHit) => {
+    if (!setId) return
+
+    setStatus(`Adding another “${hit.title}”…`)
+
+    try {
+      const added = await api<{
+        added?: boolean
+        key?: string
+      }>("POST", `/api/queues/${setId}/items`, {
+        ...queueItemAddBody(hit),
+        allow_duplicate: true,
+      })
+      const set = getState().data?.sets[setId]
+
+      if (added.key && set) {
+        // The stand-in wears the key the SERVER minted, not the one `optimisticItem` would
+        // have derived: the whole point of this add is that the derived key is taken, and an
+        // optimistic tile keyed the same as the line it repeats would collapse the two in
+        // every `data-key` lookup, React key and selection id on the page.
+        set.items = [
+          { ...optimisticItem(hit), key: added.key },
+          ...set.items,
+        ]
+        bumpRevision()
+        flashTile(setId, added.key)
+        openEntryEditor(setId, added.key)
+      }
+
+      setStatus(`Added another “${hit.title}”`, "ok")
+      refreshData()
+    } catch (e) {
+      setStatus(
+        `Add failed: ${(e as Error).message}`,
+        "err",
+      )
+      refreshData()
+    }
+  }
+
+  /**
    * ONE tile, rendered the same in either lane.
    *
    * It was inline in the grid's `.map()` until the page grew a second lane. Extracted
@@ -408,6 +466,7 @@ export function QueueView({
                  decision 2026-08-25-checkmark-under-x-edit-by-the-labels) */}
             {item.resolved ? (
               <SettingTags
+                hasSections={hasSections}
                 item={item}
                 onEdit={() =>
                   setId && openEntryEditor(setId, item.key)
@@ -751,8 +810,35 @@ export function QueueView({
                         In this queue
                       </span>
                     </span>
+                    {/* THE DOOR IN THE REFUSAL. "In this queue" is the right answer for the
+                        ordinary case — an accidental second copy of a film in a watch queue
+                        is a bug, and this badge is what caught it — but it was a dead end for
+                        the case where a second line is the POINT: a demo reel that plays
+                        three windows of one film at three positions. So the refusal keeps its
+                        badge and gains an explicit way past it
+                        (design `docs/clip-playback-design.md` § The duplicate guard stays,
+                        with a door in it).
+
+                        Offered only where a section can be played, because that is the whole
+                        reason to want a second line. Its own click, so pressing it does not
+                        also fire the row's "jump to the one already here". */}
+                    {hasSections ? (
+                      <Button
+                        appearance="outline"
+                        className="addanother"
+                        intent="neutral"
+                        onClick={() => {
+                          close()
+                          void addAnother(hit)
+                        }}
+                        size="sm"
+                      >
+                        Add another
+                      </Button>
+                    ) : null}
                   </>
                 ),
+                ignoreSelector: ".addanother",
                 pick: () => {
                   close()
                   if (!setId) return
@@ -1087,6 +1173,16 @@ export function QueueView({
               value: "priority",
             },
             { label: "Has a start point", value: "start" },
+            // Offered only where a section can exist. On a reading queue this row would
+            // filter every entry out and answer a question the backend cannot be asked.
+            ...(hasSections
+              ? [
+                  {
+                    label: "Plays a section only",
+                    value: "section",
+                  },
+                ]
+              : []),
           ]}
           size="sm"
           value={view.filters.state}
