@@ -138,9 +138,30 @@ export const RESUME_MAX_FRACTION = Number(str('RESUME_MAX_FRACTION', '0.95')) ||
 // Only seek an episode still near its start; past this we missed the transition (or the viewer
 // scrubbed there deliberately) and yanking them backwards is worse than doing nothing.
 export const RESUME_START_WINDOW_MS = int('RESUME_START_WINDOW_MS', 120_000);
-// How often to ask the SERVER what is playing. /status/sessions is the trigger because the
-// now-playing topic's HA source reports a playing state with a null ratingKey on this setup.
-export const RESUME_POLL_MS = int('RESUME_POLL_MS', 5_000);
+// How often to ask the SERVER what is playing, when the push feed has not already said so.
+//
+// This was 5 000 ms, and that one number WAS the owner's "4-5 seconds": the seek cannot go
+// out before the next tick after the player advances, so mean detection was 2 500 ms and
+// worst case 5 000 ms. 1 500 ms costs 40 GETs per minute against a LAN PMS, and only while a
+// lineup has unfired seeks — `startWatch` stops itself the moment the plan drains, and after
+// `maxMs` regardless. That is the whole price. It is the FALLBACK cadence now; the push feed
+// below is the primary trigger.
+export const RESUME_POLL_MS = int('RESUME_POLL_MS', 1_500);
+// The poll path's own request timeout. `plexReq`'s default is 60 s with no retry, which on a
+// short cadence lets ONE hung socket stall the watcher for dozens of ticks — the watcher
+// swallows the throw, so a skipped tick is strictly better than a stalled one.
+export const RESUME_POLL_TIMEOUT_MS = int('RESUME_POLL_TIMEOUT_MS', 2_500);
+// How soon to re-read after a RETRYABLE decline. At the moment of an advance /status/sessions
+// can still report the previous item's position against the new ratingKey (observed live —
+// see resume.ts), and waiting a whole interval to find out doubled the delay. The burst is
+// bounded to one interval's worth of fast re-reads; see `startWatch`.
+export const RESUME_RETRY_MS = int('RESUME_RETRY_MS', 400);
+// Use the retained now-playing topic as the PRIMARY advance trigger, with the poll above as
+// the fallback. Switchable because that topic was rejected for this job once before: it
+// reported a playing state it could not name (`ratingKey: null`) on this setup. An event
+// without a usable ratingKey is ignored rather than guessed at, so the poll still covers it —
+// but RESUME_PUSH_TRIGGER=0 turns the whole path off without a redeploy.
+export const RESUME_PUSH_TRIGGER = bool('RESUME_PUSH_TRIGGER', true);
 
 // --- profile-driven set selection (set="auto") -------------------------------- //
 // The signed-in Plex Home profile on the Shield decides the tier; cards carry only the KIND
@@ -199,6 +220,16 @@ export const PLAYBACK_FSM = bool('PLAYBACK_FSM', false);
 // immediately before firing play so a closed / mid-nav Plex surfaces as "not ready, re-open
 // + retry" instead of an Errno 111 that kills the scan.
 export const COMPANION_PORT = int('COMPANION_PORT', 32500);
+// How long a companionTarget() MISS is remembered. A HIT was already memoised forever; a miss
+// was not, so a player that is not advertising a connection cost a plex.tv WAN round trip on
+// every poll, every seek and every transport verb — and "not advertising" is exactly the state
+// the system is in while Plex is mid-navigation, which is when a seek is about to be due.
+// Short on purpose: long enough to collapse a burst, short enough that a client coming online
+// is noticed within a few seconds.
+export const COMPANION_MISS_TTL_MS = int('COMPANION_MISS_TTL_MS', 10_000);
+// Request timeout for plex.tv (`/api/v2/devices`). It is a WAN call on the seek path and had
+// no timeout at all, so a black-holed socket could hang a poll tick indefinitely.
+export const PLEXTV_TIMEOUT_MS = int('PLEXTV_TIMEOUT_MS', 8_000);
 // Bounded retries for the FSM's two fragile transitions. `play` re-opens Plex between
 // connection-refused attempts; `switch` re-summons the picker between failed switches.
 export const PLAYBACK_FSM_PLAY_ATTEMPTS = int('PLAYBACK_FSM_PLAY_ATTEMPTS', 3);

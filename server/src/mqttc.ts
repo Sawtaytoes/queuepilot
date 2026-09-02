@@ -144,6 +144,16 @@ export const onState = (fn: StateListener): Set<StateListener> => stateListeners
 
 const nowListeners = new Set<NowPlayingListener>();
 export const onNowPlaying = (fn: NowPlayingListener): Set<NowPlayingListener> => nowListeners.add(fn);
+/**
+ * Drop a now-playing listener.
+ *
+ * The two long-lived consumers (sse.js, finished.js) subscribe once for the life of the
+ * process and never needed this. The resume watcher does: it is armed and disarmed per
+ * session, and a listener that outlived its watcher would hold the previous lineup's closure
+ * and wake a plan that has already been replaced. Additive on purpose — `onNowPlaying` keeps
+ * returning the Set, so neither existing caller changes.
+ */
+export const offNowPlaying = (fn: NowPlayingListener): boolean => nowListeners.delete(fn);
 
 export function devices(): AnnouncedDevice[] {
   // Default first, then by name — the dropdown's order.

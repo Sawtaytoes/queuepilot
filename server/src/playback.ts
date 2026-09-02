@@ -27,6 +27,9 @@ import {
   SHIELD_CLIENT_URI,
   SHIELD_IP,
   COMPANION_PORT,
+  COMPANION_MISS_TTL_MS,
+  PLEXTV_TIMEOUT_MS,
+  RESUME_POLL_TIMEOUT_MS,
   PLAYBACK_FSM_COMPANION_TIMEOUT,
   PLEX_LOCAL_URL,
   MQTT_HOST,
@@ -229,6 +232,36 @@ export async function companionReady(
   });
 }
 
+// --- the Companion command id ------------------------------------------------- //
+
+/**
+ * The next `commandID` for a Companion command, as a string.
+ *
+ * Every command this file sent carried a hardcoded `commandID=1`. Companion's contract is a
+ * MONOTONICALLY INCREASING id per controlling client (`X-Plex-Client-Identifier`) — it is how
+ * the player orders commands and how it addresses the reply back over the subscription
+ * channel. Every other Companion controller increments it; this one repeated itself.
+ *
+ * It has never produced a visible failure, because this app has only ever sent isolated
+ * commands with a person's reaction time between them. A repeated id is only ambiguous when
+ * two commands are in flight close together, and nothing here did that. It is fixed now
+ * rather than later because it is three lines, it costs nothing, and the first caller to send
+ * two commands back to back would inherit the bug rather than discover it.
+ *
+ * Per PROCESS, not per session: the id is scoped to our client identifier, which is a
+ * constant for the whole process, so a per-session counter would restart and go backwards.
+ */
+let _commandId = 0;
+function nextCommandId(): string {
+  _commandId += 1;
+  return String(_commandId);
+}
+
+/** Test seam: restart the counter (unit tests assert the sequence, not the absolute value). */
+export function _resetCommandId(): void {
+  _commandId = 0;
+}
+
 // --- machine identifier + companion target (helpers that lived on plex.py) --- //
 
 let _machineId: string | null = null;
@@ -254,6 +287,10 @@ export function _resetMachineIdentifier(): void {
 
 // name|machineId -> the plex.tv row that answered for it.
 const _companionTarget = new Map<string, PlayerDevice>();
+// name|machineId -> the epoch ms at which a MISS stops being believed. See
+// COMPANION_MISS_TTL_MS: only the hit was ever memoised, so a player advertising no
+// connection re-asked plex.tv on every single call that needed a target.
+const _companionMiss = new Map<string, number>();
 
 async function plextv<T = unknown>(path: string, token = PLEX_TOKEN, method = 'GET'): Promise<T> {
   const res = await fetch(`https://plex.tv${path}`, {
@@ -263,6 +300,9 @@ async function plextv<T = unknown>(path: string, token = PLEX_TOKEN, method = 'G
       'X-Plex-Client-Identifier': CLIENT_ID,
       Accept: 'application/json',
     },
+    // A WAN call on the seek path had NO timeout: a black-holed socket hung whatever tick
+    // was waiting on it, for as long as the OS kept the connection open.
+    signal: AbortSignal.timeout(PLEXTV_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`plex.tv ${res.status} for ${path}`);
   const text = await res.text();
@@ -304,29 +344,45 @@ export async function playerDevices(): Promise<PlayerDevice[]> {
 export async function companionTarget(
   name: string | null,
   machineId = '',
+  { now = Date.now, missTtlMs = COMPANION_MISS_TTL_MS }: {
+    now?: () => number;
+    missTtlMs?: number;
+  } = {},
 ): Promise<PlayerDevice | null> {
   const key = machineId || name || '';
   if (!key) return null;
   if (_companionTarget.has(key)) return _companionTarget.get(key) ?? null;
+  // A MISS is cached too, briefly. Without this, a player that is not advertising a
+  // connection — the state Plex is in while it navigates, which is precisely when the next
+  // seek is about to be due — costs a plex.tv WAN round trip on every poll, every seek and
+  // every transport verb. The TTL is short so the client coming back online is still noticed
+  // quickly; the cost of being wrong for a few seconds is one extra fallback, not a failure.
+  const missUntil = _companionMiss.get(key);
+  if (missUntil != null && missUntil > now()) return null;
   let rows: PlayerDevice[];
   try {
     rows = await playerDevices();
   } catch {
-    return null; // network/plex.tv hiccup: caller falls back
+    // A network/plex.tv hiccup is NOT cached as a miss: "could not ask" and "asked, and it is
+    // not there" are different answers, and remembering the first would extend an outage.
+    return null; // caller falls back
   }
   for (const d of rows) {
     if (machineId && d.machineIdentifier !== machineId) continue;
     if (!machineId && d.name !== name) continue;
     // This caller DOES need a direct endpoint — playMedia is sent to `uri`.
     if (!d.uri) continue;
+    _companionMiss.delete(key);
     _companionTarget.set(key, d);
     return d;
   }
+  _companionMiss.set(key, now() + Math.max(0, missTtlMs));
   return null;
 }
 
 export function _resetCompanionTarget(): void {
   _companionTarget.clear();
+  _companionMiss.clear();
 }
 
 // --- HTTP helpers ------------------------------------------------------------ //
@@ -697,12 +753,23 @@ function intOffset(offset: number | string | null | undefined): number {
 // curated queue whose lead item was started but not finished.
 // What the SERVER says is playing on our target player, as {ratingKey, viewOffset} or null.
 //
-// This is resume.js's trigger. The retained now-playing topic would have been cheaper, but its
-// HA source reports `{"state":"playing", "ratingKey":null}` on this setup — a playing state it
-// cannot name — so it is unusable for deciding WHICH episode to seek. /status/sessions names
-// the episode and gives its position.
+// This is what resume.js READS. The retained now-playing topic now says WHEN to read it (a
+// push, rather than a fixed cadence), but it is still not what we read: its HA source was
+// measured reporting `{"state":"playing", "ratingKey":null}` on this setup — a playing state
+// it cannot name — and it carries no position we would trust to decide whether an item is
+// still near its start. /status/sessions names the episode and gives its position, so it
+// stays the authority and the fallback trigger both.
 export async function currentSession(
-  { device = null }: { device?: Device | null } = {},
+  { device = null, client = null, timeoutMs = RESUME_POLL_TIMEOUT_MS }: {
+    device?: Device | null;
+    /**
+     * The target resolved ONCE at arm time. Without it this re-ran `findClient()` on every
+     * tick, which on a player advertising no connection was a plex.tv WAN round trip per
+     * poll. Null falls back to resolving it here, so every other caller is unchanged.
+     */
+    client?: ClientTarget | null;
+    timeoutMs?: number;
+  } = {},
 ): Promise<CurrentSession | null> {
   let data: PlexReqJson;
   try {
@@ -713,7 +780,10 @@ export async function currentSession(
     //   currentSession({})                -> {"ratingKey":"359877","viewOffset":19485}
     //   currentSession({setName:'shows'}) -> null
     // The seek itself still goes out under the play token, matching playMedia.
-    data = await plexReq('GET', '/status/sessions', { token: await playToken(null) });
+    // `timeoutMs` is the poll path's own, far shorter than plexReq's 60 s default. The
+    // watcher swallows a throw and skips the tick, so a request that will not answer within
+    // one poll interval is worth abandoning — the next tick is seconds away.
+    data = await plexReq('GET', '/status/sessions', { token: await playToken(null), timeoutMs });
   } catch {
     return null;
   }
@@ -721,8 +791,10 @@ export async function currentSession(
   if (!md.length) return null;
   // Prefer the session on OUR player — the house has other clients, and seeking off the back of
   // someone else's playback would be a genuinely bad bug.
-  let wanted: ClientTarget | null = null;
-  try { wanted = await findClient(device); } catch { wanted = null; }
+  let wanted: ClientTarget | null = client;
+  if (!wanted) {
+    try { wanted = await findClient(device); } catch { wanted = null; }
+  }
   const mine = md.find((m) => {
     const p = m.Player || {};
     if (!wanted) return true;
@@ -836,7 +908,7 @@ async function playerCommand(
     type: 'video',
     'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
     'X-Plex-Client-Identifier': CLIENT_ID,
-    commandID: '1',
+    commandID: nextCommandId(),
   });
   try {
     // Companion answers 200 with a "Failure: 200 OK" body even on success — status only,
@@ -890,30 +962,54 @@ export async function seekTo(
   offsetMs: number | string | null | undefined,
   {
     device = null,
+    client = null,
     setName = null,
     userUuid = null,
-  }: { device?: Device | null; setName?: string | null; userUuid?: string | null } = {},
+  }: {
+    device?: Device | null;
+    /** The target resolved once at arm time — see `currentSession()`. */
+    client?: ClientTarget | null;
+    setName?: string | null;
+    userUuid?: string | null;
+  } = {},
 ): Promise<SeekResult> {
   const ms = intOffset(offsetMs);
   if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
-  const client = await findClient(device);
-  if (!client) return { seeked: false, error: 'target client not found' };
-  const params = new URLSearchParams({
-    offset: String(ms),
-    type: 'video',
-    machineIdentifier: await machineIdentifier(),
-    'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
-    'X-Plex-Client-Identifier': CLIENT_ID,
-    commandID: '1',
-  });
-  try {
-    // Companion answers 200 with a "Failure: 200 OK" body even on success — status only.
-    await plexReq('GET', `/player/playback/seekTo?${params}`, {
-      token: await playToken(setName, userUuid), host: client.uri || null,
+  const target = client ?? await findClient(device);
+  if (!target) return { seeked: false, error: 'target client not found' };
+  const token = await playToken(setName, userUuid);
+  const send = async (to: ClientTarget): Promise<void> => {
+    const params = new URLSearchParams({
+      offset: String(ms),
+      type: 'video',
+      machineIdentifier: await machineIdentifier(),
+      'X-Plex-Target-Client-Identifier': to.machineIdentifier || '',
+      'X-Plex-Client-Identifier': CLIENT_ID,
+      commandID: nextCommandId(),
     });
+    // Companion answers 200 with a "Failure: 200 OK" body even on success — status only.
+    await plexReq('GET', `/player/playback/seekTo?${params}`, { token, host: to.uri || null });
+  };
+  try {
+    await send(target);
     return { seeked: true, offset: ms };
   } catch (e) {
-    return { seeked: false, error: errMessage(e) };
+    // A target handed in at arm time can go stale mid-session: the player takes a new address
+    // off DHCP, or plex.tv starts advertising a different connection. So a failure against a
+    // CACHED target is not final — drop what is memoised, resolve again, and send once more.
+    // A target we resolved ourselves in this call is already fresh, so there is nothing to
+    // retry and the failure stands.
+    if (!client) return { seeked: false, error: errMessage(e) };
+    _resetCompanionTarget();
+    let fresh: ClientTarget | null = null;
+    try { fresh = await findClient(device); } catch { fresh = null; }
+    if (!fresh) return { seeked: false, error: errMessage(e) };
+    try {
+      await send(fresh);
+      return { seeked: true, offset: ms };
+    } catch (again) {
+      return { seeked: false, error: errMessage(again) };
+    }
   }
 }
 
@@ -1041,7 +1137,7 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
     token: tok,
     'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
     'X-Plex-Client-Identifier': CLIENT_ID,
-    commandID: '1',
+    commandID: nextCommandId(),
   });
 
   // Companion host: prefer the direct uri; fall back to Plex server relay if missing
