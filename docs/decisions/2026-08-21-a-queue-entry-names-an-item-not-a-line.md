@@ -4,7 +4,11 @@
 - **Date:** 2026-08-21
 - **Type:** fix / semantics
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** the SINGLE-COPY clause (§3) only, by
+  [2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines](2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md)
+  — a queue entry may now also name a LINE, so one file can hold several sections. The
+  coverage half of this record (Pending subtracts what you have watched) is UNCHANGED: two
+  sections of one film still cover one film.
 - **Completed by:** [2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key](2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key.md)
   — the data repair this record proposed and did not perform. The 84 title-only entries are
   backfilled, and the string entry form is gone.
