@@ -1,9 +1,4 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useLayoutEffect,
-} from "react"
+import { lazy, Suspense, useEffect } from "react"
 import {
   Outlet,
   Route,
@@ -27,10 +22,6 @@ import {
   ROUTE_PATHS,
   WATCH_PLAY_PATH,
 } from "./lib/routePaths"
-import {
-  pageScrollRegion,
-  scrollRegionTo,
-} from "./lib/verticalScrollRegion"
 import {
   resolveChannel,
   useChannelSelection,
@@ -217,13 +208,6 @@ function AppFrame() {
   // is a render-time call and why calling it twice at the same path is harmless. It belongs
   // here because this component renders above every page.
   trackRouteOrigin(path)
-
-  // React Router keeps the document scroll position when it swaps routes. Each route is a
-  // new page here, so start it at the top before the new page paints. QueuesView restores its
-  // saved position after this when somebody returns to Picks.
-  useLayoutEffect(() => {
-    scrollRegionTo(pageScrollRegion(), 0)
-  }, [path])
 
   useEffect(() => {
     void load()

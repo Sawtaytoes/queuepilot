@@ -51,11 +51,6 @@ import type {
   QueueMember,
   RegistrySet,
 } from "../lib/types"
-import {
-  pageScrollRegion,
-  scrollRegionTo,
-  scrollRegionTop,
-} from "../lib/verticalScrollRegion"
 import { PLEX_WORDS } from "../lib/vocab"
 import {
   parseOnly,
@@ -81,11 +76,7 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
-import {
-  homeScroll,
-  toggleCollapsed,
-  useUi,
-} from "../state/ui"
+import { toggleCollapsed, useUi } from "../state/ui"
 
 /**
  * QUEUES — the configurator. Every ordered queue is a horizontal poster shelf, so
@@ -729,22 +720,9 @@ function Shelf({
           <ChevronDownIcon />
         </IconButton>
         {/* An anchor, so the shelf title can be middle-clicked / ⌘-clicked into a new tab
-            like any other link. The handler stays but no longer navigates: it only records
-            where we were, and letting the default run is what performs the navigation.
-            Deliberately NOT preventDefault'd — that would put us back to a button wearing a
-            link's clothes. (A ⌘/Ctrl-click also fires `click`, so it harmlessly stamps the
-            scroll position of a page we are not leaving.) */}
-        <Link
-          className="open"
-          onClick={() => {
-            // Restore this `Main` position when we come back. The document does not scroll
-            // outside Charcuterie's viewport-height shell.
-            homeScroll.y = scrollRegionTop(
-              pageScrollRegion(),
-            )
-          }}
-          to={`/q/${setId}`}
-        >
+            like any other link. It records nothing on the way out: `Main` remembers where
+            each history entry was scrolled to, so Back lands here by itself. */}
+        <Link className="open" to={`/q/${setId}`}>
           <span className="lbl">{label}</span>
           <span className="sec">{items.length}</span>
           {laneClause ? (
@@ -995,19 +973,6 @@ export function QueuesView({
   const shelvesRef = useRef<HTMLDivElement>(null)
 
   useHomeDrags(shelvesRef)
-
-  // Shelf heights are deterministic (fixed tile size + aspect-ratio), so the page
-  // height is settled synchronously — restore the pre-navigation scroll on the next
-  // frame.
-  useEffect(() => {
-    const y = homeScroll.y
-
-    requestAnimationFrame(() =>
-      scrollRegionTo(pageScrollRegion(), y),
-    )
-    // Only on entering the view, which is now the same thing as mounting it.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
 
   const playingSet = activeSet(now, data)
   const only = parseOnly(search)
