@@ -145,8 +145,42 @@ export interface Start {
   series?: string;
   season?: number;
   episode?: number;
+  /**
+   * WHERE INSIDE the first played unit playback begins, in milliseconds.
+   *
+   * The next term in the sequence `series` → `season` → `episode` already runs: those pick
+   * WHICH unit plays, this picks where in it. A movie section is the shape with a position and
+   * neither a series nor an episode, exactly as `start` already behaves for a movie member of
+   * a collection — which is why `normalizeStart()` cannot require one of the other two
+   * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+   *
+   * FIRST UNIT ONLY. An entry contributing three episodes per visit takes this offset on
+   * episode one; two and three play in full.
+   *
+   * Milliseconds, and the `_ms` suffix is carried on the key because a bare `position` gives
+   * the reader no unit. Sparse like every other per-entry override: absent, negative or
+   * non-numeric DROPS the key rather than writing a 0 nobody typed.
+   */
+  position_ms?: number;
   /** Legacy location of the entry's history override. New writes use EntryExtras.watch_history. */
   history?: 'queue' | 'provider';
+}
+
+/**
+ * WHERE the first played unit STOPS — the mirror of `Start.position_ms`.
+ *
+ * A nested mapping rather than a bare `end_ms` on the entry so that a later "stop after season
+ * 2 episode 6" is an addition to THIS key instead of a third one, the same way `start` already
+ * holds `series`/`season`/`episode` beside its position.
+ *
+ * Independently optional from `start`: all four combinations are valid, and the pair with
+ * neither is today's behaviour unchanged. When both positions are set, `end` must be STRICTLY
+ * after `start` — a zero-length section plays nothing, and equal ends are refused by name
+ * rather than swapped, because a swap would hide a typo. `queues.setStart`/`setEnd` own that
+ * check; they are the only readers that can see both sides at once.
+ */
+export interface End {
+  position_ms?: number;
 }
 
 // --- bindings ---------------------------------------------------------------- //
@@ -677,6 +711,13 @@ export interface EntryExtras {
   /** Slots per round when the set is randomized. */
   weight?: number;
   start?: Start;
+  /**
+   * Where this entry's first played unit STOPS. Absent means "play to the end of the unit",
+   * which is what every entry written before 2026-09-01 says.
+   *
+   * Paired with `start.position_ms`, but neither requires the other — see `End`.
+   */
+  end?: End;
   /** Per-entry history override. Absent means follow the queue's watch_history default. */
   watch_history?: 'provider' | 'queue';
   /** Written only for 'member'/'season'; "none" DROPS the key. */
@@ -1343,6 +1384,23 @@ export interface Provider {
    * goes back years.
    */
   stampsQueuedAt?: boolean;
+  /**
+   * Can this provider play a SECTION of an item — begin at an offset and stop at one?
+   *
+   * A capability, not a kind check, and it is Plex alone. A section is a seek plus a stop on a
+   * timeline QueuePilot can COMMAND. Kavita, Board Game Picker, Steam and MiSTer are all
+   * `delivery: 'pull'`: QueuePilot hands over an artifact or a URL and loses control at that
+   * moment, so it can neither start one part-way in nor stop one.
+   *
+   * A provider that cannot serve a section offers NO CONTROL for it rather than accepting one
+   * and ignoring it, following
+   * `2026-08-30-the-watch-history-source-is-a-provider-capability-and-queuepilot-is-the-fallback`.
+   * `providers/config.ts PLAYS_SECTIONS` is the same fact keyed by KIND, so the API can report
+   * it without instantiating anything — which is what lets the web app hide the control for a
+   * reading queue whose token is not configured
+   * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+   */
+  playsSections?: boolean;
 
   // --- required -------------------------------------------------------------- //
   buckets(ctx: BucketsContext): Promise<BucketsResult>;
