@@ -5,8 +5,9 @@ import { useSyncExternalStore } from "react"
  * (typed in the toolbar, applied to shelves rendered elsewhere) and which shelves
  * are collapsed (persisted, and toggled from both the shelf and "Collapse all").
  *
- * Plus `homeScroll`: returning from a queue lands you back where you were, so you
- * can open the next queue near where you left off.
+ * Scroll position used to live here too, as `homeScroll`. Charcuterie's `Main`
+ * remembers where every history entry was scrolled to, so the one-way version this
+ * held — Queues only, and only when the queue was opened by its title — is gone.
  */
 
 const COLLAPSE_KEY = "pc.collapsedQueues"
@@ -99,6 +100,3 @@ export function toggleCollapsed(
 
   setCollapsed(next)
 }
-
-/** Where the shelves were scrolled when a queue was opened from Home. */
-export const homeScroll = { y: 0 }
