@@ -5,9 +5,13 @@
 // is everything that reads or edits the parsed document — `entryKey`, the entry readers,
 // `seqFor`, the mutations, the `listAll` memo. The split is "who touches the disk".
 //
-// The lock is CROSS-PROCESS on purpose and is the oldest constraint in this file: two writers
-// have always shared this path, so a language-level mutex cannot cover it and a mkdir-based
-// advisory lock on `<queues.yaml>.lock` does.
+// The lock is on DISK rather than in memory, and that is the oldest constraint in this file.
+// It was built that way because two writers shared this path: this editor and a Python
+// `queue_builder.queues.prune` in a sibling process. That writer was deleted in `7bf01e0` and
+// only `cast_sidecar/` is tracked Python now, which never opens this file. The mkdir lock on
+// `<queues.yaml>.lock` stays because it still earns its keep — every mutation in `queues.ts` is
+// an async read-modify-write over the whole document, and it survives a crashed holder (see
+// LOCK_STALE_MS), which a language-level mutex cannot.
 import { promises as fs, readFileSync, statSync } from 'node:fs';
 import { parse, parseDocument } from 'yaml';
 import type { Document } from 'yaml';
@@ -71,9 +75,11 @@ export async function readDoc(): Promise<Document> {
   return doc;
 }
 
-// Match the Python/ruamel writer's style so the file doesn't churn as the two writers
-// alternate: `indentSeq: false` puts block dashes at the key's indent (ruamel offset=0),
-// `lineWidth: 0` disables wrapping so long titles/comments stay on one line.
+// The emit style the file on disk is already written in, so an edit rewrites the line it
+// touched and nothing else. It came from ruamel.yaml, which is what the retired Python writer
+// used: `indentSeq: false` puts block dashes at the key's indent (ruamel offset=0), and
+// `lineWidth: 0` disables wrapping so long titles and comments stay on one line. Changing
+// either would reflow the whole household file on the next save.
 const YAML_OUT = { indentSeq: false, lineWidth: 0 };
 
 export async function writeDoc(doc: Document): Promise<void> {
@@ -93,7 +99,8 @@ export async function writeDoc(doc: Document): Promise<void> {
  * The file's `(mtimeMs, size)`, or null when it is not there yet.
  *
  * Moved from `queues.ts listAll()`, which memoizes every set's entries on this pair. Any
- * writer — this process, an SMB hand-edit, the Python prune — moves at least one of the two.
+ * writer — this process, or an SMB hand-edit, which is the only other one left — moves at
+ * least one of the two.
  */
 export async function stat(): Promise<{ mtimeMs: number; size: number } | null> {
   try {
