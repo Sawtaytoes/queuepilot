@@ -22,13 +22,21 @@ import {
   effectiveWatchHistory, storedEntryWatchHistory, type WatchHistorySource,
 } from '../watchHistory.js';
 import type { ResolvedTile } from '../tiles.js';
-import type { EntryObject, QueueEntry, Start } from '../types.js';
+import type { End, EntryObject, QueueEntry, Start } from '../types.js';
 import { mapLimit } from './mapLimit.js';
 import { readBody } from './readBody.js';
 
-/** A queue entry's manual start override ({season,episode}); null = automatic next-unwatched. */
+/** A queue entry's manual start override ({season,episode,position_ms}); null = automatic
+ *  next-unwatched. `position_ms` rides through here unchanged — this reads the stored mapping
+ *  whole rather than field by field, which is why the section offset needed no new plumbing. */
 const startOf = (e: QueueEntry): Start | null => (
   e.value && typeof e.value === 'object' && e.value.start ? e.value.start : null
+);
+
+/** Its mirror: where the entry's first played unit STOPS ({position_ms}); null = play to the
+ *  end of the unit, which is what every entry written before 2026-09-01 says. */
+const endOf = (e: QueueEntry): End | null => (
+  e.value && typeof e.value === 'object' && e.value.end ? e.value.end : null
 );
 
 /**
@@ -120,6 +128,7 @@ function queueTile(
     collectionOrder: v && Array.isArray(v.collection_order) ? v.collection_order.map(String) : [],
     queuedAt: v && Number.isFinite(Number(v.queued_at)) ? Number(v.queued_at) : null,
     start: startOf(e),
+    end: endOf(e),
     watch_history: storedEntryWatchHistory(e.value),
     effective_watch_history: history.effective,
     queue_history_completed_count: history.progress
@@ -611,6 +620,11 @@ export function queuesRoutes(): Hono {
           await queues.setWeight(set, key, 1);
           await queues.setItemOrder(set, key, null);
           await queues.setBatchStop(set, key, null);
+          // `end` FIRST. Each clear is accepted on its own (a cleared side has nothing to
+          // compare against), so the order cannot refuse either way — but clearing the stop
+          // before the start keeps the entry legal at every instant in between, which is the
+          // property to hold onto if a future writer ever reads the file mid-reset.
+          await queues.setEnd(set, key, null);
           await queues.setStart(set, key, null);
         }
         if (wants('episodes')) await queues.setEpisodes(set, key, body.episodes);
@@ -746,6 +760,24 @@ export function queuesRoutes(): Hono {
         queueEntryHistory.clearCompleted(set, key);
       }
       return c.json(result);
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // Set/clear an entry's END point — where its first played unit STOPS. Body:
+  // {end: {position_ms}}, or {end: null} to play to the end of the unit again.
+  //
+  // No validation here, exactly like its `start` sibling: the writer coerces, and the writer is
+  // also the only thing that can see the OTHER side of the window under the same lock. An
+  // `end` that is not strictly after an existing `start` comes back `{ok: false, error}` with
+  // the two offsets named.
+  app.patch('/queues/:set/items/:key/end', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    const { end } = await readBody(c);
+    try {
+      return c.json(await queues.setEnd(set, decodeURIComponent(c.req.param('key')), end));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

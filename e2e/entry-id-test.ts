@@ -72,7 +72,7 @@ const entryIdentity = await import('../server/src/entryIdentity.js');
 const promote = await import('../server/src/promote.js');
 const queueEntryHistory = await import('../server/src/store/db/queueEntryHistory.js');
 import type { ResolveCfg } from '../server/src/engine/resolve.js';
-import type { EntryValue, PlexClient } from '../server/src/types.js';
+import type { PlexClient } from '../server/src/types.js';
 
 const keysOf = async (set: string): Promise<string[]> =>
   (await queues.listSet(set)).map((e) => e.key);
@@ -168,14 +168,14 @@ same('the queue now holds three lines', (await keysOf('demo')).length, 3);
 same('…with three distinct keys', new Set(await keysOf('demo')).size, 3);
 ok('…and the ORIGINAL line kept its key', (await keysOf('demo')).includes('rk:1001'));
 
-// An add that names a WINDOW says "this is a line" on its own — no flag needed. The window
-// FIELDS are a later change (`docs/clip-playback-design.md`), so `Start` does not declare
-// `position_ms` yet and this literal is cast. That is the dependency, spelled out: identity had
-// to understand a section before the section could be written, and this is the seam where the
-// two meet. Delete the cast in the change that adds the fields.
+// An add that names a WINDOW says "this is a line" on its own — no flag needed. This literal
+// carried an `as EntryValue` cast while identity ran ahead of the fields; `Start.position_ms`
+// and `EntryExtras.end` are declared now, so the cast is gone and the shape is CHECKED. That
+// is the seam the two changes met at: identity had to understand a section before a section
+// could be written.
 const sectioned = await queues.addItem(
   'demo',
-  { ...FILM, start: { position_ms: 3660000 }, end: { position_ms: 3960000 } } as EntryValue,
+  { ...FILM, start: { position_ms: 3660000 }, end: { position_ms: 3960000 } },
   'bottom',
 );
 ok('an add carrying a section mints an id without the flag', sectioned.key.startsWith('id:'), sectioned.key);
