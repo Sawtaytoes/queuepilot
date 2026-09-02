@@ -5204,3 +5204,20 @@ body.rowdragging
   flex-wrap: wrap;
   align-items: center;
 }
+
+/* THE NARROW VIEW clips a timecode. `TimecodeInput` prints its canonical `hh:mm:ss.mmm` —
+   twelve characters — and puts two of those side by side with a "to" between them. At 390px
+   the modal is 359px wide, which leaves each field about 130px, and the default type size
+   cuts the value off after `01:01:00.00`. A value you cannot read in full is worse than a
+   small one, and the field is the primary control here.
+
+   Type size rather than a layout change: the two-across arrangement is the component's, and
+   stacking the fields by reaching into its internal wrapper would break the next time it
+   changes. Named for the WIDTH, which is what the query asks about
+   (`2026-08-17-the-cramped-layout-is-the-narrow-view-not-mobile`). */
+@media (max-width: 480px) {
+  #sectionmodal #section-typebox input {
+    font-size: 0.82rem;
+    padding-inline: 8px;
+  }
+}

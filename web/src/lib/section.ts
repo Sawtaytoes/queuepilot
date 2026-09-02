@@ -207,9 +207,15 @@ export function sectionTagTip(
 }
 
 /**
- * The one-line summary in the entry sheet's Section row. Longer than the tag — there is a
- * whole row for it — and it names the runtime when the item reports one, because "stops at
- * 17:00" means something different in a 20-minute episode and a three-hour film.
+ * The one-line summary in the entry sheet's Section row and under the modal's controls.
+ * Longer than the tag — there is a whole row for it — and it names the runtime when the item
+ * reports one, because "stops at 17:00" means something different in a 20-minute episode and
+ * a three-hour film.
+ *
+ * A FRAGMENT in all four states, never a sentence: the caller supplies the verb, because the
+ * modal has to say "Will play …" for a draft and "Plays …" for what is stored. Returning a
+ * whole sentence for the default and a fragment for the other three read as "Plays Plays the
+ * whole item." the first time the modal was opened on an entry with no section.
  */
 export function sectionSummary(
   section: Section | null,
@@ -220,7 +226,7 @@ export function sectionSummary(
       ? ` of ${timecode(durationMs)}`
       : ""
 
-  if (!section) return "Plays the whole item"
+  if (!section) return "the whole item"
 
   const { endMs, startMs } = section
 
