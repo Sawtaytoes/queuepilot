@@ -31,7 +31,7 @@ import {
   BATCH_STOPS_AT, QUEUE_SERIES_DEFAULT, QUEUE_SERIES_LENGTH,
 } from '../env.js';
 import { store } from '../store/index.js';
-import { legacyEntryMessage } from '../entryFormat.js';
+import { duplicateEntryMessage, entryIdOf, legacyEntryMessage } from '../entryFormat.js';
 import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import { isNodeError } from '../errors.js';
 import { normalizeWatchHistory } from '../watchHistory.js';
@@ -101,6 +101,8 @@ export type ResolveCfg = {
 
 /** A raw entry MAPPING off queues.yaml, before `describe()` coerces it. */
 type RawEntryObject = {
+  /** The optional opaque line id — `entryKey()`'s first branch. See `EntryExtras.id`. */
+  id?: unknown;
   ratingKey?: unknown;
   collection?: unknown;
   title?: unknown;
@@ -314,10 +316,24 @@ function isRatingKey(value: unknown): boolean {
 
 const isObj = (e: unknown): e is RawEntryObject => e != null && typeof e === 'object' && !Array.isArray(e);
 
-// Stable identity for a queue entry — MUST match queues.py entry_key (and server/src/queues.js
-// entryKey). Port of entry_key.
+// Stable identity for one LINE of a queue — the READ side's copy.
+//
+// MUST agree with its twin in `server/src/queues.ts`, which is the write side. The two are
+// separate on purpose (the engine does not import the YAML write-side; that would put a cycle
+// through `sets.ts` and the provider registry), so `e2e/play-one-entry-test.ts` asserts they
+// answer alike. Change one, change the other in the same commit.
+//
+//     id:<opaque>   when the mapping carries a non-empty id
+//     rk:<n>        otherwise, when it carries a ratingKey
+//     title:<text>  otherwise
+//
+// The `id:` branch arrived 2026-09-01 so one queue can hold the same file more than once. It is
+// FIRST and it is additive: an entry that carries no id keys exactly as it did before, byte for
+// byte ([decision] docs/decisions/2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md).
 export function entryKey(entry: unknown): string | null {
   if (isObj(entry)) {
+    const id = entryIdOf(entry);
+    if (id) return `id:${id}`;
     const rk = entry.ratingKey;
     if (rk != null) return `rk:${String(rk)}`;
     const coll = entry.collection;
@@ -405,23 +421,42 @@ export function describe(entry: unknown): EntryDescriptor {
 }
 
 /**
- * Legacy-scalar complaints already logged, as `<set>[<index>] <raw>`.
+ * Refused-entry complaints already logged, as `<set>[<index>] <raw>`.
  *
  * `loadEntries()` runs on every scan and on several request paths, so an unguarded log line
  * would repeat a broken entry into the container log for ever. One line per distinct entry
  * per process is enough to find it; a restart says it again, which is correct — it is still
- * broken.
+ * broken. Both refusals below share the Set — a legacy scalar and a duplicate key are the
+ * same kind of fault and deserve the same one line.
  */
 const complained = new Set<string>();
 
-// Ordered resolution descriptors for a set, [] if the set/file is empty. Port of queues.entries
-// (the read side only — the write-side lock/ruamel round-trip is D4's queues.py port).
+/** Say a refusal ONCE per distinct entry per process, then drop the entry. */
+function complainOnce(setName: string, index: number, entry: unknown, message: string): void {
+  const once = `${setName}[${index}] ${JSON.stringify(entry)}`;
+  if (complained.has(once)) return;
+  complained.add(once);
+  console.log(`[queues] ${message}`);
+}
+
+// Ordered resolution descriptors for a set, [] if the set/file is empty. The READ side of the
+// queue file; the lock and the comment-preserving round-trip are `queues.ts`'s.
 //
 // THE FORMAT GATE LIVES HERE (2026-08-21). A bare-string entry is refused BY NAME and does not
 // become a descriptor, so nothing plays it. The refusal is per ENTRY and never per file: this
 // app runs unattended on the household TV, and one stale hand-typed line must not take a whole
 // queue — let alone every queue — off the air. The entry stays in the file, stays visible in
 // the editor and stays addressable by its key, so it can be fixed or deleted.
+//
+// THE KEY GATE JOINED IT (2026-09-01), under exactly that doctrine. A key names ONE line, and
+// an `id` is how a second line for the same item says which one it is. A hand edit can still
+// write two lines that key alike — typing a second `start.position_ms` into `queues.yaml` over
+// SMB is the case that motivates the feature — and there is no honest answer to "which line is
+// `rk:1001`?" once it has. So the SECOND and later line is refused by name, the FIRST one plays,
+// and the queue around them is untouched. Everything downstream then keeps the invariant it was
+// written against: the first-match setters, the all-match removers, `queue_entry_history`,
+// `lead_cooldown`, and every `?only=<key>` URL
+// ([decision] docs/decisions/2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md).
 export function loadEntries(setName: string): EntryDescriptor[] {
   let data: Record<string, unknown>;
   try {
@@ -434,17 +469,21 @@ export function loadEntries(setName: string): EntryDescriptor[] {
   }
   const seq = ((data && data[setName]) || []) as unknown[];
   const out: EntryDescriptor[] = [];
+  const seen = new Set<string>();
   seq.forEach((e, index) => {
     const desc = describe(e);
     if (desc.key == null) return;
     if (desc.legacy) {
-      const once = `${setName}[${index}] ${JSON.stringify(e)}`;
-      if (!complained.has(once)) {
-        complained.add(once);
-        console.log(`[queues] ${legacyEntryMessage(setName, index, e)}`);
-      }
+      complainOnce(setName, index, e, legacyEntryMessage(setName, index, e));
       return;
     }
+    if (seen.has(desc.key)) {
+      // `entryIdOf` is not consulted: an entry that carries an id keys as `id:<opaque>`, so it
+      // can only land here by repeating another line's id, which is the same fault.
+      complainOnce(setName, index, e, duplicateEntryMessage(setName, index, e, desc.key));
+      return;
+    }
+    seen.add(desc.key);
     out.push(desc);
   });
   return out;
