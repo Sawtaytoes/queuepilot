@@ -559,8 +559,9 @@ An entry can say WHERE INSIDE its first played unit playback begins and where it
 mechanism, two independent keys on the entry mapping, and all four combinations are valid — the
 pair with neither is today's behaviour unchanged
 ([decision](docs/decisions/2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror.md),
-design `docs/clip-playback-design.md`). **The DATA path only exists so far**: the fields are
-stored, written, served and described. Playback and the editor control are the next two changes.
+design `docs/clip-playback-design.md`). **The window PLAYS as of 2026-09-02** — the head starts
+on playMedia's offset, every other unit is seeked after the player advances, the end mark fires
+Companion `skipNext`, and the lineup moves on. What is still missing is the **editor control**.
 
 Four things bite, and the first one already did.
 
@@ -590,6 +591,46 @@ Four things bite, and the first one already did.
   [the watch-history capability](docs/decisions/2026-08-30-the-watch-history-source-is-a-provider-capability-and-queuepilot-is-the-fallback.md):
   a backend that cannot serve a section offers **no control** rather than accepting one and
   playing the item in full.
+
+### Playing a section: two plans, one watcher, and an index for a key
+
+`server/src/section.ts` holds the windows; `resume.ts`'s watcher drives both plans off one
+`/status/sessions` read. Five things here have already been got wrong once, on paper or in the
+tree, and each is cheap to get wrong again.
+
+- ⚠️ **THE SECTION PLAN IS KEYED BY PLAYQUEUE INDEX. Never re-key it by ratingKey.** One queue
+  can hold the same file twice since #300, and a `Map<ratingKey, ms>` physically cannot hold two
+  windows for one file — the second would overwrite the first, and `resume.ts`'s
+  `seen: Set<string>` would answer `already considered` for the second occurrence and never
+  seek it at all. `readPlayQueue().selectedOffset` is the only signal that says which
+  OCCURRENCE is playing, it is READ rather than assumed (Plex reorders, drops what a token
+  cannot see, and a top-up inserts mid-queue), and an ambiguous reading DECLINES. A section
+  seek on the wrong occurrence is worse than no section.
+- **ONE watcher, not two.** Both plans answer the same event, so they share one read and one
+  loop. Two timers would double the reads of one endpoint and let two decisions race over one
+  item. The precedence is a single `if`, and it is the rule the feature turns on: **an AUTHORED
+  section outranks an INFERRED resume marker** — the provider's viewOffset AND the queue's own
+  ledger position. A `SectionDecision.isSpent` keeps that true for a whole item rather than one
+  read; without it the read after a start seek falls through and a resume marker drags the
+  viewer back out of the section that was just set up.
+- ⚠️ **Do NOT apply the resume filters to a section.** `RESUME_MIN_MS` (30 s) would drop a
+  section starting at 0:12, `RESUME_MAX_FRACTION` (0.95) would drop a closing-gag section, and
+  `viewCount >= 1` would drop a section of any film already watched. All three are correct for
+  an inferred marker and wrong for an authored one.
+- **The advance is `playback.transport('next')` — never `advanceSession()`**, which rebuilds
+  the whole playQueue and restarts playback (`topup.ts` names that as the thing to avoid). The
+  read before the mark BOOKS the read at it (the `mark` trigger) rather than polling up to it.
+  Measured overshoot past the mark: **475 ms mean, 900 ms worst**, of which 50 ms is the two
+  round trips and the rest is Plex's ~1 s position grain — see `docs/clip-playback-design.md`
+  § Measured, from `e2e/resume-latency-test.ts`.
+- ⚠️ **A SECTION BOUNDARY IS NOT AN ABANDONED PLAY, and `finished.ts` cannot tell from the
+  position.** A section entry stops at 40% by design, which is exactly what walking out looks
+  like. So `section.ts` records a boundary when the watcher ITSELF issues the `skipNext`, and
+  `finished.ts` claims it: on `watch_history: queue` the line is recorded COMPLETE, and on
+  `watch_history: provider` nothing is written and Plex judges (so a windowed entry on provider
+  history replays every sitting — deliberate, per the decision record). A windowed item also
+  saves NO live position: that writer matches by ratingKey, so while the second section played
+  it addressed the first section's ledger row, and `savePosition` clears `is_completed`.
 
 ### Watch history is queue-defaulted and entry-overridden
 
@@ -1044,6 +1085,7 @@ server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/resume-on-advance-test.ts  # which queued items get seeked, and once each
 server/node_modules/.bin/tsx e2e/resume-latency-test.ts  # the seek latency budget, before and after
 server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts  # the plex.tv target cache + the command id
+server/node_modules/.bin/tsx e2e/section-playback-test.ts  # start at a mark, stop at a mark, advance — incl. two sections of one file
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/tile-lane-test.ts     # the tile's three controls
 server/node_modules/.bin/tsx e2e/collection-reorder-test.ts  # a re-ordered collection reaches the panel
