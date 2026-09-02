@@ -183,6 +183,35 @@ ok('`only`: an unknown key reports unknownEntry and plays nothing',
   JSON.stringify(res));
 
 // --------------------------------------------------------------------------- //
+// A ONE-ENTRY start of a WINDOWED entry
+// --------------------------------------------------------------------------- //
+// Same claim as everything above — the normal path with a shorter list — applied to the
+// section window. `gamma` contributes two episodes, so this also pins the FIRST-UNIT rule on
+// the path where it is easiest to get wrong: with one entry in the list, "the first item of
+// the entry" and "the head of the lineup" are the same item, and a stamp written against the
+// wrong one of those would still look right here without the second episode to check.
+writeFileSync(
+  QUEUES_PATH,
+  'bob:\n  - {title: alpha}\n  - {title: beta}\n'
+  + '  - {title: gamma, episodes: 2, start: {position_ms: 750000}, end: {position_ms: 1020000}}\n',
+);
+res = await lineup('title:gamma');
+ok('`only`: the named entry carries its window',
+  res.play.length === 2
+  && res.play[0]!.sectionStartMs === 750_000 && res.play[0]!.sectionEndMs === 1_020_000,
+  JSON.stringify(res.play.map((i) => [i.ratingKey, i.sectionStartMs, i.sectionEndMs])));
+ok('`only`: and the SECOND episode it contributes plays in full',
+  res.play[1]!.sectionStartMs == null && res.play[1]!.sectionEndMs == null,
+  JSON.stringify([res.play[1]!.sectionStartMs, res.play[1]!.sectionEndMs]));
+
+// An entry with no window is untouched — the sparse rule, on the read side.
+res = await lineup('title:alpha');
+ok('`only`: an entry with no window carries no window fields',
+  res.play.length === 1
+  && res.play[0]!.sectionStartMs === undefined && res.play[0]!.sectionEndMs === undefined,
+  JSON.stringify(res.play.map((i) => [i.ratingKey, i.sectionStartMs, i.sectionEndMs])));
+
+// --------------------------------------------------------------------------- //
 // The HTTP contract: which sets may be asked to play one entry
 // --------------------------------------------------------------------------- //
 // A rotation channel's pool is a RULE — nothing in it has an entry key — so `only` there is a

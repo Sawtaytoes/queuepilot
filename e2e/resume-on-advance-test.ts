@@ -13,6 +13,7 @@ process.env.RESUME_MIN_MS = '30000';
 process.env.RESUME_MAX_FRACTION = '0.95';
 process.env.RESUME_START_WINDOW_MS = '120000';
 const resume = await import('../server/src/resume.js');
+const section = await import('../server/src/section.js');
 
 let failed = 0;
 const check = (label: string, actual: unknown, expected: unknown) => {
@@ -130,6 +131,74 @@ check('a transient Plex failure does not kill the watcher', calls >= 3, true);
 resume.disarm();
 check('disarm empties the plan and stops watching',
   [resume.armedCount(), resume.watching()], [0, false]);
+
+// --- two plans, one watcher --------------------------------------------------- //
+//
+// A section plan joined this loop on 2026-09-02. The resume plan's own behaviour must be
+// exactly what it was — a section is an addition, not a rewrite — and the boundary between
+// them has to hold in both directions.
+
+section.arm({
+  plan: section.sectionPlan([
+    { ratingKey: '106617', duration: 346_000, sectionStartMs: 12_000, sectionEndMs: 90_000 },
+  ]),
+  setName: 'shows',
+});
+resume.arm({ plan, device: null, setName: 'shows' });
+// The resume plan on its OWN is unchanged by a section existing beside it — it still holds the
+// marker and still answers with it. That is deliberate: the precedence is not a mutation of
+// one plan by the other, it lives in the watcher, where both are read from one session. The
+// block below is what drives it.
+check('the resume plan still holds its marker, section or no section',
+  resume.considerSession({ ratingKey: '106617', viewOffset: 4_000 }).ms, 189_000);
+const bothSeeks: number[] = [];
+let bothAdvances = 0;
+resume.startWatch({
+  fetchSession: async () => ({ ratingKey: '106617', viewOffset: 1_000 }),
+  seek: async (ms) => { bothSeeks.push(ms); return { seeked: true }; },
+  advance: async () => { bothAdvances += 1; return { ok: true }; },
+  intervalMs: 10,
+  retryMs: 5,
+  log: () => {},
+});
+await new Promise((r) => setTimeout(r, 80));
+resume.stopWatch();
+check('through the watcher, the AUTHORED section start wins and the marker never fires',
+  bothSeeks, [12_000]);
+check('…and nothing was advanced, because the end mark is 89s away', bothAdvances, 0);
+
+// The other direction: an item with a window that has been SPENT still belongs to the section,
+// for the rest of the sitting. Otherwise the read after the start seek falls through and a
+// resume marker drags the viewer straight back out of the section.
+const spentSeeks: number[] = [];
+resume.arm({ plan, device: null, setName: 'shows' });
+resume.startWatch({
+  fetchSession: async () => ({ ratingKey: '106617', viewOffset: 20_000 }),
+  seek: async (ms) => { spentSeeks.push(ms); return { seeked: true }; },
+  advance: async () => ({ ok: true }),
+  intervalMs: 10,
+  retryMs: 5,
+  log: () => {},
+});
+await new Promise((r) => setTimeout(r, 80));
+resume.stopWatch();
+check('a spent window keeps its item away from the resume plan', spentSeeks, []);
+
+// And an item with NO window is untouched by any of this.
+section.arm({ plan: new Map(), setName: 'shows' });
+resume.arm({ plan, device: null, setName: 'shows' });
+const plainSeeks: number[] = [];
+resume.startWatch({
+  fetchSession: async () => ({ ratingKey: '106617', viewOffset: 1_000 }),
+  seek: async (ms) => { plainSeeks.push(ms); return { seeked: true }; },
+  intervalMs: 10,
+  log: () => {},
+});
+await new Promise((r) => setTimeout(r, 60));
+resume.stopWatch();
+check('an unwindowed item resumes exactly as it always did', plainSeeks, [189_000]);
+section.disarm();
+resume.disarm();
 
 console.log(failed ? `resume-on-advance FAILED (${failed})` : 'resume-on-advance OK');
 process.exit(failed ? 1 : 0);
