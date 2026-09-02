@@ -181,8 +181,10 @@ CREATE INDEX IF NOT EXISTS queue_entries_done       ON queue_entries (set_id, do
 
 -- Queue-owned episode history. This is deliberately separate from Plex history: one person
 -- can watch later episodes under the same Plex profile while a different queue continues its
--- own run from an earlier point. `entry_key` is the stable `rk:…` / `title:…` identity used by
--- every queue mutation. A start-point reset deletes this entry's rows and begins a new run.
+-- own run from an earlier point. `entry_key` is the stable line identity every queue mutation
+-- uses — `id:…` when the entry carries one, else `rk:…`, else `title:…`. It names ONE line, so
+-- two lines for the same file (a queue that holds it twice) get two independent runs with no
+-- schema change. A start-point reset deletes this entry's rows and begins a new run.
 CREATE TABLE IF NOT EXISTS queue_entry_history (
   set_id       TEXT NOT NULL,
   entry_key    TEXT NOT NULL,

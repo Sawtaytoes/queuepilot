@@ -301,9 +301,11 @@ check('a later arrival is new again', await keysNow(), ['910']);
 // (`title:Detective Days`) and the Pending tile posted a ratingKey (`rk:705`). Two different
 // `entryKey`s, so `addItem`'s exact-key check passed and a second copy landed.
 //
-// `entryKey` is unchanged and must stay so — the Python writer addresses the same lines by it
-// and the golden parity oracles record what it returns. The duplicate test is a SECOND,
-// looser identity check that asks which ITEM an entry names.
+// `entryKey` still names one LINE and must keep doing so — roughly sixty call sites and both
+// SQLite primary keys are written against that. (It is not the Python writer or the golden
+// oracles that hold it there, whatever this comment used to say: `queue_builder/` was deleted
+// in `7bf01e0`, and no golden file contains an `rk:` or `title:` key.) The duplicate test is a
+// SECOND, looser identity check that asks which ITEM an entry names.
 const animeCfg = routing.loadSets()!.sets.anime!;
 const asAdded = { ratingKey: '705', title: 'Detective Days' };
 

@@ -461,6 +461,15 @@ jobs:
       - name: Queue entry format + migration (offline, injected resolver)
         run: $TSX e2e/entry-objects-test.ts
 
+      # THE ENTRY ID (2026-09-01): one queue may hold the same file more than once. The
+      # expensive claim is the FIRST one — an entry with no `id` keys byte-for-byte as it always
+      # did, so nothing on disk re-keyed. Then: both copies of `entryKey()` agree, two lines for
+      # one rating key are addressed one at a time by every mutation family and by both SQLite
+      # tables, and a hand-written duplicate with no id is refused BY ENTRY while its queue
+      # still plays.
+      - name: Entry id — one file, two lines (offline)
+        run: $TSX e2e/entry-id-test.ts
+
       # Comments survive every queues.yaml / sets.yaml mutation. It ran only in run.sh before
       # this, which meant nothing in CI covered the write-side round trip.
       - name: YAML comment round-trip

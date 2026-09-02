@@ -1,8 +1,14 @@
 // Read/modify the shared queues.yaml with comment- and order-preserving round-trips
-// (the `yaml` Document API), guarded by a CROSS-PROCESS lock that the Python prune also
-// takes. Both writers (this Node editor + queue_builder.queues.prune) run in the same
-// container but as separate processes, so the Python threading lock can't cover us — a
-// mkdir-based advisory lock on `<queues.yaml>.lock` does (see queue_builder/queues.py).
+// (the `yaml` Document API), guarded by an advisory lock on `<queues.yaml>.lock`.
+//
+// ⚠️ THE SECOND WRITER IS GONE. The lock was built cross-process because a Python
+// `queue_builder.queues.prune` edited the same file from a sibling process in the same
+// container; `queue_builder/` was deleted in `7bf01e0` ("chore: delete queue_builder — Node is
+// the only implementation") and only `cast_sidecar/` is tracked Python now, which never touches
+// this file. The lock stays because it is still load-bearing for THIS process: every mutation
+// below is an async read-modify-write over the whole document, several requests can interleave,
+// and two of them parsing the same text would drop one edit. A mkdir lock is also the cheapest
+// thing that survives a crash, which a language-level mutex is not.
 //
 // The FILE half of that — path, lock, parse, write — is `store/queues.ts`'s now. What is left
 // here is the entry vocabulary and every mutation over the parsed document.
@@ -14,7 +20,7 @@ import { toWeight } from './engine/weight.js';
 import { parsePromoteWindow } from './leadWindow.js';
 import * as promote from './promote.js';
 import * as sets from './sets.js';
-import { toEntryObject } from './entryFormat.js';
+import { entryIdOf, hasSection, mintEntryId, toEntryObject } from './entryFormat.js';
 import { normalizeEntryItemOrder } from './entryItemOrder.js';
 import { normalizeWatchHistory } from './watchHistory.js';
 import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
@@ -47,18 +53,33 @@ function plain(node: unknown): unknown {
   return isNode(node) ? node.toJSON() : node;
 }
 
-// Persistence lives in `store/queues.ts` now — the path, the cross-process mkdir lock the
-// Python prune also takes, and the comment-preserving round-trip. Aliased rather than
-// re-wrapped so every call site below reads exactly as it did.
+// Persistence lives in `store/queues.ts` now — the path, the mkdir lock (built cross-process
+// for a Python writer that no longer exists; see the module header), and the comment-preserving
+// round-trip. Aliased rather than re-wrapped so every call site below reads exactly as it did.
 const { readDoc, withLock } = store.queues;
 
-// Stable identity for an entry — MUST match queue_builder.queues.entry_key so the two
-// writers address the same lines. `value` is a plain-JS entry (scalar or {ratingKey,title}).
+// Stable identity for one LINE of a queue. `value` is a plain-JS entry (scalar or a mapping).
+//
+// MUST agree with its twin in `engine/resolve.ts` — the read side keys the same lines the write
+// side does, and `e2e/play-one-entry-test.ts` asserts the two answer alike. Change one, change
+// the other in the same commit.
+//
+//     id:<opaque>   when the mapping carries a non-empty id
+//     rk:<n>        otherwise, when it carries a ratingKey
+//     title:<text>  otherwise
+//
+// The `id:` branch arrived 2026-09-01 so one queue can hold the same file more than once. It is
+// FIRST and it is additive: an entry that carries no id keys exactly as it did before, byte for
+// byte, so nothing on disk re-keys and no `queue_entry_history` or `lead_cooldown` row is
+// orphaned ([decision] docs/decisions/2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md).
 export function entryKey(value: unknown): string | null {
   const m = asMapping(value);
   if (m) {
+    const id = entryIdOf(m);
+    if (id) return `id:${id}`;
     if (m.ratingKey != null) return `rk:${m.ratingKey}`;
-    // {collection: X} keys like a `Collection: X` string (matches Python queues.entry_key).
+    // {collection: X} keys like a `Collection: X` string — the older, string-encoded spelling
+    // of the same entry, so re-shaping one into the other never moves a line.
     if (m.collection) return `title:Collection: ${String(m.collection).trim()}`;
     if (m.title) return `title:${String(m.title).trim()}`;
     return null;
@@ -73,19 +94,21 @@ export function entryKey(value: unknown): string | null {
 // The rule itself lives in `entryFormat.ts` — one module, so the engine can state it without
 // importing this whole write-side. Re-exported here because this is where `entryKey()` lives
 // and where every caller already looks for the entry vocabulary.
-export { isLegacyScalarEntry, toEntryObject, legacyEntryMessage } from './entryFormat.js';
+export {
+  entryIdOf, hasSection, isLegacyScalarEntry, legacyEntryMessage, toEntryObject,
+} from './entryFormat.js';
 
-// A finished entry is KEPT and tagged by the Python service as a `{title/ratingKey, done: true}`
-// mapping (decision: keep+tag rather than auto-prune). A plain string, a bare ratingKey, or a
-// mapping without `done:true` is NOT done. Handles both on-disk shapes so a legacy plain entry
-// simply reads as not-done.
+// A finished entry is KEPT and tagged `done: true` on its mapping rather than pruned (that is
+// the decision; `markDone` below is what writes it, and the Python service that used to is
+// gone). A plain string, a bare ratingKey, or a mapping without `done:true` is NOT done.
+// Handles both on-disk shapes so a legacy plain entry simply reads as not-done.
 export function entryDone(value: unknown): boolean {
   return Boolean(asMapping(value)?.done === true);
 }
 
-// The epoch-seconds timestamp the Python service stamps alongside `done: true` (queues.mark_done),
-// or null when absent/non-numeric. queues.sweep_completed measures the TTL against this, so a
-// hand-marked `done: true` with no timestamp reads as null and is never auto-removed.
+// The epoch-seconds timestamp `markDone` stamps alongside `done: true`, or null when absent or
+// non-numeric. `sweepCompleted` measures the TTL against this, so a hand-marked `done: true`
+// with no timestamp reads as null and is never auto-removed.
 export function entryDoneAt(value: unknown): number | null {
   const m = asMapping(value);
   if (m && m.done_at != null) {
@@ -95,18 +118,18 @@ export function entryDoneAt(value: unknown): number | null {
   return null;
 }
 
-// The global default completed-entry TTL, mirroring config.REMOVE_COMPLETED_AFTER (Python) —
+// The global default completed-entry TTL, read from the app env as REMOVE_COMPLETED_AFTER —
 // used when a set names no `remove_completed_after` override. Auto-removal is OPT-IN: the
 // default is 'never' (keep finished entries forever, today's behavior), so anime channels are
 // never surprise-swept; a movie queue opts in with `remove_completed_after: 24h` in sets.yaml.
-// "24h"/"7d"/"90m" enables; "0"/"never" disables. Env-overridable so one app env feeds both.
+// "24h"/"7d"/"90m" enables; "0"/"never" disables. Env-overridable from the app's own env.
 export const DEFAULT_REMOVE_COMPLETED_AFTER = process.env.REMOVE_COMPLETED_AFTER || 'never';
 
 const DURATION_UNITS: Record<string, number> = { s: 1, m: 60, h: 3600, d: 86400, w: 604800, '': 1 };
 
 // Parse a duration string to whole seconds, or null when auto-removal is disabled. Accepts
 // `24h`/`7d`/`90m`/`45` (bare = seconds); `0`/`never`/`off`/`none`/blank/unparseable → null.
-// Mirrors queue_builder.queues.parse_duration so both processes agree on a set's window.
+// One parser, so a set's window means the same thing to the sweep and to the editor.
 export function parseDuration(value: unknown): number | null {
   if (value == null) return null;
   const s = String(value).trim().toLowerCase();
@@ -157,9 +180,9 @@ export async function listSet(setName: string): Promise<QueueEntry[]> {
 // so this was never the 2.7 s (that is Plex I/O), but it is pure waste on the request path
 // and it is what /api/shelves needs to answer in ~15 ms with no Plex call at all.
 //
-// Memoized on the file's (mtimeMs, size). Any writer — this process, an SMB hand-edit, the
-// Python prune — moves at least one of those, so a stale hit is not reachable through a normal
-// write. writeDoc() also busts it explicitly, because two writes inside the same millisecond
+// Memoized on the file's (mtimeMs, size). Any writer — this process, or an SMB hand-edit, which
+// is the only other one left — moves at least one of those, so a stale hit is not reachable
+// through a normal write. writeDoc() also busts it explicitly, because two writes inside the same millisecond
 // that happen to produce the same length would otherwise collide on the key.
 interface AllCache {
   mtimeMs: number;
@@ -188,8 +211,8 @@ export async function listAll(): Promise<Map<string, QueueEntry[]>> {
 }
 
 // Remove EVERY done entry from a set's list (the "Remove all completed" button). Done entries
-// are the ones the Python service kept + tagged after they finished; this is the ONLY path
-// that drops them (never automatic). Returns the count removed.
+// are the ones `markDone` kept and tagged after they finished; this is the ONLY path that drops
+// them (never automatic). Returns the count removed.
 export async function removeCompleted(setName: string): Promise<{ removed: number }> {
   return withLock(async () => {
     const doc = await readDoc();
@@ -215,8 +238,8 @@ export interface SweepOptions {
   now?: number;
 }
 
-// §B.3 TTL auto-remove: drop the entries this set finished longer ago than its window.
-// session.js calls this after markDone. A done entry is eligible only once
+// TTL auto-remove: drop the entries this set finished longer ago than its window.
+// session.ts calls this after markDone. A done entry is eligible only once
 // its `done_at` (epoch seconds) is >= ttl old; a `keep_completed`/`reel` set is exempt, as
 // is a hand-marked `done:true` with no timestamp. `removeCompletedAfter` defaults to the
 // global DEFAULT_REMOVE_COMPLETED_AFTER when a set names no override. Returns the count
@@ -251,14 +274,55 @@ export async function sweepCompleted(setName: string, opts: SweepOptions = {}): 
   });
 }
 
+/**
+ * Every `id` any entry in the WHOLE document already carries.
+ *
+ * The key is per set, so uniqueness within the set is what `entryKey` needs — but `moveItem`
+ * and `moveBulk` relocate a node between sets, and a minted id that was unique only in its
+ * birth queue would collide on arrival. Scanning the file costs one already-parsed walk of a
+ * few hundred lines, so the wider set is free and the move stays a pure relocation.
+ */
+function takenEntryIds(doc: Document): Set<string> {
+  const taken = new Set<string>();
+  const root: unknown[] = isCollection(doc.contents) ? doc.contents.items : [];
+  for (const pair of root) {
+    const seq = isPair(pair) ? pair.value : null;
+    if (!(seq instanceof YAMLSeq)) continue;
+    for (const node of seq.items) {
+      const id = entryIdOf(plain(node));
+      if (id) taken.add(id);
+    }
+  }
+  return taken;
+}
+
+/** `addItem()`'s knobs. `position` stays a positional argument — every caller passes it. */
+export interface AddItemOptions {
+  /**
+   * Add a SECOND line for something this queue already holds, instead of refusing.
+   *
+   * OFF by default, and that default is the product rule rather than caution: an accidental
+   * second copy of a film in a watch queue is a bug, and the refusal is what caught it. This
+   * is the opt-in for the case where a second line is the POINT — the demo reel that plays
+   * three windows of one film at three positions. Saying yes mints an `id` for the new line,
+   * which is what makes the two independently addressable.
+   */
+  allowDuplicate?: boolean;
+}
+
 // Add a new entry. `value` is a string (title), a number (ratingKey), or a mapping — the API
 // still takes all three, and `toEntryObject` turns it into the mapping that lands on disk.
 // `position` is 'top' (default — top plays next) or 'bottom'. Set-name validity is the
-// caller's (server.js) job — it checks against the live sets.yaml registry.
+// caller's (`routes/queuesRoutes.ts`) job — it checks against the live sets.yaml registry.
+//
+// A key already in the queue is REFUSED (`{added: false, key}`) unless the caller asked for a
+// duplicate, which is what `allowDuplicate` and a section on the value both say. Then the new
+// line is minted an `id` and lands beside the one it repeats.
 export async function addItem(
   setName: string,
   value: EntryValue,
   position: 'top' | 'bottom' = 'top',
+  { allowDuplicate = false }: AddItemOptions = {},
 ): Promise<{ added: boolean; key: string }> {
   return withLock(async () => {
     const doc = await readDoc();
@@ -271,9 +335,18 @@ export async function addItem(
     // provider progress, so it is also the durable answer for the queue view's "Recently
     // added" sort. Preserve an explicit stamp for imports/tests; ordinary API adds omit it.
     if (entry.queued_at == null) entry.queued_at = Math.floor(Date.now() / 1000);
-    const key = entryKey(entry);
+    let key = entryKey(entry);
     if (!key) throw new Error('empty entry');
-    if (seq.items.some((n) => entryKey(plain(n)) === key)) return { added: false, key };
+    if (seq.items.some((n) => entryKey(plain(n)) === key)) {
+      // An add that names a WINDOW is asking for a line, not for the item, so it says "yes"
+      // on its own — the same reasoning that lets it past `entryIdentity.findDuplicateItem`.
+      if (!allowDuplicate && !hasSection(entry)) return { added: false, key };
+      // MINTED HERE AND NOWHERE ELSE. This is the only refusal an id removes, which is what
+      // keeps every existing line's key byte-identical: an entry that was never going to be
+      // refused never gains one.
+      entry.id = mintEntryId(takenEntryIds(doc));
+      key = entryKey(entry) as string;
+    }
     seq.flow = false; // a populated queue is always a block list, never `[ ... ]`
     const node: Node = doc.createNode(entry);
     if (position === 'bottom') seq.items.push(node);
@@ -432,6 +505,10 @@ export function splitEntry(cur: unknown): SplitEntry {
 function entryNode(doc: Document, { ratingKey, title, extras }: SplitEntry): Node {
   const keys = Object.keys(extras).filter((k) => extras[k] != null);
   const o: Record<string, unknown> = {};
+  // `id` LEADS when the entry carries one. It is what keys the line, and this file is read and
+  // edited by hand over SMB — the identity belongs above the payload. Setting the key here and
+  // again in the loop below is harmless: an existing key keeps its position.
+  if (extras.id != null) o.id = extras.id;
   if (ratingKey != null) o.ratingKey = ratingKey;
   if (title != null) o.title = title;
   for (const k of keys) o[k] = extras[k];
@@ -526,8 +603,9 @@ export async function stampQueuedAt(
 }
 
 // Tag the given entry keys **done** in place — kept in the file, excluded from play.
-// Port of queue_builder.queues.mark_done (D4). Scalar entries become mappings so they can
-// carry `done` + `done_at` (epoch seconds). Match is by entryKey. Returns { changed: bool }.
+// Scalar entries become mappings so they can carry `done` + `done_at` (epoch seconds). Match is
+// by entryKey, which names ONE line, so "every match" here is the same single line a
+// `rewriteEntry` setter's first match would find. Returns { changed: bool }.
 export async function markDone(
   setName: string,
   keepKeys: (string | null | undefined)[] | null | undefined,
@@ -554,7 +632,7 @@ export async function markDone(
         seq.items[i] = entryNode(doc, split);
         changed = true;
       } else {
-        // Scalar → mapping carrying identity + done flags (mirrors Python CommentedMap wrap).
+        // Scalar → mapping carrying identity + done flags, the shape every entry holds now.
         const split = splitEntry(cur);
         split.extras.done = true;
         split.extras.done_at = now;
@@ -570,8 +648,8 @@ export async function markDone(
   });
 }
 
-// Un-mark the given entry keys — strip `done` + `done_at` (stale-done recovery).
-// Port of queue_builder.queues.clear_done (D4). Returns { changed: bool }.
+// Un-mark the given entry keys — strip `done` + `done_at` (stale-done recovery). Match is by
+// entryKey, one key one line, exactly as `markDone`. Returns { changed: bool }.
 export async function clearDone(
   setName: string,
   keepKeys: (string | null | undefined)[] | null | undefined,
