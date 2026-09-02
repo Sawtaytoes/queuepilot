@@ -33,6 +33,13 @@
 // carries no ratingKey — the exact failure recorded above — wakes nothing, and the poll
 // covers that item as it always did. RESUME_PUSH_TRIGGER=0 removes the wake-up entirely.
 // (decision 2026-09-01-a-section-boundary-is-detected-from-the-push-feed-not-a-five-second-poll)
+//
+// SINCE 2026-09-02 THIS LOOP DRIVES TWO PLANS. `section.ts` holds the authored windows —
+// start here, stop there, advance — and the watcher below consults it BEFORE its own resume
+// plan. One watcher rather than two, because both plans are answers to the same event ("the
+// player is at position P on item R"): a second timer would double the reads of one endpoint
+// and let two decisions race over one item. The precedence is one line, and it is the rule
+// the whole feature turns on — an AUTHORED section outranks an INFERRED resume marker.
 import {
   RESUME_MIN_MS,
   RESUME_MAX_FRACTION,
@@ -42,6 +49,7 @@ import {
 } from './env.js';
 import type { Device } from './types.js';
 import type { ClientTarget } from './playback.js';
+import * as section from './section.js';
 import { errMessage } from './errors.js';
 
 /**
@@ -211,13 +219,18 @@ export function considerSession(
 //   push   — the now-playing topic published a DIFFERENT ratingKey. The advance itself.
 //   retry  — the last read was declined provisionally (a stale position at the transition).
 //   poll   — nothing pushed; the fallback cadence came round.
+//   mark   — a section's end mark is due about now, so the read was SCHEDULED to land on it.
+//
+// `mark` is what makes the stop-at cheap. The last read said "the end is 87 s away at this
+// position", so the next one is booked for then instead of grinding through fifty-eight polls
+// that all say "not yet". A pause simply makes the booked read early, and it re-books.
 
 let TIMER: NodeJS.Timeout | null = null;
 let UNSUBSCRIBE: (() => void) | null = null;
 const LOGGED = new Set<string>(); // ratingKeys whose retryable decline has been logged once
 
 /** Which of the three reasons above caused a read. Logged verbatim. */
-export type WatchTrigger = 'push' | 'retry' | 'poll';
+export type WatchTrigger = 'push' | 'retry' | 'poll' | 'mark';
 
 /** How `startWatch` is told about a now-playing event. Returns its own unsubscribe. */
 export type PushSubscriber = (
@@ -253,6 +266,8 @@ export const watching = (): boolean => TIMER != null;
 export function startWatch({
   fetchSession,
   seek,
+  fetchPlace = null,
+  advance = null,
   subscribePush = null,
   intervalMs = RESUME_POLL_MS,
   retryMs = RESUME_RETRY_MS,
@@ -262,6 +277,23 @@ export function startWatch({
 }: {
   fetchSession: () => ObservedSession | null | Promise<ObservedSession | null>;
   seek: (ms: number) => { seeked?: boolean; error?: string } | Promise<{ seeked?: boolean; error?: string }>;
+  /**
+   * Where the player is in the LIVE playQueue — `playback.readPlayQueue()`.
+   *
+   * Read ONLY when the section plan holds two pending windows for the observed file, which is
+   * the only case an index can settle and a ratingKey cannot. Omit it and a repeated file's
+   * windows decline rather than guess; every other case is unaffected.
+   */
+  fetchPlace?: (() => section.PlayQueuePlace | null | Promise<section.PlayQueuePlace | null>) | null;
+  /**
+   * Stop the current item and move to the next — Companion `skipNext`, through
+   * `playback.transport('next')`.
+   *
+   * NOT `session.advanceSession()`, which rebuilds the whole playQueue and restarts playback.
+   * `topup.ts` names that as the thing to avoid, and it would be a hiccup on screen where a
+   * section wants a cut.
+   */
+  advance?: (() => { ok?: boolean; error?: string } | Promise<{ ok?: boolean; error?: string }>) | null;
   subscribePush?: PushSubscriber | null;
   intervalMs?: number;
   retryMs?: number;
@@ -271,7 +303,7 @@ export function startWatch({
 }): boolean {
   stopWatch();
   LOGGED.clear();
-  if (!ARMED.plan.size) return false;
+  if (!ARMED.plan.size && !section.armedCount()) return false;
   const startedAt = now();
   let isStopped = false;
   let isReading = false;
@@ -289,18 +321,20 @@ export function startWatch({
     stopWatch();
   };
 
-  const schedule = (delayMs: number): void => {
+  const schedule = (delayMs: number, via: WatchTrigger = 'poll'): void => {
     if (isStopped) return;
     if (TIMER) clearTimeout(TIMER);
-    TIMER = setTimeout(() => { void read('poll'); }, delayMs);
+    TIMER = setTimeout(() => { void read(via); }, delayMs);
     // Kept as a runtime probe, not narrowed away: `unref` exists on Node's Timeout but a test
     // harness's fake timer is a plain object without it.
     if (typeof TIMER.unref === 'function') TIMER.unref();
   };
 
+  const totalPending = (): number => pendingCount() + section.pendingCount();
+
   const read = async (via: WatchTrigger): Promise<void> => {
     if (isStopped) return;
-    if (now() - startedAt > maxMs || pendingCount() === 0) {
+    if (now() - startedAt > maxMs || totalPending() === 0) {
       finish();
       return;
     }
@@ -309,6 +343,7 @@ export function startWatch({
     if (isReading) return;
     isReading = true;
     let nextDelayMs = intervalMs;
+    let nextVia: WatchTrigger = 'poll';
     try {
       let session: ObservedSession | null = null;
       try {
@@ -316,6 +351,77 @@ export function startWatch({
       } catch {
         return; // a transient Plex hiccup must never kill the watcher
       }
+
+      // ── THE SECTION PLAN FIRST ──────────────────────────────────────────────────────
+      // An AUTHORED window outranks an INFERRED resume marker, so a section is consulted
+      // before the resume plan and, when it names this item, the resume plan is not consulted
+      // for it at all. That is not an optimisation: an entry whose window says "stop at
+      // 1:06:00" and nothing else means "from the beginning of the unit", and letting a
+      // resume marker start it half an hour in would honour neither key.
+      if (section.armedCount()) {
+        let place: section.PlayQueuePlace | null = null;
+        if (fetchPlace && session?.ratingKey != null
+          && section.isAmbiguous(String(session.ratingKey))) {
+          // Two windows on one file: only the live playQueue can say which occurrence this is.
+          try { place = await fetchPlace(); } catch { place = null; }
+        }
+        let sec: section.SectionDecision;
+        try {
+          sec = section.consider(session, place);
+        } catch {
+          return;
+        }
+        // The section OWNS this reading when it named a row for the item on screen, or when
+        // it refused to name one because two windows are in play. In the second case the
+        // resume plan must not act either — an item this file cannot identify is not an item
+        // the other plan should be seeking.
+        const isOwned = sec.index != null || sec.retry === true;
+        if (isOwned) {
+          if (sec.action !== 'wait') {
+            log(`[section] via ${via}: rk=${sec.rk} at `
+              + `${Math.round(Number(session?.viewOffset || 0) / 1000)}s -> ${sec.reason}`);
+          }
+          if (sec.action === 'seek' && sec.ms != null) {
+            try {
+              const r = await seek(sec.ms);
+              log(r && r.seeked === false
+                ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${r.error}`
+                : `[section] rk=${sec.rk} starts at ${Math.round(sec.ms / 1000)}s`);
+            } catch (e) {
+              log(`[section] the start seek threw: ${errMessage(e)}`);
+            }
+          } else if (sec.action === 'next') {
+            if (!advance) {
+              log('[section] the end mark is due but no advance was wired — the item plays on');
+            } else {
+              try {
+                const r = await advance();
+                log(r && r.ok === false
+                  ? `[section] skipNext failed at the end mark: ${r.error}`
+                  : `[section] rk=${sec.rk} stopped at its end mark; the lineup advances`);
+              } catch (e) {
+                log(`[section] skipNext threw: ${errMessage(e)}`);
+              }
+            }
+          }
+          if (sec.retry && retriesLeft > 0) {
+            retriesLeft -= 1;
+            nextDelayMs = retryDelayMs;
+          } else if (!sec.retry) {
+            retriesLeft = retryBurst;
+            if (sec.action === 'wait' && sec.dueInMs != null) {
+              // Book the next read FOR the end mark rather than polling up to it. Clamped to
+              // the ordinary cadence at the top, so a long section still gets its regular
+              // sanity reads and a viewer who paused is noticed; clamped to `retryDelayMs` at
+              // the bottom, so a mark already upon us cannot spin the loop.
+              nextDelayMs = Math.max(retryDelayMs, Math.min(intervalMs, sec.dueInMs));
+              if (sec.dueInMs <= intervalMs) nextVia = 'mark';
+            }
+          }
+          return;
+        }
+      }
+
       let decision: ResumeDecision;
       try {
         decision = considerSession(session);
@@ -351,8 +457,8 @@ export function startWatch({
       }
     } finally {
       isReading = false;
-      if (pendingCount() === 0) finish();
-      else schedule(nextDelayMs);
+      if (totalPending() === 0) finish();
+      else schedule(nextDelayMs, nextVia);
     }
   };
 
@@ -384,8 +490,9 @@ export function startWatch({
       log(`[resume] the now-playing wake-up is unavailable (${errMessage(e)}) — polling only`);
     }
   }
-  log(`[resume] watching: ${ARMED.plan.size} planned, poll every ${intervalMs}ms, `
-    + `retry after ${retryDelayMs}ms, push wake-up ${UNSUBSCRIBE ? 'on' : 'off'}`);
+  log(`[resume] watching: ${ARMED.plan.size} resume marker(s) + ${section.armedCount()} `
+    + `section window(s), poll every ${intervalMs}ms, retry after ${retryDelayMs}ms, `
+    + `push wake-up ${UNSUBSCRIBE ? 'on' : 'off'}`);
   schedule(intervalMs);
   return true;
 }
