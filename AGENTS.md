@@ -527,10 +527,26 @@ collection, `{title: "<text>"}` for a title with no key yet. A bare string (`- "
 and logs the mapping to write, so that one line stops playing and the rest of the queue does not
 ([decision](docs/decisions/2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key.md)).
 
-Three things follow, and each has cost something already:
+Four things follow, and each has cost something already:
 
-- **`entryKey()` is PINNED and still keys a scalar.** It is the LINE identity that
-  `e2e/fixtures/golden/` records and that remove/reorder/move address a line by. Do not widen it.
+- **`entryKey()` names ONE LINE, and it still keys a scalar.** `id:<opaque>` when the mapping
+  carries an id, else `rk:<n>`, else `title:<text>`. Roughly sixty call sites, both SQLite
+  primary keys (`queue_entry_history`, `lead_cooldown`) and every `?only=<key>` URL are written
+  against one-key-one-line, so **do not widen it to mean "the same item"** — the looser item
+  test is a separate check (`entryIdentity.findDuplicateItem`). Two of the three reasons this
+  file used to give for the pin were **false at HEAD** and are gone: there is no Python second
+  writer (`queue_builder/` was deleted in `7bf01e0`), and `e2e/fixtures/golden/` records **no**
+  entry key — none of `curated.json`, `engine.json`, `passthrough.json` or `routing.json`
+  contains an `rk:` or a `title:`. What the goldens pin is the play list, not entry identity.
+- **A queue can hold the same file twice, and the optional `id` is how.** `entryKey()` reads it
+  FIRST, `addItem` mints one ONLY for an add that would otherwise be refused as a duplicate, and
+  an entry with no id keys byte-for-byte as it always did — which is why every pinned entry-key
+  string in `e2e/` passed unmodified. A hand-written duplicate key with no id is refused BY
+  ENTRY by `loadEntries()`, like a legacy scalar
+  ([decision](docs/decisions/2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md)).
+  ⚠️ **Both copies of `entryKey()` change together** — `server/src/queues.ts` (write side) and
+  `server/src/engine/resolve.ts` (read side); `e2e/play-one-entry-test.ts` is what notices when
+  they disagree.
 - **No writer may emit a scalar.** `queues.toEntryObject()` normalizes at the write boundary
   (the HTTP API still accepts a bare title — only the disk shape changed), and `entryNode()` no
   longer collapses an entry back to a string when its last override is cleared.

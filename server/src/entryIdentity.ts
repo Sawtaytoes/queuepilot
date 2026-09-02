@@ -7,8 +7,12 @@
 //
 // `queues.entryKey()` answers "which LINE is this?" — `title:Detectives These Days Are Crazy!`
 // for the first, `rk:41234` for the second. That is the right answer for what it does: address
-// a line for a reorder, a move or a remove, byte-compatible with the Python writer that edits
-// the same file. It is PINNED for that reason and this module does not touch it.
+// a line for a reorder, a move or a remove. This module does not touch it, and the reason has
+// changed since it was written: there is no second WRITER to stay byte-compatible with any more
+// (`queue_builder/` was deleted in `7bf01e0`). What keeps the key narrow now is that roughly
+// sixty call sites, two SQLite primary keys and every `?only=<key>` URL are written against
+// "one key, one line" — so the 2026-09-01 change ADDED an optional `id:` branch to keep that
+// true when a queue holds the same file twice, rather than widening what a key means.
 //
 // It is the wrong question for two other callers, and both were wrong in production:
 //
@@ -24,6 +28,7 @@
 // "duplicate" then mean exactly what "is going to play" means, which is the whole premise of
 // 2026-08-17-pending-is-what-nothing-will-play.
 import { describe, resolveQueueEntry } from './engine/resolve.js';
+import { hasSection } from './entryFormat.js';
 import { mapLimit } from './routes/mapLimit.js';
 import type { ResolveCfg } from './engine/resolve.js';
 import type { PlexClient, QueueEntry } from './types.js';
@@ -97,6 +102,12 @@ const sleep = (ms: number) => new Promise<void>((r) => { setTimeout(r, ms); });
  *     collection contains should be refused is a real question, and a different one — it is
  *     coverage, not identity, and answering it here would silently refuse an add the owner may
  *     well mean.
+ *   * An add that carries a SECTION is not reported either, for the same shape of reason. It
+ *     names a LINE — this window of this film, at this point in the queue — so "the queue
+ *     already names that item" is true and beside the point. The guard keeps its refusal for
+ *     an ordinary add, which is still a bug worth catching, and the caller that means a second
+ *     copy without a window says so explicitly instead
+ *     ([decision] docs/decisions/2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md).
  */
 export async function findDuplicateItem(
   client: PlexClient,
@@ -107,6 +118,7 @@ export async function findDuplicateItem(
 ): Promise<DuplicateHit | null> {
   const desc = describe(value);
   if (desc.collection) return null;
+  if (hasSection(value)) return null;
   const want = desc.ratingKey;
   if (!want) return null;
 

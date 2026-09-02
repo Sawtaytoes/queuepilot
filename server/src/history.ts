@@ -90,8 +90,8 @@ async function readBoth(): Promise<Snapshot> {
  * So a restore RESHAPES what it writes, with the same migration the one-shot CLI runs
  * (`tools/entryObjects.ts`) and a policy that resolves nothing. Reshaping is
  * identity-preserving by construction — `entryKey(toEntryObject(v)) === entryKey(v)` for
- * every `v` — so an undo still restores the same LINES, addressed by the same keys, and
- * `e2e/fixtures/golden/` is unaffected. No rating key is backfilled: an undo must not depend
+ * every `v` — so an undo still restores the same LINES, addressed by the same keys. No rating
+ * key is backfilled: an undo must not depend
  * on Plex being reachable, and a snapshot that never had a key did not lose one.
  *
  * ⚠️ ONLY when something was actually rewritten, and `rewritten` is the flag that says so
