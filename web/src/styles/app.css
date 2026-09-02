@@ -2286,6 +2286,7 @@ body.queue-view #tools {
 #peoplemodal,
 #groupsmodal,
 #poweroffmodal,
+#sectionmodal,
 #queue-type-modal {
   background: var(--color-surface-raised);
   color: var(--color-content-primary);
@@ -2303,6 +2304,11 @@ body.queue-view #tools {
 }
 #startmodal {
   width: min(460px, 92vw);
+}
+/* Wider than the start picker: this one holds a two-ended timecode field and a range bar
+   side by side, and the bar needs room to be draggable at all. */
+#sectionmodal {
+  width: min(560px, 92vw);
 }
 /* WIDER SINCE WP-5. The queue editor contains the full audience list, so the rows can keep
    their names, rule summaries, and three-way controls readable in the Wide View. */
@@ -2381,10 +2387,16 @@ body.queue-view #tools {
   font-size: 0.86rem;
   margin: 0 0 18px;
 }
-#startmodal h3 {
+#startmodal h3,
+#sectionmodal h3 {
   margin-bottom: 10px;
 }
-#startmodal .subhint {
+/* ⚠️ `.subhint` is SCOPED to a modal or view id — every single rule for it in this file is —
+   so a new modal has to be named here or its hint paragraph renders unstyled while looking
+   styled in the source. Tailwind preflight leaves it at `margin: 0`, flat against the field
+   below it (decision `2026-08-21-a-class-name-is-not-a-style`). */
+#startmodal .subhint,
+#sectionmodal .subhint {
   color: var(--color-content-muted);
   font-size: 0.86rem;
   margin: 0 0 16px;
@@ -2425,11 +2437,35 @@ body.queue-view #tools {
 }
 #startmodal .field,
 #setmodal .field,
-#dynmodal .field {
+#dynmodal .field,
+#sectionmodal .field {
   display: block;
   margin-bottom: 14px;
   color: var(--color-content-muted);
   font-size: 0.92rem;
+}
+/* The section editor's three blocks each carry a label above their control, so the label is
+   its own line rather than sitting inline beside it as `#entrymodal`'s does. */
+#sectionmodal .fieldlabel {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-content-muted);
+}
+#sectionmodal .fieldrow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  color: var(--color-content-primary);
+}
+#sectionmodal .fieldhint {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--color-content-muted);
 }
 #setmodal .field input[type="text"],
 #dynmodal .field > input[type="text"] {
@@ -2569,12 +2605,14 @@ body.queue-view #tools {
 #startmodal .idnote,
 #setmodal .idnote,
 #dynmodal .idnote,
-#membersmodal .idnote {
+#membersmodal .idnote,
+#sectionmodal .idnote {
   color: var(--color-content-muted);
   font-size: 0.82rem;
   margin: 10px 0 0;
 }
-#startmodal .idnote:empty {
+#startmodal .idnote:empty,
+#sectionmodal .idnote:empty {
   display: none;
 }
 /* The footer OWNS the space above it. Nothing used to: `margin-top` and `padding-top` were
@@ -2590,7 +2628,8 @@ body.queue-view #tools {
 #dynmodal .modalbtns,
 #entrymodal .modalbtns,
 #membersmodal .modalbtns,
-#poweroffmodal .modalbtns {
+#poweroffmodal .modalbtns,
+#sectionmodal .modalbtns {
   display: flex;
   gap: 10px;
   align-items: center;
@@ -2603,13 +2642,15 @@ body.queue-view #tools {
   justify-content: flex-end;
 }
 
-#startmodal .modalbtns {
+#startmodal .modalbtns,
+#sectionmodal .modalbtns {
   flex-wrap: wrap;
 }
 #startmodal .modalbtns .spacer,
 #setmodal .modalbtns .spacer,
 #dynmodal .modalbtns .spacer,
-#poweroffmodal .modalbtns .spacer {
+#poweroffmodal .modalbtns .spacer,
+#sectionmodal .modalbtns .spacer {
   flex: 1;
 }
 /* EVERY FOOTER BUTTON'S SKIN IS GONE, not moved. All five `.modalbtns` are Charcuterie
@@ -3630,6 +3671,7 @@ ul.grid.posters .tile .thumb {
 ul.grid.posters .tile .badges .weighttag,
 ul.grid.posters .tile .badges .prioritytag,
 ul.grid.posters .tile .badges .skiptag,
+ul.grid.posters .tile .badges .sectiontag,
 ul.grid.posters .tile .badges .epstag {
   background: color-mix(
     in oklab,
@@ -3642,7 +3684,7 @@ ul.grid.posters .tile .badges .epstag {
    `.tagbtn` is GONE. Every one of these chips is a `BadgeButton` now — the pill, the
    border, the hover and the focus ring come from the component, and the colour comes from
    the `intent` the call site was already passing to the non-pressable branch beside it.
-   `.weighttag` / `.startbadge` / `.prioritytag` / `.editbtn` survive as SELECTORS only (the
+   `.weighttag` / `.startbadge` / `.sectiontag` / `.prioritytag` / `.editbtn` survive as SELECTORS only (the
    e2e suites read them) and carry no paint, exactly as `.badge.movie` and `.badge.show`
    already do. The one rule any of them appears in is the poster-density scrim above, which
    is about legibility ON artwork and applies to the whole group.

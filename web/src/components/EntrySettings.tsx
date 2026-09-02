@@ -17,6 +17,14 @@ import {
 } from "../lib/kind"
 import { isPlayingItem } from "../lib/nowPlaying"
 import {
+  runtimeMs,
+  sectionOf,
+  sectionSummary,
+  sectionTagLabel,
+  sectionTagTip,
+  withUnit,
+} from "../lib/section"
+import {
   hasMemberList,
   startLabel,
   tileFace,
@@ -27,11 +35,13 @@ import type {
   QueueItem,
 } from "../lib/types"
 import { applyVocab, PLEX_WORDS } from "../lib/vocab"
+import { usePlaysSections } from "../state/capabilities"
 import { refreshData } from "../state/live"
 import {
   type EntryActions,
   openMembersModal,
   openPlayMenu,
+  openSectionModal,
   openStartModal,
 } from "../state/overlays"
 import {
@@ -45,6 +55,7 @@ import { Modal } from "./Modal"
 import { isPullSet } from "./OpenQueueButton"
 import { Poster } from "./Poster"
 import { SelectListbox } from "./SelectListbox"
+import { commitSection } from "./sectionCommit"
 import { Tip } from "./Tip"
 
 /**
@@ -90,16 +101,28 @@ const shortUnits = (
 
 /** The tags for one entry: only what differs from the defaults, in a stable order. */
 export function SettingTags({
+  hasSections = false,
   item,
   onEdit,
   vocab = PLEX_WORDS,
 }: {
+  /**
+   * Can this queue's provider play a SECTION of an item? Plex alone today.
+   *
+   * A section tag is not rendered without it, for the same reason the editor offers no
+   * control: a stored window a backend cannot serve would name a behaviour the entry does
+   * not have. Defaults to false so a caller that has not joined the queue to its provider
+   * shows nothing rather than a claim it cannot back
+   * (`state/capabilities.usePlaysSections`).
+   */
+  hasSections?: boolean
   item: QueueItem
   onEdit?: () => void
   /** The queue's provider vocabulary — a reading tile must not say "3 eps". */
   vocab?: ProviderVocabulary
 }) {
   const isVolume = item.unit === "volume"
+  const section = hasSections ? sectionOf(item) : null
   const weight = item.weight ?? 1
   const tag = (
     label: string,
@@ -206,7 +229,10 @@ export function SettingTags({
             "neutral",
           )
         : null}
-      {item.start
+      {/* The start tag reads the UNIT the start names, and a film section names none — its
+          `start` carries a position and nothing else. `startLabel` answers "" for that, so
+          the tag is skipped and the section tag below is what reads the offset. */}
+      {startLabel(item.start, item.unit)
         ? tag(
             startLabel(item.start, item.unit),
             applyVocab(
@@ -214,6 +240,20 @@ export function SettingTags({
               vocab,
             ),
             "startbadge",
+            "warning",
+          )
+        : null}
+      {/* A SECTION is otherwise invisible: the tile names the same item it always did, and
+          nothing says only two minutes of it will play. Three readings, one per state that
+          is worth showing, and nothing at all when there is no section — the same rule every
+          tag here follows. Beside the start tag rather than instead of it: they answer two
+          different questions, WHICH unit plays and WHERE IN IT, and an episode entry can
+          carry both. */}
+      {section
+        ? tag(
+            sectionTagLabel(section),
+            applyVocab(sectionTagTip(section), vocab),
+            "sectiontag",
             "warning",
           )
         : null}
@@ -452,6 +492,10 @@ export function EntryEditor({
     ? reg?.sets.find((s) => s.id === setId)
     : undefined
   const vocab = setInfo?.vocabulary ?? PLEX_WORDS
+  // Can this queue's backend play PART of an item? A reading queue and a board-game queue
+  // get no section row at all — not a disabled one — the same rule the watch-history field
+  // follows a few rows up.
+  const hasSections = usePlaysSections(setInfo)
 
   if (!isOpen || !setId || !item) return null
 
@@ -989,12 +1033,11 @@ export function EntryEditor({
           <span className="fieldlabel">Start point</span>
           <div className="fieldrow">
             <span>
-              {item.start
-                ? startLabel(item.start, item.unit)
-                : applyVocab(
-                    "Automatic — the next unwatched",
-                    vocab,
-                  )}
+              {startLabel(item.start, item.unit) ||
+                applyVocab(
+                  "Automatic — the next unwatched",
+                  vocab,
+                )}
             </span>
             {/* `#entrymodal .fieldrow button` painted a small outline control — surface
                 base, a border, 6px/12px — which is `appearance="outline"` at `size="sm"`.
@@ -1011,15 +1054,21 @@ export function EntryEditor({
               }}
               size="sm"
             >
-              {item.start ? "Change…" : "Choose…"}
+              {startLabel(item.start, item.unit)
+                ? "Change…"
+                : "Choose…"}
             </Button>
-            {item.start ? (
+            {startLabel(item.start, item.unit) ? (
               <Button
                 appearance="outline"
                 intent="neutral"
                 onClick={() =>
                   void entryFor(item)
-                    .save(null)
+                    // `withUnit(…, null)` and NOT `null`: this row owns WHICH unit plays, and
+                    // a section's offset lives on the same `start` mapping. `PATCH …/start`
+                    // replaces that mapping whole, so clearing it outright would drop a
+                    // section this row never drew — invisibly.
+                    .save(withUnit(item.start, null))
                     .then(() => refreshData())
                 }
                 size="sm"
@@ -1029,6 +1078,64 @@ export function EntryEditor({
             ) : null}
           </div>
         </div>
+
+        {/* THE SECTION — where inside the first played unit playback begins and stops.
+            Its own row beside the start point rather than inside it, because they answer two
+            different questions: that one picks WHICH unit plays, this one picks WHERE IN IT.
+            An episode entry can carry both, and a film section carries only this.
+
+            Rendered only when the queue's provider can actually play a section (Plex today)
+            and only when the entry has an `end` writer — a rules channel's members store a
+            whole-map `starts` on the set and have no line to hang an `end` on. A backend that
+            cannot serve a section offers no control rather than one it would ignore
+            (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`). */}
+        {hasSections && entry.saveEnd ? (
+          <div className="field" id="entry-sectionfield">
+            <span className="fieldlabel">Section</span>
+            <div className="fieldrow">
+              <span id="entry-sectionsummary">
+                {sectionSummary(
+                  sectionOf(item),
+                  runtimeMs(item),
+                )}
+              </span>
+              <Button
+                appearance="outline"
+                id="entry-sectionopen"
+                intent="neutral"
+                onClick={() => {
+                  // Its own modal, like the start picker: it holds a DRAFT that is saved or
+                  // cancelled as one answer, where every control on this sheet writes on
+                  // change. Stacking it here would put two dialogs over one entry.
+                  onClose()
+                  openSectionModal(entryFor(item))
+                }}
+                size="sm"
+              >
+                {sectionOf(item) ? "Change…" : "Choose…"}
+              </Button>
+              {sectionOf(item) ? (
+                <Button
+                  appearance="outline"
+                  id="entry-sectionclear"
+                  intent="neutral"
+                  onClick={() =>
+                    void commitSection(entryFor(item), null)
+                  }
+                  size="sm"
+                >
+                  Play the whole item
+                </Button>
+              ) : null}
+            </div>
+            <span className="fieldhint">
+              {applyVocab(
+                "Plays only part of the first item this entry contributes, then moves on to the next entry. A later episode in the same batch still plays in full.",
+                vocab,
+              )}
+            </span>
+          </div>
+        ) : null}
       </div>
     </Modal>
   )
