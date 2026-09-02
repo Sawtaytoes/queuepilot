@@ -987,6 +987,9 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/pending-dismiss-test.ts # Dismiss removes the card now and after reload
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
+server/node_modules/.bin/tsx e2e/resume-on-advance-test.ts  # which queued items get seeked, and once each
+server/node_modules/.bin/tsx e2e/resume-latency-test.ts  # the seek latency budget, before and after
+server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts  # the plex.tv target cache + the command id
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/tile-lane-test.ts     # the tile's three controls
 server/node_modules/.bin/tsx e2e/collection-reorder-test.ts  # a re-ordered collection reaches the panel

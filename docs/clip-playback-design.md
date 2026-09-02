@@ -253,6 +253,44 @@ command (`playback.ts:840, 907, 1044`). Companion expects a monotonically increa
 id. It has never mattered because commands are isolated — a section fires **seek then skipNext
 in quick succession**, which is the first time this codebase sends two close together.
 
+### Measured — what the fixes actually bought (2026-09-02)
+
+Fixes 1, 2, 3, 4 and 5 above shipped, latency-only, ahead of the section work. The numbers are
+from `e2e/resume-latency-test.ts`, which drives the **real** `startWatch()` against a virtual
+clock and the injected `fetchSession`/`seek` seam. Run it to reproduce them.
+
+Four numbers around the loop are modelled, not measured, and the harness prints all four: a
+`/status/sessions` GET at 25 ms, a plex.tv round trip at 250 ms, a 1 000 ms window in which
+`/status/sessions` still reports the previous item's position after an advance, and a 300 ms
+PMS → Home Assistant → MQTT push delay. So the DECISION latency below is exact and the
+transport latency is by assumption — which is the right split, because the transport was never
+the slow part.
+
+| Applied | Mean | Worst case | Detection only, mean / worst |
+| --- | --- | --- | --- |
+| today (5 000 ms poll, no fast retry, target re-resolved per call) | 3 789 ms | 6 519 ms | 3 029 / 5 524 ms |
+| + target cached at arm time, and a MISS negative-cached | 3 504 ms | 6 019 ms | 2 529 / 5 024 ms |
+| + poll cut to 1 500 ms | 1 765 ms | 2 519 ms | 779 / 1 524 ms |
+| + a declined read re-reads after 400 ms | 1 244 ms | 1 524 ms | 779 / 1 524 ms |
+| + the now-playing push wake-up (all of them) | **1 175 ms** | **1 199 ms** | **296 / 325 ms** |
+
+**The diagnosis above holds.** The poll interval plus the `retry` decline are 3 029 ms of the
+3 789 ms mean — about 80% of it, and effectively all of the variance. Cutting them is what
+moved the number.
+
+**One correction to the ordering.** The list is introduced as "in the order they pay off", and
+on LATENCY that order is backwards: the `companionTarget` negative cache is the *smallest* of
+the five, worth about 285 ms of the mean, while `RESUME_POLL_MS` alone is worth about 1 700 ms
+and the push wake-up takes detection from 779 ms to 296 ms. The negative cache is still worth
+doing first — it is the cheapest change, and a WAN round trip on every poll is a cost question
+as well as a latency one — but it is not where the seconds were.
+
+**What is left is not the schedule.** With every fix applied, detection is 296 ms mean and
+325 ms worst. The remaining ~880 ms is the modelled window during which `/status/sessions`
+still answers with the previous item's position, which no amount of polling can shorten. If
+that number needs to come down, the lever is PMS's own `/:/websockets/notifications` timeline
+feed, not a faster poll.
+
 ## Provider capability
 
 A section is a seek plus a stop on a **timeline held by a player QueuePilot can command**. Only

@@ -637,6 +637,14 @@ jobs:
           # dismissals. Hermetic — both Plex reads are parameters.
           "$TSX" e2e/pending-test.ts
           "$TSX" e2e/resume-on-advance-test.ts
+          # The seek LATENCY budget, not the seek policy. It drives the real startWatch()
+          # against a virtual clock, so it is deterministic and needs neither Plex nor a
+          # player, and it fails if any step stops being an improvement on the one before it.
+          "$TSX" e2e/resume-latency-test.ts
+          # The other half of that budget: a companionTarget MISS costs one plex.tv round
+          # trip and not one per call, a plex.tv FAILURE is still re-asked, a stale handed-in
+          # target re-resolves, and Companion commands carry increasing ids.
+          "$TSX" e2e/companion-target-cache-test.ts
 
       # Narrow-view layout gate — ALWAYS runs, unlike the Plex-gated browser suites below.
       #
