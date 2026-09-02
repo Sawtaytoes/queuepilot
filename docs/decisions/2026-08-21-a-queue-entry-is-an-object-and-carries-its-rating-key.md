@@ -6,7 +6,12 @@
 - **Supersedes:** the string-entry half of
   [2026-07-20-queue-entries-are-title-strings](2026-07-20-queue-entries-are-title-strings.md)
 - **Extends:** [2026-08-21-a-queue-entry-names-an-item-not-a-line](2026-08-21-a-queue-entry-names-an-item-not-a-line.md)
-- **Superseded by:** —
+- **Superseded by:** the *"Why `entryKey` is still pinned"* reasoning only, by
+  [2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines](2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines.md)
+  — two of its three stated reasons are stale at HEAD: `queue_builder/` was deleted in
+  `7bf01e0`, and `e2e/fixtures/golden/` records no entry keys. The third (`removeItem` /
+  `reorder` / `moveItem` address a line by it) stands, and is why the new `id` branch is
+  ADDITIVE. Clauses 1-4 of this record are unchanged.
 
 ## Decision
 
