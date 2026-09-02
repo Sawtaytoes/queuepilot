@@ -119,6 +119,131 @@ seed();
 await queues.setStart('bob', 'title:Cowboy Bebop', { season: 1, episode: 3 });
 assertCommentsSurvive('setStart', QUEUES_PATH);
 
+// --- the SECTION WINDOW: start.position_ms and end.position_ms ----------------- //
+//
+// Two keys that say where inside the first played unit playback begins and where it stops
+// (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`). They ride in
+// the same `extras` bag as `weight` and `episodes`, so they answer the same four questions
+// every other sparse override answers here: the value is written, it survives an unrelated
+// later edit, the sparse case drops the key, and junk drops the key.
+
+// START. A film section is a position with NO series and NO episode — the case
+// `normalizeStart`'s old two-field guard discarded silently, which is why it is first.
+seed();
+await queues.setStart('bob', 'title:Cowboy Bebop', { position_ms: 3660000 });
+assertCommentsSurvive('setStart(position_ms)', QUEUES_PATH);
+ok('setStart(position_ms): a MOVIE section is written with no series and no episode',
+  /Cowboy Bebop[\s\S]*position_ms: 3660000/.test(read(QUEUES_PATH)));
+ok('setStart(position_ms): it wrote no season it was never given',
+  !has(QUEUES_PATH, 'season:'));
+await queues.setEpisodes('bob', 'title:Cowboy Bebop', 2);
+assertCommentsSurvive('setStart(position_ms) + a later episodes edit', QUEUES_PATH);
+ok('setStart(position_ms): survives an unrelated later edit',
+  /Cowboy Bebop[\s\S]*position_ms: 3660000/.test(read(QUEUES_PATH)));
+ok('setStart(position_ms): the later edit landed too', has(QUEUES_PATH, 'episodes: 2'));
+// The SPARSE case: a start whose only field is a cleared position is no start at all, so the
+// whole `start` key goes rather than an empty mapping being left behind.
+await queues.setStart('bob', 'title:Cowboy Bebop', { position_ms: null });
+ok('setStart(position_ms: null): the whole start key is dropped', !has(QUEUES_PATH, 'start:'));
+ok('setStart(position_ms: null): episodes override survived the clear', has(QUEUES_PATH, 'episodes: 2'));
+// JUNK: unusable text, a negative offset and a blank all drop the key rather than writing 0.
+for (const junk of ['12:30', -1, '']) {
+  await queues.setStart('bob', 'title:Cowboy Bebop', { position_ms: junk });
+  ok(`setStart(position_ms: ${JSON.stringify(junk)}): junk drops the key`,
+    !has(QUEUES_PATH, 'position_ms'));
+}
+// …but junk beside a real unit leaves the unit alone.
+await queues.setStart('bob', 'title:Cowboy Bebop', { season: 1, episode: 3, position_ms: 'soon' });
+ok('setStart(junk position beside a unit): the unit is kept, the position is not',
+  /episode: 3/.test(read(QUEUES_PATH)) && !has(QUEUES_PATH, 'position_ms'));
+assertCommentsSurvive('setStart(junk position)', QUEUES_PATH);
+
+// END — the mirror, same four questions.
+seed();
+await queues.setEnd('bob', 'title:Cowboy Bebop', { position_ms: 3960000 });
+assertCommentsSurvive('setEnd', QUEUES_PATH);
+ok('setEnd: value written', /Cowboy Bebop[\s\S]*end:[\s\S]*position_ms: 3960000/.test(read(QUEUES_PATH)));
+await queues.setWeight('bob', 'title:Cowboy Bebop', 3);
+assertCommentsSurvive('setEnd + a later weight edit', QUEUES_PATH);
+ok('setEnd: survives an unrelated later edit',
+  /Cowboy Bebop[\s\S]*position_ms: 3960000/.test(read(QUEUES_PATH)));
+ok('setEnd: the later edit landed too', has(QUEUES_PATH, 'weight: 3'));
+await queues.setEnd('bob', 'title:Cowboy Bebop', null);
+ok('setEnd(null): key dropped', !has(QUEUES_PATH, 'end:'));
+ok('setEnd(null): weight override survived the clear', has(QUEUES_PATH, 'weight: 3'));
+for (const junk of [{ position_ms: 'later' }, { position_ms: -1 }, { position_ms: '' }, {}]) {
+  await queues.setEnd('bob', 'title:Cowboy Bebop', junk);
+  ok(`setEnd(${JSON.stringify(junk)}): junk drops the key`, !has(QUEUES_PATH, 'end:'));
+}
+assertCommentsSurvive('setEnd(junk)', QUEUES_PATH);
+
+// THE FOUR OPTIONALITY STATES, on disk. All four are valid and none needs a flag.
+seed();
+const KEY = 'title:Cowboy Bebop';
+ok('neither: no start and no end on an untouched entry',
+  !has(QUEUES_PATH, 'position_ms'));
+await queues.setStart('bob', KEY, { position_ms: 750000 });
+ok('start only: the start is on disk and no end is',
+  has(QUEUES_PATH, 'position_ms: 750000') && !has(QUEUES_PATH, 'end:'));
+await queues.setStart('bob', KEY, null);
+await queues.setEnd('bob', KEY, { position_ms: 1020000 });
+ok('end only: the end is on disk and no start is',
+  has(QUEUES_PATH, 'position_ms: 1020000') && !has(QUEUES_PATH, 'start:'));
+const both = await queues.setStart('bob', KEY, { position_ms: 750000 });
+ok('both: a start strictly BEFORE the existing end is accepted', both.ok);
+ok('both: the window is on disk',
+  has(QUEUES_PATH, 'position_ms: 750000') && has(QUEUES_PATH, 'position_ms: 1020000'));
+assertCommentsSurvive('the four optionality states', QUEUES_PATH);
+
+// THE PAIR RULE. `end` must be STRICTLY after `start`, and the refusal is BY NAME rather than
+// a swap — a swap would hide the typo that produced it. Both writers ask, because either one
+// can be the second of two valid-looking writes that together invert the window.
+seed();
+await queues.setStart('bob', KEY, { position_ms: 3660000 });
+const equalEnd = await queues.setEnd('bob', KEY, { position_ms: 3660000 });
+ok('setEnd(equal to start): refused', !equalEnd.ok);
+ok('setEnd(equal to start): refused BY NAME, with both offsets in the message',
+  !equalEnd.ok && typeof equalEnd.error === 'string'
+  && equalEnd.error.includes('3660000') && /strictly after/.test(equalEnd.error),
+  !equalEnd.ok ? String(equalEnd.error) : '');
+ok('setEnd(equal to start): nothing was written', !has(QUEUES_PATH, 'end:'));
+const beforeEnd = await queues.setEnd('bob', KEY, { position_ms: 3000000 });
+ok('setEnd(before start): refused', !beforeEnd.ok);
+ok('setEnd(before start): nothing was written', !has(QUEUES_PATH, 'end:'));
+const afterEnd = await queues.setEnd('bob', KEY, { position_ms: 3960000 });
+ok('setEnd(strictly after start): accepted', afterEnd.ok);
+ok('setEnd(strictly after start): written', has(QUEUES_PATH, 'position_ms: 3960000'));
+assertCommentsSurvive('the pair rule', QUEUES_PATH);
+
+// The other direction — the half a route-level check would miss. `end` is already 3960000;
+// moving the START past it must be refused too, or two individually-valid writes reach an
+// invalid file.
+const lateStart = await queues.setStart('bob', KEY, { position_ms: 3960000 });
+ok('setStart(equal to an existing end): refused', !lateStart.ok);
+const laterStart = await queues.setStart('bob', KEY, { position_ms: 4000000 });
+ok('setStart(after an existing end): refused', !laterStart.ok);
+ok('setStart(after an existing end): the file still holds the original window',
+  has(QUEUES_PATH, 'position_ms: 3660000') && has(QUEUES_PATH, 'position_ms: 3960000'));
+// Clearing one side is always accepted — there is nothing left to compare against, and an
+// end-only window is one of the four valid states.
+const clearedStart = await queues.setStart('bob', KEY, null);
+ok('clearing the start is accepted with an end in place', clearedStart.ok);
+ok('…and the end is untouched by it', has(QUEUES_PATH, 'position_ms: 3960000'));
+// The end is still 3960000, so the guard is still armed against the next start.
+ok('a start after the surviving end is refused',
+  !(await queues.setStart('bob', KEY, { position_ms: 4000000 })).ok);
+ok('…and a start strictly before it is accepted',
+  (await queues.setStart('bob', KEY, { position_ms: 3000000 })).ok);
+ok('…leaving the file holding that window',
+  has(QUEUES_PATH, 'position_ms: 3000000') && has(QUEUES_PATH, 'position_ms: 3960000'));
+assertCommentsSurvive('the pair rule, from the start side', QUEUES_PATH);
+
+// An unknown entry is `{ok: false}` with NO error — "not found" and "refused" are different
+// answers and the caller has to be able to tell them apart.
+const missing = await queues.setEnd('bob', 'title:Not In This Queue', { position_ms: 10 });
+ok('setEnd on an unknown entry is not-found, not a refusal',
+  !missing.ok && missing.error === undefined);
+
 // WEIGHT rides in the same `extras` bag: it must coexist with the other overrides, and
 // clearing it (1 = the default) must take the KEY away rather than write `weight: 1`, or the
 // file fills with noise nobody typed.

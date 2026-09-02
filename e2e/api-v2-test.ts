@@ -20,12 +20,19 @@ const PORT = 18772;
 const QUEUES = '/tmp/queues-apiv2.yaml';
 const SETS = '/tmp/sets-apiv2.yaml';
 const HIST = '/tmp/history-apiv2.json';
+// A providers.yaml of this suite's own, so the registry holds a PUSH provider and a PULL one.
+// The capability under test is reported WITHOUT instantiating either, which is the whole point
+// of the kind-keyed map — neither of these has a token here and neither needs one.
+const PROVIDERS = '/tmp/providers-apiv2.yaml';
+const PROVIDER_SECRETS = '/tmp/providers-secrets-apiv2.yaml';
 const env = {
   ...process.env,
   WEB_PORT: String(PORT),
   QUEUES_PATH: QUEUES,
   SETS_PATH: SETS,
   HISTORY_PATH: HIST,
+  PROVIDERS_PATH: PROVIDERS,
+  PROVIDERS_SECRETS_PATH: PROVIDER_SECRETS,
   // Force the Plex-down path deterministically regardless of the caller's env.
   PLEX_API_SERVER_URL: 'https://127.0.0.1:1', // nothing listens → every plex fetch fails fast
   PLEX_TOKEN: '',
@@ -49,11 +56,17 @@ const QUEUES_SEED = `bob:
 - {title: "Plain Movie D"}
 `;
 
-for (const f of [QUEUES, SETS, HIST]) {
+for (const f of [QUEUES, SETS, HIST, PROVIDERS, PROVIDER_SECRETS]) {
   await fs.rm(f, { force: true });
   await fs.rm(f + '.lock', { recursive: true, force: true });
 }
 await fs.writeFile(QUEUES, QUEUES_SEED, 'utf8');
+await fs.writeFile(PROVIDERS, `providers:
+- id: kavita
+  kind: kavita
+  label: Kavita
+  base_url: http://127.0.0.1:1
+`, 'utf8');
 
 async function startServer(): Promise<ChildProcess> {
   const child = spawnServer({ env, stdio: 'ignore' });
@@ -111,6 +124,75 @@ try {
     JSON.stringify(skeleton.map((i) => [i.key, i.placement]))
       === JSON.stringify(resolved.map((i) => [i.key, i.placement])));
   await patch(`/queues/bob/items/${encodeURIComponent(promoteKey)}/placement`, { placement: '' });
+
+  // --- B3: the SECTION window lands, clears, and reaches the wire ------------- //
+  //
+  // `PATCH /queues/:set/items/:key/end` is `start`'s sibling and does no validating of its own
+  // — the writer coerces, because the writer is the only thing that can see the other side of
+  // the window under the same lock (decision
+  // `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+  const sectionKey = (await api('/queues')).sets.bob.items[0].key as string;
+  const sectionPath = `/queues/bob/items/${encodeURIComponent(sectionKey)}`;
+
+  const setEnd = await patch(`${sectionPath}/end`, { end: { position_ms: 3960000 } });
+  ok('PATCH …/end lands', setEnd.ok === true && setEnd.end?.position_ms === 3960000);
+  let tile = ((await api('/queues')).sets.bob.items as JsonBody[])
+    .find((i) => i.key === sectionKey);
+  ok('…and the end reaches the wire', tile?.end?.position_ms === 3960000);
+
+  // A film section: a position with NO series and NO episode. `normalizeStart` used to discard
+  // exactly this shape, so it is asserted through the route rather than only in a unit test.
+  const setStart = await patch(`${sectionPath}/start`, { start: { position_ms: 3660000 } });
+  ok('PATCH …/start takes a MOVIE section', setStart.ok === true
+    && setStart.start?.position_ms === 3660000);
+  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((i) => i.key === sectionKey);
+  ok('…and the start position reaches the wire', tile?.start?.position_ms === 3660000);
+  ok('…with no season or episode invented beside it',
+    tile?.start?.season === undefined && tile?.start?.episode === undefined);
+
+  // Refused BY NAME rather than swapped, and nothing is written.
+  const equal = await patch(`${sectionPath}/end`, { end: { position_ms: 3660000 } });
+  ok('an end EQUAL to the start is refused', equal.ok === false
+    && typeof equal.error === 'string' && equal.error.includes('strictly after'));
+  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((i) => i.key === sectionKey);
+  ok('…and the refused write changed nothing', tile?.end?.position_ms === 3960000);
+
+  const clearEnd = await patch(`${sectionPath}/end`, { end: null });
+  ok('PATCH …/end {end: null} clears', clearEnd.ok === true && clearEnd.end === null);
+  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((i) => i.key === sectionKey);
+  ok('…and the wire reports no end', tile?.end == null);
+  ok('…while the start it was paired with survives', tile?.start?.position_ms === 3660000);
+
+  const junkEnd = await patch(`${sectionPath}/end`, { end: { position_ms: 'quarter past' } });
+  ok('a junk end drops the key rather than writing one',
+    junkEnd.ok === true && junkEnd.end === null);
+  const badSet = await patch('/queues/does_not_exist/items/rk:1/end', { end: { position_ms: 1 } });
+  ok('PATCH …/end 400s on an unknown set', badSet.error === 'unknown set');
+
+  await patch(`${sectionPath}/start`, { start: null });
+
+  // The bulk RESET clears the window with everything else.
+  await patch(`${sectionPath}/start`, { start: { position_ms: 1000 } });
+  await patch(`${sectionPath}/end`, { end: { position_ms: 2000 } });
+  await patch('/queues/bulk', { items: [{ set: 'bob', key: sectionKey }], reset: true });
+  tile = ((await api('/queues')).sets.bob.items as JsonBody[]).find((i) => i.key === sectionKey);
+  ok('bulk reset clears BOTH ends of the window',
+    tile?.start == null && tile?.end == null);
+
+  // --- B4: playing a section is a PROVIDER capability ------------------------- //
+  //
+  // Reported off a kind-keyed map, so it is answerable with no token and no instantiation —
+  // which is what lets the web app hide the control on a reading queue that was never
+  // configured. Neither provider here is configured, and both still answer.
+  const registry = (await api('/providers')).providers as JsonBody[];
+  const plexView = registry.find((p) => p.id === 'plex');
+  const kavitaView = registry.find((p) => p.id === 'kavita');
+  ok('the registry holds a push provider and a pull one',
+    plexView?.delivery === 'push' && kavitaView?.delivery === 'pull');
+  ok('Plex reports that it can play a section', plexView?.plays_sections === true);
+  ok('a PULL provider reports that it cannot', kavitaView?.plays_sections === false);
+  ok('…and neither answer needed a configured token',
+    plexView?.configured === false && kavitaView?.configured === false);
 
   // --- C: collection-typed add + collections search flag --------------------- //
   const addColl = await post('/queues/bob/items', { type: 'collection', value: { title: 'Marvel Cinematic Universe' } });

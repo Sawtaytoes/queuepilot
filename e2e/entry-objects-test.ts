@@ -78,6 +78,8 @@ bob:
 - {ratingKey: "999", title: "Already Right"}
 
 - {collection: "Already A Mapping"}
+- {ratingKey: "1001", title: "A Loud Film (2019)", start: {position_ms: 3660000}, end: {position_ms: 3960000}}
+- {ratingKey: "1002", title: "A Long Show (2024)", start: {season: 2, episode: 4, position_ms: 750000}}
 # FOOT: order is play order.
 `;
 
@@ -136,6 +138,49 @@ ok('unresolved entry kept a field this code never heard of', unresolvedEntry.mys
 ok('an unresolvable title keeps its title and gains NO rating key',
   unresolvedEntry.title === 'Never Heard Of It' && unresolvedEntry.ratingKey === undefined);
 ok('an unresolvable title is REPORTED', first.unresolved.length === 1, JSON.stringify(first.unresolved));
+
+// THE SECTION WINDOW crosses the migration whole. It is the newest per-entry override
+// (`2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`), and `end` is a key the
+// migration tool itself has never heard of — so this is the `mystery_field` assertion aimed at
+// a field the app DOES read.
+const filmSection = entries[7] ?? {};
+const showSection = entries[8] ?? {};
+ok('a film section kept start.position_ms',
+  JSON.stringify(filmSection.start) === JSON.stringify({ position_ms: 3660000 }),
+  JSON.stringify(filmSection.start));
+ok('a film section kept end.position_ms',
+  JSON.stringify(filmSection.end) === JSON.stringify({ position_ms: 3960000 }),
+  JSON.stringify(filmSection.end));
+ok('an episode section kept its unit AND its offset together',
+  JSON.stringify(showSection.start) === JSON.stringify({ season: 2, episode: 4, position_ms: 750000 }),
+  JSON.stringify(showSection.start));
+ok('an episode section grew no end it was never given', showSection.end === undefined);
+
+// …and the ENGINE reads both back off the same file. `describe()` is the read side, and a
+// descriptor that dropped `end` would leave the field invisible to everything downstream while
+// the file still held it.
+const described = resolve.loadEntries('bob');
+const filmDesc = described.find((d) => d.ratingKey === '1001');
+const showDesc = described.find((d) => d.ratingKey === '1002');
+ok('describe() carries start.position_ms', filmDesc?.start?.position_ms === 3660000,
+  JSON.stringify(filmDesc?.start));
+ok('describe() carries end.position_ms', filmDesc?.end?.position_ms === 3960000,
+  JSON.stringify(filmDesc?.end));
+ok('describe() carries a unit and an offset together',
+  showDesc?.start?.season === 2 && showDesc?.start?.episode === 4
+  && showDesc?.start?.position_ms === 750000, JSON.stringify(showDesc?.start));
+ok('describe() reports NO end on an entry that has none', showDesc?.end === null,
+  JSON.stringify(showDesc?.end));
+
+// A WRITE lands on the same file and neither side of the window is disturbed. This is the
+// property the extras bag gives for free and the one a field-by-field rewrite would break.
+await queues.setEpisodes('bob', 'rk:1001', 2);
+const afterWrite = (await queues.listSet('bob')).find((e) => e.key === 'rk:1001')?.value as
+  Record<string, unknown> | undefined;
+ok('an unrelated write left the window alone',
+  JSON.stringify(afterWrite?.start) === JSON.stringify({ position_ms: 3660000 })
+  && JSON.stringify(afterWrite?.end) === JSON.stringify({ position_ms: 3960000 }),
+  JSON.stringify(afterWrite));
 
 ok('kept the head comment', migrated.includes('# HEAD:'));
 ok('kept the foot comment', migrated.includes('# FOOT:'));

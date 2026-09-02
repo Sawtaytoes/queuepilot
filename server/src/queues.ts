@@ -20,10 +20,10 @@ import { toWeight } from './engine/weight.js';
 import { parsePromoteWindow } from './leadWindow.js';
 import * as promote from './promote.js';
 import * as sets from './sets.js';
-import { entryIdOf, hasSection, mintEntryId, toEntryObject } from './entryFormat.js';
+import { entryIdOf, hasSection, mintEntryId, toEntryObject, toPositionMs } from './entryFormat.js';
 import { normalizeEntryItemOrder } from './entryItemOrder.js';
 import { normalizeWatchHistory } from './watchHistory.js';
-import type { EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
+import type { End, EntryExtras, EntryObject, EntryValue, QueueEntry, Start } from './types.js';
 
 /**
  * The MAPPING form of an on-disk entry, as it comes back off a YAML node.
@@ -95,7 +95,7 @@ export function entryKey(value: unknown): string | null {
 // importing this whole write-side. Re-exported here because this is where `entryKey()` lives
 // and where every caller already looks for the entry vocabulary.
 export {
-  entryIdOf, hasSection, isLegacyScalarEntry, legacyEntryMessage, toEntryObject,
+  entryIdOf, hasSection, isLegacyScalarEntry, legacyEntryMessage, toEntryObject, toPositionMs,
 } from './entryFormat.js';
 
 // A finished entry is KEPT and tagged `done: true` on its mapping rather than pruned (that is
@@ -517,7 +517,16 @@ function entryNode(doc: Document, { ratingKey, title, extras }: SplitEntry): Nod
 
 // Replace one entry in a set, addressed by its stable key. `mutate({ratingKey,title,extras})`
 // edits the split form in place; the node is rebuilt from the result.
-async function rewriteEntry(setName: string, key: string, mutate: (e: SplitEntry) => void): Promise<boolean> {
+async function rewriteEntry(
+  setName: string,
+  key: string,
+  // Returning `false` REFUSES the write: the file is left exactly as it was found and the
+  // entry is still reported as located. A mutator needs that because the entry it is handed is
+  // the only place two of its own fields are visible at once — `setEnd` cannot know whether an
+  // `end` is legal until it has read the `start` sitting beside it, and by then it is inside
+  // the lock. Every other mutator returns void and is unaffected.
+  mutate: (e: SplitEntry) => void | false,
+): Promise<boolean> {
   return withLock(async () => {
     const doc = await readDoc();
     const seq = doc.get(setName);
@@ -525,7 +534,7 @@ async function rewriteEntry(setName: string, key: string, mutate: (e: SplitEntry
     const idx = seq.items.findIndex((node) => entryKey(plain(node)) === key);
     if (idx < 0) return false;
     const split = splitEntry(plain(seq.items[idx]));
-    mutate(split);
+    if (mutate(split) === false) return true;
     seq.items[idx] = entryNode(doc, split);
     seq.flow = false;
     await writeDoc(doc);
@@ -858,35 +867,105 @@ export async function setBatchStop(
 // Normalize a manual START point off the wire. A SHOW start is {season, episode}; a
 // COLLECTION start also names the member to begin at — `series` is that member's ratingKey
 // (a hand-written YAML entry may name it by title instead), and season/episode are optional
-// (a movie member has neither). Anything without a series AND without an episode is "no
-// start" — i.e. back to automatic next-unwatched.
+// (a movie member has neither). A start may also name a POSITION inside the unit it picked,
+// and a MOVIE SECTION is a position ALONE — no series, no episode, because a film has neither
+// (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+//
+// ⚠️ That last clause is why the "no start" test reads all THREE fields. It used to read two
+// (`!hasSeries && src.episode == null`), which was right while a start could only pick a unit
+// and would have discarded every film section silently — the position arrived, the guard saw
+// no series and no episode, and the whole start came back null with nothing logged.
+// `e2e/yaml-roundtrip-test.ts` pins the movie case for exactly that reason.
+//
+// Sparse throughout: an absent, blank, negative or non-numeric value drops its own key, and a
+// start left with none of the three is null rather than an empty mapping.
 export function normalizeStart(start: unknown): Start | null {
   if (!start || typeof start !== 'object') return null;
   const src = start as {
-    series?: unknown; season?: unknown; episode?: unknown; history?: unknown;
+    series?: unknown; season?: unknown; episode?: unknown; position_ms?: unknown;
+    history?: unknown;
   };
   const hasSeries = src.series != null && String(src.series).trim() !== '';
-  if (!hasSeries && src.episode == null) return null;
+  const positionMs = toPositionMs(src.position_ms);
+  if (!hasSeries && src.episode == null && positionMs == null) return null;
   const s: Start = {};
   if (hasSeries) s.series = String(src.series).trim();
   if (src.episode != null) {
     s.season = Math.max(1, parseInt(String(src.season), 10) || 1);
     s.episode = Math.max(1, parseInt(String(src.episode), 10) || 1);
   }
+  if (positionMs != null) s.position_ms = positionMs;
   if (src.history === 'queue' || src.history === 'provider') s.history = src.history;
   return s;
+}
+
+// Normalize an END point off the wire — where the first played unit STOPS. `start`'s mirror,
+// and deliberately a mapping with one key rather than a bare number, so that a later "stop
+// after season 2 episode 6" is an addition here instead of a second key on the entry.
+//
+// An `end` with no usable position is null (the key is dropped), never `{}` — the same sparse
+// rule `normalizeStart` follows and the same one every other per-entry override follows.
+export function normalizeEnd(end: unknown): End | null {
+  if (!end || typeof end !== 'object') return null;
+  const positionMs = toPositionMs((end as { position_ms?: unknown }).position_ms);
+  return positionMs == null ? null : { position_ms: positionMs };
+}
+
+/**
+ * The complaint an inverted or zero-length window earns, naming both offsets.
+ *
+ * REFUSED BY NAME, never swapped and never clamped. A zero-length section plays nothing, and a
+ * swap would hide the typo that produced it — the owner asked for a window and would get a
+ * different one with no complaint (decision
+ * `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+ */
+function sectionOrderMessage(startMs: number, endMs: number): string {
+  return `end.position_ms (${endMs}) must be strictly after start.position_ms (${startMs}). `
+    + 'A section that ends where it begins plays nothing, so this write is refused rather than '
+    + 'swapped — check which of the two offsets is the typo.';
+}
+
+/**
+ * Would this pair of offsets be an invalid window? Null when there is nothing to compare.
+ *
+ * THE CROSS-FIELD CHECK LIVES ON THE WRITERS, and it has to: only `setStart` and `setEnd` see
+ * both sides of one entry, and only inside the YAML lock. A route-level check reads one side
+ * off the request and the other off a file it has not locked, so two valid-looking writes
+ * could still land an inverted window — set `end: 90s`, then set `start: 120s`, and each
+ * request on its own looks fine. Both writers ask this, so neither direction has a door.
+ *
+ * When only one side is set there is nothing to compare and the write is accepted: three of
+ * the four optionality states carry no pair at all.
+ */
+function sectionRefusal(startMs: number | null, endMs: number | null): string | null {
+  if (startMs == null || endMs == null) return null;
+  return endMs > startMs ? null : sectionOrderMessage(startMs, endMs);
+}
+
+/** `{ok: false}` plus the named reason, when a write was located but refused. */
+export interface EntryWriteRefusal {
+  ok: false;
+  /** Absent when the entry itself was not found; present when the value was refused. */
+  error?: string;
 }
 
 // Set (or clear) an entry's manual START floor — begin here, skipping earlier episodes (and,
 // for a collection, earlier members) WITHOUT marking anything watched. Preserves the entry's
 // identity and every other field it carries; pass start=null to revert to automatic.
+//
+// REFUSES a start that would invert an `end` already on the entry. Without that this writer is
+// the second half of a two-step route to an invalid file, and it is the half nobody would
+// think to check.
 export async function setStart(
   setName: string,
   key: string,
   start: unknown,
-): Promise<{ ok: true; start: Start | null } | { ok: false }> {
+): Promise<{ ok: true; start: Start | null } | EntryWriteRefusal> {
   const s = normalizeStart(start);
+  let refused: string | null = null;
   const ok = await rewriteEntry(setName, key, (e) => {
+    refused = sectionRefusal(s?.position_ms ?? null, e.extras.end?.position_ms ?? null);
+    if (refused) return false;
     // Promote the first model's `start.history` to the entry. History is independent of the
     // floor now, so clearing or moving a start must not silently change its source.
     const source = normalizeWatchHistory(s?.history)
@@ -900,8 +979,33 @@ export async function setStart(
       e.extras.start = next;
     }
     else delete e.extras.start;
+    return undefined;
   });
+  if (refused) return { ok: false, error: refused };
   return ok ? { ok: true, start: s } : { ok: false };
+}
+
+// Set (or clear) an entry's END point — stop the first played unit here and advance to the
+// next queue entry. `setStart`'s mirror in every way that matters: same sparse rule, same
+// identity preservation, same "every other field survives", and the same refusal.
+//
+// Pass end=null (or anything with no usable position) to play to the end of the unit again.
+export async function setEnd(
+  setName: string,
+  key: string,
+  end: unknown,
+): Promise<{ ok: true; end: End | null } | EntryWriteRefusal> {
+  const e = normalizeEnd(end);
+  let refused: string | null = null;
+  const ok = await rewriteEntry(setName, key, (split) => {
+    refused = sectionRefusal(split.extras.start?.position_ms ?? null, e?.position_ms ?? null);
+    if (refused) return false;
+    if (e) split.extras.end = e;
+    else delete split.extras.end;
+    return undefined;
+  });
+  if (refused) return { ok: false, error: refused };
+  return ok ? { ok: true, end: e } : { ok: false };
 }
 
 /** Set an entry's history source, or clear it so the entry follows its queue. */

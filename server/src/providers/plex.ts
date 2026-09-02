@@ -144,6 +144,21 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
     unit: 'episode',
 
     /**
+     * THE ONLY provider that can play a SECTION of an item.
+     *
+     * A section is a seek plus a stop on a timeline this app can command, and Plex is the one
+     * backend that hands one back: a companion `playMedia` takes an offset, and `transport`
+     * can stop the item and advance the lineup. The other four are `delivery: 'pull'` — a URL
+     * or an artifact goes out and control goes with it — so they offer no section control
+     * rather than accepting one and playing the item in full
+     * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+     *
+     * `providers/config.ts PLAYS_SECTIONS` is the same fact keyed by kind, for the API paths
+     * that must answer without a token.
+     */
+    playsSections: true,
+
+    /**
      * Libraries, for the queue editor's provider block.
      *
      * Only VIDEO libraries: membership is opt-in and every video library is eligible, but a
