@@ -36,7 +36,7 @@ import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import { isNodeError } from '../errors.js';
 import { normalizeWatchHistory } from '../watchHistory.js';
 import type { Rng } from './weight.js';
-import type { PlexClient, PlexMetadata, Start } from '../types.js';
+import type { End, PlexClient, PlexMetadata, Start } from '../types.js';
 
 // --------------------------------------------------------------------------- //
 // The shapes this resolver produces. Local to the engine's curated read-side: none of them
@@ -109,6 +109,8 @@ type RawEntryObject = {
   episodes?: unknown;
   item_order?: unknown;
   start?: unknown;
+  /** Where the first played unit STOPS — see `EntryDescriptor.end`. */
+  end?: unknown;
   watch_history?: unknown;
   weight?: unknown;
   done?: unknown;
@@ -150,6 +152,16 @@ export interface EntryDescriptor {
   /** Item order inside this show or Collection. `shuffle` includes watched items. */
   itemOrder: 'in-order' | 'shuffle';
   start: Start | null;
+  /**
+   * Where this entry's first played unit STOPS, the mirror of `start.position_ms`. Null on
+   * every entry that plays to the end of its unit, which is all of them written before
+   * 2026-09-01 (decision
+   * `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+   *
+   * Carried through the way `start` is — the stored mapping, not a re-derived number — so the
+   * key it may grow later ("stop after season 2 episode 6") arrives here for free.
+   */
+  end: End | null;
   /** Per-entry override. `start.history` remains the compatibility read. */
   watchHistory: 'provider' | 'queue' | null;
   /** Custom collection member order. Empty means follow Plex. */
@@ -378,6 +390,7 @@ export function describe(entry: unknown): EntryDescriptor {
       lead: entry.lead ?? null,
       promoteWindow: entry.promote_window ?? null,
       start: (entry.start ?? null) as Start | null,
+      end: (entry.end ?? null) as End | null,
       watchHistory: normalizeWatchHistory(entry.watch_history)
         ?? normalizeWatchHistory((entry.start as Start | null | undefined)?.history),
       collectionOrder: Array.isArray(entry.collection_order)
@@ -400,6 +413,7 @@ export function describe(entry: unknown): EntryDescriptor {
     return {
       key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
+      end: null,
       watchHistory: null,
       itemOrder: 'in-order',
       collectionOrder: [],
@@ -412,7 +426,8 @@ export function describe(entry: unknown): EntryDescriptor {
   const coll = cm ? cm[1]!.trim() : null;
   return {
     key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
-    collection: coll, episodes: null, batch_stops_at: null, start: null, collectionOrder: [],
+    collection: coll, episodes: null, batch_stops_at: null, start: null, end: null,
+    collectionOrder: [],
     watchHistory: null,
     itemOrder: 'in-order',
     placement: null, lead: null, promoteWindow: null, weight: 1, done: false,

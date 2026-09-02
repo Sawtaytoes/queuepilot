@@ -138,14 +138,44 @@ export function mintEntryId(taken: ReadonlySet<string>): string {
   throw new Error('could not mint a unique entry id');
 }
 
+// --- the section window (2026-09-01) ------------------------------------------ //
+//
+// `start.position_ms` and `end.position_ms` say where inside the first played unit playback
+// begins and where it stops (decision
+// `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`). The COERCION lives
+// here, beside `hasSection`, so the predicate that decides an add is deliberate and the
+// writers that put the numbers on disk cannot drift apart: one function, three readers
+// (`hasSection` below, `queues.normalizeStart` and `queues.normalizeEnd`).
+
+/**
+ * A `position_ms` off the wire or off the file, or null when there is no usable value.
+ *
+ * THE SPARSE RULE, spelled once. A null, an absent key, a blank string, a boolean, an array, a
+ * negative offset and a non-numeric string are all "no position", and every caller DROPS the
+ * key rather than writing a 0 nobody typed. Zero itself is a real value — "begin at the very
+ * start" is what an `end`-only window means for its other half — so it is `!= null` that tests
+ * this, never truthiness.
+ *
+ * A numeric string is accepted because YAML hands one back for a quoted offset and the HTTP
+ * body is JSON somebody may have typed. `Math.round` because a millisecond is the smallest
+ * unit any of this speaks; a fractional one is a UI rounding artefact, not a finer offset.
+ */
+export function toPositionMs(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
+  const ms = Number(value);
+  if (!Number.isFinite(ms) || ms < 0) return null;
+  return Math.round(ms);
+}
+
 /**
  * Does this value carry a SECTION — a `start.position_ms` or an `end.position_ms`?
  *
- * READ-ONLY, and deliberately ahead of the feature. The section fields themselves are a later
- * change (`docs/clip-playback-design.md`); what this answers is the identity question they
- * raise, which had to be settled first: an add that names a window is asking for a LINE, not
- * for the item, so it is an add the duplicate guard must let through and an add that mints its
- * own `id`. Nothing here normalizes or validates the value — that belongs with the fields.
+ * READ-ONLY. It answers the IDENTITY question the fields raise, which had to be settled a day
+ * before they existed: an add that names a window is asking for a LINE, not for the item, so it
+ * is an add the duplicate guard must let through and an add that mints its own `id`. Nothing
+ * here validates the PAIR — "end must be strictly after start" needs both sides of one entry
+ * and belongs with the writers in `queues.ts`.
  */
 export function hasSection(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -153,11 +183,19 @@ export function hasSection(value: unknown): boolean {
   return hasPositionMs(m.start) || hasPositionMs(m.end);
 }
 
-/** One side of a window: an object carrying a finite, non-negative `position_ms`. */
+/**
+ * One side of a window: an object carrying a usable `position_ms`.
+ *
+ * Delegates to `toPositionMs` rather than testing `Number(...)` itself, which is a real fix and
+ * not a tidy-up. The first draft read `Number(side.position_ms)`, and `Number(null)` is `0` —
+ * so `{start: {position_ms: null}}` answered TRUE. `null` is this file format's spelling of
+ * "no value" (`{start: null}` is how a start is cleared), so the guard would have called a
+ * cleared window a section, minted an id for it and let a duplicate add through, while
+ * `normalizeStart` correctly dropped the key. `''` did the same thing.
+ */
 function hasPositionMs(side: unknown): boolean {
   if (!side || typeof side !== 'object' || Array.isArray(side)) return false;
-  const ms = Number((side as { position_ms?: unknown }).position_ms);
-  return Number.isFinite(ms) && ms >= 0;
+  return toPositionMs((side as { position_ms?: unknown }).position_ms) != null;
 }
 
 /**
