@@ -233,6 +233,15 @@ try {
     await page.locator('#entrymodal .modalbtns button').click();
     await page.locator('#entrymodal').waitFor({ state: 'detached', timeout: 15_000 });
   };
+  /** Wait until the tile carries no section tag. Answers either way; the check reports. */
+  const tagGone = async (key: string) => {
+    const until = Date.now() + 15_000;
+    while (Date.now() < until) {
+      if (await page.locator(`#grid li.tile[data-key=${JSON.stringify(key)}] .sectiontag`)
+        .count() === 0) return;
+      await page.waitForTimeout(250);
+    }
+  };
   const tagText = async (key: string) => (
     await page.locator(`#grid li.tile[data-key=${JSON.stringify(key)}] .sectiontag`)
       .allInnerTexts()
@@ -262,7 +271,7 @@ try {
     await page.locator('#entry-sectionfield').count() === 1);
   check('…which summarises the window against the runtime',
     (await page.locator('#entry-sectionsummary').innerText())
-      .trim() === '01:01:00 to 01:06:00 of 02:00:00',
+      .trim() === 'Plays 01:01:00 to 01:06:00 of 02:00:00',
     await page.locator('#entry-sectionsummary').innerText());
   check('…and offers the clear right there in the row',
     await page.locator('#entry-sectionclear').count() === 1);
@@ -338,7 +347,10 @@ try {
   await page.locator('#entry-sectionclear').click();
   await page.waitForTimeout(2_000);
   await closePanel();
-  await page.waitForTimeout(600);
+  // POLL rather than sleep. A clear is two PATCHes and a refresh, and the refresh lands
+  // whenever the write guard lets it — a fixed wait passed most of the time and failed the
+  // rest, which is a flake in the gate rather than a fault in the app.
+  await tagGone(plainKey);
   check('the section clears back to the whole item',
     await page.locator(
       `#grid li.tile[data-key=${JSON.stringify(plainKey)}] .sectiontag`,

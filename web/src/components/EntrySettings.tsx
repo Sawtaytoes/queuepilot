@@ -129,6 +129,11 @@ export function SettingTags({
     tip: string,
     className: string,
     intent: "accent" | "neutral" | "success" | "warning",
+    // Truncate by default, which is right for every tag whose text is a WORD — "3 eps",
+    // "Leads", "Skipped" — because the first few characters already identify it. A section
+    // tag is the exception: its meaning is entirely in two timecodes, and in the Narrow View
+    // "Section 01:01:00–01:…" says which end was cut off and nothing about where it stops.
+    overflow: "truncate" | "wrap" = "truncate",
   ) => (
     // The two branches are the SAME pill now: `BadgeButton` and `Badge` build it through
     // one shared hook in the library, so a tag you can press and a tag you cannot are
@@ -141,6 +146,7 @@ export function SettingTags({
           className={`badge ${className}`}
           intent={intent}
           onClick={onEdit}
+          overflow={overflow}
           size="sm"
         >
           {label}
@@ -150,6 +156,7 @@ export function SettingTags({
           appearance="outline"
           className={`badge ${className}`}
           intent={intent}
+          overflow={overflow}
           size="sm"
         >
           {label}
@@ -255,6 +262,7 @@ export function SettingTags({
             applyVocab(sectionTagTip(section), vocab),
             "sectiontag",
             "warning",
+            "wrap",
           )
         : null}
     </>
@@ -1094,10 +1102,10 @@ export function EntryEditor({
             <span className="fieldlabel">Section</span>
             <div className="fieldrow">
               <span id="entry-sectionsummary">
-                {sectionSummary(
+                {`Plays ${sectionSummary(
                   sectionOf(item),
                   runtimeMs(item),
-                )}
+                )}`}
               </span>
               <Button
                 appearance="outline"

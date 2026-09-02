@@ -202,10 +202,10 @@ describe("sectionSummary", () => {
     ).toBe("12:30 to the end")
   })
 
-  it("describes the default in words", () => {
-    expect(sectionSummary(null)).toBe(
-      "Plays the whole item",
-    )
+  // A FRAGMENT, never a sentence — the modal says "Will play …" over the same words, and a
+  // built-in "Plays" printed "Plays Plays the whole item."
+  it("describes the default as a fragment the caller can put a verb in front of", () => {
+    expect(sectionSummary(null)).toBe("the whole item")
   })
 })
 
