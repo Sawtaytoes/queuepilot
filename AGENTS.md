@@ -553,6 +553,44 @@ Four things follow, and each has cost something already:
 - **A fixture with a bare string fails the gate that reads it.** They were all rewritten; a new
   one must be written as a mapping.
 
+### A section window: `start.position_ms` and `end.position_ms`
+
+An entry can say WHERE INSIDE its first played unit playback begins and where it stops. One
+mechanism, two independent keys on the entry mapping, and all four combinations are valid — the
+pair with neither is today's behaviour unchanged
+([decision](docs/decisions/2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror.md),
+design `docs/clip-playback-design.md`). **The DATA path only exists so far**: the fields are
+stored, written, served and described. Playback and the editor control are the next two changes.
+
+Four things bite, and the first one already did.
+
+- ⚠️ **A MOVIE SECTION HAS NO SERIES AND NO EPISODE.** `normalizeStart()`'s first line used to
+  be `if (!hasSeries && src.episode == null) return null` — correct while a start could only
+  pick a UNIT, and a silent discard of every film section the day a position joined it. It reads
+  all three fields now. `e2e/yaml-roundtrip-test.ts` and `server/src/sectionWindow.test.ts` both
+  pin the movie case for that reason.
+- **THE PAIR RULE LIVES ON THE WRITERS, not on the route.** `end` must be **strictly after**
+  `start`; equal is refused BY NAME and never swapped, because a swap hides the typo that made
+  it. Both `setStart` and `setEnd` ask, because either one can be the second of two
+  individually-valid writes that together invert the window — set `end: 90s`, then set
+  `start: 120s`. A route-level check reads one side off the request and the other off a file it
+  has not locked, so it cannot close that. `rewriteEntry`'s mutator returns `false` to refuse,
+  which leaves the file exactly as it was found; the caller gets `{ok: false, error}`, and a
+  plain `{ok: false}` still means "no such entry".
+- **The sparse rule, and `hasSection` must agree with it.** An absent, blank, negative,
+  non-numeric or `null` position DROPS its key; a `start` left with none of its three fields is
+  `null`, never `{}`. `entryFormat.toPositionMs()` is the ONE coercion, and `hasSection()` —
+  which decides an add is deliberate and mints an `id` — calls it rather than testing
+  `Number(...)` itself. It used to: `Number(null)` is `0`, so a CLEARED window read as a section
+  at offset zero. Zero is a real value, so every test is `!= null`, never truthiness.
+- **Playing a section is a PROVIDER CAPABILITY, and it is Plex alone.** `Provider.playsSections`
+  on the instance, `PLAYS_SECTIONS` in `providers/config.ts` keyed by KIND so the API answers
+  with no token and no instantiation, surfaced as `plays_sections` on `ProviderPublicView`. Same
+  shape as `stampsQueuedAt` and `DELIVERY`, and the same rule as
+  [the watch-history capability](docs/decisions/2026-08-30-the-watch-history-source-is-a-provider-capability-and-queuepilot-is-the-fallback.md):
+  a backend that cannot serve a section offers **no control** rather than accepting one and
+  playing the item in full.
+
 ### Watch history is queue-defaulted and entry-overridden
 
 **Provider history is the product default.** A curated set may store

@@ -57,6 +57,12 @@ export interface ProviderPublicView {
   supported: boolean;
   configured: boolean;
   delivery: Delivery;
+  /**
+   * Can a queue on this provider play a SECTION of an item? Reported so the UI can hide the
+   * control rather than offer one the backend would ignore — the same rule `delivery` follows,
+   * and the reason neither is a `kind` check at the call site.
+   */
+  plays_sections: boolean;
   vocabulary: ProviderVocabulary;
 }
 
@@ -81,6 +87,22 @@ export const KINDS = ['plex', 'kavita', 'board-game-picker', 'steam', 'mister'];
 // side builds it.
 const DELIVERY: Record<string, Delivery | undefined> = {
   plex: 'push', kavita: 'pull', 'board-game-picker': 'pull', steam: 'pull', mister: 'pull',
+};
+
+// Can a queue on this kind play a SECTION of an item — start at an offset and stop at one?
+//
+// Kept beside DELIVERY, and for the same reason: the API must be able to report it WITHOUT
+// instantiating a provider, so the web app can hide the section control on a reading queue
+// before any token exists. `Provider.playsSections` is the same fact on the instance, and the
+// two must agree — this is the copy every UI path reads.
+//
+// Plex alone, and the split is exactly `delivery`'s: a section is a seek plus a stop on a
+// timeline QueuePilot can COMMAND, and the other four hand back an artifact or a URL and lose
+// control at that moment. This is not a duplicate of DELIVERY even though it agrees with it
+// today — a future push provider with no seek verb would be `push` and still not play sections
+// (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+const PLAYS_SECTIONS: Record<string, boolean | undefined> = {
+  plex: true, kavita: false, 'board-game-picker': false, steam: false, mister: false,
 };
 
 // The WORDS each medium is described in. Kept beside DELIVERY and for the same reason: the
@@ -346,6 +368,10 @@ export function publicView(def: ProviderDefinition): ProviderPublicView {
     // without branching on `kind` — a UI that says `if (kind === 'kavita')` has to be edited
     // again for every future backend, which is the leak the seam exists to prevent.
     delivery: DELIVERY[def.kind] || 'push',
+    // …and whether it can play PART of an item. Defaults to false for a kind this build has
+    // not heard of, which is the safe direction: an unknown backend offers no section control
+    // rather than one nothing serves.
+    plays_sections: PLAYS_SECTIONS[def.kind] === true,
     // …and what the medium is CALLED. Same rule, different question: `delivery` fixed the
     // queue-level button and left every tile saying "Play" on something you read.
     vocabulary: VOCABULARY[def.kind] || DEFAULT_VOCABULARY,
@@ -363,6 +389,14 @@ export function publicView(def: ProviderDefinition): ProviderPublicView {
  */
 export const deliveryForKind = (kind: string | null | undefined): Delivery => (
   DELIVERY[kind ?? ''] || 'push'
+);
+
+/**
+ * Can this kind play a SECTION, without instantiating it? Same shape and same reason as
+ * `deliveryForKind`: one hand-maintained answer, so no caller grows a second one.
+ */
+export const playsSectionsForKind = (kind: string | null | undefined): boolean => (
+  PLAYS_SECTIONS[kind ?? ''] === true
 );
 
 /** One provider's words, without instantiating it. `sets.ts` labels a queue with this. */
