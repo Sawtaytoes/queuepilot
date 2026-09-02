@@ -125,7 +125,7 @@ function queueTile(
     queue_history_completed_count: history.progress
       ? [...history.progress.values()].filter((row) => row.isCompleted).length
       : 0,
-    // A finished-but-kept entry (Python tagged it done); the grid greys it and the
+    // A finished-but-kept entry (`markDone` tagged it done); the grid greys it and the
     // "Remove all completed" button targets these. False for every plain entry.
     done: Boolean(e.done),
     // The same thing judged LIVE rather than read off the file — see `tagFinishedMovies`.
@@ -229,6 +229,10 @@ async function entryOwnsPlexItem(entry: QueueEntry, itemKey: string): Promise<bo
 async function historyTarget(setId: string, key: string) {
   const set = await sets.getSet(setId);
   if (!set || set.source !== 'queue') return null;
+  // FIRST MATCH, and correct only because a key names ONE line — the invariant the optional
+  // entry `id` exists to hold (2026-09-01). A second line for the same file carries an id and
+  // therefore its own key; a hand-written duplicate that carries none is refused by
+  // `loadEntries()` rather than reaching a second row here.
   const entry = (await queues.listSet(setId)).find((row) => row.key === key) ?? null;
   if (!entry) return null;
   return { entry, set, source: effectiveWatchHistory(entry.value, set.watch_history) };
@@ -450,22 +454,28 @@ export function queuesRoutes(): Hono {
   // --- queue items ------------------------------------------------------------ //
 
   // Append an entry. Body: {value} — a title string, a ratingKey, or {ratingKey,title}. With
-  // {type:'collection'} the entry is written as the literal "Collection: <name>" string the
-  // Python resolver expands into that collection's ordered children (name taken from the
-  // value's title, or the string itself).
+  // {type:'collection'} the entry is written as `{collection: <name>}`, which the resolver
+  // expands into that collection's ordered children (name taken from the value's title, or the
+  // string itself).
   //
   // THE DUPLICATE TEST LIVES HERE, not in `queues.addItem` and not in `entryKey`.
   //
-  // `entryKey` is the LINE identity and is pinned — the Python writer addresses the same lines
-  // by it and `e2e/fixtures/golden/` records what it returns — so the looser ITEM test is a
-  // second, separate check (`entryIdentity.findDuplicateItem`). `addItem` keeps its exact-key
-  // refusal untouched and stays a pure YAML editor with no Plex dependency, which is what lets
-  // every offline gate keep calling it. This route is the one place every user-initiated add
-  // passes through (Pending, the toolbar search, the queue search row), and it already holds
-  // both a Plex client and the set's cfg.
+  // `entryKey` is the LINE identity and stays narrow — roughly sixty call sites, both SQLite
+  // primary keys and every `?only=<key>` URL are written against "one key, one line" — so the
+  // looser ITEM test is a second, separate check (`entryIdentity.findDuplicateItem`). `addItem`
+  // keeps its exact-key refusal and stays a pure YAML editor with no Plex dependency, which is
+  // what lets every offline gate keep calling it. This route is the one place every
+  // user-initiated add passes through (Pending, the toolbar search, the queue search row), and
+  // it already holds both a Plex client and the set's cfg.
   //
   // Reported 2026-08-21: an anime queue named a show by BARE TITLE, the Pending tile posted the
   // same show by rating key, the two keyed differently, and a second copy landed.
+  //
+  // `{allow_duplicate: true}` (2026-09-01) is the DOOR in that refusal, and it is deliberately
+  // a thing the caller has to type. Both checks step aside for it and `addItem` mints an `id`
+  // for the new line, so the demo reel can hold three windows of one film while an accidental
+  // second copy in a watch queue is still caught. An add that carries a section says the same
+  // thing without the flag, because a window already names a line rather than an item.
   app.post('/queues/:set/items', async (c) => {
     const set = c.req.param('set');
     if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
@@ -473,6 +483,7 @@ export function queuesRoutes(): Hono {
     let value = body.value;
     const type = body.type;
     const position = body.position === 'bottom' ? 'bottom' : 'top';
+    const allowDuplicate = body.allow_duplicate === true;
     if (type === 'collection') {
       const name = value && typeof value === 'object'
         ? (value as { title?: unknown; name?: unknown }).title || (value as { name?: unknown }).name
@@ -492,11 +503,11 @@ export function queuesRoutes(): Hono {
       // ENGINE's (`routing.loadSets`), because it is the engine's resolver that runs — the
       // registry entry `isQueueSet` reads is the file shape, which is a different object.
       const cfg = routing.loadSets()?.sets[set];
-      if (cfg) {
+      if (cfg && !allowDuplicate) {
         const dup = await findDuplicateItem(liveClient(), cfg, await queues.listSet(set), value);
         if (dup) return c.json({ added: false, key: dup.key, duplicateOf: dup.key });
       }
-      return c.json(await queues.addItem(set, value, position));
+      return c.json(await queues.addItem(set, value, position, { allowDuplicate }));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

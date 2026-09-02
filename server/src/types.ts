@@ -647,6 +647,20 @@ export interface RoutingRegistry {
  * field — which is why this is open-ended rather than a closed set.
  */
 export interface EntryExtras {
+  /**
+   * An opaque id for this LINE — `queues.entryKey()`'s FIRST branch, when it is present.
+   *
+   * Optional and additive (2026-09-01). An entry without one keys on its `ratingKey`/`title`
+   * exactly as it always did, so nothing on disk re-keyed; an entry WITH one keys as
+   * `id:<opaque>`, which is what lets a queue hold the same file more than once with a
+   * separate progress row, lead cooldown and `?only=` address per line.
+   *
+   * `addItem` mints one only for an add that would otherwise be refused as a duplicate. A hand
+   * edit may write any short unique text; a duplicate key with no id is refused by
+   * `loadEntries()` per ENTRY (decision
+   * `2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines`).
+   */
+  id?: string;
   /** How many episodes this entry contributes per visit. */
   episodes?: number;
   /**
@@ -716,7 +730,20 @@ export type EntryValue = string | number | EntryObject;
 /** One entry as `queues.js entriesOf()` reports it. Entries whose key is null are dropped
  * before this, so `key` is non-null here. */
 export interface QueueEntry {
-  /** `rk:<ratingKey>` or `title:<title>` — MUST match Python `queues.entry_key`. */
+  /**
+   * `id:<opaque>`, else `rk:<ratingKey>`, else `title:<title>` — this LINE's identity.
+   *
+   * `queues.entryKey()` and its read-side twin `engine/resolve.entryKey()` are the two
+   * implementations and MUST agree; `e2e/play-one-entry-test.ts` is what notices when they do
+   * not. There is no second WRITER any more — the Python `queue_builder.queues.entry_key` this
+   * used to have to match was deleted with `queue_builder/` in `7bf01e0`.
+   *
+   * The key names ONE line, and roughly sixty call sites are written against that: every
+   * `rewriteEntry` setter takes the first match, `removeItem`/`markDone`/`clearDone` take all
+   * matches, `queue_entry_history` and `lead_cooldown` are keyed on it, and the web app uses it
+   * as a React key, a selection id and a `?only=` URL segment. The optional entry `id` exists
+   * to KEEP that true when one queue holds the same file twice.
+   */
   key: string;
   value: EntryValue;
   done: boolean;
