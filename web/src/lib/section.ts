@@ -142,7 +142,8 @@ export const withPositionMs = (
   })
 
 /**
- * A timecode as this app prints one: `12:30`, `1:02:03` — the hour only once there is one.
+ * A timecode as this app prints one: `12:30`, `01:02:03` — the hour only once there is one,
+ * and zero-padded, which is `formatTimecode`'s canonical spelling.
  *
  * `formatTimecode` from `@charcuterie/ui`, never a sixth hand-rolled printer. The library
  * counted five across the fleet, two of them in THIS repo (`tileFace.clock` and
