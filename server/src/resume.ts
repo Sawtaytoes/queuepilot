@@ -371,13 +371,17 @@ export function startWatch({
         } catch {
           return;
         }
-        // The section OWNS this reading when it named a row for the item on screen, or when
-        // it refused to name one because two windows are in play. In the second case the
-        // resume plan must not act either — an item this file cannot identify is not an item
-        // the other plan should be seeking.
-        const isOwned = sec.index != null || sec.retry === true;
+        // The section OWNS this reading in three cases, and the third is the one that makes
+        // the precedence hold for a whole item rather than for a single read:
+        //   * it named a row for the item on screen;
+        //   * it refused to name one because two windows are in play — an item this file
+        //     cannot identify is not an item the other plan should be seeking either;
+        //   * the item is windowed and its window is SPENT. Without this, the read after a
+        //     start seek finds no live row, falls through, and a resume marker drags the
+        //     viewer straight back out of the section that was just set up.
+        const isOwned = sec.index != null || sec.retry === true || sec.isSpent === true;
         if (isOwned) {
-          if (sec.action !== 'wait') {
+          if (sec.action !== 'wait' && !sec.isSpent) {
             log(`[section] via ${via}: rk=${sec.rk} at `
               + `${Math.round(Number(session?.viewOffset || 0) / 1000)}s -> ${sec.reason}`);
           }

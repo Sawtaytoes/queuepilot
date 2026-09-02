@@ -100,6 +100,15 @@ export interface SectionDecision {
   rk?: string;
   /** Set when the decline is provisional and the next read should reconsider. */
   retry?: boolean;
+  /**
+   * The lineup DOES window this file, and the window here is already spent.
+   *
+   * Load-bearing rather than informational: it is what keeps the resume plan off an item a
+   * section owns for the whole sitting. Without it, the read after a start seek finds no live
+   * row, falls through, and a resume marker drags the viewer back out of the section that was
+   * just set up. A spent window is quiet — it is the steady state for the rest of the item.
+   */
+  isSpent?: boolean;
 }
 
 /**
@@ -307,6 +316,9 @@ export function consider(
   if (found.index == null) {
     const out: SectionDecision = { action: 'none', reason: found.reason, rk };
     if (found.retry) out.retry = true;
+    // No live row, but this lineup DOES window this file — its window here is spent. The
+    // resume plan still must not touch it: a section owns its item for the whole sitting.
+    else if (isWindowed(rk)) out.isSpent = true;
     return out;
   }
   const { index, row } = found;
