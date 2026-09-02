@@ -216,6 +216,9 @@ function shelvesAsQueues(
         raw: it.raw,
         resolved: false,
         start: null,
+        // The skeleton knows no section window either — same rule as `start`, and the same
+        // reason it is spelled rather than left absent: the resolved payload overwrites it.
+        end: null,
         title: it.title,
         type: null,
         year: null,

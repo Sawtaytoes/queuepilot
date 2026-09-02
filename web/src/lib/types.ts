@@ -18,8 +18,29 @@ export type StartPoint = {
   series?: string
   season?: number
   episode?: number
+  /**
+   * Where INSIDE the first played unit playback begins, in milliseconds. The fields above pick
+   * WHICH unit plays; this picks where in it, and a film section carries this ALONE — no
+   * series, no episode, because a film has neither
+   * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
+   *
+   * Absent means "from the beginning". Never rendered as a number: the UI shows `hh:mm:ss.mmm`.
+   */
+  position_ms?: number
   /** Queue-owned history lets this entry advance independently of the provider profile. */
   history?: "queue" | "provider"
+}
+
+/**
+ * Where the entry's first played unit STOPS — `StartPoint.position_ms`'s mirror.
+ *
+ * A mapping with one key rather than a bare number, so that a later "stop after season 2
+ * episode 6" is an addition here instead of a second field on the item. Independently optional
+ * from the start: all four combinations are valid, and null/absent means "play to the end of
+ * the unit", which is what every entry written before 2026-09-01 says.
+ */
+export type EndPoint = {
+  position_ms?: number
 }
 
 /** `plex.nextEpisode()` for a show, `plex.collectionNext()` for a collection. */
@@ -169,6 +190,8 @@ export type QueueItem = {
   /** Epoch seconds when this entry joined this queue. Null on entries created before stamps. */
   queuedAt?: number | null
   start: StartPoint | null
+  /** Where this entry's first played unit stops; null = play it to the end. */
+  end?: EndPoint | null
   /** Stored entry override; null means follow the queue. */
   watch_history?: "provider" | "queue" | null
   /** Entry override resolved against the queue default. */
@@ -752,6 +775,16 @@ export type ProviderInfo = {
    * UI reads this rather than branching on `kind`, so a third backend needs no UI change.
    */
   delivery: "push" | "pull"
+  /**
+   * Can a queue on this provider play a SECTION of an item — start at an offset and stop at
+   * one? Plex alone today. The UI reads THIS rather than branching on `kind`, and it is
+   * reported without instantiating the provider, so the control can be hidden on a reading
+   * queue whose token was never configured.
+   *
+   * Optional because a stale registry response may predate the field; absent reads as false,
+   * which is the safe direction — no control beats a control nothing serves.
+   */
+  plays_sections?: boolean
   vocabulary: ProviderVocabulary
 }
 
