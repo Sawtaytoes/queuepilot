@@ -186,7 +186,12 @@ for (const width of WIDTHS) {
   ok(`${width}px: found a queue id on the landing to visit`, Boolean(queueId));
 
   const routes = [
-    ['/', '#mode-landing:not([hidden]) .mode-primary-action'],
+    // The landing's two starts are an `ActionTiles` now, so there is no
+    // `.mode-primary-action` to wait for — the set is a `role="group"` carrying its own
+    // accessible name (decision
+    // `2026-09-03-the-mode-landing-is-two-actiontiles-not-eight-hand-written-links`).
+    // Named rather than a bare `[role="group"]`: the page has two of them.
+    ['/', '#mode-landing:not([hidden]) [role="group"][aria-label="Start something"]'],
     ['/people', '#people'],
     ['/overview', '#play:not([hidden]) .playcard'],
     ['/pending', '#pending:not([hidden])'],
