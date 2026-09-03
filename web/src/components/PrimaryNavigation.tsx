@@ -1,3 +1,8 @@
+import type { CategoricalIndex } from "@charcuterie/tokens"
+import {
+  CATEGORICAL_INDEX_COUNT,
+  CATEGORICAL_INDEXES,
+} from "@charcuterie/tokens"
 import type { NavRailItem } from "@charcuterie/ui"
 
 import {
@@ -82,3 +87,32 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
       label: "People",
     },
   ]
+
+/**
+ * One hue per DESTINATION, named rather than taken by position.
+ *
+ * The mode landing draws the same destination twice — "Open a queue" is one of the two
+ * primary actions, and Queues is also the first management link. An `ActionTiles` set
+ * walks the palette from its own index 0, so the two sets would have coloured the one
+ * destination two different ways and told the eye they were two places.
+ *
+ * Keyed by `href` because that is the identity a destination actually has here; the
+ * label is prose and has already been rewritten twice.
+ */
+export const NAVIGATION_CATEGORICAL: Readonly<
+  Record<string, CategoricalIndex>
+> = Object.fromEntries(
+  // Read out of `CATEGORICAL_INDEXES` rather than computed from the position. THE
+  // PALETTE IS 1-BASED — `1..10`, not `0..9` — and the first draft handed `ActionTiles`
+  // a 0 for the very first destination. Every lookup inside the library is a plain
+  // `Record<CategoricalIndex, …>`, so a 0 is `undefined` and the tile died reading
+  // `.ghost` off it, taking the whole landing to a blank page.
+  //
+  // Nothing reported it. `index as CategoricalIndex` is an assertion, so tsc believed
+  // the claim instead of checking it, and lint has no opinion about arithmetic. Taking
+  // the value out of the tuple makes the type honest and needs no cast at all.
+  PRIMARY_NAVIGATION_ITEMS.map((item, position) => [
+    item.href,
+    CATEGORICAL_INDEXES[position % CATEGORICAL_INDEX_COUNT],
+  ]),
+)

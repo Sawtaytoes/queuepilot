@@ -46,14 +46,61 @@ import { SearchDropdown } from "./SearchDropdown"
  * The wording is the product's, not the library's: "Picks" and "Rules" are the
  * words every other surface uses for these two kinds of queue.
  */
+/**
+ * A glyph each, so the tile's hue lands on something with a shape.
+ *
+ * `@charcuterie/ui@4.1.0` colours a tile's icon in the tile's own categorical hue and
+ * sits it beside the name. Without an `icon` the colour is only the left bar, which
+ * reads as decoration; with one it is the thing the eye goes to first.
+ *
+ * Paths, never emoji or a symbol font — charcuterie's
+ * `2026-07-29-ship-no-icons-and-no-symbol-glyphs`. `currentColor` is what the library
+ * sets, so neither of these states a colour.
+ */
+function QueueTypeIcon({
+  children,
+}: {
+  children: React.ReactNode
+}) {
+  return (
+    <svg
+      aria-hidden="true"
+      fill="none"
+      height="24"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.8"
+      viewBox="0 0 24 24"
+      width="24"
+    >
+      {children}
+    </svg>
+  )
+}
+
 const QUEUE_TYPE_TILES: ActionTileItem[] = [
   {
     hint: "Choose titles yourself, then arrange them in priority and random lanes.",
+    // A hand picking one item off a list.
+    icon: (
+      <QueueTypeIcon>
+        <path d="M4 6h7M4 10h5M4 14h4" />
+        <path d="M14 14V8.5a1.5 1.5 0 0 1 3 0V13" />
+        <path d="M17 12.5a1.5 1.5 0 0 1 3 0V16a4 4 0 0 1-4 4h-1.2a3 3 0 0 1-2.3-1.1L10 15.6a1.4 1.4 0 0 1 2.1-1.8l1.9 1.7" />
+      </QueueTypeIcon>
+    ),
     label: "Picks",
     value: "picks",
   },
   {
     hint: "Set eligibility filters and let QueuePilot select matching titles.",
+    // A funnel: many in, the matching few out.
+    icon: (
+      <QueueTypeIcon>
+        <path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" />
+      </QueueTypeIcon>
+    ),
     label: "Rules",
     value: "rules",
   },
