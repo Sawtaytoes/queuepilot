@@ -287,69 +287,20 @@ body {
   margin: 0 0 12px;
   text-transform: uppercase;
 }
+/* THE LANDING'S TWO TILE SETS ARE `ActionTiles`, so `.mode-primary-action`,
+   `.mode-primary-icon`, `.mode-action-arrow`, `.mode-management-link`,
+   `.mode-management-icon` and `.mode-management-arrow` ARE ALL DELETED — box, hover,
+   focus ring, icon slot, type ramp and column count all come from the library now.
+
+   Deleted rather than trimmed. A leftover rule here would repaint one app's copy of a
+   shape three other apps share, which is the drift the component exists to end
+   (decision `2026-09-03-the-mode-landing-is-two-actiontiles-not-eight-hand-written-links`).
+
+   `.mode-primary-actions` survives as ONE property. `ActionTiles` owns everything
+   inside its own box and nothing outside it, so the gap to the intro above is still
+   this page's to state. */
 .mode-primary-actions {
-  display: grid;
-  gap: 16px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 40px;
-}
-.mode-primary-action {
-  align-items: center;
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border-default);
-  border-radius: var(--radius-lg);
-  color: var(--color-content-primary);
-  display: grid;
-  gap: 16px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  min-height: 132px;
-  padding: 22px;
-  text-decoration: none;
-  transition:
-    background var(--duration-fast) var(--ease-standard),
-    border-color var(--duration-fast) var(--ease-standard),
-    transform var(--duration-fast) var(--ease-standard);
-}
-.mode-primary-action:hover {
-  background: var(--color-intent-neutral-surface);
-  border-color: var(--color-intent-accent-border);
-  transform: translateY(-2px);
-}
-.mode-primary-action:focus-visible,
-.mode-management-link:focus-visible {
-  border-color: var(--color-border-focus);
-  outline: 3px solid
-    color-mix(
-      in srgb,
-      var(--color-border-focus) 35%,
-      transparent
-    );
-  outline-offset: 3px;
-}
-.mode-primary-icon {
-  color: var(--color-intent-accent-content);
-  display: grid;
-  place-items: center;
-}
-.mode-primary-icon svg {
-  height: 30px;
-  width: 30px;
-}
-.mode-primary-action strong,
-.mode-primary-action small {
-  display: block;
-}
-.mode-primary-action strong {
-  font-size: 1.15rem;
-}
-.mode-primary-action small {
-  color: var(--color-content-secondary);
-  font-size: 0.9rem;
-  margin-top: 5px;
-}
-.mode-action-arrow {
-  color: var(--color-content-muted);
-  font-size: 1.5rem;
 }
 .mode-management {
   border-top: 1px solid var(--color-border-subtle);
@@ -373,40 +324,6 @@ body {
   color: var(--color-content-muted);
   font-size: 0.9rem;
 }
-.mode-management-links {
-  display: grid;
-  gap: 10px;
-  grid-template-columns: repeat(
-      auto-fit,
-      minmax(150px, 1fr)
-    );
-}
-.mode-management-link {
-  align-items: center;
-  background: var(--color-surface-base);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-md);
-  color: var(--color-content-primary);
-  display: grid;
-  gap: 9px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  min-height: 54px;
-  padding: 10px 12px;
-  text-decoration: none;
-}
-.mode-management-link:hover {
-  background: var(--color-surface-raised);
-  border-color: var(--color-border-default);
-}
-.mode-management-icon {
-  color: var(--color-content-secondary);
-  display: grid;
-  place-items: center;
-}
-.mode-management-arrow {
-  color: var(--color-content-muted);
-}
-
 /* THE PAGE HEADER IS `#apphead`, NEVER THE BARE `header` ELEMENT. `<header>` is a landmark
    a COMPONENT may render too: Charcuterie's `Card` puts its heading in one, and this file is
    unlayered, so `header { position: sticky; top: 0; z-index: 10 }` reached every card on the
@@ -3186,21 +3103,16 @@ body.name-editable #apphead h1 {
   #mode-landing .mode-landing-intro p {
     font-size: 1.15rem;
   }
+  /* The column counts are gone from here too. `ActionTiles` asks its CONTAINER, and a
+     600px-wide panel on a 2560px monitor is exactly as narrow as a phone — which this
+     `max-width: 760px` query could never see. */
   .mode-primary-actions {
-    grid-template-columns: 1fr;
     margin-top: 32px;
-  }
-  .mode-primary-action {
-    min-height: 0;
-    padding: 18px;
   }
   .mode-management-heading {
     align-items: flex-start;
     flex-direction: column;
     gap: 2px;
-  }
-  .mode-management-links {
-    grid-template-columns: 1fr;
   }
   #apphead h1 {
     font-size: 1.2rem;
