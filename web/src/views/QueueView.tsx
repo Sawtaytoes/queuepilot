@@ -9,6 +9,7 @@ import {
   SegmentedControl,
 } from "@charcuterie/ui"
 import { useRef, useState } from "react"
+import { Link } from "react-router"
 import {
   EditionChip,
   TypeBadge,
@@ -35,6 +36,7 @@ import { SkippedPanel } from "../components/SkippedPanel"
 import { Tip } from "../components/Tip"
 import { useGridDrag } from "../hooks/useGridDrag"
 import { api } from "../lib/api"
+import { filteredParent } from "../lib/filteredQueues"
 import { flashTile } from "../lib/flip"
 import { isRandomOrder } from "../lib/kind"
 import { titleWithYear } from "../lib/mediaTitle"
@@ -214,12 +216,26 @@ export function QueueView({
   // `vocabulary` renders exactly as it used to rather than rendering "undefined".
   const vocab = regSet?.vocabulary ?? PLEX_WORDS
   const verb = vocab.verb
+  // The queue this one is a filtered VIEW of, when it is one. It decides three things on this
+  // page: the banner below, whether the grid may be reordered, and nothing else — every other
+  // control here edits an ENTRY, and an entry is the same entry in both queues.
+  const filteredFrom = filteredParent(
+    regSet,
+    (id) => reg?.sets.find((x) => x.id === id) ?? null,
+  )
 
   // The fourth argument is the poster tap: with no selection running, tapping a poster
   // opens that entry's sheet. See the hook for why the gesture is resolved there.
   // The CONTAINER, not a lane: the gesture spans both `ul.grid[data-lane]` under it,
   // because a drag across the divider is how an entry is promoted or demoted.
-  useGridDrag(lanesRef, setId, setLane, openEntryEditor)
+  // A FILTERED queue cannot set the order it shows — see `useGridDrag`'s `isReorderable`.
+  useGridDrag(
+    lanesRef,
+    setId,
+    setLane,
+    openEntryEditor,
+    !filteredFrom,
+  )
 
   // A CHANNEL's members play in random order, so the grid lists them
   // alphabetically for lookup; a queue keeps its hand order (top plays next).
@@ -600,8 +616,12 @@ export function QueueView({
             {laneItems.length}
           </Badge>
           <span className="lanehint">
+            {/* The drag half of this hint is a LIE on a filtered queue: it shows a subset, so
+                it cannot express an order for the queue it views, and the tiles do not lift.
+                The order itself is still real and still the parent's, so the first clause
+                stays. */}
             {isPriority
-              ? "plays first, in this order — drag to reorder"
+              ? `plays first, in this order${filteredFrom ? "" : " — drag to reorder"}`
               : "drawn at random to fill the rest"}
           </span>
         </h2>
@@ -612,9 +632,11 @@ export function QueueView({
         >
           {laneItems.length === 0 ? (
             <li className="dropstrip">
-              {isPriority
-                ? "Drag something here to play it first"
-                : "Drag something here to let it come up at random"}
+              {filteredFrom
+                ? `Nothing here from ${filteredFrom.label} matches this filter`
+                : isPriority
+                  ? "Drag something here to play it first"
+                  : "Drag something here to let it come up at random"}
             </li>
           ) : (
             laneItems.map((item) =>
@@ -641,6 +663,24 @@ export function QueueView({
       data-provider={regSet?.provider_kind || undefined}
       id="queue"
     >
+      {/* WHAT THIS PAGE IS. Every control below writes to the parent, so the page says so
+          before it offers any of them — and it names the one thing that does NOT work here,
+          because a control that is simply missing reads as a bug. */}
+      {filteredFrom ? (
+        <p className="filtered-banner" id="qfiltered">
+          <Badge intent="neutral" size="sm">
+            Filtered
+          </Badge>
+          <span>
+            This queue shows part of{" "}
+            <Link to={`/q/${filteredFrom.id}`}>
+              {filteredFrom.label}
+            </Link>
+            . What you add, remove or finish here counts in
+            both. Set the order in {filteredFrom.label}.
+          </span>
+        </p>
+      ) : null}
       <div className="add">
         <SearchDropdown<SearchHit>
           doSearch={async (text) => {

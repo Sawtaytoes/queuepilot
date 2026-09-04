@@ -25,6 +25,10 @@ import { Tip } from "../components/Tip"
 import { useHomeDrags } from "../hooks/useHomeDrags"
 import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
+import {
+  filteredParent,
+  nestFilteredQueues,
+} from "../lib/filteredQueues"
 import { isRandomOrder } from "../lib/kind"
 import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
@@ -397,6 +401,7 @@ function RulesShelf({
 function Shelf({
   groups,
   isCollapsed,
+  filteredFrom,
   isHiddenByFilter,
   items,
   label,
@@ -435,6 +440,14 @@ function Shelf({
     RegistrySet,
     "id" | "delivery" | "episodes" | "vocabulary"
   > | null
+  /**
+   * The queue this one is a filtered VIEW of, when it is one.
+   *
+   * Present ⇒ the shelf is drawn nested under that queue: indented, badged `Filtered`, and
+   * with neither drag handle — its order is the parent's, and a subset cannot express one
+   * (`lib/filteredQueues.ts`). Null on every ordinary queue.
+   */
+  filteredFrom: { id: string; label: string } | null
   /**
    * This queue's OWN default lane — what an entry carrying no `placement` means here.
    *
@@ -694,7 +707,7 @@ function Shelf({
 
   return (
     <section
-      className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}`}
+      className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
       // This shelf's counts, rings and badges are about THIS queue, so they wear its
       // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
       // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
@@ -729,6 +742,23 @@ function Shelf({
             <span className="lanes-sec">{laneClause}</span>
           ) : null}
         </Link>
+        {/* WHAT THIS SHELF IS. The badge says the queue is a view; the line beside it names
+            what it is a view OF, because "Filtered" alone leaves the reader to guess which of
+            the shelves above it belongs to. Both sit inside the heading rather than under it,
+            so a collapsed shelf still says so. */}
+        {filteredFrom ? (
+          <>
+            <Badge intent="neutral" size="sm">
+              Filtered
+            </Badge>
+            <Link
+              className="filtered-parent"
+              to={`/q/${filteredFrom.id}`}
+            >
+              filters {filteredFrom.label}
+            </Link>
+          </>
+        ) : null}
         {/* THE LIST INHERITS THE TRAYS. Required people come first, and optional people follow.
             The shared avatar badge and visible name tell two same-activity queues apart. The
             heading's content is baseline-aligned so the badges and names read as one row. */}
@@ -804,20 +834,25 @@ function Shelf({
               <SettingsIcon />
             </IconButton>
           </Tip>
-          <Tip label="Drag to reorder queues">
-            {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
-              `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
-              second. */}
-            <IconButton
-              appearance="ghost"
-              className="shelfdrag"
-              intent="neutral"
-              label="Drag to reorder queues"
-              size="sm"
-            >
-              <DragIcon />
-            </IconButton>
-          </Tip>
+          {/* NO DRAG HANDLE on a filtered queue. Its place in the list is not a preference —
+              it is pinned under the queue it views (`lib/filteredQueues.ts`), so a handle
+              would offer a move that the next render undoes. */}
+          {filteredFrom ? null : (
+            <Tip label="Drag to reorder queues">
+              {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
+                `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
+                second. */}
+              <IconButton
+                appearance="ghost"
+                className="shelfdrag"
+                intent="neutral"
+                label="Drag to reorder queues"
+                size="sm"
+              >
+                <DragIcon />
+              </IconButton>
+            </Tip>
+          )}
         </span>
       </h2>
       <div className="strip-wrap" ref={wrapRef}>
@@ -1012,7 +1047,14 @@ export function QueuesView({
   // EVERY Picks queue, both lane defaults. It was the priority-lane half until 2026-08-26,
   // which is what left `Kevin — Anime` and nine others listed on the Rules page instead
   // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
-  const shelfIds = curatedIds(data)
+  const setById = (id: string) =>
+    reg?.sets.find((s) => s.id === id) ?? null
+  // A FILTERED queue is drawn UNDER the queue it views, wherever the file happens to have
+  // written it (`lib/filteredQueues.ts`).
+  const shelfIds = nestFilteredQueues(
+    curatedIds(data),
+    setById,
+  )
   const rulesChannels = rotationChannels(reg)
   const queueIds = [
     ...shelfIds,
@@ -1075,9 +1117,7 @@ export function QueuesView({
       <div id="shelves" ref={shelvesRef}>
         {shownShelfIds.map((id) => {
           const q = data!.sets[id]!
-          const registrySet = reg?.sets.find(
-            (s) => s.id === id,
-          )
+          const registrySet = setById(id)
           // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
           // printed the activity unconditionally until 2026-08-26, which renamed
           // "Manga & Webtoons" to "Reading" on a queue the owner had deliberately named
@@ -1114,6 +1154,10 @@ export function QueuesView({
               providerKind={
                 registrySet?.provider_kind ?? ""
               }
+              filteredFrom={filteredParent(
+                registrySet,
+                setById,
+              )}
               set={registrySet ?? null}
               setId={id}
               // The registry row first, the queues payload as the fallback — the same

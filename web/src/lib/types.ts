@@ -341,6 +341,9 @@ export type QueueSet = {
   add_as?: "priority" | "random"
   source: "queue" | "rotation" | string
   sections: number[]
+  /** The queue this one filters — see `RegistrySet.filtered_from`. Its `items` are already
+   *  narrowed to this view; the registry row says what the narrowing is. */
+  filtered_from?: string | null
   items: QueueItem[]
 }
 
@@ -374,6 +377,15 @@ export type ShelfSet = {
   source: "queue" | "rotation" | string
   sections: number[]
   count: number
+  filtered_from?: string | null
+  /**
+   * True when `items` is the PARENT's list and has not been narrowed yet.
+   *
+   * The skeleton makes no provider calls, and what narrows a filtered queue is a provider
+   * library id — so a filtered shelf paints a superset here and its count settles when
+   * `/api/queues` lands. Read it to avoid asserting a count that is about to change.
+   */
+  is_filtered?: boolean
   items: ShelfItem[]
 }
 
@@ -431,6 +443,18 @@ export type RegistrySet = {
    */
   collection_members?: "whole" | "split"
   members?: unknown[]
+  /**
+   * The queue this one is a FILTERED VIEW of — a narrower window on somebody else's entries,
+   * sharing their order and their progress. Null / absent on an ordinary queue.
+   *
+   * Every OTHER field on this row is already the parent's: the server merges the parent
+   * underneath a filtered queue before it normalizes, so nothing here has to look the parent
+   * up to know how the queue behaves. Only two things differ — the name, and `filter`.
+   */
+  filtered_from?: string | null
+  /** What this view narrows to, in the provider's own library ids. Null on an ordinary
+   *  queue; its lists may be empty on one whose filter has not been set up yet. */
+  filter?: { libraries: string[] } | null
   /** Per-show manual start floors for the dynamic rule pool, keyed by show ratingKey.
    * The Channels view seeds the "Start from…" picker from this and writes it back with a
    * whole-map `PATCH /api/sets/:id { starts }`. */
