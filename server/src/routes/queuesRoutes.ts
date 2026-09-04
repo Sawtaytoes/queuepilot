@@ -15,6 +15,7 @@ import * as providerTiles from '../providers/tiles.js';
 import type { ProviderTile } from '../providers/tiles.js';
 import * as queues from '../queues.js';
 import * as sets from '../sets.js';
+import { passesFilter } from '../filteredQueues.js';
 import { store } from '../store/index.js';
 import * as queueEntryHistory from '../store/db/queueEntryHistory.js';
 import * as tiles from '../tiles.js';
@@ -222,6 +223,29 @@ async function isQueueSet(id: string): Promise<boolean> {
   return Boolean(s && s.source === 'queue');
 }
 
+/**
+ * The one thing a FILTERED queue may not do: change the ORDER of the entries it shows.
+ *
+ * It shows a SUBSET, so the key list it would send names only what it can see, and
+ * `queues.applyOrder` sorts every key it was not given to the tail — reordering two webtoons
+ * would sweep every manga in the parent to the bottom of the parent's own queue. Membership
+ * edits are fine and land on the parent (`queues.entryOwner`); order is the one operation a
+ * view cannot express. Refused here rather than in `queues.ts` so the message can name the
+ * queue to go and edit instead. (`filteredQueues.ts`)
+ */
+async function filteredParentOf(id: string): Promise<{ id: string; label: string } | null> {
+  const s = await sets.getSet(id);
+  if (!s || !s.filtered_from) return null;
+  const parent = await sets.getSet(s.filtered_from);
+  return { id: s.filtered_from, label: parent?.label || s.filtered_from };
+}
+
+const REORDER_REFUSAL = (parent: { id: string; label: string }) => ({
+  error: `this queue shows part of '${parent.label}', so it cannot set the order — `
+    + `open '${parent.label}' to reorder`,
+  filtered_from: parent.id,
+});
+
 /** Does this Plex leaf belong to this stored entry? Used to validate manual history writes. */
 async function entryOwnsPlexItem(entry: QueueEntry, itemKey: string): Promise<boolean> {
   const value = entry.value && typeof entry.value === 'object' ? entry.value : null;
@@ -270,10 +294,18 @@ export function queuesRoutes(): Hono {
       const all = await queues.listAll();
       const result: Record<string, unknown> = {};
       for (const s of reg.sets) {
+        // A FILTERED queue reads its PARENT's entries — `listAll` aliases them onto its id.
+        // The skeleton reports them UNFILTERED and says so with `is_filtered`: what narrows
+        // them is a Kavita library id, which is the provider's answer and this endpoint makes
+        // no provider calls at all. So a filtered shelf paints a superset and its count
+        // settles when /api/queues lands — a number that corrects itself, not a shelf that
+        // moves, which is the shift this endpoint exists to prevent.
         const entries = s.source === 'queue' ? all.get(s.id) || [] : [];
         result[s.id] = {
           label: s.label,
           kind: s.kind,
+          filtered_from: s.filtered_from,
+          is_filtered: Boolean(s.filtered_from),
           // Effective lane default — without it the UI sees kind:picks for every hand-picked
           // set and treats them all as random (drag off, alpha sort).
           ...(s.source === 'queue' && 'add_as' in s ? { add_as: s.add_as } : {}),
@@ -349,7 +381,7 @@ export function queuesRoutes(): Hono {
       const all = await queues.listAll();
       const result: Record<string, {
         label: unknown; kind: unknown; source: unknown; sections: unknown;
-        items: unknown[]; add_as?: unknown;
+        items: unknown[]; add_as?: unknown; filtered_from?: string | null;
       }> = {};
       // One flat work list across every set, so the concurrency budget is spent globally.
       const work: { s: typeof reg.sets[number]; e: QueueEntry }[] = [];
@@ -365,9 +397,13 @@ export function queuesRoutes(): Hono {
           source: s.source,
           sections: s.sections,
           items: [],
+          filtered_from: s.filtered_from,
           ...(s.source === 'queue' && 'add_as' in s ? { add_as: s.add_as } : {}),
         };
         if (s.source !== 'queue') continue;
+        // A FILTERED queue: its parent's entries, aliased onto its id by `listAll`. The
+        // NARROWING happens after resolution, on the pull branch below, because the library an
+        // entry sits in is the provider's answer and is not in `queues.yaml`.
         const entries = all.get(s.id) || [];
         if (s.delivery === 'pull') {
           if (entries.length) pull.push({ s, entries });
@@ -447,10 +483,26 @@ export function queuesRoutes(): Hono {
         // Same refusal on the PULL path — the provider would happily resolve a bare title
         // against Kavita and paint a cover for an entry the engine will not queue.
         if (row) {
-          row.items = entries.map((e, i) => queueTile(
-            e,
-            isLegacyScalarEntry(e.value) ? tiles.unresolvedTile(e.value) : cores[i]!,
-          ));
+          const filter = s.filter;
+          row.items = entries
+            .map((e, i) => ({
+              e,
+              // `cores` is index-aligned with `entries` by contract, which is what the `!` says.
+              core: isLegacyScalarEntry(e.value)
+                ? tiles.unresolvedTile(e.value)
+                : cores[i]!,
+            }))
+            // THE FILTER, applied to a RESOLVED tile — the only point in this request where an
+            // entry's library is known. An unresolved one is kept (see `passesFilter`), so a
+            // provider hiccup shows the owner too much rather than silently hiding his queue.
+            // `'libraryId' in core` narrows the union: a legacy scalar entry falls back to
+            // the PLEX-shaped `tiles.unresolvedTile`, which has no such field. Absent reads
+            // as "cannot say", which `passesFilter` keeps.
+            .filter(({ core }) => passesFilter(
+              filter,
+              { libraryId: 'libraryId' in core ? core.libraryId : null },
+            ))
+            .map(({ e, core }) => queueTile(e, core));
         }
       }));
 
@@ -549,6 +601,12 @@ export function queuesRoutes(): Hono {
     const { items, toSet } = await readBody(c);
     if (!(await isQueueSet(String(toSet ?? '')))) return c.json({ error: 'unknown set' }, 400);
     if (!Array.isArray(items)) return c.json({ error: 'items[] required' }, 400);
+    const intoFiltered = await filteredParentOf(String(toSet ?? ''));
+    if (intoFiltered) return c.json(REORDER_REFUSAL(intoFiltered), 409);
+    for (const it of items) {
+      const fromFiltered = await filteredParentOf(String(it?.fromSet ?? ''));
+      if (fromFiltered) return c.json(REORDER_REFUSAL(fromFiltered), 409);
+    }
     try {
       return c.json(await queues.moveBulk(items, toSet));
     } catch (e) {
@@ -574,6 +632,9 @@ export function queuesRoutes(): Hono {
       return c.json({ error: 'unknown set' }, 400);
     }
     if (!key || !Array.isArray(toKeys)) return c.json({ error: 'key + toKeys[] required' }, 400);
+    const filtered = await filteredParentOf(String(fromSet))
+      ?? await filteredParentOf(String(toSet));
+    if (filtered) return c.json(REORDER_REFUSAL(filtered), 409);
     try {
       return c.json(await queues.moveItem(fromSet, toSet, key, toKeys));
     } catch (e) {
@@ -878,6 +939,8 @@ export function queuesRoutes(): Hono {
     if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
     const { keys } = await readBody(c);
     if (!Array.isArray(keys)) return c.json({ error: 'keys[] required' }, 400);
+    const filtered = await filteredParentOf(set);
+    if (filtered) return c.json(REORDER_REFUSAL(filtered), 409);
     try {
       return c.json(await queues.reorder(set, keys));
     } catch (e) {

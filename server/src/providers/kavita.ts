@@ -39,6 +39,7 @@ import { kavitaClient, readerSegment } from './kavita-client.js';
 import { readingListCoverBase64 } from './kavita-cover.js';
 import * as cache from '../cache.js';
 import { errMessage } from '../errors.js';
+import { passesFilter } from '../filteredQueues.js';
 import { KAVITA_BATCH_DEFAULT, ROTATION_LENGTH } from '../env.js';
 import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
 import { normalizeAddAs, normalizePlacement, type Placement } from '../kind.js';
@@ -735,7 +736,7 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
      */
     async buckets({
       cfg = {}, libraries = [], entries = [], isRandomOrder = false, batch = null,
-      volumeBatch = null, limit = null,
+      volumeBatch = null, limit = null, filterLibraries = [],
     }: BucketsContext = {}): Promise<BucketsResult> {
       // `cfg` is the routing set config, read here for the fallbacks below only. It is a union
       // in BucketsContext (`RoutingSetCfg | Record<string, unknown>`) and neither `libraries`
@@ -800,6 +801,17 @@ export function kavitaProvider({ def, apiKey, client = null }: KavitaProviderOpt
           }
         });
         sources = rows.filter((r): r is KavitaSource => r != null);
+        // A FILTERED queue: the parent's entries, minus the ones outside this view's
+        // libraries. Applied HERE and not in `curatedEntries` because the library an entry
+        // sits in is Kavita's answer, not the queue file's — the entry stores a seriesId and
+        // nothing else. `passesFilter` KEEPS a series whose library could not be read; see its
+        // note on why losing one of the owner's entries to a bad probe is the worse failure.
+        if (filterLibraries.length) {
+          const filter = { libraries: filterLibraries.map(String) };
+          sources = sources.filter(
+            (r) => passesFilter(filter, { libraryId: r.series.libraryId ?? null }),
+          );
+        }
       } else {
         const seriesLists = await Promise.all(libIds.map((id) => c.seriesForLibrary(id)));
         sources = seriesLists.flat()

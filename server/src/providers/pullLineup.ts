@@ -120,6 +120,10 @@ export async function pullLineup(
     // Volumes are not chapters. A volume-based series reads this, never `batch`.
     // Absent = 1 inside the provider — never fall through to the chapter count.
     volumeBatch: toBatch(cfg.volumes) ?? null,
+    // A FILTERED queue narrows its PARENT's entries — `curatedEntries` above already read
+    // them off the parent's line (`queues.entryOwner`), and this is what drops the ones this
+    // view does not hold. Absent on every ordinary queue, where it narrows nothing.
+    filterLibraries: cfg.filter_libraries ?? [],
   });
   return play || [];
 }

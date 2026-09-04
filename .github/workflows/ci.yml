@@ -345,6 +345,17 @@ jobs:
       - name: Kavita provider + launcher (offline)
         run: $TSX e2e/kavita-provider-test.ts
 
+      # A FILTERED queue — a queue that is a narrower VIEW of another queue. The gate exists
+      # because every part of "it shares everything except what it shows" is a silent failure
+      # if it breaks: entries that stop being the parent's would drift the first time either
+      # queue was added to, a lineup that stopped narrowing would put manga back into a
+      # webtoon-only reading list, and a reading list that stopped being its own would rebuild
+      # over the parent's on every launch. It also pins that BOTH parsers of sets.yaml inherit
+      # the same way — a view that resolved in the UI and not in the engine would show up on
+      # the page and then refuse to launch.
+      - name: Filtered queue is a view, not a copy (offline)
+        run: $TSX e2e/filtered-queue-test.ts
+
       # The THIRD provider kind, and the one that is not a media server: Board Game Picker.
       # Two things this gate exists for, both of which would be silent failures:
       #   * PRIVACY. The provider must never call the picker's /api/collection, which carries
