@@ -25,6 +25,7 @@ import { INFINITE, defaultFor } from './engine/playbackLength.js';
 import { store } from './store/index.js';
 import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
 import { activityForSet, activityLabel, isActivity } from './activity.js';
+import { filterOf, inheritFilteredQueues, parentIdOf } from './filteredQueues.js';
 import type {
   BatchStop,
   Binding,
@@ -528,6 +529,12 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     }),
     // Per-scan cap (blank = no limit); applies to curated queues AND rotation channels.
     max_items: toPosIntOrNull(ent.max_items),
+    // A FILTERED queue — a narrower view of another queue. Everything else on this row is
+    // already the parent's, merged in by `inheritFilteredQueues` before this ran, so these two
+    // fields are the whole difference between a view and the queue it views
+    // (`filteredQueues.ts`).
+    filtered_from: parentIdOf(ent),
+    filter: filterOf(ent),
     enabled: ent.enabled !== false,
   };
   // v3 PR 2: the profile bindings + behavior (rotation only). profiles is ALWAYS ≥1 entry
@@ -630,7 +637,12 @@ async function registryCache(): Promise<RegistryCache> {
   }
   const doc = await readDoc();
   const raw: { sets?: RawSet[] } = doc.toJSON() || {};
-  const sets = (raw.sets || []).map(normalize).filter((s): s is SetRegistryEntry => Boolean(s));
+  // A FILTERED queue is a sparse record — id, label, parent, filter — so its parent is merged
+  // underneath it before normalize() sees it. Done here rather than inside normalize() because
+  // normalize() reads ONE entry and inheritance needs the siblings, and done on the raw
+  // entries so `engine/routing.ts`'s separate parse of the same file inherits identically.
+  const sets = inheritFilteredQueues(raw.sets || [])
+    .map(normalize).filter((s): s is SetRegistryEntry => Boolean(s));
   const entry: RegistryCache = {
     mtimeMs: st ? st.mtimeMs : 0,
     size: st ? st.size : 0,

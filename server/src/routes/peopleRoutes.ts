@@ -110,9 +110,20 @@ export function peopleRoutes(): Hono {
   });
 
   /** Every queue's trays at once, so the shelf list paints faces without one call per shelf. */
-  app.get('/queue-people', (c) => {
+  app.get('/queue-people', async (c) => {
     try {
-      return c.json({ queues: Object.fromEntries(membersByQueue()) });
+      const byQueue = membersByQueue();
+      // A FILTERED queue is a view of its parent, so it is for the SAME people. It has no rows
+      // of its own in `queue_people` and never will — the audience is a property of the queue,
+      // not of the window onto it — so the parent's are aliased onto its id here. Without this
+      // a filtered queue reads as "Anybody" and drops out of the people filter on the Queues
+      // page while the queue it views stays. (`filteredQueues.ts`)
+      for (const s of (await sets.getRegistry()).sets) {
+        if (!s.filtered_from) continue;
+        const parent = byQueue.get(s.filtered_from);
+        if (parent) byQueue.set(s.id, parent);
+      }
+      return c.json({ queues: Object.fromEntries(byQueue) });
     } catch (e) {
       return c.json({ error: errMessage(e) }, 500);
     }
