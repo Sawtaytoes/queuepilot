@@ -144,6 +144,28 @@ export function parseDuration(value: unknown): number | null {
   return n * (DURATION_UNITS[m[2] ?? ''] ?? 1);
 }
 
+/**
+ * WHOSE entries a set id names.
+ *
+ * A FILTERED queue holds none of its own — it is a narrower view of another queue, and its
+ * whole point is that the run continues across both (`filteredQueues.ts`). So every read and
+ * every per-entry write below resolves the id first: adding a series from the filtered queue's
+ * page adds it to the parent, and finishing one finishes it for both.
+ *
+ * ONE HOP. A filter of a filter is refused at the registry, and resolving it here anyway would
+ * quietly give a refused set somebody else's entries.
+ *
+ * The three ORDER-changing operations — `reorder`, `moveItem`, `moveBulk` — deliberately do
+ * NOT call this. A filtered queue shows a SUBSET, so the key list it would send names only the
+ * items it can see, and `applyOrder` sorts everything else to the tail: reordering two webtoons
+ * would sweep every manga in the parent to the bottom. `routes/queuesRoutes.ts` refuses those
+ * three on a filtered queue instead, and the UI does not offer the drag.
+ */
+export async function entryOwner(setName: string): Promise<string> {
+  const s = await sets.getSet(setName);
+  return s?.filtered_from || setName;
+}
+
 function seqFor(doc: Document, setName: string): YAMLSeq {
   const seq = doc.get(setName);
   if (seq instanceof YAMLSeq) return seq;
@@ -170,7 +192,7 @@ function entriesOf(doc: Document, setName: string): QueueEntry[] {
 
 // Ordered raw entries for one set: [{ key, value }]. `value` is plain JS (scalar or object).
 export async function listSet(setName: string): Promise<QueueEntry[]> {
-  return entriesOf(await readDoc(), setName);
+  return entriesOf(await readDoc(), await entryOwner(setName));
 }
 
 // EVERY set's entries in ONE parse: Map<setId, entries[]>.
@@ -206,6 +228,20 @@ export async function listAll(): Promise<Map<string, QueueEntry[]>> {
     if (name == null) continue;
     map.set(name, entriesOf(doc, name));
   }
+  // A FILTERED queue has no key in this file. It is still asked for by id — every caller does
+  // `all.get(set.id)` — so it is ALIASED onto its parent's list here rather than each caller
+  // learning the rule. The caller then applies the filter itself, because what narrows the
+  // list (a Kavita library id) is not in this file.
+  //
+  // Deliberately NOT memoized differently: the alias is derived from `sets.yaml` and the memo
+  // above is keyed on `queues.yaml`'s stat, so the aliases are rebuilt on the next set edit
+  // only if the queue file also moved. `getSet()` is a Map lookup on a registry memoized on
+  // ITS own file, so re-deriving them every call is cheaper than a second cache key.
+  for (const s of (await sets.getRegistry()).sets) {
+    if (!s.filtered_from) continue;
+    const parent = map.get(s.filtered_from);
+    if (parent) map.set(s.id, parent);
+  }
   if (st) _allCache = { mtimeMs: st.mtimeMs, size: st.size, map };
   return map;
 }
@@ -214,9 +250,10 @@ export async function listAll(): Promise<Map<string, QueueEntry[]>> {
 // are the ones `markDone` kept and tagged after they finished; this is the ONLY path that drops
 // them (never automatic). Returns the count removed.
 export async function removeCompleted(setName: string): Promise<{ removed: number }> {
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { removed: 0 };
     const before = seq.items.length;
     seq.items = seq.items.filter((n) => !entryDone(plain(n)));
@@ -255,9 +292,10 @@ export async function sweepCompleted(setName: string, opts: SweepOptions = {}): 
   const ttl = parseDuration(removeCompletedAfter);
   if (ttl == null) return { removed: 0 };
   const nowSec = now == null ? Date.now() / 1000 : now;
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { removed: 0 };
     const before = seq.items.length;
     seq.items = seq.items.filter((n) => {
@@ -324,9 +362,10 @@ export async function addItem(
   position: 'top' | 'bottom' = 'top',
   { allowDuplicate = false }: AddItemOptions = {},
 ): Promise<{ added: boolean; key: string }> {
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = seqFor(doc, setName);
+    const seq = seqFor(doc, owner);
     // Keyed off the NORMALIZED value. `toEntryObject` is identity-preserving, so this is the
     // same key the raw value has always produced — spelled once, from what actually gets
     // written, rather than trusting the two to agree.
@@ -357,9 +396,10 @@ export async function addItem(
 }
 
 export async function removeItem(setName: string, key: string): Promise<{ removed: boolean }> {
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { removed: false };
     const before = seq.items.length;
     seq.items = seq.items.filter((n) => entryKey(plain(n)) !== key);
@@ -527,9 +567,11 @@ async function rewriteEntry(
   // the lock. Every other mutator returns void and is unaffected.
   mutate: (e: SplitEntry) => void | false,
 ): Promise<boolean> {
+  // ONE resolution for every per-entry setter — a filtered queue writes on its parent's line.
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return false;
     const idx = seq.items.findIndex((node) => entryKey(plain(node)) === key);
     if (idx < 0) return false;
@@ -554,9 +596,10 @@ export async function preserveInheritedPlacements(
   setName: string,
   placement: 'priority' | 'random',
 ): Promise<{ changed: number }> {
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { changed: 0 };
     let changed = 0;
     for (let i = 0; i < seq.items.length; i += 1) {
@@ -623,9 +666,10 @@ export async function markDone(
   const want = new Set((keepKeys || []).filter(Boolean));
   if (!want.size) return { changed: false };
   const now = nowSec == null ? Math.floor(Date.now() / 1000) : Math.floor(nowSec);
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { changed: false };
     let changed = false;
     for (let i = 0; i < seq.items.length; i += 1) {
@@ -665,9 +709,10 @@ export async function clearDone(
 ): Promise<{ changed: boolean }> {
   const want = new Set((keepKeys || []).filter(Boolean));
   if (!want.size) return { changed: false };
+  const owner = await entryOwner(setName);
   return withLock(async () => {
     const doc = await readDoc();
-    const seq = doc.get(setName);
+    const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { changed: false };
     let changed = false;
     for (let i = 0; i < seq.items.length; i += 1) {
@@ -1047,6 +1092,13 @@ export async function setCollectionOrder(
 
 // Drop a deleted queue's whole YAML key (used by DELETE /api/sets/:id so a removed queue
 // doesn't leave an orphaned list behind). Missing key = fine.
+/**
+ * Drop a set's whole entry list — what `sets.deleteSet()` calls once the set itself is gone.
+ *
+ * NOT routed through `entryOwner()`, and that is the point: a filtered queue has no key in
+ * this file, so deleting one is a no-op here. Resolving to the parent would delete the
+ * PARENT's entries as a side effect of removing a view of them.
+ */
 export async function deleteSetKey(setName: string): Promise<{ deleted: boolean }> {
   return withLock(async () => {
     const doc = await readDoc();

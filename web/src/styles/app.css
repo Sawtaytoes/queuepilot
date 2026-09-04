@@ -709,6 +709,46 @@ button {
   padding-left: 10px;
   border-left: 1px solid var(--color-border-default);
 }
+/* The line at the top of a FILTERED queue's own page. It says what the page is before any of
+   the controls under it are offered, and it names the one operation that is not available
+   here (the order), because a control that is simply absent reads as a bug. */
+.filtered-banner {
+  align-items: baseline;
+  color: var(--color-content-muted);
+  display: flex;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+.filtered-banner a {
+  color: var(--color-intent-accent-solid);
+}
+
+/* A FILTERED queue — a narrower view of the shelf above it, nested under it.
+
+   The indent is the whole signal, and it is drawn on the LEFT EDGE rather than as plain
+   padding: a rule the colour of a border says "this belongs to the thing above" where blank
+   space only says "this one is odd". `nestFilteredQueues` guarantees the shelf above it is
+   its parent, so the rule always has something to point at. */
+.shelf.filtered {
+  border-left: 2px solid
+    var(--color-border-strong, var(--color-border-default));
+  margin-left: 14px;
+  padding-left: 20px;
+}
+/* WHAT IT FILTERS, beside the badge that says it does. Quiet, because the queue's own name is
+   the heading and this is the footnote under it — but a LINK, because "which queue is that"
+   is the question it raises and one tap is the answer. */
+.shelf h2 .filtered-parent {
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
+  font-weight: 400;
+  padding: 0 10px 0 4px;
+  text-decoration: none;
+}
+.shelf h2 .filtered-parent:hover {
+  color: var(--color-intent-accent-solid);
+  text-decoration: underline;
+}
 .shelf h2 .shelfspacer {
   flex: 1;
 }

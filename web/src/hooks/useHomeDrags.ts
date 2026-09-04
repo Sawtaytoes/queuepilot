@@ -222,9 +222,14 @@ export function useHomeDrags(
     // --- Home poster drag: reorder WITHIN + move BETWEEN shelves --------------- //
     let hpress: HomePress | null = null
 
+    // `.filtered` is excluded as a DROP TARGET as well as a drag source: a filtered queue
+    // shows a SUBSET of its parent, so the key order a drop would send names only what it can
+    // see and every entry it cannot would be swept to the end of the PARENT's queue. The
+    // server refuses those three writes for the same reason (`filteredQueues.ts`); this is
+    // what stops the drag from being offered in the first place.
     const stripsOnScreen = () => [
       ...shelvesEl!.querySelectorAll<HTMLElement>(
-        ".shelf:not(.collapsed):not([hidden]) .strip",
+        ".shelf:not(.collapsed):not([hidden]):not(.filtered) .strip",
       ),
     ]
 
@@ -498,6 +503,9 @@ export function useHomeDrags(
       const card = target.closest<HTMLElement>("li.tile")
 
       if (!card?.closest(".strip")) return
+
+      // See `stripsOnScreen`: a filtered queue cannot express an order for its parent.
+      if (card.closest(".shelf.filtered")) return
 
       if (e.pointerType !== "touch") e.preventDefault()
 
