@@ -22,6 +22,18 @@ import type { Activity } from './activity.js';
 export type SetSource = 'queue' | 'rotation';
 
 /**
+ * What a FILTERED queue narrows its parent to — normalized, so every list is present and an
+ * empty one does not constrain. `libraries` holds the PROVIDER's own library ids.
+ *
+ * A mapping and not a bare list on purpose: the next filter anybody asks for (people, content
+ * rating, format) is a new key here rather than a second field on every set.
+ * See `filteredQueues.ts`.
+ */
+export interface QueueFilter {
+  libraries: string[];
+}
+
+/**
  * `behavior:` on a rotation channel (v3 PR 2). Supersedes `mode` and wins over it in
  * providers/plex.js buckets(): progress -> advance through unwatched, rewatch -> weighted
  * least-watched replay.
@@ -406,6 +418,18 @@ interface SetRegistryCommon {
   activity_default: Activity;
   /** Per-scan cap; blank/<=0 = no limit. Applies to queues AND channels. */
   max_items: number | null;
+  /**
+   * The queue this one is a FILTERED VIEW of, or null for an ordinary queue.
+   *
+   * A filtered queue owns its id, its name and its `filter`; every other field on this row —
+   * providers, lanes, batch, skip list — is the parent's, merged in before normalize() ran
+   * (`filteredQueues.ts`). Its entries and their done flags are the parent's too, so what is
+   * finished in one is finished in both. See `filteredQueues.ts` for why it is a view.
+   */
+  filtered_from: string | null;
+  /** What this view narrows to. Null on an ordinary queue; never null when `filtered_from`
+   *  is set, though its lists may be empty on a half-configured one. */
+  filter: QueueFilter | null;
   /** `enabled: false` is the only falsy form — absent reads as enabled. */
   enabled: boolean;
 }
@@ -566,6 +590,17 @@ interface RoutingSetCfgCommon {
   /** Selective replacement for the legacy all-specials switch. */
   included_specials?: string[];
   batch_stops_at?: string;
+  /**
+   * A FILTERED queue's parent — whose `queues.yaml` entries and done flags this queue reads.
+   * Absent on an ordinary queue. See `filteredQueues.ts`.
+   */
+  filtered_from?: string;
+  /**
+   * The provider library ids a filtered queue narrows its parent's entries to. Absent on an
+   * ordinary queue; present-and-empty on one whose filter says nothing yet, which narrows
+   * nothing. `providers/pullLineup.ts` hands it to the provider's `buckets()`.
+   */
+  filter_libraries?: string[];
   /** The set's default batch — how many items one entry contributes per visit. See
    *  resolve.ts `setBatch()`; entry `episodes:` overrides it, env is the floor. */
   episodes?: string;
@@ -1320,6 +1355,16 @@ export interface BucketsContext {
    * library shelf and only one of the ninety-three the owner had actually added.
    */
   entries?: CuratedEntryRef[];
+  /**
+   * A FILTERED queue's narrowing, in the provider's own library ids.
+   *
+   * DISTINCT from `libraries`, and the two must not be folded together. `libraries` is where a
+   * RULE-based set draws its pool FROM, and it is ignored the moment `entries` is present —
+   * entries beat libraries, which is the note above. This is the opposite direction: it takes
+   * the entries the parent queue already holds and drops the ones that are not in one of these
+   * libraries. Absent / empty = no narrowing, which is every ordinary queue.
+   */
+  filterLibraries?: string[];
   /**
    * Shuffle which entries lead this launch. True for a `kind: anime` set — the same rule
    * `playbackRoutes` uses to tell the engine a curated set plays in random order, and the

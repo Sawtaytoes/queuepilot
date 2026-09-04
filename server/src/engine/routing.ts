@@ -13,6 +13,8 @@ import { store } from '../store/index.js';
 import { setForProfile } from '../profiles.js';
 import { errMessage, isNodeError } from '../errors.js';
 import { normalizeWatchHistory } from '../watchHistory.js';
+import { filterOf, inheritFilteredQueues, parentIdOf } from '../filteredQueues.js';
+import type { FilterableEntry } from '../filteredQueues.js';
 import type {
   EngineBinding, MemberValue, RoutingQueueCfg, RoutingRegistry, RoutingRotationCfg, RoutingSetCfg,
   Start,
@@ -133,7 +135,15 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     console.log(`[routing] ${path} unreadable (${errMessage(e)}); keeping current sets`);
     return null;
   }
-  const entries: unknown[] = Array.isArray(data.sets) ? data.sets : [];
+  // A FILTERED queue's record on disk is only its id, name, parent and filter, so its parent
+  // is merged underneath it before anything below reads a field. The SAME call `sets.ts` makes
+  // on its own parse of this file — two normalizers, one inheritance rule
+  // (`filteredQueues.ts`).
+  const entries: unknown[] = inheritFilteredQueues(
+    (Array.isArray(data.sets) ? data.sets : []).filter(
+      (e): e is FilterableEntry => Boolean(e) && typeof e === 'object' && !Array.isArray(e),
+    ),
+  );
   const sets: Record<string, RoutingSetCfg> = {};
   const order: string[] = [];
   for (const rawEnt of entries) {
@@ -288,6 +298,16 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     // and is NOT defaulted to a Plex block here — blocksForSet() interprets absence, so a
     // legacy set is never rewritten on disk just because it was read.
     if (Array.isArray(ent.providers) && ent.providers.length) cfg.providers = ent.providers;
+    // A FILTERED queue: whose entries it reads, and what it narrows them to. Every other field
+    // above is already the parent's. `filter_libraries` is the flat list the lineup builder
+    // wants — `providers/pullLineup.ts` hands it to `buckets()`, which drops a curated entry
+    // that is not in one of those libraries. Absent on an ordinary queue, which is what makes
+    // the narrowing unreachable there.
+    const parentId = parentIdOf(ent);
+    if (parentId) {
+      cfg.filtered_from = parentId;
+      cfg.filter_libraries = filterOf(ent)?.libraries ?? [];
+    }
     // The six LateCommon fields are all assigned above, so the draft is complete here.
     sets[sid] = cfg as RoutingSetCfg;
     order.push(sid);

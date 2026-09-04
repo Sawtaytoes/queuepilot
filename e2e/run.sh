@@ -41,6 +41,8 @@ echo "=== rotation-length-test ==="   # browserless; a set's `length:` sizes its
 "$TSX" e2e/rotation-length-test.ts || TOTAL=$((TOTAL+1))
 echo "=== on-complete-test ==="   # browserless; a finished show restarts at ep1 or drops
 "$TSX" e2e/on-complete-test.ts || TOTAL=$((TOTAL+1))
+echo "=== filtered-queue-test ==="   # browserless; a filtered queue is a VIEW of another queue
+"$TSX" e2e/filtered-queue-test.ts || TOTAL=$((TOTAL+1))
 echo "=== topup-test ==="   # browserless; when a refill tick tops up, and what it appends
 "$TSX" e2e/topup-test.ts || TOTAL=$((TOTAL+1))
 echo "=== lineup-knobs-test ==="   # browserless; the WRITE side — create/patch store all three sparsely

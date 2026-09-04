@@ -111,6 +111,19 @@ export function useGridDrag(
    * moved. Move mode still wins — with a selection running, a tap keeps toggling it.
    */
   onOpenEntry?: (setId: string, key: string) => void,
+  /**
+   * Whether a drag may REORDER this queue. False on a FILTERED queue.
+   *
+   * A filtered queue shows a SUBSET of its parent's entries, so the key list a drop would
+   * send names only what is visible and the server sorts everything it was not given to the
+   * tail — dragging two webtoons would sweep every manga in the parent to the bottom. The
+   * server refuses the write for the same reason (`filteredQueues.ts`); this stops the tile
+   * from lifting at all, so nothing is offered that cannot be honoured.
+   *
+   * Only the DRAG is off. Tap-to-open and move-mode selection are unaffected: they are about
+   * one entry, and one entry is the same entry in both queues.
+   */
+  isReorderable = true,
 ) {
   // `onOpenEntry` is deliberately absent from the dependency list. This effect installs
   // imperative pointer listeners that must survive a re-render — re-running it on every
@@ -183,7 +196,7 @@ export function useGridDrag(
           if (isFar) endPress()
 
           return
-        } else if (isFar) {
+        } else if (isFar && isReorderable) {
           beginDrag()
         } else {
           return
@@ -648,7 +661,7 @@ export function useGridDrag(
         // sheet carries the same Play / lane actions the old stationary long press exposed.
         // (decision `2026-08-29-a-touch-hold-is-the-drag-and-it-scrolls`)
         press.holdTimer = setTimeout(() => {
-          if (!press) return
+          if (!press || !isReorderable) return
 
           beginDrag()
         }, 200)
@@ -734,5 +747,5 @@ export function useGridDrag(
       grid.removeEventListener("contextmenu", onContextMenu)
       endPress()
     }
-  }, [currentSet, gridRef, setLane])
+  }, [currentSet, gridRef, isReorderable, setLane])
 }

@@ -57,6 +57,14 @@ export interface ProviderTile {
   viewOffset: number;
   duration: number;
   unit?: MediaUnit;
+  /**
+   * The provider library this item sits in, when the provider says. Carried for ONE reader: a
+   * FILTERED queue narrows its parent's entries by library, and the library an entry belongs
+   * to is the provider's answer rather than anything stored in `queues.yaml`
+   * (`filteredQueues.ts`). Null for a provider with no library concept, and for an entry that
+   * did not resolve.
+   */
+  libraryId: string | null;
 }
 
 /**
@@ -113,6 +121,7 @@ function unresolvedTile(value: unknown): ProviderTile {
     partiallyWatched: false,
     viewOffset: 0,
     duration: 0,
+    libraryId: null,
   };
 }
 
@@ -217,6 +226,9 @@ export async function resolveTiles(
       partiallyWatched: Boolean(next && 'pagesRead' in next && (next.pagesRead ?? 0) > 0),
       viewOffset: 0,
       duration: 0,
+      // Only Kavita answers this today; a provider that has no libraries reports null and a
+      // filtered queue over it therefore narrows nothing. See `ProviderTile.libraryId`.
+      libraryId: 'libraryId' in row && row.libraryId != null ? String(row.libraryId) : null,
     };
   });
 }
