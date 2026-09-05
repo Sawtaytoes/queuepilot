@@ -29,6 +29,12 @@ Two things follow, and both have a cheap way to get wrong:
   Linus**; the existing group and queue fixtures keep the cast they already have (Bob, Alice,
   Carol, Dave, Erin) and nothing needs renaming. What is banned is the shortcut of seeding a
   test from the live database because the real data was already there.
+  **The EXTENDED cast is Sven, Hedy, Alan, Nadia, Omar and Priya** — six more invented people
+  that `e2e/shot-queue-filter.ts` adds over the API. They exist because a defect can be about
+  a roster that does not SCALE, and three people cannot show one; a harness that needs a
+  household-sized roster uses these six rather than inventing a seventh set of names. They are
+  deliberately not in `landing.people-mapping.yaml`: every other landing harness asserts
+  against a three-person roster.
 - **A screenshot is fixture data, and a PNG is opaque to every grep.** A before/after on a
   people or Tonight PR is captured against fixtures, not against the running household app.
   Nobody notices a real name in an image the way they notice one in a diff, and the repo's

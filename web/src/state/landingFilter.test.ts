@@ -2,9 +2,9 @@ import { describe, expect, test } from "vitest"
 
 import {
   filterPath,
-  parseOnly,
   parsePeople,
-  togglePerson,
+  parseProviders,
+  toggleValue,
 } from "./landingFilter"
 
 /**
@@ -40,15 +40,27 @@ describe("parsePeople", () => {
   })
 })
 
-describe("parseOnly", () => {
-  test("a kind, or null for everything", () => {
-    expect(parseOnly("?only=kavita")).toBe("kavita")
-    expect(parseOnly("")).toBeNull()
+describe("parseProviders", () => {
+  test("a comma list, or empty for everything", () => {
+    expect(parseProviders("?only=kavita,plex")).toEqual([
+      "kavita",
+      "plex",
+    ])
+    expect(parseProviders("")).toEqual([])
   })
 
-  test("`all` is spelled as the ABSENCE of the parameter", () => {
-    // So the All chip and a URL that never mentioned a provider are one address, not two.
-    expect(parseOnly("?only=all")).toBeNull()
+  test("EVERY ADDRESS THE SINGLE-SELECT ERA WROTE still parses", () => {
+    // The filter was one kind at a time until 2026-09-05, and those URLs are bookmarks,
+    // home-screen tiles and NFC targets. A lone kind is a one-item list.
+    expect(parseProviders("?only=kavita")).toEqual([
+      "kavita",
+    ])
+    // `all` was that era's spelling of "no filter" and still means it, so the unfiltered
+    // page stays ONE address rather than two.
+    expect(parseProviders("?only=all")).toEqual([])
+    expect(parseProviders("?only=all,kavita")).toEqual([
+      "kavita",
+    ])
   })
 })
 
@@ -66,17 +78,17 @@ describe("filterPath", () => {
       }),
     ).toBe("/?people=ada%2Cgrace&only=kavita")
     expect(
-      filterPath("/", "?people=ada", { only: "plex" }),
+      filterPath("/", "?people=ada", { only: ["plex"] }),
     ).toBe("/?people=ada&only=plex")
   })
 
-  test("an omitted key means UNCHANGED, and null means cleared", () => {
+  test("an omitted key means UNCHANGED, and an empty list means cleared", () => {
     expect(
       filterPath("/", "?people=ada&only=plex", {}),
     ).toBe("/?people=ada&only=plex")
     expect(
       filterPath("/", "?people=ada&only=plex", {
-        only: null,
+        only: [],
       }),
     ).toBe("/?people=ada")
     expect(
@@ -87,20 +99,29 @@ describe("filterPath", () => {
   })
 })
 
-describe("togglePerson", () => {
+describe("toggleValue", () => {
   test("adds at the end, and removes in place", () => {
-    expect(togglePerson(["ada"], "grace")).toEqual([
+    expect(toggleValue(["ada"], "grace")).toEqual([
       "ada",
       "grace",
     ])
-    expect(togglePerson(["ada", "grace"], "ada")).toEqual([
+    expect(toggleValue(["ada", "grace"], "ada")).toEqual([
       "grace",
     ])
   })
 
   test("never mutates the selection it was given", () => {
     const selected = ["ada"]
-    togglePerson(selected, "grace")
+    toggleValue(selected, "grace")
     expect(selected).toEqual(["ada"])
+  })
+
+  test("the SAME function drives both filters", () => {
+    // The provider row became multi-select on 2026-09-05 and does exactly this to its own
+    // list. Two copies would be two places for the de-duplication to drift.
+    expect(toggleValue(["plex"], "kavita")).toEqual([
+      "plex",
+      "kavita",
+    ])
   })
 })

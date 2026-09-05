@@ -2692,9 +2692,10 @@ html.modal-open {
   flex-wrap: wrap;
   gap: 8px;
 }
-/* The provider row is a second, quieter group on the same line where there is room, and
-   drops under the groups when there is not. `margin-left: auto` rather than a fixed
-   position so it hugs the right edge on a wide viewport and simply wraps on a narrow one. */
+/* The provider pills sit ON THE SIDE of the people's row rather than owning a row of their
+   own — the row they used to own held two chips and cost a whole line of a header the owner
+   needs the height of. `margin-left: auto` rather than a fixed position, so they hug the right
+   edge on a wide viewport and simply wrap on a narrow one. */
 .providerchips {
   margin-left: auto;
 }
@@ -2750,6 +2751,91 @@ html.modal-open {
 .filterchip[aria-current="page"] .filtercount {
   background: var(--color-surface-raised);
   color: var(--color-content-secondary);
+}
+
+/* ---- ＋N MORE — the rest of the roster ----
+
+   `display: contents`, so the `Combobox`'s trigger is a direct flex item of the chip row and
+   sits on the same baseline the pills do. */
+.filterpicker {
+  display: contents;
+}
+/* ⚠️ REACHING INTO A COMPONENT, and it is the one rule here that does. `Combobox isMultiple`
+   renders its own chip rail ABOVE the trigger — the right answer in a form, and the wrong one
+   inside a wrapping row of pills, where it puts back exactly the line this control exists to
+   save. Nothing is lost: a person ticked in the panel becomes a CHIP on the next render, which
+   is a better version of the same affordance and is already in the row.
+
+   The rail is the only `<div>` `Combobox` renders inline — the trigger is a `<button>` and the
+   panel is portalled to `<body>` — so this reaches it and nothing else.
+
+   It wants to be a PROP upstream in `@charcuterie/ui`, not a rule here: a shared shape is
+   fixed in the library, not overridden per app
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`). */
+.filterpicker > div {
+  display: none;
+}
+.filtercaret {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-content-tertiary);
+}
+/* The panel row: a face, the name, and the count as a trailing chip — the same three things a
+   chip carries, so the dropdown reads as the chip row folded up. */
+.filteroption {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+/* ---- ALSO IN THESE QUEUES ----
+
+   The rule between the queues that answer the filter exactly and the queues the ticked people
+   are merely on (decision
+   `2026-09-05-the-people-filter-answers-in-two-tiers-exact-then-also-in`).
+
+   A centred caption with a hairline running out either side, which is the shape that says
+   "everything under here is a different kind of answer" without looking like a second page
+   heading — the Picks and Rules headings above it are the real headings and this must not
+   compete with them. Hence `content-tertiary` and a small size: it is a label on a boundary,
+   not a title. */
+.alsodivide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 10px;
+  color: var(--color-content-tertiary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.alsodivide::before,
+.alsodivide::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-subtle);
+}
+/* WRAPS, and it has to. `white-space: nowrap` put the whole sentence — the label plus up to
+   three names — on one line, and at 390px it ran off the right edge while
+   `document.scrollWidth` stayed put, so the overflow check reported nothing wrong. */
+.alsodivide-label {
+  min-width: 0;
+}
+/* WHO the queues below still want. It is the half of the line that stops the reader having
+   to already know who is required, so it is allowed to wrap and to shrink away — the label
+   before it never does. */
+.alsodivide-who {
+  color: var(--color-content-secondary);
+}
+/* In the card grid the rule is a grid ITEM, so it has to span every column — otherwise it
+   takes one cell and the tiers interleave on the same row. */
+.playgrid-divide {
+  grid-column: 1 / -1;
+}
+.playgrid-divide .alsodivide {
+  margin: 6px 0 0;
 }
 
 /* ---- the landing's card grid ----
@@ -3216,8 +3302,8 @@ body.name-editable #apphead h1 {
   .playgrid {
     grid-template-columns: 1fr;
   }
-  /* The provider row stops hugging the right edge and takes its own line — at this width
-     `margin-left: auto` would leave one chip stranded across the page from the others. */
+  /* The provider pills stop hugging the right edge and take their own line — at this width
+     `margin-left: auto` would leave one pill stranded across the page from the others. */
   .providerchips {
     margin-left: 0;
     width: 100%;
