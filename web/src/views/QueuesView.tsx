@@ -5,6 +5,7 @@ import {
   Spinner,
 } from "@charcuterie/ui"
 import {
+  Fragment,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -13,6 +14,7 @@ import {
   useState,
 } from "react"
 import { Link, useLocation } from "react-router"
+import { AlsoInDivider } from "../components/AlsoInDivider"
 import {
   EditionChip,
   TypeBadge,
@@ -41,10 +43,13 @@ import {
   runtimeLabel,
   tileFace,
 } from "../lib/tileFace"
+import type { PeopleMatch } from "../lib/tonight"
 import {
-  membersMatchPeople,
+  missingRequiredPeople,
+  peopleMatch,
   resolveMembers,
   rosterOrder,
+  splitByMatch,
 } from "../lib/tonight"
 import type {
   GroupWithRoster,
@@ -56,9 +61,10 @@ import type {
   RegistrySet,
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
+import { parseLayout } from "../state/filterVariant"
 import {
-  parseOnly,
   parsePeople,
+  parseProviders,
 } from "../state/landingFilter"
 import {
   openDynModal,
@@ -1010,7 +1016,8 @@ export function QueuesView({
   useHomeDrags(shelvesRef)
 
   const playingSet = activeSet(now, data)
-  const only = parseOnly(search)
+  const only = parseProviders(search)
+  const layout = parseLayout(search)
   const selected = parsePeople(search)
 
   /** Every queue's audience, resolved through the SAME group rule the former queue landing
@@ -1063,25 +1070,35 @@ export function QueuesView({
   const kindOf = (id: string) =>
     reg?.sets.find((set) => set.id === id)?.provider_kind ??
     ""
-  const matches = (
+  /**
+   * HOW WELL one queue answers the filter — `exact`, `also` or `none`.
+   *
+   * The provider filter is a plain AND and has no tiers: a Kavita queue is not a near miss
+   * for "Plex", it is a different library. Only the PEOPLE question has a middle answer.
+   */
+  const matchOf = (
     id: string,
     forPeople: readonly string[],
-    forOnly: string | null,
-  ) =>
-    (!forOnly || kindOf(id) === forOnly) &&
-    membersMatchPeople(membersOf.get(id) ?? [], forPeople)
-  const shownShelfIds = shelfIds.filter((id) =>
-    matches(id, selected, only),
+    forOnly: readonly string[],
+  ): PeopleMatch =>
+    forOnly.length && !forOnly.includes(kindOf(id))
+      ? { missingRequired: 0, tier: "none" }
+      : peopleMatch(membersOf.get(id) ?? [], forPeople)
+  const shownShelfIds = splitByMatch(shelfIds, (id) =>
+    matchOf(id, selected, only),
   )
-  const shownRulesChannels = rulesChannels.filter(
-    (channel) => matches(channel.id, selected, only),
+  const shownRulesChannels = splitByMatch(
+    rulesChannels,
+    (channel) => matchOf(channel.id, selected, only),
   )
   const countFor = (
     forPeople: readonly string[],
-    forOnly: string | null,
+    forOnly: readonly string[],
   ) =>
-    queueIds.filter((id) => matches(id, forPeople, forOnly))
-      .length
+    queueIds.filter(
+      (id) =>
+        matchOf(id, forPeople, forOnly).tier !== "none",
+    ).length
   const providerKinds = [
     ...new Set(queueIds.map(kindOf).filter(Boolean)),
   ]
@@ -1094,6 +1111,33 @@ export function QueuesView({
       .filter((s): s is NonNullable<typeof s> => s != null),
     people.byQueue,
   )
+  /**
+   * The names the "Also in these queues" line prints, over BOTH tiers' also-in lists at once
+   * and in roster order.
+   *
+   * One list for the page rather than one per section, so the Picks divider and the Rules
+   * divider cannot name two different sets of people for the same filter — they are answering
+   * the same question about the same selection.
+   */
+  const alsoNames = (() => {
+    const wanted = new Set(
+      [
+        ...shownShelfIds.also,
+        ...shownRulesChannels.also.map(
+          (channel) => channel.id,
+        ),
+      ].flatMap((id) =>
+        missingRequiredPeople(
+          membersOf.get(id) ?? [],
+          selected,
+        ),
+      ),
+    )
+
+    return rosterOrder(people.people)
+      .filter((person) => wanted.has(person.id))
+      .map((person) => person.displayName)
+  })()
 
   return (
     <div className="view" id="home">
@@ -1107,6 +1151,7 @@ export function QueuesView({
         providerKinds={providerKinds}
         search={search}
         selected={selected}
+        variant={layout}
       />
       <div className="queue-section-heading picks-queue-heading">
         <div>
@@ -1115,7 +1160,16 @@ export function QueuesView({
         </div>
       </div>
       <div id="shelves" ref={shelvesRef}>
-        {shownShelfIds.map((id) => {
+        {[
+          ...shownShelfIds.exact,
+          ...shownShelfIds.also,
+        ].map((id, index) => {
+          // The rule goes BEFORE the first also-in shelf, inside the same drag container —
+          // `useHomeDrags` reorders `#shelves`' children and a separate wrapper per tier
+          // would make a drag across the line impossible.
+          const isFirstAlso =
+            shownShelfIds.also.length > 0 &&
+            index === shownShelfIds.exact.length
           const q = data!.sets[id]!
           const registrySet = setById(id)
           // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
@@ -1132,44 +1186,49 @@ export function QueuesView({
             : q.label
 
           return (
-            <Shelf
-              groups={people.groups}
-              isCollapsed={
-                !hasCollapsePreference || collapsed.has(id)
-              }
-              isHiddenByFilter={
-                !shelfMatches(
-                  filter,
-                  [title, q.label],
-                  q.items,
-                )
-              }
-              items={q.items}
-              key={id}
-              label={title}
-              members={people.byQueue[id] ?? []}
-              now={now}
-              people={people.people}
-              playingSet={playingSet}
-              providerKind={
-                registrySet?.provider_kind ?? ""
-              }
-              filteredFrom={filteredParent(
-                registrySet,
-                setById,
-              )}
-              set={registrySet ?? null}
-              setId={id}
-              // The registry row first, the queues payload as the fallback — the same
-              // pair `QueueView` and `App` resolve the lane from, so one queue cannot
-              // read as priority-by-default on its shelf and random-by-default on its
-              // own page.
-              setLane={
-                isRandomOrder(registrySet ?? q)
-                  ? "random"
-                  : "priority"
-              }
-            />
+            <Fragment key={id}>
+              {isFirstAlso ? (
+                <AlsoInDivider names={alsoNames} />
+              ) : null}
+              <Shelf
+                groups={people.groups}
+                isCollapsed={
+                  !hasCollapsePreference ||
+                  collapsed.has(id)
+                }
+                isHiddenByFilter={
+                  !shelfMatches(
+                    filter,
+                    [title, q.label],
+                    q.items,
+                  )
+                }
+                items={q.items}
+                label={title}
+                members={people.byQueue[id] ?? []}
+                now={now}
+                people={people.people}
+                playingSet={playingSet}
+                providerKind={
+                  registrySet?.provider_kind ?? ""
+                }
+                filteredFrom={filteredParent(
+                  registrySet,
+                  setById,
+                )}
+                set={registrySet ?? null}
+                setId={id}
+                // The registry row first, the queues payload as the fallback — the same
+                // pair `QueueView` and `App` resolve the lane from, so one queue cannot
+                // read as priority-by-default on its shelf and random-by-default on its
+                // own page.
+                setLane={
+                  isRandomOrder(registrySet ?? q)
+                    ? "random"
+                    : "priority"
+                }
+              />
+            </Fragment>
           )
         })}
       </div>
@@ -1185,19 +1244,28 @@ export function QueuesView({
             </div>
           </div>
           <div className="rules-queue-shelves">
-            {shownRulesChannels.map((channel) => (
-              <RulesShelf
-                channel={channel}
-                filter={filter}
-                groups={people.groups}
-                isCollapsed={
-                  !hasCollapsePreference ||
-                  collapsed.has(channel.id)
-                }
-                key={channel.id}
-                members={people.byQueue[channel.id] ?? []}
-                people={people.people}
-              />
+            {[
+              ...shownRulesChannels.exact,
+              ...shownRulesChannels.also,
+            ].map((channel, index) => (
+              <Fragment key={channel.id}>
+                {shownRulesChannels.also.length > 0 &&
+                index ===
+                  shownRulesChannels.exact.length ? (
+                  <AlsoInDivider names={alsoNames} />
+                ) : null}
+                <RulesShelf
+                  channel={channel}
+                  filter={filter}
+                  groups={people.groups}
+                  isCollapsed={
+                    !hasCollapsePreference ||
+                    collapsed.has(channel.id)
+                  }
+                  members={people.byQueue[channel.id] ?? []}
+                  people={people.people}
+                />
+              </Fragment>
             ))}
           </div>
         </section>

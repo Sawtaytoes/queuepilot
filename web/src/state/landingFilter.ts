@@ -4,7 +4,7 @@
  * Two independent filters, both in the QUERY STRING:
  *
  *   `?people=ada,grace`   who you are looking for — a multi-select over the roster
- *   `?only=kavita`        which backend — one at a time, or all
+ *   `?only=kavita,plex`   which backends — a multi-select too, empty meaning all of them
  *
  * ## Why the query string and not the path
  *
@@ -27,10 +27,9 @@
  * an old bookmark lands on the management page rather than on a filter nothing can turn off.
  */
 
-/** The people ticked, in the order the URL lists them. Empty means NO FILTER AT ALL, which
- *  is the half of the rule the strict reading gets backwards — see `membersMatchPeople`. */
-export function parsePeople(search: string): string[] {
-  const raw = new URLSearchParams(search).get("people")
+/** A comma list from the query, de-duplicated, in the order the URL gives it. */
+function parseList(search: string, key: string): string[] {
+  const raw = new URLSearchParams(search).get(key)
 
   if (!raw) return []
 
@@ -47,14 +46,26 @@ export function parsePeople(search: string): string[] {
     })
 }
 
-/**
- * The provider filter. `all` is spelled as the ABSENCE of the parameter, so the All chip and
- * a URL that never mentioned a provider are the same address rather than two.
- */
-export function parseOnly(search: string): string | null {
-  const value = new URLSearchParams(search).get("only")
+/** The people ticked, in the order the URL lists them. Empty means NO FILTER AT ALL, which
+ *  is the half of the rule the strict reading gets backwards — see `membersMatchPeople`. */
+export function parsePeople(search: string): string[] {
+  return parseList(search, "people")
+}
 
-  return value && value !== "all" ? value : null
+/**
+ * The provider filter — a LIST since 2026-09-05, where it used to be one kind or nothing.
+ *
+ * All is still spelled as the ABSENCE of the parameter, so the unfiltered address and a URL
+ * that never mentioned a provider stay the same address rather than two. `?only=all` was the
+ * old spelling of the same thing and keeps parsing to "no filter", and a single
+ * `?only=kavita` — every provider link this app ever wrote — is just a one-item list, so no
+ * bookmark, home-screen tile or NFC target had to change
+ * (`2026-08-17`'s rule that a moved address keeps working).
+ */
+export function parseProviders(search: string): string[] {
+  return parseList(search, "only").filter(
+    (kind) => kind !== "all",
+  )
 }
 
 /**
@@ -70,7 +81,7 @@ export function filterPath(
   search: string,
   change: {
     people?: readonly string[]
-    only?: string | null
+    only?: readonly string[]
   },
 ): string {
   const people =
@@ -79,25 +90,37 @@ export function filterPath(
       : change.people
   const only =
     change.only === undefined
-      ? parseOnly(search)
+      ? parseProviders(search)
       : change.only
 
   const params = new URLSearchParams()
 
   if (people.length) params.set("people", people.join(","))
-  if (only) params.set("only", only)
+  if (only.length) params.set("only", only.join(","))
+
+  // ⚠️ TEMPORARY, and it goes with `state/filterVariant.ts`. The filter-bar layout preview is
+  // a query parameter, and a chip that rebuilt the query from scratch would drop it — so the
+  // first tap took you back to the layout you were comparing AGAINST.
+  const layout = new URLSearchParams(search).get("layout")
+  if (layout) params.set("layout", layout)
 
   const query = params.toString()
 
   return query ? `${basePath}?${query}` : basePath
 }
 
-/** The selection with one person added or taken away — the href a person chip carries. */
-export function togglePerson(
+/**
+ * The selection with one value added or taken away — the href a chip carries.
+ *
+ * One function for BOTH filters since the provider row became multi-select: a person chip
+ * and a provider chip do exactly the same thing to their own list, and two copies of this
+ * would be two places for the de-duplication to drift.
+ */
+export function toggleValue(
   selected: readonly string[],
-  personId: string,
+  value: string,
 ): string[] {
-  return selected.includes(personId)
-    ? selected.filter((id) => id !== personId)
-    : [...selected, personId]
+  return selected.includes(value)
+    ? selected.filter((id) => id !== value)
+    : [...selected, value]
 }

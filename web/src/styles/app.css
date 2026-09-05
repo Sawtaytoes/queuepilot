@@ -2692,11 +2692,17 @@ html.modal-open {
   flex-wrap: wrap;
   gap: 8px;
 }
-/* The provider row is a second, quieter group on the same line where there is room, and
-   drops under the groups when there is not. `margin-left: auto` rather than a fixed
-   position so it hugs the right edge on a wide viewport and simply wraps on a narrow one. */
-.providerchips {
-  margin-left: auto;
+/* The provider pills sit in the SAME wrapping flow as the people, after a hairline, rather
+   than owning a row of their own — the row they used to own held two chips and cost a whole
+   line of a header the owner needs the height of. The hairline is a list item so it wraps
+   with everything else; it collapses to nothing at the start of a wrapped line, because a
+   rule hanging off the left edge reads as a mistake. */
+.filterdivide {
+  align-self: stretch;
+  width: 1px;
+  min-height: 22px;
+  margin: 0 4px;
+  background: var(--color-border-subtle);
 }
 .filterchip {
   display: inline-flex;
@@ -2750,6 +2756,115 @@ html.modal-open {
 .filterchip[aria-current="page"] .filtercount {
   background: var(--color-surface-raised);
   color: var(--color-content-secondary);
+}
+
+/* ---- the two dropdown layouts (PREVIEW) ----
+
+   `combos` and `compact` are the multi-select dropdowns the owner proposed as a replacement
+   for the chip row. One of the three layouts is going to be deleted — see
+   `LandingFilterBar`'s `LANDING_FILTER_VARIANTS` — and this block goes with the losers. */
+.filterrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+/* ⚠️ REACHING INTO A COMPONENT, and it is temporary. `Combobox isMultiple` renders its own
+   chip rail ABOVE the trigger — the right answer in a form, and the wrong one here, where it
+   puts back exactly the line these layouts exist to save. The trigger already names the
+   selection. If one of these layouts wins, this becomes a PROP upstream in Charcuterie: a
+   shared shape is fixed in the library, not overridden per app
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`). */
+.filterpicker {
+  display: contents;
+}
+/* The rail is the only `<div>` `Combobox` renders inline — the trigger is a `<button>` and
+   the panel is portalled to `<body>` — so this reaches it and nothing else. */
+.filterpicker > div {
+  display: none;
+}
+/* The panel row: a face, the name, and the count as a trailing chip — the same three things
+   a chip carried, so the dropdown reads as the chip row folded up. */
+.filtercaret {
+  width: 1rem;
+  height: 1rem;
+  color: var(--color-content-tertiary);
+}
+.filteroption {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+/* What is ticked, beside the control rather than above it — `compact` only. A chip here is
+   a REMOVE control, so it wears the accent the ticked chip wears and its ✕ is the whole
+   point of it being on screen. */
+.filterpicked {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filterchip-picked {
+  border-color: var(--color-intent-accent-border);
+  background: var(--color-intent-accent-surface);
+  color: var(--color-intent-accent-content);
+}
+.filterchip-picked:hover {
+  border-color: var(--color-intent-danger-border);
+  background: var(--color-intent-danger-surface);
+  color: var(--color-intent-danger-content);
+}
+
+/* ---- ALSO IN THESE QUEUES ----
+
+   The rule between the queues that answer the filter exactly and the queues the ticked people
+   are merely on (decision
+   `2026-09-05-the-people-filter-answers-in-two-tiers-exact-then-also-in`).
+
+   A centred caption with a hairline running out either side, which is the shape that says
+   "everything under here is a different kind of answer" without looking like a second page
+   heading — the Picks and Rules headings above it are the real headings and this must not
+   compete with them. Hence `content-tertiary` and a small size: it is a label on a boundary,
+   not a title. */
+.alsodivide {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 18px 0 10px;
+  color: var(--color-content-tertiary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.alsodivide::before,
+.alsodivide::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--color-border-subtle);
+}
+/* WRAPS, and it has to. `white-space: nowrap` put the whole sentence — the label plus up to
+   three names — on one line, and at 390px it ran off the right edge while
+   `document.scrollWidth` stayed put, so the overflow check reported nothing wrong. */
+.alsodivide-label {
+  min-width: 0;
+}
+/* WHO the queues below still want. It is the half of the line that stops the reader having
+   to already know who is required, so it is allowed to wrap and to shrink away — the label
+   before it never does. */
+.alsodivide-who {
+  color: var(--color-content-secondary);
+}
+/* In the card grid the rule is a grid ITEM, so it has to span every column — otherwise it
+   takes one cell and the tiers interleave on the same row. */
+.playgrid-divide {
+  grid-column: 1 / -1;
+}
+.playgrid-divide .alsodivide {
+  margin: 6px 0 0;
 }
 
 /* ---- the landing's card grid ----
@@ -3216,11 +3331,11 @@ body.name-editable #apphead h1 {
   .playgrid {
     grid-template-columns: 1fr;
   }
-  /* The provider row stops hugging the right edge and takes its own line — at this width
-     `margin-left: auto` would leave one chip stranded across the page from the others. */
-  .providerchips {
-    margin-left: 0;
-    width: 100%;
+  /* The hairline between the people and the provider pills goes at this width: a vertical
+     rule inside a flow that is wrapping every two or three chips lands in an arbitrary
+     place and reads as a divider between the wrong two things. */
+  .filterdivide {
+    display: none;
   }
   .playcard .rowmeta {
     white-space: normal;
