@@ -32,14 +32,12 @@ const FILMS = [
   { ratingKey: '4', title: 'Delta' },
 ];
 
-// One SHOW, for the in-progress case. It has to be a show and not a fifth film: a movie's
-// resolved item carries no `viewOffset` (the movie branch of `resolveMember` builds the item by
-// hand from title + ratingKey), so `leadsInProgress` has only ever been able to see an EPISODE.
-// That is pre-existing, and out of scope here — the point of this case is that the hoist still
-// outranks the Priority lane, not to widen what the hoist can see.
+// One SHOW, for the in-progress episode case.
 const SHOW = { ratingKey: '5', title: 'Echo' };
 /** viewOffset (ms) for `SHOW`'s first episode; 0 = not started. */
 let showResumeMs = 0;
+/** The movie progress that Plex returns with its metadata. */
+let movieResumeKey: string | null = null;
 
 const clientWith = (): PlexClient => ({
   async container(p: string) {
@@ -48,7 +46,14 @@ const clientWith = (): PlexClient => ({
       if (m[1] === SHOW.ratingKey) return { Metadata: [{ ...SHOW, type: 'show' }] };
       const film = FILMS.find((f) => f.ratingKey === m[1]);
       if (!film) return { Metadata: [] };
-      return { Metadata: [{ ...film, type: 'movie' }] };
+      return {
+        Metadata: [{
+          ...film,
+          type: 'movie',
+          viewOffset: movieResumeKey === film.ratingKey ? 45_000 : 0,
+          viewCount: 0,
+        }],
+      };
     }
     if (p === `/library/metadata/${SHOW.ratingKey}/allLeaves`) {
       return {
@@ -110,6 +115,15 @@ check('ordered queue plays file order', titles(await run(ORDERED, all)), ['Alpha
 // ── 2. A RANDOM pool is untouched ─────────────────────────────────────────────────────────
 // Every entry inherits `random`, so all four go through the shuffle — here, the reverse.
 check('random pool still shuffles', titles(await run(POOL, all)), ['Delta', 'Charlie', 'Bravo', 'Alpha']);
+
+// A partly watched movie is the next sitting's head, even when the pool shuffle would put it
+// last. This is the NFC rescan case: the card starts the same queue again after dinner.
+movieResumeKey = '1';
+const resumedMovie = await run(POOL, all);
+check('an in-progress movie leads the random pool', titles(resumedMovie),
+  ['Alpha', 'Delta', 'Charlie', 'Bravo']);
+check('the in-progress movie keeps its Plex resume position', resumedMovie.offset, 45_000);
+movieResumeKey = null;
 
 // ── 3. A PROMOTE leads a random pool ──────────────────────────────────────────────────────
 // Charlie names its own lane; the other three shuffle behind it.
