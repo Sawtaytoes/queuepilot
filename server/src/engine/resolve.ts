@@ -594,18 +594,18 @@ export async function itemType(
   client: PlexClient,
   ratingKey: string | number,
   token: Token,
-): Promise<['movie' | 'show', string | undefined] | [null, null]> {
+): Promise<['movie' | 'show', string | undefined, number, number] | [null, null, 0, 0]> {
   let mc;
   try {
     mc = await client.container(`/library/metadata/${ratingKey}`, token);
   } catch {
-    return [null, null];
+    return [null, null, 0, 0];
   }
   const md = mc.Metadata || [];
-  if (!md.length) return [null, null];
+  if (!md.length) return [null, null, 0, 0];
   const t = md[0]!.type;
-  if (t !== 'movie' && t !== 'show') return [null, null];
-  return [t, md[0]!.title];
+  if (t !== 'movie' && t !== 'show') return [null, null, 0, 0];
+  return [t, md[0]!.title, int0(md[0]!.viewOffset), int0(md[0]!.viewCount)];
 }
 
 // [viewOffset_ms, viewCount] for one item under `token`'s account, [0, 0] on any miss. Port of
@@ -660,16 +660,16 @@ export async function resolveTitle(
   year: number | null,
   guid: string | null,
   token: Token,
-): Promise<[string, 'movie' | 'show', string] | [null, null, null]> {
+): Promise<[string, 'movie' | 'show', string, number, number] | [null, null, null, 0, 0]> {
   const q = quote(title);
   let mc;
   try {
     mc = await client.container(
       `/library/sections/${section}/all?title=${q}&includeGuids=1&X-Plex-Container-Size=50`, token);
   } catch {
-    return [null, null, null];
+    return [null, null, null, 0, 0];
   }
-  let best: [string, 'movie' | 'show', string] | null = null;
+  let best: [string, 'movie' | 'show', string, number, number] | null = null;
   let bestScore = 0;
   const tl = title.toLowerCase();
   for (const e of mc.Metadata || []) {
@@ -690,11 +690,11 @@ export async function resolveTitle(
     const better = best === null || score > bestScore
       || (score === bestScore && /^\d+$/.test(rk) && parseInt(rk, 10) < parseInt(best[0], 10));
     if (better) {
-      best = [rk, et, candTitle];
+      best = [rk, et, candTitle, int0(e.viewOffset), int0(e.viewCount)];
       bestScore = score;
     }
   }
-  if (best === null || bestScore <= 0) return [null, null, null];
+  if (best === null || bestScore <= 0) return [null, null, null, 0, 0];
   return best;
 }
 
@@ -720,22 +720,26 @@ export async function resolveQueueEntry(
   desc: EntryDescriptor,
   cfg: ResolveCfg,
   token: Token,
-): Promise<[string, 'movie' | 'show', string | undefined] | [null, null, null]> {
+): Promise<
+  [string, 'movie' | 'show', string | undefined, number, number] | [null, null, null, 0, 0]
+> {
   const rk = desc.ratingKey;
   if (rk) {
-    const [typ, title] = await itemType(client, rk, token);
-    if (typ == null) return [null, null, null];
-    return [rk, typ, title];
+    const [typ, title, viewOffset, viewCount] = await itemType(client, rk, token);
+    if (typ == null) return [null, null, null, 0, 0];
+    return [rk, typ, title, viewOffset, viewCount];
   }
   const title = desc.title;
-  if (!title) return [null, null, null];
+  if (!title) return [null, null, null, 0, 0];
   for (const sec of resolveSections(cfg)) {
     // `sec` may be undefined here (see resolveSections); the request was always built with
     // whatever it held, and Plex answering 404 is what the try/catch inside resolveTitle is for.
-    const [rrk, typ, resolved] = await resolveTitle(client, sec as number, title, desc.year, desc.guid, token);
-    if (typ != null) return [rrk, typ, resolved];
+    const [rrk, typ, resolved, viewOffset, viewCount] = await resolveTitle(
+      client, sec as number, title, desc.year, desc.guid, token,
+    );
+    if (typ != null) return [rrk, typ, resolved, viewOffset, viewCount];
   }
-  return [null, null, null];
+  return [null, null, null, 0, 0];
 }
 
 // --------------------------------------------------------------------------- //
@@ -980,7 +984,7 @@ export async function resolveMember(
     );
     return { title: `Collection: ${name}`, type: 'collection', items, weight: toWeight(desc.weight) };
   }
-  const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
+  const [rk, typ, title, viewOffset, viewCount] = await resolveQueueEntry(client, desc, cfg, token);
   if (typ == null) return null;
   if (typ === 'movie') {
     // NOT skippable. A movie entry IS its own member — there is nothing inside it to skip —
@@ -993,13 +997,18 @@ export async function resolveMember(
       const own = progress?.get(String(rk));
       keepMovie = progress
         ? Boolean(own && !own.isCompleted && own.positionMs > 0)
-        : inProgress(...await itemViewState(client, rk, token));
+        : inProgress(viewOffset, viewCount);
     }
+    const providerProgress = resume && progress == null && inProgress(viewOffset, viewCount)
+      ? { viewOffset, viewCount } : {};
     const items: ResolvedItem[] = keepMovie
       // `show: null` is kept LITERALLY — the curated-parity oracle compares this JSON, and
       // `undefined` would drop the key entirely. The cast is only how `PlexPlayItem`'s
       // `show?: string` (types.ts) is satisfied without changing what is emitted.
-      ? [{ title, ratingKey: rk, show: null as unknown as undefined, season: null, episode: null }] : [];
+      ? [{
+        title, ratingKey: rk, show: null as unknown as undefined, season: null, episode: null,
+        ...providerProgress,
+      }] : [];
     // `title` comes back from Plex and is `string | undefined`; the original stored it as-is.
     return { title: title as string, type: 'movie', ratingKey: rk, items, weight: toWeight(desc.weight) };
   }
