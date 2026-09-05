@@ -1,5 +1,6 @@
 import { Button, EmptyState } from "@charcuterie/ui"
 import {
+  Fragment,
   type ReactNode,
   useCallback,
   useMemo,
@@ -7,6 +8,7 @@ import {
   useState,
 } from "react"
 import { Link, useLocation } from "react-router"
+import { AlsoInDivider } from "../components/AlsoInDivider"
 import { LandingFilterBar } from "../components/LandingFilterBar"
 import {
   isPullSet,
@@ -23,10 +25,13 @@ import { channelAccountLabel } from "../lib/channels"
 import { isRandomOrder } from "../lib/kind"
 import { queueNumbers, queueTitle } from "../lib/people"
 import { WATCH_PLAY_PATH } from "../lib/routePaths"
+import type { PeopleMatch } from "../lib/tonight"
 import {
-  membersMatchPeople,
+  missingRequiredPeople,
+  peopleMatch,
   resolveMembers,
   rosterOrder,
+  splitByMatch,
 } from "../lib/tonight"
 import type {
   QueuesResponse,
@@ -35,8 +40,8 @@ import type {
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
 import {
-  parseOnly,
   parsePeople,
+  parseProviders,
 } from "../state/landingFilter"
 import {
   openPlayMenu,
@@ -475,7 +480,7 @@ export function PlayView() {
   const { data, reg } = useStore()
   const people = usePeople()
   const { search } = useLocation()
-  const only = parseOnly(search)
+  const only = parseProviders(search)
   const selected = parsePeople(search)
 
   const kindOf = (id: string) =>
@@ -523,16 +528,14 @@ export function PlayView() {
    * (`queuePeople.ts queueMatchesSelection`) — the two are one implementation on each side
    * of the wire on purpose, so Play and Tonight can never offer different answers.
    */
-  const matches = (
+  const matchOf = (
     id: string,
     forPeople: readonly string[],
-    forOnly: string | null,
-  ) =>
-    (!forOnly || kindOf(id) === forOnly) &&
-    membersMatchPeople(membersOf.get(id) ?? [], forPeople)
-
-  const isShown = (id: string) =>
-    matches(id, selected, only)
+    forOnly: readonly string[],
+  ): PeopleMatch =>
+    forOnly.length && !forOnly.includes(kindOf(id))
+      ? { missingRequired: 0, tier: "none" }
+      : peopleMatch(membersOf.get(id) ?? [], forPeople)
 
   const labelForKind = (kind: string) =>
     reg?.sets.find((s) => s.provider_kind === kind)
@@ -578,12 +581,52 @@ export function PlayView() {
    */
   const countFor = (
     forPeople: readonly string[],
-    forOnly: string | null,
+    forOnly: readonly string[],
   ) =>
-    entries.filter((e) => matches(e.id, forPeople, forOnly))
-      .length
+    entries.filter(
+      (e) =>
+        matchOf(e.id, forPeople, forOnly).tier !== "none",
+    ).length
+  /**
+   * Is there a queue that NAMES all of these people? The filter bar's dead-end test.
+   *
+   * `(membersOf.get(e.id)?.length ?? 0) > 0` is the whole difference from `countFor`: a queue
+   * nobody is filed on passes every people filter by design, so a plain count answers yes for
+   * two people who share nothing.
+   */
+  const hasQueueFor = (
+    forPeople: readonly string[],
+    forOnly: readonly string[],
+  ) =>
+    entries.some(
+      (e) =>
+        (membersOf.get(e.id)?.length ?? 0) > 0 &&
+        matchOf(e.id, forPeople, forOnly).tier !== "none",
+    )
 
-  const shown = entries.filter((e) => isShown(e.id))
+  /**
+   * The grid in its two tiers. `shown` stays the flat list every other reader of this view
+   * wants — the empty state, the reorder — and `tiers.exact.length` is where the rule goes.
+   */
+  const tiers = splitByMatch(entries, (e) =>
+    matchOf(e.id, selected, only),
+  )
+  const shown = [...tiers.exact, ...tiers.also]
+  /** WHO the also-in cards still want, in roster order — the divider's own sentence. */
+  const alsoNames = (() => {
+    const wanted = new Set(
+      tiers.also.flatMap((e) =>
+        missingRequiredPeople(
+          membersOf.get(e.id) ?? [],
+          selected,
+        ),
+      ),
+    )
+
+    return rosterOrder(people.people)
+      .filter((person) => wanted.has(person.id))
+      .map((person) => person.displayName)
+  })()
 
   // --- reorder ---------------------------------------------------------------- //
   // The grid is ONE list now, so a drop permutes one list — but it is still only a SLICE
@@ -643,6 +686,7 @@ export function PlayView() {
         // groups were routes; it has one now, and the filters ride in the query.
         basePath="/admin"
         countFor={countFor}
+        hasQueueFor={hasQueueFor}
         labelForKind={labelForKind}
         only={only}
         people={rosterOrder(people.people)}
@@ -740,58 +784,75 @@ export function PlayView() {
       ) : null}
 
       <ul className="playgrid" id="playgrid" ref={gridRef}>
-        {shown.map((e) =>
-          e.kind === "rules" ? (
-            <ChannelCard
-              channel={e.set}
-              duplicateNumber={numbers.get(e.id) ?? null}
-              key={e.id}
-            />
-          ) : (
-            <PlayCard
-              key={e.id}
-              kind="picks"
-              // The REGISTRY's label, not the queues payload's: only the registry carries
-              // `has_explicit_label`, which is what separates a name somebody typed from
-              // the id the server falls back to.
-              label={queueTitle(
-                reg?.sets.find((x) => x.id === e.id) ?? {
-                  // No registry entry yet — one payload arrived before the other. All
-                  // that is known is the queues payload's label, so it is treated as
-                  // EXPLICIT: showing it beats showing an activity guessed from nothing.
-                  activity: "watching",
-                  has_explicit_label: true,
-                  label: data!.sets[e.id]!.label,
-                },
-                numbers.get(e.id) ?? null,
-              )}
-              // The registry entry, so a Plex Picks card and a Plex Rules card two
-              // cards apart render in the same amber rather than one of them in the
-              // neutral accent.
-              set={reg?.sets.find((x) => x.id === e.id)}
-              // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
-              // `usePeople` is a store slice of its own and is loaded once at start-up,
-              // so this costs the landing no extra request and no extra render on a
-              // queue-editor save.
-              people={
-                <PeopleRow
-                  groups={people.groups}
-                  members={people.byQueue[e.id] ?? []}
-                  people={people.people}
+        {shown.map((e, index) => {
+          // The rule sits inside the grid, spanning every column — `useRowReorder` permutes
+          // this list's children, so a wrapper per tier would stop a drag crossing the line.
+          const divider =
+            tiers.also.length > 0 &&
+            index === tiers.exact.length ? (
+              <li className="playgrid-divide" key="alsoin">
+                <AlsoInDivider names={alsoNames} />
+              </li>
+            ) : null
+
+          return (
+            <Fragment key={e.id}>
+              {divider}
+              {e.kind === "rules" ? (
+                <ChannelCard
+                  channel={e.set}
+                  duplicateNumber={
+                    numbers.get(e.id) ?? null
+                  }
                 />
-              }
-              meta={picksMeta(
-                data!.sets[e.id]!.items.length,
-                reg?.sets.find((x) => x.id === e.id) ??
-                  data!.sets[e.id],
+              ) : (
+                <PlayCard
+                  kind="picks"
+                  // The REGISTRY's label, not the queues payload's: only the registry carries
+                  // `has_explicit_label`, which is what separates a name somebody typed from
+                  // the id the server falls back to.
+                  label={queueTitle(
+                    reg?.sets.find(
+                      (x) => x.id === e.id,
+                    ) ?? {
+                      // No registry entry yet — one payload arrived before the other. All
+                      // that is known is the queues payload's label, so it is treated as
+                      // EXPLICIT: showing it beats showing an activity guessed from nothing.
+                      activity: "watching",
+                      has_explicit_label: true,
+                      label: data!.sets[e.id]!.label,
+                    },
+                    numbers.get(e.id) ?? null,
+                  )}
+                  // The registry entry, so a Plex Picks card and a Plex Rules card two
+                  // cards apart render in the same amber rather than one of them in the
+                  // neutral accent.
+                  set={reg?.sets.find((x) => x.id === e.id)}
+                  // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
+                  // `usePeople` is a store slice of its own and is loaded once at start-up,
+                  // so this costs the landing no extra request and no extra render on a
+                  // queue-editor save.
+                  people={
+                    <PeopleRow
+                      groups={people.groups}
+                      members={people.byQueue[e.id] ?? []}
+                      people={people.people}
+                    />
+                  }
+                  meta={picksMeta(
+                    data!.sets[e.id]!.items.length,
+                    reg?.sets.find((x) => x.id === e.id) ??
+                      data!.sets[e.id],
+                  )}
+                  to={`/q/${e.id}`}
+                  onPlay={(anchor) =>
+                    openPlayMenu({ anchor, setId: e.id })
+                  }
+                />
               )}
-              to={`/q/${e.id}`}
-              onPlay={(anchor) =>
-                openPlayMenu({ anchor, setId: e.id })
-              }
-            />
-          ),
-        )}
+            </Fragment>
+          )
+        })}
       </ul>
     </div>
   )
