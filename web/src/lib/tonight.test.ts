@@ -6,11 +6,14 @@ import {
   defaultModeFor,
   goLabel,
   isProviderWorthNaming,
+  missingRequiredPeople,
+  peopleMatch,
   queueMatchesPeople,
   queuesForTonight,
   resolveMembers,
   rosterOrder,
   SURPRISE_SCOPES,
+  splitByMatch,
   type TonightMember,
   type TonightQueue,
   tonightQueues,
@@ -358,6 +361,170 @@ describe("the people filter", () => {
     expect(
       queueMatchesPeople(family, ["ada", "grace", "zoe"]),
     ).toBe(false)
+  })
+})
+
+describe("the two tiers — exact, then also-in", () => {
+  /**
+   * The filter answers `exact` / `also` / `none` since 2026-09-05, and the reason is a
+   * filter you had to already know the answer to:
+   *
+   * > "selecting 'Xander' or 'Darius' without selecting both will show the Halloween queue.
+   * > It removes the need to 'know' everyone who's required to be in a queue."
+   *
+   * `queueMatchesPeople` is `exact` and NOTHING ELSE — the server picks on that rule and it
+   * did not move. What changed is that the queues it drops are now reported rather than
+   * discarded.
+   */
+  const tier = (
+    members: readonly TonightMember[],
+    selected: readonly string[],
+  ) => peopleMatch(members, selected).tier
+
+  test("EXACT is the old rule, unchanged", () => {
+    const both = [person("ada"), person("grace")]
+
+    expect(tier(both, ["ada", "grace"])).toBe("exact")
+    // Both empties still answer `exact`, never `also`: an unfiltered page must draw one
+    // list, not a list and a rule with everything under it.
+    expect(tier(both, [])).toBe("exact")
+    expect(tier([], ["ada"])).toBe("exact")
+  })
+
+  test("ALSO is a queue that wants somebody you did not tick", () => {
+    // THE HALLOWEEN CASE. One of the two children the queue needs, and the queue used to
+    // vanish rather than say so.
+    const halloween = [person("grace"), person("linus")]
+
+    expect(tier(halloween, ["grace"])).toBe("also")
+    expect(tier(halloween, ["linus"])).toBe("also")
+    expect(tier(halloween, ["grace", "linus"])).toBe(
+      "exact",
+    )
+  })
+
+  test("ALSO is what stops a person reading as having no queue", () => {
+    // The other half of the report: somebody who never has a queue to herself.
+    const shared = [person("ada"), person("sven")]
+
+    expect(tier(shared, ["sven"])).toBe("also")
+  })
+
+  test("NONE still means the ticked people are not all on it", () => {
+    // The one thing `also` does NOT relax. Ticking two people who share no queue keeps
+    // answering with nothing, which is true and useful.
+    const adaOnly = [person("ada")]
+
+    expect(tier(adaOnly, ["grace"])).toBe("none")
+    expect(tier(adaOnly, ["ada", "grace"])).toBe("none")
+  })
+
+  test("an OPTIONAL person never makes a queue also-in", () => {
+    // "Nice to have" is the hatch it always was: somebody there does not remove the queue,
+    // and somebody absent does not make it a near miss either.
+    const adaMaybeGrace = [
+      person("ada"),
+      person("grace", "optional"),
+    ]
+
+    expect(tier(adaMaybeGrace, ["ada"])).toBe("exact")
+    expect(tier(adaMaybeGrace, ["ada", "grace"])).toBe(
+      "exact",
+    )
+  })
+
+  test("a GROUP is short by its COUNT, not by one", () => {
+    // "At least two of these four" with nobody ticked is further away than "at least one",
+    // and that distance is what orders the also-in list.
+    const twoOfFour = [
+      group("kids", ["grace", "linus", "hedy", "alan"], 2),
+    ]
+
+    expect(
+      peopleMatch(twoOfFour, ["grace"]).missingRequired,
+    ).toBe(1)
+    expect(
+      peopleMatch(
+        [group("kids", ["grace", "linus"], 1)],
+        [],
+      ).missingRequired,
+    ).toBe(0)
+  })
+})
+
+describe("splitByMatch", () => {
+  test("keeps the caller's order inside EXACT", () => {
+    const split = splitByMatch(
+      ["a", "b", "c"],
+      () =>
+        ({ missingRequired: 0, tier: "exact" }) as const,
+    )
+
+    expect(split.exact).toEqual(["a", "b", "c"])
+    expect(split.also).toEqual([])
+  })
+
+  test("drops NONE and sorts ALSO by how far off it is", () => {
+    const distance: Record<string, number> = {
+      far: 4,
+      near: 1,
+      "near-too": 1,
+    }
+    const split = splitByMatch(
+      ["far", "hidden", "near", "keep", "near-too"],
+      (id) =>
+        id === "hidden"
+          ? ({ missingRequired: 0, tier: "none" } as const)
+          : id === "keep"
+            ? ({
+                missingRequired: 0,
+                tier: "exact",
+              } as const)
+            : ({
+                missingRequired: distance[id] ?? 0,
+                tier: "also",
+              } as const),
+    )
+
+    expect(split.exact).toEqual(["keep"])
+    // Nearest first, and STABLE — `near` was ahead of `near-too` in the caller's order and
+    // stays there. That order is the file's, which is the order the owner arranged.
+    expect(split.also).toEqual(["near", "near-too", "far"])
+  })
+})
+
+describe("missingRequiredPeople", () => {
+  test("names everybody required and not ticked", () => {
+    expect(
+      missingRequiredPeople(
+        [person("ada"), person("sven")],
+        ["sven"],
+      ),
+    ).toEqual(["ada"])
+  })
+
+  test("a GROUP contributes its whole required roster", () => {
+    // Looser than the rule the tier was computed with, deliberately: "at least one of Grace
+    // or Linus" wants EITHER, and the divider's job is to say which two to consider.
+    expect(
+      missingRequiredPeople(
+        [group("kids", ["grace", "linus"], 1)],
+        [],
+      ),
+    ).toEqual(["grace", "linus"])
+  })
+
+  test("says nothing about a satisfied member, or an optional one", () => {
+    expect(
+      missingRequiredPeople(
+        [
+          person("ada"),
+          person("grace", "optional"),
+          group("kids", ["linus", "hedy"], 1),
+        ],
+        ["ada", "linus"],
+      ),
+    ).toEqual([])
   })
 })
 

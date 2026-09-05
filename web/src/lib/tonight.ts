@@ -353,10 +353,69 @@ export function membersMatchPeople(
   members: readonly TonightMember[],
   selectedPersonIds: readonly string[],
 ): boolean {
-  if (members.length === 0) return true
+  return (
+    peopleMatch(members, selectedPersonIds).tier === "exact"
+  )
+}
+
+/**
+ * HOW WELL a queue answers the filter — the two-tier answer the one-tier one could not give.
+ *
+ * `exact`  everybody ticked is on the queue AND every required person is ticked
+ * `also`   everybody ticked is on the queue, but the queue also needs somebody who is not
+ * `none`   somebody ticked is not on this queue at all
+ *
+ * ## Why "also" exists
+ *
+ * The one-tier rule made a filter you had to already know the answer to. Ticking one adult
+ * showed nothing, because every queue she is on also requires the other adult; ticking one
+ * child hid the queue that needs two specific children, because the filter could not tell
+ * "not for these people" from "for these people and one more". The owner named both:
+ *
+ * > "it's weird that some folks don't show as having a queue … That is very strange since
+ * > they do have queues shown."
+ *
+ * > "selecting 'Xander' or 'Darius' without selecting both will show the Halloween queue. It
+ * > removes the need to 'know' everyone who's required to be in a queue."
+ *
+ * So the strict rule is kept — it is still what `exact` means, and it is still what the
+ * server picks on — and the queues it used to DROP are reported as `also` rather than
+ * thrown away. The screen draws them under a rule
+ * (decision `2026-09-05-the-people-filter-answers-in-two-tiers-exact-then-also-in`).
+ *
+ * ## What `also` deliberately is NOT
+ *
+ * It is not "any ticked person is on this queue". Everybody ticked still has to be ON the
+ * queue, so ticking two people who share nothing keeps answering with nothing — that is a
+ * true answer and a useful one. The single thing `also` relaxes is the requirement that the
+ * queue ask for NOBODY ELSE.
+ *
+ * `missingRequired` is how many required people the selection is short of, and it is what
+ * the `also` list sorts on: the near misses read first, so the queue that needs one more
+ * person is above the queue that needs four.
+ */
+export type PeopleMatch = {
+  /** How many required people are not ticked. 0 on `exact`, and meaningless on `none`. */
+  missingRequired: number
+  tier: "also" | "exact" | "none"
+}
+
+const EXACT: PeopleMatch = {
+  missingRequired: 0,
+  tier: "exact",
+}
+
+export function peopleMatch(
+  members: readonly TonightMember[],
+  selectedPersonIds: readonly string[],
+): PeopleMatch {
+  // A queue nobody is filed on is never filtered, and nobody ticked is no filter at all.
+  // Both are the ORIGINAL rule's two empties and neither becomes an `also`: an unfiltered
+  // page must draw one list, not a list and a rule with everything under it.
+  if (members.length === 0) return EXACT
 
   const selected = new Set(selectedPersonIds)
-  if (selected.size === 0) return true
+  if (selected.size === 0) return EXACT
 
   const onQueue = new Set<string>()
   for (const member of members)
@@ -364,17 +423,95 @@ export function membersMatchPeople(
       onQueue.add(personId)
 
   for (const personId of selected)
-    if (!onQueue.has(personId)) return false
+    if (!onQueue.has(personId))
+      return { missingRequired: 0, tier: "none" }
+
+  let missingRequired = 0
 
   for (const member of members) {
     if (member.role !== "required") continue
     const present = member.requiredPeople.filter(
       (personId) => selected.has(personId),
     ).length
-    if (present < member.minPresent) return false
+    // A GROUP member is short by however many of its `minPresent` are missing, not by one:
+    // "at least two of these four" with nobody ticked is further away than "at least one".
+    if (present < member.minPresent)
+      missingRequired += member.minPresent - present
   }
 
-  return true
+  return missingRequired
+    ? { missingRequired, tier: "also" }
+    : EXACT
+}
+
+/**
+ * WHO the also-in queues still want — every required person who is not ticked, de-duplicated
+ * across the whole tier, so the divider can name them.
+ *
+ * A GROUP contributes its whole required roster rather than a count, because "at least one of
+ * Grace or Linus" wants either of two people and the divider's job is to say which two. That
+ * is looser than the rule the tier was computed with, deliberately: the line is a hint about
+ * what to tick next, not a second filter.
+ */
+export function missingRequiredPeople(
+  members: readonly TonightMember[],
+  selectedPersonIds: readonly string[],
+): string[] {
+  const selected = new Set(selectedPersonIds)
+  const missing: string[] = []
+
+  for (const member of members) {
+    if (member.role !== "required") continue
+
+    const present = member.requiredPeople.filter(
+      (personId) => selected.has(personId),
+    ).length
+
+    if (present >= member.minPresent) continue
+
+    for (const personId of member.requiredPeople)
+      if (!selected.has(personId)) missing.push(personId)
+  }
+
+  return [...new Set(missing)]
+}
+
+/**
+ * Split a list of queues into the two tiers the screen draws, keeping the caller's order
+ * inside each.
+ *
+ * `also` is additionally sorted by how far off it is, so "needs one more person" reads above
+ * "needs four" — a STABLE sort, so two queues equally far away keep the order the page put
+ * them in. That order is the file's, which is the order the owner arranged.
+ */
+export function splitByMatch<Item>(
+  items: readonly Item[],
+  matchOf: (item: Item) => PeopleMatch,
+): { also: Item[]; exact: Item[] } {
+  const exact: Item[] = []
+  const also: { item: Item; missing: number }[] = []
+
+  for (const item of items) {
+    const match = matchOf(item)
+
+    if (match.tier === "exact") exact.push(item)
+    else if (match.tier === "also")
+      also.push({
+        item,
+        missing: match.missingRequired,
+      })
+  }
+
+  return {
+    also: also
+      .map((entry, index) => ({ ...entry, index }))
+      .sort(
+        (a, b) =>
+          a.missing - b.missing || a.index - b.index,
+      )
+      .map((entry) => entry.item),
+    exact,
+  }
 }
 
 /**
