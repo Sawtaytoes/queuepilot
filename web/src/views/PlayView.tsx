@@ -39,7 +39,6 @@ import type {
   SetsResponse,
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
-import { parseLayout } from "../state/filterVariant"
 import {
   parsePeople,
   parseProviders,
@@ -482,7 +481,6 @@ export function PlayView() {
   const people = usePeople()
   const { search } = useLocation()
   const only = parseProviders(search)
-  const layout = parseLayout(search)
   const selected = parsePeople(search)
 
   const kindOf = (id: string) =>
@@ -589,6 +587,22 @@ export function PlayView() {
       (e) =>
         matchOf(e.id, forPeople, forOnly).tier !== "none",
     ).length
+  /**
+   * Is there a queue that NAMES all of these people? The filter bar's dead-end test.
+   *
+   * `(membersOf.get(e.id)?.length ?? 0) > 0` is the whole difference from `countFor`: a queue
+   * nobody is filed on passes every people filter by design, so a plain count answers yes for
+   * two people who share nothing.
+   */
+  const hasQueueFor = (
+    forPeople: readonly string[],
+    forOnly: readonly string[],
+  ) =>
+    entries.some(
+      (e) =>
+        (membersOf.get(e.id)?.length ?? 0) > 0 &&
+        matchOf(e.id, forPeople, forOnly).tier !== "none",
+    )
 
   /**
    * The grid in its two tiers. `shown` stays the flat list every other reader of this view
@@ -672,13 +686,13 @@ export function PlayView() {
         // groups were routes; it has one now, and the filters ride in the query.
         basePath="/admin"
         countFor={countFor}
+        hasQueueFor={hasQueueFor}
         labelForKind={labelForKind}
         only={only}
         people={rosterOrder(people.people)}
         providerKinds={providerKinds}
         search={search}
         selected={selected}
-        variant={layout}
       />
       {/*
         Where you GO from here. These were three "Configure ›" links, one per shelf heading,

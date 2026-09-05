@@ -2692,17 +2692,12 @@ html.modal-open {
   flex-wrap: wrap;
   gap: 8px;
 }
-/* The provider pills sit in the SAME wrapping flow as the people, after a hairline, rather
-   than owning a row of their own — the row they used to own held two chips and cost a whole
-   line of a header the owner needs the height of. The hairline is a list item so it wraps
-   with everything else; it collapses to nothing at the start of a wrapped line, because a
-   rule hanging off the left edge reads as a mistake. */
-.filterdivide {
-  align-self: stretch;
-  width: 1px;
-  min-height: 22px;
-  margin: 0 4px;
-  background: var(--color-border-subtle);
+/* The provider pills sit ON THE SIDE of the people's row rather than owning a row of their
+   own — the row they used to own held two chips and cost a whole line of a header the owner
+   needs the height of. `margin-left: auto` rather than a fixed position, so they hug the right
+   edge on a wide viewport and simply wrap on a narrow one. */
+.providerchips {
+  margin-left: auto;
 }
 .filterchip {
   display: inline-flex;
@@ -2758,65 +2753,41 @@ html.modal-open {
   color: var(--color-content-secondary);
 }
 
-/* ---- the two dropdown layouts (PREVIEW) ----
+/* ---- ＋N MORE — the rest of the roster ----
 
-   `combos` and `compact` are the multi-select dropdowns the owner proposed as a replacement
-   for the chip row. One of the three layouts is going to be deleted — see
-   `LandingFilterBar`'s `LANDING_FILTER_VARIANTS` — and this block goes with the losers. */
-.filterrow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-/* ⚠️ REACHING INTO A COMPONENT, and it is temporary. `Combobox isMultiple` renders its own
-   chip rail ABOVE the trigger — the right answer in a form, and the wrong one here, where it
-   puts back exactly the line these layouts exist to save. The trigger already names the
-   selection. If one of these layouts wins, this becomes a PROP upstream in Charcuterie: a
-   shared shape is fixed in the library, not overridden per app
-   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`). */
+   `display: contents`, so the `Combobox`'s trigger is a direct flex item of the chip row and
+   sits on the same baseline the pills do. */
 .filterpicker {
   display: contents;
 }
-/* The rail is the only `<div>` `Combobox` renders inline — the trigger is a `<button>` and
-   the panel is portalled to `<body>` — so this reaches it and nothing else. */
+/* ⚠️ REACHING INTO A COMPONENT, and it is the one rule here that does. `Combobox isMultiple`
+   renders its own chip rail ABOVE the trigger — the right answer in a form, and the wrong one
+   inside a wrapping row of pills, where it puts back exactly the line this control exists to
+   save. Nothing is lost: a person ticked in the panel becomes a CHIP on the next render, which
+   is a better version of the same affordance and is already in the row.
+
+   The rail is the only `<div>` `Combobox` renders inline — the trigger is a `<button>` and the
+   panel is portalled to `<body>` — so this reaches it and nothing else.
+
+   It wants to be a PROP upstream in `@charcuterie/ui`, not a rule here: a shared shape is
+   fixed in the library, not overridden per app
+   (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`). */
 .filterpicker > div {
   display: none;
 }
-/* The panel row: a face, the name, and the count as a trailing chip — the same three things
-   a chip carried, so the dropdown reads as the chip row folded up. */
 .filtercaret {
   width: 1rem;
   height: 1rem;
   color: var(--color-content-tertiary);
 }
+/* The panel row: a face, the name, and the count as a trailing chip — the same three things a
+   chip carries, so the dropdown reads as the chip row folded up. */
 .filteroption {
   display: flex;
   flex: 1;
   align-items: center;
   gap: 8px;
   min-width: 0;
-}
-/* What is ticked, beside the control rather than above it — `compact` only. A chip here is
-   a REMOVE control, so it wears the accent the ticked chip wears and its ✕ is the whole
-   point of it being on screen. */
-.filterpicked {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.filterchip-picked {
-  border-color: var(--color-intent-accent-border);
-  background: var(--color-intent-accent-surface);
-  color: var(--color-intent-accent-content);
-}
-.filterchip-picked:hover {
-  border-color: var(--color-intent-danger-border);
-  background: var(--color-intent-danger-surface);
-  color: var(--color-intent-danger-content);
 }
 
 /* ---- ALSO IN THESE QUEUES ----
@@ -3331,11 +3302,11 @@ body.name-editable #apphead h1 {
   .playgrid {
     grid-template-columns: 1fr;
   }
-  /* The hairline between the people and the provider pills goes at this width: a vertical
-     rule inside a flow that is wrapping every two or three chips lands in an arbitrary
-     place and reads as a divider between the wrong two things. */
-  .filterdivide {
-    display: none;
+  /* The provider pills stop hugging the right edge and take their own line — at this width
+     `margin-left: auto` would leave one pill stranded across the page from the others. */
+  .providerchips {
+    margin-left: 0;
+    width: 100%;
   }
   .playcard .rowmeta {
     white-space: normal;

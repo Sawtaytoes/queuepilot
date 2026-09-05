@@ -98,12 +98,6 @@ export function filterPath(
   if (people.length) params.set("people", people.join(","))
   if (only.length) params.set("only", only.join(","))
 
-  // ⚠️ TEMPORARY, and it goes with `state/filterVariant.ts`. The filter-bar layout preview is
-  // a query parameter, and a chip that rebuilt the query from scratch would drop it — so the
-  // first tap took you back to the layout you were comparing AGAINST.
-  const layout = new URLSearchParams(search).get("layout")
-  if (layout) params.set("layout", layout)
-
   const query = params.toString()
 
   return query ? `${basePath}?${query}` : basePath

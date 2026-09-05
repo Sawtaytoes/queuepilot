@@ -61,7 +61,6 @@ import type {
   RegistrySet,
 } from "../lib/types"
 import { PLEX_WORDS } from "../lib/vocab"
-import { parseLayout } from "../state/filterVariant"
 import {
   parsePeople,
   parseProviders,
@@ -1017,7 +1016,6 @@ export function QueuesView({
 
   const playingSet = activeSet(now, data)
   const only = parseProviders(search)
-  const layout = parseLayout(search)
   const selected = parsePeople(search)
 
   /** Every queue's audience, resolved through the SAME group rule the former queue landing
@@ -1099,6 +1097,22 @@ export function QueuesView({
       (id) =>
         matchOf(id, forPeople, forOnly).tier !== "none",
     ).length
+  /**
+   * Is there a queue that NAMES all of these people? The filter bar's dead-end test.
+   *
+   * `(membersOf.get(id)?.length ?? 0) > 0` is the whole difference from `countFor`: a queue
+   * nobody is filed on passes every people filter by design, so a plain count answers yes for
+   * two people who share nothing.
+   */
+  const hasQueueFor = (
+    forPeople: readonly string[],
+    forOnly: readonly string[],
+  ) =>
+    queueIds.some(
+      (id) =>
+        (membersOf.get(id)?.length ?? 0) > 0 &&
+        matchOf(id, forPeople, forOnly).tier !== "none",
+    )
   const providerKinds = [
     ...new Set(queueIds.map(kindOf).filter(Boolean)),
   ]
@@ -1145,13 +1159,13 @@ export function QueuesView({
       <LandingFilterBar
         basePath={ROUTE_PATHS.queues.replace("/*", "")}
         countFor={countFor}
+        hasQueueFor={hasQueueFor}
         labelForKind={labelForKind}
         only={only}
         people={rosterOrder(people.people)}
         providerKinds={providerKinds}
         search={search}
         selected={selected}
-        variant={layout}
       />
       <div className="queue-section-heading picks-queue-heading">
         <div>

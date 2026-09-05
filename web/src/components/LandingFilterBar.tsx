@@ -12,7 +12,7 @@ import { PersonFace } from "./PersonFace"
 
 /**
  * WHO ARE YOU LOOKING FOR — the people filter at the top of the landing, and the provider
- * filter beside it.
+ * filter on the right of the same row.
  *
  * ## What this replaced, and why
  *
@@ -30,6 +30,53 @@ import { PersonFace } from "./PersonFace"
  * people, and it could only ever offer the combinations somebody had written down in advance.
  * Ticking people composes them instead
  * (decision `2026-08-26-the-landing-filters-by-people-and-the-group-chips-go`).
+ *
+ * ## A few quick picks, then a dropdown for the rest (2026-09-05)
+ *
+ * A chip per person was the whole roster on screen at all times. That is one tap per person,
+ * which is the thing worth keeping, and it is three wrapped rows at nine people and worse at
+ * twelve — *"I like the quick filters we have right now, but they just take up a lot of space
+ * and don't scale well."*
+ *
+ * So the row carries the **first `QUICK_PICK_COUNT` of the roster** as chips, plus **every
+ * ticked person wherever they sit in it**, and the remainder go behind one `+ N more`
+ * dropdown. Nobody is unreachable and nothing that is ON is hidden:
+ *
+ * > "a 'quick pick' version with a few selected people and then a combobox dropdown that can
+ * > optionally show more items that are selected."
+ *
+ * Which people are quick — and therefore which are one tap — is **roster order**, which the
+ * owner sets in Edit people. It is deliberately not a most-used ranking: a control that
+ * reorders itself as you use it is a control you cannot build muscle memory for.
+ *
+ * The provider pills stay pills, on the right of the same row rather than on one of their own
+ * — *"I also like the Plex and Kavita ones being on the side the way you did it."*
+ *
+ * ## A DEAD END IS NOT OFFERED
+ *
+ * Adding a name that would leave nothing on screen is not a filter, it is a wasted tap that
+ * empties the page and then has to be undone. Two people who share no queue at all is the
+ * ordinary case in a household, not an edge:
+ *
+ * > "if I click 'Kevin', that's pretty much every queue, but if I click 'Ashlee', there are
+ * > some invalid combinations like Ashlee and Sheldon. Sheldon should disable or disappear
+ * > when she's been selected."
+ *
+ * So a person the selection shares NO QUEUE with goes: the chip disappears, and the dropdown
+ * row is disabled rather than removed — the owner's own split, and the right one. A chip that
+ * greys out still occupies the row it was meant to shorten; a dropdown row that vanishes makes
+ * the panel's list change length as you type, and "N more" stop being true.
+ *
+ * ⚠️ The test is `hasQueueFor`, NOT a count of zero. A queue nobody is filed on shows under
+ * every filter — that is the 2026-08-26 rule and it is right — so the count with two people
+ * who share nothing is not 0, it is however many unfiled queues the house owns. On the live
+ * data that is at least one, and a dead-end test written on the count would therefore never
+ * have fired even once.
+ *
+ * ⚠️ **A TICKED person is never hidden and never disabled**, whatever their count says.
+ * Clicking a ticked chip REMOVES that person, which is always a legal move — and it is the
+ * only way back out of a selection that has filtered the page down to nothing. Hiding it there
+ * is a dead end with no exit, which is worse than the one this rule closes.
  *
  * ## Both filters are MULTI-SELECT, and the provider one only became so on 2026-09-05
  *
@@ -53,18 +100,28 @@ import { PersonFace } from "./PersonFace"
  * ⚠️ It counts **both tiers on purpose.** While it counted only exact matches, every person
  * who never has a queue to herself read `0` while her queues were plainly on the screen under
  * Anyone — *"That is very strange since they do have queues shown."* A chip that says 0 and
- * then shows you four cards is worse than no chip at all.
+ * then shows you four cards is worse than no chip at all
+ * (decision `2026-09-05-the-people-filter-answers-in-two-tiers-exact-then-also-in`).
  *
- * ## The three layouts
- *
- * `variant` is a PREVIEW SWITCH and one of these is going to be deleted — see
- * `LANDING_FILTER_VARIANTS`. The owner asked to compare a chip row against the two
- * multi-select dropdowns he proposed, on the real page with a real roster, before either is
- * built for good.
- *
- * The provider row only appears when more than one backend is actually reachable. Offering
+ * The provider pills only appear when more than one backend is actually reachable. Offering
  * "Plex / Kavita" to a house that has only Plex is a control that can only ever be a no-op.
  */
+
+/**
+ * How many of the roster are chips before the rest fold into the dropdown.
+ *
+ * Four, measured rather than chosen: at 1400px the row holds Anyone, four chips, the more
+ * control, Edit people and two provider pills on ONE line, which is the whole point of the
+ * change. A ticked person outside the four is added to the row, so the real maximum is four
+ * plus however many are ticked — and somebody who has ticked six people has told you they want
+ * six chips.
+ *
+ * A quick pick that a dead end has hidden is NOT backfilled from the rest of the roster. The
+ * row would stay four chips long, and they would be four different people each time you
+ * ticked somebody — a chip you are reaching for must not move because of a chip you pressed.
+ */
+const QUICK_PICK_COUNT = 4
+
 /**
  * A trigger with no chevron reads as a button that DOES something rather than as a control
  * that opens a list. The app's other pickers get theirs from `Picker`; `Combobox` takes a
@@ -93,14 +150,42 @@ const CHEVRON_DOWN = (
   </svg>
 )
 
-export const LANDING_FILTER_VARIANTS = [
-  "chips",
-  "combos",
-  "compact",
-] as const
+/**
+ * ⚙ Edit people's glyph.
+ *
+ * ⚠️ It replaces the `⚙` CHARACTER, which rendered as a tofu box on this app's own landing —
+ * U+2699 is outside the LATIN subset of Outfit, exactly like the chevron above, and it had
+ * been shipping that way. `SchemeIcons.tsx` says the app has no icon library and that raw
+ * characters are the convention; this is the second glyph to prove the convention only works
+ * for a character the font actually carries.
+ */
+const GEAR = (
+  <svg
+    aria-hidden="true"
+    className="filtercaret"
+    fill="none"
+    focusable={false}
+    stroke="currentColor"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    strokeWidth={1.75}
+    viewBox="0 0 24 24"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <circle cx="12" cy="12" r="3" />
+    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </svg>
+)
 
-export type LandingFilterVariant =
-  (typeof LANDING_FILTER_VARIANTS)[number]
+/** What a person's chip or row would show you, and therefore whether it is worth offering. */
+type PersonOffer = {
+  /** True when ticking this person would empty the page. Never true for a ticked person. */
+  isDeadEnd: boolean
+  isOn: boolean
+  person: Person
+  /** The count the control prints: the cards you get with this person INCLUDED. */
+  withThem: number
+}
 
 export type LandingFilterBarProps = {
   /** The path the chips hang off — `/`, without the query. */
@@ -111,6 +196,17 @@ export type LandingFilterBarProps = {
     people: readonly string[],
     only: readonly string[],
   ) => number
+  /**
+   * Whether any queue NAMES all of these people at once — the dead-end test.
+   *
+   * Deliberately not `countFor(...) > 0`: a queue nobody is filed on passes every people
+   * filter, so it answers yes for a pair that shares nothing. This one asks only about queues
+   * that carry a roster, which is the question "is this combination a thing in this house".
+   */
+  hasQueueFor: (
+    people: readonly string[],
+    only: readonly string[],
+  ) => boolean
   /**
    * A provider kind's display name.
    *
@@ -130,42 +226,12 @@ export type LandingFilterBarProps = {
   search: string
   /** Who is ticked. */
   selected: readonly string[]
-  /** Which layout to draw. Temporary — see the note above. */
-  variant?: LandingFilterVariant
 }
 
-export function LandingFilterBar(
-  props: LandingFilterBarProps,
-) {
-  const variant = props.variant ?? "chips"
-
-  return (
-    <nav
-      aria-label="Filter"
-      className={`filterbar filterbar-${variant}`}
-    >
-      {variant === "chips" ? (
-        <ChipsLayout {...props} />
-      ) : (
-        <DropdownLayout {...props} variant={variant} />
-      )}
-    </nav>
-  )
-}
-
-// ── the chip layouts ───────────────────────────────────────────────────────────────────── //
-
-/**
- * Every filter as a pressable pill, which is what shipped on 2026-08-26.
- *
- * The change here is that the provider pills join the SAME wrapping flow as the people, after
- * a divider, rather than owning a line of their own. Two rows of people and a third row
- * holding two provider pills was most of the header — *"They take up a whole line of space
- * that's very necessary."*
- */
-function ChipsLayout({
+export function LandingFilterBar({
   basePath,
   countFor,
+  hasQueueFor,
   labelForKind,
   only,
   people,
@@ -173,46 +239,81 @@ function ChipsLayout({
   search,
   selected,
 }: LandingFilterBarProps) {
-  return (
-    <ul className="filterchips" id="peoplechips">
-      <li>
-        {/* ANYONE is an address, not the absence of one — the same lesson the All chip
-            taught on 2026-08-19. It has to be clickable from a filtered view, so it is a
-            link to the unfiltered one rather than a state nothing can navigate to. */}
-        <Link
-          aria-current={
-            selected.length ? undefined : "page"
-          }
-          className="filterchip"
-          to={filterPath(basePath, search, { people: [] })}
-        >
-          Anyone
-          <span className="filtercount">
-            {countFor([], only)}
-          </span>
-        </Link>
-      </li>
-      {people.map((person) => {
-        const isOn = selected.includes(person.id)
-        const next = toggleValue(selected, person.id)
-        // WITH them, whichever way the chip is pointing. `next` is the href's selection and
-        // is the opposite of this on a ticked chip — see the note above.
-        const withThem = isOn
-          ? selected
-          : [...selected, person.id]
+  const offers: PersonOffer[] = people.map((person) => {
+    const isOn = selected.includes(person.id)
+    // WITH them, whichever way the control is pointing. The href's selection is the OPPOSITE
+    // of this on a ticked chip — see the note above.
+    const withThem = countFor(
+      isOn ? selected : [...selected, person.id],
+      only,
+    )
 
-        return (
+    return {
+      isDeadEnd:
+        !isOn &&
+        !hasQueueFor([...selected, person.id], only),
+      isOn,
+      person,
+      withThem,
+    }
+  })
+
+  /**
+   * The chips: the head of the roster, plus anybody ticked further down it.
+   *
+   * Chosen by id and then filtered out of `offers`, rather than concatenated, so the row stays
+   * in ROSTER ORDER — a ticked person who was already a quick pick must not appear twice, and
+   * one who was not must not jump to the end and move the chips beside her.
+   */
+  const quickIds = new Set([
+    ...people
+      .slice(0, QUICK_PICK_COUNT)
+      .map((person) => person.id),
+    ...selected,
+  ])
+  const quick = offers.filter(
+    (offer) =>
+      quickIds.has(offer.person.id) && !offer.isDeadEnd,
+  )
+  const rest = offers.filter(
+    (offer) => !quickIds.has(offer.person.id),
+  )
+
+  return (
+    <nav aria-label="Filter" className="filterbar">
+      <ul className="filterchips" id="peoplechips">
+        <li>
+          {/* ANYONE is an address, not the absence of one — the same lesson the All chip
+              taught on 2026-08-19. It has to be clickable from a filtered view, so it is a
+              link to the unfiltered one rather than a state nothing can navigate to. It is
+              also the way OUT of a selection that shows nothing, so it is never hidden. */}
+          <Link
+            aria-current={
+              selected.length ? undefined : "page"
+            }
+            className="filterchip"
+            to={filterPath(basePath, search, {
+              people: [],
+            })}
+          >
+            Anyone
+            <span className="filtercount">
+              {countFor([], only)}
+            </span>
+          </Link>
+        </li>
+        {quick.map(({ isOn, person, withThem }) => (
           <li key={person.id}>
             <Link
               aria-current={isOn ? "page" : undefined}
               className="filterchip"
               to={filterPath(basePath, search, {
-                people: next,
+                people: toggleValue(selected, person.id),
               })}
             >
-              {/* The same circle the cards and the trays draw, so one person is one
-                  colour everywhere in the app. It is `aria-hidden`, and the name beside
-                  it is the link's accessible name. */}
+              {/* The same circle the cards and the trays draw, so one person is one colour
+                  everywhere in the app. It is `aria-hidden`, and the name beside it is the
+                  link's accessible name. */}
               <PersonFace
                 id={person.id}
                 label={person.displayName}
@@ -220,29 +321,41 @@ function ChipsLayout({
               />
               {person.displayName}
               <span className="filtercount">
-                {countFor(withThem, only)}
+                {withThem}
               </span>
             </Link>
           </li>
-        )
-      })}
-      <li>
-        {/* WHO EXISTS, beside who you can pick. */}
-        <button
-          className="filterchip filteredit"
-          id="peopleedit"
-          onClick={openPeopleModal}
-          type="button"
-        >
-          ⚙ Edit people
-        </button>
-      </li>
+        ))}
+        {rest.length ? (
+          <li>
+            <MorePeople
+              basePath={basePath}
+              rest={rest}
+              search={search}
+              selected={selected}
+            />
+          </li>
+        ) : null}
+        <li>
+          {/* WHO EXISTS, beside who you can pick — and, since the quick picks are the head of
+              the roster, also where their ORDER is set. */}
+          <button
+            className="filterchip filteredit"
+            id="peopleedit"
+            onClick={openPeopleModal}
+            type="button"
+          >
+            {GEAR}
+            Edit people
+          </button>
+        </li>
+      </ul>
+
       {providerKinds.length > 1 ? (
-        <>
-          {/* A hairline rather than a second `<ul>`: the provider pills are the same kind
-              of control and belong in the same wrapping flow, but they answer a different
-              question, so the eye needs to know where one filter stops. */}
-          <li aria-hidden="true" className="filterdivide" />
+        <ul
+          className="filterchips providerchips"
+          id="providerchips"
+        >
           {providerKinds.map((kind) => {
             const isOn = only.includes(kind)
             const withIt = isOn ? only : [...only, kind]
@@ -267,184 +380,43 @@ function ChipsLayout({
               </li>
             )
           })}
-        </>
-      ) : null}
-    </ul>
-  )
-}
-
-// ── the dropdown layouts ───────────────────────────────────────────────────────────────── //
-
-/**
- * The two multi-select dropdowns, which is what the owner proposed:
- *
- * > "I kinda think both of those could be handled by 2 multi-select combobox dropdowns
- * > instead."
- *
- * `combos` is that and nothing else — one row, whatever the roster grows to. `compact` adds
- * the ticked people back beside the trigger as removable chips, so a filter that is ON is
- * legible without opening the panel; it costs a line only once something is ticked.
- *
- * Both use Charcuterie's `Combobox isMultiple`, the same control `TonightView`'s category
- * filter uses.
- *
- * ⚠️ `Combobox isMultiple` renders its OWN chip rail above the trigger, and `.filterpicker`
- * hides it. That rail is the right answer in a form — it is how you see and remove what you
- * picked — and it is the wrong one here, because it sits ABOVE the trigger and puts back
- * exactly the line this layout exists to save. The trigger already names the selection, and
- * `compact` draws the removable chips itself, beside the control rather than over it.
- * If one of these layouts wins, the rail is turned off with a PROP upstream rather than with
- * this rule — a shared shape is fixed in Charcuterie, not per app.
- */
-function DropdownLayout({
-  basePath,
-  countFor,
-  labelForKind,
-  only,
-  people,
-  providerKinds,
-  search,
-  selected,
-  variant,
-}: LandingFilterBarProps & {
-  variant: LandingFilterVariant
-}) {
-  const isCompact = variant === "compact"
-  const nameOf = (id: string) =>
-    people.find((person) => person.id === id)
-      ?.displayName ?? id
-
-  return (
-    <div className="filterrow">
-      <PeopleDropdown
-        basePath={basePath}
-        countFor={countFor}
-        isNamingSelection={!isCompact}
-        only={only}
-        people={people}
-        search={search}
-        selected={selected}
-      />
-
-      {providerKinds.length > 1 ? (
-        <ProviderDropdown
-          basePath={basePath}
-          countFor={countFor}
-          isNamingSelection={!isCompact}
-          labelForKind={labelForKind}
-          only={only}
-          providerKinds={providerKinds}
-          search={search}
-          selected={selected}
-        />
-      ) : null}
-
-      {/* WHO EXISTS, beside who you can pick — the same control the chip row carries, and
-          the reason it is still a raw button is the same: it is chip-shaped, in a row of
-          chip-shaped links, and `BadgeLink` does not exist yet. */}
-      <button
-        className="filterchip filteredit"
-        id="peopleedit"
-        onClick={openPeopleModal}
-        type="button"
-      >
-        ⚙ Edit people
-      </button>
-
-      {isCompact ? (
-        <ul className="filterpicked">
-          {selected.map((personId) => (
-            <li key={personId}>
-              {/* Each ticked person as a REMOVABLE chip: the whole chip is the remove
-                  control, so taking one name back off is a single tap and never needs
-                  the panel. It stays a `<Link>`, so the address rule holds. */}
-              <Link
-                aria-label={`Remove ${nameOf(personId)}`}
-                className="filterchip filterchip-picked"
-                to={filterPath(basePath, search, {
-                  people: toggleValue(selected, personId),
-                })}
-              >
-                <PersonFace
-                  id={personId}
-                  label={nameOf(personId)}
-                  size="sm"
-                />
-                {nameOf(personId)}
-                <span aria-hidden="true">✕</span>
-              </Link>
-            </li>
-          ))}
-          {only.map((kind) => (
-            <li key={kind}>
-              <Link
-                aria-label={`Remove ${labelForKind(kind)}`}
-                className="filterchip filterchip-picked"
-                data-provider={kind}
-                to={filterPath(basePath, search, {
-                  only: toggleValue(only, kind),
-                })}
-              >
-                {labelForKind(kind)}
-                <span aria-hidden="true">✕</span>
-              </Link>
-            </li>
-          ))}
         </ul>
       ) : null}
-    </div>
+    </nav>
   )
 }
 
 /**
- * The people dropdown.
+ * The rest of the roster, behind one control.
  *
- * The trigger names the SELECTION rather than the control, because that is the thing whose
- * value somebody is checking at a glance: "Anyone", one name, or "3 people". The panel's rows
- * carry the face and the count, so the list reads the way the chip row did.
+ * A `Combobox isMultiple` rather than a `Listbox`, for the reason the picker rule gives: this
+ * list is as long as the household and is the one control here that wants typing. Picking does
+ * not close it — multi-select keeps the panel open and clears the query for the next name —
+ * which is the whole reason a multi-select is worth having.
  *
- * Selecting does not close the panel — `Combobox isMultiple` keeps it open and clears the
- * query for the next one — which is the whole reason a multi-select is worth having here.
+ * It holds only the people who are NOT already chips. Somebody ticked here becomes a chip on
+ * the next render and leaves this list, which is what makes "N more" a true count and stops
+ * the same person being tickable in two places at once.
  */
-function PeopleDropdown({
+function MorePeople({
   basePath,
-  countFor,
-  isNamingSelection,
-  only,
-  people,
+  rest,
   search,
   selected,
-}: { isNamingSelection: boolean } & Pick<
-  LandingFilterBarProps,
-  | "basePath"
-  | "countFor"
-  | "only"
-  | "people"
-  | "search"
-  | "selected"
->) {
+}: {
+  basePath: string
+  /** The roster minus the chips, in roster order. */
+  rest: readonly PersonOffer[]
+  search: string
+  selected: readonly string[]
+}) {
   const panel = useVisibility()
   /**
    * A pick NAVIGATES, because the address is still the whole truth — the same rule the chips
    * follow. A `Combobox` row cannot be a `<Link>`: its job is to toggle one value and leave
-   * the panel open for the next one, which is the entire point of a multi-select.
+   * the panel open for the next one.
    */
   const navigate = useNavigate()
-  /**
-   * `combos` has nothing else on the row, so the trigger has to BE the selection. `compact`
-   * draws the ticked names as chips beside it, so a trigger that repeated them would print
-   * "Sven" twice in 40px of each other — there it stays a stable "People" and the chips are
-   * the answer.
-   */
-  const label = !isNamingSelection
-    ? "People"
-    : selected.length === 0
-      ? "Anyone"
-      : selected.length === 1
-        ? (people.find(
-            (person) => person.id === selected[0],
-          )?.displayName ?? "1 person")
-        : `${selected.length} people`
 
   return (
     <div className="filterpicker">
@@ -460,150 +432,67 @@ function PeopleDropdown({
             }),
           )
         }}
-        options={people.map((person) => ({
-          label: (
-            <span
-              className="filteroption"
-              data-value={person.id}
-            >
-              <PersonFace
-                id={person.id}
-                label={person.displayName}
-                size="sm"
-              />
-              <span className="optionlabel">
-                {person.displayName}
-              </span>
-              <Badge
-                appearance="outline"
-                className="optionbadge"
-                intent="neutral"
-                size="sm"
+        options={rest.map(
+          ({ isDeadEnd, person, withThem }) => ({
+            // DISABLED, not removed — see the note at the top of this file. A row that
+            // vanishes as you tick people makes the panel change length under the cursor and
+            // makes "N more" a lie.
+            isDisabled: isDeadEnd,
+            label: (
+              <span
+                className="filteroption"
+                data-value={person.id}
               >
-                {String(
-                  countFor(
-                    selected.includes(person.id)
-                      ? selected
-                      : [...selected, person.id],
-                    only,
-                  ),
+                <PersonFace
+                  id={person.id}
+                  label={person.displayName}
+                  size="sm"
+                />
+                <span className="optionlabel">
+                  {person.displayName}
+                </span>
+                {/* The same number the chip carries, so folding somebody into this list does
+                    not cost the one piece of information the chip was giving.
+
+                    NOT on a disabled row. The count there is TRUE and reads as a
+                    contradiction: a queue nobody is filed on still shows under any filter,
+                    so a person who shares nothing with the selection is greyed out beside a
+                    `1`. The row's job at that point is to say "not this one", and a number
+                    only argues with it. */}
+                {isDeadEnd ? null : (
+                  <Badge
+                    appearance="outline"
+                    className="optionbadge"
+                    intent="neutral"
+                    size="sm"
+                  >
+                    {String(withThem)}
+                  </Badge>
                 )}
-              </Badge>
-            </span>
-          ),
-          textValue: person.displayName,
-          value: person.id,
-        }))}
+              </span>
+            ),
+            textValue: person.displayName,
+            value: person.id,
+          }),
+        )}
         placeholder="Search people…"
-        selectedValue={selected}
+        // EMPTY, always. Anybody ticked has become a chip and is not in `rest`, so a checkmark
+        // in this panel would be marking a row that cannot exist.
+        selectedValue={[]}
         trigger={
           <Button
             appearance="outline"
-            aria-label={`People: ${label}`}
-            data-testid="peoplepicker"
-            id="peoplepicker"
-            // NEUTRAL, like every other picker trigger in the app. A `Button` defaults to
-            // the accent intent, which paints this as a call to action sitting where a form
-            // control belongs — and it is the loudest thing on the page beside ＋ New queue.
+            aria-label={`${rest.length} more people`}
+            data-testid="peoplemore"
+            id="peoplemore"
+            // NEUTRAL, like every other picker trigger in the app. A `Button` defaults to the
+            // accent intent, which paints this as a call to action sitting in a row of quiet
+            // pills.
             intent="neutral"
             onClick={panel.toggle}
+            size="sm"
           >
-            {label}
-            <span className="filtercount">
-              {countFor(selected, only)}
-            </span>
-            {CHEVRON_DOWN}
-          </Button>
-        }
-      />
-    </div>
-  )
-}
-
-/** The provider dropdown — the same control, over the backends. */
-function ProviderDropdown({
-  basePath,
-  countFor,
-  isNamingSelection,
-  labelForKind,
-  only,
-  providerKinds,
-  search,
-  selected,
-}: { isNamingSelection: boolean } & Pick<
-  LandingFilterBarProps,
-  | "basePath"
-  | "countFor"
-  | "labelForKind"
-  | "only"
-  | "providerKinds"
-  | "search"
-  | "selected"
->) {
-  const panel = useVisibility()
-  const navigate = useNavigate()
-  const label = !isNamingSelection
-    ? "Libraries"
-    : only.length === 0
-      ? "Every library"
-      : only.map(labelForKind).join(", ")
-
-  return (
-    <div className="filterpicker">
-      <Combobox
-        emptyLabel="No such library"
-        isMultiple
-        isVisible={panel.isVisible}
-        onDismiss={panel.hide}
-        onSelect={(kind) => {
-          navigate(
-            filterPath(basePath, search, {
-              only: toggleValue(only, kind),
-            }),
-          )
-        }}
-        options={providerKinds.map((kind) => ({
-          label: (
-            <span
-              className="filteroption"
-              data-provider={kind}
-              data-value={kind}
-            >
-              <span className="optionlabel">
-                {labelForKind(kind)}
-              </span>
-              <Badge
-                appearance="outline"
-                className="optionbadge"
-                intent="neutral"
-                size="sm"
-              >
-                {String(
-                  countFor(
-                    selected,
-                    only.includes(kind)
-                      ? only
-                      : [...only, kind],
-                  ),
-                )}
-              </Badge>
-            </span>
-          ),
-          textValue: labelForKind(kind),
-          value: kind,
-        }))}
-        placeholder="Search libraries…"
-        selectedValue={only}
-        trigger={
-          <Button
-            appearance="outline"
-            aria-label={`Libraries: ${label}`}
-            data-testid="providerpicker"
-            id="providerpicker"
-            intent="neutral"
-            onClick={panel.toggle}
-          >
-            {label}
+            {`+${rest.length} more`}
             {CHEVRON_DOWN}
           </Button>
         }
