@@ -90,7 +90,7 @@ export function isRandomOrder(
  * The lead cooldown when neither the entry nor the queue names one — the server's
  * `DEFAULT_PROMOTE_WINDOW_MS`, spelled the way it is written on disk.
  */
-export const DEFAULT_LEAD_WINDOW = "24h"
+export const DEFAULT_LEAD_WINDOW = "16h"
 
 /**
  * A lead window as a person says it.

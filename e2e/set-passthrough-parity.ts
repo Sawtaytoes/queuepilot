@@ -2,6 +2,11 @@
 // retired config.py exposed. Expectations are that Python oracle's RECORDED answers, frozen in
 // e2e/fixtures/golden/passthrough.json when Python was deleted (2026-08-12).
 //
+// A SECOND set of passthroughs post-dates Python — see POST_PYTHON below. Those expectations
+// are AUTHORED here rather than recorded in the golden, because the golden is a frozen
+// recording of an interpreter that never had the fields and adding rows to it would make it
+// claim otherwise. Same gate, same failure mode, different provenance.
+//
 // Why this exists: `loadSets()` built each cfg but stopped after label/kind/enabled/mode/
 // behavior. The fields below are read by session.js (requires_profile,
 // remove_completed_after, max_items), resolve.js (include_specials) and playback.js
@@ -32,6 +37,27 @@ const FIELDS = [
   'audio_language',
   'batch_stops_at',
 ];
+
+/**
+ * The passthroughs added AFTER Python was deleted, with expectations authored here.
+ *
+ * Both of these went dark exactly the way `requires_profile` did, and stayed dark because
+ * every test that covers them (`e2e/priority-lane-test.ts`, `e2e/kind-normalize-test.ts`)
+ * hands the engine a cfg DIRECTLY and never runs the loader:
+ *
+ *   * `promote_window` — read `undefined`, so `resolve.leadWindowMs()` used the product
+ *     default instead of the queue's own window. A queue on `20h` held its promoted entry
+ *     back for the default instead (2026-09-07).
+ *   * `add_as` — read `undefined`, so `kind.normalizeAddAs()` re-derived the lane from
+ *     `kind` and every `kind: picks` set that asked for `priority` came back `random`.
+ *
+ * Both are carried RAW and trimmed/lower-cased, which the `lane_priority` fixture spells
+ * with padding and a capital letter.
+ */
+const POST_PYTHON: Record<string, Record<string, unknown>> = {
+  lane_priority: { add_as: 'priority', promote_window: '20h' },
+  lane_default: { add_as: null, promote_window: null },
+};
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.
 process.env.SETS_PATH = FIXTURE;
@@ -76,6 +102,26 @@ for (const sid of ids) {
       console.log(`PASS ${sid}.${f} = ${JSON.stringify(have)}`);
     } else {
       console.log(`FAIL ${sid}.${f} — node ${JSON.stringify(have)}, golden ${JSON.stringify(want)}`);
+      failed++;
+    }
+  }
+}
+
+for (const [sid, want] of Object.entries(POST_PYTHON)) {
+  const got = reg.sets[sid];
+  if (!got) {
+    console.log(`FAIL ${sid}: missing from the Node registry entirely`);
+    failed++;
+    continue;
+  }
+  for (const [f, expect] of Object.entries(want)) {
+    // Same dynamic read as the loop above, and for the same reason: the gate exists to catch
+    // a field the loader never copied, so it must index by NAME.
+    const have = norm((got as unknown as Record<string, unknown>)[f]);
+    if (JSON.stringify(norm(expect)) === JSON.stringify(have)) {
+      console.log(`PASS ${sid}.${f} = ${JSON.stringify(have)}`);
+    } else {
+      console.log(`FAIL ${sid}.${f} — node ${JSON.stringify(have)}, expected ${JSON.stringify(expect)}`);
       failed++;
     }
   }

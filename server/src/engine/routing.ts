@@ -64,6 +64,8 @@ type RawSetEntry = BindingSource & {
   keep_completed?: unknown;
   requires_profile?: unknown;
   remove_completed_after?: unknown;
+  promote_window?: unknown;
+  add_as?: unknown;
   include_specials?: unknown;
   batch_stops_at?: unknown;
   episodes?: unknown;
@@ -261,6 +263,27 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     if (ent.remove_completed_after != null) {
       cfg.remove_completed_after = String(ent.remove_completed_after).trim();
     }
+    // The two PICKS LANE knobs. Both are read by engine/resolve.js on the curated scan path,
+    // and both were missing here until 2026-09-07 — the exact failure mode the block above
+    // documents, twice over:
+    //
+    //   * `promote_window` read `undefined`, so `leadWindowMs()` fell through to the 16h
+    //     product default and a queue that had asked for a different window never got it. A
+    //     set on `20h` held a promoted entry back at 23h23m, because the number the engine
+    //     was actually using was the old 24h default.
+    //   * `add_as` read `undefined`, so `normalizeAddAs()` re-derived the lane from `kind`.
+    //     A `kind: picks` set that asks for `add_as: priority` came back `random`, which
+    //     turns an ordered queue into a shuffled pool with nothing in the log to say so.
+    //
+    // Trimmed and lower-cased and NOT INTERPRETED, the same as `batch_stops_at` below:
+    // `kind.normalizeAddAs` and `leadWindow.parsePromoteWindow` own the reading, so an
+    // unrecognised value falls back at the consumer rather than being frozen into the cfg
+    // here. The case fold matches what the write side already stores
+    // (`routes/queuesRoutes.ts`), so a hand-typed `20H` and a UI-written `20h` are one value.
+    if (ent.promote_window != null) {
+      cfg.promote_window = String(ent.promote_window).trim().toLowerCase();
+    }
+    if (ent.add_as != null) cfg.add_as = String(ent.add_as).trim().toLowerCase();
     if (ent.include_specials) cfg.include_specials = true;
     const includedSpecials = (
       (ent.included_specials as unknown[] | null | undefined) || []
