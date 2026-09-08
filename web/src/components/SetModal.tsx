@@ -1039,12 +1039,12 @@ export function SetModal() {
         </label>
         <p className="subhint" id="set-season-hint">
           Optional. Out of season this queue is not offered
-          on What to Watch/Play and will not start — it
-          still appears on this page, still opens, and is
-          still editable, marked with the date it returns.
-          The window repeats every year and may cross New
-          Year (1 Dec to 6 Jan). ⚠️ It changes NOTHING about
-          what is watched: no entry is cleared, marked or
+          on What to Watch/Play and will not start. It still
+          appears on this page, still opens and is still
+          editable, marked with the date it returns. The
+          window repeats every year and may cross New Year
+          (1 Dec to 6 Jan). It changes nothing about what
+          has been watched: no entry is cleared, marked or
           removed at a season boundary. Leave the months
           blank for a queue that is available all year.
         </p>
