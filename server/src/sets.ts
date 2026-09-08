@@ -93,6 +93,7 @@ interface RawSet extends RawBinding {
   enabled?: boolean;
   keep_completed?: boolean;
   reel?: boolean;
+  restart_when_exhausted?: boolean;
   remove_completed_after?: string | null;
   watch_history?: unknown;
   batch_stops_at?: string | null;
@@ -418,6 +419,7 @@ function toWeights(v: unknown): Record<string, number> {
  * from the queue arm rather than duplicated.
  */
 type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel'
+  | 'restart_when_exhausted'
   | 'remove_completed_after' | 'batch_stops_at' | 'episodes' | 'volumes' | 'watch_history'>;
 
 function normalize(ent: RawSet): SetRegistryEntry | null {
@@ -581,6 +583,7 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
   // Set editor so they are not hand-YAML only. (decision `2026-08-08-set-modal-queue-flags`)
   // keep_completed: never mark entries done. reel: play the whole lineup every scan AND
   // implies keep_completed (normalize reports both so the UI prefill matches the engine).
+  // restart_when_exhausted: mark done as usual, then clear the lot once nothing is left.
   // remove_completed_after: TTL string ("24h"/"7d"/…) or null = keep finished forever.
   const bsa = String(ent.batch_stops_at || '').trim().toLowerCase();
   return {
@@ -596,6 +599,14 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     keep_completed: Boolean(ent.keep_completed || ent.reel),
     watch_history: normalizeWatchHistory(ent.watch_history) ?? 'provider',
     reel: Boolean(ent.reel),
+    // EFFECTIVE, the same rule `keep_completed` above follows. A set that never marks an
+    // entry done can never run out of them, so a hand-written
+    // `keep_completed: true` + `restart_when_exhausted: true` reads back as the playlist it
+    // behaves as. The precedence is reel > keep_completed > restart, and it is resolved here
+    // rather than refused (decision
+    // `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`).
+    restart_when_exhausted: Boolean(ent.restart_when_exhausted)
+      && !ent.keep_completed && !ent.reel,
     remove_completed_after:
       ent.remove_completed_after != null && String(ent.remove_completed_after).trim()
         ? String(ent.remove_completed_after).trim()
@@ -895,6 +906,11 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       // engine treats reel as keep_completed regardless. Prefer an explicit true so a
       // playlist-without-reel writes cleanly without a phantom reel key.
       if (body.keep_completed || body.reel) curated.keep_completed = true;
+      // The third completion axis. Written only when nothing else in the group is on: it
+      // marks entries done, so it means nothing beside a flag whose whole job is not to.
+      if (body.restart_when_exhausted && !body.keep_completed && !body.reel) {
+        curated.restart_when_exhausted = true;
+      }
       if (normalizeWatchHistory(body.watch_history) === 'queue') curated.watch_history = 'queue';
       const rca = body.remove_completed_after == null ? '' : String(body.remove_completed_after).trim();
       if (rca && !['0', 'never', 'off', 'none', 'disabled'].includes(rca.toLowerCase())) {
@@ -954,7 +970,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // Picks-only lane default + lead cooldown (rejected below on rotation).
       'add_as', 'promote_window',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
-      'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at', 'watch_history',
+      'keep_completed', 'reel', 'restart_when_exhausted',
+      'remove_completed_after', 'batch_stops_at', 'watch_history',
       // The items this queue never plays. Queue-only (rejected below on rotation, where
       // `blocklist` is the same feature under the name the pool editor already uses).
       'skipped',
@@ -1042,7 +1059,7 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         setKeepingComment(node, 'promote_window', doc.createNode(s));
         continue;
       }
-      if (k === 'keep_completed' || k === 'reel') {
+      if (k === 'keep_completed' || k === 'reel' || k === 'restart_when_exhausted') {
         // Queue-only booleans. false/absent drops the key so the file stays sparse.
         // Rotation channels have no consumption model here — reject rather than no-op so a
         // mis-pointed client surfaces immediately.
