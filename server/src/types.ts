@@ -432,6 +432,22 @@ interface SetRegistryCommon {
   filter: QueueFilter | null;
   /** `enabled: false` is the only falsy form — absent reads as enabled. */
   enabled: boolean;
+  /**
+   * THE SEASON WINDOW — `MM-DD` / `MM-DD`, repeating every year, or null for a queue that is
+   * available all year. Both ends or neither; a half-written pair is refused by the writer
+   * and read as no window at all.
+   */
+  season_start: string | null;
+  season_end: string | null;
+  /**
+   * Is today inside that window — computed on THIS READ, never stored and never a timer.
+   *
+   * Reported so no screen re-derives the calendar rule. It is deliberately NOT folded into
+   * `enabled`: the two are read independently, so the shelf can tell "the owner turned this
+   * off" apart from "it is June", and mark only the second
+   * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+   */
+  is_in_season: boolean;
 }
 
 /** A curated queue as the web API reports it (`source: 'queue'`). */
@@ -596,6 +612,21 @@ interface RoutingSetCfgCommon {
    */
   promote_window?: string;
   add_as?: string;
+  /**
+   * THE SEASON WINDOW — `MM-DD` and `MM-DD`, repeating every year. Both ends or neither.
+   *
+   * Read by `season.isSetAvailable`, which is the ONE answer to "is this queue available
+   * right now" and is what all six former `cfg.enabled === false` sites ask now. Carried RAW
+   * and trimmed — `season.parseSeasonDay` owns the reading, so an unrecognised value falls
+   * back to "no window" at the consumer rather than being frozen into the cfg here, the same
+   * discipline `promote_window` and `batch_stops_at` follow.
+   *
+   * ⚠️ They never write `enabled`. The window is a SECOND gate over the stored flag, and
+   * folding one into the other is the failure the decision record exists to prevent
+   * (`2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+   */
+  season_start?: string;
+  season_end?: string;
   include_specials?: true;
   /** Selective replacement for the legacy all-specials switch. */
   included_specials?: string[];

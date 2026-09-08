@@ -14,6 +14,7 @@ import { Hono } from 'hono';
 import type { ContentfulStatusCode } from 'hono/utils/http-status';
 import * as routing from '../engine/routing.js';
 import { errMessage } from '../errors.js';
+import { isSetAvailable, seasonReturnLabel } from '../season.js';
 import type { PlexClient } from '../types.js';
 import { resolveSingle, isMixed } from './blocks.js';
 import { providerFor } from './index.js';
@@ -38,7 +39,19 @@ export async function launchDescriptor(
   const reg = routing.loadSets();
   const cfg = reg?.sets?.[setId];
   if (!cfg) return { error: `unknown queue '${setId}'`, status: 404 };
-  if (cfg.enabled === false) return { error: `queue '${setId}' is not enabled`, status: 409 };
+  // `enabled` AND in season, through the one predicate. 409 either way — the queue exists and
+  // is simply not available to launch right now — but the message names which, because this
+  // one reaches a browser as the body of a failed `/go/<id>`.
+  if (!isSetAvailable(cfg)) {
+    const returns = seasonReturnLabel(cfg);
+
+    return {
+      error: returns
+        ? `queue '${setId}' is out of season — it returns ${returns}`
+        : `queue '${setId}' is not enabled`,
+      status: 409,
+    };
+  }
 
   // `{ ...cfg }` rather than `cfg`: `BlockSourceCfg` carries an index signature, and
   // TypeScript grants an implicit one to an anonymous object type but never to an interface —

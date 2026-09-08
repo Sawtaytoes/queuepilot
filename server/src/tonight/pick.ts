@@ -37,6 +37,7 @@
 //
 // CODE here, DATA in `/config/queuepilot.sqlite`. Fixtures are Ada, Grace and Linus.
 import { activityLabel } from '../activity.js';
+import { isSetAvailable } from '../season.js';
 import type { Activity } from '../activity.js';
 import type { GroupMembership, QueueMember, ResolvedMember } from '../queuePeople.js';
 import type { PlayItem } from '../types.js';
@@ -119,6 +120,11 @@ export interface CandidateSet {
   /** Whether a name was TYPED. Absent on a hand-built fixture, which reads as "no name". */
   has_explicit_label?: boolean;
   enabled: boolean;
+  /** The SEASON WINDOW, `MM-DD` / `MM-DD`. Optional here for the same reason
+   *  `has_explicit_label` is: a hand-built fixture that omits them is a queue with no window,
+   *  which is in season all year. `season.isSetAvailable` reads them beside `enabled`. */
+  season_start?: string | null;
+  season_end?: string | null;
   activity: Activity;
   behavior?: string | null;
   provider_kind: string;
@@ -163,7 +169,10 @@ export function candidatesFor({
   const out: TonightCandidate[] = [];
 
   for (const set of sets) {
-    if (!set.enabled) continue;
+    // AVAILABLE, not merely enabled: What to Watch/Play is the surface the season window was
+    // asked for, and it asks the SAME predicate the five engine-side consumers ask. There is
+    // no second calendar rule anywhere in this app.
+    if (!isSetAvailable(set)) continue;
     if (excluded.has(set.id)) continue;
     if (tileForSet(set) !== tile) continue;
 

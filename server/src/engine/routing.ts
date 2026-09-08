@@ -66,6 +66,8 @@ type RawSetEntry = BindingSource & {
   remove_completed_after?: unknown;
   promote_window?: unknown;
   add_as?: unknown;
+  season_start?: unknown;
+  season_end?: unknown;
   include_specials?: unknown;
   batch_stops_at?: unknown;
   episodes?: unknown;
@@ -284,6 +286,18 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
       cfg.promote_window = String(ent.promote_window).trim().toLowerCase();
     }
     if (ent.add_as != null) cfg.add_as = String(ent.add_as).trim().toLowerCase();
+    // THE SEASON WINDOW. Read by `season.isSetAvailable`, which is what the five engine-side
+    // consumers of `enabled` ask now — session start, the launcher, top-up, Pending and
+    // reconcile. Same failure mode as the two above and the same reason it is listed in
+    // `e2e/set-passthrough-parity.ts`: a passthrough this loader forgets does not throw, it
+    // reads `undefined` at the consumer and silently disables the feature. Here that means
+    // every seasonal queue quietly playing all year round, with nothing in the log to say so.
+    //
+    // Carried RAW and trimmed, not interpreted: `season.parseSeasonDay` owns the reading, so
+    // a hand-typed `october` falls back to "no window" at the consumer instead of being
+    // frozen into a broken cfg here.
+    if (ent.season_start != null) cfg.season_start = String(ent.season_start).trim();
+    if (ent.season_end != null) cfg.season_end = String(ent.season_end).trim();
     if (ent.include_specials) cfg.include_specials = true;
     const includedSpecials = (
       (ent.included_specials as unknown[] | null | undefined) || []

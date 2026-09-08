@@ -22,6 +22,7 @@ import * as playback from './playback.js';
 import * as driver from './driver.js';
 import * as resume from './resume.js';
 import * as section from './section.js';
+import { isSetAvailable, seasonReturnLabel } from './season.js';
 import { liveClient } from './engine/plex-live.js';
 import * as mqttc from './mqttc.js';
 import {
@@ -248,9 +249,24 @@ export async function startSession(
   }
 
   const cfg = reg!.sets[setName];
-  if (!cfg || cfg.enabled === false) {
-    _publishState({ error: `set '${setName}' not enabled`, ...SESSION.asDict() });
-    return { error: 'disabled' };
+  // AVAILABLE, which is `enabled` AND in season — one predicate, shared with the five other
+  // places that used to ask `cfg.enabled === false` on its own. The season half is evaluated
+  // HERE, on this read, because a card tapped in June must be refused in June
+  // (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+  if (!cfg || !isSetAvailable(cfg)) {
+    // The two refusals are said apart on purpose. A card that stops working is the one thing
+    // in this app with no screen attached to it — the theater simply does not start — so the
+    // one line anybody ever reads has to name which of the two it was, and when the queue
+    // comes back.
+    const returns = cfg ? seasonReturnLabel(cfg) : null;
+
+    _publishState({
+      error: returns
+        ? `set '${setName}' is out of season — it returns ${returns}`
+        : `set '${setName}' not enabled`,
+      ...SESSION.asDict(),
+    });
+    return { error: returns ? 'out of season' : 'disabled' };
   }
 
   let required: string | null = cfg.requires_profile || null;

@@ -50,13 +50,26 @@ const FIELDS = [
  *     back for the default instead (2026-09-07).
  *   * `add_as` — read `undefined`, so `kind.normalizeAddAs()` re-derived the lane from
  *     `kind` and every `kind: picks` set that asked for `priority` came back `random`.
+ *   * `season_start` / `season_end` — THE SEASON WINDOW, the second gate over `enabled`
+ *     (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`). It has the
+ *     same silent failure as the two above, pointing the other way: dropped, it reads
+ *     `undefined` at `season.isSetAvailable`, which answers "no window", and every seasonal
+ *     queue is offered all year round. Nothing throws and nothing logs.
  *
- * Both are carried RAW and trimmed/lower-cased, which the `lane_priority` fixture spells
- * with padding and a capital letter.
+ * All four are carried RAW and trimmed (the lane pair is lower-cased too), which the
+ * `lane_priority` and `season_autumn` fixtures spell with padding and a capital letter.
  */
 const POST_PYTHON: Record<string, Record<string, unknown>> = {
   lane_priority: { add_as: 'priority', promote_window: '20h' },
   lane_default: { add_as: null, promote_window: null },
+  season_autumn: { season_end: '11-05', season_start: '10-01' },
+  // The window that CROSSES the new year. Its start is AFTER its end, and the loader must
+  // carry that pair unchanged — an ordering check here would make every winter season
+  // unexpressible, and a swap would silently turn one into its own complement.
+  season_winter: { season_end: '01-06', season_start: '12-01' },
+  // No window: the reading the loader returned for every set before this landed, and the one
+  // that still has to mean "available all year".
+  season_none: { season_end: null, season_start: null },
 };
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.

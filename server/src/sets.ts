@@ -43,6 +43,7 @@ import type {
   Start,
   WritableProviderBlock,
 } from './types.js';
+import { formatSeasonDay, isInSeason, parseSeasonDay } from './season.js';
 import { normalizeWatchHistory } from './watchHistory.js';
 
 /**
@@ -94,6 +95,9 @@ interface RawSet extends RawBinding {
   keep_completed?: boolean;
   reel?: boolean;
   remove_completed_after?: string | null;
+  /** THE SEASON WINDOW — `MM-DD` and `MM-DD`, repeating every year. Both ends or neither. */
+  season_start?: unknown;
+  season_end?: unknown;
   watch_history?: unknown;
   batch_stops_at?: string | null;
   /** Anything else the file carries, verbatim — and what makes a RawSet usable as
@@ -265,6 +269,56 @@ const normalizePromoteWindowForWrite = (v: unknown): string | null => {
   return s;
 };
 
+/**
+ * THE SEASON WINDOW, normalized once for BOTH write paths — the same reason `add_as` has a
+ * shared normalizer, and the same failure if it does not (`createSet` dropped `add_as`
+ * entirely until the two paths were made to share one rule).
+ *
+ * ⚠️ **The PAIR RULE lives here, on the writer.** Both ends or neither: a half-written window
+ * is REFUSED BY NAME rather than stored, because "available from 1 October onwards, forever"
+ * and "somebody saved the form before picking an end" are the same two keys on disk, and the
+ * reader (`season.seasonWindowOf`) can only pick one of them. Refusing is the half that can
+ * be corrected; guessing is not.
+ *
+ * A pair of blanks CLEARS the window, which is how the editor turns a seasonal queue back
+ * into an all-year one. `{ok: true, end: null, start: null}` is that answer.
+ *
+ * ⚠️ Nothing here touches `enabled`. Clearing a window does not enable a queue and setting one
+ * does not disable it — they are two independent gates
+ * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+ */
+type SeasonWrite =
+  | { ok: true; start: string | null; end: string | null }
+  | { ok: false; error: string };
+const normalizeSeasonForWrite = (rawStart: unknown, rawEnd: unknown): SeasonWrite => {
+  const startText = rawStart == null ? '' : String(rawStart).trim();
+  const endText = rawEnd == null ? '' : String(rawEnd).trim();
+  if (!startText && !endText) return { end: null, ok: true, start: null };
+  const start = parseSeasonDay(startText);
+  const end = parseSeasonDay(endText);
+  // Named individually, because "the season dates are wrong" sends somebody back to a form
+  // with two controls on it and no idea which one they typed badly.
+  if (startText && !start) {
+    return { error: `season_start '${startText}' is not a MM-DD date`, ok: false };
+  }
+  if (endText && !end) {
+    return { error: `season_end '${endText}' is not a MM-DD date`, ok: false };
+  }
+  if (!start || !end) {
+    return {
+      error: 'a season window needs BOTH season_start and season_end — send both, or send '
+        + 'neither to clear it',
+      ok: false,
+    };
+  }
+  // ⚠️ NO ordering check, and that is the feature rather than an omission. `season_start`
+  // AFTER `season_end` is an Advent window that crosses the new year (12-01 → 01-06), which
+  // `season.isInSeason` reads by wrapping. Refusing it here — or "helpfully" swapping the two
+  // — would make every winter season unexpressible.
+
+  return { end: formatSeasonDay(end), ok: true, start: formatSeasonDay(start) };
+};
+
 const MODES = ['rewatch', 'episodic', 'both'] as const;
 const isMode = (v: unknown): v is SetMode => typeof v === 'string' && (MODES as readonly string[]).includes(v);
 // behavior (v3 PR 2) supersedes `mode`: progress = advance through unwatched ("next
@@ -431,6 +485,19 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
   // reader) keeps working unchanged. Queue sets have no bindings.
   const profiles = isRotation ? readProfiles(ent) : null;
   const def = profiles ? profiles[0] : null;
+  // Parsed once and reported in the ONE padded spelling, so a hand-typed `10-1` reads back as
+  // `10-01` and the editor's pickers seed off a value they can match. Unreadable ⇒ null ⇒ no
+  // window, never a window that refuses to open.
+  const seasonStartText = (() => {
+    const parsed = parseSeasonDay(ent.season_start);
+
+    return parsed ? formatSeasonDay(parsed) : null;
+  })();
+  const seasonEndText = (() => {
+    const parsed = parseSeasonDay(ent.season_end);
+
+    return parsed ? formatSeasonDay(parsed) : null;
+  })();
   // `def ? … : …` rather than `isRotation ? … : …`: the two conditions are the same one (def
   // is non-null exactly when the set is a rotation), and this spelling is the one the
   // compiler can follow.
@@ -536,6 +603,21 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     filtered_from: parentIdOf(ent),
     filter: filterOf(ent),
     enabled: ent.enabled !== false,
+    // THE SEASON WINDOW, reported as it is stored so the editor can seed its controls, plus
+    // the ANSWER so no screen re-derives the calendar rule.
+    //
+    // ⚠️ `is_in_season` is computed on THIS READ and is not stored anywhere. That is the
+    // decision, not an implementation detail: "Evaluated on a READ, like the reset date. No
+    // timer." A cached boolean would be a timer wearing a different hat, and it would be
+    // wrong for exactly one day before anybody noticed.
+    //
+    // ⚠️ It is deliberately NOT folded into `enabled`. The two are independent gates, and
+    // keeping them apart is what lets the shelf tell "the owner turned this off" from "it is
+    // June" and mark only the second
+    // (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+    season_start: seasonStartText,
+    season_end: seasonEndText,
+    is_in_season: isInSeason({ season_end: seasonEndText, season_start: seasonStartText }),
   };
   // v3 PR 2: the profile bindings + behavior (rotation only). profiles is ALWAYS ≥1 entry
   // (synthesized from legacy fields when absent), so the future per-profile form can rely
@@ -914,6 +996,15 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       writeLineupKnobs(curated, body, defaultFor(curated));
     }
     const obj = isRotation ? rotationCreateObj(id, body) : curated;
+    // THE SEASON WINDOW, on BOTH sources and after the branch, for the same reason the
+    // routing loader applies its passthroughs after its own branch: a Rules pool is as
+    // seasonal as a Picks queue. Sparse — a queue that named no season writes no keys.
+    const season = normalizeSeasonForWrite(body.season_start, body.season_end);
+    if (!season.ok) throw new Error(season.error);
+    if (season.start && season.end) {
+      obj.season_start = season.start;
+      obj.season_end = season.end;
+    }
     // Provider blocks, on BOTH sources — a reading queue and a reading channel are equally
     // plausible, and a set created with only a non-Plex block would otherwise be written
     // with no source at all and silently play nothing.
@@ -953,6 +1044,11 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       'activity',
       // Picks-only lane default + lead cooldown (rejected below on rotation).
       'add_as', 'promote_window',
+      // THE SEASON WINDOW. On BOTH sources — a Rules pool is as seasonal as a Picks queue,
+      // and the six availability call sites do not ask which kind a set is. Written as a
+      // PAIR under the `season_start` branch below; `season_end` is listed so a patch that
+      // carries only the end is still accepted, and is consumed by the same branch.
+      'season_start', 'season_end',
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
       'keep_completed', 'reel', 'remove_completed_after', 'batch_stops_at', 'watch_history',
       // The items this queue never plays. Queue-only (rejected below on rotation, where
@@ -1020,6 +1116,27 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
           node.delete('add_as');
           node.delete('promote_window');
         }
+        continue;
+      }
+      if (k === 'season_start' || k === 'season_end') {
+        // ONE branch for TWO keys, because the rule is about the pair. `season_end` is
+        // skipped when `season_start` is in the same patch, so the pair is written exactly
+        // once; a patch carrying only one of them reads the other off the NODE, which is what
+        // makes "set only the end" mean "change the end of the window this set already has"
+        // rather than "delete the start".
+        if (k === 'season_end' && 'season_start' in patch) continue;
+        const season = normalizeSeasonForWrite(
+          'season_start' in patch ? patch.season_start : node.get('season_start'),
+          'season_end' in patch ? patch.season_end : node.get('season_end'),
+        );
+        if (!season.ok) throw new Error(season.error);
+        if (!season.start || !season.end) {
+          node.delete('season_start');
+          node.delete('season_end');
+          continue;
+        }
+        setKeepingComment(node, 'season_start', doc.createNode(season.start));
+        setKeepingComment(node, 'season_end', doc.createNode(season.end));
         continue;
       }
       if (k === 'add_as') {

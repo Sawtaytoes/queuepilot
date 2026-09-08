@@ -82,8 +82,10 @@ export function parseSeasonDay(value: unknown): SeasonDay | null {
   if (!match) return null;
   const month = Number(match[1]);
   const day = Number(match[2]);
+  const longest = MONTH_LENGTHS[month - 1];
+  if (longest === undefined) return null;
   if (!Number.isInteger(month) || month < 1 || month > 12) return null;
-  if (!Number.isInteger(day) || day < 1 || day > MONTH_LENGTHS[month - 1]) return null;
+  if (!Number.isInteger(day) || day < 1 || day > longest) return null;
 
   return { day, month };
 }
@@ -170,5 +172,5 @@ export function seasonReturnLabel(
   const window = seasonWindowOf(cfg);
   if (!window || isInSeason(cfg, now)) return null;
 
-  return `${window.start.day} ${MONTH_NAMES[window.start.month - 1]}`;
+  return `${window.start.day} ${MONTH_NAMES[window.start.month - 1] ?? ''}`.trim();
 }
