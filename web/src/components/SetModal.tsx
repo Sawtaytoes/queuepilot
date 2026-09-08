@@ -1075,7 +1075,7 @@ export function SetModal() {
           ].includes(
             removeCompletedAfter.trim().toLowerCase(),
           )
-            ? " ⚠️ “Remove finished entries after” above DEFEATS this: it deletes a finished entry instead of tagging it, so there is nothing left here to reset. Clear it to use a reset date."
+            ? " Warning: “Remove finished entries after” above DEFEATS this. It deletes a finished entry instead of tagging it, so there is nothing left here to reset. Clear that field to use a reset date."
             : " Do not also set “Remove finished entries after”: that deletes a finished entry instead of tagging it, so there would be nothing left to reset."}
         </p>
         <label
