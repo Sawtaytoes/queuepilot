@@ -731,6 +731,48 @@ Gates: `server/src/seasonalReset.test.ts` (the date arithmetic, with every `now`
 queue, and the two greps above). `reset_watched_on` is in `e2e/set-passthrough-parity.ts`'s
 `POST_PYTHON`, per the loader contract.
 
+### The manual door is an Actions menu, and the confirm names the number
+
+The queue page's first door onto that reset is **one `Menu` on the queue toolbar**, and
+`Remove all completed` **moved into it** rather than being copied — the toolbar loses a button
+on the day it gains a menu
+([decision](docs/decisions/2026-09-08-a-destructive-queue-action-lives-in-an-actions-menu-behind-a-confirm.md)).
+`web/src/components/QueueActionsMenu.tsx` is the whole control. Five things bite, and three of
+them bite silently.
+
+- **It is a `Menu`, not a `Picker`, and no linter can tell.** Both rows DO something and hold
+  no value, so the picker rule does not reach this control
+  ([menu vs picker](docs/decisions/2026-08-21-an-add-to-menu-is-a-menu-not-a-picker.md)). The
+  ban in `@charcuterie/biome-config/app` looks for a native `<select>`; a `<div>` full of
+  `<button>`s trips nothing.
+- ⚠️ **The panel PORTALS to `<body>`.** A selector scoped under the view — `#queue .qactionsmenu`
+  — is wrong by construction and answers zero with no error. Read
+  `.qactionsmenu [role="menuitem"]` **document-wide**, the way the two Add-to menus are read
+  through `.addtomenu`. `.qactionsmenu` is a DOM handle carrying no rule, like `.playbtn`; it
+  does not raise `borrowed-class-audit.ts`'s count, because the panel only exists while the
+  menu is open and that audit never opens one.
+- **The confirm NAMES THE COUNT and the QUEUE** — *Clear 2 completions in Bob — Movies?*, never
+  "Are you sure?". The count comes from the entries the page already holds, because the route
+  can only answer after it has cleared them; the status line afterwards **reconciles** the two
+  and says so when they disagree. The queue is named through `queueTitle`, never `label`, which
+  falls back to the id.
+- ⚠️ **The affordance reads `allItems`, and the flag is `done`.** A view filter narrows what is
+  on screen and changes nothing about what either endpoint acts on, so counting the visible
+  entries names a number the server will not honour — the button this replaced read the
+  filtered list and could be hidden by a filter while the file still held completions.
+  `done` and **not** `isCompleted`: a live-finished entry gets its flag from the next reconcile
+  (`finished.ts`), seconds after playback, and acting on it earlier would do nothing.
+- **The confirm is a Charcuterie `Dialog`, never `window.confirm`,** and it is
+  `isDismissable={false}` — a destructive confirm is the one case the library names for that.
+  Cancel is a footer button, so there is still a way out that is not the action. Three
+  `window.confirm` call sites remain elsewhere in the app (`PendingView`, `SetModal`,
+  `DynModal`); they are out of this change's scope, not endorsed by it.
+
+Gate: `e2e/actions-menu-test.ts` (browser, no Plex, spawns its own server; 16 checks). Its
+most valuable assertion is a NEGATIVE — choosing a row writes nothing until the confirm's own
+button is pressed — and its last two are source greps: the menu never mentions `isCompleted`,
+and exactly one file under `web/src` calls `/reset-watched`.
+
 ## The two lanes inside a Picks queue
 
 A Picks queue is ONE membership list with a **Priority queue** and a **Random pool**
@@ -1282,6 +1324,8 @@ server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/completion-mode-test.ts  # the four completion modes + the reset seam
 server/node_modules/.bin/tsx e2e/seasonal-reset-test.ts  # a queue clears its watched state on a date, on a READ
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/actions-menu-test.ts   # the Actions menu + its confirm
 server/node_modules/.bin/tsx e2e/resume-on-advance-test.ts  # which queued items get seeked, and once each
 server/node_modules/.bin/tsx e2e/resume-latency-test.ts  # the seek latency budget, before and after
 server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts  # the plex.tv target cache + the command id
@@ -1318,7 +1362,7 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All fourteen of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All fifteen of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
@@ -1326,6 +1370,7 @@ there rather than in the gated block. All fourteen of them, in the order `ci.yml
 | `drag-stability-test.ts` | a drag's PATH, not its result — reversals, re-inserts, style writes |
 | `lane-drag-test.ts` | dragging across the lane divider — the promote and the demote |
 | `tile-lane-test.ts` | the tile's three controls: the select mark PAINTS when checked, and the lane button promotes / demotes |
+| `actions-menu-test.ts` | the Actions menu — the toolbar lost a button, the confirm names the count, and only the confirm writes |
 | `pending-dismiss-test.ts` | Pending Dismiss removes the pressed card immediately and keeps it absent after reload |
 | `routing-test.ts` | the client router and the server's SPA fallback, together |
 | `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
