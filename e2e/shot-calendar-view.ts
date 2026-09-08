@@ -26,7 +26,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer, REPO_ROOT } from './stubs/server-process.mjs';
 
 const TAG = process.env.SHOT_TAG || 'after';
-const PORT = parseInt(process.env.WEB_PORT || '18993', 10);
+const PORT = parseInt(process.env.WEB_PORT || '19301', 10);
 const BASE = `http://localhost:${PORT}`;
 const OUT = '__screenshots__';
 const QUEUES = '/tmp/qp-calendar-shot.queues.yaml';
@@ -68,6 +68,26 @@ const ready = async (): Promise<void> => {
   }
 };
 
+/**
+ * ⚠️ A PORT THAT ANSWERS IS NOT PROOF IT IS YOUR SERVER.
+ *
+ * Sibling agents run these harnesses in their own worktrees at the same time, and a port
+ * already held by one of theirs answers `/api/sets` with a **200** — so `ready()` returns, the
+ * shots are taken against somebody else's build, and the PNGs look plausible. That happened
+ * once while this file was being written. The fixture's own queue label is the identity, and a
+ * mismatch is a hard stop rather than a warning.
+ */
+const assertItIsOurs = async (): Promise<void> => {
+  const body = (await (await fetch(`${BASE}/api/sets`)).json()) as { sets: { label?: string }[] };
+  const isOurs = body.sets.some((set) => set.label === 'Bob — Halloween');
+  if (!isOurs) {
+    throw new Error(
+      `port ${PORT} is answering, but it is NOT this harness's server — `
+        + `no "Bob — Halloween" in its registry. Another worktree holds the port.`,
+    );
+  }
+};
+
 /** The first `store.load()` ends with a "Ready" status. On the no-Plex path its `/api/queues`
  *  half takes about ten seconds, and a shot taken inside that window is a page mid-load. */
 const settle = async (page: import('./playwright.js').Page): Promise<void> => {
@@ -83,6 +103,7 @@ const settle = async (page: import('./playwright.js').Page): Promise<void> => {
 
 try {
   await ready();
+  await assertItIsOurs();
 
   const browser = await chromium.launch();
   const page = await browser.newPage({

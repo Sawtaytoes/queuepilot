@@ -41,7 +41,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const PORT = parseInt(process.env.WEB_PORT || '18991', 10);
+const PORT = parseInt(process.env.WEB_PORT || '19300', 10);
 const BASE = `http://localhost:${PORT}`;
 
 let failed = 0;
@@ -107,6 +107,19 @@ const setById = async (id: string): Promise<Record<string, unknown>> => {
 
 try {
   await waitReady(`${BASE}/api/queues`);
+
+  // ⚠️ A PORT THAT ANSWERS IS NOT PROOF IT IS OUR SERVER. Sibling agents run these harnesses
+  // from their own worktrees, and a port one of theirs already holds answers with a 200 — so
+  // this suite would assert against somebody else's build and report their result as ours.
+  // The fixture's own queue label is the identity check, and it is a hard stop.
+  const registry = (await (await fetch(`${BASE}/api/sets`)).json()) as {
+    sets: { label?: string }[];
+  };
+  if (!registry.sets.some((set) => set.label === 'Bob — Halloween')) {
+    throw new Error(
+      `port ${PORT} answers, but it is not this harness's server — another worktree holds it`,
+    );
+  }
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
