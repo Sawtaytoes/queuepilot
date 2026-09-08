@@ -25,6 +25,7 @@ import * as routing from './engine/routing.js';
 import { describe, resolveQueueEntry, resolveSections } from './engine/resolve.js';
 import { collectionChildren, findCollection } from './engine/select.js';
 import { mapLimit } from './routes/mapLimit.js';
+import { isSetAvailable } from './season.js';
 import type { EntryDescriptor } from './engine/resolve.js';
 import type { PlexClient, PlexMetadata, RoutingRotationCfg, RoutingSetCfg } from './types.js';
 
@@ -259,7 +260,10 @@ function isInAnyRule(
     if (cfg.source !== 'rotation') continue;
     // A superseded tier is not a live pool; counting it would hide items nothing plays.
     if ((cfg as RoutingRotationCfg).superseded_by) continue;
-    if (cfg.enabled === false) continue;
+    // `enabled` AND in season. "Covered" means a live pool would already play it, and an
+    // out-of-season pool would not — counting it hides the item behind a queue nobody can
+    // reach until October.
+    if (!isSetAvailable(cfg)) continue;
     if (!(routing.setSections(cfg) || []).map(Number).includes(item.sectionId)) continue;
     if (blockedBySet.get(id)?.has(item.ratingKey)) continue;
 
