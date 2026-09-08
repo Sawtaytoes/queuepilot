@@ -195,7 +195,9 @@ jobs:
       # Engine unit tests that stub Plex entirely (no token, no network). Node ports of the
       # Python engine tests that were deleted with queue_builder/ on 2026-08-12 — the collection
       # START floor (skip earlier members, floor the named one), the non-consuming keep_completed
-      # flag, resume-in-queue (a started-but-unfinished queued item resumes at its viewOffset,
+      # flag and the CONSUMING pair beside it (a restart-when-exhausted queue marks done
+      # exactly as an ordinary one does, and clears when the last entry finishes),
+      # resume-in-queue (a started-but-unfinished queued item resumes at its viewOffset,
       # threaded to playMedia), in-progress-not-done (a started OAD/special is never marked done,
       # and a stale done flag is revived), the playback state machine, and the session profile
       # gate, and the binding token (a multi-profile channel plays as the profile that was
@@ -215,6 +217,7 @@ jobs:
         run: |
           "$TSX" e2e/collection-start-test.ts
           "$TSX" e2e/keep-completed-test.ts
+          "$TSX" e2e/completion-mode-test.ts
           "$TSX" e2e/resume-in-queue-test.ts
           "$TSX" e2e/resume-in-progress-done-test.ts
           "$TSX" e2e/playback-fsm-test.ts
