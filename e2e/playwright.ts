@@ -121,6 +121,9 @@ export interface Locator {
   click(options?: ClickOptions): Promise<void>;
   hover(options?: TimeoutOptions): Promise<void>;
   fill(value: string, options?: TimeoutOptions): Promise<void>;
+  /** One key at this element. `Enter` is what commits a `TimecodeInput`, which is the only
+   *  field in the app where typing alone deliberately does not write. */
+  press(key: string, options?: TimeoutOptions & { delay?: number }): Promise<void>;
   check(options?: TimeoutOptions): Promise<void>;
   count(): Promise<number>;
   first(): Locator;

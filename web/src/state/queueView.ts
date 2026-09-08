@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
+import { hasSection } from "../lib/section"
 import { byTitle, isCompleted } from "../lib/tileFace"
 import type { QueueItem } from "../lib/types"
 import type { Lane } from "./overlays"
@@ -25,6 +26,7 @@ export type EntryState =
   | "weighted"
   | "priority"
   | "start"
+  | "section"
 
 export type Sort = "queue" | "title" | "recent" | "weight"
 
@@ -130,7 +132,12 @@ export const hasOverrides = (it: QueueItem) =>
   // A promote IS an override — the entry says something its queue did not. `lead` rides
   // with it rather than being listed separately: it only exists on a promoted entry.
   Boolean(it.placement) ||
-  Boolean(it.start)
+  Boolean(it.start) ||
+  // A SECTION is an override the same way a start point is — the entry says something its
+  // queue did not. `end` has to be read as well as `start`: an entry that only says where to
+  // STOP carries no `start` at all, so a `Boolean(it.start)` test alone answers "no
+  // overrides" for it and the filter lies about a queue it is hiding entries from.
+  hasSection(it)
 
 /**
  * The two LANES a Picks queue's grid is drawn in — Priority queue first, Random pool below
@@ -293,6 +300,8 @@ export function applyFilters(
     )
       return false
     if (f.state === "start" && !it.start) return false
+    if (f.state === "section" && !hasSection(it))
+      return false
     return true
   })
   if (f.sort === "title") {
