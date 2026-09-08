@@ -284,9 +284,13 @@ const menuSource = await fs.readFile(
   `${ROOT}/web/src/components/QueueActionsMenu.tsx`,
   'utf8',
 );
+// COMMENTS STRIPPED FIRST. The file's own header explains the `done` / `isCompleted`
+// difference by naming both, so a grep over the raw text would fail on the documentation that
+// exists to prevent the mistake — and would start passing again the day somebody deleted it.
+const menuCode = menuSource.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 check(
   'the menu keys on `done`, never on `isCompleted`',
-  /\.done\b/.test(menuSource) && !/\bisCompleted\b/.test(menuSource.replace(/⚠[^\n]*/g, '')),
+  /\.done\b/.test(menuCode) && !/\bisCompleted\b/.test(menuCode),
   'a live-finished entry gets its flag from the next reconcile — acting on it earlier does nothing',
 );
 

@@ -37,7 +37,7 @@ import { load, setStatus } from "../state/store"
  *  4. **The confirm is a real modal step**, never `window.confirm`. Both actions are
  *     irreversible from this screen, and the dialog is the only protection there is.
  *
- * ⚠️ `isDone` keys on `done`, **NOT** `isCompleted`. `done` is the flag in `queues.yaml`,
+ * ⚠️ `doneCount` keys on `done`, **NOT** `isCompleted`. `done` is the flag in `queues.yaml`,
  * and it is what both endpoints can act on: `remove-completed` removes what the FILE has
  * flagged, and the reset strips those same flags. A live-finished entry gets its flag from
  * the next reconcile (`finished.js`), seconds after playback ends — offering to act on it
