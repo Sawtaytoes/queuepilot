@@ -1,3 +1,4 @@
+import { startNamesUnit, timecode } from "./section"
 import type {
   EntryUnit,
   NextEp,
@@ -112,23 +113,15 @@ export function withoutCollectionPrefix(
 }
 
 /**
- * "12:30" from milliseconds — `H:MM:SS` once past an hour, `M:SS` below it. Feeds the
+ * "12:30" from milliseconds — `hh:mm:ss` once past an hour, `mm:ss` below it. Feeds the
  * "In Progress" badge's hover readout (how far a resume point sits into the episode).
+ *
+ * `lib/section.timecode`, which is `formatTimecode` from `@charcuterie/ui`. This used to be a
+ * hand-rolled printer, one of five across the fleet and two in this repo — see the note on
+ * `NowPlayingBar.toClock`, which was the other one.
  */
-export function clock(
-  ms: number | null | undefined,
-): string {
-  const total = Math.max(
-    0,
-    Math.round((Number(ms) || 0) / 1000),
-  )
-  const h = Math.floor(total / 3600)
-  const m = Math.floor((total % 3600) / 60)
-  const s = total % 60
-  const mm = h ? String(m).padStart(2, "0") : String(m)
-
-  return `${h ? `${h}:` : ""}${mm}:${String(s).padStart(2, "0")}`
-}
+const clock = (ms: number | null | undefined): string =>
+  timecode(Number(ms) || 0)
 
 /**
  * The "In Progress" badge's tooltip: "12:30 of 24:00 (52%)". Falls back to a bare
@@ -439,7 +432,11 @@ export function startLabel(
   start: StartPoint | null | undefined,
   unit: EntryUnit = "episode",
 ): string {
-  if (!start) return ""
+  // ⚠️ A start point can carry a POSITION and nothing else — a film section is exactly that,
+  // because a film has no season and no episode. It names no unit, so this label has nothing
+  // to say about it and the SECTION tag beside it is what reads the offset. Without this the
+  // tag said "Start set", which names nothing at all.
+  if (!startNamesUnit(start)) return ""
   if (start.episode == null) return "Start set"
 
   if (unit === "volume") return `Start Vol ${start.episode}`

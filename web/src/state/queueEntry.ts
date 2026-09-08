@@ -344,6 +344,15 @@ export const queueEntryActions = (
       `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/start`,
       { start },
     ),
+  // `start`'s mirror, and its own route because it is its own key on the entry mapping.
+  // Through `api()` like every other write here, so `writeCount()` sees it — a raw `fetch`
+  // is invisible to the revalidate guard and gets clobbered about seven seconds later.
+  saveEnd: (end) =>
+    api(
+      "PATCH",
+      `/api/queues/${setId}/items/${encodeURIComponent(item.key)}/end`,
+      { end },
+    ),
 })
 
 /**
