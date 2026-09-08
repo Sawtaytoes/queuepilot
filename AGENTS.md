@@ -1025,6 +1025,58 @@ to six production signatures to satisfy a test would be the test designing the c
 two checks prove the arithmetic on whatever day it runs, including the ~40 days a year when
 the closed window crosses 31 December and reads as a wrapping pair.
 
+## The calendar is a SECOND editor for both date settings
+
+`/calendar` lists every queue that carries a season window or a reset date and lets those
+dates be changed there. It EDITS — a read-only summary was rejected, because a screen that
+shows a wrong date and cannot fix it sends the reader somewhere else to fix it
+([decision](docs/decisions/2026-09-08-a-calendar-view-is-a-second-editor-for-date-based-queue-settings.md)).
+Seven things bite, and five of them are product rules rather than plumbing.
+
+- **NEITHER SURFACE OWNS THE VALUE.** The set is the single source of truth; the Set editor
+  and this view both `PATCH /api/sets/:id` with the same keys. There is **no calendar-only
+  field and no second store** — `CalendarView.tsx` holds draft state for a row being edited
+  and nothing else. Adding a stored "schedule" of its own is the regression.
+- **A QUEUE WITH NO DATES DOES NOT APPEAR**, and the Add control at the top is the answer to
+  what that costs: without it a queue could only get its FIRST date from the Set editor. A
+  queue picked there, or a row whose dates are cleared, stays listed until the page is left —
+  session state, never a stored field.
+- ⚠️ **ONE COLUMN AT EVERY WIDTH, and it is the narrowed grid rule rather than an exception
+  to it.** A row is a queue's name, its dates and what happens on them, which is prose, and
+  prose is scanned down a column (`agentic:docs/decisions/2026-08-25-a-text-heavy-row-list-is-one-column-narrowing-the-grid-rule.md`
+  — a sibling workspace repo, so it is named rather than linked). **Do not "fix" it into a
+  grid of cards, and do not build a month-grid wall calendar.** `calendar-view-test.ts` asks
+  the browser for the computed `grid-template-columns` at 1400px and at 390px.
+- **A ROTATION POOL GETS THE SEASON WINDOW AND NOT THE RESET DATE.** `reset_watched_on` is
+  refused on a rotation set by `updateSet` — a pool owns no `done` flags, no
+  `queue_entry_history` and no `lead_cooldown`, which is all three of the things a reset
+  clears — so offering the control would be offering a value the API refuses.
+- **HALF a season window is refused before the request.** `seasonDayValue` answers `""` for a
+  month with no day, so a half-filled pair would otherwise reach the API as two blanks and
+  CLEAR the window silently. The pair rule itself still lives on the server writer; this is
+  about what the browser would send on the way.
+- **The row is KEYED on the stored dates**, which only the server changes — its own save, an
+  undo, a live update, a hand edit over SMB. The pickers are seeded controls, so a value
+  replaced underneath them has to remount; keying on the value being edited would remount the
+  control under the user's own focus. Same rule as `#chchannel`/`#chprofile`.
+- ⚠️ **NO TIMER, and the toast comes AFTER `load()`.** Both settings are evaluated on a read,
+  so a poll here would be a timer wearing a different hat; the gate greps the view for
+  `setInterval(` / `setTimeout(` / `requestAnimationFrame(`. And `store.load()` opens with its
+  own "Loading…" status and closes with "Ready", so a message set BEFORE it is overwritten
+  before anybody reads it.
+
+The month and day options for all three date controls — this view, the Set editor's reset row
+and its season row — are **one source**, `web/src/lib/monthDay.ts`. Named months never
+numbers, and the day list built from the month so 31 February cannot be expressed.
+`SeasonMark` is likewise one component (`web/src/components/SeasonMark.tsx`), drawn by both
+`/queues` shelves and every calendar row.
+
+Gate: `e2e/calendar-view-test.ts` (browser, no Plex; spawns its own server over
+`e2e/fixtures/calendar.sets.yaml`, the one fixture holding every combination of the two
+settings). ⚠️ **It asserts the server is ITS OWN before touching anything** — a port a sibling
+worktree already holds answers `/api/sets` with a 200, and a suite that trusts the status code
+reports another branch's result as this one's. That happened once while it was being written.
+
 ## Reading the log when a queue plays the wrong thing
 
 `[lineup]` (every curated scan) names the lane split, the head, the first ten titles in
@@ -1090,9 +1142,12 @@ Gate: `e2e/queue-name-test.ts`, 18 assertions, in CI.
 ## The task home, navigation and compatibility overview
 
 `/` is the task home: What to Watch/Play, Open a queue, then the five focused management
-destinations. Work pages use one primary navigation list in this order: Watch/Play, Picks,
-Rules, Collection, Unqueued, People. Charcuterie's `useNavLayout` renders that list as a rail,
-an icon rail, or one Narrow View menu; do not copy it into width-specific trees.
+destinations. Work pages use one primary navigation list in this order: Watch/Play, Queues,
+Collection, Unqueued, People, Calendar. Charcuterie's `useNavLayout` renders that list as a
+rail, an icon rail, or one Narrow View menu; do not copy it into width-specific trees.
+**Calendar was APPENDED on 2026-09-08 rather than inserted**, and that is not a style choice:
+`NAVIGATION_CATEGORICAL` pins each destination's hue by its POSITION in the list, so inserting
+one re-colours every destination below it.
 
 `/admin` is a legacy address that paints `/` and replaces the URL. `/g/<id>` now lands on
 `/people`. `/overview` is an unlinked compatibility surface for the former Admin card wall
@@ -1326,6 +1381,8 @@ server/node_modules/.bin/tsx e2e/completion-mode-test.ts  # the four completion 
 server/node_modules/.bin/tsx e2e/seasonal-reset-test.ts  # a queue clears its watched state on a date, on a READ
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/actions-menu-test.ts   # the Actions menu + its confirm
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
+  server/node_modules/.bin/tsx e2e/calendar-view-test.ts # the calendar view — the SECOND editor for both date settings
 server/node_modules/.bin/tsx e2e/resume-on-advance-test.ts  # which queued items get seeked, and once each
 server/node_modules/.bin/tsx e2e/resume-latency-test.ts  # the seek latency budget, before and after
 server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts  # the plex.tv target cache + the command id
@@ -1362,7 +1419,7 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All fifteen of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All sixteen of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
@@ -1372,6 +1429,7 @@ there rather than in the gated block. All fifteen of them, in the order `ci.yml`
 | `tile-lane-test.ts` | the tile's three controls: the select mark PAINTS when checked, and the lane button promotes / demotes |
 | `actions-menu-test.ts` | the Actions menu — the toolbar lost a button, the confirm names the count, and only the confirm writes |
 | `pending-dismiss-test.ts` | Pending Dismiss removes the pressed card immediately and keeps it absent after reload |
+| `calendar-view-test.ts` | the calendar view — which queues are listed, one column, and a date that reaches the SET |
 | `routing-test.ts` | the client router and the server's SPA fallback, together |
 | `pick-contract-test.ts` | the `pick.ts` ↔ `SelectListbox` contract |
 | `pool-editor-keeps-blocked-test.ts` | a pool edit does not drop Blocked |
