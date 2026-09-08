@@ -6,47 +6,64 @@
 // queue's watched state the moment the last entry finishes, so a new round starts
 // (decision `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`).
 //
-// ⚠️ THE CLEAR IS A SEAM, NOT AN IMPLEMENTATION. Clearing a queue's watched state is three
-// stores — the `done` / `done_at` flags in `queues.yaml`, the `queue_entry_history` rows and
-// the `lead_cooldown` rows — and `resetQueueWatchedState(setId)` is being built to own all
-// three for the seasonal reset, which clears the same state on a DATE. Two features, one
-// clear: a second implementation is the thing this file exists not to be. So the reset is
-// INJECTED (`setQueueWatchedStateReset`) and the default below does the one part this branch
-// can honestly do — `queues.clearDone`, which already exists and is already how a stale-done
-// entry is revived. Wiring `resetQueueWatchedState` in is one call at boot and nothing else in
-// this file changes.
+// ⚠️ THE CLEAR IS A SEAM, NOT AN IMPLEMENTATION, AND THE SEAM IS NOW FILLED. Clearing a
+// queue's watched state is three stores — the `done` / `done_at` flags in `queues.yaml`, the
+// `queue_entry_history` rows and the `lead_cooldown` rows — and
+// `watchedReset.resetQueueWatchedState(setId)` owns all three for the seasonal reset, which
+// clears the same state on a DATE (decision
+// `2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`). Two features, one
+// clear: a second implementation is the thing this file exists not to be.
 //
-// Until that wiring lands, an exhausted restart clears the done flags and leaves the ledger
-// rows alone: the queue plays again, and a queue on `watch_history: queue` keeps its own
-// per-item completions until the rebase.
+// This file wrote a weaker one while that function was on another branch — `queues.clearDone`
+// alone, which left the ledger rows behind, so a queue on `watch_history: queue` restarted a
+// round it was still recorded as having watched. That default is DELETED.
+//
+// ⚠️ THE DEFAULT IS THE REAL RESET, not a boot-time injection, and the difference is not a
+// preference. `finished.applyQueueWriteSide` runs inside `session.startSession`, and every
+// offline session harness (`e2e/keep-completed-test.ts`, `e2e/seasonal-reset-test.ts`, and any
+// written after them) imports `session.js` directly and never reaches `index.ts`. A wiring
+// call at boot would therefore be live in production and absent from every gate — which is a
+// second implementation again, wearing a different hat. `setQueueWatchedStateReset` stays, and
+// its one caller is `e2e/completion-mode-test.ts`, which replaces the clear with a recorder to
+// prove the exhaustion rule decides WHEN and nothing else.
 import * as queues from './queues.js';
+import { resetQueueWatchedState } from './watchedReset.js';
 
 /**
  * Clear one queue's watched state so a new round can start.
  *
- * The signature is `resetQueueWatchedState(setId)`'s, on purpose — the wiring is an
- * assignment, not an adapter.
+ * The signature is `resetQueueWatchedState(setId)`'s first parameter, so a substitute a gate
+ * supplies needs to know nothing about reasons or counts.
  */
 export type QueueWatchedStateReset = (setName: string) => Promise<void>;
 
 /**
- * The part of the clear this branch owns: strip `done` / `done_at` from every entry of the
- * set. It calls `queues.clearDone`, the same writer the stale-done revival uses, rather than
- * re-deriving what "cleared" means.
+ * The real clear, adapted to this seam's shape rather than the other way round.
+ *
+ * The adapter exists for the REASON, not for the signature: `resetQueueWatchedState` settles
+ * `queue_watched_reset` with why it ran, and an exhausted round is neither the Actions menu
+ * (`manual`) nor a date (`MM-DD`). It is `exhausted`, and the log and the API say so.
+ *
+ * ⚠️ It DOES settle the seasonal clock, and that is correct rather than a coupling accident.
+ * `settled_at` means *no occurrence at or before this moment owes this queue a reset* — and
+ * after a restart the queue's watched state is empty, so every past occurrence has nothing
+ * left to clear. Settling here stops a seasonal reset firing seconds later to clear nothing.
+ * It cannot swallow a reset that was owed: `applySeasonalReset` runs in `session.startSession`
+ * BEFORE `provider.buckets()`, and `restartIfExhausted` runs in the write side AFTER it, so
+ * within one play the seasonal reset always goes first.
  */
-async function clearDoneFlags(setName: string): Promise<void> {
-  const entries = await queues.listSet(setName);
-  const doneKeys = entries.filter((entry) => entry.done).map((entry) => entry.key);
-  if (!doneKeys.length) return;
-  await queues.clearDone(setName, doneKeys);
-}
+const resetForExhaustion: QueueWatchedStateReset = async (setName) => {
+  await resetQueueWatchedState(setName, { reason: 'exhausted' });
+};
 
-let _reset: QueueWatchedStateReset = clearDoneFlags;
+let _reset: QueueWatchedStateReset = resetForExhaustion;
 
 /**
- * Replace the clear. `feat/seasonal-reset-core` hands this
- * `resetQueueWatchedState`, which also drops the `queue_entry_history` and `lead_cooldown`
- * rows; call it ONCE, at boot, beside the other wiring.
+ * Replace the clear.
+ *
+ * Not the production wiring — the default above already is that. This exists so a gate can
+ * prove the exhaustion rule decides WHEN independently of what the clear does;
+ * `e2e/completion-mode-test.ts` is its one caller.
  */
 export function setQueueWatchedStateReset(reset: QueueWatchedStateReset): void {
   _reset = reset;
