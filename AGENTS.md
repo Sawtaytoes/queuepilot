@@ -1015,6 +1015,51 @@ keep the opposite default: absent from `skipped:` means playable
 
 Gate: `e2e/specials-count-test.ts` plus `web/src/lib/skipList.test.ts`.
 
+## Completion is ONE question with four answers
+
+The Set editor asks it once, as a Charcuterie `Picker`
+([decision](docs/decisions/2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes.md)).
+It replaced `Playlist mode` and `Demo reel` as CHECKBOXES, where ticking the second forced the
+first on and disabled it — a four-state control drawn as two two-state ones.
+
+| Mode | Marks an entry done | Plays the whole lineup each scan | When everything is done |
+| --- | --- | --- | --- |
+| **Consume** — the default | Yes | No | The queue runs dry |
+| **Start over when exhausted** | Yes | No | Clears, and a new round starts |
+| **Playlist mode** (`keep_completed`) | No | No | Never happens |
+| **Demo reel** (`reel`) | No | Yes | Never happens |
+
+Four things bite here.
+
+- **STORAGE DID NOT CHANGE, and that is the point.** `keep_completed` and `reel` are still the
+  keys on disk; `restart_when_exhausted` is ONE MORE BOOLEAN beside them, never a `mode:`
+  string. So nothing migrated, a hand-edited `sets.yaml` keeps working, and a key nobody
+  promoted was not dropped. `web/src/lib/completionMode.ts` is the whole translation, both
+  ways. **Do not "tidy" the three booleans into one enum** — that is the migration this design
+  exists to avoid.
+- **`restart_when_exhausted` is a THIRD AXIS, not a rename.** `keep_completed` and `reel` both
+  work by never marking anything done (`finished.ts applyQueueWriteSide()`: a `reel` returns
+  before writing anything, a `keep_completed` set still revives and sweeps but never marks).
+  This one MARKS, so nothing repeats while anything is unwatched. Neither existing flag can
+  express it.
+- **An illegal combination is RESOLVED, never refused.** The precedence is
+  `reel` > `keep_completed` > `restart_when_exhausted`, and it is the engine's own: a set that
+  never marks an entry done can never run out of them. `sets.ts normalize()`,
+  `engine/routing.ts loadSets()` and `completionMode.ts completionModeOf()` all report the same
+  EFFECTIVE triple, which is what stops the editor and the engine disagreeing about a
+  contradictory file. `e2e/set-passthrough-parity.ts` pins it — this knob is read by
+  `applyQueueWriteSide` and by nothing else, so a loader that forgot it would read `undefined`
+  there and the queue would silently never start a new round.
+- ⚠️ **CLEARING THE WATCHED STATE IS A SEAM, AND THERE MUST BE ONE IMPLEMENTATION.**
+  `server/src/exhaustion.ts` decides WHEN (every entry of the queue is done) and calls an
+  INJECTED reset; the reset itself is the seasonal reset's `resetQueueWatchedState(setId)`,
+  which owns all three stores — the `done`/`done_at` flags, the `queue_entry_history` rows and
+  the `lead_cooldown` rows. Two features, one clear. The default in that file strips the done
+  flags through `queues.clearDone` and nothing else, so **a new round is only genuinely
+  playable on a queue that owns its history** (`watch_history: queue`) — a queue on PROVIDER
+  history is still watched in Plex, and neither this nor the seasonal reset can change that.
+  Gate: `e2e/completion-mode-test.ts`.
+
 ## The page loads from CACHE, and phase 3 re-reads the providers
 
 **`GET /api/queues` makes no provider call.** Every entry resolves out of three tables —
@@ -1100,6 +1145,7 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/pending-dismiss-test.ts # Dismiss removes the card now and after reload
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
+server/node_modules/.bin/tsx e2e/completion-mode-test.ts  # the four completion modes + the reset seam
 server/node_modules/.bin/tsx e2e/resume-on-advance-test.ts  # which queued items get seeked, and once each
 server/node_modules/.bin/tsx e2e/resume-latency-test.ts  # the seek latency budget, before and after
 server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts  # the plex.tv target cache + the command id

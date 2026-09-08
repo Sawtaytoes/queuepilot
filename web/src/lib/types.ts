@@ -529,6 +529,15 @@ export type RegistrySet = {
    */
   reel?: boolean
   /**
+   * Curated queues only. Start over when exhausted: mark entries done as usual, then clear
+   * the queue's watched state once the LAST one finishes, so a new round starts. The THIRD
+   * completion axis — `keep_completed` and `reel` both work by never marking anything done,
+   * and this one marks. Reported EFFECTIVE, so it is false whenever either of those is on.
+   * The editor reads all three as ONE picker
+   * (decision `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`).
+   */
+  restart_when_exhausted?: boolean
+  /**
    * Curated queues only. Opt-in TTL for auto-removing finished entries
    * (`"24h"` / `"7d"` / …). null/absent = keep forever. Movie queues often ship as
    * `"24h"`; anime channels stay keep-forever by design.
