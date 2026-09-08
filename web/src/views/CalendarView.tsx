@@ -456,65 +456,79 @@ function CalendarRow({
               <span className={styles.dateLabel}>
                 In season from
               </span>
-              <SelectListbox
-                id={`calendar-${set.id}-season-start-month`}
-                label="Season start month"
-                onChange={(value) =>
-                  patch({
-                    seasonStartDay: onMonthChange(
-                      value,
-                      draft.seasonStartDay,
-                    ),
-                    seasonStartMonth: value,
-                  })
-                }
-                options={SEASON_MONTH_OPTIONS}
-                size="sm"
-                value={draft.seasonStartMonth}
-              />
-              <SelectListbox
-                id={`calendar-${set.id}-season-start-day`}
-                isDisabled={!draft.seasonStartMonth}
-                /* Keyed on the MONTH: the day list narrows with it, so a stored 31 has to be
+              <span className={styles.datePair}>
+                <SelectListbox
+                  id={`calendar-${set.id}-season-start-month`}
+                  label="Season start month"
+                  onChange={(value) =>
+                    patch({
+                      seasonStartDay: onMonthChange(
+                        value,
+                        draft.seasonStartDay,
+                      ),
+                      seasonStartMonth: value,
+                    })
+                  }
+                  options={SEASON_MONTH_OPTIONS}
+                  size="sm"
+                  value={draft.seasonStartMonth}
+                />
+                <SelectListbox
+                  id={`calendar-${set.id}-season-start-day`}
+                  isDisabled={!draft.seasonStartMonth}
+                  /* Keyed on the MONTH: the day list narrows with it, so a stored 31 has to be
                    re-seeded when the window moves to a 30-day month. */
-                key={`ssd-${draft.seasonStartMonth}`}
-                label="Season start day"
-                onChange={(value) =>
-                  patch({ seasonStartDay: value })
-                }
-                options={dayOptions(draft.seasonStartMonth)}
-                size="sm"
-                value={draft.seasonStartDay}
-              />
-              <span className={styles.dateTo}>to</span>
-              <SelectListbox
-                id={`calendar-${set.id}-season-end-month`}
-                label="Season end month"
-                onChange={(value) =>
-                  patch({
-                    seasonEndDay: onMonthChange(
-                      value,
-                      draft.seasonEndDay,
-                    ),
-                    seasonEndMonth: value,
-                  })
-                }
-                options={SEASON_MONTH_OPTIONS}
-                size="sm"
-                value={draft.seasonEndMonth}
-              />
-              <SelectListbox
-                id={`calendar-${set.id}-season-end-day`}
-                isDisabled={!draft.seasonEndMonth}
-                key={`sed-${draft.seasonEndMonth}`}
-                label="Season end day"
-                onChange={(value) =>
-                  patch({ seasonEndDay: value })
-                }
-                options={dayOptions(draft.seasonEndMonth)}
-                size="sm"
-                value={draft.seasonEndDay}
-              />
+                  key={`ssd-${draft.seasonStartMonth}`}
+                  label="Season start day"
+                  onChange={(value) =>
+                    patch({ seasonStartDay: value })
+                  }
+                  options={dayOptions(
+                    draft.seasonStartMonth,
+                  )}
+                  /* An unchosen day reads "—", not the first option's "1". `Picker` falls back
+                   to the first label when a value matches nothing, and a control that says
+                   "1" while holding nothing is a control that has answered a question nobody
+                   asked. */
+                  placeholder="—"
+                  size="sm"
+                  value={draft.seasonStartDay}
+                />
+              </span>
+              {/* "to" travels with the END of the window rather than the start, so a wrap
+                  reads "Jun 1 / to Aug 31" instead of leaving the word stranded. */}
+              <span className={styles.datePair}>
+                <span className={styles.dateTo}>to</span>
+                <SelectListbox
+                  id={`calendar-${set.id}-season-end-month`}
+                  label="Season end month"
+                  onChange={(value) =>
+                    patch({
+                      seasonEndDay: onMonthChange(
+                        value,
+                        draft.seasonEndDay,
+                      ),
+                      seasonEndMonth: value,
+                    })
+                  }
+                  options={SEASON_MONTH_OPTIONS}
+                  size="sm"
+                  value={draft.seasonEndMonth}
+                />
+                <SelectListbox
+                  id={`calendar-${set.id}-season-end-day`}
+                  isDisabled={!draft.seasonEndMonth}
+                  key={`sed-${draft.seasonEndMonth}`}
+                  label="Season end day"
+                  onChange={(value) =>
+                    patch({ seasonEndDay: value })
+                  }
+                  options={dayOptions(draft.seasonEndMonth)}
+                  placeholder="—"
+                  size="sm"
+                  value={draft.seasonEndDay}
+                />
+              </span>
             </div>
 
             {isResettable ? (
@@ -522,34 +536,36 @@ function CalendarRow({
                 <span className={styles.dateLabel}>
                   Clear watched state each year on
                 </span>
-                <SelectListbox
-                  id={`calendar-${set.id}-reset-month`}
-                  label="Reset month"
-                  onChange={(value) =>
-                    patch({
-                      resetDay: clampDay(
-                        value,
-                        draft.resetDay,
-                      ),
-                      resetMonth: value,
-                    })
-                  }
-                  options={RESET_MONTH_OPTIONS}
-                  size="sm"
-                  value={draft.resetMonth}
-                />
-                <SelectListbox
-                  id={`calendar-${set.id}-reset-day`}
-                  isDisabled={!draft.resetMonth}
-                  key={`rd-${draft.resetMonth}`}
-                  label="Reset day"
-                  onChange={(value) =>
-                    patch({ resetDay: value })
-                  }
-                  options={dayOptions(draft.resetMonth)}
-                  size="sm"
-                  value={draft.resetDay}
-                />
+                <span className={styles.datePair}>
+                  <SelectListbox
+                    id={`calendar-${set.id}-reset-month`}
+                    label="Reset month"
+                    onChange={(value) =>
+                      patch({
+                        resetDay: clampDay(
+                          value,
+                          draft.resetDay,
+                        ),
+                        resetMonth: value,
+                      })
+                    }
+                    options={RESET_MONTH_OPTIONS}
+                    size="sm"
+                    value={draft.resetMonth}
+                  />
+                  <SelectListbox
+                    id={`calendar-${set.id}-reset-day`}
+                    isDisabled={!draft.resetMonth}
+                    key={`rd-${draft.resetMonth}`}
+                    label="Reset day"
+                    onChange={(value) =>
+                      patch({ resetDay: value })
+                    }
+                    options={dayOptions(draft.resetMonth)}
+                    size="sm"
+                    value={draft.resetDay}
+                  />
+                </span>
               </div>
             ) : null}
           </div>
