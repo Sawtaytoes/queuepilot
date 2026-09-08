@@ -535,6 +535,25 @@ export type RegistrySet = {
    */
   remove_completed_after?: string | null
   /**
+   * THE SEASON WINDOW — `MM-DD` / `MM-DD`, repeating every year, or null on a queue that is
+   * available all year. Both ends or neither; the server refuses a half-written pair by name.
+   *
+   * On BOTH sources: a Rules pool is as seasonal as a Picks queue, and the six availability
+   * call sites never ask which kind a set is.
+   */
+  season_start?: string | null
+  season_end?: string | null
+  /**
+   * Is today inside that window — the SERVER's answer, computed on the read that produced
+   * this row. Nothing in the browser re-derives the calendar rule.
+   *
+   * ⚠️ It is NOT folded into an availability flag, and the two must stay apart on screen: a
+   * queue the owner switched off and a queue that is out of season are different facts, and
+   * only the second one gets the "returns <date>" mark
+   * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+   */
+  is_in_season?: boolean
+  /**
    * Curated sets only. The set-wide default for WHERE a multi-episode batch may stop; an
    * entry can override it. null/absent = no boundary (fill the batch across anything).
    */

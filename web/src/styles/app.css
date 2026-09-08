@@ -2372,6 +2372,30 @@ body.queue-view #tools {
 #setmodal .fieldselect {
   margin-inline-start: 10px;
 }
+/* THE SEASON WINDOW's four pickers, on one wrapping line under their label.
+   A ROW rather than four stacked controls: "1 Oct to 5 Nov" is one sentence, and reading it
+   down a column makes the eye ask which two of the four belong together. It WRAPS rather than
+   scrolling, because the Narrow View must never gain horizontal scroll
+   (`narrow-scroll-test` is the gate).
+   ⚠️ `.fieldselect` carries `margin-inline-start: 10px` from the rule above, which is the
+   gutter between an inline LABEL and its trigger. Here the gap is the flex `gap`, so the
+   first trigger on each line would sit 10px further in than the label above it. */
+#setmodal .seasonrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+}
+#setmodal .seasonrow .fieldselect {
+  margin-inline-start: 0;
+}
+/* The word between the two pairs. Muted, because it is punctuation rather than a label. */
+#setmodal .seasonto {
+  color: var(--color-content-muted);
+  font-size: 0.92rem;
+  padding-inline: 2px;
+}
 #setmodal .flags > .field {
   display: flex;
   flex-wrap: wrap;
