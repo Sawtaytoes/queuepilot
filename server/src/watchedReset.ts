@@ -44,10 +44,10 @@ export interface WatchedResetCounts {
 
 export interface WatchedResetResult extends WatchedResetCounts {
   set: string;
-  /** Epoch seconds stamped on `queue_watched_reset`. */
+  /** Epoch seconds settled on `queue_watched_reset`. */
   resetAt: number;
-  /** The `MM-DD` occurrence that fired it, or null when a person asked. */
-  reason: string | null;
+  /** `'manual'`, or the `MM-DD` occurrence that fired it. */
+  reason: string;
 }
 
 /**
@@ -62,15 +62,16 @@ export interface WatchedResetResult extends WatchedResetCounts {
  *     why;
  *  3. the `lead_cooldown` rows, so an entry that led last season can lead again.
  *
- * `atSec` and `reason` are passed in so the seasonal caller's clock and its stamp agree, and so
- * the stamp records WHICH occurrence fired. A manual reset passes neither.
+ * `atSec` and `reason` are passed in so the seasonal caller's clock and the row it settles
+ * agree, and so the row records WHICH occurrence fired. A manual reset passes neither and
+ * settles as `'manual'` at the current moment.
  */
 export async function resetQueueWatchedState(
   setId: string,
-  opts: { atSec?: number; reason?: string | null } = {},
+  opts: { atSec?: number; reason?: string } = {},
 ): Promise<WatchedResetResult> {
   const atSec = Math.floor(opts.atSec ?? Date.now() / 1000);
-  const reason = opts.reason ?? null;
+  const reason = opts.reason ?? 'manual';
 
   // 1. The `done` flags. Read the list first so the count is what was actually cleared rather
   //    than a `changed: boolean`; `clearDone` answers all-or-nothing and the dialog needs a
@@ -87,7 +88,9 @@ export async function resetQueueWatchedState(
   // 3. The lead windows.
   const leadCooldowns = await promote.clearSetLeads(setId);
 
-  queueWatchedReset.stampReset(setId, atSec, reason);
+  // Settle the queue through this moment, so the read AFTER this one does not reset it again.
+  // There is no timer holding that state — this row is it.
+  queueWatchedReset.settle(setId, atSec, reason);
 
   // The tiles carry a Completed badge and the shelf skeleton carries the lane split, both of
   // which just changed. Best-effort: the cache is derived and a failure here must not turn a
@@ -106,7 +109,7 @@ export async function resetQueueWatchedState(
   };
   console.log(
     `[reset] ${setId} cleared ${counts.entries} done flags, ${counts.historyRows} history rows, `
-    + `${counts.leadCooldowns} lead cooldowns${reason ? ` (reset date ${reason})` : ' (manual)'}`,
+    + `${counts.leadCooldowns} lead cooldowns (${reason})`,
   );
   return { set: setId, resetAt: atSec, reason, ...counts };
 }
@@ -114,10 +117,10 @@ export async function resetQueueWatchedState(
 /**
  * The READ-TIME check. Called on the play path, never on a timer.
  *
- * Returns the reset that happened, or null when the queue is not configured, is not past its
- * date, or has already reset for this year's occurrence. A queue with no `reset_watched_on`
- * costs one `parseResetDate` of a null and behaves exactly as it does today — no database read
- * at all, which is why the guard is FIRST.
+ * Returns the reset that happened, or null when the queue is not configured, is ADOPTING its
+ * date on this read (see below), is not past that date, or has already reset for this year's
+ * occurrence. A queue with no `reset_watched_on` costs one string test and behaves exactly as
+ * it does today — no database read at all, which is why the guard is FIRST.
  *
  * ⚠️ `remove_completed_after` DEFEATS this, and it defeats it silently. That setting does not
  * tag an entry, it DELETES the entry from the queue, so a seasonal queue with a TTL set has
@@ -134,17 +137,36 @@ export async function applySeasonalReset(
   // The cheap guard, before anything opens the book of record.
   if (resetWatchedOn == null || String(resetWatchedOn).trim() === '') return null;
 
-  let stamp: number | null = null;
+  let settledAt: number | null = null;
   try {
-    stamp = queueWatchedReset.lastResetFor(setId)?.lastResetAt ?? null;
+    settledAt = queueWatchedReset.settlementFor(setId)?.settledAt ?? null;
   } catch (e) {
     // A store that cannot be read must not stop the queue playing. Skipping the reset is the
     // safe direction: it happens on the next read, which is what a missed day already means.
-    console.log(`[reset] ${setId}: could not read the reset stamp (${errMessage(e)})`);
+    console.log(`[reset] ${setId}: could not read the reset settlement (${errMessage(e)})`);
     return null;
   }
 
-  const verdict = isResetDue({ resetWatchedOn, lastResetAt: stamp, now });
+  // ⚠️ ADOPTION. A queue with a date and no row has just been given one, and the most recent
+  // occurrence of any date is in the PAST — so the literal reading fires immediately. That
+  // would mean adding `reset_watched_on: 11-01` to a running Halloween queue in October throws
+  // the season away on the very next play, with no confirm and nothing on screen to say why.
+  //
+  // So the first read SETTLES the occurrence that has already passed and clears nothing. The
+  // reset then fires on the NEXT one, which is what "clear this queue once a year on this date"
+  // means to the person who typed it. Somebody who wants it now has the Actions menu, which
+  // names the count before it does anything.
+  if (settledAt == null) {
+    const nowSec = Math.floor(now.getTime() / 1000);
+    queueWatchedReset.settle(setId, nowSec, 'adopted');
+    console.log(
+      `[reset] ${setId} adopted its reset date (${String(resetWatchedOn).trim()}); `
+      + 'nothing cleared — the first reset is the next time that date comes round.',
+    );
+    return null;
+  }
+
+  const verdict = isResetDue({ resetWatchedOn, lastResetAt: settledAt, now });
   if (!verdict.isDue) return null;
 
   const ttl = cfg?.remove_completed_after;

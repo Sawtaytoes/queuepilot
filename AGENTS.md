@@ -659,6 +659,74 @@ same sheet can mark the next item complete and undo the latest completion.
 The one-shot upgrade is `server/src/tools/migrate-entry-objects.ts` — dry run by default, backup
 first, idempotent. **It runs BEFORE the new code deploys**, never after.
 
+### A queue can clear its own watched state on a date each year
+
+`reset_watched_on: "MM-DD"` on a curated set. On the first play after that date passes, every
+completion the queue owns is cleared and it plays from the start again — the Halloween queue's
+answer to "next October"
+([decision](docs/decisions/2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year.md)).
+Six things bite, and four of them bite silently.
+
+- ⚠️ **IT IS EVALUATED ON A READ. THERE IS NO TIMER ANYWHERE IN THE FEATURE, and that is the
+  decision, not an omission.** No `setInterval`, no cron, no scheduler.
+  `session.startSession()` asks `watchedReset.applySeasonalReset()` on the play path, which is
+  the same read that already consumes `promote_window`. A timer that does not fire is
+  invisible until somebody notices a repeat; a comparison against the date cannot silently not
+  happen. A missed day corrects itself — nobody plays it until December, it resets in December.
+  `e2e/seasonal-reset-test.ts` §6b greps the three modules for a timer.
+- ⚠️ **THE CHECK RUNS ABOVE THE LINEUP BUILD, and a version below it passes every other
+  assertion.** The reset clears the `done` flags the resolver is about to read, so a call
+  placed after `provider.buckets()` clears the same three things and the November queue still
+  plays its last October item once more — only the sitting AFTER that starts over. Gated by
+  §3d, which marks an unwatched movie `done`, plays, and asserts that movie reached the
+  delivery layer on that same scan.
+- **A RESET CLEARS THREE THINGS and only the first is obvious.** The `done` / `done_at` flags;
+  every `queue_entry_history` row for the set, which is where the completions live on
+  `watch_history: queue`; and the `lead_cooldown` rows, so an entry that led last season can
+  lead again. Clearing only the flags leaves a partly watched series stuck at the episode it
+  reached with no badge to explain why. The history clear is **whole-set**
+  (`queueEntryHistory.clearSet`), never a loop over the current entries — a line re-keyed since
+  it played leaves rows no current key answers to.
+- ⚠️ **A RESET NEVER WRITES TO A PROVIDER**, in either direction. `watchedReset.ts` imports
+  none and may import none; §6a asserts it. This is not a courtesy — the household server holds
+  other people's watch state in the same Plex profile, and a queue clearing its own rows is the
+  only version of this that is safe there.
+- ⚠️ **`queue_watched_reset.settled_at` IS NOT "WHEN IT LAST RESET".** It means *no occurrence
+  at or before this moment owes this queue a reset*, and the difference is what stops the
+  feature wiping a season the day it is switched on. A queue with a date and no row has just
+  been GIVEN one, and the most recent occurrence of any date is in the past — so the literal
+  reading fires immediately. The first read therefore **ADOPTS**: it settles the occurrence
+  already passed, clears nothing, writes `reason: 'adopted'`, and the reset fires on the NEXT
+  one. Somebody who wants it now has the Actions menu, which names the count first. That rule
+  is this repo's, not the decision record's; the record does not contemplate the adoption
+  moment.
+- ⚠️ **`remove_completed_after` DEFEATS this, silently.** That setting DELETES a finished entry
+  rather than tagging it, so a seasonal queue with a TTL has nothing left to reset when the
+  date arrives — the live Halloween queue was found carrying `24h`. The Set editor's hint says
+  so where the two sit, and `applySeasonalReset` logs it. Nothing can fix it in code: the
+  entries are gone.
+
+Three doors onto **one** function, and there is no second implementation
+([decision](docs/decisions/2026-09-08-the-reset-is-exposed-on-the-api-and-mqtt-without-a-home-assistant-automation.md)):
+the Actions menu, `POST /api/queues/:set/reset-watched`, and the MQTT command
+`queuepilot/cmd/queue/reset-watched` (`{"set": "<id>"}`), answered on
+`queuepilot/resp/reset-watched`. **This repo ships no Home Assistant automation and no Home
+Assistant dependency** — the topic is a seam, the repo is public, and the household's own case
+needs nothing to publish on it. Both server doors refuse a set that is not a curated queue
+rather than reporting three zeros as a success.
+
+The date is stored `MM-DD` and is **validated on write** (`sets.normalizeResetWatchedOnForWrite`
+throws), unlike `promote_window`, which is stored verbatim — a value nobody looks at again for a
+year cannot be left to fall back at the consumer. It is read TOLERANTLY, so a hand-edited typo
+loads the queue with the feature off. The Set editor uses two `SelectListbox`es (named months,
+never numbers: "11" is 1 November here and 11 January in half the world), and the DAY picker is
+keyed on the MONTH — the month is the day's second writer, because choosing February clamps 31.
+
+Gates: `server/src/seasonalReset.test.ts` (the date arithmetic, with every `now` injected) and
+`e2e/seasonal-reset-test.ts` (the reset, the read-time firing, the fire-once, adoption, an off
+queue, and the two greps above). `reset_watched_on` is in `e2e/set-passthrough-parity.ts`'s
+`POST_PYTHON`, per the loader contract.
+
 ## The two lanes inside a Picks queue
 
 A Picks queue is ONE membership list with a **Priority queue** and a **Random pool**
@@ -1146,6 +1214,7 @@ PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
 server/node_modules/.bin/tsx e2e/pick-contract-test.ts   # the picker contract
 server/node_modules/.bin/tsx e2e/skipped-items-test.ts   # the curated skip rule
 server/node_modules/.bin/tsx e2e/completion-mode-test.ts  # the four completion modes + the reset seam
+server/node_modules/.bin/tsx e2e/seasonal-reset-test.ts  # a queue clears its watched state on a date, on a READ
 server/node_modules/.bin/tsx e2e/resume-on-advance-test.ts  # which queued items get seeked, and once each
 server/node_modules/.bin/tsx e2e/resume-latency-test.ts  # the seek latency budget, before and after
 server/node_modules/.bin/tsx e2e/companion-target-cache-test.ts  # the plex.tv target cache + the command id
