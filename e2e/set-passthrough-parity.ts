@@ -56,7 +56,16 @@ const FIELDS = [
  */
 const POST_PYTHON: Record<string, Record<string, unknown>> = {
   lane_priority: { add_as: 'priority', promote_window: '20h' },
-  lane_default: { add_as: null, promote_window: null },
+  lane_default: { add_as: null, promote_window: null, restart_when_exhausted: false },
+  // The third completion axis, added 2026-09-08. It is read by
+  // `finished.applyQueueWriteSide` and by nothing else, so a loader that forgot it would read
+  // `undefined` there and the queue would simply never start a new round — exactly the silent
+  // disablement this whole gate exists for. The two contradictory sets pin the PRECEDENCE:
+  // a set that never marks an entry done can never exhaust, so `keep_completed` and `reel`
+  // both win, and the answer is resolved rather than refused.
+  restart_round: { restart_when_exhausted: true },
+  restart_vs_playlist: { restart_when_exhausted: false, keep_completed: true },
+  restart_vs_reel: { restart_when_exhausted: false, keep_completed: true, reel: true },
 };
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.

@@ -62,6 +62,7 @@ type RawSetEntry = BindingSource & {
   superseded_by?: unknown;
   reel?: unknown;
   keep_completed?: unknown;
+  restart_when_exhausted?: unknown;
   requires_profile?: unknown;
   remove_completed_after?: unknown;
   promote_window?: unknown;
@@ -242,6 +243,15 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         // queue. reel implies keep_completed. Both gate next_queue's D4 mark-done persistence.
         reel: Boolean(ent.reel),
         keep_completed: Boolean(ent.keep_completed || ent.reel),
+        // The THIRD completion axis: mark done as usual, then clear the queue's watched
+        // state once the last entry finishes. Carried EFFECTIVE, the same way
+        // `keep_completed` above is: a set that never marks anything done can never exhaust,
+        // so `keep_completed`/`reel` win over it (decision
+        // `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`). Read by
+        // `finished.applyQueueWriteSide` — a loader that forgot it would read `undefined`
+        // there and silently leave the queue dry, which is this file's own standing warning.
+        restart_when_exhausted: Boolean(ent.restart_when_exhausted)
+          && !ent.keep_completed && !ent.reel,
         watch_history: normalizeWatchHistory(ent.watch_history) ?? 'provider',
       };
     }
