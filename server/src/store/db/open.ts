@@ -54,8 +54,15 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * `table_xinfo`: `sets.activity` is a VIRTUAL generated column, which `table_info` does not
  * list. `role` is a plain `NOT NULL DEFAULT 'required'`, so an existing roster row keeps the
  * only meaning it had.
+ *
+ * 7: `queue_watched_reset` — the seasonal reset stamp
+ * (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year). ONE new
+ * table, no changed column, so an existing file absorbs it by re-running `schema.sql`. The
+ * number moves for the reason 2 and 3 record: a rollback to a pre-reset image must refuse the
+ * file rather than write rows a newer schema will misread. Losing this table alone would not
+ * lose queue data — it would let a queue reset twice on its date, once per read.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;

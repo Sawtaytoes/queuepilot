@@ -101,6 +101,23 @@ export async function clearLead(setId: string, entryKey: string): Promise<void> 
   }
 }
 
+/**
+ * Drop EVERY cooldown this set holds, and say how many went.
+ *
+ * The third of the three things a seasonal reset clears
+ * (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year). Without
+ * it an entry that led the queue in October is still inside its window in November and cannot
+ * lead the new season — which reads on screen as the promote simply not working.
+ *
+ * Unlike `clearLead` this RETURNS a count and does not swallow the error into a log line: it
+ * is one third of a number the confirm dialog shows a person, so a failure has to reach the
+ * caller rather than under-report.
+ */
+export async function clearSetLeads(setId: string): Promise<number> {
+  const result = stmt('DELETE FROM lead_cooldown WHERE set_id = ?').run(setId);
+  return Number(result.changes);
+}
+
 /** Test helper: close the book of record so a later open picks up a fresh path. */
 export function _closeForTests(): void {
   closeBookOfRecord();
