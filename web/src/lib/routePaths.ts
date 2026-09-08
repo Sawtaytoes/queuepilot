@@ -17,6 +17,7 @@
  *   `/collection`                   COLLECTION — choose one maintained collection
  *   `/collection/board-games`       BOARD GAMES — the shelf, and "we played this"
  *   `/queues`                       all Picks and Rules queues
+ *   `/calendar`                     CALENDAR — every queue that has a date, and its dates
  *   `/people`                       roster and saved audience-group management
  *   `/q/<id>`                       one curated queue / channel as a grid
  *   `/channels/<id>`                one rule-based queue
@@ -61,6 +62,13 @@ export const BOARD_GAME_COLLECTION_PATH = `${COLLECTION_PATH}/board-games`
  */
 export const ROUTE_PATHS = {
   admin: "/admin",
+  /**
+   * THE CALENDAR — a second editor for the two date-based queue settings, the season window
+   * and the reset date. It EDITS: a view that can show a wrong date and not fix it sends the
+   * reader somewhere else to fix it
+   * (decision `2026-09-08-a-calendar-view-is-a-second-editor-for-date-based-queue-settings`).
+   */
+  calendar: "/calendar",
   boardGameCollection: `${BOARD_GAME_COLLECTION_PATH}/*`,
   collection: COLLECTION_PATH,
   channels: "/channels/:channelId",

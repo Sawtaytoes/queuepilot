@@ -1,0 +1,86 @@
+# queuepilot set registry — THE CALENDAR VIEW'S FIXTURE.
+#
+# Synthetic, like every fixture here: the cast is the invented one (Bob, Alice, Carol) and the
+# section ids are the harness's. It exists because the calendar view needs a registry that
+# holds every combination of the two date-based settings AT ONCE, and no other fixture does:
+#
+#   * `bob`           — a season window AND a reset date, the Halloween shape the feature was
+#                       built for. Its window is 1 Oct → 5 Nov, so it is out of season for most
+#                       of the year and the "returns 1 Oct" mark has something to say.
+#   * `bob_alice`     — a season window and NO reset date. A queue can be seasonal and never
+#                       reset (the two settings are independent, and the owner split them on
+#                       purpose).
+#   * `bob_anime`     — a reset date and NO season window. The other half of that split.
+#   * `family`        — NEITHER, so it is the queue the Add control offers and the proof that a
+#                       queue with no dates does not appear.
+#   * `younger`       — a ROTATION pool with a season window. A Rules pool is as seasonal as a
+#                       Picks queue, and it must NOT be offered a reset date: the server refuses
+#                       `reset_watched_on` on a rotation set, because a pool owns none of the
+#                       three things a reset clears.
+#   * `older`         — a rotation pool with no dates at all.
+#
+# ⚠️ The dates are LITERAL and not computed from today. The season window's evaluation is the
+# server's (`is_in_season`), and this fixture is read by a screenshot as much as by an
+# assertion — a date that moves with the clock makes both unreproducible.
+global:
+  excluded_sections: []
+
+sets:
+  - id: bob
+    label: Bob — Halloween
+    kind: movies
+    source: queue
+    sections: [1, 14]
+    watch_history: queue
+    season_start: "10-01"
+    season_end: "11-05"
+    reset_watched_on: "11-01"
+  - id: bob_alice
+    label: Bob & Alice — Advent
+    kind: movies
+    source: queue
+    sections: [1, 14]
+    # WRAPS the new year, which is the case a `start <= today && today <= end` test gets wrong
+    # by being false every day of its own season.
+    season_start: "12-01"
+    season_end: "01-06"
+  - id: bob_anime
+    label: Bob — Anime
+    kind: anime
+    source: queue
+    sections: [11]
+    watch_history: queue
+    reset_watched_on: "04-01"
+  - id: family
+    label: Family — Movies
+    kind: movies
+    source: queue
+    sections: [1]
+  - id: younger
+    label: Younger Kids
+    kind: cartoons
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
+    movie_ratings: [TV-Y, TV-Y7, TV-Y7-FV, TV-G, G]
+    blocklist: []
+    plex_user: Younger Kids
+    account_id: 11111111
+    user_uuid: "1111111111111111"
+    watch_count_accounts: [11111111]
+    season_start: "06-01"
+    season_end: "08-31"
+  - id: older
+    label: Older Kids
+    kind: cartoons
+    source: rotation
+    sections: [5]
+    item_sections: [15]
+    allowed_ratings: [TV-PG, PG]
+    movie_ratings: [TV-PG, PG]
+    blocklist: []
+    plex_user: Older Kids
+    account_id: 22222222
+    user_uuid: "2222222222222222"
+    watch_count_accounts: [22222222]

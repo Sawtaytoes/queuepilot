@@ -1,11 +1,10 @@
-// The browser half of the season window is DISPLAY only — the words on a card and the rows in
-// two pickers. The calendar rule itself is the server's `is_in_season`, and is deliberately
-// not written twice.
+// The browser half of the season window is DISPLAY only — the words on a card, and the two
+// spellings of a `MM-DD`. The calendar rule itself is the server's `is_in_season`, and is
+// deliberately not written twice. The PICKERS' options moved to `monthDay.test.ts` when a
+// third caller wanted the same twelve rows.
 import { describe, expect, it } from "vitest"
 
 import {
-  dayOptions,
-  MONTH_OPTIONS,
   parseSeasonDay,
   seasonDayLabel,
   seasonDayValue,
@@ -26,26 +25,7 @@ describe("the words on an out-of-season card", () => {
   })
 })
 
-describe("the two pickers", () => {
-  it("offers a blank month, which is how a season is cleared", () => {
-    expect(MONTH_OPTIONS[0]).toEqual({
-      label: "—",
-      value: "",
-    })
-    expect(MONTH_OPTIONS).toHaveLength(13)
-  })
-
-  it("narrows the day list to the month's own length", () => {
-    // A control that offers a value the server refuses is a control that looks broken.
-    expect(dayOptions("2")).toHaveLength(29)
-    expect(dayOptions("4")).toHaveLength(30)
-    expect(dayOptions("1")).toHaveLength(31)
-  })
-
-  it("offers 31 before a month is chosen", () => {
-    expect(dayOptions("")).toHaveLength(31)
-  })
-
+describe("the stored MM-DD", () => {
   it("joins the pair into the one padded spelling the server stores", () => {
     expect(seasonDayValue("10", "1")).toBe("10-01")
     expect(seasonDayValue("1", "1")).toBe("01-01")
