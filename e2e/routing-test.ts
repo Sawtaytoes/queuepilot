@@ -26,7 +26,7 @@ const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' :
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/q/bob', '/channels/younger', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
+for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/calendar', '/q/bob', '/channels/younger', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
   const res = await fetch(BASE + path);
   const body = await res.text();
   ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
@@ -85,19 +85,23 @@ const modeLinks = await page.$$eval('#mode-landing a', (els) =>
   })),
 );
 ok(
-  'the task home offers two starts and four management destinations',
-  modeLinks.length === 6 &&
+  'the task home offers two starts and five management destinations',
+  modeLinks.length === 7 &&
     modeLinks[0]?.href === '/what-to-watch-play' &&
     modeLinks[0].text?.startsWith('What to Watch/Play') === true &&
     modeLinks[1]?.href === '/queues' &&
     modeLinks[1].text?.startsWith('Open a queue') === true &&
-    modeLinks.some((link) => link.href === '/people' && link.text?.startsWith('People')),
+    modeLinks.some((link) => link.href === '/people' && link.text?.startsWith('People')) &&
+    // The calendar is reachable from the front door. A route nobody can navigate to is not the
+    // "another mechanism for maintaining it" the decision record asks for.
+    modeLinks.some((link) => link.href === '/calendar' && link.text?.startsWith('Calendar')),
 );
 
 for (const [path, want] of [
   ['/overview', 'Overview'],
   ['/people', 'People'],
   ['/queues', 'Queues'],
+  ['/calendar', 'Calendar'],
   ['/q/bob', 'Bob — Movies'],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.

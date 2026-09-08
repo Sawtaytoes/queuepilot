@@ -65,6 +65,16 @@ describe("the route table", () => {
     expect(match("/queues").route).toBe("queues")
   })
 
+  test("/calendar is the date-based settings editor", () => {
+    // A SECOND editor for the season window and the reset date, and a real route rather than a
+    // `useState` fork off the queue index
+    // (decision `2026-09-08-a-calendar-view-is-a-second-editor-for-date-based-queue-settings`).
+    expect(match("/calendar").route).toBe("calendar")
+    expect(match("/calendar/").route).toBe("calendar")
+    // …and a longer word that merely starts the same way is not it.
+    expect(match("/calendars").route).toBe("fallback")
+  })
+
   test("the retired queue-kind indexes have redirect routes", () => {
     expect(match("/picks").route).toBe("legacyPicks")
     expect(match("/channels").route).toBe("legacyChannels")
