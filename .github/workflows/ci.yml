@@ -445,6 +445,20 @@ jobs:
       - name: Set-passthrough parity (Node engine ↔ recorded oracle)
         run: $TSX e2e/set-passthrough-parity.ts
 
+      # THE SEASON WINDOW, at all six places that gate on `enabled`. The decision record's
+      # whole shape is "reuse the six call sites rather than adding a parallel notion of
+      # hidden", so a gate that proved the window at one of them would be proving the least
+      # interesting half — and the failure this catches is a SEVENTH place growing its own
+      # calendar rule, or one of the six drifting back to a bare `enabled` test.
+      #
+      # It also pins the rule the record is actually about: an out-of-season queue is still
+      # `enabled: true` on disk afterwards. A window that WROTE the flag would pass every
+      # availability assertion here and silently overwrite the owner's manual switch.
+      #
+      # Offline: the fixture's dates are computed FROM TODAY, so nothing stubs a clock.
+      - name: The season window gates all six enabled call sites (offline)
+        run: $TSX e2e/season-window-test.ts
+
       # Prove server/src/engine/select.js computes the unwatched-buckets pool exactly as the
       # retired Python engine did, over the committed SYNTHETIC corpus (no real library data —
       # owner decision 2026-08-07) against e2e/fixtures/golden/engine.json.
