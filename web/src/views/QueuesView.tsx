@@ -36,6 +36,7 @@ import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
 import { queueNumbers, queueTitle } from "../lib/people"
 import { ROUTE_PATHS } from "../lib/routePaths"
+import { seasonDayLabel } from "../lib/season"
 import {
   collectionOrderCount,
   isCompleted,
@@ -126,6 +127,46 @@ type RulesPreviewItem = {
   key: string
   ratingKey: string
   title: string
+}
+
+/**
+ * THE OUT-OF-SEASON MARK, on the card the queue still has.
+ *
+ * A queue out of its season is not offered on What to Watch/Play and will not start, but it is
+ * still HERE, still opens and is still editable — "a queue that vanishes is a support
+ * question; a queue that says 'Out of season · returns 1 Oct' is an answer"
+ * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+ *
+ * Three things it deliberately does not do:
+ *
+ *   * It does NOT re-derive the calendar. `is_in_season` is the server's answer, computed on
+ *     the read that produced this row, and there is exactly one implementation of that rule.
+ *   * It does NOT mark a queue the owner switched off by hand. `enabled` and the window are
+ *     independent gates; blaming the calendar for a flipped switch would send somebody to the
+ *     wrong control.
+ *   * It says nothing about watched state, because a season boundary changes none.
+ *
+ * One component for both shelf kinds — a Rules pool is as seasonal as a Picks queue, and two
+ * copies of a mark is how one of them stops matching the other.
+ */
+function SeasonMark({
+  set,
+}: {
+  set: Pick<
+    RegistrySet,
+    "is_in_season" | "season_start"
+  > | null
+}) {
+  if (!set || set.is_in_season !== false) return null
+  const returns = seasonDayLabel(set.season_start)
+
+  return (
+    <Badge intent="neutral" size="sm">
+      {returns
+        ? `Out of season · returns ${returns}`
+        : "Out of season"}
+    </Badge>
+  )
 }
 
 /**
@@ -302,6 +343,7 @@ function RulesShelf({
             {items ? "eligible" : "eligible titles"}
           </span>
         </Link>
+        <SeasonMark set={channel} />
         <PeopleRow
           groups={groups}
           members={members}
@@ -443,7 +485,12 @@ function Shelf({
    *  while the registry is still loading, which reads as push — the pre-existing default. */
   set: Pick<
     RegistrySet,
-    "id" | "delivery" | "episodes" | "vocabulary"
+    | "id"
+    | "delivery"
+    | "episodes"
+    | "is_in_season"
+    | "season_start"
+    | "vocabulary"
   > | null
   /**
    * The queue this one is a filtered VIEW of, when it is one.
@@ -764,6 +811,9 @@ function Shelf({
             </Link>
           </>
         ) : null}
+        {/* Inside the heading, beside the Filtered badge and for the same reason: a COLLAPSED
+            shelf still has to say it. */}
+        <SeasonMark set={set} />
         {/* THE LIST INHERITS THE TRAYS. Required people come first, and optional people follow.
             The shared avatar badge and visible name tell two same-activity queues apart. The
             heading's content is baseline-aligned so the badges and names read as one row. */}

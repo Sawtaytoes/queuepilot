@@ -139,6 +139,38 @@ sets:
   source: queue
   sections: [1]
 
+# season_start / season_end — THE SEASON WINDOW. Post-Python like the two lane knobs above,
+# so its expectations are authored in POST_PYTHON rather than recorded in the golden. Carried
+# RAW and trimmed, which the padded spelling pins. The window is the SECOND gate over
+# `enabled`, so a loader that drops it does not throw — every seasonal queue simply plays all
+# year round (decision 2026-09-08-a-season-window-gates-the-existing-enabled-flag).
+- id: season_autumn
+  label: Autumn Queue
+  kind: picks
+  season_start: "  10-01  "
+  season_end: "11-05"
+  source: queue
+  sections: [1]
+
+# The window that CROSSES THE NEW YEAR. Its start is after its end on the calendar, which is
+# an ordering a "helpful" writer would refuse or swap — and either would make every winter
+# season unexpressible. The loader carries it verbatim; `season.isInSeason` wraps.
+- id: season_winter
+  label: Winter Queue
+  kind: picks
+  season_start: "12-01"
+  season_end: "01-06"
+  source: queue
+  sections: [1]
+
+# No window at all — the reading the loader used to return for EVERY set, and the one that
+# must still mean "available all year".
+- id: season_none
+  label: All Year Queue
+  kind: picks
+  source: queue
+  sections: [1]
+
 # restart_when_exhausted — the THIRD completion axis (decision
 # 2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes). Carried EFFECTIVE, the
 # same way `keep_completed` is: a set that never marks an entry done can never run out of
