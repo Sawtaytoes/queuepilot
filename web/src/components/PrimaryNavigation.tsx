@@ -1,7 +1,7 @@
 import type { CategoricalIndex } from "@charcuterie/tokens"
 import {
   CATEGORICAL_INDEX_COUNT,
-  CATEGORICAL_INDEXES,
+  CATEGORICAL_SEQUENCE,
 } from "@charcuterie/tokens"
 import type { NavRailItem } from "@charcuterie/ui"
 
@@ -102,9 +102,17 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
 export const NAVIGATION_CATEGORICAL: Readonly<
   Record<string, CategoricalIndex>
 > = Object.fromEntries(
-  // Read out of `CATEGORICAL_INDEXES` rather than computed from the position. THE
-  // PALETTE IS 1-BASED — `1..10`, not `0..9` — and the first draft handed `ActionTiles`
-  // a 0 for the very first destination. Every lookup inside the library is a plain
+  // `CATEGORICAL_SEQUENCE`, not `CATEGORICAL_INDEXES`. The ring is hue-ordered for the
+  // swatch picker's sake, so walking it in order gives the first two destinations red
+  // and orange — the two closest hues the palette has. Pinning from the ring here also
+  // opted this app out of the library's own fix: `ActionTiles` walks the sequence now,
+  // but a tile that names its `categorical` keeps what it was given, so the landing
+  // stayed red-beside-orange after the bump to `@charcuterie/ui@4.3.0` while every
+  // other app changed. The sequence holds each neighbour 105 degrees or more apart.
+  //
+  // Read out of the tuple rather than computed from the position. THE PALETTE IS
+  // 1-BASED — `1..10`, not `0..9` — and the first draft handed `ActionTiles` a 0 for
+  // the very first destination. Every lookup inside the library is a plain
   // `Record<CategoricalIndex, …>`, so a 0 is `undefined` and the tile died reading
   // `.ghost` off it, taking the whole landing to a blank page.
   //
@@ -113,6 +121,8 @@ export const NAVIGATION_CATEGORICAL: Readonly<
   // the value out of the tuple makes the type honest and needs no cast at all.
   PRIMARY_NAVIGATION_ITEMS.map((item, position) => [
     item.href,
-    CATEGORICAL_INDEXES[position % CATEGORICAL_INDEX_COUNT],
+    CATEGORICAL_SEQUENCE[
+      position % CATEGORICAL_INDEX_COUNT
+    ],
   ]),
 )
