@@ -137,8 +137,9 @@ export function isConnRefused(result: { error?: string } | null | undefined): bo
 // but `driveProfile()` below WRITES that field itself on a switch it never verified, so the
 // skip was a cache confirming its own last guess. Once the guess was wrong it stayed wrong,
 // silently, on every later play: "already signed in; no picker walk" against a Shield that
-// was signed in as somebody else. Only a profile the PMS log actually SAW may skip the walk.
-// (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
+// was signed in as somebody else. Only a profile Plex identified in a PMS log line or in the
+// target player's `/status/sessions` row may skip the walk.
+// (docs/decisions/2026-09-07-a-plex-session-observation-skips-the-profile-picker.md)
 async function onRequired(required: string): Promise<boolean> {
   const seen = profiles.LAST_SEEN.title;
   if (!seen || !profiles.LAST_SEEN.isObserved) return false;
@@ -150,17 +151,61 @@ async function onRequired(required: string): Promise<boolean> {
 // NON-DESTRUCTIVE fast path: if the Shield is already signed into `required`
 // (profiles.LAST_SEEN, alias-aware via adb.sameProfile), this is a no-op — it never walks
 // the picker. Only when a real change is needed does it drive adb.switchTo, bounded-retried.
-// A successful switch RECORDS `required` into LAST_SEEN so the next gated scan skips.
+// A successful switch records only a CLAIM. The active-session preflight or the post-play
+// account audit must promote it to an OBSERVATION before a later gated scan may skip.
 async function driveProfile(
   required: string,
   cancel: CancelFlag | null,
+  accountId: number | null = null,
+  device: Device | null = null,
 ): Promise<PushResult | null> {
-  if (await onRequired(required)) {
+  // The common queue-to-queue case already has a live session on the Shield. Plex stamps that
+  // session with the account that owns it, so ask once before touching the UI. This is an
+  // OBSERVATION, unlike the ADB keypress below. A one-second ceiling keeps an unhealthy PMS
+  // from making the fast path slower than the picker it is trying to avoid.
+  let hasActiveMismatch = false;
+  if (accountId != null) {
+    const active = await playback.currentAccount({ device, timeoutMs: 1_000 });
+    if (active.accountId != null) {
+      if (active.accountId === Number(accountId)) {
+        profiles.recordObservedProfile(active.title || required);
+        console.log(
+          `[driver] active Plex session confirms '${profiles.LAST_SEEN.title}' `
+          + `(account ${active.accountId} == ${accountId}); no picker walk`,
+        );
+        return null;
+      }
+
+      // A positive mismatch invalidates any older matching observation. Keep the real title
+      // when Plex supplied it because the picker opens on that account and can use it as a
+      // navigation hint. Without a title, keep the old hint but remove its authority.
+      hasActiveMismatch = true;
+      if (active.title) profiles.recordObservedProfile(active.title);
+      else profiles.invalidateObservedProfile();
+      console.log(
+        `[driver] active Plex session is '${active.title || 'unknown'}' `
+        + `(account ${active.accountId}), not '${required}' (account ${accountId}); picker walk required`,
+      );
+    } else {
+      console.log(
+        `[driver] active Plex session did not identify a profile before '${required}': `
+        + `${active.reason || 'no account observation'}; checking the last verified profile`,
+      );
+    }
+  }
+
+  // An account-id mismatch is newer and stronger than any alias-resolved title. Never let a
+  // stale or misconfigured alias turn that positive mismatch back into a skip.
+  if (!hasActiveMismatch && await onRequired(required)) {
     console.log(
       `[driver] already signed in as '${profiles.LAST_SEEN.title}' `
       + `(== '${required}'); no picker walk`,
     );
     return null;
+  }
+
+  if (!hasActiveMismatch) {
+    console.log(`[driver] no verified profile observation matches '${required}'; picker walk required`);
   }
 
   publishAwait(`profile:${required}`);
@@ -330,7 +375,7 @@ export async function driveToPlaying({
 
   // plex_foreground -> signed_in(required). Only when the set/card demands a profile.
   if (requiredProfile) {
-    const r = await driveProfile(requiredProfile, cancel);
+    const r = await driveProfile(requiredProfile, cancel, accountId, device);
     if (r != null) {
       if (r.error === SWITCH_ERROR) {
         const profile = r._profile != null ? r._profile : requiredProfile;
@@ -361,6 +406,11 @@ export async function driveToPlaying({
   if (result && (result as PlaybackResult).played && accountId != null) {
     if (isCancelled(cancel)) return { cancelled: true };
     const verdict = await playback.verifyAccount(accountId, { device });
+    if (verdict.accountId != null) {
+      const observedTitle = verdict.title || (!verdict.isMismatch ? requiredProfile : null);
+      if (observedTitle) profiles.recordObservedProfile(observedTitle);
+      else profiles.invalidateObservedProfile();
+    }
     if (verdict.isMismatch) {
       console.log(
         `[driver] WRONG ACCOUNT: '${setLabel || setName}' is bound to account ${accountId} `
@@ -378,7 +428,10 @@ export async function driveToPlaying({
     if (verdict.accountId == null) {
       console.log(`[driver] account audit had no opinion: ${verdict.reason}`);
     } else {
-      console.log(`[driver] account audit OK: playing as ${verdict.accountId} ('${verdict.title}')`);
+      console.log(
+        `[driver] account audit OK: playing as ${verdict.accountId} ('${verdict.title}'); `
+        + 'profile observation remembered',
+      );
     }
   }
   return result;

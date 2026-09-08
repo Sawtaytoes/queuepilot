@@ -11,7 +11,8 @@
 //
 // Bug 2 — picker walked even when already on the required profile. driveProfile's
 //         "already on required -> skip" needs profiles.LAST_SEEN populated and alias-aware
-//         matching; a successful switch must RECORD the profile so the next scan skips.
+//         matching. A successful switch records only a picker hint; a PMS-log or Plex-session
+//         observation is what authorizes a later skip.
 //
 // Run:  server/node_modules/.bin/tsx e2e/fsm-wake-and-skip-test.ts   (from the repo root; exits non-zero on failure)
 
@@ -134,8 +135,9 @@ function wireDriver(aliasGroups: readonly (readonly string[])[] = [], switchOk =
 const switches = () => CTL.calls.filter((c) => c[0] === 'switch_to');
 
 // Every scenario below now turns on PROVENANCE as well as the title, because the skip is
-// only sound for a profile the PMS log actually SAW. `isObserved: true` is what
-// `profiles.waitForProfile()` sets; `driveProfile` writes the title alone, as a claim.
+// only sound for a profile Plex itself identified. `profiles.waitForProfile()` and the
+// `/status/sessions` account observation set `isObserved: true`; `driveProfile` writes the
+// title alone, as a claim.
 // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
 
 // (a) An OBSERVED LAST_SEEN == required exactly -> no picker walk.
