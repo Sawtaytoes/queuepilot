@@ -813,8 +813,9 @@ jobs:
       - name: Tile menu — lane rows, and a long press that is not also a drag
         run: $TSX e2e/tile-menu-test.ts
 
-      # THE ACTIONS MENU. Two destructive queue actions moved off the toolbar into one menu,
-      # each behind a confirm that NAMES the count. Nothing offline can see any of it: the
+      # THE ACTIONS MENU. The queue's two destructive actions sit in one menu — `Remove all
+      # completed` MOVED off the toolbar and `Mark all unwatched` is new — and each row is
+      # behind a confirm that NAMES the count. Nothing offline can see any of it: the
       # panel is a portal, the confirm is a dialog rather than `window.confirm`, and the
       # assertion that matters most is a NEGATIVE — choosing a row must write nothing until
       # the confirm's own button is pressed. Same shape as the two steps above: its own
