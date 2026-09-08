@@ -697,9 +697,9 @@ Six things bite, and four of them bite silently.
   been GIVEN one, and the most recent occurrence of any date is in the past — so the literal
   reading fires immediately. The first read therefore **ADOPTS**: it settles the occurrence
   already passed, clears nothing, writes `reason: 'adopted'`, and the reset fires on the NEXT
-  one. Somebody who wants it now has the Actions menu, which names the count first. That rule
-  is this repo's, not the decision record's; the record does not contemplate the adoption
-  moment.
+  one. Somebody who wants it now has the Actions menu, which names the count first
+  ([decision](docs/decisions/2026-09-08-adopting-a-reset-date-settles-the-past-occurrence-and-clears-nothing.md),
+  which also records why the date is validated on write and why the months are named).
 - ⚠️ **`remove_completed_after` DEFEATS this, silently.** That setting DELETES a finished entry
   rather than tagging it, so a seasonal queue with a TTL has nothing left to reset when the
   date arrives — the live Halloween queue was found carrying `24h`. The Set editor's hint says
@@ -714,6 +714,10 @@ the Actions menu, `POST /api/queues/:set/reset-watched`, and the MQTT command
 Assistant dependency** — the topic is a seam, the repo is public, and the household's own case
 needs nothing to publish on it. Both server doors refuse a set that is not a curated queue
 rather than reporting three zeros as a success.
+
+There is a FOURTH caller, and it is not a door: `exhaustion.ts` calls the same function with
+`reason: 'exhausted'` when a `restart_when_exhausted` queue runs out. That is the seam the
+completion-mode section describes, filled — do not add a fifth clear.
 
 The date is stored `MM-DD` and is **validated on write** (`sets.normalizeResetWatchedOnForWrite`
 throws), unlike `promote_window`, which is stored verbatim — a value nobody looks at again for a
