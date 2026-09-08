@@ -49,7 +49,12 @@ that marking entirely.
 - **No new state, no sweep coupling.** Writing nothing is the simplest exemption from any
   finished-entry cleanup, and it needs no coordination with the TTL-sweep work.
 
-## Open decision (owner)
+## Open decision (owner) — ANSWERED 2026-09-08
+
+> Answered by
+> [2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes](2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes.md):
+> advance-one-item-per-scan-and-never-consume is **Playlist mode**, which this record already
+> shipped. `reel` keeps its play-all-every-scan meaning. Nothing new was needed.
 
 Whether the demo reel should keep playing the **whole lineup every scan** (current `reel`) or
 **advance one item per scan** as a loop is the owner's call and is **out of scope** here — this
