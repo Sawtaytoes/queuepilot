@@ -122,6 +122,28 @@ try {
   const hasRow = await page.locator('#set-season').count();
   console.log(`queue editor: season row ${hasRow ? 'PRESENT ✓' : 'absent ✗'}`);
 
+  // ── 3. The same row in the NARROW VIEW ─────────────────────────────────────────────────
+  // Four pickers and the word "to" cannot sit on one line at 390px, so the row WRAPS as
+  // [month][day][to] / [month][day]. That break is the thing worth photographing: it has to
+  // read as one sentence across it, and it must not make the page scroll sideways.
+  const narrow = await browser.newPage({
+    colorScheme: 'dark',
+    viewport: { height: 844, width: 390 },
+  });
+  await narrow.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
+  await narrow.waitForSelector('#grid .tile .cap', { timeout: 30_000 });
+  await narrow.click('#qconfigure');
+  await narrow.waitForSelector('#set-season', { timeout: 10_000 });
+  await narrow.locator('#set-season').scrollIntoViewIfNeeded();
+  await narrow.waitForTimeout(400);
+  await narrow.locator('#setmodal').screenshot({ path: `${OUT}/season-window-narrow-${TAG}.png` });
+  console.log(`wrote ${OUT}/season-window-narrow-${TAG}.png`);
+  // A sideways scrollbar here is a FAILURE, not a cosmetic note — `e2e/narrow-scroll-test.ts`
+  // gates the same property for the rest of the app.
+  const width = await narrow.evaluate(() => document.documentElement.scrollWidth);
+  console.log(`narrow view: scrollWidth ${width} (viewport 390)`);
+  if (width > 390) { console.log('NARROW VIEW SCROLLS SIDEWAYS ✗'); failed = true; }
+
   await browser.close();
 } catch (e) {
   console.log('SHOT FAILED:', e);
