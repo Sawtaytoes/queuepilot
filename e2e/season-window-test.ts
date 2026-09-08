@@ -413,6 +413,90 @@ await check('7. a season boundary wrote NOTHING back to the registry', async () 
   assert.equal(closed?.season_end, CLOSED.end);
 });
 
+// ── 8. The write side ────────────────────────────────────────────────────────────────────
+//
+// The pair rule lives on the WRITER, and it is the half a read-side gate cannot see.
+const seasonOf = async (id: string) => {
+  const registry = await sets.getRegistry();
+  const row = registry.sets.find((one) => one.id === id);
+
+  return { end: row?.season_end ?? null, start: row?.season_start ?? null };
+};
+
+await check('8. a saved window reads back in the one padded spelling', async () => {
+  // `10-1` is what a hand edit types; `10-01` is what everything reads.
+  await sets.updateSet('season_none', { season_end: '11-05', season_start: '10-1' });
+  assert.deepEqual(await seasonOf('season_none'), { end: '11-05', start: '10-01' });
+});
+
+await check('8b. a WRAPPING window is stored as written, never swapped', async () => {
+  // A swap would silently turn an Advent window into its own complement — available for the
+  // ten months it is meant to be shut. There is no ordering check, on purpose.
+  await sets.updateSet('season_none', { season_end: '01-06', season_start: '12-01' });
+  assert.deepEqual(await seasonOf('season_none'), { end: '01-06', start: '12-01' });
+});
+
+await check('8c. two blanks CLEAR the window', async () => {
+  await sets.updateSet('season_none', { season_end: '', season_start: '' });
+  assert.deepEqual(await seasonOf('season_none'), { end: null, start: null });
+});
+
+await check('8d. a HALF-written pair is refused by name', async () => {
+  await assert.rejects(
+    () => sets.updateSet('season_none', { season_end: '', season_start: '10-01' }),
+    /BOTH season_start and season_end/,
+  );
+  // …and the refusal left the file alone.
+  assert.deepEqual(await seasonOf('season_none'), { end: null, start: null });
+});
+
+await check('8e. a date that does not exist is refused, and names which control', async () => {
+  await assert.rejects(
+    () => sets.updateSet('season_none', { season_end: '11-05', season_start: '02-30' }),
+    /season_start '02-30' is not a MM-DD date/,
+  );
+  await assert.rejects(
+    () => sets.updateSet('season_none', { season_end: '13-01', season_start: '10-01' }),
+    /season_end '13-01' is not a MM-DD date/,
+  );
+});
+
+await check('8f. a patch carrying ONE end edits the window the set already has', async () => {
+  await sets.updateSet('season_none', { season_end: '11-05', season_start: '10-01' });
+  // The other half is read off the NODE, so this means "move the end", not "delete the start".
+  await sets.updateSet('season_none', { season_end: '11-30' });
+  assert.deepEqual(await seasonOf('season_none'), { end: '11-30', start: '10-01' });
+  await sets.updateSet('season_none', { season_end: '', season_start: '' });
+});
+
+await check('8g. a window survives createSet, and a queue without one gains no keys', async () => {
+  const made = await sets.createSet({
+    kind: 'picks',
+    label: 'Created Seasonal',
+    season_end: '11-05',
+    season_start: '10-01',
+    sections: [1],
+    source: 'queue',
+  });
+  assert.deepEqual(await seasonOf(made.id), { end: '11-05', start: '10-01' });
+  const plain = await sets.createSet({
+    kind: 'picks', label: 'Created Plain', sections: [1], source: 'queue',
+  });
+  // Sparse: the file gains no `season_*` line at all, so a new queue is available all year.
+  assert.deepEqual(await seasonOf(plain.id), { end: null, start: null });
+});
+
+await check('8h. writing a window never touches `enabled`', async () => {
+  // The whole record in one assertion, on the write side this time.
+  await sets.updateSet('season_disabled', { season_end: '11-05', season_start: '10-01' });
+  const registry = await sets.getRegistry();
+  assert.equal(
+    registry.sets.find((one) => one.id === 'season_disabled')?.enabled,
+    false,
+    'saving a season window re-enabled a queue the owner had switched off',
+  );
+});
+
 console.log();
 if (FAILS.length) {
   console.log(`${FAILS.length} FAILED: ${FAILS.join(', ')}`);

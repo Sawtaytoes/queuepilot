@@ -857,6 +857,55 @@ Two rules, both settled 2026-08-26 after the owner met them on a tablet
 
 Gate: `e2e/tile-menu-test.ts` (spawns its own server; browser, no Plex).
 
+## A queue can be out of season
+
+A set may carry a **season window** — `season_start` and `season_end`, both `MM-DD`,
+repeating every year. Out of season the queue is unavailable
+([decision](docs/decisions/2026-09-08-a-season-window-gates-the-existing-enabled-flag.md)).
+Five things bite, and the first two are what a re-implementation gets wrong.
+
+- **`season.isSetAvailable(cfg, now)` is THE answer to "is this queue available right now",
+  and it is the only one.** `enabled !== false` AND today inside the window. The six places
+  that used to ask `cfg.enabled === false` on their own all ask it now —
+  `tonight/pick.ts:166`, `session.ts:251`, `providers/launcher.ts:41`, `topup.ts:273`,
+  `pending.ts:262`, `finished.ts:149`. `SeasonGated` is **structural**, which is what lets the
+  engine cfg and the web registry entry share one predicate without either importing the
+  other. A seventh gate with its own calendar rule is the regression; `e2e/season-window-test.ts`
+  is what notices.
+- ⚠️ **NOTHING WRITES `enabled`, and nothing may learn to.** The window is a SECOND gate over
+  the stored flag. Fold one into the other and the owner's manual toggle and the calendar
+  fight over one value, and whichever ran last wins silently. `is_in_season` is reported
+  BESIDE `enabled` on `/api/sets` for the same reason — the shelf has to tell "he switched it
+  off" from "it is June", and only the second gets the "returns 1 Oct" mark.
+- **Evaluated on a READ. There is no timer, no cron and no `setInterval.`** Every entry point
+  takes `now`, and `sets.ts normalize()` computes `is_in_season` on the read that produced the
+  row. A cached boolean is a timer wearing a different hat.
+- ⚠️ **A season boundary CLEARS NOTHING and MARKS NOTHING** — no `done` flag, no
+  `queue_entry_history` row, no `lead_cooldown` row. Resetting watched state is a **separate
+  setting** with its own record
+  ([reset](docs/decisions/2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year.md)),
+  and the owner split them on purpose: *"Option 3 is more of a display one, not a 'reset the
+  queue' one."* A queue can be seasonal and never reset, or reset annually and be available
+  all year.
+- **The window WRAPS the new year, and the pair rule lives on the WRITER.** `12-01` → `01-06`
+  is Advent, and a `start <= today && today <= end` test is false every day of its own season.
+  There is deliberately **no ordering check** — refusing it, or "helpfully" swapping the two,
+  makes every winter season unexpressible. Both ends or neither: a half-written pair is
+  refused BY NAME by `sets.normalizeSeasonForWrite`, never guessed into an open end, and two
+  blanks clear it.
+
+Both fields are set-level knobs, so they are in `engine/routing.ts loadSets()` **and** in
+`e2e/set-passthrough-parity.ts`'s `POST_PYTHON`
+([loader](docs/decisions/2026-09-07-the-set-loader-carries-every-field-the-engine-reads.md)).
+Dropped, they read `undefined`, which means "no window" — so every seasonal queue plays all
+year with nothing in the log to say so.
+
+Gate: `e2e/season-window-test.ts` (offline; 25 checks). ⚠️ **Its fixture's dates are computed
+from TODAY**, because the six call sites read the clock with no injected `now` and adding one
+to six production signatures to satisfy a test would be the test designing the code. Its first
+two checks prove the arithmetic on whatever day it runs, including the ~40 days a year when
+the closed window crosses 31 December and reads as a wrapping pair.
+
 ## Reading the log when a queue plays the wrong thing
 
 `[lineup]` (every curated scan) names the lane split, the head, the first ten titles in
@@ -1092,6 +1141,7 @@ yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-web run
 yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck
 yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
 server/node_modules/.bin/tsx e2e/priority-lane-test.ts   # the Priority queue / Random pool lanes
+server/node_modules/.bin/tsx e2e/season-window-test.ts  # the season window, at all six `enabled` call sites
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
   server/node_modules/.bin/tsx e2e/lane-drag-test.ts     # dragging across the lane divider
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
