@@ -90,6 +90,10 @@ const MembersModal = lazy(async () => ({
   default: (await import("./components/MembersModal"))
     .MembersModal,
 }))
+const SectionModal = lazy(async () => ({
+  default: (await import("./components/SectionModal"))
+    .SectionModal,
+}))
 const TileMenu = lazy(async () => ({
   default: (await import("./components/TileMenu")).TileMenu,
 }))
@@ -246,6 +250,7 @@ function AppFrame() {
         {overlays.groupsModal ? <GroupsModal /> : null}
         {overlays.startModal ? <StartModal /> : null}
         {overlays.membersModal ? <MembersModal /> : null}
+        {overlays.sectionModal ? <SectionModal /> : null}
         {overlays.tileMenu ? <TileMenu /> : null}
       </Suspense>
       <PlayMenu />
