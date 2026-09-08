@@ -335,6 +335,12 @@ try {
     await shot(page, 'section-tags-narrow');
     await openModal(page, windowKey);
     await shot(page, 'section-modal-narrow');
+    // Stacking the two marks makes the section taller than a 390x844 viewport, so the
+    // actions leave the fold. The modal scrolls, so this shot is the proof that Save is
+    // still reachable rather than stranded under the edge.
+    await page.locator('#sectionmodal button:has-text("Save")').scrollIntoViewIfNeeded();
+    await page.waitForTimeout(300);
+    await shot(page, 'section-modal-narrow-actions');
     await context.close();
   }
 
