@@ -894,13 +894,19 @@ Five things bite, and the first two are what a re-implementation gets wrong.
   refused BY NAME by `sets.normalizeSeasonForWrite`, never guessed into an open end, and two
   blanks clear it.
 
+- **A FILTERED VIEW inherits the window, and its `enabled` is still its own.** `season_start`
+  and `season_end` are not in `filteredQueues.NEVER_INHERITED`, which is the right pair: the
+  switch is per view, the calendar belongs to the queue it views. Adding them to that list is
+  a one-line change that quietly makes every view of a seasonal queue available all year;
+  `e2e/season-window-test.ts` §1c is what notices.
+
 Both fields are set-level knobs, so they are in `engine/routing.ts loadSets()` **and** in
 `e2e/set-passthrough-parity.ts`'s `POST_PYTHON`
 ([loader](docs/decisions/2026-09-07-the-set-loader-carries-every-field-the-engine-reads.md)).
 Dropped, they read `undefined`, which means "no window" — so every seasonal queue plays all
 year with nothing in the log to say so.
 
-Gate: `e2e/season-window-test.ts` (offline; 25 checks). ⚠️ **Its fixture's dates are computed
+Gate: `e2e/season-window-test.ts` (offline; 26 checks). ⚠️ **Its fixture's dates are computed
 from TODAY**, because the six call sites read the clock with no injected `now` and adding one
 to six production signatures to satisfy a test would be the test designing the code. Its first
 two checks prove the arithmetic on whatever day it runs, including the ~40 days a year when

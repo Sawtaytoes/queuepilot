@@ -119,6 +119,18 @@ const { dir } = useFixtures({
   enabled: false
   season_start: "${OPEN.start}"
   season_end: "${OPEN.end}"
+# A FILTERED VIEW of the out-of-season queue. A view inherits every field but id, label,
+# enabled, filtered_from and filter -- so it inherits the window, which is the answer a view
+# of a Halloween queue wants. Pinned because the opposite is a one-line change nobody would
+# notice: add season_start to filteredQueues.NEVER_INHERITED and every view of a seasonal
+# queue is quietly available all year.
+# (No backticks in here: this block is a template literal, and one would end it.)
+- id: season_closed_view
+  label: Out Of Season View
+  kind: picks
+  source: queue
+  filtered_from: season_closed
+  filter: { libraries: ["1"] }
 # Three rule pools over three different libraries, so Pending can ask about one arrival per
 # season state without the pools covering each other's items.
 - id: pool_open
@@ -270,6 +282,27 @@ await check('1b. the registry reports the window and the answer, computed on the
   assert.equal(closed?.enabled, true, 'the season window WROTE the enabled flag');
   assert.equal(off?.enabled, false);
   assert.equal(off?.is_in_season, true, 'a disabled queue is not thereby out of season');
+});
+
+await check('1c. a FILTERED VIEW inherits its parent\'s window', async () => {
+  const registry = await sets.getRegistry();
+  const view = registry.sets.find((s) => s.id === 'season_closed_view');
+
+  assert.equal(view?.season_start, CLOSED.start, 'a view did not inherit the window');
+  assert.equal(view?.is_in_season, false);
+  // A view's `enabled` is its OWN (`filteredQueues.NEVER_INHERITED`), and the window is not —
+  // which is the right pair: the switch is per view, the calendar belongs to the queue.
+  assert.equal(view?.enabled, true);
+
+  const offered = candidatesFor({
+    membershipFor: () => null,
+    membersByQueue: new Map(),
+    personIds: [],
+    providerIdFor: () => 'plex',
+    sets: registry.sets as unknown as CandidateSet[],
+    tile: 'shows',
+  }).map((one) => one.setId);
+  assert.ok(!offered.includes('season_closed_view'), 'an out-of-season VIEW was offered');
 });
 
 // ── 2. session.ts — a card tap ───────────────────────────────────────────────────────────
