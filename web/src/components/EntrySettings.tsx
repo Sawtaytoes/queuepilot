@@ -487,10 +487,10 @@ export function EntryEditor({
   const setLaneLabel =
     setLane === "random" ? "Random pool" : "Priority queue"
   const effectiveLane = item.placement ?? setLane
-  // THE WINDOW THIS ENTRY ACTUALLY FOLLOWS — entry, then queue, then the 24h product
+  // THE WINDOW THIS ENTRY ACTUALLY FOLLOWS — entry, then queue, then the 16h product
   // default, which is `leadWindowMs()`'s precedence read from the other end. Nothing here
-  // may hardcode "24h": the queue's own window is a setting now, so a panel that says "once
-  // a day" over a queue set to 20h is describing a rule the engine is not running
+  // may hardcode a duration: the queue's own window is a setting now, so a panel that says
+  // "once a day" over a queue set to 20h is describing a rule the engine is not running
   // (decision `2026-08-26-the-promote-window-is-a-queue-setting`).
   const setWindow =
     setInfo?.promote_window?.trim() || DEFAULT_LEAD_WINDOW

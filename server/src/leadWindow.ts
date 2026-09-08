@@ -5,8 +5,18 @@
 // not. The engine is the deterministic core the parity corpus replays with no SQLite anywhere
 // near it; a duration parser is exactly the part of promote it is allowed to know.
 
-/** Product default when neither the entry nor the set names a window. */
-export const DEFAULT_PROMOTE_WINDOW_MS = 24 * 60 * 60 * 1000; // 24h
+/**
+ * Product default when neither the entry nor the set names a window.
+ *
+ * SIXTEEN hours, not 24. The window is a ROLLING timer from the moment playback started, so a
+ * default of exactly one day can only ever be too long: a sitting that starts at 21:10 does not
+ * clear until 21:10 the next night, which is later than the next night's scan, and the promoted
+ * entry silently skips a night. 16h clears every sitting that starts at least 16 hours after
+ * the last one — which is every ordinary evening — and still holds an entry out of two sittings
+ * on the same day. It was 24h until 2026-09-07
+ * (decision `2026-09-07-the-default-lead-window-is-16h-and-every-queue-uses-it`).
+ */
+export const DEFAULT_PROMOTE_WINDOW_MS = 16 * 60 * 60 * 1000; // 16h
 
 /**
  * Parse a promote_window duration (`24h`, `7d`, `30d`, `90m`, …) to milliseconds.

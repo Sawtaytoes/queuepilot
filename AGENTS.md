@@ -685,8 +685,20 @@ sitting through the existing shuffle/weight path.
   exactly that reason, and `promote.ts` re-exports it.
 - **In-progress still outranks a promote**, and only out of the pool. An ordered queue has
   never hoisted anything and still does not.
+- **The lead window is entry > queue > the 16h product default, and BOTH set-level knobs
+  reach the engine through `engine/routing.ts loadSets()`.** That loader is the only reader of
+  `sets.yaml` on the scan path, and it copies a fixed list of fields — a knob it forgets reads
+  `undefined` at the consumer and silently disables itself. It forgot `promote_window` and
+  `add_as` until 2026-09-07: a queue on `20h` held a promoted entry back at 23h23m against the
+  old 24h default, and five `add_as: priority` sets ran as a shuffled pool
+  ([decision](docs/decisions/2026-09-07-the-set-loader-carries-every-field-the-engine-reads.md)).
+  **Adding a set-level knob means editing the loader AND `e2e/set-passthrough-parity.ts` in the
+  same change** — every other test of these two hands the engine a cfg directly and cannot see
+  the loader at all. The default is 16h and no queue overrides it
+  ([decision](docs/decisions/2026-09-07-the-default-lead-window-is-16h-and-every-queue-uses-it.md)).
 - Gate: `e2e/priority-lane-test.ts`. Half of it is not about the feature — cases 1, 2, 5 and
-  7 pin that an un-promoted queue comes out exactly as it did before the lanes existed.
+  7 pin that an un-promoted queue comes out exactly as it did before the lanes existed. It
+  proves the PRECEDENCE, not the plumbing; `e2e/set-passthrough-parity.ts` is the loader half.
 
 ### The page is two lanes, and `#grid` is the container
 

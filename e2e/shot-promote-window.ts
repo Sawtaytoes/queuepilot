@@ -17,6 +17,8 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer, REPO_ROOT } from './stubs/server-process.mjs';
 
 const TAG = process.env.SHOT_TAG || 'after';
+/** The window to put on the queue before the shot. Empty = leave it on the default. */
+const WINDOW = process.env.SHOT_PROMOTE_WINDOW ?? '20h';
 const PORT = parseInt(process.env.WEB_PORT || '18974', 10);
 const MQTT_PORT = parseInt(process.env.FAKE_MQTT_PORT || '11974', 10);
 const BASE = `http://localhost:${PORT}`;
@@ -29,6 +31,7 @@ await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
 for (const p of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(p, { recursive: true, force: true });
 
+let failed = false;
 const fake = await startFakeMqtt({ port: MQTT_PORT });
 const srv = spawnServer({
   env: {
@@ -61,11 +64,15 @@ try {
   // that window governs. Written through the API so the fixture on disk stays the fixture.
   // `after` only — the field does not exist on the before build, and a PATCH the old server
   // ignores would leave the two shots claiming the same setup.
-  if (TAG === 'after') {
+  //
+  // `SHOT_PROMOTE_WINDOW=` (empty) leaves the queue with NO window of its own, which is how
+  // the PRODUCT DEFAULT gets on screen: the entry sheet reads entry > queue > default, so a
+  // queue that names one hides the rung the default lives on.
+  if (TAG === 'after' && WINDOW) {
     await fetch(`${BASE}/api/sets/bob_anime`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ promote_window: '20h' }),
+      body: JSON.stringify({ promote_window: WINDOW }),
     });
   }
   const key = encodeURIComponent('title:Space Dandy');
@@ -98,19 +105,35 @@ try {
   await page.keyboard.press('Escape');
 
   // ── 2. The entry sheet, on the promoted entry ──────────────────────────────────────────
+  // ⚠️ NEEDS PLEX. The pencil is rendered under `item.resolved` (QueueView), and nothing in
+  // this fixture resolves without a library behind it — so offline this panel is SKIPPED, out
+  // loud, rather than timing out for thirty seconds and being swallowed by the `finally`
+  // below. `e2e/shot-entry-actions.ts` shows the other way round it: build ONE synthetic
+  // resolved entry. Do that here when this panel is what a change is about.
   await page.goto(`${BASE}/q/bob_anime`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#grid .tile .cap', { timeout: 30_000 });
   const tile = page.locator('#grid .tile', { hasText: 'Space Dandy' }).first();
-  await tile.locator('.editbtn').click();
-  await page.waitForSelector('#entrymodal', { timeout: 10_000 });
-  await page.waitForTimeout(400);
-  const lead = page.locator('#entrymodal .field', { hasText: 'How often it leads' }).first();
-  await lead.scrollIntoViewIfNeeded();
-  await lead.screenshot({ path: `${OUT}/promote-window-entry-${TAG}.png` });
-  console.log(`wrote ${OUT}/promote-window-entry-${TAG}.png`);
-  console.log('entry sheet says:', (await lead.innerText()).replace(/\n+/g, ' / '));
+  const pencil = tile.locator('.editbtn');
+  if (await pencil.count()) {
+    await pencil.click();
+    await page.waitForSelector('#entrymodal', { timeout: 10_000 });
+    await page.waitForTimeout(400);
+    const lead = page.locator('#entrymodal .field', { hasText: 'How often it leads' }).first();
+    await lead.scrollIntoViewIfNeeded();
+    await lead.screenshot({ path: `${OUT}/promote-window-entry-${TAG}.png` });
+    console.log(`wrote ${OUT}/promote-window-entry-${TAG}.png`);
+    console.log('entry sheet says:', (await lead.innerText()).replace(/\n+/g, ' / '));
+  } else {
+    console.log('entry sheet: SKIPPED — no resolved entry, so no pencil. Needs Plex.');
+  }
 
   await browser.close();
+} catch (e) {
+  // The `finally` below ends with `process.exit(0)`, which used to swallow a thrown shot
+  // whole: the harness printed the panels it had managed and returned success. Record the
+  // failure so the exit code can carry it.
+  console.log('SHOT FAILED:', e);
+  failed = true;
 } finally {
   // `process.exit` and not a fall-through: the fake broker's client keeps a live socket and
   // aedes keeps its own handles, so the event loop stays open and the script hangs after the
@@ -120,5 +143,5 @@ try {
   try { fake.client.end(true); } catch { /* already down */ }
   try { fake.server.close(); } catch { /* already down */ }
   try { fake.aedes.close(); } catch { /* already down */ }
-  process.exit(0);
+  process.exit(failed ? 1 : 0);
 }

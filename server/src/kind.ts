@@ -172,8 +172,8 @@ export function isExplicitPlacement(raw: unknown): boolean {
  *
  * The ADR's table says a sparse `lead` means `once`. Read literally that would break every
  * Ordered Queue in the house: those sets are `add_as: priority`, so EVERY entry is in the
- * Priority lane by inheritance, and a 24h window on each of them turns "play this list in
- * order" into "play a different entry each night". A show entry that contributes one episode
+ * Priority lane by inheritance, and a day-long window on each of them turns "play this list
+ * in order" into "play a different entry each night". A show entry that contributes one episode
  * per sitting would yield to the entry below it before its second episode.
  *
  * So the default follows HOW THE ENTRY GOT INTO THE LANE:
