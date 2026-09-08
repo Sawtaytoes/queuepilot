@@ -831,6 +831,19 @@ jobs:
       - name: Pending Dismiss removes the card (browser, stub Plex)
         run: $TSX e2e/pending-dismiss-test.ts
 
+      # THE CALENDAR VIEW — the second editor for the season window and the reset date.
+      #
+      # Spawns its own server against `e2e/fixtures/calendar.sets.yaml`, which is the only
+      # fixture holding every combination of the two settings at once, and needs no Plex. It
+      # pins the four product rules a re-implementation drops — a queue with no dates is
+      # absent, the list is ONE COLUMN, a rotation pool is offered no reset date, and a date
+      # changed here reaches the SET — plus the Narrow View's geometry and the ban on a timer.
+      #
+      # Reuses the chromium the narrow-view step installed — keep it AFTER that step.
+      - name: Calendar view — the second editor for date-based settings (browser, no Plex needed)
+        timeout-minutes: 15
+        run: $TSX e2e/calendar-view-test.ts
+
       # Path routing: the client router and the server's SPA fallback, pinned together.
       # ALWAYS runs, like the narrow-view gate above and for the same reason — the
       # PLEX_TOKEN-gated suites below are skipped on every PR, so a routing regression

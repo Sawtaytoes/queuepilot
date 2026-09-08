@@ -1,0 +1,110 @@
+/* THE CALENDAR VIEW'S LAYOUT — and nothing else.
+ *
+ * A CSS MODULE, like `CollectionLandingView.module.css`, so every name here is local. That is
+ * the structural answer to `a class name is not a style`
+ * (decision `2026-08-21-a-class-name-is-not-a-style`): a module class cannot be borrowed into a
+ * view it was not scoped for, because there is no global name to borrow. It is also why this
+ * file has no `.subhint` — that class is scoped under a view or modal id in `app.css`, every
+ * single rule of it, and a fourth copy of the same paragraph is a rule waiting to be missed.
+ *
+ * Nothing here paints a control. The card, both buttons, the badges and all six pickers are
+ * Charcuterie components configured by props
+ * (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`).
+ */
+
+.addSection {
+  margin: 0 0 var(--space-6);
+  max-width: 44rem;
+}
+
+.hint {
+  margin: 0 0 var(--space-3);
+  font-size: 0.9rem;
+  color: var(--color-content-muted);
+}
+
+.addRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* ⚠️ ONE COLUMN AT EVERY WIDTH, and it is the narrowed grid rule rather than an exception to
+   it: a row here is a queue's name, its dates and what happens on them, which is prose, and
+   prose is scanned down a column
+   (decision `2026-09-08-a-calendar-view-is-a-second-editor-for-date-based-queue-settings`,
+   and the workspace's `2026-08-25-a-text-heavy-row-list-is-one-column-narrowing-the-grid-rule`).
+   Do not "fix" this into `auto-fill` tracks. */
+.rows {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  min-width: 0;
+}
+
+.body {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.summary {
+  margin: 0;
+  /* A reading measure. The COLUMN is full width so the controls below have room; the sentence
+     inside it is not, because a 2560px line has no return sweep. */
+  max-width: 68ch;
+  color: var(--color-content-muted);
+}
+
+.warning {
+  margin: 0;
+  max-width: 68ch;
+  color: var(--color-content-warning, var(--color-content-muted));
+}
+
+.dates {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* WRAPS, and that is the Narrow View's whole answer: four pickers and a caption on one line at
+   1280px, stacked into as many lines as 390px needs, with no horizontal scroll. */
+.dateGroup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.dateLabel {
+  flex: 0 0 auto;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-content-muted);
+}
+
+.dateTo {
+  flex: 0 0 auto;
+  color: var(--color-content-muted);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

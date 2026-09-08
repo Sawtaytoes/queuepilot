@@ -41,6 +41,7 @@ import {
   rotationChannels,
   useStore,
 } from "./state/store"
+import { CalendarView } from "./views/CalendarView"
 import { ChannelsView } from "./views/ChannelsView"
 import { CollectionLandingView } from "./views/CollectionLandingView"
 import { CollectionView } from "./views/CollectionView"
@@ -149,6 +150,10 @@ export const appRouteElements = (
     <Route
       element={<QueuesPage />}
       path={ROUTE_PATHS.queues}
+    />
+    <Route
+      element={<CalendarPage />}
+      path={ROUTE_PATHS.calendar}
     />
     <Route
       element={<ChannelsPage />}
@@ -435,6 +440,32 @@ function QueuesPage() {
       sub="Choose a Picks or Rules queue to view it, or create a new queue."
     >
       <QueuesView toolbar={<Toolbar />} />
+    </Page>
+  )
+}
+
+/**
+ * THE CALENDAR — the second editor for the two date-based settings.
+ *
+ * `queue-view` is what HIDES the Queues toolbar, the same reuse Pending and What to Watch/Play
+ * make of it. Without it this page's header grows the landing's add-to-any-queue search, its
+ * queue filter and "New queue".
+ */
+function CalendarPage() {
+  return (
+    <Page
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
+      bodyClass="queue-view"
+      documentTitle="Calendar — QueuePilot"
+      editableSetId={null}
+      heading="Calendar"
+      isSubHidden={false}
+      sub="Every queue with a date, and the dates it keeps. Change one here or in the queue itself — it is the same setting."
+    >
+      <CalendarView />
     </Page>
   )
 }
