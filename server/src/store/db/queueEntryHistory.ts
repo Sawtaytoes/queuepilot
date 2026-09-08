@@ -74,6 +74,26 @@ export function clearCompleted(setId: string, entryKey: string): number {
   return Number(result.changes);
 }
 
+/**
+ * Delete EVERY row this set owns — both completions and partial positions.
+ *
+ * The second of the three things a seasonal reset clears
+ * (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year). It is not
+ * the same operation as `clearCompleted` run once per entry: an entry whose LINE was edited or
+ * re-keyed since it played leaves rows under a key no current entry answers to, and a per-entry
+ * loop cannot see them. A partly watched series would then resume at the episode it reached,
+ * with nothing on screen to explain why.
+ *
+ * Returns the number of rows removed, which is what the confirm dialog counts.
+ */
+export function clearSet(setId: string): number {
+  const result = prepareChecked(
+    bookOfRecord(),
+    'DELETE FROM queue_entry_history WHERE set_id = :set_id',
+  ).run({ set_id: setId });
+  return Number(result.changes);
+}
+
 /** Undo the most recent manual/observed completion for one entry. Partial positions stay. */
 export function undoLatestCompleted(setId: string, entryKey: string): string | null {
   const row = prepareChecked<{ item_key: string }>(bookOfRecord(),

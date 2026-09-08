@@ -261,6 +261,34 @@ CREATE TABLE IF NOT EXISTS lead_cooldown (
 
 CREATE INDEX IF NOT EXISTS lead_cooldown_led_at ON lead_cooldown (led_at);
 
+-- ── The seasonal reset stamp ─────────────────────────────────────────────────────────────
+--
+-- decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year. A queue may
+-- carry `reset_watched_on: "MM-DD"`, and on the first READ after that date passes every
+-- completion the queue owns is cleared. There is no timer, so the ONLY thing that stops the
+-- reset running again on the next read of the same day is this row.
+--
+-- ⚠️ WHY IT IS NOT A KEY ON THE SET. `sets.yaml` is hand-edited over SMB and is the file the
+-- undo history snapshots, so stamping it on every reset would put a machine-written timestamp
+-- into a document a person reads and would push an undo entry nobody asked for. The DATE is a
+-- setting and lives on the set; the BOOKKEEPING lives here — the same split `lead_cooldown`
+-- already makes between `promote_window` (the set) and `led_at` (a row).
+--
+-- No FOREIGN KEY on `set_id`, for `lead_cooldown`'s reason: under STORE_BACKEND=yaml the
+-- `sets` table is empty and every row would be refused.
+CREATE TABLE IF NOT EXISTS queue_watched_reset (
+  set_id     TEXT PRIMARY KEY,
+  -- Unix epoch SECONDS, and NOT "when it last reset": *no occurrence at or before this moment
+  -- owes this queue a reset*. A reset settles the occurrence it cleared; the first read after
+  -- somebody SETS a date settles the occurrence already in the past and clears nothing, which
+  -- is what stops `reset_watched_on: 11-01` added to a running Halloween queue in October from
+  -- throwing the season away on the very next play.
+  settled_at INTEGER NOT NULL,
+  -- 'adopted' | 'manual' | the `MM-DD` that fired. Kept so the log and the API can tell the
+  -- two writers above apart, which a bare timestamp cannot.
+  reason     TEXT
+);
+
 -- ── People — the household, and the identity the absorb needs ────────────────────────────
 --
 -- WP-3. The decision (2026-08-22-queuepilot-absorbs-board-game-picker-tonight-pick §6) says to

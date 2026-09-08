@@ -19,6 +19,7 @@ import { passesFilter } from '../filteredQueues.js';
 import { store } from '../store/index.js';
 import * as queueEntryHistory from '../store/db/queueEntryHistory.js';
 import * as tiles from '../tiles.js';
+import * as watchedReset from '../watchedReset.js';
 import {
   effectiveWatchHistory, storedEntryWatchHistory, type WatchHistorySource,
 } from '../watchHistory.js';
@@ -581,6 +582,29 @@ export function queuesRoutes(): Hono {
     if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
     try {
       return c.json(await queues.removeCompleted(set));
+    } catch (e) {
+      return c.json({ error: String(e) }, 500);
+    }
+  });
+
+  // CLEAR EVERY COMPLETION THIS QUEUE OWNS — the manual twin of the reset date.
+  //
+  // The second of the reset's three doors (decision
+  // 2026-09-08-the-reset-is-exposed-on-the-api-and-mqtt-without-a-home-assistant-automation);
+  // the Actions menu calls THIS, and the MQTT command topic calls the same function. There is
+  // no second implementation.
+  //
+  // It answers the three counts because the confirm step names the number — "Clear 12
+  // completions in Halloween?", never "Are you sure?" — and a count is the only thing that
+  // tells the owner he has the queue he thinks he has. It never writes to a provider.
+  //
+  // POST and not DELETE: it is an ACTION on the queue, not the removal of a resource at this
+  // address, and the same POST shape `remove-completed` above already uses.
+  app.post('/queues/:set/reset-watched', async (c) => {
+    const set = c.req.param('set');
+    if (!(await isQueueSet(set))) return c.json({ error: 'unknown set' }, 400);
+    try {
+      return c.json(await watchedReset.resetQueueWatchedState(set));
     } catch (e) {
       return c.json({ error: String(e) }, 500);
     }

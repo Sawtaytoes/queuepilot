@@ -292,6 +292,25 @@ export const T_RESP_FINISHED = str('T_RESP_FINISHED', 'queuepilot/resp/finished'
 // Still an ANNOUNCEMENT of intent rather than an action: HA owns the things with power cables
 // (workspace rule). Not retained — it describes one press, not a current state.
 export const T_CMD_ACTIVITY_OFF = str('T_CMD_ACTIVITY_OFF', 'queuepilot/cmd/activity/off');
+// CLEAR ONE QUEUE'S WATCHED STATE — `{"set": "<id>"}`, the same wire id an NFC card carries.
+//
+// The third of the reset's three doors (decision
+// 2026-09-08-the-reset-is-exposed-on-the-api-and-mqtt-without-a-home-assistant-automation).
+// The Actions menu is the first and the HTTP route is the second; all three call the one
+// `watchedReset.resetQueueWatchedState()`, and there is no second implementation.
+//
+// ⚠️ THIS REPO SHIPS NO HOME ASSISTANT AUTOMATION AND NO HOME ASSISTANT DEPENDENCY. The topic
+// is a SEAM other people can use — an NFC card, a voice command, somebody else's scheduler.
+// What is published on it, and when, is not this repo's business, and the household's own
+// case is already covered by `reset_watched_on` with nothing publishing here at all. The
+// workspace's "HA owns the schedule" rule is about cross-service bridges; a queue clearing its
+// own rows is one app maintaining its own state, and this repo is public, so a feature that
+// only works with a Home Assistant install is a feature most people who clone it cannot use.
+export const T_CMD_RESET_WATCHED = str('T_CMD_RESET_WATCHED', 'queuepilot/cmd/queue/reset-watched');
+// What the reset cleared, so a caller (and a human reading the broker) sees the three counts
+// rather than silence. Not retained: it describes one reset, not a current state — the same
+// rule `resp/topup` and `resp/finished` follow.
+export const T_RESP_RESET_WATCHED = str('T_RESP_RESET_WATCHED', 'queuepilot/resp/reset-watched');
 // Cast sidecar command topic (decision 2026-08-03). The sidecar has always read this from
 // env (cast_sidecar/service.py:18); the publisher used to hardcode it in playback.js, so the
 // two halves could be re-pointed independently and silently diverge — the sidecar sitting on

@@ -53,6 +53,14 @@ const FIELDS = [
  *
  * Both are carried RAW and trimmed/lower-cased, which the `lane_priority` fixture spells
  * with padding and a capital letter.
+ *
+ *   * `reset_watched_on` (2026-09-08) — the day each year a queue clears its own watched
+ *     state. It is read on the PLAY path by `session.ts`
+ *     (`watchedReset.applySeasonalReset`), so a loader that drops it does not throw: the
+ *     seasonal queue reads `undefined`, never resets, and says nothing about it — and nobody
+ *     finds out until the following November. Carried RAW and trimmed, so `seasonal_junk`
+ *     pins that an unreadable value reaches the cfg UNCHANGED and is refused at the consumer
+ *     (`seasonalReset.parseResetDate`) rather than being laundered here.
  */
 const POST_PYTHON: Record<string, Record<string, unknown>> = {
   lane_priority: { add_as: 'priority', promote_window: '20h' },
@@ -66,6 +74,9 @@ const POST_PYTHON: Record<string, Record<string, unknown>> = {
   restart_round: { restart_when_exhausted: true },
   restart_vs_playlist: { restart_when_exhausted: false, keep_completed: true },
   restart_vs_reel: { restart_when_exhausted: false, keep_completed: true, reel: true },
+  seasonal: { reset_watched_on: '11-01' },
+  seasonal_junk: { reset_watched_on: '13-40' },
+  seasonal_off: { reset_watched_on: null },
 };
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.
