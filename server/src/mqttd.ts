@@ -11,9 +11,12 @@ import * as devices from './devices.js';
 import * as topup from './topup.js';
 import { startTopupScheduler, type TopupScheduler } from './topupScheduler.js';
 import * as finished from './finished.js';
+import * as sets from './sets.js';
+import * as watchedReset from './watchedReset.js';
 import {
   MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
   T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
+  T_CMD_RESET_WATCHED, T_RESP_RESET_WATCHED,
   T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_RESP_TOPUP, T_RESP_FINISHED, T_STATE,
   T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS,
@@ -174,6 +177,49 @@ async function handleTopup(scope: 'session' | 'pull' | 'all' = 'all'): Promise<v
   }
 }
 
+/**
+ * Clear one queue's watched state — the MQTT door onto `resetQueueWatchedState()`.
+ *
+ * decision 2026-09-08-the-reset-is-exposed-on-the-api-and-mqtt-without-a-home-assistant-automation.
+ * The Actions menu and the HTTP route are the other two; all three call the same function and
+ * there is no second implementation.
+ *
+ * ⚠️ THIS REPO SHIPS NO HOME ASSISTANT AUTOMATION. The topic is a seam for an NFC card, a voice
+ * command or somebody else's scheduler; what publishes on it is not this repo's business, and
+ * the household's own case is covered by `reset_watched_on` with nothing publishing here.
+ *
+ * The payload is `{"set": "<id>"}` — the same wire id a card carries and the same key
+ * `cmd/session/start` reads, so a card that starts a queue and a card that resets it differ by
+ * their topic alone.
+ *
+ * Answers on `resp/reset-watched` whatever happened, INCLUDING a refusal. A reset that names an
+ * unknown queue is otherwise indistinguishable from a broker that dropped the message, and this
+ * is a command whose whole point is that nobody is watching when it runs.
+ */
+async function handleResetWatched(payload: Record<string, unknown>): Promise<void> {
+  const setId = String(payload.set ?? '').trim();
+  if (!setId) {
+    pub(T_RESP_RESET_WATCHED, { ok: false, error: 'no set named' });
+    return;
+  }
+  try {
+    // Refused rather than reset when it is not a curated queue: a rotation pool owns no done
+    // flags, no queue_entry_history and no lead cooldowns, so "reset" would report three zeros
+    // and read as a success. `sets.updateSet` refuses `reset_watched_on` on one for the same
+    // reason.
+    const set = await sets.getSet(setId);
+    if (!set || set.source !== 'queue') {
+      pub(T_RESP_RESET_WATCHED, { ok: false, set: setId, error: 'unknown curated queue' });
+      return;
+    }
+    const result = await watchedReset.resetQueueWatchedState(setId);
+    pub(T_RESP_RESET_WATCHED, { ok: true, ...result });
+    console.log(`[mqttd] reset-watched ${setId}: ${result.total} cleared`);
+  } catch (e) {
+    pub(T_RESP_RESET_WATCHED, { ok: false, set: setId, error: errMessage(e) });
+  }
+}
+
 async function handlePreview(payload: PreviewPayload): Promise<void> {
   const setName = String(payload.set || '');
   const reply = String(payload.reply || '');
@@ -270,7 +316,10 @@ export function start(): MqttClient | null {
   client = c;
   c.on('connect', () => {
     console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
-    c.subscribe([T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP]);
+    c.subscribe([
+      T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
+      T_CMD_RESET_WATCHED,
+    ]);
     announceDevices();
     publishDiscovery();
     publishState({ boot: true });
@@ -279,7 +328,7 @@ export function start(): MqttClient | null {
   });
   c.on('error', (e) => console.log(`[mqttd] ${e.message}`));
   c.on('message', (topic, buf) => {
-    // One parse for four command topics, so it stays `unknown` here and each handler declares
+    // One parse for five command topics, so it stays `unknown` here and each handler declares
     // the shape it reads. A non-object body (or junk) reads as `{}`, exactly as before.
     let payload: Record<string, unknown> = {};
     try {
@@ -297,6 +346,10 @@ export function start(): MqttClient | null {
     }
     if (topic === T_CMD_TOPUP) {
       void handleTopup();
+      return;
+    }
+    if (topic === T_CMD_RESET_WATCHED) {
+      void handleResetWatched(payload);
       return;
     }
     if (topic === T_CMD_PREVIEW) {

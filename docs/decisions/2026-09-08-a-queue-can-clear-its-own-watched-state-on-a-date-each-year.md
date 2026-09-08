@@ -6,6 +6,9 @@
 **Supersedes:** —
 **Superseded by:** —
 
+Complemented by [Adopting a reset date settles the past occurrence and clears nothing](2026-09-08-adopting-a-reset-date-settles-the-past-occurrence-and-clears-nothing.md),
+which says what the FIRST read after the date is set does. Nothing below is changed by it.
+
 ## Decision
 
 A queue may carry a **reset date**. On the first read after that date passes, every

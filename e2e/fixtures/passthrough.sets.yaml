@@ -167,3 +167,29 @@ sets:
   reel: true
   restart_when_exhausted: true
   sections: [1]
+
+# reset_watched_on — the seasonal reset date, read on the play path by session.ts
+# (watchedReset.applySeasonalReset). It post-dates the Python oracle, so its expectation is
+# authored in the gate (POST_PYTHON), not recorded in the golden. Carried RAW and trimmed, the
+# same posture as promote_window: seasonalReset.parseResetDate owns the reading, so the
+# UNREADABLE value below has to arrive at the cfg unchanged and be refused at the CONSUMER.
+# The set with no key pins the "absent" reading, which is every queue written before 2026-09-08.
+- id: seasonal
+  label: Seasonal Queue
+  kind: picks
+  source: queue
+  reset_watched_on: "  11-01  "
+  sections: [1]
+
+- id: seasonal_junk
+  label: Seasonal Junk
+  kind: picks
+  source: queue
+  reset_watched_on: "13-40"
+  sections: [1]
+
+- id: seasonal_off
+  label: No Seasonal Reset
+  kind: picks
+  source: queue
+  sections: [1]
