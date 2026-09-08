@@ -223,7 +223,9 @@ function hasDates(set: RegistrySet): boolean {
 
 /** `MM-DD` as one comparable integer: 1001 for 1 October. Month-major, so it sorts the
  *  calendar without a year to hang the dates on. */
-function ordinalOf(value: string | null | undefined): number {
+function ordinalOf(
+  value: string | null | undefined,
+): number {
   const parsed = parseSeasonDay(value)
 
   return parsed ? parsed.month * 100 + parsed.day : 9999
@@ -240,7 +242,10 @@ function ordinalOf(value: string | null | undefined): number {
  * A row with no date yet is one somebody is filling in right now, so it sorts to the top where
  * they are looking.
  */
-function byFirstDate(a: RegistrySet, b: RegistrySet): number {
+function byFirstDate(
+  a: RegistrySet,
+  b: RegistrySet,
+): number {
   const first = (set: RegistrySet) =>
     Math.min(
       ordinalOf(set.season_start),

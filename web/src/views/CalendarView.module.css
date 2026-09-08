@@ -70,10 +70,11 @@
   color: var(--color-content-muted);
 }
 
+/* APP LAYOUT on a component's outer element — a reading measure, and nothing else. That is the
+   one allowed use of a `className` on a Charcuterie component, and the `Alert` it lands on
+   paints itself (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`). */
 .warning {
-  margin: 0;
   max-width: 68ch;
-  color: var(--color-content-warning, var(--color-content-muted));
 }
 
 .dates {
