@@ -30,6 +30,7 @@ import {
   PencilGlyph,
   PosterTile,
 } from "../components/PosterTile"
+import { QueueActionsMenu } from "../components/QueueActionsMenu"
 import { SearchDropdown } from "../components/SearchDropdown"
 import { SelectListbox } from "../components/SelectListbox"
 import { SkippedPanel } from "../components/SkippedPanel"
@@ -41,6 +42,7 @@ import { flashTile } from "../lib/flip"
 import { isRandomOrder } from "../lib/kind"
 import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
+import { queueNumbers, queueTitle } from "../lib/people"
 import { queueItemAddBody } from "../lib/searchGroups"
 import {
   collectionOrderCount,
@@ -62,6 +64,7 @@ import {
   openTileMenu,
   useOverlays,
 } from "../state/overlays"
+import { usePeople } from "../state/people"
 import {
   moveEntryLane,
   queueEntryActions,
@@ -81,7 +84,6 @@ import {
 import {
   bumpRevision,
   getState,
-  load,
   setStatus,
   useStore,
 } from "../state/store"
@@ -181,6 +183,7 @@ export function QueueView({
   setId: string | null
 }) {
   const { data, now, reg } = useStore()
+  const people = usePeople()
   const selected = useSelected()
   const lanesRef = useRef<HTMLDivElement>(null)
   const lastPaintedSet = useRef<string | null>(null)
@@ -223,6 +226,22 @@ export function QueueView({
     regSet,
     (id) => reg?.sets.find((x) => x.id === id) ?? null,
   )
+
+  // WHAT THIS QUEUE IS CALLED, for anything that has to name it in a sentence — today the
+  // Actions menu's confirm. `queueTitle`, never `label`: the registry makes `label` printable
+  // by falling back to the ID, so a nameless queue's is `movies_shows` and a confirm naming
+  // that reads like a bug rather than like the queue on screen (decision
+  // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). The duplicate NUMBER
+  // comes off the whole registry, because "Movies & Shows 2" is only meaningful against its
+  // siblings.
+  const queueName = regSet
+    ? queueTitle(
+        regSet,
+        queueNumbers(reg?.sets ?? [], people.byQueue).get(
+          regSet.id,
+        ) ?? null,
+      )
+    : (q?.label ?? "this queue")
 
   // The fourth argument is the poster tap: with no selection running, tapping a poster
   // opens that entry's sheet. See the hook for why the gesture is resolved there.
@@ -991,41 +1010,22 @@ export function QueueView({
               `outline` — the app class paints a surface background AND a border, which is
               what `outline` means; the borderless one is Charcuterie's own `ghost`.
               (decision `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`) */}
-          <Button
-            appearance="outline"
-            // `done`, NOT `isCompleted`: this removes entries from queues.yaml, and the
-            // endpoint behind it can only remove what the FILE has flagged. A live-finished
-            // entry gets its flag from the next reconcile (finished.js), seconds after
-            // playback ends — offering to remove it before then would do nothing.
-            hidden={!items.some((it) => it.done)}
-            id="qremovedone"
-            intent="neutral"
-            onClick={async () => {
-              if (!setId) return
+          {/* THE DESTRUCTIVE PAIR, in a menu behind a confirm. "Remove all completed" was
+              `#qremovedone` and sat right here beside ▶ Play on; it MOVED into the menu
+              rather than being copied, so this row loses a button on the day it gains one
+              (decision
+              `2026-09-08-a-destructive-queue-action-lives-in-an-actions-menu-behind-a-confirm`).
 
-              setStatus("Removing completed…")
-
-              try {
-                const out = await api<{ removed?: number }>(
-                  "POST",
-                  `/api/queues/${setId}/remove-completed`,
-                )
-
-                setStatus(
-                  `Removed ${out.removed ?? 0} completed`,
-                  "ok",
-                )
-                await load()
-              } catch (e) {
-                setStatus(
-                  `Remove failed: ${(e as Error).message}`,
-                  "err",
-                )
-              }
-            }}
-          >
-            Remove all completed
-          </Button>
+              `allItems`, never the filtered `items`: a view filter narrows what is on
+              screen and changes nothing about what either endpoint acts on, and the count
+              the confirm names has to be the count the server will honour. */}
+          {setId ? (
+            <QueueActionsMenu
+              items={allItems}
+              queueName={queueName}
+              setId={setId}
+            />
+          ) : null}
           <Tip label="Configure this set">
             <Button
               appearance="outline"
