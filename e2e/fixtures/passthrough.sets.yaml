@@ -119,3 +119,22 @@ sets:
   sections: [5]
   profiles:
   - { plex_user: "Some User", account_id: 11110009, user_uuid: su-uuid }
+
+# add_as / promote_window — the two PICKS LANE knobs. They post-date the Python oracle, so
+# their expectations are authored in the gate itself rather than recorded in the golden; see
+# the POST_PYTHON block in e2e/set-passthrough-parity.ts. Both are carried RAW, so the padded
+# and mixed-case spelling has to come back trimmed and lower-cased. The set with neither pins
+# the "absent" reading, which is what the loader used to return for EVERY set.
+- id: lane_priority
+  label: Ordered Picks Queue
+  kind: picks
+  add_as: "  Priority  "
+  promote_window: "  20H  "
+  source: queue
+  sections: [1]
+
+- id: lane_default
+  label: Default Lane Queue
+  kind: picks
+  source: queue
+  sections: [1]

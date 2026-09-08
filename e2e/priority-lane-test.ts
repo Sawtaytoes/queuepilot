@@ -186,18 +186,22 @@ const promote = await import('../server/src/promote.js');
 check('resolving a lineup does not consume the window', await promote.canLeadOnce('set1', 'rk:3'), true);
 
 // ── 9. The QUEUE names the window, and the ENTRY outranks it ──────────────────────────────
-// `leadWindowMs` is entry > set > 24h product default. The set level is the one that had no
-// UI and no test: a 24h window is a rolling timer, so a queue watched past midnight stamps
+// `leadWindowMs` is entry > set > 16h product default. The set level is the one that had no
+// UI and no test: the window is a rolling timer, so a queue watched past midnight stamps
 // its lead AFTER midnight and blocks the following night's scan — which is what happened on
-// 2026-08-26 (decision 2026-08-26-the-promote-window-is-a-queue-setting). The assertion is on
-// the milliseconds handed to the gate, because that is the only place the precedence is
-// observable from outside.
+// 2026-08-26 (decision 2026-08-26-the-promote-window-is-a-queue-setting), and is why the
+// product default is 16h and not a flat day. The assertion is on the milliseconds handed to
+// the gate, because that is the only place the precedence is observable from outside.
+//
+// ⚠️ This whole block hands `run()` a cfg DIRECTLY. That is what let the loader drop the
+// set's `promote_window` for two weeks with every assertion here still green — the gate that
+// pins the loader half is `e2e/set-passthrough-parity.ts`.
 const asked: number[] = [];
 const recordingGate: LeadGate = async (_k, ms) => { asked.push(ms); return true; };
 
 asked.length = 0;
 await run(POOL, promoted, recordingGate);
-check('with no window anywhere, the gate is asked for the 24h default', asked, [86_400_000]);
+check('with no window anywhere, the gate is asked for the 16h default', asked, [57_600_000]);
 
 asked.length = 0;
 await run({ ...POOL, promote_window: '20h' }, promoted, recordingGate);
@@ -217,7 +221,7 @@ check('an ENTRY window outranks the queue', asked, [604_800_000]);
 // default and not an accidental 0ms free pass.
 asked.length = 0;
 await run({ ...POOL, promote_window: 'never' }, promoted, recordingGate);
-check('an unparseable queue window falls back to the default', asked, [86_400_000]);
+check('an unparseable queue window falls back to the default', asked, [57_600_000]);
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nALL PASS');
 process.exit(failed ? 1 : 0);
