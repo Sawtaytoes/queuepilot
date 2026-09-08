@@ -65,6 +65,7 @@ interface DriverCtl {
   awake: boolean;
   onSwitch: (() => void) | null;
   accountVerdict: Verdict | null;
+  accountObservation: Omit<Verdict, 'isMismatch'> | null;
 }
 const CTL = RAW_CTL as unknown as DriverCtl;
 
@@ -117,19 +118,30 @@ ok('(a) wrong account: the error names the ACTUAL profile', spoken.includes('saw
 ok('(a) wrong account: the error says it was stopped', /stopped/i.test(spoken), spoken);
 ok('(a) wrong account: it is a SENTENCE, no diagnostics',
   !/\b(accountID|sessions|null|undefined)\b/.test(spoken), spoken);
+ok('(a) wrong account: the ACTUAL profile becomes the latest trusted observation',
+  CTL.lastSeen.title === 'sawtaytoes' && CTL.lastSeen.isObserved === true,
+  JSON.stringify(CTL.lastSeen));
 
 // --------------------------------------------------------------------------- //
 // (b) The account matches -> the play result passes through, nothing is stopped.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
 CTL.accountVerdict = { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' };
 res = await drive();
 ok('(b) right account: the audit ran', nCalls('verify_account') === 1);
 ok('(b) right account: reports played', res.played === true, JSON.stringify(res));
 ok('(b) right account: no error', !res.error, JSON.stringify(res));
 ok('(b) right account: playback is NOT stopped', nCalls('stop_playback') === 0);
+ok('(b) right account: the audit records a TRUSTED profile observation',
+  CTL.lastSeen.title === 'Younger Kids' && CTL.lastSeen.isObserved === true,
+  JSON.stringify(CTL.lastSeen));
+
+// The ADB selection above was only a claim. The successful Plex session audit promoted it to
+// an observation, so another start in the same profile must use the cheap LAST_SEEN path.
+CTL.calls = [];
+res = await drive();
+ok('(b2) next queue: the verified profile skips the picker',
+  res.played === true && nCalls('switch_to') === 0, JSON.stringify(CTL.calls));
 
 // --------------------------------------------------------------------------- //
 // (c) The audit ABSTAINS (no session surfaced in time / Plex unreachable).
@@ -177,6 +189,48 @@ ok('(e) play failed: the audit does NOT run', nCalls('verify_account') === 0);
 ok('(e) play failed: nothing is stopped', nCalls('stop_playback') === 0);
 ok('(e) play failed: the ORIGINAL play error survives',
   String(res.error || '').includes('HTTP 500'), JSON.stringify(res));
+
+// --------------------------------------------------------------------------- //
+// (f) A queue is already playing on the requested account. The one-shot PRE-FLIGHT
+//     `/status/sessions` read is direct proof and must skip the picker immediately, even
+//     when LAST_SEEN is cold or stale.
+// --------------------------------------------------------------------------- //
+reset();
+CTL.lastSeen.title = 'sawtaytoes';
+CTL.lastSeen.isObserved = true;
+CTL.accountObservation = { accountId: YOUNGER_KIDS, title: 'Younger Kids' };
+CTL.accountVerdict = { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' };
+res = await drive();
+ok('(f) matching active session: pre-flight account read ran', nCalls('current_account') === 1);
+ok('(f) matching active session: NO picker walk', nCalls('switch_to') === 0,
+  JSON.stringify(CTL.calls));
+ok('(f) matching active session: replaces stale LAST_SEEN with the direct observation',
+  CTL.lastSeen.title === 'Younger Kids' && CTL.lastSeen.isObserved === true,
+  JSON.stringify(CTL.lastSeen));
+ok('(f) matching active session: playback starts', res.played === true, JSON.stringify(res));
+
+// --------------------------------------------------------------------------- //
+// (g) The active session belongs to somebody else. It is newer than LAST_SEEN, so the driver
+//     must walk the picker and use the observed title as the starting-position hint.
+// --------------------------------------------------------------------------- //
+reset();
+CTL.lastSeen.title = 'Younger Kids';
+CTL.lastSeen.isObserved = true;
+CTL.accountObservation = { accountId: OWNER, title: 'sawtaytoes' };
+CTL.accountVerdict = { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' };
+// Even a stale/misconfigured alias must not overrule the stronger account-id mismatch.
+CTL.same.set('sawtaytoes|Younger Kids', true);
+res = await drive();
+const switchCall = CTL.calls.find((call) => call[0] === 'switch_to');
+ok('(g) wrong active session: picker walk runs once', nCalls('switch_to') === 1,
+  JSON.stringify(CTL.calls));
+ok('(g) wrong active session: actual profile becomes the picker hint',
+  switchCall?.[2] === 'sawtaytoes', JSON.stringify(switchCall));
+ok('(g) wrong active session: successful new play records the requested profile',
+  res.played === true
+    && CTL.lastSeen.title === 'Younger Kids'
+    && CTL.lastSeen.isObserved === true,
+  JSON.stringify({ res, lastSeen: CTL.lastSeen }));
 
 console.log(FAILS.length ? `\nFAILURES: ${FAILS.length}` : '\ndone');
 process.exit(FAILS.length ? 1 : 0);

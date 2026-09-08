@@ -277,6 +277,7 @@ jobs:
           "$TSX" e2e/playback-fsm-test.ts
           "$TSX" e2e/fsm-wake-and-skip-test.ts
           "$TSX" e2e/account-audit-test.ts
+          "$TSX" e2e/profile-session-observation-test.ts
           "$TSX" e2e/session-profile-gate-test.ts
           "$TSX" e2e/profile-gate-test.ts
           "$TSX" e2e/binding-token-test.ts
