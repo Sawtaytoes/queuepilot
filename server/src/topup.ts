@@ -27,6 +27,7 @@ import { initialQueueSize, isTargetMet, needsTopup, playbackLength } from './eng
 import { pullLineup } from './providers/pullLineup.js';
 import { ROTATION_LENGTH, TOPUP_AT, TOPUP_COOLDOWN_SECONDS } from './env.js';
 import { errMessage } from './errors.js';
+import { isSetAvailable } from './season.js';
 import type { BlockSourceCfg } from './providers/blocks.js';
 import type { PlexPlayItem } from './types.js';
 
@@ -270,7 +271,10 @@ export async function topupPullLists(
   const sets = routing.loadSets()?.sets || {};
   const out: TopupResult[] = [];
   for (const [setName, cfg] of Object.entries(sets)) {
-    if (cfg?.enabled === false) continue;
+    // `enabled` AND in season. An out-of-season reading list stops being topped up rather
+    // than growing all year for a queue nobody is offered — and nothing is REMOVED from it,
+    // because a season boundary clears nothing.
+    if (!isSetAvailable(cfg)) continue;
     let provider;
     try {
       provider = deps.providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));

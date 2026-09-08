@@ -41,19 +41,23 @@ const FIELDS = [
 /**
  * The passthroughs added AFTER Python was deleted, with expectations authored here.
  *
- * Both of these went dark exactly the way `requires_profile` did, and stayed dark because
- * every test that covers them (`e2e/priority-lane-test.ts`, `e2e/kind-normalize-test.ts`)
- * hands the engine a cfg DIRECTLY and never runs the loader:
+ * Every one of them went dark exactly the way `requires_profile` did, or would have, and the
+ * two that did stayed dark because every test that covers them
+ * (`e2e/priority-lane-test.ts`, `e2e/kind-normalize-test.ts`) hands the engine a cfg
+ * DIRECTLY and never runs the loader:
  *
  *   * `promote_window` — read `undefined`, so `resolve.leadWindowMs()` used the product
  *     default instead of the queue's own window. A queue on `20h` held its promoted entry
  *     back for the default instead (2026-09-07).
  *   * `add_as` — read `undefined`, so `kind.normalizeAddAs()` re-derived the lane from
  *     `kind` and every `kind: picks` set that asked for `priority` came back `random`.
- *
- * Both are carried RAW and trimmed/lower-cased, which the `lane_priority` fixture spells
- * with padding and a capital letter.
- *
+ *   * `season_start` / `season_end` — THE SEASON WINDOW, the second gate over `enabled`
+ *     (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`). It has the
+ *     same silent failure as the two above, pointing the other way: dropped, it reads
+ *     `undefined` at `season.isSetAvailable`, which answers "no window", and every seasonal
+ *     queue is offered all year round. Nothing throws and nothing logs.
+ *   * `restart_when_exhausted` — read `undefined` at `finished.applyQueueWriteSide`, so the
+ *     queue would simply never start a new round.
  *   * `reset_watched_on` (2026-09-08) — the day each year a queue clears its own watched
  *     state. It is read on the PLAY path by `session.ts`
  *     (`watchedReset.applySeasonalReset`), so a loader that drops it does not throw: the
@@ -61,10 +65,23 @@ const FIELDS = [
  *     finds out until the following November. Carried RAW and trimmed, so `seasonal_junk`
  *     pins that an unreadable value reaches the cfg UNCHANGED and is refused at the consumer
  *     (`seasonalReset.parseResetDate`) rather than being laundered here.
+ *
+ * All of them but one are carried RAW and trimmed (the lane pair is lower-cased too), which
+ * the `lane_priority`, `season_autumn` and `seasonal_junk` fixtures spell with padding, a
+ * capital letter and outright nonsense respectively. `restart_when_exhausted` is the odd one
+ * out: it is carried EFFECTIVE, because `keep_completed` and `reel` win over it.
  */
 const POST_PYTHON: Record<string, Record<string, unknown>> = {
   lane_priority: { add_as: 'priority', promote_window: '20h' },
   lane_default: { add_as: null, promote_window: null, restart_when_exhausted: false },
+  season_autumn: { season_end: '11-05', season_start: '10-01' },
+  // The window that CROSSES the new year. Its start is AFTER its end, and the loader must
+  // carry that pair unchanged — an ordering check here would make every winter season
+  // unexpressible, and a swap would silently turn one into its own complement.
+  season_winter: { season_end: '01-06', season_start: '12-01' },
+  // No window: the reading the loader returned for every set before this landed, and the one
+  // that still has to mean "available all year".
+  season_none: { season_end: null, season_start: null },
   // The third completion axis, added 2026-09-08. It is read by
   // `finished.applyQueueWriteSide` and by nothing else, so a loader that forgot it would read
   // `undefined` there and the queue would simply never start a new round — exactly the silent

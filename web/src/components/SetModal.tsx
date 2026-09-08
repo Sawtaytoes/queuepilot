@@ -14,6 +14,12 @@ import {
 import { SET_LENGTH_PRESETS } from "../lib/countPicker"
 import { normalizeAddAs } from "../lib/kind"
 import { ACTIVITY_LABELS, queueTitle } from "../lib/people"
+import {
+  dayOptions,
+  MONTH_OPTIONS,
+  parseSeasonDay,
+  seasonDayValue,
+} from "../lib/season"
 import type {
   Activity,
   Profile,
@@ -187,6 +193,23 @@ export function SetModal() {
    * (decision `2026-08-26-the-promote-window-is-a-queue-setting`)
    */
   const [promoteWindow, setPromoteWindow] = useState("")
+  /**
+   * THE SEASON WINDOW — a start date and an end date that repeat every year. Out of season the
+   * queue is unavailable, and that is ALL it does: it clears nothing and marks nothing
+   * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
+   *
+   * Four controls rather than one date field, and neither half is a preference. A DATE input
+   * carries a YEAR, which is a lie the first time the window rolls over; and a native picker
+   * paints as the OS widget, which is the whole reason this app has no `<select>` left.
+   *
+   * Held as four strings so the picker seeds are ordinary option values. Blanking either MONTH
+   * clears the window, which is how a seasonal queue becomes an all-year one again.
+   */
+  const [seasonStartMonth, setSeasonStartMonth] =
+    useState("")
+  const [seasonStartDay, setSeasonStartDay] = useState("")
+  const [seasonEndMonth, setSeasonEndMonth] = useState("")
+  const [seasonEndDay, setSeasonEndDay] = useState("")
   const [batchStopsAt, setBatchStopsAt] = useState("none")
   // This queue's default batch. 1 is the engine default everywhere, and the point of the
   // control is that the right number differs per queue — one episode for TV, three chapters
@@ -309,6 +332,16 @@ export function SetModal() {
     // here would write the key onto every new queue and make the sparse file lie about
     // which queues have an opinion.
     setPromoteWindow(editing?.promote_window || "")
+    // No create-time default either: a queue is available all year until somebody says
+    // otherwise, and seeding a window here would make every new queue seasonal.
+    const startDay = parseSeasonDay(editing?.season_start)
+    const endDay = parseSeasonDay(editing?.season_end)
+    setSeasonStartMonth(
+      startDay ? String(startDay.month) : "",
+    )
+    setSeasonStartDay(startDay ? String(startDay.day) : "")
+    setSeasonEndMonth(endDay ? String(endDay.month) : "")
+    setSeasonEndDay(endDay ? String(endDay.day) : "")
     // Seed the blocks. An existing set always reports at least one (the implicit Plex block
     // for a pre-blocks set); a NEW set starts with one block on the first configured
     // provider, so creating a queue is exactly as many clicks as it was before.
@@ -515,6 +548,16 @@ export function SetModal() {
       // Empty string drops the key and falls back to the 16h product default; `never`/`0`
       // clears it to "no window", which means a promoted entry may lead every sitting.
       promote_window: promoteWindow.trim(),
+      // Sent as a PAIR, always both, because the pair rule lives on the writer: it refuses a
+      // half-written window by name rather than guessing an open end. Two blanks clear it.
+      season_start: seasonDayValue(
+        seasonStartMonth,
+        seasonStartDay,
+      ),
+      season_end: seasonDayValue(
+        seasonEndMonth,
+        seasonEndDay,
+      ),
       // "none" is the engine default, so it is stored as the absence of the key.
       batch_stops_at: batchStopsAt,
       // Likewise 1 — the server drops the key at <= 1, so a queue that never touched this
@@ -1103,6 +1146,70 @@ export function SetModal() {
           24h then blocks the next night’s scan. Blank means
           16h; `never` or `0` means a promoted entry leads
           every sitting.
+        </p>
+        {/* THE SEASON WINDOW. Its own row, below the promote window and above the batch
+            control, because it is the only setting here that is about WHEN the queue is
+            offered rather than about what it plays.
+
+            Four `SelectListbox`es and not an `<input type="date">`: a date input carries a
+            YEAR, which is a lie the first time this window rolls over, and it paints as the
+            OS widget. Both are the reason this app has no native picker left. */}
+        <label className="field">
+          In season from
+          <span className="seasonrow" id="set-season">
+            <SelectListbox
+              className="fieldselect"
+              id="set-season-start-month"
+              key={`${modalKey}-ssm`}
+              label="Season start month"
+              onChange={setSeasonStartMonth}
+              options={MONTH_OPTIONS}
+              value={seasonStartMonth}
+            />
+            <SelectListbox
+              className="fieldselect"
+              id="set-season-start-day"
+              /* Keyed on the MONTH too: the day list narrows with it, so a stored 31 has to
+                 be re-seeded when somebody moves the window to a 30-day month. Keying a
+                 picker on its second writer is the house rule
+                 (`2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`). */
+              key={`${modalKey}-ssd-${seasonStartMonth}`}
+              label="Season start day"
+              onChange={setSeasonStartDay}
+              options={dayOptions(seasonStartMonth)}
+              value={seasonStartDay}
+            />
+            <span className="seasonto">to</span>
+            <SelectListbox
+              className="fieldselect"
+              id="set-season-end-month"
+              key={`${modalKey}-sem`}
+              label="Season end month"
+              onChange={setSeasonEndMonth}
+              options={MONTH_OPTIONS}
+              value={seasonEndMonth}
+            />
+            <SelectListbox
+              className="fieldselect"
+              id="set-season-end-day"
+              key={`${modalKey}-sed-${seasonEndMonth}`}
+              label="Season end day"
+              onChange={setSeasonEndDay}
+              options={dayOptions(seasonEndMonth)}
+              value={seasonEndDay}
+            />
+          </span>
+        </label>
+        <p className="subhint" id="set-season-hint">
+          Optional. Out of season this queue is not offered
+          on What to Watch/Play and will not start. It still
+          appears on this page, still opens and is still
+          editable, marked with the date it returns. The
+          window repeats every year and may cross New Year
+          (1 Dec to 6 Jan). It changes nothing about what
+          has been watched: no entry is cleared, marked or
+          removed at a season boundary. Leave the months
+          blank for a queue that is available all year.
         </p>
         {/* `batch_stops_at` is PLEX-ONLY: it is read by the curated resolver
             (engine/resolve.js) and by nothing else, so on a queue with no Plex source it is

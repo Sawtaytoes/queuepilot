@@ -35,6 +35,7 @@ import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as queues from './queues.js';
 import * as queueEntryHistory from './store/db/queueEntryHistory.js';
 import * as section from './section.js';
+import { isSetAvailable } from './season.js';
 import * as sets from './sets.js';
 import { SESSION } from './session.js';
 import type {
@@ -158,7 +159,11 @@ export async function reconcileQueue(
   const cfg = reg && reg.sets[setName];
   // Only a CURATED queue has entries to mark. A rotation channel's lineup is computed, and a
   // reel writes nothing by rule.
-  if (!cfg || cfg.enabled === false || cfg.source !== 'queue' || cfg.reel) return { reconciled: false };
+  // `enabled` AND in season, through the one predicate. ⚠️ Skipping the reconcile is the whole
+  // of it: an out-of-season queue is not swept, not cleared and not marked. A season boundary
+  // clears NOTHING — that is a separate setting with its own record
+  // (`2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`).
+  if (!cfg || !isSetAvailable(cfg) || cfg.source !== 'queue' || cfg.reel) return { reconciled: false };
   try {
     const binding = routing.bindingFor(cfg, profileTitle);
     const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
