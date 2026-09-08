@@ -170,3 +170,32 @@ sets:
   kind: picks
   source: queue
   sections: [1]
+
+# restart_when_exhausted — the THIRD completion axis (decision
+# 2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes). Carried EFFECTIVE, the
+# same way `keep_completed` is: a set that never marks an entry done can never run out of
+# them, so `keep_completed`/`reel` win over it. All three spellings are here because the
+# loader resolves the contradiction rather than refusing it, and the resolution is the thing
+# a future edit could silently drop.
+- id: restart_round
+  label: Restarting Queue
+  kind: picks
+  source: queue
+  restart_when_exhausted: true
+  sections: [1]
+
+- id: restart_vs_playlist
+  label: Contradictory Queue
+  kind: picks
+  source: queue
+  keep_completed: true
+  restart_when_exhausted: true
+  sections: [1]
+
+- id: restart_vs_reel
+  label: Contradictory Reel
+  kind: picks
+  source: queue
+  reel: true
+  restart_when_exhausted: true
+  sections: [1]

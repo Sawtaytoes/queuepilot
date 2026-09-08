@@ -3,6 +3,14 @@ import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
 import { fetchProfiles } from "../lib/channels"
+import {
+  COMPLETION_MODE_HINTS,
+  COMPLETION_MODE_LABELS,
+  COMPLETION_MODES,
+  type CompletionMode,
+  completionFlagsFor,
+  completionModeOf,
+} from "../lib/completionMode"
 import { SET_LENGTH_PRESETS } from "../lib/countPicker"
 import { normalizeAddAs } from "../lib/kind"
 import { ACTIVITY_LABELS, queueTitle } from "../lib/people"
@@ -43,9 +51,12 @@ import { SelectListbox } from "./SelectListbox"
  * paths — renaming the label never breaks a card.
  * (decision `2026-07-21-sets-registry-immutable-ids`)
  *
- * Queue consumption flags (`keep_completed`, `reel`, `remove_completed_after`) are
- * editable here via Charcuterie `Checkbox` — previously hand-YAML only.
- * (decision `2026-08-08-set-modal-queue-flags`)
+ * Queue consumption flags are editable here rather than hand-YAML only
+ * (decision `2026-08-08-set-modal-queue-flags`). The two that answer the SAME question —
+ * `keep_completed` and `reel` — are ONE four-value `Picker` as of 2026-09-08, which is also
+ * where `restart_when_exhausted` lives (decision
+ * `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`). `remove_completed_after`
+ * is a different question and keeps its own row.
  *
  * `batch_stops_at` is the set-wide default for WHERE a multi-episode batch may stop; an
  * individual entry can override it from the queue view.
@@ -102,9 +113,16 @@ export function SetModal() {
    */
   const [activity, setActivity] =
     useState<Activity>("watching")
-  const [isKeepCompleted, setIsKeepCompleted] =
-    useState(false)
-  const [isReel, setIsReel] = useState(false)
+  /**
+   * ONE question about completion, four answers — never two booleans where one force-disables
+   * the other, which is a four-state control drawn as two two-state ones
+   * (decision `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`).
+   *
+   * The three booleans are still what goes on disk. `lib/completionMode.ts` owns the
+   * translation both ways, so nothing here re-derives it.
+   */
+  const [completionMode, setCompletionMode] =
+    useState<CompletionMode>("consume")
   const [watchHistory, setWatchHistory] = useState<
     "provider" | "queue"
   >("provider")
@@ -217,12 +235,7 @@ export function SetModal() {
       editing ? editing.requires_profile || "" : "",
     )
     setActivity(editing?.activity ?? "watching")
-    setIsKeepCompleted(
-      editing
-        ? Boolean(editing.keep_completed || editing.reel)
-        : false,
-    )
-    setIsReel(editing ? Boolean(editing.reel) : false)
+    setCompletionMode(completionModeOf(editing))
     setWatchHistory(editing?.watch_history ?? "provider")
     setBatchStopsAt(
       editing ? editing.batch_stops_at || "none" : "none",
@@ -392,8 +405,9 @@ export function SetModal() {
     // Board Game Picker case, where ticking every box narrowed the search to a category
     // and lost every uncategorised game.
 
-    // reel implies keep_completed at the engine; always send the effective pair so a
-    // re-opened edit prefill matches what was saved.
+    // The completion picker is ONE value on screen and THREE booleans on the wire, which is
+    // the same pair of keys this modal has always posted plus one more beside them. Storage
+    // did not change, so nothing migrates and a hand-edited `sets.yaml` keeps working.
     // A SINGLE Plex block is written back through the legacy `sections` /
     // `requires_profile` fields rather than as a `providers:` list. That keeps every
     // existing set byte-identical on disk after an unrelated edit — the block shape only
@@ -429,8 +443,7 @@ export function SetModal() {
       requires_profile: isLegacyShape
         ? blocks[0].profile
         : requiresProfile,
-      keep_completed: isKeepCompleted || isReel,
-      reel: isReel,
+      ...completionFlagsFor(completionMode),
       watch_history: watchHistory,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
@@ -526,13 +539,6 @@ export function SetModal() {
         "err",
       )
     }
-  }
-
-  const onReelChange = (nextIsReel: boolean) => {
-    setIsReel(nextIsReel)
-    // reel ⇒ keep_completed. When reel turns on, force the playlist flag on so the
-    // submitted body and the disabled checkbox both read the implied state.
-    if (nextIsReel) setIsKeepCompleted(true)
   }
 
   return (
@@ -910,34 +916,35 @@ export function SetModal() {
             </p>
           </>
         ) : null}
-        {/* Charcuterie Checkbox is uncontrolled (isChecked seeds once). Remount on modal
-            open AND when reel forces keep_completed on, so the box reflects the implied
-            state without becoming a controlled input. */}
-        <Checkbox
-          id="set-keep-completed"
-          isChecked={isKeepCompleted || isReel}
-          isDisabled={isReel}
-          key={`${modalKey}-keep-${isReel ? "reel" : "free"}`}
-          label="Playlist mode — don’t mark entries done when played"
-          onChange={setIsKeepCompleted}
-        />
-        <p className="subhint" id="set-keep-hint">
-          Non-consuming queue: entries stay re-showable
-          forever. Demo Reel and other showcase lineups want
-          this. Forced on when Demo reel is checked.
-        </p>
-        <Checkbox
-          id="set-reel"
-          isChecked={isReel}
-          key={`${modalKey}-reel`}
-          label="Demo reel — play the whole lineup every scan"
-          onChange={onReelChange}
-        />
-        <p className="subhint" id="set-reel-hint">
-          Ignores watched-state and plays every entry each
-          scan (implies playlist mode). Leave off for a
-          normal ordered queue that advances one item at a
-          time.
+        {/* ONE question about completion, four answers. It replaced the `Playlist mode` and
+            `Demo reel` CHECKBOXES, where checking Demo reel forced Playlist mode on and
+            disabled it — a four-state control drawn as two two-state ones — and it is where
+            `Start over when exhausted` went, which had nowhere else to go: a third checkbox
+            makes eight combinations of which four are meaningless.
+            (decision `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`)
+
+            KEYED ON `modalKey`, the SECOND WRITER, never on the mode. `SelectListbox` seeds
+            once, so the seed has to be re-taken when a different queue opens the modal;
+            keying on the value would remount the control under the user’s own focus
+            (decision `2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`). */}
+        <label className="field">
+          Completion mode
+          <SelectListbox
+            id="set-completion-mode"
+            key={`${modalKey}-completion`}
+            label="Completion mode"
+            onChange={(value) =>
+              setCompletionMode(value as CompletionMode)
+            }
+            options={COMPLETION_MODES.map((mode) => ({
+              label: COMPLETION_MODE_LABELS[mode],
+              value: mode,
+            }))}
+            value={completionMode}
+          />
+        </label>
+        <p className="subhint" id="set-completion-hint">
+          {COMPLETION_MODE_HINTS[completionMode]}
         </p>
         <label className="field" htmlFor="set-remove-after">
           Remove finished entries after

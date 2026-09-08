@@ -41,9 +41,10 @@ const FIELDS = [
 /**
  * The passthroughs added AFTER Python was deleted, with expectations authored here.
  *
- * Both of these went dark exactly the way `requires_profile` did, and stayed dark because
- * every test that covers them (`e2e/priority-lane-test.ts`, `e2e/kind-normalize-test.ts`)
- * hands the engine a cfg DIRECTLY and never runs the loader:
+ * Every one of them went dark exactly the way `requires_profile` did, or would have, and the
+ * two that did stayed dark because every test that covers them
+ * (`e2e/priority-lane-test.ts`, `e2e/kind-normalize-test.ts`) hands the engine a cfg
+ * DIRECTLY and never runs the loader:
  *
  *   * `promote_window` — read `undefined`, so `resolve.leadWindowMs()` used the product
  *     default instead of the queue's own window. A queue on `20h` held its promoted entry
@@ -55,13 +56,17 @@ const FIELDS = [
  *     same silent failure as the two above, pointing the other way: dropped, it reads
  *     `undefined` at `season.isSetAvailable`, which answers "no window", and every seasonal
  *     queue is offered all year round. Nothing throws and nothing logs.
+ *   * `restart_when_exhausted` — read `undefined` at `finished.applyQueueWriteSide`, so the
+ *     queue would simply never start a new round.
  *
- * All four are carried RAW and trimmed (the lane pair is lower-cased too), which the
+ * The first four are carried RAW and trimmed (the lane pair is lower-cased too), which the
  * `lane_priority` and `season_autumn` fixtures spell with padding and a capital letter.
+ * `restart_when_exhausted` is the odd one out: it is carried EFFECTIVE, because
+ * `keep_completed` and `reel` win over it.
  */
 const POST_PYTHON: Record<string, Record<string, unknown>> = {
   lane_priority: { add_as: 'priority', promote_window: '20h' },
-  lane_default: { add_as: null, promote_window: null },
+  lane_default: { add_as: null, promote_window: null, restart_when_exhausted: false },
   season_autumn: { season_end: '11-05', season_start: '10-01' },
   // The window that CROSSES the new year. Its start is AFTER its end, and the loader must
   // carry that pair unchanged — an ordering check here would make every winter season
@@ -70,6 +75,15 @@ const POST_PYTHON: Record<string, Record<string, unknown>> = {
   // No window: the reading the loader returned for every set before this landed, and the one
   // that still has to mean "available all year".
   season_none: { season_end: null, season_start: null },
+  // The third completion axis, added 2026-09-08. It is read by
+  // `finished.applyQueueWriteSide` and by nothing else, so a loader that forgot it would read
+  // `undefined` there and the queue would simply never start a new round — exactly the silent
+  // disablement this whole gate exists for. The two contradictory sets pin the PRECEDENCE:
+  // a set that never marks an entry done can never exhaust, so `keep_completed` and `reel`
+  // both win, and the answer is resolved rather than refused.
+  restart_round: { restart_when_exhausted: true },
+  restart_vs_playlist: { restart_when_exhausted: false, keep_completed: true },
+  restart_vs_reel: { restart_when_exhausted: false, keep_completed: true, reel: true },
 };
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.

@@ -28,6 +28,7 @@ import * as routing from './engine/routing.js';
 import * as select from './engine/select.js';
 import { WATCH_COUNT_ACCOUNTS } from './env.js';
 import { errMessage } from './errors.js';
+import * as exhaustion from './exhaustion.js';
 import * as mqttc from './mqttc.js';
 import { providerFor } from './providers/index.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
@@ -109,6 +110,14 @@ export async function watchedFor(
  * (so it is exempt from the TTL sweep by construction), and a `keep_completed` set still
  * revives and sweeps but never marks
  * (decision 2026-08-07-non-consuming-keep-completed-queue-flag).
+ *
+ * `restart_when_exhausted` is the THIRD axis and sits between the mark and the sweep. It marks
+ * exactly as a consuming queue does, so nothing repeats while anything is unwatched; what it
+ * adds is that the round STARTS OVER once the last entry finishes
+ * (decision 2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes). It runs BEFORE
+ * the sweep on purpose: a restart and a `remove_completed_after` TTL are a contradictory pair
+ * on one queue, and this order lets the restart win — the entries are cleared, so the sweep
+ * then finds nothing aged out and deletes nothing.
  */
 export async function applyQueueWriteSide(
   setName: string,
@@ -123,6 +132,9 @@ export async function applyQueueWriteSide(
   const isMarking = Boolean(newly.length) && !cfg.keep_completed;
   if (isMarking) {
     await queues.markDone(setName, newly);
+  }
+  if (cfg.restart_when_exhausted) {
+    await exhaustion.restartIfExhausted(setName);
   }
   await queues.sweepCompleted(setName, {
     keepCompleted: Boolean(cfg.keep_completed),
