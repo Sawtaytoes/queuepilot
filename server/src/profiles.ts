@@ -46,11 +46,14 @@ export function _resetLineRe(): void {
 // switch will use it as a HINT (the picker opens on the current user) — never as anything that
 // clears a profile gate; the switcher reads back after pressing.
 //
-// `isObserved` is that rule made enforceable. Two different things write this field and they
-// are NOT interchangeable:
+// `isObserved` is that rule made enforceable. Three different things write this field and
+// they are NOT interchangeable:
 //
-//   * `waitForProfile()` below writes an OBSERVATION — it matched a real PMS log line, so the
+//   * `waitForProfile()` below records an OBSERVATION — it matched a real PMS log line, so the
 //     Shield demonstrably acted as that profile. `isObserved: true`.
+//   * `driver.driveToPlaying()` records an OBSERVATION after `/status/sessions` names the
+//     account on this player. That is stronger than the log because Plex itself says which
+//     account owns the live session. `isObserved: true`.
 //   * `driver.driveProfile()` writes a CLAIM after an ADB switch reports success — but that
 //     report is only "CENTER was pressed on the right tile", never "Plex signed in". It has
 //     been wrong on the TV. `isObserved: false`.
@@ -63,6 +66,17 @@ export const LAST_SEEN: { title: string | null; isObserved: boolean } = {
   title: null,
   isObserved: false,
 };
+
+/** Record a profile that Plex itself identified, never one inferred from an ADB keypress. */
+export function recordObservedProfile(title: string): void {
+  LAST_SEEN.title = title;
+  LAST_SEEN.isObserved = true;
+}
+
+/** Keep a title as a picker hint, but prevent stale evidence from clearing a profile gate. */
+export function invalidateObservedProfile(): void {
+  LAST_SEEN.isObserved = false;
+}
 
 // Map a Plex Home profile title to a set name, or null if unmapped. (config.set_for_profile)
 export function setForProfile(title: string): string | null {
@@ -138,10 +152,9 @@ export async function waitForProfile(
           // index-checked under noUncheckedIndexedAccess.
           const title = lineRe().exec(line)?.[1];
           if (title !== undefined) {
-            // An OBSERVATION: the Shield served a request under this profile. This is the
-            // only writer allowed to set isObserved.
-            LAST_SEEN.title = title;
-            LAST_SEEN.isObserved = true;
+            // An OBSERVATION: the Shield served a request under this profile. The other
+            // trusted observation is `/status/sessions`; both go through the same writer.
+            recordObservedProfile(title);
             if (match === null || title === match) return title;
             // Signed in, but as the wrong profile: keep waiting for the switch.
             console.log(`[profiles] saw '${title}', holding out for '${match}'`);
