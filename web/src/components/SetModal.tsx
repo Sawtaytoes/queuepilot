@@ -111,7 +111,8 @@ export function SetModal() {
    * number is a property of WHEN this queue is watched, not a value a menu can guess. A
    * sitting that runs past midnight stamps its lead after midnight, so a flat 24h puts the
    * next eligible time LATER on the clock than the following night's scan and the promote
-   * skips a night. Blank follows the 24h product default.
+   * skips a night. Blank follows the 16h product default, which is short enough that an
+   * ordinary evening always clears it.
    * (decision `2026-08-26-the-promote-window-is-a-queue-setting`)
    */
   const [promoteWindow, setPromoteWindow] = useState("")
@@ -221,7 +222,7 @@ export function SetModal() {
         nextAddAs === "random" ? "" : "24h",
       )
     }
-    // No create-time default: a blank window IS the 24h product default, and seeding "24h"
+    // No create-time default: a blank window IS the 16h product default, and seeding "16h"
     // here would write the key onto every new queue and make the sparse file lie about
     // which queues have an opinion.
     setPromoteWindow(editing?.promote_window || "")
@@ -400,7 +401,7 @@ export function SetModal() {
       watch_history: watchHistory,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
-      // Empty string drops the key and falls back to the 24h product default; `never`/`0`
+      // Empty string drops the key and falls back to the 16h product default; `never`/`0`
       // clears it to "no window", which means a promoted entry may lead every sitting.
       promote_window: promoteWindow.trim(),
       // "none" is the engine default, so it is stored as the absence of the key.
@@ -924,7 +925,7 @@ export function SetModal() {
             onChange={(e) =>
               setPromoteWindow(e.target.value)
             }
-            placeholder="e.g. 20h — blank = 24h"
+            placeholder="e.g. 20h — blank = 16h"
             type="text"
             value={promoteWindow}
           />
@@ -937,7 +938,7 @@ export function SetModal() {
           gap between your sittings. A queue watched late at
           night stamps its lead after midnight, and a flat
           24h then blocks the next night’s scan. Blank means
-          24h; `never` or `0` means a promoted entry leads
+          16h; `never` or `0` means a promoted entry leads
           every sitting.
         </p>
         {/* `batch_stops_at` is PLEX-ONLY: it is read by the curated resolver

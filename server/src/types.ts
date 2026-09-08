@@ -350,7 +350,7 @@ interface SetRegistryCommon {
    * queues. Reported as the EFFECTIVE value (legacy movies → priority, anime → random).
    */
   add_as?: 'priority' | 'random';
-  /** Default lead cooldown for Priority entries (`24h`, `7d`, …). Picks only; sparse. */
+  /** Default lead cooldown for Priority entries (`16h`, `7d`, …). Picks only; sparse. */
   promote_window?: string | null;
   sections: number[];
   item_sections: number[];
@@ -586,6 +586,16 @@ interface RoutingSetCfgCommon {
   // --- optional passthroughs: ABSENT, not null, when the file omits them --------
   requires_profile?: string;
   remove_completed_after?: string;
+  /**
+   * The Picks lane knobs, trimmed and lower-cased and otherwise UNINTERPRETED —
+   * `kind.normalizeAddAs` and `leadWindow.parsePromoteWindow` own the reading, so an
+   * unrecognised value falls back at the consumer instead of being frozen here. `add_as` is
+   * the set's DEFAULT lane for an entry that names none; `promote_window` is how long a
+   * promoted entry stays led-out. Both are `string` and not the narrowed union for that
+   * reason.
+   */
+  promote_window?: string;
+  add_as?: string;
   include_specials?: true;
   /** Selective replacement for the legacy all-specials switch. */
   included_specials?: string[];
