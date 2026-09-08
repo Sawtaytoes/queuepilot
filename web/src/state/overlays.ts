@@ -1,7 +1,11 @@
 import { useSyncExternalStore } from "react"
 
 import { isStartable } from "../lib/tileFace"
-import type { StartPoint, TileEntry } from "../lib/types"
+import type {
+  EndPoint,
+  StartPoint,
+  TileEntry,
+} from "../lib/types"
 
 /** The two lanes a Picks queue is drawn in. Mirrors `AddAs` on the wire. */
 export type Lane = "priority" | "random"
@@ -32,6 +36,19 @@ export type MemberDraft = {
 export type EntryActions = {
   item: TileEntry
   save: (start: StartPoint | null) => Promise<unknown>
+  /**
+   * How to persist the entry's END point — where its first played unit stops.
+   *
+   * `start`'s mirror and a SEPARATE write, because they are separate keys and separate
+   * routes server-side (`PATCH …/start`, `PATCH …/end`). Both are needed for a section, so
+   * `sectionCommit.ts` sends whichever of the two actually moved.
+   *
+   * ABSENT on anything that is not a queue entry. A rules channel's members store a
+   * whole-map `starts` on the set and have no per-line mapping to hang an `end` on, so the
+   * section control is not rendered there at all rather than rendered and inert — the same
+   * shape `lane` and `skip` already use.
+   */
+  saveEnd?: (end: EndPoint | null) => Promise<unknown>
   /** Pending items keep this whole answer locally until Add to chooses a queue. */
   memberDraft?: MemberDraft
   saveMembers?: (draft: MemberDraft) => Promise<unknown>
@@ -111,6 +128,15 @@ type Overlays = {
   } | null
   startModal: EntryActions | null
   /**
+   * The SECTION editor — where inside the first played unit playback begins and stops.
+   *
+   * Its own overlay rather than a block inside the entry sheet, following the start picker
+   * exactly: it holds a draft that is saved or cancelled as one answer (a window is a PAIR
+   * and half of one is not a state worth writing), where every control on the entry sheet
+   * writes on change.
+   */
+  sectionModal: EntryActions | null
+  /**
    * The MEMBER list — every item inside one entry, and which of them this queue plays.
    *
    * Its own overlay rather than a section of the entry sheet: the list is as long as the
@@ -160,6 +186,7 @@ let overlays: Overlays = {
   peopleModal: false,
   membersModal: null,
   playMenu: null,
+  sectionModal: null,
   setModal: null,
   startModal: null,
   tileMenu: null,
@@ -222,6 +249,18 @@ export const openStartModal = (entry: EntryActions) =>
 
 export const closeStartModal = () =>
   set({ startModal: null })
+
+// Closes the entry sheet AND the tile menu that launched it, the same as `openMembersModal`:
+// this opens from the sheet's Section row, and two dialogs over one entry is never intended.
+export const openSectionModal = (entry: EntryActions) =>
+  set({
+    entryEditor: null,
+    sectionModal: entry,
+    tileMenu: null,
+  })
+
+export const closeSectionModal = () =>
+  set({ sectionModal: null })
 
 // Closes the tile menu AND the entry sheet, for the same reason `openStartModal` closes the
 // menu: this opens from either one, and two overlays over one tile is never intended.
