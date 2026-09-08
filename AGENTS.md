@@ -862,7 +862,7 @@ Gate: `e2e/tile-menu-test.ts` (spawns its own server; browser, no Plex).
 A set may carry a **season window** — `season_start` and `season_end`, both `MM-DD`,
 repeating every year. Out of season the queue is unavailable
 ([decision](docs/decisions/2026-09-08-a-season-window-gates-the-existing-enabled-flag.md)).
-Five things bite, and the first two are what a re-implementation gets wrong.
+Six things bite, and the first two are what a re-implementation gets wrong.
 
 - **`season.isSetAvailable(cfg, now)` is THE answer to "is this queue available right now",
   and it is the only one.** `enabled !== false` AND today inside the window. The six places
@@ -893,7 +893,6 @@ Five things bite, and the first two are what a re-implementation gets wrong.
   makes every winter season unexpressible. Both ends or neither: a half-written pair is
   refused BY NAME by `sets.normalizeSeasonForWrite`, never guessed into an open end, and two
   blanks clear it.
-
 - **A FILTERED VIEW inherits the window, and its `enabled` is still its own.** `season_start`
   and `season_end` are not in `filteredQueues.NEVER_INHERITED`, which is the right pair: the
   switch is per view, the calendar belongs to the queue it views. Adding them to that list is
