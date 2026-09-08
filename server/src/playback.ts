@@ -100,6 +100,14 @@ export interface AccountVerdict {
   reason?: string;
 }
 
+/** A one-shot observation of the account on the target player's active Plex session. */
+export interface AccountObservation {
+  accountId: number | null;
+  title: string | null;
+  /** Why Plex could not identify an account, when `accountId` is null. Log-only. */
+  reason?: string;
+}
+
 /**
  * A player as plex.tv's `/api/v2/devices` describes it, flattened by `playerDevices()`.
  *
@@ -149,6 +157,7 @@ interface PlaybackMetadata {
   ratingKey?: string | number;
   viewOffset?: number;
   Player?: { machineIdentifier?: string; title?: string };
+  User?: { id?: unknown; title?: unknown };
   Media?: { Part?: PlexPart[] }[];
 }
 
@@ -806,7 +815,7 @@ export async function currentSession(
   return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0) };
 }
 
-// --- the post-play account audit --------------------------------------------------------- //
+// --- the active-session account observation + post-play audit --------------------------- //
 //
 // The ONE fact this system could never read back: which Plex Home profile the Shield is
 // signed into. `profiles.waitForProfile()` infers it from a PMS DEBUG line keyed on
@@ -818,9 +827,84 @@ export async function currentSession(
 // session with the `User` whose token owns it — and that account IS the one Plex will
 // scrobble to, which is the only definition of "the right profile" that ever mattered.
 //
-// This is why it is a POST-play audit and not a pre-play gate: before playMedia there is no
-// session to read. Play, then immediately confirm, then stop if it was wrong.
+// It serves two different moments. Before a new handoff, an EXISTING session can prove the
+// player is already on the required account and avoid the picker. After a handoff, polling
+// waits for the NEW session and stops it if it landed on the wrong account. An idle player
+// still exposes no account, so that case needs a prior trusted observation or the picker.
 // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
+
+function configuredSessionTarget(device: Device | null): ClientTarget | null {
+  const machineIdentifier = device?.machineIdentifier || SHIELD_CLIENT_MACHINE_ID || null;
+  const name = device?.name || SHIELD_CLIENT_NAME || null;
+  if (!machineIdentifier && !name) return null;
+  return { machineIdentifier, name, uri: device?.uri || SHIELD_CLIENT_URI || null };
+}
+
+async function sessionTarget(device: Device | null): Promise<ClientTarget | null> {
+  // Matching a PMS session needs only the configured identity. Do not make a plex.tv device
+  // lookup part of the fast path when the target's machine id or name is already known.
+  const configured = configuredSessionTarget(device);
+  if (configured) return configured;
+  try { return await findClient(device); } catch { return null; }
+}
+
+function sessionBelongsTo(m: PlaybackMetadata, wanted: ClientTarget): boolean {
+  const player = m.Player || {};
+  return Boolean(
+    (wanted.machineIdentifier && player.machineIdentifier === wanted.machineIdentifier)
+    || (wanted.name && player.title === wanted.name),
+  );
+}
+
+async function readAccountForTarget(
+  wanted: ClientTarget,
+  timeoutMs: number,
+): Promise<AccountObservation> {
+  let data: PlexReqJson;
+  try {
+    // ADMIN token. A managed-user token receives an EMPTY /status/sessions container and
+    // therefore cannot reveal that the player is actually using another account.
+    data = await plexReq('GET', '/status/sessions', { token: PLEX_TOKEN, timeoutMs });
+  } catch (e) {
+    return {
+      accountId: null,
+      title: null,
+      reason: `/status/sessions unreadable: ${errMessage(e)}`,
+    };
+  }
+
+  const sessions = data.MediaContainer?.Metadata || [];
+  const mine = sessions.find((m) => sessionBelongsTo(m, wanted));
+  if (!mine) {
+    return { accountId: null, title: null, reason: 'no active session on the target player' };
+  }
+
+  const parsed = parseInt(String(mine.User?.id), 10);
+  const accountId = Number.isFinite(parsed) ? parsed : null;
+  const title = mine.User?.title != null ? String(mine.User.title) : null;
+  if (accountId == null) {
+    return { accountId: null, title, reason: 'target session carries no User id' };
+  }
+  return { accountId, title };
+}
+
+/**
+ * Read the account on the target player's EXISTING session once, without waiting for a new
+ * session. This is the cheap pre-switch fast path. A null account means "no proof", never
+ * "the player is signed out".
+ */
+export async function currentAccount(
+  {
+    device = null,
+    timeoutMs = 1_000,
+  }: { device?: Device | null; timeoutMs?: number } = {},
+): Promise<AccountObservation> {
+  const wanted = await sessionTarget(device);
+  if (!wanted) {
+    return { accountId: null, title: null, reason: 'target player identity is unavailable' };
+  }
+  return readAccountForTarget(wanted, Math.max(1, timeoutMs));
+}
 
 /**
  * Who is Plex playing as on our client? `expectAccountId` is the bound account
@@ -841,40 +925,28 @@ export async function verifyAccount(
   if (expectAccountId == null) {
     return { isMismatch: false, accountId: null, title: null, reason: 'no bound account to check' };
   }
-  let wanted: ClientTarget | null = null;
-  try { wanted = await findClient(device); } catch { wanted = null; }
+  const wanted = await sessionTarget(device);
+  if (!wanted) {
+    return {
+      isMismatch: false,
+      accountId: null,
+      title: null,
+      reason: 'target player identity is unavailable',
+    };
+  }
 
   const deadline = Date.now() + Math.max(0, timeoutMs);
   let lastReason = 'no session appeared on the target client';
   for (;;) {
-    let data: PlexReqJson;
-    try {
-      // ADMIN token, for the same reason currentSession() uses it, and here the reason is
-      // sharper: /status/sessions returns an EMPTY container to a managed user, so asking as
-      // Younger Kids could never reveal that the Shield is playing as the owner — which is
-      // the entire question this function exists to answer.
-      data = await plexReq('GET', '/status/sessions', { token: PLEX_TOKEN });
-    } catch (e) {
-      lastReason = `/status/sessions unreadable: ${errMessage(e)}`;
-      data = {};
+    const observation = await readAccountForTarget(wanted, RESUME_POLL_TIMEOUT_MS);
+    if (observation.accountId != null) {
+      return {
+        isMismatch: observation.accountId !== Number(expectAccountId),
+        accountId: observation.accountId,
+        title: observation.title,
+      };
     }
-    const md = (data && data.MediaContainer && data.MediaContainer.Metadata) || [];
-    const mine = md.find((m) => {
-      const pl = m.Player || {};
-      if (!wanted) return true;
-      return (wanted.machineIdentifier && pl.machineIdentifier === wanted.machineIdentifier)
-        || (wanted.name && pl.title === wanted.name);
-    });
-    if (mine) {
-      const row = mine as typeof mine & { User?: { id?: unknown; title?: unknown } };
-      const parsed = parseInt(String(row.User?.id), 10);
-      const accountId = Number.isFinite(parsed) ? parsed : null;
-      const title = row.User?.title != null ? String(row.User.title) : null;
-      if (accountId == null) {
-        return { isMismatch: false, accountId: null, title, reason: 'session carries no User id' };
-      }
-      return { isMismatch: accountId !== Number(expectAccountId), accountId, title };
-    }
+    lastReason = observation.reason || lastReason;
     if (Date.now() >= deadline) break;
     await sleep(Math.max(0.05, pollMs / 1000));
   }

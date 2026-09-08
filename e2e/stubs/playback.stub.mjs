@@ -13,6 +13,16 @@ export async function playRatingKeys(ratingKeys, { setName = null, device = null
   return CTL.playResults[Math.min(nth, CTL.playResults.length - 1)];
 }
 
+/** The one-shot pre-switch account observation from an existing target session. */
+export async function currentAccount({ device = null, timeoutMs = 1000 } = {}) {
+  record('current_account', device, timeoutMs);
+  return CTL.accountObservation || {
+    accountId: null,
+    title: null,
+    reason: 'no active session on the target player',
+  };
+}
+
 /**
  * The post-play account audit. Scripted off `CTL.accountVerdict`, which the driver tests set
  * to whatever `/status/sessions` would have said. Default: the account matches.
