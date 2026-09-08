@@ -4,7 +4,13 @@
 **Date:** 2026-09-08
 **Type:** UI / interaction / safety
 **Supersedes:** the toolbar placement of `#qremovedone` (QueueView "Remove all completed")
-**Superseded by:** —
+**Superseded by:** in part —
+  [2026-09-08-the-actions-menu-hides-on-what-each-row-can-do-not-on-the-done-flag](2026-09-08-the-actions-menu-hides-on-what-each-row-can-do-not-on-the-done-flag.md)
+  (the HIDE clause only — the menu no longer hides on the `done` flag alone, because
+  `Mark all unwatched` has work to do on a `watch_history: queue` queue that holds
+  `queue_entry_history` rows and no flag. Everything else below stands: the placement, the
+  `Menu`-not-`Picker` call, the confirm that names the count, and the move of `#qremovedone`
+  off the toolbar.)
 
 ## Decision
 
@@ -34,6 +40,14 @@ Three constraints.
   ⚠️ It keys on `done`, **not** `isCompleted` — a live-finished entry gets its flag from the
   next reconcile, seconds after playback, and offering to act on it before then would do
   nothing.
+
+  ⚠️ **SUPERSEDED — this clause only.** Inheriting `#qremovedone`'s rule was wrong for the row
+  that arrived with the menu: `Mark all unwatched` has work to do when nothing is flagged, on a
+  `watch_history: queue` queue whose completions live in `queue_entry_history`. Each row is now
+  offered on what THAT row can do, and an unavailable row is disabled with a reason rather than
+  absent — see
+  [2026-09-08-the-actions-menu-hides-on-what-each-row-can-do-not-on-the-done-flag](2026-09-08-the-actions-menu-hides-on-what-each-row-can-do-not-on-the-done-flag.md).
+  The `done`-not-`isCompleted` reasoning above is unchanged and still binds.
 
 ## Context
 

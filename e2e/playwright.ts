@@ -141,6 +141,9 @@ export interface Locator {
   isVisible(options?: TimeoutOptions): Promise<boolean>;
   isHidden(options?: TimeoutOptions): Promise<boolean>;
   isChecked(options?: TimeoutOptions): Promise<boolean>;
+  /** The NATIVE `disabled` attribute, which is what Charcuterie's `MenuAction` writes for a
+   * disabled row — it never sets `aria-disabled`, so an attribute check reads the wrong thing. */
+  isDisabled(options?: TimeoutOptions): Promise<boolean>;
   scrollIntoViewIfNeeded(options?: TimeoutOptions): Promise<void>;
   elementHandle(options?: TimeoutOptions): Promise<ElementHandle | null>;
   elementHandles(): Promise<ElementHandle[]>;

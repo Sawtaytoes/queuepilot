@@ -180,15 +180,21 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
   each element matches any rule for each class it wears. It **reports, it is not a CI gate**
   (a state class on an ancestor matches nothing on purpose). The five findings it left open
   on other pages are **all fixed** as of 2026-08-21, by adopting components rather than by
-  un-scoping rules; it now returns **18** pairs. Sixteen are a state class or one of Tailwind's own
-  `peer` / `divide-*` primitives; the other two are **`.playbtn`**, which is deliberately a
-  DOM handle carrying no rule — `PlayMenu`'s outside-click handler asks
-  `t.closest(".playbtn")`, so the class has to exist and must not paint. **`.addanother` is a
-  third one of those** — the queue search row's duplicate door, which `SearchDropdown` names
-  in `ignoreSelector` so pressing it does not also fire the row's "jump to the one already
-  here". The audit never sees it, because it visits routes and the results list is closed on
-  all of them. A rise in this
-  number is not automatically a regression, but it needs a reason written down here. ⚠️ Do not trust a zero from it — its first
+  un-scoping rules. ⚠️ **THE NUMBER IS A FLOOR, NOT A CONSTANT — do not read a difference as a
+  regression on its own.** Measured 2026-09-08 over four runs of the same commit: **11, 11, 11,
+  13**. The floor of 11 is eight state or ancestor classes (`.editable`, `.modalbtns`,
+  `.name-editable`, `.play-view`, `.queue-view` on three bodies, `.rules-shelf`), two of
+  Tailwind's own `peer` primitive, and one **`.playbtn`**, which is deliberately a DOM handle
+  carrying no rule — `PlayMenu`'s outside-click handler asks `t.closest(".playbtn")`, so the
+  class has to exist and must not paint. **`.addanother` is a second one of those** — the queue
+  search row's duplicate door, which `SearchDropdown` names in `ignoreSelector` so pressing it
+  does not also fire the row's "jump to the one already here". The audit never sees it, because
+  it visits routes and the results list is closed on all of them. The two extra pairs in the
+  fourth run are `.badge` and `.unresolved` on `/channels`, and they appear only when that route
+  paints its data before the audit reads it — the same run reported `flagged=112` there against
+  `flagged=2` in its own earlier pass. So compare the CLASS LIST, not the total: a class that
+  was never on it is the finding. A new class here needs a reason written down at this line.
+  (The earlier figure of 18 at this line was never reproduced and is withdrawn.) ⚠️ Do not trust a zero from it — its first
   draft returned zero on every route, which was a bug (CSS nesting gives every `CSSStyleRule`
   a truthy empty `cssRules`). Confirm the self-test probe fires.
 - **A BARE ELEMENT SELECTOR in `app.css` is the same override, aimed at every component at
