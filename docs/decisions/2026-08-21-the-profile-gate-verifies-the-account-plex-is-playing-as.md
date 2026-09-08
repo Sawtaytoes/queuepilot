@@ -4,7 +4,9 @@
 - **Date:** 2026-08-21
 - **Type:** Bug fix / playback correctness
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-09-07](2026-09-07-a-plex-session-observation-skips-the-profile-picker.md)
+  *(only the PMS-log-only observation source and unconditional second-walk clauses; the
+  keypress remains untrusted and the post-play account audit remains authoritative)*
 - **Extends:** the workspace-root record *ADB is enabled on the Shield, for closed-loop Plex profile
   switching* (2026-07-26),
   [2026-08-16-a-curated-queue-plays-as-the-profile-it-is-gated-to](2026-08-16-a-curated-queue-plays-as-the-profile-it-is-gated-to.md),

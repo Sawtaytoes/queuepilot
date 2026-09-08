@@ -1,8 +1,11 @@
 # Design: playback as a state machine
 
-> **Updated 2026-08-12.** The FSM now lives in `server/src/driver.js` (the Python `driver.py`
-> this doc describes is deleted). The design below still holds; the tests are
-> `e2e/playback-fsm-test.mjs` + `e2e/fsm-wake-and-skip-test.mjs`.
+> **Updated 2026-09-07.** The FSM now lives in `server/src/driver.ts` (the Python `driver.py`
+> this doc describes is deleted). The profile fast path now reads an existing target session
+> before ADB and remembers the independent post-play account audit; see
+> [the decision](decisions/2026-09-07-a-plex-session-observation-skips-the-profile-picker.md).
+> The tests are `e2e/playback-fsm-test.ts`, `e2e/fsm-wake-and-skip-test.ts`,
+> `e2e/account-audit-test.ts` and `e2e/profile-session-observation-test.ts`.
 
 Status: **implemented behind the `PLAYBACK_FSM` flag** (default off) — `queue_builder/driver.py`
 + its wiring in `service._do_start`. The pre-FSM incremental version stays live and unchanged
@@ -102,15 +105,16 @@ call to it. Each observed failure mode → how it's fixed:
    connection-refused play a bounded few times (`PLAYBACK_FSM_PLAY_ATTEMPTS`), re-opening Plex
    between attempts. Play is the LAST action and it is verified. Client-mode only (cast doesn't
    use `:32500`). Confirmed zero Errno-111 across live runs.
-2. **Destructive switch when already on the right profile.** `_drive_profile` reads the current
-   profile from `profiles.LAST_SEEN` (alias-aware via `adb.same_profile`, so the picker's
-   display name 'Bob Smith' == the username 'sawtaytoes' the log + `requires_profile` use)
-   FIRST and, when it already matches `required`, is a no-op — it never summons or walks the
-   picker. Only a real change drives `adb.switch_to`. **The cache is load-bearing:** the FSM
-   gated path never calls `wait_for_profile`, so nothing else populates `LAST_SEEN` — a
-   successful switch therefore RECORDS `required` into it so the next gated scan short-circuits
-   with no picker flash (without this it walked the picker on every gated scan). *(Fixed
-   post-live-test, 2026-08-07.)*
+2. **Destructive switch when already on the right profile.** `driveProfile` first makes a
+   one-shot `/status/sessions` read. An existing session on the target player names its Plex
+   `User`; a matching account is a no-op, while a different account is the verified starting
+   hint for the picker walk. With no active session, `profiles.LAST_SEEN` remains the
+   alias-aware fast path. Only a Plex observation may populate it: either a direct PMS log
+   line or the post-play account audit. A successful ADB selection records an UNOBSERVED claim
+   because a real selection once reported success while Plex kept the old account. The audit
+   after that play promotes a match to OBSERVED, so the next queue skips without trusting the
+   keypress. A cold cache plus no active session still walks the picker. *(Original fast path
+   2026-08-07; trust correction 2026-08-21; active-session path 2026-09-07.)*
 3. **Gate never clears when already signed in.** The gate is satisfied by a picker read-back
    (`switch_to` returning ok) OR `LAST_SEEN == required` — not solely a fresh PMS-log sign-in
    line. With ADB off it still falls back to `wait_for_profile`.
