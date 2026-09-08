@@ -1118,15 +1118,23 @@ Four things bite here.
   contradictory file. `e2e/set-passthrough-parity.ts` pins it — this knob is read by
   `applyQueueWriteSide` and by nothing else, so a loader that forgot it would read `undefined`
   there and the queue would silently never start a new round.
-- ⚠️ **CLEARING THE WATCHED STATE IS A SEAM, AND THERE MUST BE ONE IMPLEMENTATION.**
-  `server/src/exhaustion.ts` decides WHEN (every entry of the queue is done) and calls an
-  INJECTED reset; the reset itself is the seasonal reset's `resetQueueWatchedState(setId)`,
-  which owns all three stores — the `done`/`done_at` flags, the `queue_entry_history` rows and
-  the `lead_cooldown` rows. Two features, one clear. The default in that file strips the done
-  flags through `queues.clearDone` and nothing else, so **a new round is only genuinely
-  playable on a queue that owns its history** (`watch_history: queue`) — a queue on PROVIDER
-  history is still watched in Plex, and neither this nor the seasonal reset can change that.
-  Gate: `e2e/completion-mode-test.ts`.
+- ⚠️ **CLEARING THE WATCHED STATE IS A SEAM, AND THERE IS EXACTLY ONE IMPLEMENTATION.**
+  `server/src/exhaustion.ts` decides WHEN (every entry of the queue is done) and calls the
+  reset; the reset is the seasonal reset's `watchedReset.resetQueueWatchedState(setId)`, which
+  owns all three stores — the `done`/`done_at` flags, the `queue_entry_history` rows and the
+  `lead_cooldown` rows. Two features, one clear. The weaker `queues.clearDone`-only default is
+  **deleted**. ⚠️ **That function is the module DEFAULT, not a boot-time injection, and do not
+  "move the wiring to `index.ts`."** Every offline session harness imports `session.js`
+  directly and never reaches `index.ts`, so a boot-only call would be live in production and
+  absent from every gate — a second implementation again. `setQueueWatchedStateReset` survives
+  for one purpose: `e2e/completion-mode-test.ts` swaps in a recorder to prove the exhaustion
+  rule decides WHEN and nothing else. The restart passes `reason: 'exhausted'`, so it also
+  settles `queue_watched_reset` — correct, because after a restart no past occurrence has
+  anything left to clear, and a seasonal reset owed on the same play already ran first
+  (`session.startSession` before `provider.buckets()`, against the write side after it).
+  **A new round is only genuinely playable on a queue that owns its history**
+  (`watch_history: queue`) — a queue on PROVIDER history is still watched in Plex, and neither
+  this nor the seasonal reset can change that. Gate: `e2e/completion-mode-test.ts`.
 
 ## The page loads from CACHE, and phase 3 re-reads the providers
 
