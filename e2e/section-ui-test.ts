@@ -246,6 +246,20 @@ try {
     await page.locator(`#grid li.tile[data-key=${JSON.stringify(key)}] .sectiontag`)
       .allInnerTexts()
   ).join('|');
+  /**
+   * Wait until the tile HAS its tag, then answer with the text. The seeded tags render a
+   * beat after the grid's captions do, so reading them off a bare `waitForTimeout` raced:
+   * the assertion saw '' and the failure line — a second, later read — printed the right
+   * string, which reads as a mismatch between two identical values. One read, after the
+   * element exists.
+   */
+  const tagSettled = async (key: string) => {
+    await page.locator(`#grid li.tile[data-key=${JSON.stringify(key)}] .sectiontag`)
+      .first().waitFor({ state: 'attached', timeout: 15_000 })
+      .catch(() => {});
+
+    return tagText(key);
+  };
 
   await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
   await page.locator('#grid .tile .cap', { hasText: 'A Reel Sampler' }).first()
@@ -253,12 +267,15 @@ try {
   await page.waitForTimeout(600);
 
   // ── 1: the tag ──────────────────────────────────────────────────────────────────────────
-  check('a WINDOW names both marks', await tagText(windowKey) === 'Section 01:01:00–01:06:00',
-    await tagText(windowKey));
+  const windowTag = await tagSettled(windowKey);
+  check('a WINDOW names both marks',
+    windowTag === 'Section 01:01:00–01:06:00', windowTag);
+  const openEndTag = await tagSettled(openEndKey);
   check('an OPEN END says where it begins and nothing else',
-    await tagText(openEndKey) === 'Section from 01:15:00', await tagText(openEndKey));
+    openEndTag === 'Section from 01:15:00', openEndTag);
+  const openStartTag = await tagSettled(openStartKey);
   check('an OPEN START says where it stops and nothing else',
-    await tagText(openStartKey) === 'Section to 01:30', await tagText(openStartKey));
+    openStartTag === 'Section to 01:30', openStartTag);
   check('an entry with no section wears no tag at all',
     await page.locator(`#grid li.tile[data-key=${JSON.stringify(plainKey)}] .sectiontag`)
       .count() === 0);
