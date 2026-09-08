@@ -544,6 +544,17 @@ export type RegistrySet = {
    */
   remove_completed_after?: string | null
   /**
+   * Curated queues only. `MM-DD` — the day each year this queue clears its own watched
+   * state, or null/absent = never, which is what every queue written before 2026-09-08
+   * means. It is evaluated on a READ at play time, never on a timer
+   * (decision `2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`).
+   *
+   * ⚠️ `remove_completed_after` DEFEATS it, silently: that setting DELETES a finished entry
+   * instead of tagging it, so a seasonal queue with a TTL has nothing left to reset by the
+   * time the date arrives. The Set editor says so where the two sit.
+   */
+  reset_watched_on?: string | null
+  /**
    * Curated sets only. The set-wide default for WHERE a multi-episode batch may stop; an
    * entry can override it. null/absent = no boundary (fill the batch across anything).
    */
