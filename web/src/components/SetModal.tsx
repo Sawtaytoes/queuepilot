@@ -13,10 +13,13 @@ import {
 } from "../lib/completionMode"
 import { SET_LENGTH_PRESETS } from "../lib/countPicker"
 import { normalizeAddAs } from "../lib/kind"
+import {
+  clampDay,
+  dayOptions,
+  monthOptions,
+} from "../lib/monthDay"
 import { ACTIVITY_LABELS, queueTitle } from "../lib/people"
 import {
-  dayOptions,
-  MONTH_OPTIONS,
   parseSeasonDay,
   seasonDayValue,
 } from "../lib/season"
@@ -76,41 +79,19 @@ const newUid = () => {
  * `""` is OFF, which is what every queue written before 2026-09-08 means.
  *
  * Named months, not numbers: "11" is 1 November here and 11 January in half the world, and
- * this is the one setting whose value is next read a year after it was chosen.
+ * this is the one setting whose value is next read a year after it was chosen. The list itself
+ * is `lib/monthDay.ts`, which is also what the season row below and the calendar view read —
+ * three copies of it is three chances for one to offer 31 February.
  */
-const RESET_MONTH_OPTIONS = [
-  { label: "Never — this queue does not reset", value: "" },
-  ...[
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ].map((label, index) => ({
-    label,
-    value: String(index + 1),
-  })),
-]
+const RESET_MONTH_OPTIONS = monthOptions({
+  emptyLabel: "Never — this queue does not reset",
+  isLongName: true,
+})
 
-/**
- * How many days a month has. February is the only interesting one, and it is given 29 —
- * a person may legitimately pick the leap day, and `seasonalReset.mostRecentOccurrence`
- * lands it on 1 March in a common year rather than skipping the year.
- *
- * Mirrors `server/src/seasonalReset.ts daysInMonth`, which the web workspace cannot import.
- * The pair cannot drift far: a day this list offers and the server refuses is refused on
- * Save, loudly, rather than stored.
- */
-const RESET_MONTH_DAYS = [
-  31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
-]
+/** The season row's months, in the short spelling: four pickers share one line there. */
+const SEASON_MONTH_OPTIONS = monthOptions({
+  emptyLabel: "—",
+})
 
 export function SetModal() {
   const { setModal } = useOverlays()
@@ -389,18 +370,12 @@ export function SetModal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setModal])
 
-  // The DAY options for the chosen month. February offers 29 (see RESET_MONTH_DAYS); a month
-  // nobody has chosen offers the full 31 so the disabled control is not also empty.
-  const resetDayOptions = useMemo(() => {
-    const days = resetMonth
-      ? (RESET_MONTH_DAYS[Number(resetMonth) - 1] ?? 31)
-      : 31
-
-    return Array.from({ length: days }, (_, index) => ({
-      label: String(index + 1),
-      value: String(index + 1),
-    }))
-  }, [resetMonth])
+  // The DAY options for the chosen month. February offers 29; a month nobody has chosen offers
+  // the full 31 so the disabled control is not also empty.
+  const resetDayOptions = useMemo(
+    () => dayOptions(resetMonth),
+    [resetMonth],
+  )
 
   // Choosing a month is the DAY's second writer: February cannot hold the 31 January left
   // behind. Clamp here rather than in render, so the day picker's remount (keyed on the
@@ -408,8 +383,7 @@ export function SetModal() {
   const onResetMonthChange = (value: string) => {
     setResetMonth(value)
     if (!value) return
-    const days = RESET_MONTH_DAYS[Number(value) - 1] ?? 31
-    if (Number(resetDay) > days) setResetDay(String(days))
+    setResetDay(clampDay(value, resetDay))
   }
 
   // Profile-gate options. The play gate matches the PMS-log stamp: managed users stamp
@@ -1163,7 +1137,7 @@ export function SetModal() {
               key={`${modalKey}-ssm`}
               label="Season start month"
               onChange={setSeasonStartMonth}
-              options={MONTH_OPTIONS}
+              options={SEASON_MONTH_OPTIONS}
               value={seasonStartMonth}
             />
             <SelectListbox
@@ -1186,7 +1160,7 @@ export function SetModal() {
               key={`${modalKey}-sem`}
               label="Season end month"
               onChange={setSeasonEndMonth}
-              options={MONTH_OPTIONS}
+              options={SEASON_MONTH_OPTIONS}
               value={seasonEndMonth}
             />
             <SelectListbox

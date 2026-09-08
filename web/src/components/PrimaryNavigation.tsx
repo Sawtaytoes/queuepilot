@@ -86,6 +86,24 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
       ),
       label: "People",
     },
+    {
+      /**
+       * THE CALENDAR — the second editor for the two date-based queue settings.
+       *
+       * Appended rather than inserted: the list's order is settled, and the four destinations
+       * above it keep the positions (and therefore the categorical hues) they have had. A
+       * route the owner cannot reach is not "another mechanism for maintaining it"
+       * (decision `2026-09-08-a-calendar-view-is-a-second-editor-for-date-based-queue-settings`).
+       */
+      href: ROUTE_PATHS.calendar,
+      icon: (
+        <NavigationIcon>
+          <path d="M4 6h16v14H4z" />
+          <path d="M4 10h16M9 4v4M15 4v4" />
+        </NavigationIcon>
+      ),
+      label: "Calendar",
+    },
   ]
 
 /**
