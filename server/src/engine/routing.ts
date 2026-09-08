@@ -65,6 +65,7 @@ type RawSetEntry = BindingSource & {
   restart_when_exhausted?: unknown;
   requires_profile?: unknown;
   remove_completed_after?: unknown;
+  reset_watched_on?: unknown;
   promote_window?: unknown;
   add_as?: unknown;
   season_start?: unknown;
@@ -274,6 +275,15 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     // §B.3 TTL auto-removal of completed entries; queues.sweepCompleted interprets it.
     if (ent.remove_completed_after != null) {
       cfg.remove_completed_after = String(ent.remove_completed_after).trim();
+    }
+    // The seasonal reset date, `MM-DD`. READ ON THE PLAY PATH by `session.ts`
+    // (`watchedReset.applySeasonalReset`), so it is exactly the class of field the block below
+    // is about: forget it here and every seasonal queue reads `undefined`, never resets, and
+    // says nothing about it. Carried RAW and only trimmed — `seasonalReset.parseResetDate`
+    // owns the reading, so a hand-typed `13-01` falls back to "off" at the consumer rather
+    // than being frozen into the cfg here.
+    if (ent.reset_watched_on != null) {
+      cfg.reset_watched_on = String(ent.reset_watched_on).trim();
     }
     // The two PICKS LANE knobs. Both are read by engine/resolve.js on the curated scan path,
     // and both were missing here until 2026-09-07 — the exact failure mode the block above

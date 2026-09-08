@@ -71,6 +71,47 @@ const newUid = () => {
   return `blk-${uidSeq}`
 }
 
+/**
+ * The month half of the seasonal reset date. Value is the 1-based month number as a string;
+ * `""` is OFF, which is what every queue written before 2026-09-08 means.
+ *
+ * Named months, not numbers: "11" is 1 November here and 11 January in half the world, and
+ * this is the one setting whose value is next read a year after it was chosen.
+ */
+const RESET_MONTH_OPTIONS = [
+  { label: "Never — this queue does not reset", value: "" },
+  ...[
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ].map((label, index) => ({
+    label,
+    value: String(index + 1),
+  })),
+]
+
+/**
+ * How many days a month has. February is the only interesting one, and it is given 29 —
+ * a person may legitimately pick the leap day, and `seasonalReset.mostRecentOccurrence`
+ * lands it on 1 March in a common year rather than skipping the year.
+ *
+ * Mirrors `server/src/seasonalReset.ts daysInMonth`, which the web workspace cannot import.
+ * The pair cannot drift far: a day this list offers and the server refuses is refused on
+ * Save, loudly, rather than stored.
+ */
+const RESET_MONTH_DAYS = [
+  31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+]
+
 export function SetModal() {
   const { setModal } = useOverlays()
   const { data, reg } = useStore()
@@ -128,6 +169,18 @@ export function SetModal() {
   >("provider")
   const [removeCompletedAfter, setRemoveCompletedAfter] =
     useState("")
+  /**
+   * THE SEASONAL RESET DATE — the day each year this queue clears its own watched state.
+   * Held as two pieces because that is what a person picks, and joined into the stored
+   * `MM-DD` only on Save
+   * (decision `2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`).
+   *
+   * A blank month is OFF, which is what every queue written before this control means. The
+   * day is never blank on its own: choosing a month seeds it to 1, so the pair can never be
+   * half a date.
+   */
+  const [resetMonth, setResetMonth] = useState("")
+  const [resetDay, setResetDay] = useState("1")
   /**
    * How long a PROMOTED entry stays led-out before it may lead again.
    *
@@ -258,6 +311,23 @@ export function SetModal() {
         nextAddAs === "random" ? "" : "24h",
       )
     }
+    // The seasonal reset is OFF on a new queue and on every queue that has never carried the
+    // key — an off queue must behave exactly as it does today. Split back into the two
+    // controls; a stored value is always `MM-DD`, and anything else the server refused to
+    // write, so a bad split is not reachable.
+    const storedReset = (
+      editing?.reset_watched_on || ""
+    ).split("-")
+    setResetMonth(
+      storedReset.length === 2
+        ? String(Number(storedReset[0]))
+        : "",
+    )
+    setResetDay(
+      storedReset.length === 2
+        ? String(Number(storedReset[1]))
+        : "1",
+    )
     // No create-time default: a blank window IS the 16h product default, and seeding "16h"
     // here would write the key onto every new queue and make the sparse file lie about
     // which queues have an opinion.
@@ -318,6 +388,29 @@ export function SetModal() {
     // Only re-seed when the modal is (re-)opened.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setModal])
+
+  // The DAY options for the chosen month. February offers 29 (see RESET_MONTH_DAYS); a month
+  // nobody has chosen offers the full 31 so the disabled control is not also empty.
+  const resetDayOptions = useMemo(() => {
+    const days = resetMonth
+      ? (RESET_MONTH_DAYS[Number(resetMonth) - 1] ?? 31)
+      : 31
+
+    return Array.from({ length: days }, (_, index) => ({
+      label: String(index + 1),
+      value: String(index + 1),
+    }))
+  }, [resetMonth])
+
+  // Choosing a month is the DAY's second writer: February cannot hold the 31 January left
+  // behind. Clamp here rather than in render, so the day picker's remount (keyed on the
+  // month) seeds from a value that is already valid.
+  const onResetMonthChange = (value: string) => {
+    setResetMonth(value)
+    if (!value) return
+    const days = RESET_MONTH_DAYS[Number(value) - 1] ?? 31
+    if (Number(resetDay) > days) setResetDay(String(days))
+  }
 
   // Profile-gate options. The play gate matches the PMS-log stamp: managed users stamp
   // their title, the owner stamps the plex.tv username. Blank = ungated. A current hand-set
@@ -447,6 +540,11 @@ export function SetModal() {
       watch_history: watchHistory,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
       remove_completed_after: removeCompletedAfter.trim(),
+      // `MM-DD`, or an empty string for "this queue does not reset" — which drops the key
+      // server-side, so a queue that never touched the control stays byte-identical on disk.
+      reset_watched_on: resetMonth
+        ? `${resetMonth.padStart(2, "0")}-${resetDay.padStart(2, "0")}`
+        : "",
       // Empty string drops the key and falls back to the 16h product default; `never`/`0`
       // clears it to "no window", which means a promoted entry may lead every sitting.
       promote_window: promoteWindow.trim(),
@@ -964,6 +1062,64 @@ export function SetModal() {
           tagged done until you clear them. Playlist / reel
           queues never mark done, so this only applies to
           ordinary consuming queues.
+        </p>
+        {/* THE SEASONAL RESET. A <div>+<span>, not a <label>: there are TWO controls under
+            one caption, and a <label> may name only one.
+
+            Two pickers rather than a text field, because this is the one setting whose value
+            is next examined a YEAR from now — a typed `13-40` would be refused on Save, but a
+            typed `01-11` for 11 January is a date, so nothing could refuse it and the queue
+            would reset in the wrong month. A month and a day cannot be mistyped into a
+            different valid date.
+
+            The DAY picker is keyed on the MONTH, not on its own value: the month is the day's
+            second writer (choosing February clamps 31 to 28), and keying a picker on its own
+            value remounts it under the user's own focus
+            (decision `2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer`). */}
+        <div className="field" id="set-reset-watched">
+          <span className="fieldlbl">
+            Clear watched state each year on
+          </span>
+          <SelectListbox
+            className="fieldselect"
+            id="set-reset-month"
+            key={`${modalKey}-reset-month`}
+            label="Reset month"
+            onChange={onResetMonthChange}
+            options={RESET_MONTH_OPTIONS}
+            value={resetMonth}
+          />
+          <SelectListbox
+            className="fieldselect"
+            id="set-reset-day"
+            isDisabled={!resetMonth}
+            key={`${modalKey}-reset-day-${resetMonth}`}
+            label="Reset day"
+            onChange={setResetDay}
+            options={resetDayOptions}
+            value={resetDay}
+          />
+        </div>
+        <p className="subhint" id="set-reset-watched-hint">
+          On the first play after this date each year, every
+          completion this queue owns is cleared and it plays
+          from the start again — the done marks, the
+          separate QueuePilot history and the promote
+          cooldowns. Nothing is removed and nothing is
+          written to Plex. There is no timer: a queue nobody
+          plays until December resets in December.
+          {removeCompletedAfter.trim() &&
+          ![
+            "0",
+            "disabled",
+            "never",
+            "none",
+            "off",
+          ].includes(
+            removeCompletedAfter.trim().toLowerCase(),
+          )
+            ? " Warning: “Remove finished entries after” above DEFEATS this. It deletes a finished entry instead of tagging it, so there is nothing left here to reset. Clear that field to use a reset date."
+            : " Do not also set “Remove finished entries after”: that deletes a finished entry instead of tagging it, so there would be nothing left to reset."}
         </p>
         <label
           className="field"

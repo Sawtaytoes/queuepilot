@@ -474,6 +474,16 @@ export interface QueueSet extends SetRegistryCommon {
   restart_when_exhausted: boolean;
   /** TTL string ("24h"/"7d"/…) or null = keep finished entries forever (the default). */
   remove_completed_after: string | null;
+  /**
+   * `MM-DD` — the day each year this queue clears its own watched state, or null = never
+   * (the default, and what every queue written before 2026-09-08 means).
+   *
+   * ⚠️ `remove_completed_after` DEFEATS it, silently: that setting DELETES a finished entry
+   * rather than tagging it, so a seasonal queue with a TTL has nothing left to reset by the
+   * time the date arrives. The Set editor says so where the two sit
+   * (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
+   */
+  reset_watched_on: string | null;
   batch_stops_at: BatchStop;
   /**
    * This queue's DEFAULT batch: how many items one entry contributes per visit when the
@@ -614,6 +624,15 @@ interface RoutingSetCfgCommon {
   // --- optional passthroughs: ABSENT, not null, when the file omits them --------
   requires_profile?: string;
   remove_completed_after?: string;
+  /**
+   * `MM-DD` — the day each year this queue clears its own watched state, read on the PLAY
+   * path and never on a timer
+   * (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
+   * Trimmed and otherwise UNINTERPRETED, the same posture as `promote_window`:
+   * `seasonalReset.parseResetDate` owns the reading, so an unrecognised value reads as "this
+   * queue does not reset" at the consumer.
+   */
+  reset_watched_on?: string;
   /**
    * The Picks lane knobs, trimmed and lower-cased and otherwise UNINTERPRETED —
    * `kind.normalizeAddAs` and `leadWindow.parsePromoteWindow` own the reading, so an

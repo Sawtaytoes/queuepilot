@@ -490,6 +490,15 @@ jobs:
       - name: Queue write-side (markDone/clearDone)
         run: $TSX e2e/mark-done-parity.ts
 
+      # THE SEASONAL RESET (2026-09-08): a queue clears its own watched state on a date each
+      # year, EVALUATED ON A READ. Three of the six claims are the ones a re-implementation
+      # gets wrong — a reset clears THREE things and only the first is obvious; it runs ABOVE
+      # the lineup build, so the cleared queue plays on the same scan rather than the next one;
+      # and it fires ONCE, held by a row rather than by a timer that does not exist. Offline:
+      # the real session.startSession() runs against the synthetic replay corpus.
+      - name: The seasonal reset, on a read (offline session)
+        run: $TSX e2e/seasonal-reset-test.ts
+
       # A curated queue's `skipped` list — the item-level exclude a Filtered Pool has had as
       # `blocklist` all along. The claim worth a gate is the WRITE side: an entry emptied only
       # by a skip must never reach `newlyDone`, or `markDone` retires it and the TTL sweep can

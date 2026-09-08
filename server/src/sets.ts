@@ -26,6 +26,7 @@ import { store } from './store/index.js';
 import { kindForWrite, normalizeAddAs, normalizeProductKind, type AddAs } from './kind.js';
 import { activityForSet, activityLabel, isActivity } from './activity.js';
 import { filterOf, inheritFilteredQueues, parentIdOf } from './filteredQueues.js';
+import { formatResetDate, parseResetDate } from './seasonalReset.js';
 import type {
   BatchStop,
   Binding,
@@ -96,9 +97,13 @@ interface RawSet extends RawBinding {
   reel?: boolean;
   restart_when_exhausted?: boolean;
   remove_completed_after?: string | null;
-  /** THE SEASON WINDOW — `MM-DD` and `MM-DD`, repeating every year. Both ends or neither. */
+  /** THE SEASON WINDOW — `MM-DD` and `MM-DD`, repeating every year. Both ends or neither.
+   *  AVAILABILITY only; it clears nothing. `reset_watched_on` below is the other feature and
+   *  they are deliberately independent. */
   season_start?: unknown;
   season_end?: unknown;
+  /** `MM-DD` — the day each year this queue clears its own watched state. */
+  reset_watched_on?: string | null;
   watch_history?: unknown;
   batch_stops_at?: string | null;
   /** Anything else the file carries, verbatim — and what makes a RawSet usable as
@@ -320,6 +325,23 @@ const normalizeSeasonForWrite = (rawStart: unknown, rawEnd: unknown): SeasonWrit
   return { end: formatSeasonDay(end), ok: true, start: formatSeasonDay(start) };
 };
 
+// The seasonal reset date, normalized ONCE for both write paths. `null` = off, which is the
+// ABSENCE of the key on disk (sparse), so a queue that has never reset writes no line at all.
+//
+// Unlike `promote_window` this one is VALIDATED rather than stored verbatim: `20h` and `20H`
+// are the same duration and the parser can say so at read time, but `13-40` is not a date in
+// any reading, and a value stored today is next examined a year from now. `parseResetDate`
+// refuses it here, so the editor's Save reports the refusal to a person who can still fix it —
+// rather than the queue silently never resetting next November.
+const normalizeResetWatchedOnForWrite = (v: unknown): string | null => {
+  const s = v == null ? '' : String(v).trim();
+  if (!s || RESET_WATCHED_OFF.includes(s.toLowerCase())) return null;
+  const parsed = parseResetDate(s);
+  if (!parsed) throw new Error(`reset_watched_on must be MM-DD (got ${JSON.stringify(s)})`);
+  return formatResetDate(parsed);
+};
+const RESET_WATCHED_OFF = ['never', 'off', 'none', 'disabled'];
+
 const MODES = ['rewatch', 'episodic', 'both'] as const;
 const isMode = (v: unknown): v is SetMode => typeof v === 'string' && (MODES as readonly string[]).includes(v);
 // behavior (v3 PR 2) supersedes `mode`: progress = advance through unwatched ("next
@@ -474,7 +496,8 @@ function toWeights(v: unknown): Record<string, number> {
  */
 type SetRegistryCommon = Omit<QueueSet, 'source' | 'keep_completed' | 'reel'
   | 'restart_when_exhausted'
-  | 'remove_completed_after' | 'batch_stops_at' | 'episodes' | 'volumes' | 'watch_history'>;
+  | 'remove_completed_after' | 'reset_watched_on' | 'batch_stops_at' | 'episodes' | 'volumes'
+  | 'watch_history'>;
 
 function normalize(ent: RawSet): SetRegistryEntry | null {
   const id = String(ent.id || '').trim();
@@ -693,6 +716,14 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       ent.remove_completed_after != null && String(ent.remove_completed_after).trim()
         ? String(ent.remove_completed_after).trim()
         : null,
+    // The day each year this queue clears its own watched state, or null = never. Read
+    // TOLERANTLY (unlike the writer, which refuses a typo): a hand-edited file saying
+    // `reset_watched_on: nonsense` still loads as the queue it has always been, with the
+    // feature off — the same rule `on_complete` states above.
+    reset_watched_on: (() => {
+      const parsed = parseResetDate(ent.reset_watched_on);
+      return parsed ? formatResetDate(parsed) : null;
+    })(),
     // WHERE a multi-episode batch may stop: "none" | "member" | "season". Only curated
     // sets carry it — a dynamic channel's round-robin already alternates shows every
     // item, so it has no multi-episode batch to bound. null = the engine default (none).
@@ -998,6 +1029,11 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
       if (rca && !['0', 'never', 'off', 'none', 'disabled'].includes(rca.toLowerCase())) {
         curated.remove_completed_after = rca;
       }
+      // The seasonal reset date. Sparse: off writes no line. `normalizeResetWatchedOnForWrite`
+      // THROWS on a value that is not a date, which surfaces as the create's 400 rather than
+      // as a queue that quietly never resets.
+      const rwo = normalizeResetWatchedOnForWrite(body.reset_watched_on);
+      if (rwo) curated.reset_watched_on = rwo;
       const bsa = normalizeBatchStop(body.batch_stops_at);
       if (bsa) curated.batch_stops_at = bsa;
       // The queue's default batch. Same sparse rule as updateSet: 1 is the engine default,
@@ -1068,6 +1104,10 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // Queue-only consumption / reel / TTL knobs (rejected below on rotation).
       'keep_completed', 'reel', 'restart_when_exhausted',
       'remove_completed_after', 'batch_stops_at', 'watch_history',
+      // The day each year this queue clears its own watched state. Queue-only for the reason
+      // the reset itself is: a rotation pool owns no done flags, no queue_entry_history and no
+      // lead cooldowns, which is all three of the things a reset clears.
+      'reset_watched_on',
       // The items this queue never plays. Queue-only (rejected below on rotation, where
       // `blocklist` is the same feature under the name the pool editor already uses).
       'skipped',
@@ -1210,6 +1250,17 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
           continue;
         }
         setKeepingComment(node, 'remove_completed_after', doc.createNode(s));
+        continue;
+      }
+      if (k === 'reset_watched_on') {
+        // The day each year this queue clears its own watched state. Blank / never / off drops
+        // the key (= this queue does not reset), so the file stays sparse; anything that is
+        // not `MM-DD` THROWS rather than being dropped, because a stored date is next examined
+        // a year from now and a silently-ignored typo is a queue that never resets.
+        if (isRotation) throw new Error('reset_watched_on is only valid on curated queues');
+        const s = normalizeResetWatchedOnForWrite(v);
+        if (!s) { node.delete('reset_watched_on'); continue; }
+        setKeepingComment(node, 'reset_watched_on', doc.createNode(s));
         continue;
       }
       if (k === 'batch_stops_at') {

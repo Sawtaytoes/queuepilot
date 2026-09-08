@@ -58,11 +58,18 @@ const FIELDS = [
  *     queue is offered all year round. Nothing throws and nothing logs.
  *   * `restart_when_exhausted` — read `undefined` at `finished.applyQueueWriteSide`, so the
  *     queue would simply never start a new round.
+ *   * `reset_watched_on` (2026-09-08) — the day each year a queue clears its own watched
+ *     state. It is read on the PLAY path by `session.ts`
+ *     (`watchedReset.applySeasonalReset`), so a loader that drops it does not throw: the
+ *     seasonal queue reads `undefined`, never resets, and says nothing about it — and nobody
+ *     finds out until the following November. Carried RAW and trimmed, so `seasonal_junk`
+ *     pins that an unreadable value reaches the cfg UNCHANGED and is refused at the consumer
+ *     (`seasonalReset.parseResetDate`) rather than being laundered here.
  *
- * The first four are carried RAW and trimmed (the lane pair is lower-cased too), which the
- * `lane_priority` and `season_autumn` fixtures spell with padding and a capital letter.
- * `restart_when_exhausted` is the odd one out: it is carried EFFECTIVE, because
- * `keep_completed` and `reel` win over it.
+ * All of them but one are carried RAW and trimmed (the lane pair is lower-cased too), which
+ * the `lane_priority`, `season_autumn` and `seasonal_junk` fixtures spell with padding, a
+ * capital letter and outright nonsense respectively. `restart_when_exhausted` is the odd one
+ * out: it is carried EFFECTIVE, because `keep_completed` and `reel` win over it.
  */
 const POST_PYTHON: Record<string, Record<string, unknown>> = {
   lane_priority: { add_as: 'priority', promote_window: '20h' },
@@ -84,6 +91,9 @@ const POST_PYTHON: Record<string, Record<string, unknown>> = {
   restart_round: { restart_when_exhausted: true },
   restart_vs_playlist: { restart_when_exhausted: false, keep_completed: true },
   restart_vs_reel: { restart_when_exhausted: false, keep_completed: true, reel: true },
+  seasonal: { reset_watched_on: '11-01' },
+  seasonal_junk: { reset_watched_on: '13-40' },
+  seasonal_off: { reset_watched_on: null },
 };
 
 // env.js reads process.env at module-eval, so set SETS_PATH BEFORE importing the port.

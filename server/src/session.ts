@@ -23,6 +23,7 @@ import * as driver from './driver.js';
 import * as resume from './resume.js';
 import * as section from './section.js';
 import { isSetAvailable, seasonReturnLabel } from './season.js';
+import * as watchedReset from './watchedReset.js';
 import { liveClient } from './engine/plex-live.js';
 import * as mqttc from './mqttc.js';
 import {
@@ -338,6 +339,28 @@ export async function startSession(
   // here — a latent requirement of the push path, not of the interface. Adding a guard would
   // change behaviour, so the assertion preserves the throw instead.
   const tok = await provider.profileToken!(binding.user_uuid);
+
+  // THE SEASONAL RESET, EVALUATED ON THIS READ — there is no timer anywhere in the feature
+  // (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
+  //
+  // It sits HERE, immediately before `buckets()`, for one reason: the reset clears the `done`
+  // flags and the queue-owned ledger that the resolver is about to read. A line below the
+  // lineup build would answer the right question a scan too late — the November queue would
+  // play its last October item once more, and only the sitting after that would start over.
+  //
+  // Curated queues only. A rotation pool owns no `done` flags, no `queue_entry_history` and no
+  // lead cooldowns, which is all three of the things a reset clears; `sets.updateSet` refuses
+  // the key on one for the same reason.
+  //
+  // Best-effort: a queue must still play if the stamp cannot be written. A reset that does not
+  // happen today happens on the next read, which is what a missed day already means.
+  if (cfg.source === 'queue') {
+    try {
+      await watchedReset.applySeasonalReset(setName, cfg);
+    } catch (e) {
+      console.log(`[session] ${setName}: seasonal reset failed (${errMessage(e)})`);
+    }
+  }
 
   const res = await provider.buckets({
     setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk, only,
