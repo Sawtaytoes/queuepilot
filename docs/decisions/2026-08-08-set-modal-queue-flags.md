@@ -7,7 +7,10 @@ Supersedes: the "Web UI needs no change" clause of
   [2026-08-07-non-consuming-keep-completed-queue-flag](2026-08-07-non-consuming-keep-completed-queue-flag.md)
   (that clause meant the *Completed badge* needed no special case — it did **not**
   forbid exposing the flags as controls; the flags themselves stayed hand-YAML only)
-Superseded by: —
+Superseded by: in part —
+  [2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes](2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes.md)
+  (the `keep_completed` and `reel` CHECKBOXES only — they become one four-value `Picker`;
+  every other flag in this record is untouched, and the storage keys do not change)
 
 ## Decision
 
