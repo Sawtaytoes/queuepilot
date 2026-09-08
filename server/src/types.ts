@@ -444,6 +444,18 @@ export interface QueueSet extends SetRegistryCommon {
   keep_completed: boolean;
   /** Play the whole lineup every scan. */
   reel: boolean;
+  /**
+   * Mark entries done as usual, and clear the whole queue's watched state once the LAST one
+   * finishes, so a new round starts. The THIRD completion axis: `keep_completed` and `reel`
+   * both work by never marking anything done, and this one marks
+   * (decision `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`).
+   *
+   * `normalize()` reports the EFFECTIVE value, the way `keep_completed` does: a set that also
+   * carries `keep_completed`/`reel` never marks anything done, so it can never exhaust, and
+   * this reads back false. That is the existing precedence rule applied, not a refusal — a
+   * hand-written contradiction still parses.
+   */
+  restart_when_exhausted: boolean;
   /** TTL string ("24h"/"7d"/…) or null = keep finished entries forever (the default). */
   remove_completed_after: string | null;
   batch_stops_at: BatchStop;
@@ -671,6 +683,12 @@ export interface RoutingQueueCfg extends RoutingSetCfgCommon {
   item_sections: [];
   reel: boolean;
   keep_completed: boolean;
+  /**
+   * Clear this queue's watched state when the last entry finishes, so a new round starts.
+   * Effective: false whenever `keep_completed`/`reel` is on, because those never mark
+   * anything done and so can never exhaust. Read by `finished.applyQueueWriteSide`.
+   */
+  restart_when_exhausted: boolean;
   /** Effective queue default. Absent on disk is normalized to provider. */
   watch_history: 'provider' | 'queue';
   /**
