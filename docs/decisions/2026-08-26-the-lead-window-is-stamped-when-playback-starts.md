@@ -4,7 +4,9 @@
 - **Date:** 2026-08-26
 - **Type:** playback semantics / data
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** [2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads](2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads.md)
+  — only the broad interpretation of which eligible entries count as having led. The
+  post-handoff stamp and engine/store boundary remain unchanged.
 - **Builds on:** [kind-is-picks-or-rules](2026-08-23-kind-is-picks-or-rules.md) §4.2
 
 ## Decision

@@ -807,6 +807,12 @@ sitting through the existing shuffle/weight path.
   ([decision](docs/decisions/2026-08-26-the-lead-window-is-stamped-when-playback-starts.md)).
   Keep `engine/` free of `promote.ts` — the duration parser lives in `leadWindow.ts` for
   exactly that reason, and `promote.ts` re-exports it.
+- **ELIGIBLE is not `led`.** Priority must supply the lineup head, and a `lead: once` batch
+  must contribute inside the playback cap before its key reaches `QueueResult.led`. An
+  in-progress pool item still leads, but a Priority entry behind it keeps its window. Every
+  path that removes an entry from a set clears that set's cooldown after the queue write —
+  direct / bulk remove, completed-entry remove / sweep, and direct / bulk move
+  ([decision](docs/decisions/2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads.md)).
 - **In-progress still outranks a promote**, and only out of the pool. An ordered queue has
   never hoisted anything and still does not.
 - **The lead window is entry > queue > the 16h product default, and BOTH set-level knobs

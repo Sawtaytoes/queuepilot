@@ -243,16 +243,36 @@ same('reorder ranks the two lines separately', (await keysOf('demo')).join(','),
   `${SECOND_LINE},rk:1002,${FIRST_LINE}`);
 
 // (d) moveItem — one line crosses to another queue, the other stays.
+await promote.recordLead('demo', SECOND_LINE);
 await queues.moveItem('demo', 'spare', SECOND_LINE, [SECOND_LINE]);
 same('moveItem takes the id line', (await keysOf('spare')).join(','), SECOND_LINE);
 same('…and leaves the rating-key line behind', (await keysOf('demo')).join(','), `rk:1002,${FIRST_LINE}`);
+ok('moveItem clears the source cooldown', (await promote.lastLedAt('demo', SECOND_LINE)) === null);
 await queues.moveItem('spare', 'demo', SECOND_LINE, [FIRST_LINE, SECOND_LINE, 'rk:1002']);
 same('…and it comes back where it was asked to', (await keysOf('demo')).join(','),
   `${FIRST_LINE},${SECOND_LINE},rk:1002`);
 
+await promote.recordLead('demo', FIRST_LINE);
+await promote.recordLead('demo', 'rk:1002');
+await queues.moveBulk([
+  { fromSet: 'demo', key: FIRST_LINE },
+  { fromSet: 'demo', key: 'rk:1002' },
+], 'spare');
+ok('moveBulk clears the first source cooldown', (await promote.lastLedAt('demo', FIRST_LINE)) === null);
+ok('moveBulk clears the second source cooldown',
+  (await promote.lastLedAt('demo', 'rk:1002')) === null);
+await queues.moveBulk([
+  { fromSet: 'spare', key: FIRST_LINE },
+  { fromSet: 'spare', key: 'rk:1002' },
+], 'demo');
+await queues.reorder('demo', [FIRST_LINE, SECOND_LINE, 'rk:1002']);
+
 // (e) removeItem — the all-match filter removes ONE line.
+await promote.recordLead('demo', SECOND_LINE);
+ok('the line being removed has a lead cooldown', (await promote.lastLedAt('demo', SECOND_LINE)) !== null);
 await queues.removeItem('demo', SECOND_LINE);
 same('removeItem removes only the id line', (await keysOf('demo')).join(','), `${FIRST_LINE},rk:1002`);
+ok('removeItem clears that line\'s lead cooldown', (await promote.lastLedAt('demo', SECOND_LINE)) === null);
 
 // --- 6. the two SQLite tables keyed on the entry key ---------------------------- //
 //
@@ -280,6 +300,16 @@ await promote.recordLead('demo', SECOND_LINE);
 await promote.clearLead('demo', FIRST_LINE);
 ok('…clearing one cooldown leaves the other', (await promote.lastLedAt('demo', SECOND_LINE)) !== null);
 ok('…and the cleared one is cleared', (await promote.lastLedAt('demo', FIRST_LINE)) === null);
+
+await promote.recordLead('demo', FIRST_LINE);
+await promote.recordLead('demo', 'rk:1002');
+await queues.removeBulk([
+  { fromSet: 'demo', key: FIRST_LINE },
+  { fromSet: 'demo', key: 'rk:1002' },
+]);
+same('removeBulk removes both remaining lines', (await keysOf('demo')).join(','), '');
+ok('removeBulk clears the first cooldown', (await promote.lastLedAt('demo', FIRST_LINE)) === null);
+ok('removeBulk clears the second cooldown', (await promote.lastLedAt('demo', 'rk:1002')) === null);
 
 // --- 7. a hand-written duplicate with no id is refused BY ENTRY ----------------- //
 //

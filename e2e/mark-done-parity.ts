@@ -21,6 +21,8 @@ bob:
 writeFileSync(Q, SEED);
 
 process.env.QUEUES_PATH = Q;
+// `sweepCompleted` clears lead rows for entries it removes; keep that durable write in scratch.
+process.env.STORE_PATH = path.join(dir, 'queuepilot.sqlite');
 const queues = await import('../server/src/queues.js');
 
 let fails = 0;
