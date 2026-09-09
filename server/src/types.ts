@@ -1154,10 +1154,13 @@ export interface BucketsResult {
   /** Entry keys to persist as done after this scan. */
   newlyDone?: string[];
   /**
-   * Priority-lane entry keys that LED this lineup on a `lead: once` window, so the caller can
-   * stamp their cooldown — but only once playback actually starts. A lineup that is built and
-   * never played (a preview, a failed profile gate, a cancelled scan) must not burn the window
-   * (decision `2026-08-26-the-lead-window-is-stamped-when-playback-starts`).
+   * Priority-lane entry keys that LED this lineup on a `lead: once` window: Priority supplied
+   * the head, and these batches contributed inside the playback cap. The caller stamps their
+   * cooldown only once playback actually starts. A lineup that is built and never played (a
+   * preview, a failed profile gate, a cancelled scan), an eligible batch beyond the cap, or a
+   * Priority batch behind an in-progress pool head must not burn the window (decisions
+   * `2026-08-26-the-lead-window-is-stamped-when-playback-starts` and
+   * `2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads`).
    */
   led?: string[];
   /** Priority-lane entry keys held back this scan by an unexpired lead window. */

@@ -58,6 +58,19 @@ function plain(node: unknown): unknown {
 // round-trip. Aliased rather than re-wrapped so every call site below reads exactly as it did.
 const { readDoc, withLock } = store.queues;
 
+/**
+ * Forget the promise an entry made after the queue mutation that removed it has committed.
+ *
+ * The YAML write and SQLite row cannot share a transaction. `promote.clearLead()` is therefore
+ * deliberately best-effort, like the existing demote path: the queue edit remains successful
+ * if the bookkeeping store is temporarily unavailable.
+ */
+async function clearRemovedLeads(
+  items: readonly { fromSet: string; key: string }[],
+): Promise<void> {
+  await Promise.all(items.map(({ fromSet, key }) => promote.clearLead(fromSet, key)));
+}
+
 // Stable identity for one LINE of a queue. `value` is a plain-JS entry (scalar or a mapping).
 //
 // MUST agree with its twin in `engine/resolve.ts` — the read side keys the same lines the write
@@ -251,12 +264,19 @@ export async function listAll(): Promise<Map<string, QueueEntry[]>> {
 // them (never automatic). Returns the count removed.
 export async function removeCompleted(setName: string): Promise<{ removed: number }> {
   const owner = await entryOwner(setName);
-  return withLock(async () => {
+  const removedKeys: string[] = [];
+  const result = await withLock(async () => {
     const doc = await readDoc();
     const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { removed: 0 };
     const before = seq.items.length;
-    seq.items = seq.items.filter((n) => !entryDone(plain(n)));
+    seq.items = seq.items.filter((n) => {
+      const value = plain(n);
+      if (!entryDone(value)) return true;
+      const key = entryKey(value);
+      if (key) removedKeys.push(key);
+      return false;
+    });
     const removed = before - seq.items.length;
     if (removed) {
       if (seq.items.length === 0) seq.flow = true; // restore a compact `[]` when emptied
@@ -264,6 +284,8 @@ export async function removeCompleted(setName: string): Promise<{ removed: numbe
     }
     return { removed };
   });
+  await clearRemovedLeads(removedKeys.map((key) => ({ fromSet: setName, key })));
+  return result;
 }
 
 /** `sweepCompleted()`'s options — the set's own consumption knobs, plus a clock for tests. */
@@ -293,7 +315,8 @@ export async function sweepCompleted(setName: string, opts: SweepOptions = {}): 
   if (ttl == null) return { removed: 0 };
   const nowSec = now == null ? Date.now() / 1000 : now;
   const owner = await entryOwner(setName);
-  return withLock(async () => {
+  const removedKeys: string[] = [];
+  const result = await withLock(async () => {
     const doc = await readDoc();
     const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { removed: 0 };
@@ -301,7 +324,12 @@ export async function sweepCompleted(setName: string, opts: SweepOptions = {}): 
     seq.items = seq.items.filter((n) => {
       const v = plain(n);
       const doneAt = entryDoneAt(v);
-      return !(entryDone(v) && doneAt != null && nowSec - doneAt >= ttl);
+      const shouldRemove = entryDone(v) && doneAt != null && nowSec - doneAt >= ttl;
+      if (shouldRemove) {
+        const key = entryKey(v);
+        if (key) removedKeys.push(key);
+      }
+      return !shouldRemove;
     });
     const removed = before - seq.items.length;
     if (removed) {
@@ -310,6 +338,8 @@ export async function sweepCompleted(setName: string, opts: SweepOptions = {}): 
     }
     return { removed };
   });
+  await clearRemovedLeads(removedKeys.map((key) => ({ fromSet: setName, key })));
+  return result;
 }
 
 /**
@@ -397,7 +427,7 @@ export async function addItem(
 
 export async function removeItem(setName: string, key: string): Promise<{ removed: boolean }> {
   const owner = await entryOwner(setName);
-  return withLock(async () => {
+  const result = await withLock(async () => {
     const doc = await readDoc();
     const seq = doc.get(owner);
     if (!(seq instanceof YAMLSeq)) return { removed: false };
@@ -408,6 +438,8 @@ export async function removeItem(setName: string, key: string): Promise<{ remove
     await writeDoc(doc);
     return { removed: true };
   });
+  if (result.removed) await promote.clearLead(setName, key);
+  return result;
 }
 
 function applyOrder(seq: YAMLSeq, keys: string[]): void {
@@ -434,7 +466,7 @@ export async function moveItem(
   toKeys: string[],
 ): Promise<{ moved: boolean } | { reordered: boolean }> {
   if (fromSet === toSet) return reorder(toSet, toKeys);
-  return withLock(async () => {
+  const result = await withLock(async () => {
     const doc = await readDoc();
     const src = doc.get(fromSet);
     if (!(src instanceof YAMLSeq)) return { moved: false };
@@ -449,6 +481,8 @@ export async function moveItem(
     await writeDoc(doc);
     return { moved: true };
   });
+  if ('moved' in result && result.moved) await promote.clearLead(fromSet, key);
+  return result;
 }
 
 /** One `{fromSet, key}` addressing pair for the bulk operations. */
@@ -461,7 +495,8 @@ export interface BulkItem {
 // given order. One lock + one write, so a multi-select move is atomic. Entries already in
 // `toSet` are left in place. `items` = [{fromSet, key}].
 export async function moveBulk(items: BulkItem[], toSet: string): Promise<{ moved: number }> {
-  return withLock(async () => {
+  const removedItems: BulkItem[] = [];
+  const result = await withLock(async () => {
     const doc = await readDoc();
     const dst = seqFor(doc, toSet);
     let moved = 0;
@@ -472,6 +507,7 @@ export async function moveBulk(items: BulkItem[], toSet: string): Promise<{ move
       const i = src.items.findIndex((n) => entryKey(plain(n)) === key);
       if (i < 0) continue;
       const [node] = src.items.splice(i, 1);
+      removedItems.push({ fromSet, key });
       if (src.items.length === 0) src.flow = true;
       if (!dst.items.some((n) => entryKey(plain(n)) === key)) {
         dst.flow = false;
@@ -482,11 +518,17 @@ export async function moveBulk(items: BulkItem[], toSet: string): Promise<{ move
     if (moved) await writeDoc(doc);
     return { moved };
   });
+  // A duplicate already in the destination is not counted as moved. If another item made the
+  // document write, though, that duplicate was still removed from its source and its old
+  // promise must go too. With no committed move the document was not written, so clear none.
+  if (result.moved) await clearRemovedLeads(removedItems);
+  return result;
 }
 
 // Bulk-remove entries across sets. `items` = [{fromSet, key}]. One lock + one write.
 export async function removeBulk(items: BulkItem[]): Promise<{ removed: number }> {
-  return withLock(async () => {
+  const removedItems: BulkItem[] = [];
+  const result = await withLock(async () => {
     const doc = await readDoc();
     let removed = 0;
     for (const { fromSet, key } of items) {
@@ -496,12 +538,15 @@ export async function removeBulk(items: BulkItem[]): Promise<{ removed: number }
       src.items = src.items.filter((n) => entryKey(plain(n)) !== key);
       if (src.items.length < before) {
         removed += 1;
+        removedItems.push({ fromSet, key });
         if (src.items.length === 0) src.flow = true;
       }
     }
     if (removed) await writeDoc(doc);
     return { removed };
   });
+  await clearRemovedLeads(removedItems);
+  return result;
 }
 
 /**
