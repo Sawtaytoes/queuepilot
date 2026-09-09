@@ -18,7 +18,6 @@ import { activeSet } from "./lib/nowPlaying"
 import {
   canonicalCollectionPath,
   canonicalWatchPlayPath,
-  labelForPath,
   ROUTE_PATHS,
   WATCH_PLAY_PATH,
 } from "./lib/routePaths"
@@ -31,11 +30,6 @@ import {
   closePlayMenus,
   useOverlays,
 } from "./state/overlays"
-import {
-  getRouteOrigin,
-  trackRouteOrigin,
-  usePath,
-} from "./state/route"
 import {
   load,
   rotationChannels,
@@ -211,12 +205,7 @@ export function App() {
  * is the order the vanilla app had.
  */
 function AppFrame() {
-  const path = usePath()
-
-  // Before anything reads `getRouteOrigin()` — see the note in `state/route.ts` on why this
-  // is a render-time call and why calling it twice at the same path is harmless. It belongs
-  // here because this component renders above every page.
-  trackRouteOrigin(path)
+  const { pathname: path } = useLocation()
 
   useEffect(() => {
     void load()
@@ -500,8 +489,8 @@ function ChannelsPage() {
   return (
     <Page
       back={{
-        label: "‹ QueuePilot",
-        target: ROUTE_PATHS.home,
+        label: "‹ Queues",
+        target: ROUTE_PATHS.queues.replace("/*", ""),
       }}
       // `queue-view` reuse: it hides the queues toolbar.
       bodyClass={
@@ -554,8 +543,7 @@ function QueuePage() {
     verb: "Play",
   }
   const playing = activeSet(now, data)
-  const origin =
-    getRouteOrigin() || (isChannel ? "/channels" : "/picks")
+  const queuesPath = ROUTE_PATHS.queues.replace("/*", "")
   const isPlayingThis = Boolean(
     playing && playing === setId,
   )
@@ -563,7 +551,7 @@ function QueuePage() {
 
   return (
     <Page
-      back={{ label: labelForPath(origin), target: origin }}
+      back={{ label: "‹ Queues", target: queuesPath }}
       bodyClass={
         isChannel ? "queue-view channel-mode" : "queue-view"
       }
@@ -573,7 +561,7 @@ function QueuePage() {
       // This queue is the running session — say what's on screen (the matching tile is
       // highlighted too, but a long queue can scroll it out of view).
       isSubHidden={isPlayingThis ? false : !isChannel}
-      navigationHref={origin}
+      navigationHref={queuesPath}
       sub={
         isPlayingThis && n
           ? `${n.state === "paused" ? "⏸ Paused" : "▶ Now playing"}${n.title || n.showTitle ? ` — ${n.title || n.showTitle}` : ""}`
