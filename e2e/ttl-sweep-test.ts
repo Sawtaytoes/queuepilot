@@ -9,7 +9,10 @@
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 
 const QUEUES_PATH = '/tmp/ttl-queues.yaml';
+const STORE_PATH = '/tmp/ttl-queuepilot.sqlite';
 process.env.QUEUES_PATH = QUEUES_PATH;
+process.env.STORE_PATH = STORE_PATH;
+for (const f of [STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`]) rmSync(f, { force: true });
 
 let failures = 0;
 const ok = (name: string, cond: boolean, extra = '') => {
@@ -38,6 +41,7 @@ function seed() {
 }
 
 const q = await import('../server/src/queues.js');
+const promote = await import('../server/src/promote.js');
 
 // --- parseDuration mirrors the Python parser --------------------------------- //
 ok('parseDuration 24h -> 86400', q.parseDuration('24h') === 86400);
@@ -64,10 +68,13 @@ ok('default: past-TTL done entry survives', (await keys()).includes('title:Old D
 
 // --- opt-in window removes ONLY past-TTL done entries ------------------------ //
 seed();
+await promote.recordLead('bob', 'title:Old Done');
 res = await q.sweepCompleted('bob', { removeCompletedAfter: '24h', now: NOW });
 ok('opt-in removed exactly one entry', res.removed === 1, `removed=${res.removed}`);
 let ks = await keys();
 ok('opt-in removed the past-TTL done entry', !ks.includes('title:Old Done'));
+ok('opt-in cleared the removed entry\'s lead cooldown',
+  (await promote.lastLedAt('bob', 'title:Old Done')) === null);
 ok('opt-in kept the recent done entry', ks.includes('title:Recent Done'));
 ok('opt-in kept the timestamp-less done entry', ks.includes('title:Legacy Done'));
 ok('opt-in kept the active (not-done) entry', ks.includes('title:Active Movie'));
@@ -106,6 +113,7 @@ ok('kept entries stay a block list', /bob:\n- /.test(read()) && !/bob:\s*\[/.tes
 
 rmSync(QUEUES_PATH, { force: true });
 rmSync(`${QUEUES_PATH}.lock`, { force: true, recursive: true });
+for (const f of [STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`]) rmSync(f, { force: true });
 
 console.log(failures ? `\n${failures} sweep assertion(s) failed` : '\nall TTL sweep assertions passed');
 process.exit(failures ? 1 : 0);
