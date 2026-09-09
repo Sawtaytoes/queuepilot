@@ -12,8 +12,12 @@ import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 
 const QUEUES_PATH = '/tmp/rt-queues.yaml';
 const SETS_PATH = '/tmp/rt-sets.yaml';
+const STORE_PATH = '/tmp/rt-queuepilot.sqlite';
 process.env.QUEUES_PATH = QUEUES_PATH;
 process.env.SETS_PATH = SETS_PATH;
+// Queue removal now clears durable lead rows. Keep that write in this harness's scratch store.
+process.env.STORE_PATH = STORE_PATH;
+for (const f of [STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`]) rmSync(f, { force: true });
 
 let failures = 0;
 const ok = (name: string, cond: boolean, extra = '') => {
@@ -77,6 +81,7 @@ const assertCommentsSurvive = (label: string, path: string) => {
 };
 
 const queues = await import('../server/src/queues.js');
+const promote = await import('../server/src/promote.js');
 
 // --- queues.js mutations ------------------------------------------------------ //
 seed();
@@ -86,12 +91,22 @@ ok('addItem: entry added', has(QUEUES_PATH, 'Ronin (1998)'));
 ok('addItem: long title stayed on one line', new RegExp(`- .?${LONG_TITLE.replace(/[()]/g, '\\$&')}`).test(read(QUEUES_PATH)));
 
 seed();
+await promote.recordLead('bob', 'title:Duel (1971)');
 await queues.removeItem('bob', 'title:Duel (1971)');
 // The inline comment lived on the Duel line — removing that entry legitimately removes its
 // inline comment, but the HEAD and FOOT must survive.
 ok('removeItem: kept # HEAD:', has(QUEUES_PATH, '# HEAD:'));
 ok('removeItem: kept # FOOT:', has(QUEUES_PATH, '# FOOT:'));
 ok('removeItem: entry gone', !has(QUEUES_PATH, 'Duel (1971)'));
+ok('removeItem: lead cooldown cleared', (await promote.lastLedAt('bob', 'title:Duel (1971)')) === null);
+
+seed();
+await queues.markDone('bob', ['title:Cowboy Bebop']);
+await promote.recordLead('bob', 'title:Cowboy Bebop');
+const removedCompleted = await queues.removeCompleted('bob');
+ok('removeCompleted: removed the done entry', removedCompleted.removed === 1);
+ok('removeCompleted: lead cooldown cleared',
+  (await promote.lastLedAt('bob', 'title:Cowboy Bebop')) === null);
 
 seed();
 await queues.reorder('bob', ['title:Cowboy Bebop', `title:${LONG_TITLE}`, 'title:Duel (1971)']);
@@ -266,10 +281,12 @@ ok('storedCount(1) is a real override', queues.storedCount(1) === 1);
 ok('storedCount(0) is not a count', queues.storedCount(0) === null);
 
 seed();
+await promote.recordLead('bob', 'title:Duel (1971)');
 await queues.moveItem('bob', 'family', 'title:Duel (1971)', ['title:Up (2009)', 'title:Duel (1971)']);
 ok('moveItem: kept # HEAD:', has(QUEUES_PATH, '# HEAD:'));
 ok('moveItem: kept # FOOT:', has(QUEUES_PATH, '# FOOT:'));
 ok('moveItem: Duel moved to family (inline travels)', /family:[\s\S]*Duel \(1971\)"?\s+# INLINE:/.test(read(QUEUES_PATH)));
+ok('moveItem: source lead cooldown cleared', (await promote.lastLedAt('bob', 'title:Duel (1971)')) === null);
 
 // --- sets.js mutations -------------------------------------------------------- //
 const sets = await import('../server/src/sets.js');
@@ -331,7 +348,7 @@ assertCommentsSurvive('createSet', SETS_PATH);
 ok('createSet: new set present', has(SETS_PATH, 'label: New Queue'));
 
 // Cleanup.
-for (const f of [QUEUES_PATH, SETS_PATH, `${QUEUES_PATH}.lock`, `${SETS_PATH}.lock`]) rmSync(f, { force: true, recursive: true });
+for (const f of [QUEUES_PATH, SETS_PATH, STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`, `${QUEUES_PATH}.lock`, `${SETS_PATH}.lock`]) rmSync(f, { force: true, recursive: true });
 
 console.log(failures ? `\n${failures} round-trip assertion(s) failed` : '\nall yaml round-trip assertions passed');
 process.exit(failures ? 1 : 0);
