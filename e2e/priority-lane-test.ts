@@ -165,12 +165,28 @@ check(
   ['Charlie', 'Echo E1', 'Alpha'],
 );
 showResumeMs = 1_200_000;
+const resumedAheadOfPromote = await run(POOL, withShow);
 check(
   'a half-watched pool member still leads a promote',
-  titles(await run(POOL, withShow)),
+  titles(resumedAheadOfPromote),
   ['Echo E1', 'Charlie', 'Alpha'],
 );
+check(
+  'a promote behind the resumed head does not spend its lead window',
+  resumedAheadOfPromote.led,
+  [],
+);
 showResumeMs = 0;
+
+// Passing the gate is not itself a contribution. A short sitting can fill before a later
+// Priority entry reaches the handed-off lineup, and that unplayed entry keeps its promise.
+const cappedPromotes = await run(
+  { ...POOL, length: 1 },
+  [entry('1', { placement: 'priority' }), entry('2', { placement: 'priority' }), entry('4')],
+  async () => true,
+);
+check('the playback cap keeps only the first promoted contribution', titles(cappedPromotes), ['Alpha']);
+check('an eligible promote beyond the playback cap keeps its window', cappedPromotes.led, ['rk:1']);
 
 // ── 7. A lineup that plays nothing spends no window ───────────────────────────────────────
 const watchedAll = await nextQueue(

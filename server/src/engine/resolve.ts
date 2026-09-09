@@ -1355,7 +1355,10 @@ export async function nextQueue(
   // film that already led today can still come up on a random-default queue — it has just
   // stopped being a promise.
   const suppressed: string[] = [];
-  const led: string[] = [];
+  // These are only CANDIDATES until the playback cap is applied below. A priority entry can
+  // pass its lead gate and still contribute nothing because an in-progress pool entry is the
+  // real head, or because an earlier batch fills the lineup. Neither case spent its promise.
+  const ledCandidates = new Map<Batch, string>();
   const priority: Batch[] = [];
   const pool: Batch[] = [];
   for (const b of batches) {
@@ -1369,7 +1372,7 @@ export async function nextQueue(
     const mayLead = canLead ? await canLead(b.desc.key as string, windowMs) : true;
     if (mayLead) {
       priority.push(b);
-      led.push(b.desc.key as string);
+      ledCandidates.set(b, b.desc.key as string);
     } else {
       suppressed.push(b.desc.key as string);
       pool.push(b);
@@ -1403,17 +1406,31 @@ export async function nextQueue(
   // set is what makes a queue with nothing promoted bit-for-bit what it was.
   const cap = initialQueueSize(playbackLength(cfg));
   let playItems: ResolvedItem[];
+  const contributingBatches = new Set<Batch>();
   if (isRandomOrder(cfg)) {
     playItems = [];
     for (const b of ordered) {
-      playItems.push(...b.items.slice(0, cap - playItems.length));
+      const contribution = b.items.slice(0, cap - playItems.length);
+      if (contribution.length) contributingBatches.add(b);
+      playItems.push(...contribution);
       if (playItems.length >= cap) break;
     }
   } else {
     playItems = [];
-    for (const b of ordered.slice(0, cap)) playItems.push(...b.items);
+    for (const b of ordered.slice(0, cap)) {
+      contributingBatches.add(b);
+      playItems.push(...b.items);
+    }
   }
   const leadBatch: Batch | null = ordered.length ? ordered[0]! : null;
+  // `led` means that Priority actually led the sitting. An eligible Priority entry placed
+  // behind an in-progress pool item did not lead, even when it appears later in the lineup.
+  // Within a Priority-led lineup, stamp only the once-mode batches that survived the cap.
+  const led = leadBatch && priority.includes(leadBatch)
+    ? priority
+      .filter((batch) => contributingBatches.has(batch) && ledCandidates.has(batch))
+      .map((batch) => ledCandidates.get(batch) as string)
+    : [];
 
   logLineup(setName, cfg, {
     addAs, ordered, priority, pool, resuming, playItems, suppressed, doneFlagged, unresolved,
@@ -1428,7 +1445,7 @@ export async function nextQueue(
     newlyDone, // D4: keys for queues.markDone (not in the Python JSON oracle shape)
     // Only the entries that actually LED — the caller stamps their cooldown once playback
     // starts, never here (see `QueueResult.led`).
-    led: playItems.length ? led : [],
+    led,
     suppressed,
   };
 }
