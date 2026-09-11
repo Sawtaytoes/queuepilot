@@ -154,9 +154,12 @@ check(
 );
 check('and nothing in it is reported as suppressed', (await run(ORDERED, all, spent)).suppressed, []);
 
-// ── 6. In-progress outranks a promote ─────────────────────────────────────────────────────
-// ADR §4.4: a promote must not steal the screen from something half-watched. Echo E1 is 20
-// minutes in, so it resumes ahead of promoted Charlie.
+// ── 6. A promote outranks an in-progress resume ───────────────────────────────
+// Reversed on 2026-09-11 (decision
+// `2026-09-11-priority-leads-a-sitting-ahead-of-an-in-progress-resume`). ADR §4.4 used to put
+// the half-watched show first; the owner's rule is that Priority means first in line. Echo E1
+// is 20 minutes in and still yields to promoted Charlie — and it keeps its place AHEAD of the
+// shuffled rest, which is the half of the old rule that survives.
 const withShow = [entry('1'), entry('3', { placement: 'priority' }), entry('5')];
 showResumeMs = 0;
 check(
@@ -165,16 +168,23 @@ check(
   ['Charlie', 'Echo E1', 'Alpha'],
 );
 showResumeMs = 1_200_000;
-const resumedAheadOfPromote = await run(POOL, withShow);
+const promoteAheadOfResume = await run(POOL, withShow);
 check(
-  'a half-watched pool member still leads a promote',
-  titles(resumedAheadOfPromote),
-  ['Echo E1', 'Charlie', 'Alpha'],
+  'a promote leads a half-watched pool member',
+  titles(promoteAheadOfResume),
+  ['Charlie', 'Echo E1', 'Alpha'],
 );
 check(
-  'a promote behind the resumed head does not spend its lead window',
-  resumedAheadOfPromote.led,
-  [],
+  'the promote that took the head spends its lead window',
+  promoteAheadOfResume.led,
+  ['rk:3'],
+);
+// The hoist still works inside the pool: with nothing promoted, the half-watched show leads
+// the shuffle instead of landing where the rng put it.
+check(
+  'with no promote, the half-watched member still leads the pool',
+  titles(await run(POOL, [entry('1'), entry('3'), entry('5')])),
+  ['Echo E1', 'Charlie', 'Alpha'],
 );
 showResumeMs = 0;
 
