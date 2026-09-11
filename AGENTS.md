@@ -808,13 +808,19 @@ sitting through the existing shuffle/weight path.
   Keep `engine/` free of `promote.ts` — the duration parser lives in `leadWindow.ts` for
   exactly that reason, and `promote.ts` re-exports it.
 - **ELIGIBLE is not `led`.** Priority must supply the lineup head, and a `lead: once` batch
-  must contribute inside the playback cap before its key reaches `QueueResult.led`. An
-  in-progress pool item still leads, but a Priority entry behind it keeps its window. Every
-  path that removes an entry from a set clears that set's cooldown after the queue write —
-  direct / bulk remove, completed-entry remove / sweep, and direct / bulk move
+  must contribute inside the playback cap before its key reaches `QueueResult.led`. Since
+  2026-09-11 a non-empty Priority lane supplies the head by construction, so the cap is the
+  test that still bites; the empty-lane guard stays. Every path that removes an entry from a
+  set clears that set's cooldown after the queue write — direct / bulk remove, completed-entry
+  remove / sweep, and direct / bulk move
   ([decision](docs/decisions/2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads.md)).
-- **In-progress still outranks a promote**, and only out of the pool. An ordered queue has
-  never hoisted anything and still does not.
+- **PRIORITY OUTRANKS AN IN-PROGRESS RESUME, and it did not until 2026-09-11.** The order is
+  `priority`, `resuming`, then the shuffled rest. ADR §4.4 said the opposite, and a card scan
+  opened on two half-watched pool shows with both promoted entries at 4 and 5 — which reads as
+  the promote having silently failed. ⚠️ **The in-progress hoist is NOT gone**: it orders the
+  POOL, so a queue with nothing promoted is bit-for-bit what it was, and a half-watched member
+  still leads the shuffled rest. An ordered queue has an empty pool and never reached it
+  ([decision](docs/decisions/2026-09-11-priority-leads-a-sitting-ahead-of-an-in-progress-resume.md)).
 - **The lead window is entry > queue > the 16h product default, and BOTH set-level knobs
   reach the engine through `engine/routing.ts loadSets()`.** That loader is the only reader of
   `sets.yaml` on the scan path, and it copies a fixed list of fields — a knob it forgets reads
