@@ -814,8 +814,16 @@ sitting through the existing shuffle/weight path.
   set clears that set's cooldown after the queue write — direct / bulk remove, completed-entry
   remove / sweep, and direct / bulk move
   ([decision](docs/decisions/2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads.md)).
-- **PRIORITY OUTRANKS AN IN-PROGRESS RESUME, and it did not until 2026-09-11.** The order is
-  `priority`, `resuming`, then the shuffled rest. ADR §4.4 said the opposite, and a card scan
+- **A HALF-WATCHED PRIORITY ENTRY KEEPS ITS RANK and is asked no gate.** It reports in neither
+  `suppressed` nor `led`, and spends nothing — a window means the entry has had its turn, and
+  somebody part way through a film has not. The dinner case is the one to remember: Rank 1 leads
+  at 18:00, spends its 16h window, and the rescan at 20:00 used to hand the head to Rank 2.
+  ⚠️ **Systematic on a `length: 1` queue** — only the head contributes, so only the head ever
+  spends a window, so the second entry's window is permanently fresh. That is all three
+  household movie queues
+  ([decision](docs/decisions/2026-09-11-a-half-watched-priority-entry-keeps-its-rank.md)).
+- **PRIORITY OUTRANKS AN IN-PROGRESS RESUME, and it did not until 2026-09-11.** The full order is
+  Priority in RANK order, then `resuming` pool members, then the shuffled rest. ADR §4.4 said the opposite, and a card scan
   opened on two half-watched pool shows with both promoted entries at 4 and 5 — which reads as
   the promote having silently failed. ⚠️ **The in-progress hoist is NOT gone**: it orders the
   POOL, so a queue with nothing promoted is bit-for-bit what it was, and a half-watched member
