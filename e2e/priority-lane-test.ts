@@ -188,6 +188,39 @@ check(
 );
 showResumeMs = 0;
 
+// ── 6b. A half-watched Priority entry keeps its RANK ──────────────────────────────────────
+// THE DINNER CASE. Rank 1 leads at 18:00 and spends its 16h window. The owner stops part way
+// through, eats, and scans the card again at 20:00. The window must not demote him to Rank 2:
+// an entry somebody is in the middle of has not had its turn yet
+// (decision `2026-09-11-a-half-watched-priority-entry-keeps-its-rank`).
+//
+// This bites hardest on a `length: 1` movie queue — the household shape. Only the head ever
+// contributes, so Rank 2's window is always fresh, and before the fix Rank 2 led every rescan.
+const twoPromotes = [
+  entry('1', { placement: 'priority' }),
+  entry('2', { placement: 'priority' }),
+  entry('3'),
+];
+movieResumeKey = '1';
+const rank1Spent: LeadGate = async (key) => key !== 'rk:1';
+const afterDinner = await run(POOL, twoPromotes, rank1Spent);
+check(
+  'a half-watched promote keeps the head when its OWN window is spent',
+  titles(afterDinner),
+  ['Alpha', 'Bravo', 'Charlie'],
+);
+check('an unfulfilled promise is not reported as suppressed', afterDinner.suppressed, []);
+check('and it is not re-charged — only the fresh promote behind it is', afterDinner.led, ['rk:2']);
+// Both windows spent: Rank 1 still leads on its resume, and Rank 2 falls to the pool as before.
+const bothSpent = await run(POOL, twoPromotes, async () => false);
+check(
+  'with every window spent, the half-watched promote still leads',
+  titles(bothSpent),
+  ['Alpha', 'Charlie', 'Bravo'],
+);
+check('the promote nobody started is still suppressed', bothSpent.suppressed, ['rk:2']);
+movieResumeKey = null;
+
 // Passing the gate is not itself a contribution. A short sitting can fill before a later
 // Priority entry reaches the handed-off lineup, and that unplayed entry keeps its promise.
 const cappedPromotes = await run(
