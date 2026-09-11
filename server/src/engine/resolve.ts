@@ -1379,9 +1379,15 @@ export async function nextQueue(
     }
   }
 
-  // In-progress OUTRANKS a promote, and only out of the pool. Two halves of one rule:
-  //   * a half-watched member of a random pool has always led so it resumes, and a promote
-  //     must not steal the screen from a show somebody is in the middle of (ADR §4.4);
+  // PRIORITY OUTRANKS AN IN-PROGRESS RESUME. It did not until 2026-09-11, and the reversal is
+  // the whole of decision `2026-09-11-priority-leads-a-sitting-ahead-of-an-in-progress-resume`:
+  // the lane is called Priority, so it is first in line, and a half-watched pool member that
+  // took the head made a promote look like it had silently failed.
+  //
+  // The in-progress HOIST is unchanged and still matters — it just applies inside the pool now.
+  // Two halves of that half-rule, both still true:
+  //   * a half-watched member of a random pool resumes ahead of the shuffled rest, so a sitting
+  //     that stopped mid-episode picks that episode up rather than rolling a new title;
   //   * an ORDERED queue has never hoisted anything — its head is its head — so the hoist
   //     stays scoped to the pool, where it already lived, and a priority-default queue with
   //     no pool never reaches it.
@@ -1397,7 +1403,7 @@ export async function nextQueue(
   } else {
     weightedShuffle(rest, rng);
   }
-  const ordered = resuming.concat(priority, rest);
+  const ordered = priority.concat(resuming, rest);
 
   // The CAP still follows the set, not the lane. `playbackLength` is a set-level knob and
   // means two different things either side of `add_as` — ENTRIES on a priority-default queue
@@ -1423,9 +1429,10 @@ export async function nextQueue(
     }
   }
   const leadBatch: Batch | null = ordered.length ? ordered[0]! : null;
-  // `led` means that Priority actually led the sitting. An eligible Priority entry placed
-  // behind an in-progress pool item did not lead, even when it appears later in the lineup.
-  // Within a Priority-led lineup, stamp only the once-mode batches that survived the cap.
+  // `led` means that Priority actually led the sitting. Since Priority now takes the head from
+  // an in-progress pool item, a non-empty Priority lane always supplies `leadBatch`; the guard
+  // stays because an empty one must not stamp anything. Within a Priority-led lineup, stamp
+  // only the once-mode batches that survived the cap.
   const led = leadBatch && priority.includes(leadBatch)
     ? priority
       .filter((batch) => contributingBatches.has(batch) && ledCandidates.has(batch))
