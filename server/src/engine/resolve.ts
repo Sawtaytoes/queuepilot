@@ -1366,6 +1366,16 @@ export async function nextQueue(
     const isPromoted = isExplicitPlacement(b.desc.placement);
     const mode = normalizeLead(b.desc.lead, { isPromoted });
     if (mode === 'always') { priority.push(b); continue; }
+    // A HALF-WATCHED Priority entry keeps its rank and is asked no gate. The window says
+    // "this entry has had its turn", and an entry somebody stopped part way through has not:
+    // the promise is still owed. Without this, the film at Rank 1 leads at 18:00, spends its
+    // 16h window, and the rescan after dinner suppresses it into the pool — so Rank 2 takes
+    // the head while Rank 1 sits half-watched behind it. On a `length: 1` movie queue, where
+    // only the head ever contributes, Rank 2's own window is still fresh and it leads every
+    // time. It spends nothing here either: an unfulfilled promise is not re-charged, and a
+    // finished film leaves the lane by being done rather than by being suppressed.
+    // (decision `2026-09-11-a-half-watched-priority-entry-keeps-its-rank`)
+    if (leadsInProgress(b)) { priority.push(b); continue; }
     const windowMs = leadWindowMs(b.desc, cfg);
     // No gate injected (the parity corpus, a unit test) means "nothing has ever led" — the
     // deterministic answer, and the one that keeps the engine runnable without the store.
