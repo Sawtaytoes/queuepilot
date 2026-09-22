@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@charcuterie/server": "^0.4.0",
+    "@charcuterie/server": "^0.5.1",
     "@hono/node-server": "^2.0.2",
     "hono": "^4.12.21",
     "mqtt": "^5.15.2",
@@ -27,7 +27,7 @@
   },
   "devDependencies": {
     "@charcuterie/tsconfig": "^1.0.0",
-    "@charcuterie/vitest-config": "^1.0.1",
+    "@charcuterie/vitest-config": "^1.1.2",
     "@types/node": "^25.6.2",
     "esbuild": "^0.25.0",
     "tsx": "^4.20.3",
