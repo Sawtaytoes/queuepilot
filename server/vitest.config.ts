@@ -20,6 +20,9 @@ import { createVitestConfig } from '@charcuterie/vitest-config';
  */
 export default createVitestConfig({
   test: {
+    // Node, not a browser: the shared config turns browser mode on by
+    // default, so this suite opts out.
+    browser: { enabled: false },
     environment: 'node',
     include: ['src/**/*.test.ts'],
     name: 'server',
