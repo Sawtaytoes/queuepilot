@@ -175,12 +175,14 @@ type FinishableTile = ReturnType<typeof queueTile> & {
  * cheap re-implementation here would be a SECOND rule that could disagree with the flag.
  *
  * Two reads back this: the set's watched history, memoized per accounts×sections
- * (`finished.watchedFor`), and one batched view-state call for the watched candidates only,
- * because a movie tile's cached viewCount can be up to 7 days old. The view state is read
- * with the ADMIN token, exactly like every other watch-state field on this endpoint.
+ * (`finished.watchedFor`), and one batched view-state call per profile for the watched
+ * candidates only, because a movie tile's cached viewCount can be up to 7 days old. Both
+ * reads use the profile the queue plays as. Mixing the queue profile with the admin token is
+ * how the owner's completed short appeared completed in the Older Kids queue.
  */
 async function tagFinishedMovies(
   rows: readonly { setId: string; tile: FinishableTile }[],
+  scopes: ReadonlyMap<string, AccountScope>,
 ): Promise<void> {
   const engineReg = routing.loadSets();
   if (!engineReg) return;
@@ -193,7 +195,7 @@ async function tagFinishedMovies(
   await Promise.all(setIds.map(async (id) => {
     const cfg = engineReg.sets[id];
     if (!cfg) return;
-    watchedBySet.set(id, await finished.watchedFor(cfg, routing.bindingFor(cfg, null)));
+    watchedBySet.set(id, await finished.watchedFor(cfg, cfg.requires_profile || null));
   }));
 
   const isWatched = (r: { setId: string; tile: FinishableTile }): boolean =>
@@ -201,17 +203,29 @@ async function tagFinishedMovies(
   const candidates = movies.filter(isWatched);
   if (!candidates.length) return;
 
-  const live = await plex.viewStates(candidates.map((r) => String(r.tile.ratingKey)));
-  for (const { tile } of candidates) {
-    const state = live.get(String(tile.ratingKey));
-    // No live answer (Plex hiccup, or the item is gone): keep what the tile already said
-    // rather than promote a possibly-stale cached view state into a Completed badge.
-    if (!state) continue;
-    tile.partiallyWatched = inProgress(state.viewOffset, state.viewCount);
-    tile.viewOffset = state.viewOffset;
-    tile.duration = state.duration;
-    tile.isFinished = !tile.partiallyWatched;
+  const byProfile = new Map<string, typeof candidates>();
+  for (const row of candidates) {
+    const profile = engineReg.sets[row.setId]?.requires_profile || '';
+    const group = byProfile.get(profile) || [];
+    group.push(row);
+    byProfile.set(profile, group);
   }
+  await Promise.all([...byProfile].map(async ([profile, group]) => {
+    const live = await plex.viewStates(
+      group.map((r) => String(r.tile.ratingKey)),
+      scopes.get(profile)?.token ?? null,
+    );
+    for (const { tile } of group) {
+      const state = live.get(String(tile.ratingKey));
+      // No live answer (Plex hiccup, or the item is gone): keep what the tile already said
+      // rather than promote a possibly-stale cached view state into a Completed badge.
+      if (!state) continue;
+      tile.partiallyWatched = inProgress(state.viewOffset, state.viewCount);
+      tile.viewOffset = state.viewOffset;
+      tile.duration = state.duration;
+      tile.isFinished = !tile.partiallyWatched;
+    }
+  }));
 }
 
 /**
@@ -470,7 +484,7 @@ export function queuesRoutes(): Hono {
       });
       // What the next scan would call finished, said now — one pass over the flat list, so
       // the watched-history reads and the view-state call are shared across every set.
-      await tagFinishedMovies(resolvedItems);
+      await tagFinishedMovies(resolvedItems, scopes);
       // Regroup by set, preserving the flat list's order (set-then-entry order).
       for (const { setId, tile } of resolvedItems) result[setId]?.items.push(tile);
 

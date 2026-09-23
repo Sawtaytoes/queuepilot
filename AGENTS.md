@@ -666,6 +666,16 @@ win when the random pool chooses its in-progress head. A play started directly i
 queue identity; the entry sheet's **Track the current Plex play here** action supplies it. The
 same sheet can mark the next item complete and undo the latest completion.
 
+⚠️ **EVERY provider-history read uses the profile the queue plays as, including the Completed
+badge and the playback-end reconcile.** A gated curated queue carries only a
+`requires_profile` name, so `routing.loadSets()` must leave its synthetic binding EMPTY and
+`Provider.profileBinding()` must fill it before `finished.watchedFor()` or
+`finished.reconcileQueue()` reads history. An ungated queue keeps the historical admin binding.
+Do not restore the old hardcoded admin identity on the gated branch: it looks explicit to the
+provider, so the join returns early and the owner's watches silently mark a kid queue complete.
+The live view-state batch in `tagFinishedMovies()` uses the same profile token too. Gate:
+`e2e/finished-live-test.ts` plus `e2e/curated-queue-profile-test.ts`'s loaded-config assertions.
+
 The one-shot upgrade is `server/src/tools/migrate-entry-objects.ts` — dry run by default, backup
 first, idempotent. **It runs BEFORE the new code deploys**, never after.
 

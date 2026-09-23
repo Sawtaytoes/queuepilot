@@ -39,7 +39,7 @@ import { isSetAvailable } from './season.js';
 import * as sets from './sets.js';
 import { SESSION } from './session.js';
 import type {
-  BucketsResult, EngineBinding, NowPlaying, RoutingQueueCfg, RoutingSetCfg,
+  BucketsResult, NowPlaying, RoutingQueueCfg, RoutingSetCfg,
 } from './types.js';
 
 /**
@@ -74,6 +74,26 @@ export function forgetWatched(): void {
 }
 
 /**
+ * The provider and binding for the profile a set plays as.
+ *
+ * `routing.bindingFor()` cannot finish a curated queue by itself: that queue stores only
+ * `requires_profile`, while the account id and provider token identity belong to the provider.
+ * Session start already performs this join before it builds a lineup. The two finish checks
+ * must perform the SAME join, or they silently judge a kid queue from the owner's history.
+ */
+async function scopedBinding(
+  cfg: RoutingSetCfg,
+  profileTitle: string | null,
+) {
+  const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+  let binding = routing.bindingFor(cfg, profileTitle);
+  if (typeof provider.profileBinding === 'function') {
+    binding = await provider.profileBinding(binding, profileTitle);
+  }
+  return { binding, provider };
+}
+
+/**
  * The watched ratingKeys a scan of this set would judge by: `select.watchedForSet`, memoized
  * on (accounts × sections) rather than on the set, because that pair is what the fan-out
  * actually reads — every one of Bob's curated queues names the same one, so they share a
@@ -84,8 +104,9 @@ export function forgetWatched(): void {
  */
 export async function watchedFor(
   cfg: RoutingSetCfg,
-  binding: EngineBinding | null | undefined,
+  profileTitle: string | null,
 ): Promise<Set<string>> {
+  const { binding } = await scopedBinding(cfg, profileTitle);
   const accts = (binding && binding.watch_count_accounts) || WATCH_COUNT_ACCOUNTS;
   const key = `${accts.join(',')}|${routing.setSections(cfg).join(',')}`;
   const memo = _watched.get(key);
@@ -165,8 +186,7 @@ export async function reconcileQueue(
   // (`2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`).
   if (!cfg || !isSetAvailable(cfg) || cfg.source !== 'queue' || cfg.reel) return { reconciled: false };
   try {
-    const binding = routing.bindingFor(cfg, profileTitle);
-    const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+    const { binding, provider } = await scopedBinding(cfg, profileTitle);
     // Same unguarded call as `startSession` — a provider with no `profileToken` throws here
     // and is caught below rather than silently reconciling under the wrong account.
     const token = await provider.profileToken!(binding.user_uuid);

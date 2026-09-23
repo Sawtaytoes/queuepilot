@@ -229,9 +229,14 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         // resolved/scoped against them); resolve.js reads queue_sections first, else set_sections.
         queue_sections: secs,
         queue_section: secs[0],
-        watch_count_accounts: [1],
-        plex_user: 'Bob (admin)',
-        account_id: 1,
+        // A GATED curated queue stores only `requires_profile`, not a provider binding. Keep
+        // that binding empty so Provider.profileBinding() can join the name to its account.
+        // Hardcoding the admin there made the provider mistake a synthetic default for an
+        // explicit binding and refuse to replace it. An UNGATED queue keeps the admin identity
+        // it has always used rather than falling through to the legacy env account union.
+        watch_count_accounts: ent.requires_profile ? null : [1],
+        plex_user: ent.requires_profile ? null : 'Bob (admin)',
+        account_id: ent.requires_profile ? null : 1,
         user_uuid: null,
         allowed_ratings: null,
         movie_ratings: null,
