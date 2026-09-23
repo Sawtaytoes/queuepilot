@@ -29,6 +29,7 @@ process.env.ADB_ENABLED = 'false';
 process.env.MQTT_HOST = ''; // no import-time broker connect (mqttc.js guards on HOST)
 
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import path from 'node:path';
 import { SESSION_CTL, stubSessionDeps, useFixtures, resetSession } from './stubs/session-harness.mjs';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 import {
@@ -120,6 +121,10 @@ const child = spawnServer({
     PLEX_API_SERVER_URL: `http://127.0.0.1:${PLEX_PORT}`,
     PLEX_TOKEN: 'offline-test-token',
     MQTT_HOST: '',
+    NODE_OPTIONS: [
+      process.env.NODE_OPTIONS,
+      `--import=${path.resolve('e2e/stubs/plex-tv-profile-fetch.mjs')}`,
+    ].filter(Boolean).join(' '),
   },
   stdio: 'ignore',
 });
@@ -156,6 +161,11 @@ try {
 
   ok('the live view state came from the batched metadata read',
     plex.hits.some((p: string) => /^\/library\/metadata\/[\d,]+$/.test(p)), plex.hits.join(' '));
+
+  const body = await fetch(`http://localhost:${PORT}/api/queues?fresh=1`).then((r) => r.json()) as any;
+  const kidItem = body.sets.kids.items[0] || {};
+  ok('a kid queue does not inherit the owner\'s Completed state',
+    kidItem.isFinished === false && kidItem.done === false, JSON.stringify(kidItem));
 } finally {
   killServer(child);
   await plex.close();

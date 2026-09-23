@@ -593,8 +593,9 @@ export interface MemberObject {
  *   * `sections` becomes `episodic_sections`, and a QUEUE with no sections defaults to
  *     `[SEC_MOVIES]` — the web shape leaves it `[]`.
  *   * bindings are `EngineBinding` (ratings as `Set`), not `Binding`.
- *   * a queue set is given HARDCODED admin identity (`plex_user: 'Bob (admin)'`,
- *     `account_id: 1`, `watch_count_accounts: [1]`), which the web shape never invents.
+ *   * a GATED queue set has an EMPTY binding. Its `requires_profile` is a provider-scoped
+ *     display name, so `Provider.profileBinding()` joins it to the account. An ungated queue
+ *     keeps its historical hardcoded admin identity.
  *   * the optional passthroughs below are only SET WHEN PRESENT (mirroring config.py's
  *     truthiness) instead of being normalized to null — `cfg.requires_profile` reading
  *     `undefined` versus `null` is the difference, and a field the loader forgets is a

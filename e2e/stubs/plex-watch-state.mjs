@@ -39,6 +39,8 @@ export const QUEUES_YAML = `movies:
 - {title: "2001: A Space Odyssey (1968)"}
 - {title: "Logan's Run (1976)"}
 - {title: "Predator (1987)"}
+kids:
+- {title: "2001: A Space Odyssey (1968)"}
 `;
 
 export const SETS_YAML = `sets:
@@ -47,6 +49,12 @@ export const SETS_YAML = `sets:
     kind: movies
     source: queue
     sections: [1]
+  - id: kids
+    label: Older Kids — Movies
+    kind: movies
+    source: queue
+    sections: [1]
+    requires_profile: Older Kids
 `;
 
 /**
@@ -62,6 +70,9 @@ export function startStubPlex(port) {
       res.writeHead(200, { 'content-type': 'application/json' });
       res.end(JSON.stringify(body));
     };
+    if (url.pathname === '/') {
+      return send({ MediaContainer: { machineIdentifier: 'offline-server' } });
+    }
     if (/^\/library\/sections\/\d+\/all$/.test(url.pathname)) {
       const want = String(url.searchParams.get('title') || '').toLowerCase();
       const rows = LISTING.filter((m) => String(m.title).toLowerCase() === want);
