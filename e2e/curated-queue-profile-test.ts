@@ -16,6 +16,9 @@
 //
 // Run:  server/node_modules/.bin/tsx e2e/curated-queue-profile-test.ts   (from the repo root)
 import { registerHooks } from 'node:module';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { parentIs } from './stubs/module-id.mjs';
 import * as select from '../server/src/engine/select.js';
 import * as routing from '../server/src/engine/routing.js';
@@ -59,6 +62,34 @@ const bindingWith = (accts: number[] | null): EngineBinding => ({
   allowed_ratings: null, movie_ratings: null,
   watch_count_accounts: accts, movie_excludes: [],
 });
+
+// The actual loader must hand the provider an EMPTY binding for a gated curated queue. A
+// synthetic admin binding looks explicit to profileBinding(), so it returns early and the
+// queue reads the owner's history. This was the missing link in the first regression gate:
+// it tested profileBinding with a hand-built empty object but never tested what loadSets()
+// really passed to it.
+const routingDir = mkdtempSync(path.join(tmpdir(), 'queuepilot-profile-routing-'));
+const routingPath = path.join(routingDir, 'sets.yaml');
+writeFileSync(routingPath, `sets:
+  - id: gated
+    source: queue
+    sections: [5]
+    requires_profile: Older Kids
+  - id: ungated
+    source: queue
+    sections: [5]
+`);
+const loaded = routing.loadSets(routingPath)!;
+const gatedBinding = routing.bindingFor(loaded.sets.gated);
+const ungatedBinding = routing.bindingFor(loaded.sets.ungated);
+ok('a loaded gated queue leaves its provider binding empty',
+  gatedBinding.account_id === null && gatedBinding.watch_count_accounts === null,
+  JSON.stringify(gatedBinding));
+ok('a loaded ungated queue keeps the historical admin identity',
+  ungatedBinding.account_id === 1
+    && JSON.stringify(ungatedBinding.watch_count_accounts) === '[1]',
+  JSON.stringify(ungatedBinding));
+rmSync(routingDir, { recursive: true, force: true });
 
 HISTORY_CALLS.length = 0;
 let watched = await select.watchedForSet(recordingClient, CFG, bindingWith([700002]));
