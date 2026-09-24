@@ -1364,7 +1364,9 @@ export async function nextQueue(
   for (const b of batches) {
     if (laneOf(b) !== 'priority') { pool.push(b); continue; }
     const isPromoted = isExplicitPlacement(b.desc.placement);
-    const mode = normalizeLead(b.desc.lead, { isPromoted });
+    // `isMovie` is the batch's resolved TYPE, not a guess off the descriptor: an entry is a
+    // movie when Plex says so, and a one-member collection is still a collection.
+    const mode = normalizeLead(b.desc.lead, { isPromoted, isMovie: b.type === 'movie' });
     if (mode === 'always') { priority.push(b); continue; }
     // A HALF-WATCHED Priority entry keeps its rank and is asked no gate. The window says
     // "this entry has had its turn", and an entry somebody stopped part way through has not:
