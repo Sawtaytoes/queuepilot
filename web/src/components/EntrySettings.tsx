@@ -547,10 +547,13 @@ export function EntryEditor({
   const setWindow =
     setInfo?.promote_window?.trim() || DEFAULT_LEAD_WINDOW
   // `lead` defaults by HOW the entry got into the lane: inherited from an ordered queue is
-  // sticky, promoted by hand is once-per-window. Mirrors `kind.normalizeLead` on the server
-  // (decision `2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue`).
+  // sticky, promoted by hand is once-per-window. A MOVIE is sticky either way, because it
+  // cannot deliver part of itself and still owe the rest — it leaves the lane by being
+  // watched, not by a clock. Mirrors `kind.normalizeLead` on the server
+  // (decisions `2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue`
+  // and `2026-09-23-a-ranked-movie-leads-until-it-is-watched`).
   const leadDefaultLabel =
-    item.placement === "priority"
+    item.placement === "priority" && item.type !== "movie"
       ? `once every ${leadWindowLabel(setWindow)}`
       : "every sitting"
   const leadValue = item.lead
