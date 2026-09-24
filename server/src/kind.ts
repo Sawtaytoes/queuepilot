@@ -183,11 +183,29 @@ export function isExplicitPlacement(raw: unknown): boolean {
  *   * PROMOTED (the entry itself says `placement: priority`) -> `once`, which is what the
  *     owner asked promote for: "guaranteed first tonight, then not again until tomorrow".
  *
- * An explicit `lead:` on the entry outranks both.
+ * ...EXCEPT A MOVIE, WHICH IS `always` WHATEVER PUT IT IN THE LANE. A window is spent when an
+ * entry has DELIVERED what it owes, and a movie owes exactly one thing: itself. It cannot
+ * deliver half and still be owed the rest, so there is no second sitting for a window to hold
+ * it out of — a movie that played leaves the lane by being FINISHED (`resolveEntry` returns
+ * `items: []` for a watched movie), and a movie that did not play is still owed. Gating one on
+ * a clock could therefore only ever take a rank away from a film nobody watched, which is the
+ * failure this exists to stop: the Rank 1 film was dispatched, the Plex client stopped working
+ * before Plex recorded any `viewOffset`, and the rescan demoted it to the pool for 16h.
+ *
+ * A show and a collection keep `once`. They CAN deliver an episode count and still owe more,
+ * so the window is what makes a second sitting the same day fall through to Rank 2 rather than
+ * serve the same show again.
+ * (decision `2026-09-23-a-ranked-movie-leads-until-it-is-watched`)
+ *
+ * An explicit `lead:` on the entry outranks all of it.
  * (decision `2026-08-26-the-lead-window-belongs-to-a-promote-not-to-an-ordered-queue`)
  */
-export function normalizeLead(raw: unknown, opts: { isPromoted: boolean }): Lead {
+export function normalizeLead(
+  raw: unknown,
+  opts: { isPromoted: boolean; isMovie?: boolean },
+): Lead {
   const v = String(raw ?? '').trim().toLowerCase();
   if (v === 'once' || v === 'always') return v;
+  if (opts.isMovie) return 'always';
   return opts.isPromoted ? 'once' : 'always';
 }
