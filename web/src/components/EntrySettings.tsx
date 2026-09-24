@@ -835,14 +835,29 @@ export function EntryEditor({
               value={leadValue}
             />
             <span className="fieldhint">
-              “Every sitting” is what an ordered queue does
-              — the top entry stays the top entry until it
-              is finished. A window is what a promote is
-              for: guaranteed first tonight, then back in
-              the pool until the window runs out. The window
-              is a rolling timer from the moment playback
-              started, and this queue’s own is {setWindow} —
-              the queue editor changes it.
+              {item.type === "movie" ? (
+                <>
+                  A ranked film leads every sitting until it
+                  is watched, and then it leaves the lane by
+                  being finished — so it is never held back
+                  by a window. A window is for something
+                  that can hand over part of what it owes
+                  and still owe the rest, which a film
+                  cannot. Choose one here to override that.
+                </>
+              ) : (
+                <>
+                  “Every sitting” is what an ordered queue
+                  does — the top entry stays the top entry
+                  until it is finished. A window is what a
+                  promote is for: guaranteed first tonight,
+                  then back in the pool until the window
+                  runs out. The window is a rolling timer
+                  from the moment playback started, and this
+                  queue’s own is {setWindow} — the queue
+                  editor changes it.
+                </>
+              )}
             </span>
           </div>
         ) : null}
