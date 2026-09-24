@@ -276,14 +276,21 @@ try {
   // setting. Moving `younger` to 1 Jun → 30 Sep.
   await pickValue(page, '[data-testid="calendar-younger-season-end-month"]', '9');
   await pickValue(page, '[data-testid="calendar-younger-season-end-day"]', '30');
-  await page.click('#calendar-younger-save');
-  await page
-    .waitForFunction(
-      () => (document.querySelector('#status')?.textContent ?? '').includes('dates saved'),
-      undefined,
+  // ⚠️ WAIT FOR THE PATCH, NOT FOR `#status`. The message is `${title} — dates saved`, so the
+  // one the bob_anime save left on screen ALREADY matches `includes('dates saved')` — the
+  // wait returned immediately on stale text and `setById` read the server before this PATCH
+  // landed. Intermittent by nature, and it reported as a product bug rather than a race:
+  // CI run 35956097609 failed with `06-01 → 08-31`, a correct start beside the fixture's
+  // untouched end. The old `.catch(() => null)` made it worse by discarding the timeout, so
+  // a save that never reported could not be told from a value that was wrong.
+  const isYoungerPatched = await Promise.all([
+    page.waitForResponse(
+      (r) => r.url().includes('/api/sets/younger') && r.request().method() === 'PATCH',
       { timeout: 90000 },
-    )
-    .catch(() => null);
+    ).then((r) => r.ok(), () => false),
+    page.click('#calendar-younger-save'),
+  ]).then(([ok]) => ok);
+  check('the rotation pool save reached the server', isYoungerPatched);
 
   const younger = await setById('younger');
   check(

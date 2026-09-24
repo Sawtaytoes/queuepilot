@@ -195,6 +195,9 @@ export interface Response {
   ok(): boolean;
   text(): Promise<string>;
   json(): Promise<unknown>;
+  /** The request this answered — how a `waitForResponse` predicate reads the METHOD, which
+   *  a URL alone cannot distinguish (a GET and a PATCH of one set share an address). */
+  request(): Request;
 }
 
 /** What `route.fulfill()` answers a request with. Everything is optional; an omitted
@@ -292,6 +295,13 @@ export interface Page {
   waitForLoadState(state?: string, options?: TimeoutOptions): Promise<void>;
   waitForFunction<R>(fn: () => R, arg?: undefined, options?: TimeoutOptions): Promise<JSHandle<R>>;
   waitForFunction<R, A>(fn: (arg: A) => R, arg: A, options?: TimeoutOptions): Promise<JSHandle<R>>;
+  /** Wait for a response the predicate accepts. This is the honest way to wait on a WRITE:
+   *  a status message can be left over from the previous one, so `waitForFunction` over
+   *  `#status` can return before the request under test has even been answered. */
+  waitForResponse(
+    predicate: (response: Response) => boolean,
+    options?: TimeoutOptions,
+  ): Promise<Response>;
 
   // The browser boundary. `E` defaults to HTMLElement (Playwright's own default is
   // `HTMLElement | SVGElement`); a call site that needs `.value` narrows it explicitly —
