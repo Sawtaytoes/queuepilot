@@ -197,5 +197,28 @@ r = await driveProfile('sawtaytoes', null);
 ok('(bug2d) genuinely-wrong profile: drives the switch once',
   r === null && switches().length === 1, JSON.stringify(switches()));
 
+// (e) THE SCREEN OUTRANKS THE MEMORY. An OBSERVED LAST_SEEN == required, and the profile
+//     picker is on screen anyway — Plex's cold launch put it up and is waiting for a pick.
+//     On 2026-09-23 the skip fired here, play landed on top of the picker, and the Shield
+//     tore the player down. The walk must run; the observation is true and irrelevant.
+wireDriver();
+CTL.lastSeen.title = 'sawtaytoes';
+CTL.lastSeen.isObserved = true;
+CTL.foreground = 'com.plexapp.android/com.plexapp.shared.ui.userpicker.PickUserActivity';
+r = await driveProfile('sawtaytoes', null);
+ok('(bug2e) picker on screen + observed match: walks the picker anyway',
+  r === null && switches().length === 1, JSON.stringify(switches()));
+ok('(bug2e) picker on screen: the walk starts from the remembered profile as its hint',
+  switches()[0]?.[2] === 'sawtaytoes', JSON.stringify(switches()));
+
+// (e2) ...and with Plex on Home (no picker), the same observation still skips the walk.
+wireDriver();
+CTL.lastSeen.title = 'sawtaytoes';
+CTL.lastSeen.isObserved = true;
+CTL.foreground = 'com.plexapp.android/com.plexapp.plex.home.tv.HomeActivityTV';
+r = await driveProfile('sawtaytoes', null);
+ok('(bug2e2) no picker + observed match: still no walk', r === null && switches().length === 0,
+  JSON.stringify(switches()));
+
 console.log(FAILS.length ? `\nFAILURES: ${FAILS.length}` : '\ndone');
 process.exit(FAILS.length ? 1 : 0);

@@ -25,6 +25,7 @@ import {
   PLAYBACK_FSM_PLAY_ATTEMPTS,
   PLAYBACK_FSM_SWITCH_ATTEMPTS,
   PLAYBACK_FSM_RETRY_BACKOFF,
+  PLAYBACK_SESSION_RETRIES,
 } from './env.js';
 import * as adb from './adb.js';
 import * as playback from './playback.js';
@@ -194,9 +195,24 @@ async function driveProfile(
     }
   }
 
+  // The SCREEN outranks the memory. A remembered observation says who the Shield was signed
+  // in as; it cannot say whether Plex's cold launch has just put the picker up and is waiting
+  // for a pick. Both were true on 2026-09-23: the observation was three hours old and
+  // correct, the picker was on screen, the skip fired, play landed on top of the picker, and
+  // the Shield tore the player down five seconds later. One ~50 ms dumpsys read closes that.
+  // (docs/decisions/2026-09-23-the-screen-outranks-the-observation-and-a-session-proves-the-play.md)
+  const hasPickerUp = ADB_ENABLED && !hasActiveMismatch
+    && Boolean(await Promise.resolve(adb.isPickerForeground()));
+  if (hasPickerUp) {
+    console.log(
+      `[driver] the profile picker is on screen; walking it to '${required}' `
+      + 'whatever the last observation says',
+    );
+  }
+
   // An account-id mismatch is newer and stronger than any alias-resolved title. Never let a
   // stale or misconfigured alias turn that positive mismatch back into a skip.
-  if (!hasActiveMismatch && await onRequired(required)) {
+  if (!hasActiveMismatch && !hasPickerUp && await onRequired(required)) {
     console.log(
       `[driver] already signed in as '${profiles.LAST_SEEN.title}' `
       + `(== '${required}'); no picker walk`,
@@ -204,7 +220,7 @@ async function driveProfile(
     return null;
   }
 
-  if (!hasActiveMismatch) {
+  if (!hasActiveMismatch && !hasPickerUp) {
     console.log(`[driver] no verified profile observation matches '${required}'; picker walk required`);
   }
 
@@ -391,21 +407,49 @@ export async function driveToPlaying({
   if (isCancelled(cancel)) return { cancelled: true };
 
   // signed_in(required) -> playing(target). Play is the last action, verified + retried.
-  const result = await drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
+  let result = await drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
 
-  // playing(target) -> playing(target) AS THE RIGHT ACCOUNT.
+  // playing(target) -> playing(target) FOR REAL, and AS THE RIGHT ACCOUNT.
   //
   // Everything above this line is the gate PROMISING the right profile; this is the only step
   // that CHECKS it. `adb.switchTo` reports success on the CENTER keypress and cannot see
   // whether Plex acted on it, so until a session exists there is nothing to read — which is
   // why the audit runs here, after play, and stops a mismatch instead of preventing it.
   //
-  // Only a POSITIVE mismatch is terminal. `verifyAccount` abstains when it cannot tell (no
-  // session surfaced in time, Plex unreachable), because failing a play that is probably fine
-  // is worse than an audit that occasionally has no opinion.
-  if (result && (result as PlaybackResult).played && accountId != null) {
+  // The same wait is what proves the play TOOK. Companion's 200 says the client accepted the
+  // command, not that anything is playing: on 2026-09-23 the Shield accepted, opened the
+  // player over the profile picker, posted one `buffering` timeline and went back to Home,
+  // and the audit's "no opinion" was logged and dropped. A push with no session behind it
+  // is now re-opened and pushed again, a bounded number of times, in client mode only —
+  // cast mode has no Companion and no ADB to re-open with.
+  //
+  // Only a POSITIVE mismatch is terminal. The account comparison abstains when it cannot
+  // tell (a session with no user stamp, Plex unreachable), because failing a play that is
+  // probably fine is worse than an audit that occasionally has no opinion.
+  const mode = (device && device.mode) || PLAYBACK_MODE;
+  if (result && (result as PlaybackResult).played && mode === 'client') {
     if (isCancelled(cancel)) return { cancelled: true };
-    const verdict = await playback.verifyAccount(accountId, { device });
+    let verdict = await playback.verifyAccount(accountId, { device });
+    for (let retry = 1; !verdict.hasSession && retry <= Math.max(0, PLAYBACK_SESSION_RETRIES); retry++) {
+      if (isCancelled(cancel)) return { cancelled: true };
+      console.log(
+        `[driver] play was accepted but no session appeared on the target player `
+        + `(${verdict.reason || 'no session'}); re-opening Plex and playing again `
+        + `(${retry}/${PLAYBACK_SESSION_RETRIES})`,
+      );
+      if (ADB_ENABLED) await ensurePlex();
+      result = await drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
+      if (!result || !(result as PlaybackResult).played) return result;
+      if (isCancelled(cancel)) return { cancelled: true };
+      verdict = await playback.verifyAccount(accountId, { device });
+    }
+    if (!verdict.hasSession) {
+      console.log(
+        `[driver] still no session on the target player after `
+        + `${PLAYBACK_SESSION_RETRIES} extra push(es); reporting the last push as-is`,
+      );
+    }
+    if (accountId == null) return result;
     if (verdict.accountId != null) {
       const observedTitle = verdict.title || (!verdict.isMismatch ? requiredProfile : null);
       if (observedTitle) profiles.recordObservedProfile(observedTitle);

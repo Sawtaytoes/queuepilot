@@ -237,6 +237,13 @@ export const PLAYBACK_FSM_SWITCH_ATTEMPTS = int('PLAYBACK_FSM_SWITCH_ATTEMPTS', 
 // Seconds to wait on the Companion TCP connect probe, and the short pause between retries.
 export const PLAYBACK_FSM_COMPANION_TIMEOUT = float('PLAYBACK_FSM_COMPANION_TIMEOUT', 1.5);
 export const PLAYBACK_FSM_RETRY_BACKOFF = float('PLAYBACK_FSM_RETRY_BACKOFF', 1.0);
+// A play is PROVEN by a session on the target player, not by Companion's 200. How long to
+// wait for that session after each push, and how many extra pushes to spend when none
+// appears. The Shield posts its first `playing` timeline about 15 s after the push even on a
+// good start, so the wait must clear that comfortably; the 12 s the account audit used to
+// wait abstained on nearly every play, including the one where nothing was playing.
+export const PLAYBACK_SESSION_WAIT_SECONDS = float('PLAYBACK_SESSION_WAIT_SECONDS', 25);
+export const PLAYBACK_SESSION_RETRIES = int('PLAYBACK_SESSION_RETRIES', 1);
 
 // --- MQTT (Mosquitto HA add-on) ----------------------------------------------- //
 // MQTT survives the port: HA's automations, the retained device registry and the discovery

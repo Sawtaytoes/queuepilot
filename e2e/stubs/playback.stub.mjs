@@ -16,22 +16,32 @@ export async function playRatingKeys(ratingKeys, { setName = null, device = null
 /** The one-shot pre-switch account observation from an existing target session. */
 export async function currentAccount({ device = null, timeoutMs = 1000 } = {}) {
   record('current_account', device, timeoutMs);
-  return CTL.accountObservation || {
+  const o = CTL.accountObservation;
+  if (o) return { hasSession: o.accountId != null, ...o };
+  return {
     accountId: null,
     title: null,
+    hasSession: false,
     reason: 'no active session on the target player',
   };
 }
 
 /**
- * The post-play account audit. Scripted off `CTL.accountVerdict`, which the driver tests set
- * to whatever `/status/sessions` would have said. Default: the account matches.
+ * The post-play session wait + account audit. Scripted off `CTL.accountVerdicts` (one per
+ * call, last repeats) or, when that is empty, `CTL.accountVerdict`, which the driver tests
+ * set to whatever `/status/sessions` would have said. Default: a session on the expected
+ * account. A scripted verdict that omits `hasSession` gets it derived from `accountId`.
  */
 export async function verifyAccount(expectAccountId, { device = null } = {}) {
   record('verify_account', expectAccountId, device);
-  const v = CTL.accountVerdict;
-  if (v) return v;
-  return { isMismatch: false, accountId: expectAccountId ?? null, title: 'stub' };
+  const nth = CTL.calls.filter((c) => c[0] === 'verify_account').length - 1;
+  const v = CTL.accountVerdicts.length
+    ? CTL.accountVerdicts[Math.min(nth, CTL.accountVerdicts.length - 1)]
+    : CTL.accountVerdict;
+  if (v) return { hasSession: v.accountId != null, ...v };
+  return {
+    isMismatch: false, accountId: expectAccountId ?? null, title: 'stub', hasSession: true,
+  };
 }
 
 export async function stopPlayback(device = null) {

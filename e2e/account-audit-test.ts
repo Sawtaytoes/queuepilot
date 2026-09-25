@@ -37,6 +37,7 @@ process.env.SHIELD_CLIENT_URI = '';
 process.env.PLAYBACK_FSM_PLAY_ATTEMPTS = '1';
 process.env.PLAYBACK_FSM_SWITCH_ATTEMPTS = '1';
 process.env.PLAYBACK_FSM_RETRY_BACKOFF = '0';
+process.env.PLAYBACK_SESSION_RETRIES = '1';
 
 import { stubDriverDeps } from './stubs/hooks.mjs';
 import type { Device } from '../server/src/types.js';
@@ -50,6 +51,7 @@ interface Verdict {
   isMismatch: boolean;
   accountId: number | null;
   title: string | null;
+  hasSession?: boolean;
   reason?: string;
 }
 
@@ -65,6 +67,7 @@ interface DriverCtl {
   awake: boolean;
   onSwitch: (() => void) | null;
   accountVerdict: Verdict | null;
+  accountVerdicts: Verdict[];
   accountObservation: Omit<Verdict, 'isMismatch'> | null;
 }
 const CTL = RAW_CTL as unknown as DriverCtl;
@@ -163,17 +166,19 @@ ok('(c) abstain: no error', !res.error, JSON.stringify(res));
 ok('(c) abstain: playback is NOT stopped', nCalls('stop_playback') === 0);
 
 // --------------------------------------------------------------------------- //
-// (d) No bound account (an ungated curated queue, or a set with no account_id) -> no audit.
-//     There is nothing to compare against, so asking would only cost a round trip.
+// (d) No bound account (an ungated curated queue, or a set with no account_id). The SESSION
+//     wait still runs — it is what proves the push became playback — but there is nothing to
+//     compare the account against, so whatever account the session names is never a mismatch.
 // --------------------------------------------------------------------------- //
 reset();
 CTL.lastSeen.title = 'Younger Kids';
 CTL.lastSeen.isObserved = true;
-CTL.accountVerdict = { isMismatch: true, accountId: OWNER, title: 'sawtaytoes' };
+CTL.accountVerdict = { isMismatch: false, accountId: OWNER, title: 'sawtaytoes' };
 res = await drive({ accountId: null });
-ok('(d) no bound account: the audit does NOT run', nCalls('verify_account') === 0);
+ok('(d) no bound account: the session wait still runs, once', nCalls('verify_account') === 1);
 ok('(d) no bound account: plays normally', res.played === true, JSON.stringify(res));
 ok('(d) no bound account: nothing is stopped', nCalls('stop_playback') === 0);
+ok('(d) no bound account: plays exactly once when the session appears', nCalls('play') === 1);
 
 // --------------------------------------------------------------------------- //
 // (e) Play never started -> there is no session to audit, and nothing to stop. The play
@@ -231,6 +236,74 @@ ok('(g) wrong active session: successful new play records the requested profile'
     && CTL.lastSeen.title === 'Younger Kids'
     && CTL.lastSeen.isObserved === true,
   JSON.stringify({ res, lastSeen: CTL.lastSeen }));
+
+// --------------------------------------------------------------------------- //
+// (h) THE 2026-09-23 FAILURE. Companion answered 200, the Shield opened the player over the
+//     profile picker and tore it down five seconds later; no session ever appeared. The
+//     driver must not take the 200 for playback: re-open Plex, push once more, and only then
+//     read the account off the session that finally appears.
+// --------------------------------------------------------------------------- //
+reset();
+CTL.lastSeen.title = 'Younger Kids';
+CTL.lastSeen.isObserved = true;
+CTL.accountVerdicts = [
+  { isMismatch: false, accountId: null, title: null, reason: 'no session appeared on the target client' },
+  { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' },
+];
+res = await drive();
+ok('(h) no session after play: pushes play a SECOND time', nCalls('play') === 2,
+  JSON.stringify(CTL.calls.filter((c) => c[0] === 'play')));
+ok('(h) no session after play: re-opens Plex before the second push',
+  nCalls('ensure_plex_open') >= 1, JSON.stringify(CTL.calls));
+ok('(h) no session after play: waits for a session after each push',
+  nCalls('verify_account') === 2);
+ok('(h) no session after play: reports played once the session appears',
+  res.played === true && !res.error, JSON.stringify(res));
+ok('(h) no session after play: the second session is the trusted observation',
+  CTL.lastSeen.title === 'Younger Kids' && CTL.lastSeen.isObserved === true,
+  JSON.stringify(CTL.lastSeen));
+
+// --------------------------------------------------------------------------- //
+// (i) Still no session after the bounded retry -> the last push is reported as-is. A false
+//     "no session" (a misconfigured target identity) must cost one extra push at most, never
+//     an error on every scan.
+// --------------------------------------------------------------------------- //
+reset();
+CTL.lastSeen.title = 'Younger Kids';
+CTL.lastSeen.isObserved = true;
+CTL.accountVerdict = {
+  isMismatch: false, accountId: null, title: null, reason: 'no session appeared on the target client',
+};
+res = await drive();
+ok('(i) never a session: exactly one extra push (bounded)', nCalls('play') === 2);
+ok('(i) never a session: reports the last push as played', res.played === true, JSON.stringify(res));
+ok('(i) never a session: no error, nothing stopped', !res.error && nCalls('stop_playback') === 0);
+
+// --------------------------------------------------------------------------- //
+// (j) A session with no User stamp is still a session: the push took, the account is
+//     unknown. No retry, no error.
+// --------------------------------------------------------------------------- //
+reset();
+CTL.lastSeen.title = 'Younger Kids';
+CTL.lastSeen.isObserved = true;
+CTL.accountVerdict = {
+  isMismatch: false, accountId: null, title: null, hasSession: true,
+  reason: 'target session carries no User id',
+};
+res = await drive();
+ok('(j) unstamped session: plays exactly once', nCalls('play') === 1);
+ok('(j) unstamped session: reports played, no error', res.played === true && !res.error);
+
+// --------------------------------------------------------------------------- //
+// (k) Cast mode has no Companion and no ADB to re-open with: play once and return.
+// --------------------------------------------------------------------------- //
+reset();
+CTL.accountVerdict = {
+  isMismatch: false, accountId: null, title: null, reason: 'no session appeared on the target client',
+};
+res = await drive({ device: asDevice('cast'), requiredProfile: null, accountId: null });
+ok('(k) cast mode: plays once, no session wait', nCalls('play') === 1 && nCalls('verify_account') === 0,
+  JSON.stringify(CTL.calls));
 
 console.log(FAILS.length ? `\nFAILURES: ${FAILS.length}` : '\ndone');
 process.exit(FAILS.length ? 1 : 0);
