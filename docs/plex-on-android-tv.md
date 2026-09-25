@@ -5,15 +5,9 @@ QueuePilot has two ways to start Plex playback. Its `PLAYBACK_MODE` setting is `
 chooses the items and their order, Plex Media Server holds them in a temporary **play queue**,
 and QueuePilot asks the Plex app to start it. This does not create a saved Plex Playlist.
 
-```mermaid
-flowchart LR
-    A[Play request] --> B[QueuePilot chooses and orders items]
-    B -->|Create temporary play queue| C[Plex Media Server]
-    C -->|Return queue ID| B
-    B -->|Plex Companion: play queue ID| D[Plex app on Shield or Android TV]
-    D -->|Read queue and stream items| C
-    B -.->|Optional ADB: wake, open Plex, select profile| D
-```
+![Five steps from QueuePilot's item selection to Plex playback on Android TV, with ADB as an optional control path](images/plex-client-playback.svg)
+
+[Open the diagram by itself](images/plex-client-playback.svg).
 
 The play request can come from the web app or an MQTT automation, including one started by
 Home Assistant. Home Assistant does not deliver the queue to the player in this mode.
