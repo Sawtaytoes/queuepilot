@@ -43,6 +43,18 @@ import { SelectListbox } from "./SelectListbox"
  */
 const SEGMENTED_MAX = 2
 
+type PlexSource = {
+  id: string
+  name: string
+  owned: boolean
+  available: boolean
+  libraries: {
+    id: string
+    title: string
+    type: "movie" | "show"
+  }[]
+}
+
 export function ProviderBlock({
   block,
   canRemove,
@@ -69,6 +81,12 @@ export function ProviderBlock({
   const [libError, setLibError] = useState<string | null>(
     null,
   )
+  const [sharedSources, setSharedSources] = useState<
+    PlexSource[] | null
+  >(null)
+  const [sharedError, setSharedError] = useState<
+    string | null
+  >(null)
 
   const provider =
     providers.find((p) => p.id === block.provider) ?? null
@@ -103,6 +121,34 @@ export function ProviderBlock({
       cancelled = true
     }
   }, [block.provider])
+
+  useEffect(() => {
+    let cancelled = false
+    setSharedSources(null)
+    setSharedError(null)
+    if (block.provider !== "plex") return
+    void api<{ sources: PlexSource[] }>(
+      "GET",
+      `/api/plex-sources?profile=${encodeURIComponent(block.profile)}`,
+    )
+      .then((result) => {
+        if (!cancelled)
+          setSharedSources(
+            result.sources.filter((s) => !s.owned),
+          )
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setSharedError(
+            error instanceof Error
+              ? error.message
+              : String(error),
+          )
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [block.provider, block.profile])
 
   const profileOptions = profileOptionsFor(block.provider)
 
@@ -274,6 +320,61 @@ export function ProviderBlock({
             : "Uncheck every box to search all of them."}
         </p>
       </fieldset>
+      {block.provider === "plex" ? (
+        <section
+          aria-label="Shared Plex libraries"
+          className="field sharedplex"
+        >
+          <span className="fieldlbl">
+            Shared Plex libraries
+          </span>
+          <p className="subhint">
+            {block.profile
+              ? `These servers are available to ${block.profile}. Plex grants access to each profile separately.`
+              : "These servers are available to the Plex admin account. Choose a profile above to check its access."}{" "}
+            QueuePilot can show their libraries, but cannot
+            add their items to this queue yet.
+          </p>
+          {sharedError ? (
+            <p className="subhint" role="alert">
+              {sharedError}
+            </p>
+          ) : null}
+          {!sharedError && sharedSources === null ? (
+            <p className="subhint">Checking Plex…</p>
+          ) : null}
+          {sharedSources?.length === 0 ? (
+            <p className="subhint">
+              This profile has no shared servers.
+            </p>
+          ) : null}
+          {sharedSources?.map((source) => (
+            <div
+              className="sharedplex-source"
+              key={source.id}
+            >
+              <strong>{source.name}</strong>
+              {!source.available ? (
+                <p className="subhint">
+                  Server unavailable from QueuePilot.
+                </p>
+              ) : source.libraries.length === 0 ? (
+                <p className="subhint">
+                  No video libraries available.
+                </p>
+              ) : (
+                <ul>
+                  {source.libraries.map((library) => (
+                    <li key={`${source.id}:${library.id}`}>
+                      {library.title}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ))}
+        </section>
+      ) : null}
     </div>
   )
 }

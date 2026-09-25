@@ -10,6 +10,10 @@ It currently supports Plex, Kavita, BoardGameGeek collections, Steam and MiSTer.
 includes a web interface for queue management and can connect to Home Assistant through MQTT
 for NFC cards, remote controls and playback automations.
 
+The Plex source editor also shows video libraries on other servers shared with the selected
+Plex account. This view is read-only. Queue entries and playback still use the configured
+Plex server; a managed Plex Home profile does not inherit another account's external shares.
+
 ## Run the container
 
 Follow the [setup guide](docs/setup.md) first. It explains the required MQTT broker, persistent
