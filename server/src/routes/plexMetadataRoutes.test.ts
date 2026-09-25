@@ -1,10 +1,37 @@
 // The ratings route must use the profile's managed token even when the caller does not
 // provide a library scope. Otherwise it asks Plex for the admin's libraries and hides ratings
 // that the selected profile is allowed to use.
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as plex from '../plex.js';
+import * as plexSources from '../plexSources.js';
 import { plexMetadataRoutes } from './plexMetadataRoutes.js';
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('GET /plex-sources', () => {
+  it('uses the selected Home account and refuses an unknown profile', async () => {
+    vi.spyOn(plex, 'homeUsers').mockResolvedValue([
+      { name: 'Admin', username: 'admin-login', id: 1, uuid: null, admin: true, restricted: false },
+      { name: 'Kids', username: null, id: 2, uuid: 'kids-uuid', admin: false, restricted: true },
+    ]);
+    const discover = vi.spyOn(plexSources, 'plexSourcesForProfile').mockResolvedValue([]);
+
+    const admin = await plexMetadataRoutes().request('/plex-sources');
+    expect(admin.status).toBe(200);
+    expect(await admin.json()).toEqual({ profile: 'admin-login', sources: [] });
+    expect(discover).toHaveBeenLastCalledWith(null);
+
+    const kids = await plexMetadataRoutes().request('/plex-sources?profile=Kids');
+    expect(kids.status).toBe(200);
+    expect(await kids.json()).toEqual({ profile: 'Kids', sources: [] });
+    expect(discover).toHaveBeenLastCalledWith('kids-uuid');
+
+    const unknown = await plexMetadataRoutes().request('/plex-sources?profile=not-a-user');
+    expect(unknown.status).toBe(400);
+    expect(discover).toHaveBeenCalledTimes(2);
+  });
+});
 
 describe('GET /ratings', () => {
   it('mints the profile token before loading every video library', async () => {
