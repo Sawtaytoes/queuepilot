@@ -429,7 +429,7 @@ async function plextv<T = unknown>(path: string, token: string, method = 'GET'):
   return (text ? JSON.parse(text) : {}) as T;
 }
 
-async function machineIdentifier(): Promise<string> {
+export async function machineIdentifier(): Promise<string> {
   return container(await plexGet('/')).machineIdentifier || '';
 }
 
