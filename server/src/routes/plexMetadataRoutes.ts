@@ -30,9 +30,14 @@ export function plexMetadataRoutes(): Hono {
         ? users.find((u) => (u.admin ? u.username : u.name) === profile)
         : users.find((u) => u.admin);
       if (!user) return c.json({ error: 'Unknown Plex profile' }, 400);
+      const [sources, localServerId] = await Promise.all([
+        plexSourcesForProfile(user.uuid),
+        plex.machineIdentifier(),
+      ]);
+      if (!localServerId) return c.json({ error: 'Plex server identity is unavailable' }, 503);
       return c.json({
         profile: user.admin ? (user.username || user.name) : user.name,
-        sources: await plexSourcesForProfile(user.uuid),
+        sources: sources.map((source) => ({ ...source, local: source.id === localServerId })),
       });
     } catch (e) {
       return c.json({ error: e instanceof Error ? e.message : String(e) }, 503);

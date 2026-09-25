@@ -16,6 +16,7 @@ describe('GET /plex-sources', () => {
       { name: 'Kids', username: null, id: 2, uuid: 'kids-uuid', admin: false, restricted: true },
     ]);
     const discover = vi.spyOn(plexSources, 'plexSourcesForProfile').mockResolvedValue([]);
+    vi.spyOn(plex, 'machineIdentifier').mockResolvedValue('home-server');
 
     const admin = await plexMetadataRoutes().request('/plex-sources');
     expect(admin.status).toBe(200);
@@ -30,6 +31,27 @@ describe('GET /plex-sources', () => {
     const unknown = await plexMetadataRoutes().request('/plex-sources?profile=not-a-user');
     expect(unknown.status).toBe(400);
     expect(discover).toHaveBeenCalledTimes(2);
+  });
+
+  it('marks the home server as local even when a managed account does not own it', async () => {
+    vi.spyOn(plex, 'homeUsers').mockResolvedValue([
+      { name: 'Kids', username: null, id: 2, uuid: 'kids-uuid', admin: false, restricted: true },
+    ]);
+    vi.spyOn(plex, 'machineIdentifier').mockResolvedValue('home-server');
+    vi.spyOn(plexSources, 'plexSourcesForProfile').mockResolvedValue([
+      { id: 'home-server', name: 'Home', owned: false, available: true, libraries: [] },
+      { id: 'shared-server', name: 'Shared', owned: false, available: true, libraries: [] },
+    ]);
+
+    const response = await plexMetadataRoutes().request('/plex-sources?profile=Kids');
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      profile: 'Kids',
+      sources: [
+        { id: 'home-server', name: 'Home', owned: false, local: true, available: true, libraries: [] },
+        { id: 'shared-server', name: 'Shared', owned: false, local: false, available: true, libraries: [] },
+      ],
+    });
   });
 });
 
