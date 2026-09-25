@@ -31,6 +31,7 @@ import {
   PLEXTV_TIMEOUT_MS,
   RESUME_POLL_TIMEOUT_MS,
   PLAYBACK_FSM_COMPANION_TIMEOUT,
+  PLAYBACK_SESSION_WAIT_SECONDS,
   PLEX_LOCAL_URL,
   MQTT_HOST,
   MQTT_PORT,
@@ -96,6 +97,12 @@ export interface AccountVerdict {
   isMismatch: boolean;
   accountId: number | null;
   title: string | null;
+  /**
+   * Whether the target player had a session at all when the wait ended. This is the proof
+   * that a play TOOK — `accountId` can be null on a session Plex did not stamp with a user,
+   * and that is still a session. False means the push was accepted and nothing followed.
+   */
+  hasSession: boolean;
   /** Why we could not tell, when `accountId` is null. Log-only. */
   reason?: string;
 }
@@ -104,6 +111,8 @@ export interface AccountVerdict {
 export interface AccountObservation {
   accountId: number | null;
   title: string | null;
+  /** True when the target player has a session, whatever it says about the account. */
+  hasSession: boolean;
   /** Why Plex could not identify an account, when `accountId` is null. Log-only. */
   reason?: string;
 }
@@ -869,6 +878,7 @@ async function readAccountForTarget(
     return {
       accountId: null,
       title: null,
+      hasSession: false,
       reason: `/status/sessions unreadable: ${errMessage(e)}`,
     };
   }
@@ -876,16 +886,26 @@ async function readAccountForTarget(
   const sessions = data.MediaContainer?.Metadata || [];
   const mine = sessions.find((m) => sessionBelongsTo(m, wanted));
   if (!mine) {
-    return { accountId: null, title: null, reason: 'no active session on the target player' };
+    return {
+      accountId: null,
+      title: null,
+      hasSession: false,
+      reason: 'no active session on the target player',
+    };
   }
 
   const parsed = parseInt(String(mine.User?.id), 10);
   const accountId = Number.isFinite(parsed) ? parsed : null;
   const title = mine.User?.title != null ? String(mine.User.title) : null;
   if (accountId == null) {
-    return { accountId: null, title, reason: 'target session carries no User id' };
+    return {
+      accountId: null,
+      title,
+      hasSession: true,
+      reason: 'target session carries no User id',
+    };
   }
-  return { accountId, title };
+  return { accountId, title, hasSession: true };
 }
 
 /**
@@ -901,36 +921,43 @@ export async function currentAccount(
 ): Promise<AccountObservation> {
   const wanted = await sessionTarget(device);
   if (!wanted) {
-    return { accountId: null, title: null, reason: 'target player identity is unavailable' };
+    return {
+      accountId: null,
+      title: null,
+      hasSession: false,
+      reason: 'target player identity is unavailable',
+    };
   }
   return readAccountForTarget(wanted, Math.max(1, timeoutMs));
 }
 
 /**
- * Who is Plex playing as on our client? `expectAccountId` is the bound account
- * (`binding.account_id`); null means the caller has nothing to compare and this abstains.
+ * Did the play TAKE, and who is Plex playing as? Waits for a session on our client, then
+ * compares its account with `expectAccountId` (the bound `binding.account_id`). A null
+ * `expectAccountId` still waits for the session — that is the proof the push became
+ * playback — and abstains only on the account comparison.
  *
  * Polls, because a session does not appear the instant Companion answers 200 — the client
- * still has to open the stream. Bounded by `timeoutMs`; abstains rather than fails on
- * timeout.
+ * still has to open the stream, and this Shield posts its first `playing` timeline ~15 s
+ * after the push. Bounded by `timeoutMs` (default `PLAYBACK_SESSION_WAIT_SECONDS`); the
+ * account comparison abstains rather than fails on timeout, and `hasSession: false` is the
+ * caller's signal that nothing is playing.
  */
 export async function verifyAccount(
   expectAccountId: number | null | undefined,
   {
     device = null,
-    timeoutMs = 12_000,
+    timeoutMs = PLAYBACK_SESSION_WAIT_SECONDS * 1000,
     pollMs = 1_000,
   }: { device?: Device | null; timeoutMs?: number; pollMs?: number } = {},
 ): Promise<AccountVerdict> {
-  if (expectAccountId == null) {
-    return { isMismatch: false, accountId: null, title: null, reason: 'no bound account to check' };
-  }
   const wanted = await sessionTarget(device);
   if (!wanted) {
     return {
       isMismatch: false,
       accountId: null,
       title: null,
+      hasSession: false,
       reason: 'target player identity is unavailable',
     };
   }
@@ -941,16 +968,29 @@ export async function verifyAccount(
     const observation = await readAccountForTarget(wanted, RESUME_POLL_TIMEOUT_MS);
     if (observation.accountId != null) {
       return {
-        isMismatch: observation.accountId !== Number(expectAccountId),
+        isMismatch: expectAccountId != null
+          && observation.accountId !== Number(expectAccountId),
         accountId: observation.accountId,
         title: observation.title,
+        hasSession: true,
+      };
+    }
+    if (observation.hasSession) {
+      // A session with no User id: the play took, the account is unknown. Abstain on the
+      // comparison; do not keep polling for a stamp Plex is not going to add.
+      return {
+        isMismatch: false,
+        accountId: null,
+        title: observation.title,
+        hasSession: true,
+        reason: observation.reason,
       };
     }
     lastReason = observation.reason || lastReason;
     if (Date.now() >= deadline) break;
     await sleep(Math.max(0.05, pollMs / 1000));
   }
-  return { isMismatch: false, accountId: null, title: null, reason: lastReason };
+  return { isMismatch: false, accountId: null, title: null, hasSession: false, reason: lastReason };
 }
 
 /**

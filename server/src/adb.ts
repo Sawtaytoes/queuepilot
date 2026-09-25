@@ -256,6 +256,20 @@ export function foregroundActivity(): string | null {
 }
 
 /**
+ * Is Plex's profile picker the focused window right now? One ~50 ms `dumpsys` read.
+ *
+ * The picker is Plex — `foregroundActivity()` reports the package — but it is not a Plex that
+ * will play: a Companion push that lands on it opens the player over the picker, and on a
+ * cold room start that player was torn down five seconds later. The screen outranks any
+ * remembered profile observation: a true "signed in as X" and a picker on screen are not
+ * exclusive, which is exactly what the 2026-09-23 cold-start scan showed.
+ */
+export function isPickerForeground(): boolean {
+  const act = foregroundActivity() || '';
+  return act.includes(PICKER_ACTIVITY);
+}
+
+/**
  * True if the Shield's display is awake, false if dozing/asleep, null if unreadable.
  *
  * Reads `dumpsys power` wakefulness (Awake / Dozing / Asleep / Dreaming) so ensurePlexOpen

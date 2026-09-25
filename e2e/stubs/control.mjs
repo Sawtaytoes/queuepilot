@@ -20,6 +20,10 @@ export const CTL = {
   onSwitch: null, // optional hook fired inside switchTo (cancel-mid-flight scenarios)
   // What playback.verifyAccount() should answer; null = 'the account matches'.
   accountVerdict: null,
+  // A SCRIPT of verdicts, one per verifyAccount() call (the last one repeats). Takes
+  // precedence over `accountVerdict` when non-empty — for the no-session-then-session
+  // scenarios that drive the play retry.
+  accountVerdicts: [],
   // What the one-shot pre-switch `/status/sessions` read should answer. Null means the
   // target has no active session, so the driver falls back to LAST_SEEN or the picker.
   accountObservation: null,
@@ -37,6 +41,7 @@ export function reset() {
   CTL.awake = true;
   CTL.onSwitch = null;
   CTL.accountVerdict = null;
+  CTL.accountVerdicts = [];
   CTL.accountObservation = null;
 }
 

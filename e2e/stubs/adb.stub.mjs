@@ -8,6 +8,11 @@ export function foregroundActivity() {
   return CTL.foreground;
 }
 
+export function isPickerForeground() {
+  record('is_picker_foreground');
+  return String(CTL.foreground || '').includes('PickUserActivity');
+}
+
 export async function ensurePlexOpen() {
   record('ensure_plex_open');
   // Opening Plex foregrounds it and brings the Companion port up — same as the real thing.
