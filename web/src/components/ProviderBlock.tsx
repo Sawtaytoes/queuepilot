@@ -47,6 +47,7 @@ type PlexSource = {
   id: string
   name: string
   owned: boolean
+  local: boolean
   available: boolean
   libraries: {
     id: string
@@ -134,7 +135,7 @@ export function ProviderBlock({
       .then((result) => {
         if (!cancelled)
           setSharedSources(
-            result.sources.filter((s) => !s.owned),
+            result.sources.filter((s) => !s.local),
           )
       })
       .catch((error: unknown) => {
