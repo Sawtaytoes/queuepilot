@@ -47,5 +47,6 @@ yarn workspace queuepilot-web dev
 ## Documentation
 
 - [Installation and provider setup](docs/setup.md)
+- [How Plex playback reaches a Shield or Android TV](docs/plex-on-android-tv.md)
 - [Why QueuePilot uses queues instead of Plex playlists](docs/why-queues-not-plex-playlists.md)
 - [Decision records](docs/decisions/README.md)

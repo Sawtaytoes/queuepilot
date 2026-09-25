@@ -79,6 +79,9 @@ Choose one playback mode:
 | `client` | `PLAYBACK_MODE=client` plus `SHIELD_CLIENT_NAME`; optionally set `SHIELD_CLIENT_MACHINE_ID` or the direct `SHIELD_CLIENT_URI=http://<player>:32500` | Remote-controls the signed-in Plex player. Watch history belongs to the account active on that player. |
 | `cast` | `PLAYBACK_MODE=cast` plus `SHIELD_CAST_NAME` | Uses Plex Cast and the queue account token. This keeps watch attribution deterministic for Plex Home accounts. MQTT and network discovery are required. |
 
+For the `client` path, see [how playback reaches a Shield or Android TV](plex-on-android-tv.md).
+It shows the temporary Plex play queue, the Companion command, and ADB's separate role.
+
 Profile-aware NFC cards can also use `set: "auto"`. Mount the Plex Media Server log directory
 read-only so `PMS_LOG_PATH` points at `Plex Media Server.log`. Set `SHIELD_IP` to the player.
 Automatic profile switching is optional and off by default. To use it, set `ADB_ENABLED=true`,
