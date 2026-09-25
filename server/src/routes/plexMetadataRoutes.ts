@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import * as cache from '../cache.js';
 import * as plex from '../plex.js';
+import { plexSourcesForProfile } from '../plexSources.js';
 import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
@@ -17,6 +18,26 @@ const memberOrder = (children: readonly plex.CollectionChild[] | null): string =
  */
 export function plexMetadataRoutes(): Hono {
   const app = new Hono();
+
+  // Server grants belong to the selected Plex account. Resolve a profile against the
+  // Home roster before switching so a caller cannot supply an arbitrary user UUID.
+  app.get('/plex-sources', async (c) => {
+    const profile = (c.req.query('profile') || '').trim();
+    try {
+      const users = await plex.homeUsers();
+      if (!users.length) return c.json({ error: 'Plex profiles are unavailable' }, 503);
+      const user = profile
+        ? users.find((u) => (u.admin ? u.username : u.name) === profile)
+        : users.find((u) => u.admin);
+      if (!user) return c.json({ error: 'Unknown Plex profile' }, 400);
+      return c.json({
+        profile: user.admin ? (user.username || user.name) : user.name,
+        sources: await plexSourcesForProfile(user.uuid),
+      });
+    } catch (e) {
+      return c.json({ error: e instanceof Error ? e.message : String(e) }, 503);
+    }
+  });
 
   // --- search ------------------------------------------------------------------ //
   // With ?set= : scoped to that set's sections (the in-queue add box).
