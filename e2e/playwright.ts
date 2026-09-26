@@ -59,6 +59,9 @@ export interface ScreenshotOptions {
   fullPage?: boolean;
   clip?: { x: number; y: number; width: number; height: number };
   type?: 'png' | 'jpeg';
+  /** `'disabled'` finishes CSS transitions and animations before the shot (VRT). */
+  animations?: 'disabled' | 'allow';
+  caret?: 'hide' | 'initial';
 }
 
 export interface BoundingBox {
@@ -234,6 +237,8 @@ export interface PageEvents {
   pageerror: Error;
   request: Request;
   requestfailed: Request;
+  /** The response body has fully arrived. `vrt-capture` counts these to know the page is idle. */
+  requestfinished: Request;
   response: Response;
   crash: Page;
   close: Page;
@@ -352,6 +357,10 @@ export interface BrowserContext {
   addInitScript(fn: () => void): Promise<void>;
   addCookies(cookies: unknown[]): Promise<void>;
   pages(): Page[];
+  /** Playwright's fake clock. `setFixedTime` pins `Date` and leaves the timers real. */
+  clock: {
+    setFixedTime(time: number | string | Date): Promise<void>;
+  };
 }
 
 export interface NewContextOptions {
@@ -361,6 +370,7 @@ export interface NewContextOptions {
   deviceScaleFactor?: number;
   reducedMotion?: 'reduce' | 'no-preference';
   locale?: string;
+  timezoneId?: string;
   storageState?: unknown;
   /**
    * Real device emulation, which a narrow `viewport` alone is NOT. Only with `isMobile`

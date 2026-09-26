@@ -1497,6 +1497,19 @@ Three of them — `drag-stability`, `lane-drag` and `shelf-remove` — were miss
 list while running in CI the whole time. A gate this file does not name is a gate nobody
 re-runs by hand before claiming a change is safe.
 
+**Visual regression is the `vrt` job, and its shots come from `e2e/vrt-capture.ts`** — not a
+Storybook; this repo has none
+([decision](docs/decisions/2026-09-25-vrt-shoots-the-main-screens-from-the-e2e-harness.md)).
+Twelve routes over the committed fixtures, Wide and Narrow View, light and dark: 48 PNGs into
+`$VRT_ACTUAL_DIR`. The job runs the shared `shared-vrt.yml@workflows-v1` on the repo's LAN
+runner, and a red `vrt` is diagnosed in its own pull request by opening the images, never
+re-run into green. Run it by hand after `yarn workspace queuepilot-web run build`:
+`PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot VRT_ACTUAL_DIR=/tmp/qp-vrt server/node_modules/.bin/tsx e2e/vrt-capture.ts`
+(about five minutes — the no-Plex `/api/queues` retries for eleven seconds on every page load).
+⚠️ **A new screen needs a ready marker that proves its DATA painted**, and the capture fails when
+one never appears; do not loosen that to a `.catch()`, or a spinner becomes the baseline. The
+server clock is pinned by `e2e/stubs/fixed-clock.mjs`, so a shot never depends on the day.
+
 `group-create-test.ts` is **deleted**, not forgotten. It pinned "a new queue joins the group
 on screen", and there is no group on screen any more — the landing filters by PEOPLE and a
 group is not an address ([decision](docs/decisions/2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md)).
