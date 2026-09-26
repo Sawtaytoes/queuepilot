@@ -39,6 +39,7 @@ import { profileUser, sections as plexSections, showEpisodes } from '../plex.js'
 import { toWeight } from '../engine/weight.js';
 import * as playback from '../playback.js';
 import * as driver from '../driver.js';
+import { plexServerAccessForProfile, plexServerClient } from '../plexSources.js';
 
 /**
  * What `buckets()` actually needs, which is NARROWER than `BucketsContext`.
@@ -258,6 +259,18 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
     }: PlexBucketsContext): Promise<BucketsResult> {
       if (cfg.source === 'queue') {
         let entries = resolve.loadEntries(setName);
+        const sharedClients = new Map<string, Promise<PlexClient | null>>();
+        const clientForEntry: resolve.EntryClientResolver = async (entry) => {
+          if (!entry.plexServer) return c;
+          let pending = sharedClients.get(entry.plexServer);
+          if (!pending) {
+            pending = plexServerAccessForProfile(binding.user_uuid, entry.plexServer)
+              .then((access) => (access ? plexServerClient(access) : null))
+              .catch(() => null);
+            sharedClients.set(entry.plexServer, pending);
+          }
+          return pending;
+        };
         // "Play THIS one" (the grid's per-tile ▶). Narrowing the ENTRY LIST — rather than
         // adding a branch inside nextQueue — is what keeps this honest: the one entry still
         // goes through the same resolve/watched/batch machinery, so it gets the same next
@@ -268,7 +281,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
           entries = entries.filter((e) => e.key === only);
           if (!entries.length) return { play: [], unknownEntry: only };
         }
-        if (cfg.reel) return resolve.buildReel(c, setName, cfg, entries, token);
+        if (cfg.reel) return resolve.buildReel(c, setName, cfg, entries, token, 60, clientForEntry);
         const watched = await select.watchedForSet(c, cfg, binding);
         // The rng is REQUIRED, not optional: a channel (kind: anime) plays its members in a
         // shuffled order, and nextQueue only shuffles when handed one. Python defaulted it to
@@ -281,6 +294,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
           c, setName, cfg, entries, watched, token, defaultRng,
           (entryKey, windowMs) => promote.canLeadOnce(setName, entryKey, windowMs),
           (entryKey) => queueEntryHistory.progressFor(setName, entryKey),
+          clientForEntry,
         );
       }
 
@@ -377,6 +391,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
       return {
         provider: this.id,
         kind: 'plex',
+        items,
         ratingKeys: items.map((it) => String(it.ratingKey)),
         offset,
         setName,
@@ -394,6 +409,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
     }: HandoffOptions = {}): Promise<PushResult> {
       if (useFsm) {
         return driver.driveToPlaying({
+          items: artifact.items,
           ratingKeys: artifact.ratingKeys,
           requiredProfile,
           offset: artifact.offset,
@@ -405,7 +421,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
           accountId: artifact.accountId,
         });
       }
-      return playback.playRatingKeys(artifact.ratingKeys, {
+      return playback.playRatingKeys(artifact.items, {
         setName: artifact.setName,
         device,
         offset: artifact.offset,

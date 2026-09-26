@@ -22,8 +22,10 @@ import * as cache from './cache.js';
 import { errMessage } from './errors.js';
 import * as mqttc from './mqttc.js';
 import * as plex from './plex.js';
+import { plexServerAccessForProfile, plexServerGet } from './plexSources.js';
+import { SESSION } from './session.js';
 import { store } from './store/index.js';
-import type { NowPlaying, PublishedSessionState, SseEvent } from './types.js';
+import type { NowPlaying, PlayingContext, PublishedSessionState, SseEvent } from './types.js';
 import * as warm from './warm.js';
 
 /** The payload type that goes with one `SseEvent` discriminant. */
@@ -88,6 +90,7 @@ export function broadcast<TType extends SseEvent['type']>(
 // Attach the parent series/collection to the raw HA payload so the UI can match a playing
 // episode to its SERIES tile. Only worth resolving while something is actually on screen.
 let LAST_NOW: NowPlaying | null = null; // withContext()-enriched, kept fresh by onNowPlaying
+const sharedContexts = new Map<string, PlayingContext>();
 
 /** The enriched now-playing snapshot, for `/api/now` and the on-connect replay. */
 export const lastNow = (): NowPlaying | null => LAST_NOW;
@@ -97,7 +100,31 @@ export async function withContext(
 ): Promise<NowPlaying | null> {
   if (!now || !now.ratingKey) return now || null;
   if (now.state !== 'playing' && now.state !== 'paused') return { ...now, context: null };
-  return { ...now, context: await plex.playingContext(now.ratingKey) };
+  const matches = SESSION.set && SESSION.queue.length
+    ? SESSION.queue.filter((item) => item.ratingKey === String(now.ratingKey)) : [];
+  // An HA rating key alone cannot distinguish two servers that assigned the same number.
+  // Suppress attribution rather than paint either queue tile as playing.
+  if (matches.length > 1) return { ...now, plexServer: '', context: null };
+  const server = matches[0]?.plexServer || null;
+  if (!server) return { ...now, plexServer: null, context: await plex.playingContext(now.ratingKey) };
+  const contextKey = `${server}:${now.ratingKey}`;
+  const cached = sharedContexts.get(contextKey);
+  if (cached) return { ...now, plexServer: server, context: cached };
+  try {
+    const access = await plexServerAccessForProfile(SESSION.userUuid, server);
+    if (!access) return { ...now, plexServer: server, context: null };
+    const md = (await plexServerGet(access, `/library/metadata/${now.ratingKey}`))
+      .MediaContainer?.Metadata?.[0];
+    const context: PlayingContext | null = md ? {
+        ratingKey: String(now.ratingKey), type: md.type || null,
+        showRatingKey: md.grandparentRatingKey == null ? null : String(md.grandparentRatingKey),
+        collections: (md.Collection || []).map((row) => row.tag).filter((tag): tag is string => Boolean(tag)),
+      } : null;
+    if (context) sharedContexts.set(contextKey, context);
+    return { ...now, plexServer: server, context };
+  } catch {
+    return { ...now, plexServer: server, context: null };
+  }
 }
 
 /** The `{now, set}` snapshot every `now` frame carries (live push and on-connect replay). */

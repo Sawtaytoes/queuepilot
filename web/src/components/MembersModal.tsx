@@ -135,6 +135,7 @@ function toEpisodeRows(
   data: ShowEpisodes,
   unit: EntryUnit,
   hasSpecials: boolean,
+  plexServer: string | null = null,
 ): MemberRow[] {
   return data.seasons.flatMap((s) =>
     s.episodes.map((e) => ({
@@ -149,7 +150,11 @@ function toEpisodeRows(
         },
         unit,
       ),
-      ratingKey: e.ratingKey ? String(e.ratingKey) : null,
+      ratingKey: e.ratingKey
+        ? plexServer
+          ? `server:${plexServer}:rk:${e.ratingKey}`
+          : String(e.ratingKey)
+        : null,
       season: data.multiSeason ? s.season : null,
     })),
   )
@@ -309,6 +314,9 @@ export function MembersModal() {
       accountUuid
         ? `uuid=${encodeURIComponent(accountUuid)}`
         : "",
+      item && "plexServer" in item && item.plexServer
+        ? `plex_server=${encodeURIComponent(item.plexServer)}`
+        : "",
     ]
       .filter(Boolean)
       .join("&")
@@ -335,6 +343,9 @@ export function MembersModal() {
         res,
         unitOf(item, vocab),
         hasSpecials,
+        item && "plexServer" in item
+          ? (item.plexServer ?? null)
+          : null,
       )
     }
 

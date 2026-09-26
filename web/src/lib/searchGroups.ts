@@ -137,7 +137,13 @@ export function entryTitle(hit: SearchHit): string {
 export function queueItemAddBody(hit: SearchHit): {
   position: "top"
   type?: "collection"
-  value: string | { ratingKey: string; title: string }
+  value:
+    | string
+    | {
+        ratingKey: string
+        title: string
+        plex_server?: string
+      }
 } {
   if (hit.type === "collection") {
     return {
@@ -152,6 +158,9 @@ export function queueItemAddBody(hit: SearchHit): {
     value: {
       ratingKey: hit.ratingKey,
       title: entryTitle(hit),
+      ...(hit.plexServer
+        ? { plex_server: hit.plexServer }
+        : {}),
     },
   }
 }

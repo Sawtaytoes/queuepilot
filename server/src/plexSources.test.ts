@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { plexSourcesForToken } from './plexSources.js';
+import { plexServerSearch, plexSourcesForToken } from './plexSources.js';
 
 const reply = (body: unknown, status = 200): Response => new Response(JSON.stringify(body), {
   status,
@@ -64,5 +64,34 @@ describe('Plex source discovery', () => {
       id: 'friend-id', name: 'Friend', owned: false, available: false, libraries: [],
     }]);
     expect(requests).toHaveLength(1);
+  });
+});
+
+describe('shared Plex search', () => {
+  it('uses the server grant, limits the search to allowed libraries, and scopes each hit', async () => {
+    const requests: { url: string; token: string | null }[] = [];
+    const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+      requests.push({
+        url: String(input),
+        token: new Headers(init?.headers).get('X-Plex-Token'),
+      });
+      return reply({ MediaContainer: { Metadata: [{
+        ratingKey: '42', title: 'Fixture Film', year: 2001, type: 'movie', thumb: '/thumb/42',
+      }] } });
+    }) as typeof fetch;
+    const access = {
+      id: 'friend-id', name: 'Friend', baseUrl: 'https://friend.example', token: 'friend-grant',
+      libraries: [{ id: '7', title: 'Shared Movies', type: 'movie' as const }],
+    };
+
+    const hits = await plexServerSearch(access, ['7', '999'], 'Fixture', fetchImpl);
+
+    expect(hits).toEqual([expect.objectContaining({
+      ratingKey: '42', title: 'Fixture Film', sectionId: 7,
+      plexServer: 'friend-id', plexServerName: 'Friend',
+    })]);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.url).toContain('/library/sections/7/all?title=Fixture');
+    expect(requests[0]?.token).toBe('friend-grant');
   });
 });

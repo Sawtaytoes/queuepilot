@@ -218,14 +218,20 @@ export async function topup(
   // the viewer has already passed. Re-adding a short they watched ten minutes ago is the most
   // visible way this feature can look broken, and the rotation builder has no idea what is
   // currently queued: it answers "what should this channel play", not "what is queued".
-  const already = new Set(live.ratingKeys.map(String));
+  const queueItemKey = (item: { ratingKey: string | number; plexServer?: string | null }) =>
+    `${item.plexServer || ''}:${String(item.ratingKey)}`;
+  const liveItems = live.items ?? live.ratingKeys.map((ratingKey) => ({ ratingKey }));
+  const already = new Set(liveItems.map(queueItemKey));
   let built: PlexPlayItem[];
   try {
     built = (await buildLineup()) as PlexPlayItem[];
   } catch (e) {
     return { ok: false, set: setName, error: `lineup build failed: ${errMessage(e)}` };
   }
-  const fresh = built.map((it) => String(it.ratingKey)).filter((rk) => rk && rk !== 'undefined' && !already.has(rk));
+  const fresh = built.filter((item) => {
+    const ratingKey = String(item.ratingKey);
+    return ratingKey && ratingKey !== 'undefined' && !already.has(queueItemKey(item));
+  });
   if (!fresh.length) {
     // Genuinely out of material: every eligible item is already queued. On a channel with
     // `on_complete: restart` this should not happen; on the default (drop) it is the honest
@@ -234,9 +240,12 @@ export async function topup(
   }
 
   const slice = fresh.slice(0, want);
+  const appendItems = slice.map((item) => (
+    item.plexServer ? item : String(item.ratingKey)
+  ));
   let sizeAfter: number | null;
   try {
-    sizeAfter = await deps.extendPlayQueue(SESSION.playQueueID, slice, { token });
+    sizeAfter = await deps.extendPlayQueue(SESSION.playQueueID, appendItems, { token });
   } catch (e) {
     return { ok: false, set: setName, error: `extend failed: ${errMessage(e)}` };
   }

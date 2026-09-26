@@ -6,6 +6,7 @@ import { errMessage } from '../errors.js';
 import * as finished from '../finished.js';
 import { fileSetIntoGroup } from '../groups.js';
 import * as plex from '../plex.js';
+import { plexServerAccessForProfile, plexServerGet } from '../plexSources.js';
 import * as providerTiles from '../providers/tiles.js';
 import * as queues from '../queues.js';
 import * as sets from '../sets.js';
@@ -189,6 +190,39 @@ export function setsRoutes(): Hono {
       // Bounded like every other Plex fan-out here. A dead key still yields a row (see
       // `plex.itemLabel`), so a deleted library item can be cleared from the panel.
       const items = await mapLimit(keys, 6, async (rk) => {
+        const shared = /^server:([a-zA-Z0-9-]+):rk:(\d+)$/.exec(rk);
+        if (shared) {
+          const bareKey = shared[2]!;
+          try {
+            const scope = await plex.profileScope(s.requires_profile || null);
+            const access = await plexServerAccessForProfile(scope.account ?? null, shared[1]!);
+            if (access) {
+              const md = (await plexServerGet(access, `/library/metadata/${bareKey}`))
+                .MediaContainer?.Metadata?.[0];
+              if (md) return {
+                ratingKey: rk,
+                type: md.type || null,
+                title: md.title || `#${bareKey}`,
+                year: md.year ?? null,
+                editionTitle: md.editionTitle || null,
+                show: md.grandparentTitle || null,
+                season: md.parentIndex ?? null,
+                episode: md.index ?? null,
+                posterRatingKey: null,
+                cover: md.thumb
+                  ? `/api/shared-plex-thumb/${encodeURIComponent(s.id)}`
+                    + `/${encodeURIComponent(access.id)}/${bareKey}` : null,
+                sourceTitle: access.name,
+                webUrl: null,
+              };
+            }
+          } catch { /* A removed grant still leaves a restorable skipped key. */ }
+          return {
+            ratingKey: rk, type: null, title: `#${bareKey}`, year: null,
+            editionTitle: null, show: null, season: null, episode: null,
+            posterRatingKey: null, cover: null, sourceTitle: null, webUrl: null,
+          };
+        }
         const item = await plex.itemLabel(rk);
         return { ...item, webUrl: await plexWebUrl(item.ratingKey, item.type) };
       });

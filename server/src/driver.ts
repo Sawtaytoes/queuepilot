@@ -31,7 +31,7 @@ import * as adb from './adb.js';
 import * as playback from './playback.js';
 import type { PlaybackResult } from './playback.js';
 import * as profiles from './profiles.js';
-import type { CancelFlag, Device, PublishedStateExtra, PushResult } from './types.js';
+import type { CancelFlag, Device, PlexPlayItem, PublishedStateExtra, PushResult } from './types.js';
 import { errMessage, isCancelled } from './errors.js';
 
 /**
@@ -292,7 +292,7 @@ async function driveProfile(
 // retries, a bounded few times. Success (or any non-connection failure) returns immediately.
 // Cast mode doesn't use Companion :32500 — play once and return its result.
 async function drivePlay(
-  ratingKeys: (string | number)[] | null | undefined,
+  items: (string | number | PlexPlayItem)[] | null | undefined,
   setName: string | null,
   device: Device | null,
   offset: number,
@@ -301,7 +301,7 @@ async function drivePlay(
 ): Promise<PlaybackResult | PushResult> {
   const mode = (device && device.mode) || PLAYBACK_MODE;
   if (mode !== 'client') {
-    return playback.playRatingKeys(ratingKeys, {
+    return playback.playRatingKeys(items, {
       setName, device, offset, userUuid,
     });
   }
@@ -323,7 +323,7 @@ async function drivePlay(
       if (ADB_ENABLED) await ensurePlex();
       await sleep(PLAYBACK_FSM_RETRY_BACKOFF);
     }
-    result = await playback.playRatingKeys(ratingKeys, {
+    result = await playback.playRatingKeys(items, {
       setName, device, offset, userUuid,
     });
     if (result && result.played) return result;
@@ -362,6 +362,7 @@ async function drivePlay(
 // built as. It is passed through untouched; playback.playToken explains why the set's
 // top-level user_uuid cannot be trusted for a multi-profile channel.
 export async function driveToPlaying({
+  items,
   ratingKeys,
   requiredProfile = null,
   offset = 0,
@@ -372,6 +373,7 @@ export async function driveToPlaying({
   userUuid = null,
   accountId = null,
 }: {
+  items?: PlexPlayItem[];
   ratingKeys?: (string | number)[];
   requiredProfile?: string | null;
   offset?: number;
@@ -407,7 +409,8 @@ export async function driveToPlaying({
   if (isCancelled(cancel)) return { cancelled: true };
 
   // signed_in(required) -> playing(target). Play is the last action, verified + retried.
-  let result = await drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
+  const lineup = items ?? ratingKeys;
+  let result = await drivePlay(lineup, setName, device, offset, cancel, userUuid);
 
   // playing(target) -> playing(target) FOR REAL, and AS THE RIGHT ACCOUNT.
   //
@@ -429,7 +432,9 @@ export async function driveToPlaying({
   const mode = (device && device.mode) || PLAYBACK_MODE;
   if (result && (result as PlaybackResult).played && mode === 'client') {
     if (isCancelled(cancel)) return { cancelled: true };
-    let verdict = await playback.verifyAccount(accountId, { device });
+    const first = lineup?.[0];
+    const sourceServer = first && typeof first === 'object' ? first.plexServer ?? null : null;
+    let verdict = await playback.verifyAccount(accountId, { device, sourceServer, userUuid });
     for (let retry = 1; !verdict.hasSession && retry <= Math.max(0, PLAYBACK_SESSION_RETRIES); retry++) {
       if (isCancelled(cancel)) return { cancelled: true };
       console.log(
@@ -438,10 +443,10 @@ export async function driveToPlaying({
         + `(${retry}/${PLAYBACK_SESSION_RETRIES})`,
       );
       if (ADB_ENABLED) await ensurePlex();
-      result = await drivePlay(ratingKeys, setName, device, offset, cancel, userUuid);
+      result = await drivePlay(lineup, setName, device, offset, cancel, userUuid);
       if (!result || !(result as PlaybackResult).played) return result;
       if (isCancelled(cancel)) return { cancelled: true };
-      verdict = await playback.verifyAccount(accountId, { device });
+      verdict = await playback.verifyAccount(accountId, { device, sourceServer, userUuid });
     }
     if (!verdict.hasSession) {
       console.log(
@@ -449,8 +454,14 @@ export async function driveToPlaying({
         + `${PLAYBACK_SESSION_RETRIES} extra push(es); reporting the last push as-is`,
       );
     }
+    if (sourceServer) {
+      if (verdict.hasSession) {
+        console.log(`[driver] shared Plex server confirmed playback on the target player`);
+      }
+      return result;
+    }
     if (accountId == null) return result;
-    if (verdict.accountId != null) {
+    if (verdict.accountId != null && !sourceServer) {
       const observedTitle = verdict.title || (!verdict.isMismatch ? requiredProfile : null);
       if (observedTitle) profiles.recordObservedProfile(observedTitle);
       else profiles.invalidateObservedProfile();

@@ -120,6 +120,7 @@ export async function findDuplicateItem(
   if (desc.collection) return null;
   if (hasSection(value)) return null;
   const want = desc.ratingKey;
+  const wantServer = desc.plexServer;
   if (!want) return null;
 
   // Pass 1, free: an entry that already carries a rating key needs no resolution at all.
@@ -128,13 +129,13 @@ export async function findDuplicateItem(
   for (const entry of entries) {
     const d = describe(entry.value);
     if (d.ratingKey) {
-      if (d.ratingKey === want) return { key: entry.key, ratingKey: want };
+      if (d.ratingKey === want && d.plexServer === wantServer) return { key: entry.key, ratingKey: want };
       continue;
     }
     if (d.collection || !d.title) continue;
     titled.push(entry);
   }
-  if (!titled.length) return null;
+  if (wantServer || !titled.length) return null;
 
   // Pass 2: the title lines, resolved through the engine. Short-circuits — once one matches
   // the rest of the fan-out stops starting new lookups.

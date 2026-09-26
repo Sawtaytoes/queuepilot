@@ -104,6 +104,7 @@ type RawEntryObject = {
   /** The optional opaque line id — `entryKey()`'s first branch. See `EntryExtras.id`. */
   id?: unknown;
   ratingKey?: unknown;
+  plex_server?: unknown;
   collection?: unknown;
   title?: unknown;
   episodes?: unknown;
@@ -144,6 +145,7 @@ type EpisodeLike = {
 export interface EntryDescriptor {
   key: string | null;
   ratingKey: string | null;
+  plexServer: string | null;
   title: string | null;
   year: number | null;
   guid: string | null;
@@ -219,6 +221,7 @@ export interface EntryDescriptor {
  */
 export interface ResolvedItem {
   ratingKey: string;
+  plexServer?: string;
   title?: string;
   show?: string;
   season?: number | null;
@@ -245,6 +248,9 @@ export interface ResolvedItem {
   /** Where it STOPS, from the entry's `end.position_ms`. Same first-unit rule. */
   sectionEndMs?: number | null;
 }
+
+/** Select the Plex server client named by one stored entry. */
+export type EntryClientResolver = (entry: EntryDescriptor) => Promise<PlexClient | null>;
 
 /** One resolved member — `resolveMember()`'s return. Empty `items` = FINISHED, null = UNRESOLVED. */
 export interface ResolvedMember {
@@ -354,6 +360,7 @@ export function entryKey(entry: unknown): string | null {
     const id = entryIdOf(entry);
     if (id) return `id:${id}`;
     const rk = entry.ratingKey;
+    if (entry.plex_server && rk != null) return `server:${entry.plex_server}:rk:${String(rk)}`;
     if (rk != null) return `rk:${String(rk)}`;
     const coll = entry.collection;
     if (coll) return `title:Collection: ${String(coll).trim()}`;
@@ -381,6 +388,7 @@ export function describe(entry: unknown): EntryDescriptor {
     return {
       key: entryKey(entry),
       ratingKey: rk == null ? null : String(rk),
+      plexServer: entry.plex_server ? String(entry.plex_server) : null,
       title: title || null,
       year,
       guid,
@@ -418,7 +426,7 @@ export function describe(entry: unknown): EntryDescriptor {
   }
   if (isRatingKey(entry)) {
     return {
-      key: entryKey(entry), ratingKey: String(entry).trim(), title: null, year: null,
+      key: entryKey(entry), ratingKey: String(entry).trim(), plexServer: null, title: null, year: null,
       guid: null, collection: null, episodes: null, batch_stops_at: null, start: null,
       end: null,
       watchHistory: null,
@@ -432,7 +440,7 @@ export function describe(entry: unknown): EntryDescriptor {
   const cm = COLLECTION_RE.exec(title);
   const coll = cm ? cm[1]!.trim() : null;
   return {
-    key: entryKey(entry), ratingKey: null, title: title || null, year, guid,
+    key: entryKey(entry), ratingKey: null, plexServer: null, title: title || null, year, guid,
     collection: coll, episodes: null, batch_stops_at: null, start: null, end: null,
     collectionOrder: [],
     watchHistory: null,
@@ -982,6 +990,7 @@ export async function resolveMember(
       desc.episodes || defaultBatch,
       isShuffled ? 'none' : batchStop(desc, cfg),
     );
+    if (desc.plexServer) items = items.map((item) => ({ ...item, plexServer: desc.plexServer as string }));
     return { title: `Collection: ${name}`, type: 'collection', items, weight: toWeight(desc.weight) };
   }
   const [rk, typ, title, viewOffset, viewCount] = await resolveQueueEntry(client, desc, cfg, token);
@@ -992,7 +1001,7 @@ export async function resolveMember(
     // an entry in the file that can never play and says nothing about why, which is the state
     // `skipped` exists to avoid. The tile agrees: a movie has no next-up leaf, so the grid
     // offers Remove there and Skip only where there is an item inside a member.
-    let keepMovie = !watched.has(rk);
+    let keepMovie = desc.plexServer && progress == null ? !(Number(viewCount) > 0) : !watched.has(rk);
     if (!keepMovie && resume) {
       const own = progress?.get(String(rk));
       keepMovie = progress
@@ -1007,6 +1016,7 @@ export async function resolveMember(
       // `show?: string` (types.ts) is satisfied without changing what is emitted.
       ? [{
         title, ratingKey: rk, show: null as unknown as undefined, season: null, episode: null,
+        ...(desc.plexServer ? { plexServer: desc.plexServer } : {}),
         ...providerProgress,
       }] : [];
     // `title` comes back from Plex and is `string | undefined`; the original stored it as-is.
@@ -1014,16 +1024,25 @@ export async function resolveMember(
   }
   const allEps: ResolvedItem[] = await showEpisodes(client, rk, token);
   const start = desc.start;
-  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, cfg, resume), start);
+  const episodeCfg = desc.plexServer ? {
+    ...cfg,
+    included_specials: (cfg.included_specials || []).map(String)
+      .filter((key) => key.startsWith(`server:${desc.plexServer}:rk:`))
+      .map((key) => key.slice(`server:${desc.plexServer}:rk:`.length)),
+  } : cfg;
+  let eps = episodesAtOrAfterStart(orderedPlayableEpisodes(allEps, episodeCfg, resume), start);
   if (!isShuffled) {
-    eps = eps.filter((e) => !watched.has(e.ratingKey)
+    eps = eps.filter((e) => !(desc.plexServer && progress == null
+      ? Number(e.viewCount) > 0
+      : watched.has(e.ratingKey))
       || (resume && (progress
         ? Boolean(progress.get(String(e.ratingKey))?.positionMs)
         : inProgress(e.viewOffset, e.viewCount))));
   }
   // The SKIP list, applied to what is left after the watched/specials/start filters and BEFORE
   // the batch cap — so skipping E5 makes an `episodes: 2` entry queue E6 + E7, not E6 alone.
-  eps = eps.filter((e) => !skipped.has(e.ratingKey));
+  eps = eps.filter((e) => !skipped.has(desc.plexServer
+    ? `server:${desc.plexServer}:rk:${e.ratingKey}` : e.ratingKey));
   if (isShuffled) eps = shuffleEntryItems(eps, rng, progress);
   // A `season` stop also cuts at a season boundary, so `episodes: 2` on a show sitting at its
   // finale queues S1E12 alone instead of S1E12 + S2E01.
@@ -1032,6 +1051,7 @@ export async function resolveMember(
     desc.episodes || defaultBatch,
     isShuffled ? 'none' : batchStop(desc, cfg),
   );
+  if (desc.plexServer) eps = eps.map((item) => ({ ...item, plexServer: desc.plexServer as string }));
   return {
     title: title as string, type: 'show', ratingKey: rk, items: eps, multi_season: multiSeason(allEps),
     weight: toWeight(desc.weight),
@@ -1080,6 +1100,7 @@ export async function buildReel(
   entries: readonly EntryDescriptor[],
   token: Token,
   limit = 60,
+  clientForEntry: EntryClientResolver | null = null,
 ): Promise<QueueResult> {
   if (!entries.length) return emptyResult(setName);
   const play: ResolvedItem[] = [];
@@ -1091,6 +1112,12 @@ export async function buildReel(
   for (const desc of entries) {
     if (play.length >= limit) break;
     if (desc.done) continue; // a hand-tagged skip is still honored
+    const entryClient = clientForEntry ? await clientForEntry(desc) : client;
+    if (!entryClient) {
+      unresolved.push((desc.collection ? `Collection: ${desc.collection}`
+        : desc.ratingKey || desc.title || desc.key) as string);
+      continue;
+    }
     // Where this entry's own contribution begins, so its window lands on the FIRST unit it
     // pushes and on nothing after it. A reel is the case the whole feature came from: every
     // line of the Theater Demo Reel is a pre-clipped file that exists only because a section
@@ -1098,30 +1125,36 @@ export async function buildReel(
     const mine = play.length;
     if (desc.collection) {
       const items = await collectionItems(
-        client, cfg, desc.collection, new Set(), token, desc.start, false, desc.collectionOrder,
+        entryClient, cfg, desc.collection, new Set(), token, desc.start, false, desc.collectionOrder,
       );
       if (!items || !items.length) {
         unresolved.push(`Collection: ${desc.collection}`);
         continue;
       }
-      play.push(...items.slice(0, Math.max(0, limit - play.length)));
+      play.push(...items.slice(0, Math.max(0, limit - play.length)).map((item) => (
+        desc.plexServer ? { ...item, plexServer: desc.plexServer } : item
+      )));
       const collectionSection = sectionOf(desc);
       const collectionFirst = play[mine];
       if (collectionSection && collectionFirst) play[mine] = { ...collectionFirst, ...collectionSection };
       continue;
     }
-    const [rk, typ, title] = await resolveQueueEntry(client, desc, cfg, token);
+    const [rk, typ, title] = await resolveQueueEntry(entryClient, desc, cfg, token);
     if (typ == null) {
       unresolved.push((desc.ratingKey || desc.title || desc.key) as string);
       continue;
     }
     if (typ === 'movie') {
-      play.push({ title, ratingKey: rk });
+      play.push({ title, ratingKey: rk, ...(desc.plexServer ? { plexServer: desc.plexServer } : {}) });
     } else {
-      const eps = (await showEpisodes(client, rk, token)).filter((e) => !skipped.has(e.ratingKey));
+      const eps = (await showEpisodes(entryClient, rk, token)).filter((e) => !skipped.has(e.ratingKey));
       const batch = Math.max(1, Math.min(parseInt(String(desc.episodes || QUEUE_SERIES_DEFAULT), 10),
         QUEUE_SERIES_LENGTH));
-      for (const e of eps.slice(0, batch)) play.push({ title: e.title || title, ratingKey: e.ratingKey });
+      for (const e of eps.slice(0, batch)) play.push({
+        title: e.title || title,
+        ratingKey: e.ratingKey,
+        ...(desc.plexServer ? { plexServer: desc.plexServer } : {}),
+      });
     }
     const section = sectionOf(desc);
     const first = play[mine];
@@ -1227,6 +1260,7 @@ export async function nextQueue(
   ownProgress: ((entryKey: string) => ReadonlyMap<string, {
     isCompleted: boolean; positionMs: number;
   }>) | null = null,
+  clientForEntry: EntryClientResolver | null = null,
 ): Promise<QueueResult> {
   if (!entries.length) return emptyResult(setName);
   const newlyDone: string[] = [];
@@ -1236,6 +1270,7 @@ export async function nextQueue(
   let remaining = 0;
   const batches: Batch[] = [];
   for (const desc of entries) {
+    const entryClient = clientForEntry ? await clientForEntry(desc) : client;
     const isOwnHistory = (desc.watchHistory ?? normalizeWatchHistory(cfg.watch_history)
       ?? 'provider') === 'queue';
     const progress = isOwnHistory && desc.key && ownProgress
@@ -1244,8 +1279,8 @@ export async function nextQueue(
     const entryWatched = progress
       ? new Set([...progress].filter(([, row]) => row.isCompleted).map(([key]) => key))
       : watched;
-    const res = await resolveMember(
-      client,
+    const res = entryClient ? await resolveMember(
+      entryClient,
       desc,
       cfg,
       entryWatched,
@@ -1254,7 +1289,7 @@ export async function nextQueue(
       true,
       rng,
       progress,
-    );
+    ) : null;
     // The entry's window, on the FIRST unit it contributes and on nothing after it. Stamped
     // before the own-history pass below so both spreads survive, and outside it because a
     // section is not a history concern — an entry on provider history has one too.
@@ -1291,7 +1326,7 @@ export async function nextQueue(
       // resolved item is always an object), and it is what NARROWS `head` for the
       // `headResumeOffset` call in the same `&&` chain, which `Boolean()` does not.
       const isRevived = head != null
-        && (desc.doneAt != null || await headResumeOffset(client, head, token) > 0);
+        && (desc.doneAt != null || await headResumeOffset(entryClient as PlexClient, head, token) > 0);
       if (isRevived) {
         revived.push(desc.key as string);
         remaining += 1;

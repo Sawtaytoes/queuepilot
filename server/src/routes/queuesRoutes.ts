@@ -11,6 +11,7 @@ import * as finished from '../finished.js';
 import * as mqttc from '../mqttc.js';
 import * as plex from '../plex.js';
 import type { AccountScope } from '../plex.js';
+import { plexServerAccessForProfile, plexServerGet, plexServerTile } from '../plexSources.js';
 import * as providerTiles from '../providers/tiles.js';
 import type { ProviderTile } from '../providers/tiles.js';
 import * as queues from '../queues.js';
@@ -112,6 +113,7 @@ function queueTile(
     key: e.key,
     raw: tiles.displayFor(e.value),
     ...core,
+    plexServer: v?.plex_server ? String(v.plex_server) : null,
     // null = follow the set. Never coerce a missing key to 1: the set default may
     // be 2, and a stored 1 is then a real override (queues.storedCount).
     episodes: queues.storedCount(v ? v.episodes : null),
@@ -143,7 +145,7 @@ function queueTile(
     // Overwritten there; false here so the field is never absent on a tile.
     isFinished: history.effective === 'queue' && core.type === 'movie' && core.ratingKey
       ? Boolean(history.progress?.get(String(core.ratingKey))?.isCompleted)
-      : false,
+      : Boolean('isFinished' in core && core.isFinished),
     // The opposite prediction — see `isRevivedEntry`.
     isRevived: isRevivedEntry(e, core),
   };
@@ -187,7 +189,7 @@ async function tagFinishedMovies(
   const engineReg = routing.loadSets();
   if (!engineReg) return;
   const movies = rows.filter((r) => r.tile.type === 'movie' && r.tile.ratingKey
-    && r.tile.effective_watch_history !== 'queue');
+    && r.tile.effective_watch_history !== 'queue' && !r.tile.plexServer);
   if (!movies.length) return;
 
   const setIds = [...new Set(movies.map((r) => r.setId))];
@@ -262,8 +264,23 @@ const REORDER_REFUSAL = (parent: { id: string; label: string }) => ({
 });
 
 /** Does this Plex leaf belong to this stored entry? Used to validate manual history writes. */
-async function entryOwnsPlexItem(entry: QueueEntry, itemKey: string): Promise<boolean> {
+async function entryOwnsPlexItem(
+  entry: QueueEntry, itemKey: string, profileTitle: string | null,
+): Promise<boolean> {
   const value = entry.value && typeof entry.value === 'object' ? entry.value : null;
+  const remoteServer = value?.plex_server ? String(value.plex_server) : null;
+  if (remoteServer) {
+    if (!/^\d+$/.test(itemKey)) return false;
+    const scope = await plex.profileScope(profileTitle);
+    const access = await plexServerAccessForProfile(scope.account ?? null, remoteServer);
+    if (!access) return false;
+    const metadata = await plexServerGet(access, `/library/metadata/${encodeURIComponent(itemKey)}`);
+    const item = metadata.MediaContainer?.Metadata?.[0];
+    const ratingKey = value?.ratingKey == null ? null : String(value.ratingKey);
+    return Boolean(item && ratingKey
+      && (ratingKey === String(item.ratingKey)
+        || ratingKey === String(item.grandparentRatingKey)));
+  }
   const context = await plex.playingContext(itemKey);
   if (!context) return false;
   const ratingKey = value?.ratingKey == null ? null : String(value.ratingKey);
@@ -442,6 +459,7 @@ export function queuesRoutes(): Hono {
           scopes.set(p, { ...(await plex.profileScope(p)), isFresh });
         }),
       );
+      const sharedAccess = new Map<string, ReturnType<typeof plexServerAccessForProfile>>();
       const resolvedItems = await mapLimit(work, 8, async ({ s, e }) => {
         // resolveTile surfaces, for a series, the next unwatched episode (queue plays it
         // TV-style until the whole show is watched); for a Collection, its first still-unwatched
@@ -459,6 +477,8 @@ export function queuesRoutes(): Hono {
         const progress = historySource === 'queue'
           ? queueEntryHistory.progressFor(s.id, e.key)
           : null;
+        const stored = e.value && typeof e.value === 'object' ? e.value : null;
+        const serverId = stored?.plex_server ? String(stored.plex_server) : null;
         const core = isLegacyScalarEntry(e.value)
           ? tiles.unresolvedTile(e.value)
           // The set's SKIP list, built per tile off the registry row the work item already
@@ -466,6 +486,31 @@ export function queuesRoutes(): Hono {
           // (set, entry) pairs and the lists are a handful of keys; the alternative is a
           // second map to keep in step with `scopes`.
           : await (async () => {
+            if (serverId) {
+              const accessKey = `${s.requires_profile || ''}:${serverId}`;
+              let access = sharedAccess.get(accessKey);
+              if (!access) {
+                access = plexServerAccessForProfile(
+                  scopes.get(s.requires_profile || '')?.account ?? null,
+                  serverId,
+                );
+                sharedAccess.set(accessKey, access);
+              }
+              const granted = await access;
+              if (!granted) return tiles.unresolvedTile(e.value);
+              return plexServerTile(
+                granted,
+                stored || {},
+                startOf(e),
+                new Set(s.skipped || []),
+                new Set(s.included_specials || []),
+                progress
+                  ? new Set([...progress].filter(([, row]) => row.isCompleted).map(([key]) => key))
+                  : null,
+                progress,
+                s.id,
+              );
+            }
             return tiles.resolveTile(
               s.sections, e.value, startOf(e),
               scopes.get(s.requires_profile || '') ?? {},
@@ -579,6 +624,24 @@ export function queuesRoutes(): Hono {
       // ENGINE's (`routing.loadSets`), because it is the engine's resolver that runs — the
       // registry entry `isQueueSet` reads is the file shape, which is a different object.
       const cfg = routing.loadSets()?.sets[set];
+      const remoteServer = value && typeof value === 'object' && value.plex_server
+        ? String(value.plex_server) : null;
+      if (remoteServer) {
+        if (remoteServer === await plex.machineIdentifier()) {
+          return c.json({ error: 'Use the home server search for local Plex items' }, 400);
+        }
+        if (!cfg || value.ratingKey == null || !/^\d+$/.test(String(value.ratingKey))) {
+          return c.json({ error: 'A shared Plex item needs a valid rating key' }, 400);
+        }
+        const scope = await plex.profileScope(cfg.requires_profile || null);
+        const access = await plexServerAccessForProfile(scope.account ?? null, remoteServer);
+        if (!access) return c.json({ error: 'This queue profile cannot reach that Plex server' }, 403);
+        const metadata = await plexServerGet(access, `/library/metadata/${value.ratingKey}`);
+        const item = metadata.MediaContainer?.Metadata?.[0];
+        if (!item || (item.type !== 'movie' && item.type !== 'show')) {
+          return c.json({ error: 'That item is not available to this queue profile' }, 400);
+        }
+      }
       if (cfg && !allowDuplicate) {
         const dup = await findDuplicateItem(liveClient(), cfg, await queues.listSet(set), value);
         if (dup) return c.json({ added: false, key: dup.key, duplicateOf: dup.key });
@@ -909,7 +972,9 @@ export function queuesRoutes(): Hono {
     if (target.source !== 'queue') return c.json({ error: 'entry uses provider history' }, 400);
     const body = await readBody(c);
     const itemKey = String(body.item_key ?? '').trim();
-    if (!itemKey || !(await entryOwnsPlexItem(target.entry, itemKey))) {
+    if (!itemKey || !(await entryOwnsPlexItem(
+      target.entry, itemKey, target.set.requires_profile || null,
+    ))) {
       return c.json({ error: 'item does not belong to this entry' }, 400);
     }
     queueEntryHistory.markCompleted(setId, key, itemKey);
@@ -938,12 +1003,18 @@ export function queuesRoutes(): Hono {
     const target = await historyTarget(setId, key);
     if (!target) return c.json({ error: 'unknown entry' }, 404);
     if (target.source !== 'queue') return c.json({ error: 'entry uses provider history' }, 400);
+    if (target.entry.value && typeof target.entry.value === 'object'
+      && target.entry.value.plex_server) {
+      return c.json({ error: 'Tracking a shared item started outside QueuePilot is not supported' }, 400);
+    }
     const now = mqttc.lastNowPlaying();
     const itemKey = now?.ratingKey ? String(now.ratingKey) : '';
     if (!itemKey || !['playing', 'paused', 'buffering'].includes(String(now?.state))) {
       return c.json({ error: 'nothing is playing in Plex' }, 400);
     }
-    if (!(await entryOwnsPlexItem(target.entry, itemKey))) {
+    if (!(await entryOwnsPlexItem(
+      target.entry, itemKey, target.set.requires_profile || null,
+    ))) {
       return c.json({ error: 'the current Plex item does not belong to this entry' }, 400);
     }
     try {

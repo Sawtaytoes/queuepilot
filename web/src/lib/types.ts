@@ -104,6 +104,8 @@ export type EntryUnit =
 /** One resolved entry in a curated queue (`GET /api/queues`). */
 export type QueueItem = {
   key: string
+  /** Plex server id for an item supplied by a shared server. Absent for the home server. */
+  plexServer?: string | null
   raw?: string
   resolved: boolean
   ratingKey: string | null
@@ -317,6 +319,7 @@ export type ChannelMember = {
  */
 export type SkippedItem = {
   ratingKey: string
+  cover?: string | null
   type: string | null
   title: string
   year: number | null
@@ -694,6 +697,22 @@ export type SearchHit = {
    * for a series without a second request. */
   leafCount?: number
   viewedLeafCount?: number
+  /** Server scope for a shared Plex result. Absent for the home server. */
+  plexServer?: string
+  plexServerName?: string
+}
+
+export type PlexSource = {
+  id: string
+  name: string
+  owned: boolean
+  local: boolean
+  available: boolean
+  libraries: {
+    id: string
+    title: string
+    type: "movie" | "show"
+  }[]
 }
 
 export type Profile = {
@@ -716,6 +735,7 @@ export type NowState = {
   now: {
     state?: string
     ratingKey?: string
+    plexServer?: string | null
     title?: string
     showTitle?: string
     show?: string
