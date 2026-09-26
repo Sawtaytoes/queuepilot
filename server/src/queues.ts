@@ -90,6 +90,7 @@ export function entryKey(value: unknown): string | null {
   if (m) {
     const id = entryIdOf(m);
     if (id) return `id:${id}`;
+    if (m.plex_server && m.ratingKey != null) return `server:${m.plex_server}:rk:${m.ratingKey}`;
     if (m.ratingKey != null) return `rk:${m.ratingKey}`;
     // {collection: X} keys like a `Collection: X` string — the older, string-encoded spelling
     // of the same entry, so re-shaping one into the other never moves a line.

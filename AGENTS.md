@@ -537,7 +537,8 @@ is the data loss the latch exists to prevent.
 
 ## queues.yaml
 
-**Every entry is a MAPPING** — `{ratingKey, title}` for an item, `{collection: "<name>"}` for a
+**Every entry is a MAPPING** — `{ratingKey, title}` for a home-server item,
+`{ratingKey, title, plex_server}` for a shared-server item, `{collection: "<name>"}` for a
 collection, `{title: "<text>"}` for a title with no key yet. A bare string (`- "Duel (1971)"`,
 `- 12345`, `- "Collection: X"`) is the pre-2026-08-21 form: `loadEntries()` refuses it BY ENTRY
 and logs the mapping to write, so that one line stops playing and the rest of the queue does not
@@ -546,7 +547,9 @@ and logs the mapping to write, so that one line stops playing and the rest of th
 Four things follow, and each has cost something already:
 
 - **`entryKey()` names ONE LINE, and it still keys a scalar.** `id:<opaque>` when the mapping
-  carries an id, else `rk:<n>`, else `title:<text>`. Roughly sixty call sites, both SQLite
+  carries an id, else `server:<plex_server>:rk:<n>` for a shared Plex item, else `rk:<n>`, else
+  `title:<text>`. A Plex rating key is unique only inside one server; the server scope is part
+  of item identity, not a duplicate-line escape hatch. Roughly sixty call sites, both SQLite
   primary keys (`queue_entry_history`, `lead_cooldown`) and every `?only=<key>` URL are written
   against one-key-one-line, so **do not widen it to mean "the same item"** — the looser item
   test is a separate check (`entryIdentity.findDuplicateItem`). Two of the three reasons this
@@ -1127,6 +1130,13 @@ groups exist to separate three failures that used to look identical in the log: 
 built wrong, a lineup Plex reordered, and something else already on screen. Both are
 unconditional — a scan is a button press, and the report always arrives the morning after a
 redeploy has thrown the evidence away.
+
+A Plex playQueue can interleave home-server and shared-server items. Each stored shared item
+carries `plex_server`, and playback hosts the playQueue on the first item's server before it
+appends consecutive source runs. Never strip the server identity down to a bare rating key in
+the resolver, session queue or top-up path; the same numeric key may name a different item on
+each server
+([decision](docs/decisions/2026-09-25-a-plex-queue-can-mix-items-from-several-servers.md)).
 
 ## People on a queue
 

@@ -8,7 +8,7 @@ import {
   SearchInput,
   SegmentedControl,
 } from "@charcuterie/ui"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router"
 import {
   EditionChip,
@@ -52,7 +52,11 @@ import {
   runtimeLabel,
   tileFace,
 } from "../lib/tileFace"
-import type { QueueItem, SearchHit } from "../lib/types"
+import type {
+  PlexSource,
+  QueueItem,
+  SearchHit,
+} from "../lib/types"
 import { usePlaysSections } from "../state/capabilities"
 import { refreshData } from "../state/live"
 import {
@@ -115,7 +119,9 @@ import {
 const keyOfHit = (hit: SearchHit) =>
   hit.type === "collection"
     ? `title:Collection: ${hit.title}`
-    : `rk:${hit.ratingKey}`
+    : hit.plexServer
+      ? `server:${hit.plexServer}:rk:${hit.ratingKey}`
+      : `rk:${hit.ratingKey}`
 
 /** Is a hit's release year inside one of the add box's bands? An unknown year matches none. */
 function inYearBand(
@@ -167,7 +173,10 @@ function optimisticItem(hit: SearchHit): QueueItem {
     queuedAt: Math.floor(Date.now() / 1000),
     key: isCollection
       ? `title:Collection: ${hit.title}`
-      : `rk:${hit.ratingKey}`,
+      : hit.plexServer
+        ? `server:${hit.plexServer}:rk:${hit.ratingKey}`
+        : `rk:${hit.ratingKey}`,
+    plexServer: hit.plexServer ?? null,
     nextEp: null,
     ratingKey: hit.ratingKey,
     resolved: true,
@@ -195,6 +204,7 @@ export function QueueView({
   // now, and a stale "Movies only" silently hiding shows the next time you open the box is the
   // exact failure the queue filter's always-visible count exists to prevent.
   const [searchType, setSearchType] = useState("")
+  const [searchSource, setSearchSource] = useState("")
   const [searchLibrary, setSearchLibrary] = useState("")
   const [searchYear, setSearchYear] = useState("")
   const [searchState, setSearchState] = useState("")
@@ -206,6 +216,33 @@ export function QueueView({
   const regSet = setId
     ? reg?.sets.find((x) => x.id === setId)
     : undefined
+  const [plexSources, setPlexSources] = useState<
+    PlexSource[]
+  >([])
+  useEffect(() => {
+    let cancelled = false
+    setSearchSource("")
+    setSearchLibrary("")
+    setPlexSources([])
+    if (!regSet || regSet.provider_kind !== "plex") return
+    void api<{ sources: PlexSource[] }>(
+      "GET",
+      `/api/plex-sources?profile=${encodeURIComponent(regSet.requires_profile ?? "")}`,
+    )
+      .then((result) => {
+        if (!cancelled) setPlexSources(result.sources ?? [])
+      })
+      .catch(() => {
+        if (!cancelled) setPlexSources([])
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    regSet?.id,
+    regSet?.provider_kind,
+    regSet?.requires_profile,
+  ])
   // Prefer the registry row when present — it always carries effective add_as.
   // The queues payload may still be the shelves skeleton for a beat.
   // The queue's OWN default lane — what an entry with no `placement` of its own means.
@@ -283,11 +320,22 @@ export function QueueView({
   // `2026-08-17-no-libraries-checked-means-every-library`), so the filter is skipped
   // entirely rather than narrowing the dropdown to nothing.
   const queueSections = regSet?.sections ?? []
-  const libraryOptions = (reg?.libraries ?? [])
+  const selectedSource = plexSources.find(
+    (source) => source.id === searchSource,
+  )
+  const libraryOptions = (
+    selectedSource
+      ? selectedSource.libraries.map((library) => ({
+          ...library,
+          video: true,
+        }))
+      : (reg?.libraries ?? [])
+  )
     .filter(
       (l) =>
+        Boolean(selectedSource) ||
         !queueSections.length ||
-        queueSections.includes(l.id),
+        queueSections.includes(Number(l.id)),
     )
     .map((l) => ({ label: l.title, value: String(l.id) }))
 
@@ -762,6 +810,7 @@ export function QueueView({
       ) : null}
       <div className="add">
         <SearchDropdown<SearchHit>
+          searchKey={`${searchSource}:${searchLibrary}:${searchType}:${searchYear}:${searchState}:${hideQueued}`}
           doSearch={async (text) => {
             // Opt into Collection results — `collections=1` is additive; the scoped
             // add box is where "play a collection in order" is composed.
@@ -769,7 +818,13 @@ export function QueueView({
               results: SearchHit[]
             }>(
               "GET",
-              `/api/search?set=${setId}&q=${encodeURIComponent(text)}&collections=1`,
+              `/api/search?set=${setId}&q=${encodeURIComponent(text)}` +
+                (searchSource
+                  ? `&plex_server=${encodeURIComponent(searchSource)}` +
+                    (searchLibrary
+                      ? `&section=${encodeURIComponent(searchLibrary)}`
+                      : "")
+                  : "&collections=1"),
             )
 
             // The filters are applied HERE rather than as query parameters because
@@ -855,7 +910,8 @@ export function QueueView({
                       }
                       // A collection with no artwork of its own has nothing to ask for.
                       ratingKey={
-                        isCollection && !hit.hasThumb
+                        hit.plexServer ||
+                        (isCollection && !hit.hasThumb)
                           ? null
                           : hit.ratingKey
                       }
@@ -937,7 +993,8 @@ export function QueueView({
                     }
                     // A collection with no artwork of its own has nothing to ask for.
                     ratingKey={
-                      isCollection && !hit.hasThumb
+                      hit.plexServer ||
+                      (isCollection && !hit.hasThumb)
                         ? null
                         : hit.ratingKey
                     }
@@ -1010,6 +1067,40 @@ export function QueueView({
             }
           }}
         >
+          {plexSources.some(
+            (source) => !source.local && source.available,
+          ) ? (
+            <label className="addpos">
+              <span className="addlbl">Server</span>
+              <SelectListbox
+                id="searchsource"
+                label="Plex server"
+                onChange={(value) => {
+                  setSearchSource(value)
+                  setSearchLibrary("")
+                }}
+                options={[
+                  {
+                    label:
+                      plexSources.find(
+                        (source) => source.local,
+                      )?.name ?? "Home server",
+                    value: "",
+                  },
+                  ...plexSources
+                    .filter(
+                      (source) =>
+                        !source.local && source.available,
+                    )
+                    .map((source) => ({
+                      label: source.name,
+                      value: source.id,
+                    })),
+                ]}
+                value={searchSource}
+              />
+            </label>
+          ) : null}
           <label className="addpos">
             <span className="addlbl">Type</span>
             <SelectListbox
@@ -1023,6 +1114,7 @@ export function QueueView({
                 {
                   label: "Collections",
                   value: "collection",
+                  isDisabled: Boolean(searchSource),
                 },
               ]}
               value={searchType}
