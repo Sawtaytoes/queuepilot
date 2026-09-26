@@ -1471,7 +1471,7 @@ exactly this reason.
 
 The Playwright browser suites are gated on the `PLEX_TOKEN` secret and are **skipped on every
 PR**; the no-Plex browser gates always run, which is why picker/layout/routing claims belong
-there rather than in the gated block. All sixteen of them, in the order `ci.yml` runs them:
+there rather than in the gated block. All seventeen of them, in the order `ci.yml` runs them:
 
 | Gate | What it pins |
 | --- | --- |
@@ -1479,6 +1479,7 @@ there rather than in the gated block. All sixteen of them, in the order `ci.yml`
 | `drag-stability-test.ts` | a drag's PATH, not its result — reversals, re-inserts, style writes |
 | `lane-drag-test.ts` | dragging across the lane divider — the promote and the demote |
 | `tile-lane-test.ts` | the tile's three controls: the select mark PAINTS when checked, and the lane button promotes / demotes |
+| `shared-plex-search-ui-test.ts` | switching to a shared Plex server reruns the queue search under a synthetic grant |
 | `actions-menu-test.ts` | the Actions menu — the toolbar lost a button, the confirm names the count, and only the confirm writes |
 | `pending-dismiss-test.ts` | Pending Dismiss removes the pressed card immediately and keeps it absent after reload |
 | `calendar-view-test.ts` | the calendar view — which queues are listed, one column, and a date that reaches the SET |
