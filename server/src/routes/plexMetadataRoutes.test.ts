@@ -85,7 +85,7 @@ describe('GET /search on a shared Plex server', () => {
   it('derives access from the queue profile and returns server-scoped hits', async () => {
     vi.spyOn(sets, 'getSet').mockResolvedValue({
       id: 'fixture', source: 'queue', delivery: 'push', requires_profile: 'Kids',
-    } as Awaited<ReturnType<typeof sets.getSet>>);
+    } as unknown as Awaited<ReturnType<typeof sets.getSet>>);
     vi.spyOn(plex, 'homeUsers').mockResolvedValue([
       { name: 'Kids', username: null, id: 2, uuid: 'kids-uuid', admin: false, restricted: true },
     ]);
@@ -111,5 +111,33 @@ describe('GET /search on a shared Plex server', () => {
       ratingKey: '42', plexServer: 'friend-id',
       cover: '/api/shared-plex-thumb/fixture/friend-id/42',
     })] });
+  });
+
+  it('uses the queue-selected libraries and rejects a different library', async () => {
+    vi.spyOn(sets, 'getSet').mockResolvedValue({
+      id: 'fixture', source: 'queue', delivery: 'push', requires_profile: 'Kids',
+      shared_libraries: { 'friend-id': ['7'] },
+    } as unknown as Awaited<ReturnType<typeof sets.getSet>>);
+    vi.spyOn(plex, 'homeUsers').mockResolvedValue([
+      { name: 'Kids', username: null, id: 2, uuid: 'kids-uuid', admin: false, restricted: true },
+    ]);
+    vi.spyOn(plexSources, 'plexServerAccessForProfile').mockResolvedValue({
+      id: 'friend-id', name: 'Friend', baseUrl: 'https://friend.example', token: 'grant',
+      libraries: [
+        { id: '7', title: 'Movies', type: 'movie' },
+        { id: '8', title: 'Shows', type: 'show' },
+      ],
+    });
+    const search = vi.spyOn(plexSources, 'plexServerSearch').mockResolvedValue([]);
+
+    const scoped = await plexMetadataRoutes().request('/search?set=fixture&q=Film&plex_server=friend-id');
+    expect(scoped.status).toBe(200);
+    expect(search).toHaveBeenCalledWith(expect.anything(), ['7'], 'Film');
+
+    const blocked = await plexMetadataRoutes().request(
+      '/search?set=fixture&q=Film&plex_server=friend-id&section=8',
+    );
+    expect(blocked.status).toBe(403);
+    expect(search).toHaveBeenCalledTimes(1);
   });
 });

@@ -323,6 +323,19 @@ export function QueueView({
   const selectedSource = plexSources.find(
     (source) => source.id === searchSource,
   )
+  const sharedSections = searchSource
+    ? (regSet?.shared_libraries?.[searchSource] ?? [])
+    : []
+  useEffect(() => {
+    if (
+      searchSource &&
+      searchLibrary &&
+      sharedSections.length &&
+      !sharedSections.includes(searchLibrary)
+    ) {
+      setSearchLibrary("")
+    }
+  }, [searchSource, searchLibrary, sharedSections])
   const libraryOptions = (
     selectedSource
       ? selectedSource.libraries.map((library) => ({
@@ -331,11 +344,12 @@ export function QueueView({
         }))
       : (reg?.libraries ?? [])
   )
-    .filter(
-      (l) =>
-        Boolean(selectedSource) ||
-        !queueSections.length ||
-        queueSections.includes(Number(l.id)),
+    .filter((l) =>
+      selectedSource
+        ? !sharedSections.length ||
+          sharedSections.includes(String(l.id))
+        : !queueSections.length ||
+          queueSections.includes(Number(l.id)),
     )
     .map((l) => ({ label: l.title, value: String(l.id) }))
 
@@ -810,7 +824,7 @@ export function QueueView({
       ) : null}
       <div className="add">
         <SearchDropdown<SearchHit>
-          searchKey={`${searchSource}:${searchLibrary}:${searchType}:${searchYear}:${searchState}:${hideQueued}`}
+          searchKey={`${searchSource}:${searchLibrary}:${sharedSections.join(",")}:${searchType}:${searchYear}:${searchState}:${hideQueued}`}
           doSearch={async (text) => {
             // Opt into Collection results — `collections=1` is additive; the scoped
             // add box is where "play a collection in order" is composed.

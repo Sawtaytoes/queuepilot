@@ -122,8 +122,14 @@ export function plexMetadataRoutes(): Hono {
           if (remoteSection && !access.libraries.some((library) => library.id === remoteSection)) {
             return c.json({ error: 'That Plex library is not available to this profile' }, 403);
           }
+          const selected = allLibraries ? [] : (s.shared_libraries?.[plexServer] ?? []);
+          if (remoteSection && selected.length && !selected.includes(remoteSection)) {
+            return c.json({ error: 'That Plex library is not selected for this queue' }, 403);
+          }
+          const allowed = selected.filter((id) => access.libraries.some((library) => library.id === id));
+          if (!remoteSection && selected.length && !allowed.length) return c.json({ results: [] });
           const found = rankByYear(
-            await plexServerSearch(access, remoteSection ? [remoteSection] : [], q),
+            await plexServerSearch(access, remoteSection ? [remoteSection] : allowed, q),
             year,
           );
           return c.json({

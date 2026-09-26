@@ -59,7 +59,10 @@ try {
         { id: 'home', name: 'Home Server', local: true, available: true,
           owned: true, libraries: [] },
         { id: 'friend-server', name: 'Friend Server', local: false, available: true,
-          owned: false, libraries: [{ id: '2', title: 'Shared Movies', type: 'movie' }] },
+          owned: false, libraries: [
+            { id: '2', title: 'Shared Movies', type: 'movie' },
+            { id: '3', title: 'Shared Shows', type: 'show' },
+          ] },
       ] }),
     }));
     const searchUrls: string[] = [];
@@ -93,6 +96,39 @@ try {
       }
     }
     await page.locator('#queue .add').screenshot({ path: screenshot });
+    if (mode === 'after') {
+      await page.locator('#search').press('Escape');
+      await page.locator('#qconfigure').click();
+      await page.getByRole('button', { name: 'Friend Server — all libraries' }).click();
+      await page.getByRole('checkbox', { name: 'Shared Movies' }).check();
+      await page.locator('#setmodal').screenshot({
+        path: path.join(thisRoot, '__screenshots__', 'shared-library-settings.png'),
+      });
+      await page.locator('#set-save').click();
+      await page.locator('#setmodal').waitFor({ state: 'hidden' });
+
+      const saved = await (await fetch(`${base}/api/sets`)).json() as {
+        sets: { id: string; shared_libraries: Record<string, string[]> }[];
+      };
+      const scope = saved.sets.find((set) => set.id === 'bob')?.shared_libraries;
+      if (JSON.stringify(scope) !== JSON.stringify({ 'friend-server': ['2'] })) {
+        throw new Error(`Shared library choice did not persist: ${JSON.stringify(scope)}`);
+      }
+
+      await page.locator('#qconfigure').click();
+      await page.getByRole('button', { name: 'Friend Server — 1 selected' }).click();
+      if (!(await page.getByRole('checkbox', { name: 'Shared Movies' }).isChecked())) {
+        throw new Error('Saved shared library was not checked on reopen');
+      }
+      if (await page.getByRole('checkbox', { name: 'Shared Shows' }).isChecked()) {
+        throw new Error('Unselected shared library was checked on reopen');
+      }
+      await page.locator('#set-cancel').click();
+      await page.locator('[data-testid="searchlib"]').click();
+      if (await page.getByRole('option', { name: 'Shared Shows' }).count()) {
+        throw new Error('Unselected shared library is still offered in queue search');
+      }
+    }
     console.log(`PASS ${mode} queue search screenshot: ${screenshot}`);
   } finally {
     await browser.close();
