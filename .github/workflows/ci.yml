@@ -42,6 +42,35 @@ jobs:
     uses: Sawtaytoes/charcuterie/.github/workflows/shared-docs-lint.yml@workflows-v1
 
 
+  # VISUAL REGRESSION — the shared workflow, imported by tag like the two jobs above. This
+  # repo has no Storybook, so the shots come from `e2e/vrt-capture.ts`: the real server over
+  # the committed fixtures, every main screen in the Wide View and the Narrow View, light and
+  # dark (decision `2026-09-25-vrt-shoots-the-main-screens-from-the-e2e-harness`).
+  #
+  # It runs on the repo's own self-hosted `vrt` runner, where the baseline store is. The fork
+  # guard lives inside the shared workflow: this repo is public, and a fork's pull request
+  # must never execute on the LAN.
+  #
+  # The committed yarn release, not corepack — the same reason as `YARN` in the job below.
+  # The capture installs its OWN pinned Playwright's chromium; the workflow points
+  # PLAYWRIGHT_BROWSERS_PATH at a directory the job can write.
+  #
+  # A push build never fails on a picture change, so a merge to main cannot hold up the
+  # deploy that keys on this workflow's conclusion.
+  vrt:
+    needs: [changes]
+    if: ${{ needs.changes.outputs.isDocsOnly != 'true' }}
+    permissions: { contents: read, statuses: write, pull-requests: write }
+    uses: Sawtaytoes/charcuterie/.github/workflows/shared-vrt.yml@workflows-v1
+    with:
+      setupCommand: node .yarn/releases/yarn-4.14.1.cjs install --immutable
+      buildCommand: node .yarn/releases/yarn-4.14.1.cjs workspace queuepilot-web run build
+      captureCommand: |
+        e2e/node_modules/.bin/playwright install chromium
+        server/node_modules/.bin/tsx e2e/vrt-capture.ts
+      timeoutMinutes: 30
+    secrets: inherit
+
   ci:
     needs: [changes]
     # Skipped, not absent: this still posts its status context.
