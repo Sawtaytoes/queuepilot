@@ -9,17 +9,14 @@
 ## Decision
 
 The queue settings offer checkboxes for the libraries on each shared Plex server available to
-the selected Home profile. Each server sits in an accordion. Checked shared libraries join the
-default Add search alongside the home libraries. An unchanged queue searches only home
-libraries, so adding this feature does not make every search fan out to every shared server.
-A queue saves the selections by Plex server id; the home server's existing `sections` setting
-is unchanged.
+the selected Home profile. Each server sits in an accordion. Checked libraries narrow that
+queue's search on that server. No boxes checked on a server means every library granted there,
+matching the local-library rule. A queue saves these selections by Plex server id; the home
+server's existing `sections` setting is unchanged.
 
-The queue search keeps its Server picker for a search on one server. On that explicit server
-path, no boxes checked means every library granted there, matching the local-library rule.
-Its Library picker and server-side search obey a named selection. The server intersects it
-with the profile's current Plex grant. Changing the queue profile clears the old shared
-selections, since the new profile has a different grant.
+The queue search keeps its Server picker, but its Library picker and server-side search obey the
+saved scope. The server intersects the scope with the profile's current Plex grant. Changing
+the queue profile clears the old shared selections, since the new profile has a different grant.
 
 ## Context
 
@@ -37,7 +34,5 @@ server id is part of the scope because library ids can repeat across servers.
 
 - Owner, 2026-09-25/26: “Huh, can we just fix it to work like the local libraries?” Chat
   `25db5d8f-617e-4b07-a701-b8c4fda89f30`.
-- Owner, 2026-09-26: “Yes, search local and shared together” in answer to whether checked
-  shared libraries should join the default Add search, same chat.
 - `e2e/shared-plex-search-ui-test.ts` saves a synthetic selection, reopens the editor and
   verifies that the queue search excludes the other shared library.
