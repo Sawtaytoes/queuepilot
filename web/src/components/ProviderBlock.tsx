@@ -7,6 +7,7 @@ import { useEffect, useState } from "react"
 
 import { api } from "../lib/api"
 import type {
+  PlexSource,
   ProviderBlockValue,
   ProviderInfo,
   ProviderLibrary,
@@ -42,19 +43,6 @@ import { SelectListbox } from "./SelectListbox"
  * change whatsoever.
  */
 const SEGMENTED_MAX = 2
-
-type PlexSource = {
-  id: string
-  name: string
-  owned: boolean
-  local: boolean
-  available: boolean
-  libraries: {
-    id: string
-    title: string
-    type: "movie" | "show"
-  }[]
-}
 
 export function ProviderBlock({
   block,
@@ -333,8 +321,8 @@ export function ProviderBlock({
             {block.profile
               ? `These servers are available to ${block.profile}. Plex grants access to each profile separately.`
               : "These servers are available to the Plex admin account. Choose a profile above to check its access."}{" "}
-            QueuePilot can show their libraries, but cannot
-            add their items to this queue yet.
+            You can select one of these servers in the queue
+            search and add its items.
           </p>
           {sharedError ? (
             <p className="subhint" role="alert">

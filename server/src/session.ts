@@ -25,6 +25,7 @@ import * as section from './section.js';
 import { isSetAvailable, seasonReturnLabel } from './season.js';
 import * as watchedReset from './watchedReset.js';
 import { liveClient } from './engine/plex-live.js';
+import { plexServerAccessForProfile, plexServerClient } from './plexSources.js';
 import * as mqttc from './mqttc.js';
 import {
   PLAYBACK_FSM, ADB_ENABLED, RESUME_ON_ADVANCE, RESUME_PUSH_TRIGGER,
@@ -46,6 +47,7 @@ import type {
  */
 interface SessionQueueItem {
   ratingKey: string;
+  plexServer?: string | undefined;
   title?: string | undefined;
   season?: number | null | undefined;
   episode?: number | null | undefined;
@@ -424,13 +426,20 @@ export async function startSession(
   // REWATCH completion: another device may have incremented viewCount since that row was
   // cached. Read each queue-owned head directly before handoff, so only THIS play can make
   // the final count larger than the captured count.
+  const baselineAccess = new Map<string, ReturnType<typeof plexServerAccessForProfile>>();
   await Promise.all(playItems.map(async (item) => {
     const it = item as PlexPlayItem & {
       queueOwnHistory?: boolean; queueProviderViewCount?: number;
     };
     if (!it.queueOwnHistory) return;
     try {
-      const mc = await liveClient().container(`/library/metadata/${it.ratingKey}`, tok);
+      if (it.plexServer && !baselineAccess.has(it.plexServer)) {
+        baselineAccess.set(it.plexServer, plexServerAccessForProfile(SESSION.userUuid, it.plexServer));
+      }
+      const remote = it.plexServer ? await baselineAccess.get(it.plexServer) : null;
+      if (it.plexServer && !remote) throw new Error('Shared Plex server is unavailable');
+      const mc = await (remote ? plexServerClient(remote) : liveClient())
+        .container(`/library/metadata/${it.ratingKey}`, remote?.token ?? tok);
       it.queueProviderViewCount = Math.max(0, Number(mc.Metadata?.[0]?.viewCount) || 0);
     } catch {
       // Keep the resolver's count. A failed baseline read must not block playback; the final
@@ -445,6 +454,7 @@ export async function startSession(
     const it = item as Partial<PlexPlayItem>;
     return {
       ratingKey: String(it.ratingKey),
+      plexServer: it.plexServer,
       title: it.title,
       season: it.season,
       episode: it.episode,
@@ -530,9 +540,13 @@ export async function startSession(
   }
   if (plan.size || sections.size) {
     resume.startWatch({
-      fetchSession: () => playback.currentSession({ device: device as Device | null, client }),
+      fetchSession: () => playback.currentSession({
+        device: device as Device | null, client,
+        playQueueID: SESSION.playQueueID, userUuid: SESSION.userUuid,
+      }),
       seek: (ms: number) => playback.seekTo(ms, {
         device: device as Device | null, client, setName, userUuid: SESSION.userUuid,
+        playQueueID: SESSION.playQueueID,
       }),
       // WHICH OCCURRENCE is playing. Read lazily off the session because the playQueue does
       // not exist yet — `handoff()` below is what creates it — and called by the watcher only
@@ -624,8 +638,7 @@ export async function advanceSession(): Promise<SessionResult> {
     _publishState({ error: 'end of queue', ...SESSION.asDict() });
     return { error: 'end of queue' };
   }
-  const ratingKeys = rest.map((q) => q.ratingKey);
-  const result = await playback.playRatingKeys(ratingKeys, {
+  const result = await playback.playRatingKeys(rest, {
     setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid,
   });
   _publishLastPlayed(lastPlayedFromItem(rest[0]));

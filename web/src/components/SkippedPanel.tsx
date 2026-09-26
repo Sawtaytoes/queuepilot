@@ -85,6 +85,7 @@ export function SkippedPanel({
                     <div className="thumb">
                       <Poster
                         className="poster"
+                        cover={row.cover}
                         ratingKey={
                           row.posterRatingKey ??
                           row.ratingKey

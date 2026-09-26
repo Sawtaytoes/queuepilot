@@ -40,8 +40,9 @@ import {
   T_CMD_CAST_PLAY,
 } from './env.js';
 import { accountToken, plexGet } from './plex.js';
+import { plexServerAccessForProfile } from './plexSources.js';
 import { getSet } from './sets.js';
-import type { Device, PushResult } from './types.js';
+import type { Device, PlexPlayItem, PushResult } from './types.js';
 import { PlexError, errMessage, isNodeError, isPlexError } from './errors.js';
 
 const CLIENT_ID = PLEX_CLIENT_IDENTIFIER;
@@ -164,6 +165,8 @@ interface PlexPart {
  * `PlexMetadata` in types.ts is the ENGINE's view and carries neither `Player` nor `Media`. */
 interface PlaybackMetadata {
   ratingKey?: string | number;
+  /** Present when an item in the play queue comes from a different Plex server. */
+  source?: string;
   viewOffset?: number;
   Player?: { machineIdentifier?: string; title?: string };
   User?: { id?: unknown; title?: unknown };
@@ -187,6 +190,118 @@ interface PlaybackContainer {
 interface PlexReqJson {
   MediaContainer?: PlaybackContainer;
   _raw?: string;
+}
+
+/** A stored lineup item, or the legacy bare rating key accepted by public helpers. */
+export type PlexQueueItemInput = string | number | {
+  ratingKey: PlexPlayItem['ratingKey'];
+  plexServer?: string | null;
+};
+
+interface PlexQueueItemRef {
+  ratingKey: string;
+  plexServer: string | null;
+}
+
+interface PlayQueueHost {
+  machineIdentifier: string;
+  apiBaseUrl: string;
+  streamBaseUrl: string;
+  token: string;
+  hasSharedItems?: boolean;
+}
+
+const playQueueHosts = new Map<string, PlayQueueHost>();
+const sharedSessionAccess = new Map<string, {
+  until: number;
+  access: Awaited<ReturnType<typeof plexServerAccessForProfile>>;
+}>();
+
+async function sharedAccess(userUuid: string | null, serverId: string) {
+  const key = `${userUuid || ''}:${serverId}`;
+  const cached = sharedSessionAccess.get(key);
+  if (cached && cached.until > Date.now()) return cached.access;
+  const access = await plexServerAccessForProfile(userUuid, serverId).catch(() => null);
+  if (access) sharedSessionAccess.set(key, { access, until: Date.now() + 30_000 });
+  return access;
+}
+
+async function selectedSource(
+  playQueueID: number | string | null | undefined,
+  userUuid: string | null,
+): Promise<{ host: string; token: string; machineIdentifier: string } | null> {
+  if (playQueueID == null || !playQueueHosts.get(String(playQueueID))?.hasSharedItems) return null;
+  const queue = await readPlayQueue(playQueueID);
+  if (!queue) throw new Error('The mixed Plex queue is unavailable');
+  const item = queue?.items[queue.selectedOffset];
+  if (!item) throw new Error('The selected Plex item is unavailable');
+  if (!item?.plexServer) return null;
+  const access = await sharedAccess(userUuid, item.plexServer);
+  if (!access) throw new Error('The selected shared Plex server is unavailable');
+  return { host: access.baseUrl, token: access.token, machineIdentifier: access.id };
+}
+
+function queueItemRef(item: PlexQueueItemInput): PlexQueueItemRef {
+  if (item != null && typeof item === 'object') {
+    return {
+      ratingKey: String(item.ratingKey),
+      plexServer: item.plexServer ? String(item.plexServer) : null,
+    };
+  }
+  return { ratingKey: String(item), plexServer: null };
+}
+
+function queueItemRefs(
+  items: readonly PlexQueueItemInput[] | null | undefined,
+): PlexQueueItemRef[] {
+  return (items || []).map(queueItemRef).filter((item) => item.ratingKey && item.ratingKey !== 'undefined');
+}
+
+function queueSourceUri(machineId: string, ratingKeys: readonly string[]): string {
+  return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKeys.join(',')}`;
+}
+
+function sourceId(source: string | null | undefined): string | null {
+  const match = /^server:\/\/([^/]+)\//.exec(String(source || ''));
+  return match?.[1] ?? null;
+}
+
+function queueGroups(items: readonly PlexQueueItemRef[], fallbackServer: string): {
+  server: string;
+  ratingKeys: string[];
+}[] {
+  const groups: { server: string; ratingKeys: string[] }[] = [];
+  for (const item of items) {
+    const server = item.plexServer || fallbackServer;
+    const tail = groups[groups.length - 1];
+    if (tail?.server === server) tail.ratingKeys.push(item.ratingKey);
+    else groups.push({ server, ratingKeys: [item.ratingKey] });
+  }
+  return groups;
+}
+
+async function playQueueHost(
+  first: PlexQueueItemRef,
+  userUuid: string | null,
+  localToken: string,
+): Promise<PlayQueueHost> {
+  const localId = await machineIdentifier();
+  if (!first.plexServer || first.plexServer === localId) {
+    return {
+      machineIdentifier: localId,
+      apiBaseUrl: PLEX_URL,
+      streamBaseUrl: PLEX_LOCAL_URL,
+      token: localToken,
+    };
+  }
+  const access = await plexServerAccessForProfile(userUuid, first.plexServer);
+  if (!access) throw new Error('The selected Plex profile cannot reach the first item\'s server');
+  return {
+    machineIdentifier: access.id,
+    apiBaseUrl: access.baseUrl,
+    streamBaseUrl: access.baseUrl,
+    token: access.token,
+  };
 }
 
 /**
@@ -541,20 +656,33 @@ export async function findClient(device: Device | null = null): Promise<ClientTa
 // Create a video playQueue from an ordered list of ratingKeys; return its id.
 // continuous=false tells the client to STOP when the queue ends (per-scan max_items cap).
 export async function createPlayQueue(
-  ratingKeys: (string | number)[] | null | undefined,
-  { token = null, continuous = true }: { token?: string | null; continuous?: boolean } = {},
+  items: PlexQueueItemInput[] | null | undefined,
+  {
+    token = null,
+    continuous = true,
+    host = null,
+    machineIdentifier: queueHostId = null,
+    streamBaseUrl = null,
+  }: {
+    token?: string | null;
+    continuous?: boolean;
+    host?: string | null;
+    machineIdentifier?: string | null;
+    streamBaseUrl?: string | null;
+  } = {},
 ): Promise<number | string | null> {
-  if (!ratingKeys || !ratingKeys.length) return null;
-  const mid = await machineIdentifier();
-  const keys = ratingKeys.map(String).join(',');
-  const uri = `server://${mid}/com.plexapp.plugins.library/library/metadata/${keys}`;
+  const refs = queueItemRefs(items);
+  if (!refs.length) return null;
+  const mid = queueHostId || await machineIdentifier();
+  const groups = queueGroups(refs, mid);
+  const first = groups[0]!;
   const q = new URLSearchParams({
     type: 'video',
-    uri,
+    uri: queueSourceUri(first.server, first.ratingKeys),
     continuous: continuous ? '1' : '0',
     'X-Plex-Client-Identifier': CLIENT_ID,
   });
-  const data = await plexReq('POST', `/playQueues?${q}`, { token });
+  const data = await plexReq('POST', `/playQueues?${q}`, { token, host });
   const mc: PlaybackContainer = (data && data.MediaContainer) || {};
   // An EMPTY queue is a hard failure, not a playable one. Plex answers 200 for a playQueue
   // built from ratingKeys this token cannot see (a managed account whose library filter hides
@@ -563,11 +691,27 @@ export async function createPlayQueue(
   // is how the wrong-token bug above stayed invisible. Throw so playRatingKeys reports it.
   if (!mc.size) {
     throw new Error(
-      `Plex built an EMPTY playQueue for ${ratingKeys.length} item(s) — this profile's account `
+      `Plex built an EMPTY playQueue for ${refs.length} item(s) — this profile's account `
       + 'cannot see them',
     );
   }
-  return mc.playQueueID ?? null;
+  const playQueueID = mc.playQueueID ?? null;
+  if (playQueueID == null) return null;
+  for (const group of groups.slice(1)) {
+    const append = new URLSearchParams({
+      uri: queueSourceUri(group.server, group.ratingKeys),
+      'X-Plex-Client-Identifier': CLIENT_ID,
+    });
+    await plexReq('PUT', `/playQueues/${playQueueID}?${append}`, { token, host });
+  }
+  playQueueHosts.set(String(playQueueID), {
+    machineIdentifier: mid,
+    apiBaseUrl: host || PLEX_URL,
+    streamBaseUrl: streamBaseUrl || host || PLEX_LOCAL_URL,
+    token: token || PLEX_TOKEN,
+    hasSharedItems: refs.some((item) => Boolean(item.plexServer)),
+  });
+  return playQueueID;
 }
 
 /**
@@ -579,12 +723,20 @@ export async function createPlayQueue(
  */
 export async function readPlayQueue(
   pqId: number | string,
-  { token = null }: { token?: string | null } = {},
-): Promise<{ ratingKeys: string[]; selectedOffset: number; remaining: number } | null> {
+  { token = null, host = null }: { token?: string | null; host?: string | null } = {},
+): Promise<{
+  ratingKeys: string[];
+  items: PlexQueueItemRef[];
+  selectedOffset: number;
+  remaining: number;
+} | null> {
+  const remembered = playQueueHosts.get(String(pqId));
+  const requestToken = remembered?.token ?? token;
+  const requestHost = remembered?.apiBaseUrl ?? host;
   const q = new URLSearchParams({ 'X-Plex-Client-Identifier': CLIENT_ID });
   let data: PlexReqJson;
   try {
-    data = await plexReq('GET', `/playQueues/${pqId}?${q}`, { token });
+    data = await plexReq('GET', `/playQueues/${pqId}?${q}`, { token: requestToken, host: requestHost });
   } catch {
     // A playQueue Plex has forgotten (server restart, expiry) is not an error worth throwing
     // at a background tick — it means "there is nothing to top up", which is the caller's
@@ -592,10 +744,24 @@ export async function readPlayQueue(
     return null;
   }
   const mc: PlaybackContainer = (data && data.MediaContainer) || {};
-  const rows = (mc.Metadata || []) as { ratingKey?: string | number }[];
+  const rows = mc.Metadata || [];
   const ratingKeys = rows.map((r) => String(r.ratingKey));
+  const localId = await machineIdentifier();
+  const hostId = remembered?.machineIdentifier ?? localId;
+  const items = rows.map((row) => {
+    const server = sourceId(row.source) || hostId;
+    return {
+      ratingKey: String(row.ratingKey),
+      plexServer: server === localId ? null : server,
+    };
+  });
   const selectedOffset = Number(mc.playQueueSelectedItemOffset ?? 0) || 0;
-  return { ratingKeys, selectedOffset, remaining: Math.max(0, ratingKeys.length - selectedOffset - 1) };
+  return {
+    ratingKeys,
+    items,
+    selectedOffset,
+    remaining: Math.max(0, ratingKeys.length - selectedOffset - 1),
+  };
 }
 
 /**
@@ -614,21 +780,35 @@ export async function readPlayQueue(
  */
 export async function extendPlayQueue(
   pqId: number | string,
-  ratingKeys: (string | number)[] | null | undefined,
-  { token = null }: { token?: string | null } = {},
+  items: PlexQueueItemInput[] | null | undefined,
+  { token = null, host = null }: { token?: string | null; host?: string | null } = {},
 ): Promise<number | null> {
-  if (!ratingKeys || !ratingKeys.length) return 0;
-  const mid = await machineIdentifier();
-  const q = new URLSearchParams({
-    uri: `server://${mid}/com.plexapp.plugins.library/library/metadata/${ratingKeys.map(String).join(',')}`,
-    'X-Plex-Client-Identifier': CLIENT_ID,
-  });
-  const data = await plexReq('PUT', `/playQueues/${pqId}?${q}`, { token });
-  const mc: PlaybackContainer = (data && data.MediaContainer) || {};
+  const refs = queueItemRefs(items);
+  if (!refs.length) return 0;
+  const remembered = playQueueHosts.get(String(pqId));
+  if (remembered && refs.some((item) => Boolean(item.plexServer))) {
+    remembered.hasSharedItems = true;
+  }
+  const mid = remembered?.machineIdentifier ?? await machineIdentifier();
+  const requestToken = remembered?.token ?? token;
+  const requestHost = remembered?.apiBaseUrl ?? host;
+  let size: number | null = null;
+  for (const group of queueGroups(refs, mid)) {
+    const q = new URLSearchParams({
+      uri: queueSourceUri(group.server, group.ratingKeys),
+      'X-Plex-Client-Identifier': CLIENT_ID,
+    });
+    const data = await plexReq('PUT', `/playQueues/${pqId}?${q}`, {
+      token: requestToken,
+      host: requestHost,
+    });
+    const mc: PlaybackContainer = (data && data.MediaContainer) || {};
+    size = mc.size ?? size;
+  }
   // Plex answers 200 with the queue's new size. Reported so the caller can log what actually
   // landed rather than what it asked for — the create path already learned that Plex silently
   // drops keys a token cannot see.
-  return mc.size ?? null;
+  return size;
 }
 
 // --- audio language (best-effort, both paths) -------------------------------- //
@@ -641,12 +821,13 @@ async function applyAudioLanguage(
   ratingKeys: (string | number)[] | null | undefined,
   token: string,
   lang: string | null | undefined,
+  host: string | null = null,
 ): Promise<void> {
   if (!lang || !ratingKeys || !ratingKeys.length) return;
   const want = String(lang).trim().toLowerCase();
   for (const rk of ratingKeys) {
     try {
-      const data = await plexReq('GET', `/library/metadata/${rk}?includeBandwidths=1`, { token });
+      const data = await plexReq('GET', `/library/metadata/${rk}?includeBandwidths=1`, { token, host });
       const item = ((data.MediaContainer || {}).Metadata || [])[0];
       if (!item) continue;
       for (const media of item.Media || []) {
@@ -663,7 +844,7 @@ async function applyAudioLanguage(
             await plexReq(
               'PUT',
               `/library/parts/${part.id}?audioStreamID=${match.id}&allParts=1`,
-              { token },
+              { token, host },
             );
           }
         }
@@ -778,7 +959,10 @@ function intOffset(offset: number | string | null | undefined): number {
 // still near its start. /status/sessions names the episode and gives its position, so it
 // stays the authority and the fallback trigger both.
 export async function currentSession(
-  { device = null, client = null, timeoutMs = RESUME_POLL_TIMEOUT_MS }: {
+  {
+    device = null, client = null, timeoutMs = RESUME_POLL_TIMEOUT_MS,
+    playQueueID = null, userUuid = null,
+  }: {
     device?: Device | null;
     /**
      * The target resolved ONCE at arm time. Without it this re-ran `findClient()` on every
@@ -787,10 +971,13 @@ export async function currentSession(
      */
     client?: ClientTarget | null;
     timeoutMs?: number;
+    playQueueID?: number | string | null;
+    userUuid?: string | null;
   } = {},
 ): Promise<CurrentSession | null> {
   let data: PlexReqJson;
   try {
+    const source = await selectedSource(playQueueID, userUuid);
     // ADMIN token, deliberately — NOT the set's account token. /status/sessions returns an
     // EMPTY container for a managed user, so querying as the set's profile makes every session
     // invisible and the resume watcher silently does nothing. Measured on the live deploy while
@@ -801,7 +988,11 @@ export async function currentSession(
     // `timeoutMs` is the poll path's own, far shorter than plexReq's 60 s default. The
     // watcher swallows a throw and skips the tick, so a request that will not answer within
     // one poll interval is worth abandoning — the next tick is seconds away.
-    data = await plexReq('GET', '/status/sessions', { token: await playToken(null), timeoutMs });
+    data = await plexReq('GET', '/status/sessions', {
+      token: source?.token ?? await playToken(null),
+      host: source?.host ?? null,
+      timeoutMs,
+    });
   } catch {
     return null;
   }
@@ -868,12 +1059,17 @@ function sessionBelongsTo(m: PlaybackMetadata, wanted: ClientTarget): boolean {
 async function readAccountForTarget(
   wanted: ClientTarget,
   timeoutMs: number,
+  source: { host: string; token: string } | null = null,
 ): Promise<AccountObservation> {
   let data: PlexReqJson;
   try {
     // ADMIN token. A managed-user token receives an EMPTY /status/sessions container and
     // therefore cannot reveal that the player is actually using another account.
-    data = await plexReq('GET', '/status/sessions', { token: PLEX_TOKEN, timeoutMs });
+    data = await plexReq('GET', '/status/sessions', {
+      token: source?.token ?? PLEX_TOKEN,
+      host: source?.host ?? null,
+      timeoutMs,
+    });
   } catch (e) {
     return {
       accountId: null,
@@ -949,7 +1145,15 @@ export async function verifyAccount(
     device = null,
     timeoutMs = PLAYBACK_SESSION_WAIT_SECONDS * 1000,
     pollMs = 1_000,
-  }: { device?: Device | null; timeoutMs?: number; pollMs?: number } = {},
+    sourceServer = null,
+    userUuid = null,
+  }: {
+    device?: Device | null;
+    timeoutMs?: number;
+    pollMs?: number;
+    sourceServer?: string | null;
+    userUuid?: string | null;
+  } = {},
 ): Promise<AccountVerdict> {
   const wanted = await sessionTarget(device);
   if (!wanted) {
@@ -964,11 +1168,21 @@ export async function verifyAccount(
 
   const deadline = Date.now() + Math.max(0, timeoutMs);
   let lastReason = 'no session appeared on the target client';
+  const sourceAccess = sourceServer ? await sharedAccess(userUuid, sourceServer) : null;
+  if (sourceServer && !sourceAccess) {
+    return {
+      isMismatch: false, accountId: null, title: null, hasSession: false,
+      reason: 'the shared Plex server is unavailable to this profile',
+    };
+  }
+  const source = sourceAccess
+    ? { host: sourceAccess.baseUrl, token: sourceAccess.token }
+    : null;
   for (;;) {
-    const observation = await readAccountForTarget(wanted, RESUME_POLL_TIMEOUT_MS);
+    const observation = await readAccountForTarget(wanted, RESUME_POLL_TIMEOUT_MS, source);
     if (observation.accountId != null) {
       return {
-        isMismatch: expectAccountId != null
+        isMismatch: !sourceServer && expectAccountId != null
           && observation.accountId !== Number(expectAccountId),
         accountId: observation.accountId,
         title: observation.title,
@@ -1077,24 +1291,32 @@ export async function seekTo(
     client = null,
     setName = null,
     userUuid = null,
+    playQueueID = null,
   }: {
     device?: Device | null;
     /** The target resolved once at arm time — see `currentSession()`. */
     client?: ClientTarget | null;
     setName?: string | null;
     userUuid?: string | null;
+    playQueueID?: number | string | null;
   } = {},
 ): Promise<SeekResult> {
   const ms = intOffset(offsetMs);
   if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
   const target = client ?? await findClient(device);
   if (!target) return { seeked: false, error: 'target client not found' };
-  const token = await playToken(setName, userUuid);
+  let source: Awaited<ReturnType<typeof selectedSource>>;
+  try {
+    source = await selectedSource(playQueueID, userUuid);
+  } catch (e) {
+    return { seeked: false, error: errMessage(e) };
+  }
+  const token = source?.token ?? await playToken(setName, userUuid);
   const send = async (to: ClientTarget): Promise<void> => {
     const params = new URLSearchParams({
       offset: String(ms),
       type: 'video',
-      machineIdentifier: await machineIdentifier(),
+      machineIdentifier: source?.machineIdentifier ?? await machineIdentifier(),
       'X-Plex-Target-Client-Identifier': to.machineIdentifier || '',
       'X-Plex-Client-Identifier': CLIENT_ID,
       commandID: nextCommandId(),
@@ -1125,7 +1347,7 @@ export async function seekTo(
   }
 }
 
-export async function playRatingKeys(ratingKeys: (string | number)[] | null | undefined, {
+export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefined, {
   setName = null,
   device = null,
   offset = 0,
@@ -1136,6 +1358,8 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
   offset?: number | string | null;
   userUuid?: string | null;
 } = {}): Promise<PlaybackResult> {
+  const refs = queueItemRefs(items);
+  const ratingKeys = refs.map((item) => item.ratingKey);
   // Only the two knobs this path reads off the set. `getSet()` is still JS, so the wider
   // `SetRegistryEntry` it really returns is not visible here yet.
   let cfg: { audio_language?: string | null; max_items?: number | null } = {};
@@ -1146,7 +1370,21 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
   const lang = cfg.audio_language;
   if (lang) {
     try {
-      await applyAudioLanguage(ratingKeys, await playToken(setName, userUuid), lang);
+      const byServer = new Map<string | null, string[]>();
+      for (const item of refs) {
+        const source = item.plexServer || null;
+        const keys = byServer.get(source) || [];
+        keys.push(item.ratingKey);
+        byServer.set(source, keys);
+      }
+      for (const [server, keys] of byServer) {
+        if (!server) {
+          await applyAudioLanguage(keys, await playToken(setName, userUuid), lang);
+        } else {
+          const access = await sharedAccess(userUuid, server);
+          if (access) await applyAudioLanguage(keys, access.token, lang, access.baseUrl);
+        }
+      }
     } catch (e) {
       // Never let audio prefs block playback.
       console.log(`[audio] language '${lang}' not applied: ${errMessage(e)}`);
@@ -1155,6 +1393,15 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
 
   const mode = (device && device.mode) || PLAYBACK_MODE;
   if (mode === 'cast') {
+    if (refs.some((item) => item.plexServer)) {
+      return {
+        queued: refs.length,
+        played: false,
+        mode: 'cast',
+        client: device?.name || SHIELD_CAST_NAME || null,
+        error: 'shared Plex server items require client playback',
+      };
+    }
     return castPlay(ratingKeys, setName, device && device.name, offset);
   }
 
@@ -1176,6 +1423,13 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
   const cap = cfg.max_items;
   const isCapped = typeof cap === 'number' && Number.isInteger(cap) && cap > 0;
   let pqId: number | string | null = null;
+  let queueHost: PlayQueueHost;
+  try {
+    queueHost = await playQueueHost(refs[0]!, userUuid, tok);
+  } catch (e) {
+    result.error = `${errName(e)}: ${errMessage(e)}`;
+    return result;
+  }
   // What we are ASKING Plex for, before we ask. The head is the whole point of an ordered
   // queue, so it is named rather than left to be inferred from a count
   // (decision `2026-08-26-a-scan-logs-the-lineup-it-built`).
@@ -1184,7 +1438,13 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
     + `offset=${Math.round(intOffset(offset) / 1000)}s, continuous=${!isCapped}`,
   );
   try {
-    pqId = await createPlayQueue(ratingKeys, { token: tok, continuous: !isCapped });
+    pqId = await createPlayQueue(refs, {
+      token: queueHost.token,
+      continuous: !isCapped,
+      host: queueHost.apiBaseUrl,
+      machineIdentifier: queueHost.machineIdentifier,
+      streamBaseUrl: queueHost.streamBaseUrl,
+    });
   } catch (e) {
     result.error = `${errName(e)}: ${errMessage(e)}`;
     return result;
@@ -1201,9 +1461,25 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
     try {
       const built = await readPlayQueue(pqId, { token: tok });
       const builtHead = built?.ratingKeys[0];
-      if (built && builtHead !== String(ratingKeys[0])) {
+      const askedHead = refs[0]!;
+      const builtHeadItem = built?.items[0];
+      const sourceChanged = Boolean(builtHeadItem)
+        && (builtHeadItem!.plexServer || null) !== (askedHead.plexServer || null);
+      if (refs.some((item) => item.plexServer)) {
+        const matches = built?.items.length === refs.length
+          && refs.every((item, index) => {
+            const actual = built.items[index];
+            return actual?.ratingKey === item.ratingKey
+              && actual.plexServer === item.plexServer;
+          });
+        if (!matches) {
+          result.error = 'Plex did not retain the full mixed-server queue in order';
+          return result;
+        }
+      }
+      if (built && (builtHead !== askedHead.ratingKey || sourceChanged)) {
         console.log(
-          `[play] ⚠ Plex reordered the playQueue: asked for head rk=${ratingKeys[0]}, `
+          `[play] ⚠ Plex reordered the playQueue: asked for head rk=${askedHead.ratingKey}, `
           + `playQueue ${pqId} leads with rk=${builtHead} (${built.ratingKeys.length} item(s))`,
         );
       } else if (built && built.ratingKeys.length !== ratingKeys.length) {
@@ -1228,25 +1504,24 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
 
   let srv: URL;
   try {
-    srv = new URL(PLEX_LOCAL_URL);
+    srv = new URL(queueHost.streamBaseUrl);
   } catch {
-    result.error = `invalid PLEX_LOCAL_URL: ${PLEX_LOCAL_URL}`;
+    result.error = `invalid Plex source URL: ${queueHost.streamBaseUrl}`;
     return result;
   }
-  const first = ratingKeys[0];
-  const mid = await machineIdentifier();
+  const first = refs[0]!.ratingKey;
   const params = new URLSearchParams({
     key: `/library/metadata/${first}`,
     // Resume point (ms) for the first item — 0 plays from the top.
     offset: String(intOffset(offset)),
-    machineIdentifier: mid,
+    machineIdentifier: queueHost.machineIdentifier,
     // Where the Shield should stream FROM — it can't infer this when we bypass the
     // server's relay, so hand it the LAN address explicitly.
     address: srv.hostname,
     port: String(srv.port || (srv.protocol === 'https:' ? 443 : 32400)),
     protocol: srv.protocol.replace(/:$/, ''),
     containerKey: `/playQueues/${pqId}`,
-    token: tok,
+    token: queueHost.token,
     'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
     'X-Plex-Client-Identifier': CLIENT_ID,
     commandID: nextCommandId(),
@@ -1259,7 +1534,7 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
     // Companion answers 200 with body "Failure: 200 OK" even when playback DOES start —
     // the body is not a usable success signal; only the HTTP status is.
     await plexReq('GET', `/player/playback/playMedia?${params}`, {
-      token: tok,
+      token: queueHost.token,
       host,
       extraHeaders: {
         'X-Plex-Device-Name': 'queuepilot',
@@ -1293,6 +1568,8 @@ export async function playRatingKeys(ratingKeys: (string | number)[] | null | un
 export const _internals = {
   playToken,
   applyAudioLanguage,
+  queueGroups,
+  queueItemRefs,
   plexReq,
   sleep,
 };

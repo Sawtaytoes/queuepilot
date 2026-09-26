@@ -254,4 +254,21 @@ describe("queueItemAddBody", () => {
       },
     })
   })
+
+  it("keeps the Plex server scope on a shared item", () => {
+    expect(
+      queueItemAddBody({
+        ...hit("42", 15),
+        plexServer: "friend-server",
+        title: "A Shared Film",
+      }),
+    ).toEqual({
+      position: "top",
+      value: {
+        plex_server: "friend-server",
+        ratingKey: "42",
+        title: "A Shared Film",
+      },
+    })
+  })
 })
