@@ -59,20 +59,26 @@ try {
         { id: 'home', name: 'Home Server', local: true, available: true,
           owned: true, libraries: [] },
         { id: 'friend-server', name: 'Friend Server', local: false, available: true,
-          owned: false, libraries: [{ id: '2', title: 'Shared Movies', type: 'movie' }] },
+          owned: false, libraries: [
+            { id: '2', title: 'Shared Movies', type: 'movie' },
+            { id: '3', title: 'Shared Shows', type: 'show' },
+          ] },
       ] }),
     }));
     const searchUrls: string[] = [];
+    let sharedChoiceSaved = false;
     await page.route('**/api/search?*', (route) => {
       searchUrls.push(route.request().url());
+      const isSharedOnly = new URL(route.request().url()).searchParams.has('plex_server');
+      const home = { ratingKey: '42', title: 'Example Film', year: 2024, type: 'movie',
+        sectionId: 1, viewCount: 0, viewOffset: 0 };
+      const shared = { ...home, sectionId: 2, plexServer: 'friend-server',
+        plexServerName: 'Friend Server' };
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ results: [{
-          ratingKey: '42', title: 'Example Film', year: 2024, type: 'movie',
-          sectionId: 2, viewCount: 0, viewOffset: 0,
-          ...(mode === 'after' ? { plexServer: 'friend-server' } : {}),
-        }] }),
+        body: JSON.stringify({ results: isSharedOnly ? [shared]
+          : sharedChoiceSaved ? [home, shared] : [home] }),
       });
     });
     await page.goto(`${base}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -93,6 +99,51 @@ try {
       }
     }
     await page.locator('#queue .add').screenshot({ path: screenshot });
+    if (mode === 'after') {
+      await page.locator('#search').press('Escape');
+      await page.locator('#qconfigure').click();
+      await page.getByRole('button', { name: 'Friend Server — all libraries' }).click();
+      await page.getByRole('checkbox', { name: 'Shared Movies' }).check();
+      await page.locator('#setmodal').screenshot({
+        path: path.join(thisRoot, '__screenshots__', 'shared-library-settings.png'),
+      });
+      await page.locator('#set-save').click();
+      await page.locator('#setmodal').waitFor({ state: 'hidden' });
+
+      const saved = await (await fetch(`${base}/api/sets`)).json() as {
+        sets: { id: string; shared_libraries: Record<string, string[]> }[];
+      };
+      const scope = saved.sets.find((set) => set.id === 'bob')?.shared_libraries;
+      if (JSON.stringify(scope) !== JSON.stringify({ 'friend-server': ['2'] })) {
+        throw new Error(`Shared library choice did not persist: ${JSON.stringify(scope)}`);
+      }
+      sharedChoiceSaved = true;
+
+      await page.locator('#qconfigure').click();
+      await page.getByRole('button', { name: 'Friend Server — 1 selected' }).click();
+      if (!(await page.getByRole('checkbox', { name: 'Shared Movies' }).isChecked())) {
+        throw new Error('Saved shared library was not checked on reopen');
+      }
+      if (await page.getByRole('checkbox', { name: 'Shared Shows' }).isChecked()) {
+        throw new Error('Unselected shared library was checked on reopen');
+      }
+      await page.locator('#set-cancel').click();
+      await page.locator('[data-testid="searchsource"]').click();
+      await page.getByRole('option', { name: 'Home + selected shared servers' }).click();
+      await page.locator('[data-testid="searchlib"]').click();
+      if (!(await page.getByRole('option', { name: 'Friend Server — Shared Movies' }).count())) {
+        throw new Error('Selected shared library is missing from the combined Library picker');
+      }
+      if (await page.getByRole('option', { name: 'Shared Shows' }).count()) {
+        throw new Error('Unselected shared library is still offered in queue search');
+      }
+      await page.locator('#search').fill('Example Film');
+      await page.locator('#results li').nth(1).waitFor({ state: 'visible' });
+      const combined = await page.locator('#results li').allInnerTexts();
+      if (combined.length !== 2 || !combined.some((row) => row.includes('Friend Server'))) {
+        throw new Error(`Default Add search did not combine home and shared results: ${combined}`);
+      }
+    }
     console.log(`PASS ${mode} queue search screenshot: ${screenshot}`);
   } finally {
     await browser.close();

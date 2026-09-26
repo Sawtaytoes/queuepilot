@@ -323,21 +323,71 @@ export function QueueView({
   const selectedSource = plexSources.find(
     (source) => source.id === searchSource,
   )
-  const libraryOptions = (
-    selectedSource
-      ? selectedSource.libraries.map((library) => ({
-          ...library,
-          video: true,
-        }))
-      : (reg?.libraries ?? [])
-  )
-    .filter(
-      (l) =>
-        Boolean(selectedSource) ||
-        !queueSections.length ||
-        queueSections.includes(Number(l.id)),
+  const sharedScope = regSet?.shared_libraries ?? {}
+  const sharedScopeKey = Object.entries(sharedScope)
+    .map(
+      ([server, libraries]) =>
+        `${server}:${libraries.join(",")}`,
     )
-    .map((l) => ({ label: l.title, value: String(l.id) }))
+    .join("|")
+  const sharedSections = searchSource
+    ? (sharedScope[searchSource] ?? [])
+    : []
+  const localLibraryOptions = (reg?.libraries ?? [])
+    .filter(
+      (library) =>
+        !queueSections.length ||
+        queueSections.includes(Number(library.id)),
+    )
+    .map((library) => ({
+      label: Object.keys(sharedScope).length
+        ? `${plexSources.find((source) => source.local)?.name ?? "Home server"} — ${library.title}`
+        : library.title,
+      value: String(library.id),
+    }))
+  const libraryOptions = selectedSource
+    ? selectedSource.libraries
+        .filter(
+          (library) =>
+            !sharedSections.length ||
+            sharedSections.includes(library.id),
+        )
+        .map((library) => ({
+          label: library.title,
+          value: library.id,
+        }))
+    : [
+        ...localLibraryOptions,
+        ...plexSources
+          .filter(
+            (source) => !source.local && source.available,
+          )
+          .flatMap((source) =>
+            source.libraries
+              .filter((library) =>
+                (sharedScope[source.id] ?? []).includes(
+                  library.id,
+                ),
+              )
+              .map((library) => ({
+                label: `${source.name} — ${library.title}`,
+                value: `server:${source.id}:${library.id}`,
+              })),
+          ),
+      ]
+  const libraryOptionValues = libraryOptions
+    .map((option) => option.value)
+    .join("|")
+  useEffect(() => {
+    if (
+      searchLibrary &&
+      !libraryOptionValues
+        .split("|")
+        .includes(searchLibrary)
+    ) {
+      setSearchLibrary("")
+    }
+  }, [searchLibrary, libraryOptionValues])
 
   // Entry keys already in this queue, for the add box's "already here" answer. An object rather
   // than a Set so it can be built inline without a memo; the lists are dozens of entries.
@@ -810,7 +860,7 @@ export function QueueView({
       ) : null}
       <div className="add">
         <SearchDropdown<SearchHit>
-          searchKey={`${searchSource}:${searchLibrary}:${searchType}:${searchYear}:${searchState}:${hideQueued}`}
+          searchKey={`${searchSource}:${searchLibrary}:${sharedScopeKey}:${searchType}:${searchYear}:${searchState}:${hideQueued}`}
           doSearch={async (text) => {
             // Opt into Collection results — `collections=1` is additive; the scoped
             // add box is where "play a collection in order" is composed.
@@ -834,11 +884,28 @@ export function QueueView({
             const filtered = results.filter((hit) => {
               if (searchType && hit.type !== searchType)
                 return false
-              if (
-                searchLibrary &&
-                String(hit.sectionId) !== searchLibrary
-              ) {
-                return false
+              if (searchLibrary) {
+                if (searchSource) {
+                  if (
+                    String(hit.sectionId) !== searchLibrary
+                  )
+                    return false
+                } else if (
+                  searchLibrary.startsWith("server:")
+                ) {
+                  const [, server, library] =
+                    searchLibrary.split(":")
+                  if (
+                    hit.plexServer !== server ||
+                    String(hit.sectionId) !== library
+                  )
+                    return false
+                } else if (
+                  hit.plexServer ||
+                  String(hit.sectionId) !== searchLibrary
+                ) {
+                  return false
+                }
               }
               if (
                 hideQueued &&
@@ -884,6 +951,14 @@ export function QueueView({
           }
           rowFor={(hit, _index, close) => {
             const isCollection = hit.type === "collection"
+            const sourceLabel =
+              hit.plexServerName ??
+              (Object.keys(regSet?.shared_libraries ?? {})
+                .length
+                ? (plexSources.find(
+                    (source) => source.local,
+                  )?.name ?? "Home server")
+                : null)
             // `queueItemAddBody` appends the EDITION when Plex gave the item one. Two editions of a
             // film are two library items with the same title and the same year, so without it
             // the two rows are identical AND the two entries this box writes are stored under
@@ -922,6 +997,11 @@ export function QueueView({
                         {hit.year || ""}
                       </span>
                       <EditionBadge hit={hit} />{" "}
+                      {sourceLabel ? (
+                        <Badge intent="neutral" size="sm">
+                          {sourceLabel}
+                        </Badge>
+                      ) : null}{" "}
                       <span className="collbadge">
                         In this queue
                       </span>
@@ -1016,6 +1096,11 @@ export function QueueView({
                         <EditionBadge hit={hit} />
                       </>
                     )}
+                    {sourceLabel ? (
+                      <Badge intent="neutral" size="sm">
+                        {sourceLabel}
+                      </Badge>
+                    ) : null}
                   </span>
                 </>
               ),
@@ -1081,10 +1166,11 @@ export function QueueView({
                 }}
                 options={[
                   {
-                    label:
-                      plexSources.find(
-                        (source) => source.local,
-                      )?.name ?? "Home server",
+                    label: Object.keys(sharedScope).length
+                      ? "Home + selected shared servers"
+                      : (plexSources.find(
+                          (source) => source.local,
+                        )?.name ?? "Home server"),
                     value: "",
                   },
                   ...plexSources

@@ -486,6 +486,8 @@ export type RegistrySet = {
   /** Curated-queue play gate: a scan waits (and ADB-switches the Shield) until this Plex
    * Home profile is signed in before playing. null/absent = ungated. */
   requires_profile?: string | null
+  /** Per shared Plex server, selected library ids. Missing server = all granted libraries. */
+  shared_libraries?: Record<string, string[]>
   /**
    * The repeating {provider, profile, libraries} source blocks. ALWAYS present and always
    * a list: a set written before blocks existed reports the single implicit Plex block it

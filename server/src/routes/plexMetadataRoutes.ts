@@ -78,6 +78,7 @@ export function plexMetadataRoutes(): Hono {
     const allLibraries = c.req.query('scope') === 'all';
     const plexServer = (c.req.query('plex_server') || '').trim();
     const remoteSection = (c.req.query('section') || '').trim();
+    let scopedSet: Awaited<ReturnType<typeof sets.getSet>> = null;
     if (!q) return c.json({ results: [] });
     try {
       // A PULL set searches ITS provider, not Plex. Routed here rather than at the four call
@@ -87,6 +88,7 @@ export function plexMetadataRoutes(): Hono {
       if (setId) {
         const s = await sets.getSet(setId);
         if (!s) return c.json({ error: 'unknown set' }, 400);
+        scopedSet = s;
         if (s.delivery === 'pull') {
           // Spread, not `s`: see the note in providers/launcher.ts — `BlockSourceCfg`'s index
           // signature is satisfied by an anonymous object type but never by an interface.
@@ -122,8 +124,14 @@ export function plexMetadataRoutes(): Hono {
           if (remoteSection && !access.libraries.some((library) => library.id === remoteSection)) {
             return c.json({ error: 'That Plex library is not available to this profile' }, 403);
           }
+          const selected = allLibraries ? [] : (s.shared_libraries?.[plexServer] ?? []);
+          if (remoteSection && selected.length && !selected.includes(remoteSection)) {
+            return c.json({ error: 'That Plex library is not selected for this queue' }, 403);
+          }
+          const allowed = selected.filter((id) => access.libraries.some((library) => library.id === id));
+          if (!remoteSection && selected.length && !allowed.length) return c.json({ results: [] });
           const found = rankByYear(
-            await plexServerSearch(access, remoteSection ? [remoteSection] : [], q),
+            await plexServerSearch(access, remoteSection ? [remoteSection] : allowed, q),
             year,
           );
           return c.json({
@@ -171,14 +179,45 @@ export function plexMetadataRoutes(): Hono {
         sections = named.length ? named : await everyVideoSection();
         collectionSections = sections;
       }
-      // Deliberately the UNION of both hit shapes: `plex.search()` returns `PosterFields` and
-      // `plex.collections()` returns `CollectionHit`, and this route has always emitted them in
-      // one `results` array (the frontend branches on `type`). Declaring the union here is what
-      // makes the `unshift` below honest instead of a cast.
+      // An unchanged queue searches only the home server. Checked shared libraries join
+      // its default Add search; choosing a Server above still searches that server alone.
+      const sharedSearch = async () => {
+        if (!scopedSet || allLibraries) return [];
+        const scopes = Object.entries(scopedSet.shared_libraries || {});
+        if (!scopes.length) return [];
+        let user;
+        try { user = await profileUser(scopedSet.requires_profile); }
+        catch { return []; }
+        if (!user) return [];
+        return Promise.all(scopes.map(async ([serverId, chosen]) => {
+          try {
+            const access = await plexServerAccessForProfile(user.uuid, serverId);
+            if (!access) return [];
+            const allowed = chosen.filter((id) => access.libraries.some((library) => library.id === id));
+            if (!allowed.length) return [];
+            return rankByYear(await plexServerSearch(access, allowed, q), year).map((hit) => ({
+              ...hit,
+              cover: hit.hasThumb
+                ? `/api/shared-plex-thumb/${encodeURIComponent(setId)}`
+                  + `/${encodeURIComponent(access.id)}/${encodeURIComponent(hit.ratingKey)}`
+                : null,
+            }));
+          } catch {
+            // An unavailable shared server must not hide home-server results.
+            return [];
+          }
+        }));
+      };
+      const [localHits, sharedGroups] = await Promise.all([
+        plex.search(sections, q), sharedSearch(),
+      ]);
+      const localResults = rankByYear(localHits, year);
+      // All three hit shapes keep their distinct item identities on the wire.
       const results: (
         Awaited<ReturnType<typeof plex.search>>[number]
         | Awaited<ReturnType<typeof plex.collections>>[number]
-      )[] = rankByYear(await plex.search(sections, q), year);
+        | (Awaited<ReturnType<typeof plexServerSearch>>[number] & { cover: string | null })
+      )[] = [];
       if (withCollections) {
         try {
           // Collections lead the list: typing a franchise name ("Mobile Suit Gundam") turns up
@@ -190,9 +229,19 @@ export function plexMetadataRoutes(): Hono {
           // and "it is not there" is indistinguishable from "it does not exist". A search is
           // one call and is not on the page-load path
           // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
-          results.unshift(...(await plex.collections(collectionSections, q, { isFresh: true })));
+          results.push(...(await plex.collections(collectionSections, q, { isFresh: true })));
         } catch {
           /* collections are additive — a Plex hiccup there never fails item search */
+        }
+      }
+      // The dropdown shows only 30 rows. Alternate the source groups so local matches
+      // cannot fill that window before a checked shared library gets a row.
+      const groups = [localResults, ...sharedGroups];
+      const longest = Math.max(0, ...groups.map((group) => group.length));
+      for (let i = 0; i < longest; i++) {
+        for (const group of groups) {
+          const hit = group[i];
+          if (hit) results.push(hit);
         }
       }
       return c.json({ results });
