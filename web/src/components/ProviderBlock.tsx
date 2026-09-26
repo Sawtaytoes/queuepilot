@@ -1,4 +1,5 @@
 import {
+  Accordion,
   Button,
   Checkbox,
   SegmentedControl,
@@ -50,19 +51,25 @@ export function ProviderBlock({
   index,
   onChange,
   onRemove,
+  onSharedLibrariesChange,
   profileOptionsFor,
   providers,
+  sharedLibraries,
 }: {
   block: ProviderBlockValue
   canRemove: boolean
   index: number
   onChange: (next: ProviderBlockValue) => void
   onRemove: () => void
+  onSharedLibrariesChange: (
+    next: Record<string, string[]>,
+  ) => void
   /** Plex's profile list comes from the registry; other providers fetch their own. */
   profileOptionsFor: (
     providerId: string,
   ) => { label: string; value: string }[]
   providers: ProviderInfo[]
+  sharedLibraries: Record<string, string[]>
 }) {
   const [libraries, setLibraries] = useState<
     ProviderLibrary[]
@@ -164,6 +171,21 @@ export function ProviderBlock({
         ? [...block.libraries, id]
         : block.libraries.filter((x) => x !== id),
     })
+  }
+
+  const setSharedLibrary = (
+    server: string,
+    id: string,
+    on: boolean,
+  ) => {
+    const selected = sharedLibraries[server] ?? []
+    const next = on
+      ? [...new Set([...selected, id])]
+      : selected.filter((item) => item !== id)
+    const scope = { ...sharedLibraries }
+    if (next.length) scope[server] = next
+    else delete scope[server]
+    onSharedLibrariesChange(scope)
   }
 
   return (
@@ -321,8 +343,10 @@ export function ProviderBlock({
             {block.profile
               ? `These servers are available to ${block.profile}. Plex grants access to each profile separately.`
               : "These servers are available to the Plex admin account. Choose a profile above to check its access."}{" "}
-            You can select one of these servers in the queue
-            search and add its items.
+            Checked libraries join this queue's Add search.
+            The Server picker can search one server at a
+            time. With no boxes checked on a server, that
+            picker searches all its libraries.
           </p>
           {sharedError ? (
             <p className="subhint" role="alert">
@@ -337,31 +361,58 @@ export function ProviderBlock({
               This profile has no shared servers.
             </p>
           ) : null}
-          {sharedSources?.map((source) => (
-            <div
-              className="sharedplex-source"
-              key={source.id}
-            >
-              <strong>{source.name}</strong>
-              {!source.available ? (
-                <p className="subhint">
-                  Server unavailable from QueuePilot.
-                </p>
-              ) : source.libraries.length === 0 ? (
-                <p className="subhint">
-                  No video libraries available.
-                </p>
-              ) : (
-                <ul>
-                  {source.libraries.map((library) => (
-                    <li key={`${source.id}:${library.id}`}>
-                      {library.title}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+          {sharedSources?.length ? (
+            <Accordion
+              headingLevel={3}
+              items={sharedSources.map((source) => ({
+                key: source.id,
+                label: `${source.name} — ${
+                  !source.available
+                    ? "unavailable"
+                    : sharedLibraries[source.id]?.length
+                      ? `${sharedLibraries[source.id].length} selected`
+                      : "all libraries"
+                }`,
+                content: !source.available ? (
+                  <p className="subhint">
+                    Server unavailable from QueuePilot.
+                  </p>
+                ) : source.libraries.length === 0 ? (
+                  <p className="subhint">
+                    No video libraries available.
+                  </p>
+                ) : (
+                  <div
+                    className="libs"
+                    data-scope={
+                      sharedLibraries[source.id]?.length
+                        ? "named"
+                        : "all"
+                    }
+                  >
+                    {source.libraries.map((library) => (
+                      <Checkbox
+                        isChecked={(
+                          sharedLibraries[source.id] ?? []
+                        ).includes(library.id)}
+                        key={`${block.profile}:${source.id}:${library.id}`}
+                        label={library.title}
+                        onChange={(isChecked) =>
+                          setSharedLibrary(
+                            source.id,
+                            library.id,
+                            isChecked,
+                          )
+                        }
+                        size="sm"
+                        value={`${source.id}:${library.id}`}
+                      />
+                    ))}
+                  </div>
+                ),
+              }))}
+            />
+          ) : null}
         </section>
       ) : null}
     </div>

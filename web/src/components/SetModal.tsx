@@ -216,6 +216,9 @@ export function SetModal() {
   // would reuse the wrong component instance and each surviving block would show the
   // library list it had already fetched for a different provider.
   const [blocks, setBlocks] = useState<EditableBlock[]>([])
+  const [sharedLibraries, setSharedLibraries] = useState<
+    Record<string, string[]>
+  >({})
   const [providers, setProviders] = useState<
     ProviderInfo[]
   >([])
@@ -345,6 +348,7 @@ export function SetModal() {
             },
           ],
     )
+    setSharedLibraries(editing?.shared_libraries ?? {})
     void fetchProfiles().then(setProfiles)
     void api<{ providers: ProviderInfo[] }>(
       "GET",
@@ -510,6 +514,7 @@ export function SetModal() {
       requires_profile: isLegacyShape
         ? blocks[0].profile
         : requiresProfile,
+      shared_libraries: sharedLibraries,
       ...completionFlagsFor(completionMode),
       watch_history: watchHistory,
       // Empty string clears the TTL (keep forever). Explicit never/0 also clears server-side.
@@ -807,7 +812,13 @@ export function SetModal() {
             canRemove={blocks.length > 1}
             index={i}
             key={b.uid}
-            onChange={(next) =>
+            onChange={(next) => {
+              if (
+                next.provider !== b.provider ||
+                next.profile !== b.profile
+              ) {
+                setSharedLibraries({})
+              }
               setBlocks((prev) => {
                 const changedProvider =
                   next.provider !== prev[i].provider
@@ -837,7 +848,7 @@ export function SetModal() {
                   }
                 })
               })
-            }
+            }}
             onRemove={() =>
               setBlocks((prev) =>
                 prev.filter((_, j) => j !== i),
@@ -845,6 +856,8 @@ export function SetModal() {
             }
             profileOptionsFor={profileOptionsFor}
             providers={providers}
+            sharedLibraries={sharedLibraries}
+            onSharedLibrariesChange={setSharedLibraries}
           />
         ))}
       </div>
