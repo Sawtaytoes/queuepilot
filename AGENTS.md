@@ -1479,7 +1479,7 @@ there rather than in the gated block. All seventeen of them, in the order `ci.ym
 | `drag-stability-test.ts` | a drag's PATH, not its result — reversals, re-inserts, style writes |
 | `lane-drag-test.ts` | dragging across the lane divider — the promote and the demote |
 | `tile-lane-test.ts` | the tile's three controls: the select mark PAINTS when checked, and the lane button promotes / demotes |
-| `shared-plex-search-ui-test.ts` | switching to a shared Plex server reruns search; the settings accordion saves a shared-library scope, reopens checked, and narrows the queue search under a synthetic grant |
+| `shared-plex-search-ui-test.ts` | switching to a shared Plex server reruns search; the settings accordion saves a shared-library scope, reopens checked, and the default Add search combines the home server with checked shared libraries under a synthetic grant |
 | `actions-menu-test.ts` | the Actions menu — the toolbar lost a button, the confirm names the count, and only the confirm writes |
 | `pending-dismiss-test.ts` | Pending Dismiss removes the pressed card immediately and keeps it absent after reload |
 | `calendar-view-test.ts` | the calendar view — which queues are listed, one column, and a date that reaches the SET |

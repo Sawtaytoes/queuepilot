@@ -66,16 +66,19 @@ try {
       ] }),
     }));
     const searchUrls: string[] = [];
+    let sharedChoiceSaved = false;
     await page.route('**/api/search?*', (route) => {
       searchUrls.push(route.request().url());
+      const isSharedOnly = new URL(route.request().url()).searchParams.has('plex_server');
+      const home = { ratingKey: '42', title: 'Example Film', year: 2024, type: 'movie',
+        sectionId: 1, viewCount: 0, viewOffset: 0 };
+      const shared = { ...home, sectionId: 2, plexServer: 'friend-server',
+        plexServerName: 'Friend Server' };
       return route.fulfill({
         status: 200,
         contentType: 'application/json',
-        body: JSON.stringify({ results: [{
-          ratingKey: '42', title: 'Example Film', year: 2024, type: 'movie',
-          sectionId: 2, viewCount: 0, viewOffset: 0,
-          ...(mode === 'after' ? { plexServer: 'friend-server' } : {}),
-        }] }),
+        body: JSON.stringify({ results: isSharedOnly ? [shared]
+          : sharedChoiceSaved ? [home, shared] : [home] }),
       });
     });
     await page.goto(`${base}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -114,6 +117,7 @@ try {
       if (JSON.stringify(scope) !== JSON.stringify({ 'friend-server': ['2'] })) {
         throw new Error(`Shared library choice did not persist: ${JSON.stringify(scope)}`);
       }
+      sharedChoiceSaved = true;
 
       await page.locator('#qconfigure').click();
       await page.getByRole('button', { name: 'Friend Server — 1 selected' }).click();
@@ -124,9 +128,20 @@ try {
         throw new Error('Unselected shared library was checked on reopen');
       }
       await page.locator('#set-cancel').click();
+      await page.locator('[data-testid="searchsource"]').click();
+      await page.getByRole('option', { name: 'Home + selected shared servers' }).click();
       await page.locator('[data-testid="searchlib"]').click();
+      if (!(await page.getByRole('option', { name: 'Friend Server — Shared Movies' }).count())) {
+        throw new Error('Selected shared library is missing from the combined Library picker');
+      }
       if (await page.getByRole('option', { name: 'Shared Shows' }).count()) {
         throw new Error('Unselected shared library is still offered in queue search');
+      }
+      await page.locator('#search').fill('Example Film');
+      await page.locator('#results li').nth(1).waitFor({ state: 'visible' });
+      const combined = await page.locator('#results li').allInnerTexts();
+      if (combined.length !== 2 || !combined.some((row) => row.includes('Friend Server'))) {
+        throw new Error(`Default Add search did not combine home and shared results: ${combined}`);
       }
     }
     console.log(`PASS ${mode} queue search screenshot: ${screenshot}`);

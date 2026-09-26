@@ -343,9 +343,10 @@ export function ProviderBlock({
             {block.profile
               ? `These servers are available to ${block.profile}. Plex grants access to each profile separately.`
               : "These servers are available to the Plex admin account. Choose a profile above to check its access."}{" "}
-            Check libraries to narrow this queue's search on
-            each shared server. Leave every box on a server
-            unchecked to search all its libraries.
+            Checked libraries join this queue's Add search.
+            The Server picker can search one server at a
+            time. With no boxes checked on a server, that
+            picker searches all its libraries.
           </p>
           {sharedError ? (
             <p className="subhint" role="alert">
