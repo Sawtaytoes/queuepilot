@@ -1,7 +1,13 @@
 import { Hono } from 'hono';
 import * as cache from '../cache.js';
 import * as plex from '../plex.js';
-import { plexSourcesForProfile } from '../plexSources.js';
+import {
+  plexServerAccessForProfile,
+  plexServerEpisodes,
+  plexServerSearch,
+  plexServerThumb,
+  plexSourcesForProfile,
+} from '../plexSources.js';
 import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
@@ -19,16 +25,21 @@ const memberOrder = (children: readonly plex.CollectionChild[] | null): string =
 export function plexMetadataRoutes(): Hono {
   const app = new Hono();
 
+  const profileUser = async (profile: string | null | undefined) => {
+    const users = await plex.homeUsers();
+    if (!users.length) return null;
+    const wanted = String(profile || '').trim();
+    return wanted
+      ? users.find((u) => (u.admin ? u.username : u.name) === wanted) || null
+      : users.find((u) => u.admin) || null;
+  };
+
   // Server grants belong to the selected Plex account. Resolve a profile against the
   // Home roster before switching so a caller cannot supply an arbitrary user UUID.
   app.get('/plex-sources', async (c) => {
     const profile = (c.req.query('profile') || '').trim();
     try {
-      const users = await plex.homeUsers();
-      if (!users.length) return c.json({ error: 'Plex profiles are unavailable' }, 503);
-      const user = profile
-        ? users.find((u) => (u.admin ? u.username : u.name) === profile)
-        : users.find((u) => u.admin);
+      const user = await profileUser(profile);
       if (!user) return c.json({ error: 'Unknown Plex profile' }, 400);
       const [sources, localServerId] = await Promise.all([
         plexSourcesForProfile(user.uuid),
@@ -65,6 +76,8 @@ export function plexMetadataRoutes(): Hono {
     const { text: q, year } = parseSearchQuery(raw);
     const withCollections = c.req.query('collections') === '1' || c.req.query('collections') === 'true';
     const allLibraries = c.req.query('scope') === 'all';
+    const plexServer = (c.req.query('plex_server') || '').trim();
+    const remoteSection = (c.req.query('section') || '').trim();
     if (!q) return c.json({ results: [] });
     try {
       // A PULL set searches ITS provider, not Plex. Routed here rather than at the four call
@@ -98,6 +111,28 @@ export function plexMetadataRoutes(): Hono {
               // move is /api/thumb/<id>, which is PLEX's proxy and answers 502 for a Kavita
               // seriesId — the broken-image row the owner hit on 2026-08-15.
               cover: coverUrl(block.provider, r.id),
+            })),
+          });
+        }
+        if (plexServer) {
+          const user = await profileUser(s.requires_profile);
+          if (!user) return c.json({ error: 'The queue profile is unavailable' }, 503);
+          const access = await plexServerAccessForProfile(user.uuid, plexServer);
+          if (!access) return c.json({ error: 'This profile cannot reach that Plex server' }, 403);
+          if (remoteSection && !access.libraries.some((library) => library.id === remoteSection)) {
+            return c.json({ error: 'That Plex library is not available to this profile' }, 403);
+          }
+          const found = rankByYear(
+            await plexServerSearch(access, remoteSection ? [remoteSection] : [], q),
+            year,
+          );
+          return c.json({
+            results: found.map((hit) => ({
+              ...hit,
+              cover: hit.hasThumb
+                ? `/api/shared-plex-thumb/${encodeURIComponent(setId)}`
+                  + `/${encodeURIComponent(access.id)}/${encodeURIComponent(hit.ratingKey)}`
+                : null,
             })),
           });
         }
@@ -271,6 +306,20 @@ export function plexMetadataRoutes(): Hono {
   app.get('/show/:ratingKey/episodes', async (c) => {
     try {
       const setId = (c.req.query('set') ?? '').trim();
+      const remoteServer = (c.req.query('plex_server') ?? '').trim();
+      if (remoteServer) {
+        if (!setId) return c.json({ error: 'A queue is required for shared Plex items' }, 400);
+        const set = await sets.getSet(setId);
+        if (!set || set.delivery !== 'push') return c.json({ error: 'unknown Plex queue' }, 400);
+        const user = await profileUser(set.requires_profile);
+        if (!user) return c.json({ error: 'The queue profile is unavailable' }, 503);
+        const access = await plexServerAccessForProfile(user.uuid, remoteServer);
+        if (!access) return c.json({ error: 'This profile cannot reach that Plex server' }, 403);
+        const out = await plexServerEpisodes(
+          access, c.req.param('ratingKey'), c.req.query('specials') === 'choices',
+        );
+        return out ? c.json(out) : c.json({ error: 'no episodes' }, 404);
+      }
       // Resolved BEFORE the provider branch, so a Kavita/Plex set alike hands its provider the
       // profile the queue plays as rather than only an explicitly-passed one.
       const { scope, uuid } = await pickerScope(c);
@@ -363,6 +412,26 @@ export function plexMetadataRoutes(): Hono {
         buffer: t.buffer,
         cacheControl: 'public, max-age=86400',
         contentType: t.contentType,
+      });
+    } catch {
+      return c.body(null, 502);
+    }
+  });
+
+  app.get('/shared-plex-thumb/:setId/:serverId/:ratingKey', async (c) => {
+    try {
+      const set = await sets.getSet(c.req.param('setId'));
+      if (!set) return c.body(null, 404);
+      const user = await profileUser(set.requires_profile);
+      if (!user) return c.body(null, 403);
+      const access = await plexServerAccessForProfile(user.uuid, c.req.param('serverId'));
+      if (!access) return c.body(null, 403);
+      const thumb = await plexServerThumb(access, c.req.param('ratingKey'));
+      if (!thumb) return c.body(null, 404);
+      return binaryResponse({
+        buffer: thumb.buffer,
+        cacheControl: 'private, max-age=86400',
+        contentType: thumb.contentType,
       });
     } catch {
       return c.body(null, 502);

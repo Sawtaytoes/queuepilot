@@ -65,6 +65,8 @@ type Props<T> = {
   listId: string
   placeholder: string
   doSearch: (q: string) => Promise<T[]>
+  /** A source or filter change reruns the current text without asking the user to type again. */
+  searchKey?: string
   rowFor: (
     hit: T,
     index: number,
@@ -79,6 +81,7 @@ type Props<T> = {
 export function SearchDropdown<T>({
   children,
   doSearch,
+  searchKey = "",
   inputId,
   listId,
   onClose,
@@ -98,6 +101,8 @@ export function SearchDropdown<T>({
   const timerRef = useRef<ReturnType<
     typeof setTimeout
   > | null>(null)
+  const searchKeyRef = useRef(searchKey)
+  searchKeyRef.current = searchKey
 
   const close = useCallback(() => {
     setIsOpen(false)
@@ -125,6 +130,7 @@ export function SearchDropdown<T>({
     if (timerRef.current) clearTimeout(timerRef.current)
 
     const q = next.trim()
+    const requestKey = searchKey
 
     if (q.length < 2) {
       setIsOpen(false)
@@ -141,6 +147,7 @@ export function SearchDropdown<T>({
         // Stale — the user kept typing. Read the LIVE input, not `value`: this
         // closure captured the text as it was 250 ms ago.
         if (inputRef.current?.value.trim() !== q) return
+        if (searchKeyRef.current !== requestKey) return
 
         setHits(found.slice(0, 30))
         setNoMatch(found.length ? null : q)
@@ -160,6 +167,11 @@ export function SearchDropdown<T>({
   const handlerRef = useRef(onInput)
 
   handlerRef.current = onInput
+
+  useEffect(() => {
+    if (inputRef.current?.value.trim())
+      handlerRef.current(inputRef.current.value)
+  }, [searchKey])
 
   useEffect(() => {
     const el = inputRef.current

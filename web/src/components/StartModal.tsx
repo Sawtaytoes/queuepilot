@@ -124,6 +124,9 @@ export function StartModal() {
           ? `set=${encodeURIComponent(entry.setId)}`
           : "",
         uuid ? `uuid=${encodeURIComponent(uuid)}` : "",
+        item && "plexServer" in item && item.plexServer
+          ? `plex_server=${encodeURIComponent(item.plexServer)}`
+          : "",
       ]
         .filter(Boolean)
         .join("&")
@@ -166,7 +169,7 @@ export function StartModal() {
     },
     // Re-close over the profile uuid when it changes (once per open) so the fetch scopes
     // its watched marks to the right account.
-    [entry?.accountUuid, entry?.setId, t],
+    [entry?.accountUuid, entry?.setId, item, t],
   )
 
   /** A collection member: a series opens its pickers, a movie member has nothing

@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import * as plex from '../plex.js';
 import * as plexSources from '../plexSources.js';
+import * as sets from '../sets.js';
 import { plexMetadataRoutes } from './plexMetadataRoutes.js';
 
 afterEach(() => vi.restoreAllMocks());
@@ -77,5 +78,38 @@ describe('GET /ratings', () => {
     expect(accountToken).toHaveBeenCalledWith('profile-uuid');
     expect(sections).toHaveBeenCalledOnce();
     expect(contentRatings).toHaveBeenCalledWith([1], 'managed-token');
+  });
+});
+
+describe('GET /search on a shared Plex server', () => {
+  it('derives access from the queue profile and returns server-scoped hits', async () => {
+    vi.spyOn(sets, 'getSet').mockResolvedValue({
+      id: 'fixture', source: 'queue', delivery: 'push', requires_profile: 'Kids',
+    } as Awaited<ReturnType<typeof sets.getSet>>);
+    vi.spyOn(plex, 'homeUsers').mockResolvedValue([
+      { name: 'Kids', username: null, id: 2, uuid: 'kids-uuid', admin: false, restricted: true },
+    ]);
+    const access = {
+      id: 'friend-id', name: 'Friend', baseUrl: 'https://friend.example', token: 'grant',
+      libraries: [{ id: '7', title: 'Movies', type: 'movie' as const }],
+    };
+    const resolveAccess = vi.spyOn(plexSources, 'plexServerAccessForProfile').mockResolvedValue(access);
+    vi.spyOn(plexSources, 'plexServerSearch').mockResolvedValue([{
+      ratingKey: '42', title: 'Fixture Film', year: 2001, editionTitle: null,
+      type: 'movie', sectionId: 7, hasThumb: true, viewCount: 0, viewOffset: 0,
+      duration: 1_000, leafCount: 0, viewedLeafCount: 0,
+      plexServer: 'friend-id', plexServerName: 'Friend',
+    }]);
+
+    const response = await plexMetadataRoutes().request(
+      '/search?set=fixture&q=Fixture&plex_server=friend-id&section=7',
+    );
+
+    expect(response.status).toBe(200);
+    expect(resolveAccess).toHaveBeenCalledWith('kids-uuid', 'friend-id');
+    expect(await response.json()).toEqual({ results: [expect.objectContaining({
+      ratingKey: '42', plexServer: 'friend-id',
+      cover: '/api/shared-plex-thumb/fixture/friend-id/42',
+    })] });
   });
 });

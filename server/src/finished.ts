@@ -31,6 +31,7 @@ import { errMessage } from './errors.js';
 import * as exhaustion from './exhaustion.js';
 import * as mqttc from './mqttc.js';
 import { providerFor } from './providers/index.js';
+import { plexServerAccessForProfile, plexServerClient } from './plexSources.js';
 import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
 import * as queues from './queues.js';
 import * as queueEntryHistory from './store/db/queueEntryHistory.js';
@@ -276,6 +277,7 @@ export interface FinishedPayload {
 
 interface OwnedQueueItem {
   ratingKey: string;
+  plexServer?: string;
   queueEntryKey?: string;
   queueOwnHistory?: boolean;
   queueProviderViewCount?: number;
@@ -317,10 +319,13 @@ async function finalizeQueueProgress(
   try {
     const cfg = routing.loadSets()?.sets[setName];
     if (!cfg) return;
-    const binding = routing.bindingFor(cfg, profileTitle);
-    const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+    const { binding, provider } = await scopedBinding(cfg, profileTitle);
     const token = await provider.profileToken!(binding.user_uuid);
-    const mc = await liveClient().container(`/library/metadata/${item.ratingKey}`, token);
+    const remote = item.plexServer
+      ? await plexServerAccessForProfile(binding.user_uuid, item.plexServer) : null;
+    if (item.plexServer && !remote) throw new Error('Shared Plex server is unavailable');
+    const mc = await (remote ? plexServerClient(remote) : liveClient())
+      .container(`/library/metadata/${item.ratingKey}`, remote?.token ?? token);
     const md = mc.Metadata?.[0];
     if (!md) throw new Error('Plex returned no item metadata');
     const verdict = providerProgressVerdict(
@@ -429,7 +434,10 @@ export function watchPlaybackEnd(): void {
   mqttc.onNowPlaying((now: NowPlaying | null) => {
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
     const activeSet = SESSION.set;
-    const active = nowRk ? SESSION.queue.find((item) => item.ratingKey === nowRk) : null;
+    const matches = nowRk ? SESSION.queue.filter((item) => item.ratingKey === nowRk) : [];
+    // HA supplies no Plex server id. A duplicated rating key in a mixed queue is ambiguous;
+    // abstain from ledger writes instead of assigning progress to the wrong server's entry.
+    const active = matches.length === 1 ? matches[0] : null;
     const adopted = nowRk && adoptedQueuePlay?.ratingKey === nowRk ? adoptedQueuePlay : null;
     const trackedSet = adopted?.setName ?? activeSet;
     const tracked = adopted ?? active;
@@ -472,7 +480,8 @@ export function watchPlaybackEnd(): void {
         ? SESSION.queue.find((item) => item.ratingKey === String(ended)
           && item.queueEntryKey === boundary.entryKey)
         : undefined)
-      ?? SESSION.queue.find((item) => item.ratingKey === String(ended));
+      ?? (SESSION.queue.filter((item) => item.ratingKey === String(ended)).length === 1
+        ? SESSION.queue.find((item) => item.ratingKey === String(ended)) : null);
     const profile = manual?.profileTitle ?? (state && state.profile ? String(state.profile) : null);
     if (boundary) {
       // No RECONCILE_DELAY_MS: that delay exists to let Plex write a history row this then

@@ -804,6 +804,11 @@ jobs:
       - name: Per-entry Shuffle editor (browser, no Plex needed)
         run: $TSX e2e/per-entry-shuffle-ui-test.ts
 
+      # Mocked Plex grants keep the test independent of household data. Select a shared
+      # server after typing, then require the existing query to rerun against that server.
+      - name: Shared Plex queue search (browser, no Plex needed)
+        run: $TSX e2e/shared-plex-search-ui-test.ts
+
       # THE TILE MENU, and the long press that opens it. The menu carries only what the card
       # cannot (the lane moves, the start point, Skip) and a long press is one gesture, not
       # two — the hold used to arm the reorder drag AND pop the menu over the picked-up tile.

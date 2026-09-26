@@ -87,7 +87,11 @@ export const skippableLeaf = (
 ): string | null => {
   const rk = item.nextEp?.ratingKey
 
-  return rk ? String(rk) : null
+  return rk
+    ? item.plexServer
+      ? `server:${item.plexServer}:rk:${rk}`
+      : String(rk)
+    : null
 }
 
 /** What the Skip row says it will drop — the episode label, else the leaf's own title. */

@@ -75,6 +75,13 @@ export function isPlayingItem(
 
   const n = now.now!
   const ctx = n.context || {}
+  if (
+    n.plexServer !== undefined &&
+    ("plexServer" in item
+      ? (item.plexServer ?? null)
+      : null) !== n.plexServer
+  )
+    return false
 
   if (
     item.ratingKey &&

@@ -795,6 +795,8 @@ export interface RoutingRegistry {
  * field — which is why this is open-ended rather than a closed set.
  */
 export interface EntryExtras {
+  /** Plex machine ID for an item on another server. Absent means this server. */
+  plex_server?: string;
   /**
    * An opaque id for this LINE — `queues.entryKey()`'s FIRST branch, when it is present.
    *
@@ -886,7 +888,8 @@ export type EntryValue = string | number | EntryObject;
  * before this, so `key` is non-null here. */
 export interface QueueEntry {
   /**
-   * `id:<opaque>`, else `rk:<ratingKey>`, else `title:<title>` — this LINE's identity.
+   * `id:<opaque>`, else `server:<plex_server>:rk:<ratingKey>` for a shared Plex item, else
+   * `rk:<ratingKey>`, else `title:<title>` — this LINE's identity.
    *
    * `queues.entryKey()` and its read-side twin `engine/resolve.entryKey()` are the two
    * implementations and MUST agree; `e2e/play-one-entry-test.ts` is what notices when they do
@@ -1181,6 +1184,8 @@ export interface BucketsResult {
 /** A Plex lineup item, as session.js consumes it. */
 export interface PlexPlayItem {
   ratingKey: string | number;
+  /** Plex machine ID when this leaf lives on a shared server. */
+  plexServer?: string;
   title?: string;
   show?: string;
   season?: number | null;
@@ -1274,6 +1279,9 @@ export type PlayItem =
 export interface PlexArtifact {
   provider: string;
   kind: 'plex';
+  /** The ordered lineup with each item's source server preserved. */
+  items: PlexPlayItem[];
+  /** Compatibility projection for logs and consumers that only need item ids. */
   ratingKeys: string[];
   offset: number;
   setName: string | null;
@@ -1833,6 +1841,8 @@ export interface Device {
 export interface NowPlaying {
   state?: string;
   ratingKey?: string;
+  /** Server of the queued item, when attribution is unambiguous. */
+  plexServer?: string | null;
   title?: string;
   showTitle?: string;
   show?: string;
