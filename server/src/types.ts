@@ -388,6 +388,8 @@ interface SetRegistryCommon {
    * so normalize() still emits the field for them but the engine never reads it there.
    */
   requires_profile: string | null;
+  /** Per shared Plex server, selected library ids. Missing server = all granted libraries. */
+  shared_libraries: Record<string, string[]>;
   /** ALWAYS a list, never null — a legacy set reports its one implicit Plex block. */
   providers: ProviderBlock[];
   delivery: Delivery;

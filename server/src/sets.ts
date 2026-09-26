@@ -46,6 +46,7 @@ import type {
 } from './types.js';
 import { formatSeasonDay, isInSeason, parseSeasonDay } from './season.js';
 import { normalizeWatchHistory } from './watchHistory.js';
+import { sharedLibraryScope } from './sharedLibraryScope.js';
 
 /**
  * One binding AS READ OFF THE YAML — what `normalizeBinding()` accepts, from either a
@@ -90,6 +91,7 @@ interface RawSet extends RawBinding {
   superseded_by?: string | null;
   audio_language?: string;
   requires_profile?: string | null;
+  shared_libraries?: unknown;
   providers?: unknown[];
   max_items?: unknown;
   enabled?: boolean;
@@ -586,6 +588,7 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
     // Rotation channels are ungated by design (their profiles[] names the account explicitly),
     // so this is only meaningful/editable on queue sets. null = ungated, i.e. the admin view.
     requires_profile: ent.requires_profile != null ? String(ent.requires_profile) : null,
+    shared_libraries: sharedLibraryScope(ent.shared_libraries),
     // The repeating {provider, profile, libraries} block. ALWAYS a list, never null: a set
     // written before blocks existed reports the one implicit Plex block it has always meant,
     // built from `sections` / `requires_profile`. The editor therefore never has to special-
@@ -1063,6 +1066,8 @@ export async function createSet(body: Record<string, unknown> = {}): Promise<{ i
     const created = validateBlocks(body.providers);
     if (!created.ok) throw new Error(created.errors.join('; '));
     if (created.blocks.length) obj.providers = writableBlocks(created.blocks);
+    const sharedLibraries = sharedLibraryScope(body.shared_libraries);
+    if (Object.keys(sharedLibraries).length) obj.shared_libraries = sharedLibraries;
     const node = doc.createNode(obj);
     // Curated shelves land after the last curated queue, before the rotation block; new
     // rotation channels append at the end (they live after the queues on the shelf).
@@ -1090,6 +1095,7 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
     const isRotation = node.get('source') === 'rotation';
     const allow = [
       'label', 'kind', 'sections', 'enabled', 'max_items', 'requires_profile',
+      'shared_libraries',
       // WP-5's activity OVERRIDE. Editable on both sources — a reading channel is as much a
       // `reading` thing as a reading queue — and stored sparsely: clearing it puts the queue
       // back under its provider's activity rather than under a blank heading.
@@ -1302,6 +1308,12 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         if (!ok) throw new Error(errors.join('; '));
         if (!blocks.length) { node.delete('providers'); continue; }
         node.set('providers', doc.createNode(writableBlocks(blocks)));
+        continue;
+      }
+      if (k === 'shared_libraries') {
+        const scope = sharedLibraryScope(v);
+        if (!Object.keys(scope).length) { node.delete('shared_libraries'); continue; }
+        node.set('shared_libraries', doc.createNode(scope));
         continue;
       }
       if (k === 'skipped') {
