@@ -53,3 +53,9 @@ __corpus__/
 
 # playwright-mcp scratch (console logs, page snapshots)
 .playwright-mcp/
+
+# Visual regression (shared-vrt.yml): the shots, reg-suit's scratch and the config the
+# workflow writes from secrets. None of them is ever committed.
+.vrt-actual/
+.reg/
+.regconfig.json
