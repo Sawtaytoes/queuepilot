@@ -575,10 +575,6 @@ CREATE TABLE IF NOT EXISTS board_game_boxes (
   label             TEXT NOT NULL,
   kind              TEXT NOT NULL DEFAULT 'standalone' CHECK (kind IN ('standalone', 'expansion')),
   bgg_id            TEXT,
-  -- The inventory-app link the schema was designed around and which has never been used: 0 of
-  -- 562 rows carry either. Carried anyway, because the ported engine keeps the field name and
-  -- renaming it would be a schema change rather than a port.
-  homebox_entity_id TEXT,
   location_text     TEXT,
   image_path        TEXT,
   version_nickname  TEXT,

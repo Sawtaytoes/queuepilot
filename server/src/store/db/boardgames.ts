@@ -152,7 +152,6 @@ interface BoxRow {
   label: string;
   kind: string;
   bgg_id: string | null;
-  homebox_entity_id: string | null;
   location_text: string | null;
   image_path: string | null;
   version_nickname: string | null;
@@ -180,7 +179,6 @@ interface ModuleRow {
 const toBox = (row: BoxRow): Box => ({
   bggId: toBggId(row.bgg_id),
   gameId: row.game_id,
-  homeboxEntityId: row.homebox_entity_id,
   id: row.id,
   imagePath: row.image_path,
   kind: row.kind === 'expansion' ? 'expansion' : 'standalone',

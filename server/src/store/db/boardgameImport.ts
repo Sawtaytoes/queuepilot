@@ -196,19 +196,19 @@ export function importBoardGameRows(
   const insertBox = prepareChecked(
     db,
     `INSERT INTO board_game_boxes (
-       id, game_id, label, kind, bgg_id, homebox_entity_id, location_text, image_path,
+       id, game_id, label, kind, bgg_id, location_text, image_path,
        version_nickname, version_year, version_languages, created_at
      ) VALUES (
-       :id, :game_id, :label, :kind, :bgg_id, :homebox_entity_id, :location_text, :image_path,
+       :id, :game_id, :label, :kind, :bgg_id, :location_text, :image_path,
        :version_nickname, :version_year, :version_languages, :now
      )`,
   );
 
   /**
    * What a box knows that no import can tell it: its cached art, where it physically lives, and
-   * its inventory id.
+   * its edition.
    *
-   * Boxes are deleted and rebuilt per title, and these three came from the enrichment pass —
+   * Boxes are deleted and rebuilt per title, and these came from the enrichment pass —
    * never from an upstream row. Writing NULL over them made every import cost the whole
    * collection's box art until somebody re-ran the enrichment, which was survivable while
    * importing was a rare command and is not now that it is a scheduled job. Carried across by
@@ -216,7 +216,6 @@ export function importBoardGameRows(
    */
   const boxKeepsakes = prepareChecked<{
     label: string;
-    homebox_entity_id: string | null;
     location_text: string | null;
     image_path: string | null;
     version_nickname: string | null;
@@ -224,7 +223,7 @@ export function importBoardGameRows(
     version_languages: string | null;
   }>(
     db,
-    `SELECT label, homebox_entity_id, location_text, image_path, version_nickname,
+    `SELECT label, location_text, image_path, version_nickname,
             version_year, version_languages
        FROM board_game_boxes WHERE game_id = :game_id`,
   );
@@ -331,7 +330,6 @@ export function importBoardGameRows(
           insertBox.run({
             bgg_id: asBggText(row.bggId),
             game_id: game.id,
-            homebox_entity_id: kept?.homebox_entity_id ?? null,
             id,
             image_path: kept?.image_path ?? null,
             kind: row.kind,
