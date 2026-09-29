@@ -687,6 +687,7 @@ interface SourceBox {
   label: string;
   kind: string;
   bgg_id: number | null;
+  /** The source still has it; the copy ignores it (retired, and never populated). */
   homebox_entity_id: string | null;
   location_text: string | null;
   image_path: string | null;
@@ -700,10 +701,10 @@ function copyBoxes(from: SqliteDatabase, db: SqliteDatabase): void {
   const insert = prepareChecked(
     db,
     `INSERT INTO board_game_boxes (
-       id, game_id, label, kind, bgg_id, homebox_entity_id, location_text, image_path,
+       id, game_id, label, kind, bgg_id, location_text, image_path,
        version_nickname, version_year, version_languages, created_at
      ) VALUES (
-       :id, :game_id, :label, :kind, :bgg_id, :homebox_entity_id, :location_text, :image_path,
+       :id, :game_id, :label, :kind, :bgg_id, :location_text, :image_path,
        :version_nickname, :version_year, :version_languages, :created_at
      )`,
   );
@@ -712,7 +713,6 @@ function copyBoxes(from: SqliteDatabase, db: SqliteDatabase): void {
       bgg_id: asListingId(row.bgg_id),
       created_at: row.created_at,
       game_id: row.game_id,
-      homebox_entity_id: row.homebox_entity_id,
       id: row.id,
       image_path: row.image_path,
       // The source column has no CHECK; this one does. Anything unrecognised becomes a

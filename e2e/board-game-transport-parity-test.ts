@@ -307,13 +307,13 @@ const HARBOUR_LANTERN: FixtureGame = {
   bggId: 100001,
   boxes: [
     {
-      bggId: 100001, gameId: 'harbour-lantern', homeboxEntityId: null, id: 'box-1',
+      bggId: 100001, gameId: 'harbour-lantern', id: 'box-1',
       imagePath: '/images/aaaa-600.webp', kind: 'standalone', label: 'Harbour Lantern',
       locationText: 'Shelf A', versionLanguages: ['English'], versionNickname: 'Deluxe',
       versionYear: 2019,
     },
     {
-      bggId: 100003, gameId: 'harbour-lantern', homeboxEntityId: null, id: 'box-2',
+      bggId: 100003, gameId: 'harbour-lantern', id: 'box-2',
       imagePath: null, kind: 'expansion', label: 'Harbour Lantern: Deep Water',
       locationText: null, versionLanguages: [], versionNickname: null, versionYear: null,
     },
@@ -362,7 +362,7 @@ const ORCHARD_RUN: FixtureGame = {
   bggId: 100002,
   boxes: [
     {
-      bggId: 100002, gameId: 'orchard-run', homeboxEntityId: null, id: 'box-3',
+      bggId: 100002, gameId: 'orchard-run', id: 'box-3',
       imagePath: '/images/bbbb-600.webp', kind: 'standalone', label: 'Orchard Run',
       locationText: 'Shelf B', versionLanguages: [], versionNickname: null, versionYear: null,
     },
@@ -403,7 +403,7 @@ const QUARRY_DUEL: FixtureGame = {
   bggId: null,
   boxes: [
     {
-      bggId: null, gameId: 'quarry-duel', homeboxEntityId: null, id: 'box-4', imagePath: null,
+      bggId: null, gameId: 'quarry-duel', id: 'box-4', imagePath: null,
       kind: 'standalone', label: 'Quarry Duel', locationText: null, versionLanguages: [],
       versionNickname: null, versionYear: null,
     },
