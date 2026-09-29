@@ -155,8 +155,6 @@ export interface Box {
   label: string;
   kind: 'standalone' | 'expansion';
   bggId: number | null;
-  /** Cached from the inventory app; inventory is never on the pick hot path. */
-  homeboxEntityId: string | null;
   locationText: string | null;
   /** Served from this app's origin, never hotlinked. `null` in v1. */
   imagePath: string | null;

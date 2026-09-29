@@ -176,6 +176,20 @@ describe('migrate', () => {
     db.close();
   });
 
+  it('drops a retired column from an older file, and is safe to run again', () => {
+    const db = fresh();
+    migrate(db);
+    db.exec('ALTER TABLE board_game_boxes ADD COLUMN homebox_entity_id TEXT');
+    migrate(db);
+    migrate(db);
+    const columns = (db.pragma('table_xinfo(board_game_boxes)') as { name: string }[]).map(
+      (row) => row.name,
+    );
+    expect(columns).not.toContain('homebox_entity_id');
+    expect(columns).toContain('location_text');
+    db.close();
+  });
+
   it('REFUSES a file written by a newer build rather than writing rows it may misread', () => {
     const db = fresh();
     db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(

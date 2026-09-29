@@ -61,8 +61,13 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * number moves for the reason 2 and 3 record: a rollback to a pre-reset image must refuse the
  * file rather than write rows a newer schema will misread. Losing this table alone would not
  * lose queue data — it would let a queue reset twice on its date, once per read.
+ *
+ * 8: `board_game_boxes.homebox_entity_id` is DROPPED (see `RETIRED_COLUMNS`). The inventory
+ * app it pointed at is retired and the column never held a value — 0 of 562 rows. The number
+ * moves because a pre-8 image INSERTs into that column by name and would fail against a file
+ * that no longer has it.
  */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;
@@ -196,6 +201,30 @@ function addMissingColumns(db: SqliteDatabase): void {
 }
 
 /**
+ * Columns `schema.sql` used to declare and no longer does, dropped from an older file.
+ *
+ * `addMissingColumns()` only ever adds, so a column taken out of `schema.sql` would otherwise
+ * stay in every existing file forever. Each entry is checked with `table_xinfo` first, so
+ * running this on a new or already-migrated file does nothing. A column in an index or a
+ * constraint cannot be dropped this way; none of these is.
+ */
+const RETIRED_COLUMNS: readonly { table: string; column: string }[] = [
+  // Pointed at the Homebox inventory app, retired 2026-09-28. Never populated.
+  { column: 'homebox_entity_id', table: 'board_game_boxes' },
+];
+
+function dropRetiredColumns(db: SqliteDatabase): void {
+  for (const { table, column } of RETIRED_COLUMNS) {
+    const present = (db.pragma(`table_xinfo(${table})`) as { name: string }[]).some(
+      (row) => row.name === column,
+    );
+    if (!present) continue;
+    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+    console.log(`[store] dropped ${table}.${column}`);
+  }
+}
+
+/**
  * Create the schema on a new file, and bring an old one forward.
  *
  * Exported so a test can drive it against a `:memory:` database without going near
@@ -207,6 +236,7 @@ export function migrate(db: SqliteDatabase): void {
   // table is brought up to date before the schema runs; on a fresh file this finds no tables
   // and does nothing.
   addMissingColumns(db);
+  dropRetiredColumns(db);
   // The whole schema is idempotent, so it runs on every open rather than only on a version
   // bump — that is what makes "add a table" a one-file change with no migration step.
   db.exec(SCHEMA_SQL);
