@@ -34,13 +34,13 @@
 // Each shot waits for a marker that proves ITS view painted with data. A marker that never
 // appears FAILS the run: a shot of a spinner would become the baseline and hide the break.
 import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 import { startBoardGameServer, stopBoardGameServer } from './board-game-play-harness.js';
+import { startFixtureServer } from './fixture-server.js';
 import { chromium, type Browser, type Page, type Request } from './playwright.js';
-import { killServer, REPO_ROOT, spawnServer } from './stubs/server-process.mjs';
+import { killServer, REPO_ROOT } from './stubs/server-process.mjs';
 import { startTonightServer, stopTonightServer } from './tonight-harness.js';
 
 const FIXED_NOW = '2026-06-15T18:00:00.000Z';
@@ -83,74 +83,6 @@ process.env.NODE_OPTIONS = [
 ]
   .filter(Boolean)
   .join(' ');
-
-interface FixtureFiles {
-  groups?: string;
-  /** Copied under the proposal FILENAME, which is the one the importer reads. */
-  people?: string;
-  queues: string;
-  sets: string;
-}
-
-/** Committed fixtures in a private config directory, and a server over them. */
-async function startFixtureServer(port: number, files: FixtureFiles) {
-  const dir = await fs.mkdtemp(path.join(tmpdir(), 'qp-vrt-'));
-  const fixture = (name: string) => path.join(REPO_ROOT, 'e2e', 'fixtures', name);
-
-  await fs.copyFile(fixture(files.sets), path.join(dir, 'sets.yaml'));
-  await fs.copyFile(fixture(files.queues), path.join(dir, 'queues.yaml'));
-  if (files.groups) {
-    await fs.copyFile(fixture(files.groups), path.join(dir, 'groups.yaml'));
-  } else {
-    await fs.writeFile(path.join(dir, 'groups.yaml'), 'groups: []\n');
-  }
-  if (files.people) {
-    await fs.copyFile(fixture(files.people), path.join(dir, 'people-mapping-proposal.yaml'));
-  }
-  await fs.writeFile(path.join(dir, 'pending.yaml'), 'seen_through: 0\n');
-
-  const child = spawnServer({
-    env: {
-      ...process.env,
-      CACHE_PATH: path.join(dir, 'cache.sqlite'),
-      GROUPS_PATH: path.join(dir, 'groups.yaml'),
-      HISTORY_PATH: path.join(dir, '.history.json'),
-      // The agent shell carries real MQTT_* values; a harness that keeps them dials the
-      // household broker.
-      MQTT_HOST: '',
-      MQTT_PASS: '',
-      MQTT_PORT: '',
-      MQTT_USER: '',
-      NODE_TLS_REJECT_UNAUTHORIZED: '0',
-      PENDING_PATH: path.join(dir, 'pending.yaml'),
-      PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-      PLEX_TOKEN: '',
-      PROVIDERS_PATH: path.join(dir, 'providers.yaml'),
-      PROVIDERS_SECRETS_PATH: path.join(dir, 'providers.secrets.yaml'),
-      QUEUES_PATH: path.join(dir, 'queues.yaml'),
-      SETS_PATH: path.join(dir, 'sets.yaml'),
-      STORE_BACKEND: 'sqlite',
-      WEB_PORT: String(port),
-    },
-    stdio: 'ignore',
-  });
-
-  const base = `http://localhost:${port}`;
-  await waitReady(`${base}/api/people`);
-  return { base, child, dir };
-}
-
-async function waitReady(url: string) {
-  for (let attempt = 0; attempt < 150; attempt += 1) {
-    try {
-      if ((await fetch(url)).ok) return;
-    } catch {
-      /* not up yet */
-    }
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  }
-  throw new Error(`vrt-capture: the server never answered ${url}`);
-}
 
 /**
  * The page is at rest when the store's load has FINISHED and its toast has gone. Each step is
