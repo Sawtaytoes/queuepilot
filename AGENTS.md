@@ -1417,6 +1417,7 @@ yarn workspace queuepilot-web run lint:biome
 yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-web run test
 yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck
 yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot yarn test:smoke  # every route, four windows
 server/node_modules/.bin/tsx e2e/priority-lane-test.ts   # the Priority queue / Random pool lanes
 server/node_modules/.bin/tsx e2e/season-window-test.ts  # the season window, at all six `enabled` call sites
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
@@ -1509,6 +1510,28 @@ re-run into green. Run it by hand after `yarn workspace queuepilot-web run build
 ⚠️ **A new screen needs a ready marker that proves its DATA painted**, and the capture fails when
 one never appears; do not loosen that to a `.catch()`, or a spinner becomes the baseline. The
 server clock is pinned by `e2e/stubs/fixed-clock.mjs`, so a shot never depends on the day.
+
+**Browser tests run in four windows — the smoke is `yarn test:smoke`.** Every top-level route,
+in the fleet's four named windows (`narrow` 384x824 at 3.75 DPR with `isMobile`, `tall`
+1080x1920, `wide` 1920x1080, `ultrawide` 3440x1440), through `@charcuterie/playwright-config`
+([decision](https://github.com/Sawtaytoes/charcuterie/blob/master/docs/decisions/2026-10-04-every-browser-test-runs-in-four-named-windows.md)).
+It is the repo's only `@playwright/test` suite: `e2e/playwright.config.ts`, `testDir`
+`e2e/smoke/`, and `e2e/smoke/serve.ts` as its `webServer` — the same four fixture servers VRT
+shoots from (`e2e/fixture-server.ts`, the Tonight harness, the board-game harness). Build
+`web/` first, then
+`PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot yarn test:smoke` (about two minutes
+locally; `QUEUEPILOT_SMOKE_PORT` moves its four ports off 18961-18964). Each route asserts its
+data painted, no page error, `expectNoHorizontalOverflow`, a layout viewport equal to the
+window, and **no clipping or scrolling box wider inside than outside**. That last check is the
+one that can fail here: Charcuterie's `Shell` makes `<main>` the scroll region with
+`overflow-x: hidden`, so the document never overflows and the shared helper passes a 600px box
+in a 384px window. `.strip` (the poster carousel) and `text-overflow: ellipsis` are the two
+deliberate exceptions. A full-page screenshot per route and window is attached to the report
+(CI uploads it as `playwright-smoke-report`), compared against nothing. ⚠️ `@playwright/test` is
+pinned `~1.62.1` to the SAME Playwright as the harnesses, so the two never want different
+browser revisions — bump them together. ⚠️ The `tsx` harnesses in the table above still open
+their own fixed sizes; each is an interaction test at the size its gesture was written for, and
+moving one to the four windows is a per-harness change with its own triage, not a config flip.
 
 `group-create-test.ts` is **deleted**, not forgotten. It pinned "a new queue joins the group
 on screen", and there is no group on screen any more — the landing filters by PEOPLE and a

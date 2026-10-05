@@ -779,6 +779,30 @@ jobs:
           kill $SRV 2>/dev/null || true; wait $SRV 2>/dev/null || true
           exit $rc
 
+      # THE FOUR-WINDOW BROWSER SMOKE — every top-level route in the fleet's four windows
+      # (`narrow` 384x824 at 3.75 DPR and isMobile, `tall` 1080x1920, `wide` 1920x1080,
+      # `ultrawide` 3440x1440), through `@charcuterie/playwright-config`. ALWAYS runs: it needs
+      # no Plex, because `e2e/smoke/serve.ts` boots four real servers over the committed
+      # fixtures, the same four VRT shoots from. Each route asserts its data painted, no page
+      # error, no document overflow, no clipping box wider inside than out, and a layout
+      # viewport equal to the window. A full-page screenshot per route and window goes into the
+      # uploaded report as an attachment, compared against nothing.
+      #
+      # Serves web/dist, so it runs after "Web build". Reuses the chromium the install step put
+      # in the cache: `@playwright/test` is pinned to the same Playwright as the harnesses
+      # (`~1.62.1`), so the two cannot want different browser revisions.
+      - name: Browser smoke — every route in four windows (browser, no Plex needed)
+        timeout-minutes: 15
+        run: $YARN test:smoke
+
+      - name: Upload browser smoke report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-smoke-report
+          path: e2e/playwright-report/
+          retention-days: 14
+
       # Drag stability — ALWAYS runs, for the same reason as the narrow-view gate: the
       # PLEX_TOKEN-gated browser suites are skipped on every PR, and `homedrag-test` /
       # `ui-test` live there. Neither would have caught this anyway.
