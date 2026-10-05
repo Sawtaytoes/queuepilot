@@ -784,7 +784,8 @@ jobs:
       # `ultrawide` 3440x1440), through `@charcuterie/playwright-config`. ALWAYS runs: it needs
       # no Plex, because `e2e/smoke/serve.ts` boots four real servers over the committed
       # fixtures, the same four VRT shoots from. Each route asserts its data painted, no page
-      # error, no document overflow, no clipping box wider inside than out, and a layout
+      # error, no document overflow, no clipping box wider inside than out, no sideways
+      # scroller but the poster strip, no heading word broken across two lines, and a layout
       # viewport equal to the window. A full-page screenshot per route and window goes into the
       # uploaded report as an attachment, compared against nothing.
       #

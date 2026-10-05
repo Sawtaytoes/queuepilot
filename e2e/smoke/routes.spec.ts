@@ -1,4 +1,7 @@
-import { expectNoHorizontalOverflow } from '@charcuterie/playwright-config/responsive.js';
+import {
+  expectNoHorizontalOverflow,
+  expectNoSplitWords,
+} from '@charcuterie/playwright-config/responsive.js';
 import { expect, type Page, test } from '@playwright/test';
 
 import { SMOKE_FIXED_NOW, smokeServers } from './ports.js';
@@ -93,29 +96,26 @@ const trackApi = (page: Page) => {
 };
 
 /**
- * No box that clips or scrolls is wider inside than it is outside.
+ * No box that SCROLLS sideways is wider inside than it is outside.
  *
- * `expectNoHorizontalOverflow` asks the DOCUMENT, and in this app the document cannot
- * overflow: Charcuterie's `Shell` makes `<main>` the one scroll region, and `<main>` computes
- * `overflow-x: hidden`. A 600px box injected into the board-game grid at 384px measured
- * `scrollWidth` 384 on the document — the helper passed — while `<main>` measured 617 inside
- * 384 and the box was cut off at the screen edge. So this asks every box that does not paint
- * its overflow (`overflow-x` other than `visible`) whether its content is wider than it is,
- * which is the rule `narrow-scroll-test.ts` already holds for inner scrollers, widened to
- * the clipping boxes that hide the same defect instead of scrolling it.
- *
- * Two deliberate exceptions, each a design rather than an accident:
- *   * `.strip` is the Plex-style poster shelf, a carousel that is supposed to run off the edge;
- *   * a box with `text-overflow: ellipsis` exists to truncate its one line (`#sub`, the
- *     header's subtitle, is 829px of text in a 338px box on `/calendar` at 384px, by design).
+ * The clipping half of this rule is `expectNoHorizontalOverflow`'s own since
+ * `@charcuterie/playwright-config` 2.1.0: it asks every `overflow-x: hidden | clip` box, which
+ * is what catches a box cut off under `<main>`'s `overflow-x: hidden` (a 600px box injected into
+ * the board-game grid at 384px measured `scrollWidth` 384 on the document while `<main>` held 617
+ * inside 384). It deliberately leaves `auto`/`scroll` alone, because a fleet table scrolls on
+ * purpose. This app has exactly ONE deliberate sideways scroller — `.strip`, the Plex-style
+ * poster shelf, a carousel that is supposed to run off the edge — so here every OTHER inline
+ * scroller is a mistake: `.chfilters-scroll`'s `overflow-y: auto` once computed `overflow-x` to
+ * `auto` too and shipped a horizontal scrollbar at every width. `narrow-scroll-test.ts` holds
+ * that rule at 390 and 320 only, over one fixture that leaves the board-game routes empty; this
+ * holds it on every route, with its data painted, in all four windows.
  */
-const expectNoClippedInlineOverflow = async (page: Page) => {
+const expectNoStrayInlineScroller = async (page: Page) => {
   const offenders = await page.evaluate(() =>
     [...document.querySelectorAll('*')]
       .filter((element) => {
         if (element.closest('.strip')) return false;
-        const style = getComputedStyle(element);
-        if (style.overflowX === 'visible' || style.textOverflow === 'ellipsis') return false;
+        if (!/auto|scroll/.test(getComputedStyle(element).overflowX)) return false;
         return element.scrollWidth > element.clientWidth + 1;
       })
       .map((element) => {
@@ -127,7 +127,7 @@ const expectNoClippedInlineOverflow = async (page: Page) => {
       })
       .slice(0, 6),
   );
-  expect(offenders, 'no clipping or scrolling box overflows on the inline axis').toEqual([]);
+  expect(offenders, 'no box other than the poster strip scrolls on the inline axis').toEqual([]);
 };
 
 test.use({ locale: 'en-US', timezoneId: 'UTC' });
@@ -162,8 +162,14 @@ for (const route of routes) {
 
     expect(new URL(page.url()).pathname).toBe(route.path);
 
+    // The document, and every box that CLIPS (`hidden`/`clip`) — `<main>` is one, so a box cut
+    // off at the screen edge fails here rather than measuring clean. No `ignore`: `.strip`
+    // scrolls (`overflow-x: auto`), which this helper never flags. A single-line `ellipsis`
+    // box (`#sub`, the header's subtitle) is skipped by the helper itself.
     await expectNoHorizontalOverflow(page);
-    await expectNoClippedInlineOverflow(page);
+    // A heading that breaks a word in the middle is a squeezed layout that `wrap-anywhere` hid.
+    await expectNoSplitWords(page);
+    await expectNoStrayInlineScroller(page);
 
     // The layout viewport is the window. Under `isMobile` (the `narrow` window), Chromium
     // honors `<meta name="viewport">` and WIDENS the layout viewport to fit content that
