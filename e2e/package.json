@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "devDependencies": {
-    "@charcuterie/playwright-config": "^2.0.0",
+    "@charcuterie/playwright-config": "^2.1.0",
     "@playwright/test": "~1.62.1",
     "playwright": "^1.61.1",
     "typescript": "^6.0.3"

@@ -140,14 +140,14 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@charcuterie/playwright-config@npm:^2.0.0":
-  version: 2.0.0
-  resolution: "@charcuterie/playwright-config@npm:2.0.0"
+"@charcuterie/playwright-config@npm:^2.1.0":
+  version: 2.1.0
+  resolution: "@charcuterie/playwright-config@npm:2.1.0"
   dependencies:
     "@charcuterie/vitest-config": "npm:^2.0.0"
   peerDependencies:
     "@playwright/test": ">=1.40"
-  checksum: 10c0/ebfb86730bbe183854fedb351f9e73a03f9eb2aa362406da4c1fb4dc2aabe9d8f37b93c0c3bdbc1e4f4165a5415d160ae29df03eeaca899d91b7b47511321a6b
+  checksum: 10c0/cf9c7c3a30337065f15273f09db6ab57390b0483b937806b2c73eea98e9f06b7ac04a144fe162ccff6db92f21c54e0157d27ca135303fcfbe1877e330ae72050
   languageName: node
   linkType: hard
 
@@ -2803,7 +2803,7 @@ __metadata:
   version: 0.0.0-use.local
   resolution: "queuepilot-e2e@workspace:e2e"
   dependencies:
-    "@charcuterie/playwright-config": "npm:^2.0.0"
+    "@charcuterie/playwright-config": "npm:^2.1.0"
     "@playwright/test": "npm:~1.62.1"
     playwright: "npm:^1.61.1"
     typescript: "npm:^6.0.3"
