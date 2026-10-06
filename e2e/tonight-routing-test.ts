@@ -32,7 +32,7 @@ import { startTonightServer, stopTonightServer } from './tonight-harness.js';
  *
  * `web/` compiles under bundler module resolution and writes extensionless relative imports;
  * this workspace is `nodenext` and refuses them. A static import would therefore fail
- * `yarn workspace queuepilot-e2e run typecheck` on the WEB file's own style, which is correct
+ * `pnpm --filter queuepilot-e2e run typecheck` on the WEB file's own style, which is correct
  * for the web and is not this suite's to change. Building the specifier at runtime keeps
  * TypeScript out of it while `tsx` still loads the file — and it loads cleanly, because every
  * import in that module is `import type` and is erased.

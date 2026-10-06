@@ -421,7 +421,7 @@ export interface PlaywrightModule {
 
 const ROOTS = [
   // e2e's OWN node_modules first: Playwright is a declared devDependency of this workspace
-  // as of the 2026-08-19 yarn migration, so in CI and on the NAS alike this is the one that
+  // as of the 2026-08-19 pnpm migration, so in CI and on the NAS alike this is the one that
   // hits. `nmHoistingLimits: workspaces` is why it lands here rather than at the root.
   //
   // The sibling-borrowing below is the pre-migration fallback, kept for a checkout whose

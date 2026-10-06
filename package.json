@@ -1,24 +1,14 @@
 {
-  "//": "The workspace root. It exists for THREE reasons, in order of how much they cost when it was missing: (1) yarn is the fleet's package manager (decision 2026-06-18 'use yarn, never npm/npx') and Berry wants one lockfile at one root; (2) the e2e harnesses had nowhere to declare Playwright, so ci.yml ran an unpinned `npm install playwright` twice per run and a `--with-deps` apt call that stalled for six hours on 2026-08-19; (3) `no root manifest` was load-bearing in half a dozen comments — every one of them a workaround for this file's absence. NOTE: no `type` field, deliberately. web/, server/ and e2e/ each declare their own, and setting one here would change the module format of any file they do not cover.",
+  "//": "Workspace root for one frozen pnpm lock and the four web/server/e2e/broker workspaces. Each workspace declares its own module type; deliberately keep the root without a type field.",
   "name": "queuepilot",
   "private": true,
-  "packageManager": "yarn@4.14.1",
-  "workspaces": [
-    "web",
-    "server",
-    "e2e",
-    "e2e/broker"
-  ],
+  "packageManager": "pnpm@12.9.1",
   "scripts": {
-    "build": "yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build",
-    "install-playwright-browser": "yarn workspace queuepilot-e2e run playwright install chromium --with-deps",
-    "lint": "yarn workspace queuepilot-web run lint",
-    "test": "yarn workspace queuepilot-web run test && yarn workspace queuepilot-server run test",
-    "test:smoke": "yarn workspace queuepilot-e2e run test:smoke",
-    "typecheck": "yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck"
-  },
-  "resolutions": {
-    "aedes/uuid": "11.1.1",
-    "hyperid/uuid": "11.1.1"
+    "build": "pnpm --filter queuepilot-web run build && pnpm --filter queuepilot-server run build",
+    "install-playwright-browser": "pnpm --filter queuepilot-e2e run playwright install chromium --with-deps",
+    "lint": "pnpm --filter queuepilot-web run lint",
+    "test": "pnpm --filter queuepilot-web run test && pnpm --filter queuepilot-server run test",
+    "test:smoke": "pnpm --filter queuepilot-e2e run test:smoke",
+    "typecheck": "pnpm --filter queuepilot-web run typecheck && pnpm --filter queuepilot-server run typecheck && pnpm --filter queuepilot-e2e run typecheck"
   }
 }

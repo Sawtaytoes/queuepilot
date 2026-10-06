@@ -1,0 +1,17 @@
+packages:
+  - web
+  - server
+  - e2e
+  - e2e/broker
+dedupePeerDependents: false
+autoInstallPeers: false
+strictPeerDependencies: false
+minimumReleaseAge: 0
+enableGlobalVirtualStore: false
+enablePrePostScripts: false
+verifyDepsBeforeRun: error
+allowBuilds:
+  esbuild: true
+overrides:
+  "aedes>uuid": "11.1.1"
+  "hyperid>uuid": "11.1.1"

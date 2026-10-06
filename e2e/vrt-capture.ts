@@ -2,7 +2,7 @@
 // written as PNGs into `$VRT_ACTUAL_DIR` for the shared `shared-vrt.yml` workflow to compare
 // against its baseline (decision `2026-09-25-vrt-shoots-the-main-screens-from-the-e2e-harness`).
 //
-//   yarn workspace queuepilot-web run build     # the server serves web/dist
+//   pnpm --filter queuepilot-web run build     # the server serves web/dist
 //   PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot \
 //     VRT_ACTUAL_DIR=$PWD/.vrt-actual server/node_modules/.bin/tsx e2e/vrt-capture.ts
 //
