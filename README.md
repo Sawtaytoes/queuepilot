@@ -34,18 +34,19 @@ port.
 
 ## Run from source
 
-The source build needs Node.js 24 or later and uses the committed Yarn release.
+The source build needs Node.js 24 or later and uses pnpm 12.9.1.
 
 ```sh
-yarn install --immutable
-yarn build
-yarn workspace queuepilot-server start
+npm install --global --force --allow-scripts=pnpm pnpm@12.9.1
+pnpm install --frozen-lockfile
+pnpm build
+pnpm --filter queuepilot-server start
 ```
 
 For frontend development, keep the server running and start Vite in another terminal:
 
 ```sh
-yarn workspace queuepilot-web dev
+pnpm --filter queuepilot-web dev
 ```
 
 ## Documentation
