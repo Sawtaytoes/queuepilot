@@ -51,7 +51,7 @@ jobs:
   # guard lives inside the shared workflow: this repo is public, and a fork's pull request
   # must never execute on the LAN.
   #
-  # The committed yarn release, not corepack — the same reason as `YARN` in the job below.
+  # The shared installer bootstraps pinned pnpm before the capture commands.
   # The capture installs its OWN pinned Playwright's chromium; the workflow points
   # PLAYWRIGHT_BROWSERS_PATH at a directory the job can write.
   #
@@ -63,8 +63,8 @@ jobs:
     permissions: { contents: read, statuses: write, pull-requests: write }
     uses: Sawtaytoes/charcuterie/.github/workflows/shared-vrt.yml@workflows-v1
     with:
-      setupCommand: node .yarn/releases/yarn-4.14.1.cjs install --immutable
-      buildCommand: node .yarn/releases/yarn-4.14.1.cjs workspace queuepilot-web run build
+      setupCommand: pnpm install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
+      buildCommand: pnpm --filter queuepilot-web run build
       captureCommand: |
         e2e/node_modules/.bin/playwright install chromium
         server/node_modules/.bin/tsx e2e/vrt-capture.ts
@@ -98,20 +98,14 @@ jobs:
       # server/src is TypeScript since the Hono conversion: plain `node` can neither load an
       # entry point ending .ts nor resolve the `./foo.js` specifiers inside it, so every
       # harness and every server boot below goes through tsx. It is a server/ devDependency,
-      # installed by the yarn step below, and addressed by bin path — `npx` is denied fleet
-      # wide (decision 2026-06-18) and `yarn workspace … run` would spawn a shell per call.
+      # installed by the pnpm step below, and addressed by bin path — `npx` is denied fleet
+      # wide (decision 2026-06-18) and `pnpm --filter … run` would spawn a shell per call.
       #
-      # `nmHoistingLimits: workspaces` is what keeps this path valid: each workspace has its
+      # pnpm workspace isolation is what keeps this path valid: each workspace has its
       # own node_modules, exactly as the three npm installs used to.
       TSX: server/node_modules/.bin/tsx
-      # The COMMITTED yarn release, run through node — NOT corepack. `actions/setup-node`
-      # gives us Node 26, and Node dropped corepack from the distribution in 25, so
-      # `corepack enable` is "command not found" here (and in the Dockerfile's node:26 base,
-      # where it was caught by an actual build). Running the release file directly also means
-      # CI never fetches a package manager over the network to install packages with.
-      #
-      # Same file `.yarnrc.yml` names as `yarnPath` — if you bump yarn, bump both.
-      YARN: node .yarn/releases/yarn-4.14.1.cjs
+      # Bootstrap pnpm at its pinned native version in the install step.
+      PNPM: pnpm
     steps:
       - uses: actions/checkout@v7
 
@@ -120,13 +114,18 @@ jobs:
           node-version: 26
 
       # ONE install for all three workspaces (web, server, e2e). It was three `npm ci`s and
-      # an unpinned `npm install playwright`; yarn is the fleet's package manager and npm/npx
-      # are denied (decision 2026-06-18-use-yarn-base-on-mux-magic).
+      # an unpinned `npm install playwright`; pnpm is the fleet's package manager and npm/npx
+      # are used only to bootstrap the pinned native package manager.
       #
-      # `--immutable` is the point of committing the lockfile: CI fails on a manifest whose
+      # `--frozen-lockfile` is the point of committing the lockfile: CI fails on a manifest whose
       # lockfile was not updated, rather than quietly resolving something else.
-      - name: Install (yarn workspaces)
-        run: $YARN install --immutable
+      - name: Install (pnpm workspaces)
+        run: |
+          npm install --global --force --allow-scripts=pnpm pnpm@12.9.1
+          pnpm_global_bin="$(npm prefix --global)/bin"
+          export PATH="$pnpm_global_bin:$PATH"
+          echo "$pnpm_global_bin" >> "$GITHUB_PATH"
+          $PNPM install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
 
       # ---- Playwright's browser, ONCE, cached ----
       #
@@ -178,10 +177,10 @@ jobs:
       # before that it only ever proved each file PARSED. `tsc --noEmit` against
       # server/tsconfig.json is the gate `node --check` never was.
       #
-      # No extra install: the one `yarn install` above hydrates every workspace, and
+      # No extra install: the one `pnpm install` above hydrates every workspace, and
       # `typescript` (and `tsx`, and `esbuild`) are server/ devDependencies.
       - name: Server typecheck
-        run: $YARN workspace queuepilot-server run typecheck
+        run: $PNPM --filter queuepilot-server run typecheck
 
       # The server's first UNIT gate (added with the node:sqlite driver shim, WP-4a). Vitest,
       # through @charcuterie/vitest-config — the same runner and the same factory `web/` below
@@ -193,21 +192,21 @@ jobs:
       # object". Half of the first suite is characterization over `node:sqlite` itself, so a
       # Node upgrade that changes a binding rule or an integer conversion fails HERE.
       - name: Server unit tests
-        run: $YARN workspace queuepilot-server run test
+        run: $PNPM --filter queuepilot-server run test
 
       # The harnesses are TypeScript too, and they are the only consumer of several
       # server/src exports — a signature change that server/ typechecks against its own
       # callers still breaks them. e2e/ is a real workspace with its own `typescript` and
       # `playwright` now, so it runs its own script rather than borrowing server's tsc.
       - name: e2e typecheck
-        run: $YARN workspace queuepilot-e2e run typecheck
+        run: $PNPM --filter queuepilot-e2e run typecheck
 
       # The prod artifact is an esbuild bundle, not the tsc output — `tsc --noEmit` above
       # cannot catch a bundling break (an unresolvable import, a native dep that will not
       # bundle), and the Dockerfile builds it. Gate it here rather than discovering it at
       # deploy time; mux-magic and castkit both do this.
       - name: Server build (esbuild bundle)
-        run: $YARN workspace queuepilot-server run build
+        run: $PNPM --filter queuepilot-server run build
 
       # --- the React frontend (M6d) --------------------------------------------
       # `web/` is React 19 + TypeScript + Vite + Tailwind v4 on @charcuterie/tokens.
@@ -216,16 +215,16 @@ jobs:
       # Biome is formatter + linter for web/. Runs before typecheck so a
       # formatting/lint failure reads as one, rather than as a build problem.
       - name: Web lint (Biome)
-        run: $YARN workspace queuepilot-web run lint:biome
+        run: $PNPM --filter queuepilot-web run lint:biome
 
       - name: Web typecheck
-        run: $YARN workspace queuepilot-web run typecheck
+        run: $PNPM --filter queuepilot-web run typecheck
 
       - name: Web unit tests
-        run: $YARN workspace queuepilot-web run test
+        run: $PNPM --filter queuepilot-web run test
 
       - name: Web build
-        run: $YARN workspace queuepilot-web run build
+        run: $PNPM --filter queuepilot-web run build
 
       # Engine unit tests that stub Plex entirely (no token, no network). Node ports of the
       # Python engine tests that were deleted with queue_builder/ on 2026-08-12 — the collection
@@ -794,7 +793,7 @@ jobs:
       # (`~1.62.1`), so the two cannot want different browser revisions.
       - name: Browser smoke — every route in four windows (browser, no Plex needed)
         timeout-minutes: 15
-        run: $YARN test:smoke
+        run: $PNPM test:smoke
 
       - name: Upload browser smoke report
         if: ${{ !cancelled() }}

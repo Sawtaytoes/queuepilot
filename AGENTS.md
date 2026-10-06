@@ -1408,16 +1408,16 @@ this table. `e2e/collection-reorder-test.ts` gates it.
 ## Gates
 
 Everything CI runs is in [`.github/workflows/ci.yml`](.github/workflows/ci.yml), and it is
-the source of truth. The fast loop, from the repo root (yarn Berry, committed release —
+the source of truth. The fast loop, from the repo root (pnpm 12.9.1, frozen workspace lock —
 `npm`/`npx` are denied fleet-wide):
 
 ```sh
-yarn install --immutable
-yarn workspace queuepilot-web run lint:biome
-yarn workspace queuepilot-web run typecheck && yarn workspace queuepilot-web run test
-yarn workspace queuepilot-server run typecheck && yarn workspace queuepilot-e2e run typecheck
-yarn workspace queuepilot-web run build && yarn workspace queuepilot-server run build
-PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot yarn test:smoke  # every route, four windows
+pnpm install --frozen-lockfile
+pnpm --filter queuepilot-web run lint:biome
+pnpm --filter queuepilot-web run typecheck && pnpm --filter queuepilot-web run test
+pnpm --filter queuepilot-server run typecheck && pnpm --filter queuepilot-e2e run typecheck
+pnpm --filter queuepilot-web run build && pnpm --filter queuepilot-server run build
+PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot pnpm test:smoke  # every route, four windows
 server/node_modules/.bin/tsx e2e/priority-lane-test.ts   # the Priority queue / Random pool lanes
 server/node_modules/.bin/tsx e2e/season-window-test.ts  # the season window, at all six `enabled` call sites
 PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers \
@@ -1464,7 +1464,7 @@ hand the same way — a bare `tsx e2e/narrow-scroll-test.ts` answers `ERR_CONNEC
 which reads exactly like a regression and is not one. Start the server with `setsid` and stop it
 with `kill -- -$SRV`; see "Working here" for why `kill $SRV` does not.
 
-⚠️ **`yarn workspace queuepilot-web run build` is not optional before the offline e2e gates.**
+⚠️ **`pnpm --filter queuepilot-web run build` is not optional before the offline e2e gates.**
 Without `web/dist` the server has no SPA fallback, so every deep link answers **404** — and a
 gate that compares a status code before against after passes on two 404s while proving nothing.
 `people-test.ts` pins the 200 and fails loudly; `board-game-absorb-test.ts` now pins it too, for
@@ -1504,14 +1504,14 @@ Storybook; this repo has none
 Twelve routes over the committed fixtures, Wide and Narrow View, light and dark: 48 PNGs into
 `$VRT_ACTUAL_DIR`. The job runs the shared `shared-vrt.yml@workflows-v1` on the repo's LAN
 runner, and a red `vrt` is diagnosed in its own pull request by opening the images, never
-re-run into green. Run it by hand after `yarn workspace queuepilot-web run build`:
+re-run into green. Run it by hand after `pnpm --filter queuepilot-web run build`:
 `PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot VRT_ACTUAL_DIR=/tmp/qp-vrt server/node_modules/.bin/tsx e2e/vrt-capture.ts`
 (about five minutes — the no-Plex `/api/queues` retries for eleven seconds on every page load).
 ⚠️ **A new screen needs a ready marker that proves its DATA painted**, and the capture fails when
 one never appears; do not loosen that to a `.catch()`, or a spinner becomes the baseline. The
 server clock is pinned by `e2e/stubs/fixed-clock.mjs`, so a shot never depends on the day.
 
-**Browser tests run in four windows — the smoke is `yarn test:smoke`.** Every top-level route,
+**Browser tests run in four windows — the smoke is `pnpm test:smoke`.** Every top-level route,
 in the fleet's four named windows (`narrow` 384x824 at 3.75 DPR with `isMobile`, `tall`
 1080x1920, `wide` 1920x1080, `ultrawide` 3440x1440), through `@charcuterie/playwright-config`
 ([decision](https://github.com/Sawtaytoes/charcuterie/blob/master/docs/decisions/2026-10-04-every-browser-test-runs-in-four-named-windows.md)).
@@ -1519,7 +1519,7 @@ It is the repo's only `@playwright/test` suite: `e2e/playwright.config.ts`, `tes
 `e2e/smoke/`, and `e2e/smoke/serve.ts` as its `webServer` — the same four fixture servers VRT
 shoots from (`e2e/fixture-server.ts`, the Tonight harness, the board-game harness). Build
 `web/` first, then
-`PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot yarn test:smoke` (about two minutes
+`PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot pnpm test:smoke` (about two minutes
 locally; `QUEUEPILOT_SMOKE_PORT` moves its four ports off 18961-18964). Each route asserts its
 data painted, no page error, `expectNoHorizontalOverflow`, a layout viewport equal to the
 window, and **no clipping or scrolling box wider inside than outside**. That last check is the
@@ -1550,14 +1550,14 @@ assertion about a control that no longer exists.
 > Install this repo's build somewhere writable and point the run at it:
 >
 > ```sh
-> PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers yarn workspace queuepilot-e2e run playwright install chromium
+> PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers pnpm --filter queuepilot-e2e run playwright install chromium
 > PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers server/node_modules/.bin/tsx e2e/narrow-scroll-test.ts
 > ```
 >
 > Full `chromium`, not `chromium-headless-shell` — these harnesses drive a real browser.
 > `--dry-run` on the install prints the exact revision and path without downloading.
 >
-> ⚠️ **Do not run `yarn install-playwright-browser` in the container.** It passes
+> ⚠️ **Do not run `pnpm install-playwright-browser` in the container.** It passes
 > `--with-deps`, which needs root to apt-install system libraries, and the agent has no
 > `sudo` — it stalls rather than failing. That is the same `--with-deps` call that stalled CI
 > for six hours on 2026-08-19. It is for CI; run `playwright install` directly, as above.

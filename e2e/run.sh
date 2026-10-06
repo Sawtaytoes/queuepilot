@@ -8,12 +8,12 @@ cd "$(dirname "$0")/.."
 set -a; source /mnt/TrueNAS-Apps/Repos/agentic/.env; set +a
 # The frontend is a Vite build since M6d — the server serves web/dist, so a stale (or
 # missing) dist means every browser suite drives an empty page.
-[ -d web/node_modules ] || node "$(dirname "$0")/../.yarn/releases"/yarn-*.cjs install --immutable
-node .yarn/releases/yarn-*.cjs workspace queuepilot-web run build
+[ -d web/node_modules ] || pnpm install --frozen-lockfile
+pnpm --filter queuepilot-web run build
 # server/src is TypeScript: `node` can neither load an entry point ending .ts nor resolve the
 # `./foo.js` specifiers inside it, so every harness AND the server itself run through tsx.
 # tsx is a server/ devDependency, hence the explicit bin path (npx is denied fleet-wide).
-[ -d server/node_modules ] || node "$(dirname "$0")/../.yarn/releases"/yarn-*.cjs install --immutable
+[ -d server/node_modules ] || pnpm install --frozen-lockfile
 TSX=server/node_modules/.bin/tsx
 unset MQTT_HOST MQTT_PORT MQTT_USER MQTT_PASS   # suites assert the degraded no-broker paths
 export QUEUES_PATH=/tmp/queues-ui.yaml SETS_PATH=/tmp/sets-ui.yaml WEB_PORT=18768 \

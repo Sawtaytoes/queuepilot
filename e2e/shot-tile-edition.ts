@@ -5,7 +5,7 @@
 // branch and the frames are comparable pixel for pixel. The web bundle is what the server
 // serves, so rebuild `web/dist` between the two runs:
 //
-//   yarn workspace queuepilot-web run build
+//   pnpm --filter queuepilot-web run build
 //   server/node_modules/.bin/tsx e2e/shot-tile-edition.ts --tag=after
 //
 // **FIXTURE DATA, NEVER LIVE.** The shot has to show ONE title twice, and the real pair would

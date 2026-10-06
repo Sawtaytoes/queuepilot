@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # One image, two processes (decision 2026-07-20-queue-web-ui-monorepo-single-container.md):
 #   * queuepilot-web     — the Node.js app: API, web UI, selection engine, MQTT service and
 #                          playback (the esbuild bundle at server/dist/index.js). This is the
@@ -13,27 +14,24 @@
 # stage means React, Vite, Tailwind and TypeScript never reach the final image.
 FROM node:26-trixie-slim AS web-build
 WORKDIR /repo
-# The workspace root's manifest + lockfile + the pinned yarn release, then the workspace
+RUN npm install --global --force --allow-scripts=pnpm pnpm@12.9.1
+# The workspace root's manifest + lockfile + pnpm configuration, then the workspace
 # manifests: everything the install resolves from and nothing that invalidates it on a
-# source-only edit. `--immutable` makes a lockfile that does not match the manifests a BUILD
+# source-only edit. `--frozen-lockfile` makes a lockfile that does not match the manifests a BUILD
 # failure rather than a silent re-resolve.
 #
-# e2e/package.json is copied but its workspace is not built here: yarn needs every manifest
-# named in `workspaces` to resolve the lockfile at all.
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn/releases ./.yarn/releases
+# e2e/package.json is copied but its workspace is not built here: pnpm needs every manifest
+# named in `pnpm-workspace.yaml` to resolve the lockfile at all.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/
 COPY server/package.json ./server/
 COPY e2e/package.json ./e2e/
-# The COMMITTED yarn release, run through node — not corepack. node:26 ships neither
-# corepack (dropped from the distribution in Node 25) nor yarn, so `corepack enable` fails
-# with "not found"; and even where it exists it would fetch yarn over the network at build
-# time. `.yarnrc.yml` pins the same file as `yarnPath`, so this is the exact yarn the
-# lockfile was written by.
-RUN node .yarn/releases/yarn-*.cjs workspaces focus queuepilot-web
+COPY e2e/broker/package.json ./e2e/broker/
+# Bootstrap the pinned native pnpm binary; Node 26 does not include Corepack.
+RUN --mount=type=cache,id=queuepilot-pnpm,target=/pnpm/store,sharing=locked pnpm --filter queuepilot-web... install --frozen-lockfile --store-dir /pnpm/store
 COPY web/ ./web/
 WORKDIR /repo/web
-# `yarn run build` is plain `vite build`; the `.br`/`.gz` siblings the server's static
+# `pnpm run build` is plain `vite build`; the `.br`/`.gz` siblings the server's static
 # handler serves are emitted by `precompressAssets()` from `@charcuterie/server/vite`,
 # inside the build (this replaced the hand-rolled web/scripts/precompress.mjs).
 #
@@ -42,7 +40,7 @@ WORKDIR /repo/web
 # ~2 MB of unreachable files. The glob is `*.map*`, not `*.map`: the precompress
 # plugin walks the whole `dist/` and also writes `<chunk>.js.map.br`/`.gz`, which
 # `-name '*.map'` would leave behind as orphans.
-RUN node ../.yarn/releases/yarn-*.cjs run build && find dist -name '*.map*' -delete
+RUN pnpm run build && find dist -name '*.map*' -delete
 
 # --- stage 2: bundle the Node server ------------------------------------------ #
 # esbuild collapses server/src/**.ts into ONE ESM file plus its source map, so the
@@ -52,24 +50,26 @@ RUN node ../.yarn/releases/yarn-*.cjs run build && find dist -name '*.map*' -del
 # same readable stack traces from the `.map` alone.
 FROM node:26-trixie-slim AS server-build
 WORKDIR /repo
+RUN npm install --global --force --allow-scripts=pnpm pnpm@12.9.1
 # Manifests first so the (dev-inclusive) install layer is keyed on them and survives
 # source-only edits.
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn/releases ./.yarn/releases
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/
 COPY server/package.json ./server/
 COPY e2e/package.json ./e2e/
-# `workspaces focus` installs ONE workspace's dependency tree instead of all three — the
+COPY e2e/broker/package.json ./e2e/broker/
+# A filtered install installs ONE workspace's dependency tree instead of all three — the
 # server-build stage has no use for React, Vite or Playwright.
-RUN node .yarn/releases/yarn-*.cjs workspaces focus queuepilot-server
+RUN --mount=type=cache,id=queuepilot-pnpm,target=/pnpm/store,sharing=locked pnpm --filter queuepilot-server... install --frozen-lockfile --store-dir /pnpm/store
 COPY server/ ./server/
 WORKDIR /repo/server
-RUN node ../.yarn/releases/yarn-*.cjs run build
+RUN pnpm run build
 
 # --- stage 3: the runtime image ----------------------------------------------- #
 FROM node:26-trixie-slim
 
 WORKDIR /app
+RUN npm install --global --force --allow-scripts=pnpm pnpm@12.9.1
 
 ENV PYTHONUNBUFFERED=1 \
     NODE_ENV=production \
@@ -102,14 +102,14 @@ RUN python3 -m venv /opt/venv \
 # were needed only by the server-build stage. The bundle currently externalizes
 # NOTHING (see server/scripts/build-server.mjs), so this layer is a safety net rather
 # than a hard requirement — but it is what makes an added `external:` entry work
-# without a second Dockerfile change, and it keeps `yarn info` answerable inside the
+# without a second Dockerfile change, and it keeps `pnpm list` answerable inside the
 # container.
-COPY package.json yarn.lock .yarnrc.yml ./
-COPY .yarn/releases ./.yarn/releases
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY web/package.json ./web/
 COPY server/package.json ./server/
 COPY e2e/package.json ./e2e/
-RUN node .yarn/releases/yarn-*.cjs workspaces focus queuepilot-server --production
+COPY e2e/broker/package.json ./e2e/broker/
+RUN --mount=type=cache,id=queuepilot-pnpm,target=/pnpm/store,sharing=locked pnpm --filter queuepilot-server... install --prod --frozen-lockfile --store-dir /pnpm/store
 
 # --- source + build artifacts ---
 # cast_sidecar is plain Python and ships as source. The Node half ships ONLY as the

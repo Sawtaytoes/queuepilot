@@ -41,7 +41,7 @@ const result = await build({
   // `createRequire` still finds the binary in `node_modules` — but it grows the
   // bundle by ~3 MB of code that then loads its addon from outside the bundle
   // anyway, which is the worst of both. It stays out, and the Dockerfile's
-  // `yarn workspaces focus queuepilot-server --production` layer is what installs
+  // `pnpm workspaces focus queuepilot-server --production` layer is what installs
   // it in the runtime image. That layer already exists; this is the entry it was
   // described as being a safety net for.
   //

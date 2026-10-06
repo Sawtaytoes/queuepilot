@@ -74,6 +74,7 @@ function titleFontSize(label: string): number {
 export async function readingListCoverSvg(label: string): Promise<string> {
   const title = label.trim() || 'Reading queue';
   const element = {
+    key: null,
     type: 'div',
     props: {
       style: {
