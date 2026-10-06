@@ -6,7 +6,7 @@
 //   SHOT_TAG=before server/node_modules/.bin/tsx e2e/shot-revived-badge.ts   (from a main checkout)
 //   SHOT_TAG=after  server/node_modules/.bin/tsx e2e/shot-revived-badge.ts
 //
-// Writes __screenshots__/revived-badge-<tag>.png. Needs `yarn workspace queuepilot-web run
+// Writes __screenshots__/revived-badge-<tag>.png. Needs `pnpm --filter queuepilot-web run
 // build` first (the server serves web/dist) and the workspace's Playwright.
 //
 // The fixture is synthetic (stubs/plex-returning-show.mjs): three placeholder shows, all

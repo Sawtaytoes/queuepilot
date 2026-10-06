@@ -8,7 +8,7 @@
 // branch and the frames are comparable pixel for pixel. The web bundle is what the server
 // serves, so rebuild `web/dist` between the two runs:
 //
-//   yarn workspace queuepilot-web run build
+//   pnpm --filter queuepilot-web run build
 //   server/node_modules/.bin/tsx e2e/shot-skipped-items.ts --tag=after
 //
 // **FIXTURE DATA, NEVER LIVE** (decision `2026-08-19-pr-screenshots-are-fixture-data-never-live`,

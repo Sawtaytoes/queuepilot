@@ -22,7 +22,7 @@ import { QUEUES_PATH } from '../../config.js';
 /**
  * Resolved from the CONFIG directory, not from a repo root.
  *
- * The source app resolved this against its repo root because `yarn workspace … run` sets the
+ * The source app resolved this against its repo root because `pnpm --filter … run` sets the
  * cwd to the package directory, and a bare relative path put the art under the package while
  * the server looked for it at the root — no error, just a page of broken images. This server
  * ships as a single bundled file and has no repo root at runtime, so the same class of bug is
