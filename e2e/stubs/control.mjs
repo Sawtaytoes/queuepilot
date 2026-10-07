@@ -8,6 +8,7 @@
 export const CTL = {
   calls: [],
   foreground: '',
+  onboarding: false,
   companionUp: true,
   switchResult: [true, 'selected on the picker'],
   same: new Map(), // "a|b" -> bool override for sameProfile
@@ -32,6 +33,7 @@ export const CTL = {
 export function reset() {
   CTL.calls = [];
   CTL.foreground = 'com.plexapp.android/.PlayerActivity'; // Plex up by default
+  CTL.onboarding = false;
   CTL.companionUp = true;
   CTL.switchResult = [true, 'selected on the picker'];
   CTL.same = new Map();

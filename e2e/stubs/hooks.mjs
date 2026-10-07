@@ -17,7 +17,9 @@ const STUBS = {
   './profiles.js': new URL('./profiles.stub.mjs', import.meta.url).href,
 };
 
-const fromAdb = parentIs('/server/src/adb');
+const fromAdbFacade = parentIs('/server/src/adb');
+const fromAdbLegacy = parentIs('/server/src/adbLegacy');
+const fromAdb = (ctx) => fromAdbFacade(ctx) || fromAdbLegacy(ctx);
 const fromDriver = parentIs('/server/src/driver');
 
 // Swap node:child_process for the scripted stub, but ONLY for server/src/adb — so a test

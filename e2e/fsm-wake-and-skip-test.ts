@@ -54,6 +54,7 @@ interface DriverCtl {
   /** `[name, ...args]` per recorded primitive — read positionally by the assertions. */
   calls: unknown[][];
   foreground: string;
+  onboarding: boolean;
   companionUp: boolean;
   switchResult: [boolean, string];
   /** `"a|b"` -> the sameProfile answer to force. */
@@ -219,6 +220,21 @@ CTL.foreground = 'com.plexapp.android/com.plexapp.plex.home.tv.HomeActivityTV';
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2e2) no picker + observed match: still no walk', r === null && switches().length === 0,
   JSON.stringify(switches()));
+
+// The new UI's onboarding must never be bypassed by a remembered account, or retried
+// into answering the owner's questions. It blocks playback with an actionable error.
+const { PLEX_SETUP_REQUIRED } = await import('../server/src/plexControlModern.js');
+wireDriver();
+CTL.lastSeen.title = 'Bob';
+CTL.lastSeen.isObserved = true;
+CTL.onboarding = true;
+r = await driveProfile('Bob', null);
+ok('onboarding blocks a remembered profile without navigating', r?.error === PLEX_SETUP_REQUIRED && switches().length === 0);
+
+wireDriver();
+CTL.switchResult = [false, PLEX_SETUP_REQUIRED];
+r = await driveProfile('Bob', null);
+ok('onboarding encountered after a pick returns immediately without retry', r?.error === PLEX_SETUP_REQUIRED && switches().length === 1);
 
 console.log(FAILS.length ? `\nFAILURES: ${FAILS.length}` : '\ndone');
 process.exit(FAILS.length ? 1 : 0);
