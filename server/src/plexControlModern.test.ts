@@ -12,6 +12,7 @@ function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[
   let nodes = initial;
   let activity: string | null = ACTIVITY;
   let cancelled = false;
+  let playerActive = false;
   const keys: string[] = [];
   let beforeDump: (() => void) | undefined;
   const control = createModernPlexControl({
@@ -22,6 +23,7 @@ function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[
     sameProfile: async (current, target) => current.toLowerCase() === target.toLowerCase()
       || (current === 'Bob Smith' && target === 'bob'),
     offset: async () => 1,
+    playerActive: () => playerActive,
     sleep: async () => {},
   }, { maxPresses: 4, waitSeconds: 0.03 });
   return {
@@ -29,6 +31,7 @@ function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[
     setNodes: (next: Node[]) => { nodes = next; },
     setActivity: (next: string | null) => { activity = next; },
     cancelNow: () => { cancelled = true; },
+    setPlayerActive: (active: boolean) => { playerActive = active; },
     beforeDump: (hook: () => void) => { beforeDump = hook; },
   };
 }
@@ -92,6 +95,17 @@ describe('modern Plex control adapter', () => {
     });
     expect(await h.control.summonPicker()).toEqual(['Bob', true]);
     expect(h.keys).toEqual(['KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
+  });
+
+  it('leaves a protected Plex player before opening the profile picker', async () => {
+    const h = harness([node('android:id/content')], (key) => {
+      if (key === 'KEYCODE_MEDIA_STOP') return [node('screen-home'), node('primary-navigation-account', true)];
+      if (key === 'KEYCODE_DPAD_RIGHT') return [node('secondary-navigation-account-switch-user', true)];
+      return picker(['Bob'], 0);
+    });
+    h.setPlayerActive(true);
+    expect(await h.control.summonPicker()).toEqual(['Bob', true]);
+    expect(h.keys).toEqual(['KEYCODE_MEDIA_STOP', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
   });
 
   it('does not accept CENTER when a PIN screen or the picker remains', async () => {

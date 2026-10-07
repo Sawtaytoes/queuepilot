@@ -41,6 +41,7 @@ export interface ModernPlexIo {
   press(key: string): Promise<boolean>;
   sameProfile(current: string, target: string): Promise<boolean>;
   offset(current: string, target: string): Promise<number | null>;
+  playerActive?(): boolean;
   sleep?(ms: number): Promise<void>;
 }
 
@@ -113,6 +114,12 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
         const rightEdge = Number(focus?.bounds?.match(/^\[\d+,\d+\]\[(\d+),\d+\]$/)?.[1]);
         key = rightEdge > 0 && rightEdge <= 32 ? 'KEYCODE_DPAD_RIGHT' : 'KEYCODE_DPAD_LEFT';
       }
+      else if (io.playerActive?.() && nodes.every((node) => !node.text && !node['content-desc']
+        && (!node['resource-id'] || ['android:id/content', 'com.plexapp.android:id/action_bar_root'].includes(node['resource-id'])))) {
+        // Protected video exposes only blank root nodes. The active Plex media session
+        // identifies this screen; a PIN/onboarding/unknown dialog has visible controls.
+        key = 'KEYCODE_MEDIA_STOP';
+      }
       else if (nodes.some((node) => node['resource-id']?.startsWith('screen-')) && backs < 3) {
         key = 'KEYCODE_BACK';
         backs += 1;
@@ -122,6 +129,7 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
       }
       console.log(`[adb] modern menu focus '${id || 'content'}': ${key}`);
       if (!(await guardedPress(key, cancel, (live) => !tiles(live).length
+        && (key !== 'KEYCODE_MEDIA_STOP' || io.playerActive?.() === true)
         && live.find((node) => node.focused === 'true')?.['resource-id'] === focus?.['resource-id'], nodes))) return [null, false];
       presses += 1;
       await sleep(350);

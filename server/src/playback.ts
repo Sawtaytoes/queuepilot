@@ -1321,7 +1321,7 @@ export async function seekTo(
     // player, then adopt the SAME queue at its server-confirmed current item.
     const stopped = adb.modernPlayerCommand('stop');
     if (!stopped.ok) return { seeked: false, error: stopped.error };
-    const sent = adb.playModernQueue(remembered.machineIdentifier, playQueueID, ms, session.ratingKey);
+    const sent = await adb.playModernQueue(remembered.machineIdentifier, playQueueID, ms, session.ratingKey);
     return sent.ok ? { seeked: true, offset: Math.floor(ms / 1000) * 1000 } : { seeked: false, error: sent.error };
   }
   let source: Awaited<ReturnType<typeof selectedSource>>;
@@ -1518,7 +1518,7 @@ export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefi
 
   if (modernPlayback) {
     result.client = device?.name || SHIELD_CLIENT_NAME || null;
-    const sent = adb.playModernQueue(queueHost.machineIdentifier, pqId!, intOffset(offset), refs[0]!.ratingKey);
+    const sent = await adb.playModernQueue(queueHost.machineIdentifier, pqId!, intOffset(offset), refs[0]!.ratingKey);
     result.played = sent.ok;
     result.error = sent.error;
     return result;

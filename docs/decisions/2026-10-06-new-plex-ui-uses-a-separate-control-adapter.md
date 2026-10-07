@@ -27,7 +27,9 @@ controls must return a clear failure rather than pretend a command worked. New p
 control support requires live verification with the dedicated test profile.
 
 Pause, resume and next use remote key events while Plex owns the active media session.
-Stop leaves the player through Back. Local seeking reopens the same queue at its
+Stop uses the dedicated media-stop key, including when player controls are visible.
+Replacing a running queue leaves the current player before opening the new route.
+Local seeking reopens the same queue at its
 server-confirmed selected item and uses whole-second offsets; an unknown or mismatching
 queue, or a selected item from a shared server, fails explicitly instead of changing media.
 

@@ -57,14 +57,14 @@ describe('Plex UI adapter routing', () => {
     expect(adb.usesModernPlayback({ ...device, uri: null })).toBe(false);
   });
 
-  it('leaves onboarding untouched and sends a scoped queue intent after setup', () => {
+  it('leaves onboarding untouched and sends a scoped queue intent after setup', async () => {
     ctl.activity = 'com.plexapp.android/tv.plex.app.MainActivity';
-    expect(adb.playModernQueue('test-server', 42, 15000, '123').ok).toBe(false);
+    expect((await adb.playModernQueue('test-server', 42, 15000, '123')).ok).toBe(false);
     expect(ctl.calls).toEqual([]);
     ctl.onboarding = false;
-    expect(adb.playModernQueue('test-server', 42, 15000, '123').ok).toBe(true);
-    expect(ctl.calls[0]?.[2]).toContain('-p com.plexapp.android');
-    expect(ctl.calls[0]?.[2]).toContain('containerKey=%2FplayQueues%2F42');
+    expect((await adb.playModernQueue('test-server', 42, 15000, '123')).ok).toBe(true);
+    expect(ctl.calls[1]?.[2]).toContain('-p com.plexapp.android');
+    expect(ctl.calls[1]?.[2]).toContain('containerKey=%2FplayQueues%2F42');
   });
 
   it('refuses transport commands if another app owns media buttons', () => {
@@ -79,5 +79,14 @@ describe('Plex UI adapter routing', () => {
     ctl.output = 'Media button session is com.plexapp.android/native\n    androidx.media3.session.id.test-123 com.plexapp.android/native';
     expect(adb.modernPlayerCommand('pause').ok).toBe(true);
     expect(ctl.calls[1]?.[2]).toBe('input keyevent KEYCODE_MEDIA_PAUSE');
+  });
+
+  it('stops an existing Plex player before opening a replacement queue', async () => {
+    ctl.activity = 'com.plexapp.android/tv.plex.app.MainActivity';
+    ctl.onboarding = false;
+    ctl.output = 'Media button session is com.plexapp.android/native';
+    expect((await adb.playModernQueue('test-server', 42, 0, '123')).ok).toBe(true);
+    const commands = ctl.calls.filter((call) => call[0] === 'run').map((call) => String(call[2]));
+    expect(commands.indexOf('input keyevent KEYCODE_MEDIA_STOP')).toBeLessThan(commands.findIndex((command) => command.startsWith('am start')));
   });
 });
