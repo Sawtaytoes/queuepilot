@@ -213,6 +213,13 @@ interface PlayQueueHost {
 }
 
 const playQueueHosts = new Map<string, PlayQueueHost>();
+// The Now-playing seek route supplies a device/offset, while the resume watcher also
+// supplies its queue. Keep the last accepted modern queue per resolved player so both
+// paths can use the same guarded seek without borrowing another device's queue.
+const modernPlayerQueues = new Map<string, { id: number | string; userUuid: string | null }>();
+function playerQueueKey(client: ClientTarget | null): string | null {
+  return client?.machineIdentifier ? `id:${client.machineIdentifier}` : client?.uri ? `uri:${client.uri}` : null;
+}
 const sharedSessionAccess = new Map<string, {
   until: number;
   access: Awaited<ReturnType<typeof plexServerAccessForProfile>>;
@@ -1308,6 +1315,9 @@ export async function seekTo(
   const target = client ?? await findClient(device);
   if (!target) return { seeked: false, error: 'target client not found' };
   if (adb.usesModernPlayback(device)) {
+    const rememberedPlayer = modernPlayerQueues.get(playerQueueKey(target) || '');
+    playQueueID ??= rememberedPlayer?.id ?? null;
+    userUuid ??= rememberedPlayer?.userUuid ?? null;
     const remembered = playQueueID == null ? null : playQueueHosts.get(String(playQueueID));
     if (!remembered || playQueueID == null) return { seeked: false, error: 'Plex queue context is unavailable for seeking' };
     const queue = await readPlayQueue(playQueueID);
@@ -1521,6 +1531,8 @@ export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefi
     const sent = await adb.playModernQueue(queueHost.machineIdentifier, pqId!, intOffset(offset), refs[0]!.ratingKey);
     result.played = sent.ok;
     result.error = sent.error;
+    const key = playerQueueKey(client);
+    if (sent.ok && key && pqId != null) modernPlayerQueues.set(key, { id: pqId, userUuid });
     return result;
   }
   if (!client) {
