@@ -28,6 +28,7 @@ import {
   PLAYBACK_SESSION_RETRIES,
 } from './env.js';
 import * as adb from './adb.js';
+import { PLEX_SETUP_REQUIRED } from './plexControlModern.js';
 import * as playback from './playback.js';
 import type { PlaybackResult } from './playback.js';
 import * as profiles from './profiles.js';
@@ -201,6 +202,7 @@ async function driveProfile(
   // correct, the picker was on screen, the skip fired, play landed on top of the picker, and
   // the Shield tore the player down five seconds later. One ~50 ms dumpsys read closes that.
   // (docs/decisions/2026-09-23-the-screen-outranks-the-observation-and-a-session-proves-the-play.md)
+  if (ADB_ENABLED && adb.isOnboardingForeground()) return { error: PLEX_SETUP_REQUIRED, _profile: required };
   const hasPickerUp = ADB_ENABLED && !hasActiveMismatch
     && Boolean(await Promise.resolve(adb.isPickerForeground()));
   if (hasPickerUp) {
@@ -269,6 +271,9 @@ async function driveProfile(
       profiles.LAST_SEEN.isObserved = false;
       return null;
     }
+    // Onboarding is an owner decision, not a retryable navigation failure. Do not let a
+    // remembered account bypass this screen or push playback over its questions.
+    if (detail === PLEX_SETUP_REQUIRED) return { error: PLEX_SETUP_REQUIRED, _profile: required };
     // A human or HA may have signed in meanwhile — a fresh LAST_SEEN also clears the gate.
     if (await onRequired(required)) {
       console.log(
@@ -316,7 +321,7 @@ async function drivePlay(
       console.log('[driver] Plex not foreground before play; re-opening');
       await ensurePlex();
     }
-    if (!(await playback.companionReady(host, port))) {
+    if (!adb.usesModernPlayback(device) && !(await playback.companionReady(host, port))) {
       console.log(
         `[driver] Companion ${host}:${port} not accepting a connection; re-opening Plex`,
       );

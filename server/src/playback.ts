@@ -17,6 +17,7 @@
 // Companion returns body "Failure: 200 OK" on success — only the HTTP status matters.
 
 import net from 'node:net';
+import * as adb from './adb.js';
 import { Agent, request } from 'undici';
 import { PLEX_URL, PLEX_TOKEN, PLEX_CLIENT_IDENTIFIER } from './config.js';
 import {
@@ -1228,6 +1229,7 @@ async function playerCommand(
   verb: 'stop' | 'pause' | 'play' | 'skipNext',
   device: Device | null = null,
 ): Promise<{ ok: boolean; error?: string }> {
+  if (adb.usesModernPlayback(device)) return adb.modernPlayerCommand(verb);
   const client = await findClient(device);
   if (!client) return { ok: false, error: 'target client not found' };
   const params = new URLSearchParams({
@@ -1305,6 +1307,23 @@ export async function seekTo(
   if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
   const target = client ?? await findClient(device);
   if (!target) return { seeked: false, error: 'target client not found' };
+  if (adb.usesModernPlayback(device)) {
+    const remembered = playQueueID == null ? null : playQueueHosts.get(String(playQueueID));
+    if (!remembered || playQueueID == null) return { seeked: false, error: 'Plex queue context is unavailable for seeking' };
+    const queue = await readPlayQueue(playQueueID);
+    const session = await currentSession({ device, client: target, playQueueID, userUuid });
+    const selected = queue?.items[queue.selectedOffset];
+    if (!selected || !session || session.ratingKey !== selected.ratingKey) {
+      return { seeked: false, error: 'The active Plex item does not match the queue selection' };
+    }
+    if (selected.plexServer) return { seeked: false, error: 'Seeking shared-server items is unavailable in the new Plex app' };
+    // The new route only applies its offset when opening a player. Leave the current
+    // player, then adopt the SAME queue at its server-confirmed current item.
+    const stopped = adb.modernPlayerCommand('stop');
+    if (!stopped.ok) return { seeked: false, error: stopped.error };
+    const sent = adb.playModernQueue(remembered.machineIdentifier, playQueueID, ms, session.ratingKey);
+    return sent.ok ? { seeked: true, offset: Math.floor(ms / 1000) * 1000 } : { seeked: false, error: sent.error };
+  }
   let source: Awaited<ReturnType<typeof selectedSource>>;
   try {
     source = await selectedSource(playQueueID, userUuid);
@@ -1417,6 +1436,7 @@ export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefi
   }
 
   const tok = await playToken(setName, userUuid);
+  const modernPlayback = adb.usesModernPlayback(device);
   const client = await findClient(device);
   // A per-scan cap (max_items) means "play exactly these and stop": drop continuous so the
   // client doesn't auto-advance into related content once the queue ends.
@@ -1496,6 +1516,13 @@ export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefi
     }
   }
 
+  if (modernPlayback) {
+    result.client = device?.name || SHIELD_CLIENT_NAME || null;
+    const sent = adb.playModernQueue(queueHost.machineIdentifier, pqId!, intOffset(offset), refs[0]!.ratingKey);
+    result.played = sent.ok;
+    result.error = sent.error;
+    return result;
+  }
   if (!client) {
     result.error = "target Shield not listed as a player (is its Plex app installed/signed in?)";
     return result;
