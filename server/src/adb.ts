@@ -13,7 +13,8 @@ const modern = createModernPlexControl({
   foreground: legacy.foregroundActivity,
   dump: () => legacy.run(['shell', 'uiautomator dump /sdcard/queuepilot-ui.xml >/dev/null && cat /sdcard/queuepilot-ui.xml']),
   parse: legacy.parseUiNodes,
-  press: (key) => legacy.press(key, { settle: legacy.SETTLE }),
+  // The modern adapter owns its settling delay; the transport sends one bounded batch.
+  press: (key, count = 1) => legacy.press([key, count]),
   sameProfile: legacy.sameProfile,
   playerActive: () => plexOwnsMediaButtons(legacy.run(['shell', 'dumpsys media_session'])),
   offset: async (current, target) => legacy.offsetBetween(await legacy.profileOrder(), current, target),
