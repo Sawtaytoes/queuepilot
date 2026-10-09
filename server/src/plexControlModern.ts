@@ -38,7 +38,7 @@ export interface ModernPlexIo {
   foreground(): string | null;
   dump(): string | null;
   parse(xml: string | null): Node[];
-  press(key: string): Promise<boolean>;
+  press(key: string, count?: number): Promise<boolean>;
   sameProfile(current: string, target: string): Promise<boolean>;
   offset(current: string, target: string): Promise<number | null>;
   playerActive?(): boolean;
@@ -73,32 +73,32 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
     return nodes != null && isModernPlexOnboarding(nodes);
   }
 
-  async function guardedPress(key: string, cancel: CancelFlag | null, guard: (nodes: Node[]) => boolean, justRead: Node[] | null = null): Promise<boolean> {
+  async function guardedPress(key: string, cancel: CancelFlag | null, guard: (nodes: Node[]) => boolean, justRead: Node[] | null = null, count = 1): Promise<boolean> {
     if (isCancelled(cancel)) return false;
     // Menu decisions are synchronous with their dump. Reuse that fresh tree instead of
     // waiting for a second idle-window dump; account alias lookups still require a re-read.
     const nodes = justRead ?? read();
     if (!isModernPlexActivity(io.foreground())) return false;
     if (!nodes || !guard(nodes) || isCancelled(cancel)) return false;
-    return io.press(key);
+    return io.press(key, count);
   }
 
-  async function summonPicker(cancel: CancelFlag | null = null): Promise<[string | null, boolean]> {
+  async function openPicker(cancel: CancelFlag | null = null): Promise<Node[] | null> {
     const deadline = Date.now() + waitMs;
     let presses = 0;
     let backs = 0;
     while (Date.now() < deadline && presses < maxPresses) {
-      if (isCancelled(cancel)) return [null, false];
+      if (isCancelled(cancel)) return null;
       const nodes = read();
-      if (!nodes) return [null, false];
-      if (isModernPlexOnboarding(nodes)) return [null, false];
+      if (!nodes) return null;
+      if (isModernPlexOnboarding(nodes)) return null;
       if (tiles(nodes).length) {
         const selected = modernSelectedProfile(nodes);
-        if (selected) return [selected, true];
+        if (selected) return nodes;
         // On a fresh launch React Native can expose the picker before assigning focus.
         // Acquire it with a direction key; CENTER still requires a named focused tile.
         if (!(await guardedPress('KEYCODE_DPAD_LEFT', cancel,
-          (live) => tiles(live).length > 0 && !modernSelectedProfile(live), nodes))) return [null, false];
+          (live) => tiles(live).length > 0 && !modernSelectedProfile(live), nodes))) return null;
         presses += 1;
         await sleep(350);
         continue;
@@ -125,28 +125,33 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
         backs += 1;
       } else {
         // Unknown screens (including onboarding/PIN dialogs) receive no input.
-        return [null, false];
+        return null;
       }
       console.log(`[adb] modern menu focus '${id || 'content'}': ${key}`);
       if (!(await guardedPress(key, cancel, (live) => !tiles(live).length
         && (key !== 'KEYCODE_MEDIA_STOP' || io.playerActive?.() === true)
-        && live.find((node) => node.focused === 'true')?.['resource-id'] === focus?.['resource-id'], nodes))) return [null, false];
+        && live.find((node) => node.focused === 'true')?.['resource-id'] === focus?.['resource-id'], nodes))) return null;
       presses += 1;
       await sleep(350);
     }
-    return [null, false];
+    return null;
+  }
+
+  async function summonPicker(cancel: CancelFlag | null = null): Promise<[string | null, boolean]> {
+    const nodes = await openPicker(cancel);
+    const name = nodes && modernSelectedProfile(nodes);
+    return [name, name != null];
   }
 
   async function switchTo(target: string, cancel: CancelFlag | null = null): Promise<[boolean, string]> {
     const deadline = Date.now() + waitMs;
-    const [name] = await summonPicker(cancel);
-    if (!name) {
+    let nodes = await openPicker(cancel);
+    if (!nodes) {
       const live = read();
       return [false, live && isModernPlexOnboarding(live) ? PLEX_SETUP_REQUIRED : 'could not open the modern Plex profile picker'];
     }
-    for (let presses = 0; presses <= maxPresses && Date.now() < deadline; presses += 1) {
+    for (let presses = 0; presses <= maxPresses && Date.now() < deadline;) {
       if (isCancelled(cancel)) return [false, 'cancelled by a newer scan'];
-      const nodes = read();
       const current = nodes && modernSelectedProfile(nodes);
       if (!nodes || !current) return [false, 'the modern Plex picker lost its focused profile'];
       if (await io.sameProfile(current, target)) {
@@ -172,20 +177,30 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
       const focused = tiles(nodes).find((node) => node.focused === 'true');
       const currentIndex = Number(focused?.['resource-id']?.match(TILE)?.[1]);
       let step: number | null = null;
+      let targetTile: Node | null = null;
       for (const tile of tiles(nodes)) {
         if (await io.sameProfile(decode(tile['content-desc'] || '').trim(), target)) {
+          targetTile = tile;
           step = Number(tile['resource-id']?.match(TILE)?.[1]) - currentIndex;
           break;
         }
       }
-      // Off-screen targets use the Home roster only as a direction hint. Read back after
-      // ONE press, so differences in picker order cannot commit the wrong account.
+      // Off-screen targets use the Home roster only as a direction hint and move one slot.
+      // A visible target gives a measured distance; send those arrows in one input call.
+      // Read back after every batch and still re-read the exact tile before CENTER.
       step ??= await io.offset(current, target);
       if (!step) return [false, `'${target}' is not reachable in the modern Plex picker`];
       const key = step > 0 ? 'KEYCODE_DPAD_RIGHT' : 'KEYCODE_DPAD_LEFT';
-      if (!(await guardedPress(key, cancel, (live) => modernSelectedProfile(live) === current))) return [false, 'the modern Plex picker changed before navigation'];
+      const count = targetTile ? Math.min(Math.abs(step), maxPresses - presses) : 1;
+      if (!(await guardedPress(key, cancel, (live) => modernSelectedProfile(live) === current
+        && tiles(live).find((tile) => tile.focused === 'true')?.['resource-id'] === focused?.['resource-id']
+        && (!targetTile || tiles(live).some((tile) => tile['resource-id'] === targetTile['resource-id']
+          && tile['content-desc'] === targetTile['content-desc'])), null, count))) return [false, 'the modern Plex picker changed before navigation'];
+      console.log(`[adb] modern picker from '${current}' toward '${target}': ${count} ${key}`);
+      presses += count;
       await sleep(350);
-      if (selectedProfile() === current) return [false, `the modern Plex picker did not move from '${current}'`];
+      nodes = read();
+      if (nodes && modernSelectedProfile(nodes) === current) return [false, `the modern Plex picker did not move from '${current}'`];
     }
     return [false, `modern Plex profile switch exceeded its bounded navigation budget for '${target}'`];
   }
