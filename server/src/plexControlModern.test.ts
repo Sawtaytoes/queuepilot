@@ -13,21 +13,29 @@ function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[
   let activity: string | null = ACTIVITY;
   let cancelled = false;
   let playerActive = false;
+  let offset = 1;
   const keys: string[] = [];
+  const batches: { key: string; count: number }[] = [];
+  let dumps = 0;
   let beforeDump: (() => void) | undefined;
   const control = createModernPlexControl({
     foreground: () => activity,
-    dump: () => { beforeDump?.(); return JSON.stringify(nodes); },
+    dump: () => { dumps += 1; beforeDump?.(); return JSON.stringify(nodes); },
     parse: (xml) => JSON.parse(xml || '[]') as Node[],
-    press: async (key) => { keys.push(key); nodes = onPress(key, nodes); return true; },
+    press: async (key, count = 1) => {
+      batches.push({ key, count });
+      for (let i = 0; i < count; i += 1) { keys.push(key); nodes = onPress(key, nodes); }
+      return true;
+    },
     sameProfile: async (current, target) => current.toLowerCase() === target.toLowerCase()
       || (current === 'Bob Smith' && target === 'bob'),
-    offset: async () => 1,
+    offset: async () => offset,
     playerActive: () => playerActive,
     sleep: async () => {},
   }, { maxPresses: 4, waitSeconds: 0.03 });
   return {
-    control, keys, cancel: { isSet: () => cancelled },
+    control, keys, batches, dumpCount: () => dumps, cancel: { isSet: () => cancelled },
+    setOffset: (next: number) => { offset = next; },
     setNodes: (next: Node[]) => { nodes = next; },
     setActivity: (next: string | null) => { activity = next; },
     cancelNow: () => { cancelled = true; },
@@ -63,7 +71,7 @@ describe('modern Plex control adapter', () => {
     expect(h.keys).toEqual(['KEYCODE_DPAD_UP', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
   });
 
-  it('uses the visible tile order and reads back each step before committing', async () => {
+  it('batches the measured visible distance, reads it back, and verifies before committing', async () => {
     let index = 0;
     const names = ['Bob', 'Carol', 'Alice'];
     const h = harness(picker(names, index), (key) => {
@@ -73,6 +81,69 @@ describe('modern Plex control adapter', () => {
     });
     expect((await h.control.switchTo('Alice'))[0]).toBe(true);
     expect(h.keys).toEqual(['KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
+    expect(h.batches).toEqual([{ key: 'KEYCODE_DPAD_RIGHT', count: 2 }, { key: 'KEYCODE_DPAD_CENTER', count: 1 }]);
+    // Previously ten costly dumps for the same two-slot switch; five retain the guards.
+    expect(h.dumpCount()).toBe(5);
+  });
+
+  it('batches leftward navigation and counts arrows against the budget', async () => {
+    let index = 3;
+    const names = ['Bob', 'Carol', 'Dave', 'Alice'];
+    const h = harness(picker(names, index), (key) => key === 'KEYCODE_DPAD_CENTER' ? home() : picker(names, --index));
+    expect((await h.control.switchTo('Bob'))[0]).toBe(true);
+    expect(h.batches).toEqual([{ key: 'KEYCODE_DPAD_LEFT', count: 3 }, { key: 'KEYCODE_DPAD_CENTER', count: 1 }]);
+    expect(h.dumpCount()).toBe(5);
+
+    let boundedIndex = 0;
+    const farNames = ['Bob', 'Carol', 'Dave', 'Erin', 'Grace', 'Alice'];
+    const bounded = harness(picker(farNames, 0), () => picker(farNames, ++boundedIndex));
+    expect((await bounded.control.switchTo('Alice'))[0]).toBe(false);
+    expect(bounded.batches).toEqual([{ key: 'KEYCODE_DPAD_RIGHT', count: 4 }]);
+    expect(bounded.keys).not.toContain('KEYCODE_DPAD_CENTER');
+  });
+
+  it('uses one arrow for an off-screen target even when the roster hints at several', async () => {
+    const h = harness(picker(['Bob'], 0), (key) => key === 'KEYCODE_DPAD_CENTER' ? home() : picker(['Alice'], 0));
+    h.setOffset(3);
+    expect((await h.control.switchTo('Alice'))[0]).toBe(true);
+    expect(h.batches).toEqual([{ key: 'KEYCODE_DPAD_RIGHT', count: 1 }, { key: 'KEYCODE_DPAD_CENTER', count: 1 }]);
+  });
+
+  it('replans from the measured landing when a batch moves fewer slots', async () => {
+    let index = 0;
+    const names = ['Bob', 'Carol', 'Alice'];
+    const h = harness(picker(names, 0), (key) => {
+      if (key === 'KEYCODE_DPAD_CENTER') return home();
+      // The second event of the first batch is ignored by the UI.
+      if (h.keys.length !== 2) index += 1;
+      return picker(names, index);
+    });
+    expect((await h.control.switchTo('Alice'))[0]).toBe(true);
+    expect(h.batches).toEqual([
+      { key: 'KEYCODE_DPAD_RIGHT', count: 2 },
+      { key: 'KEYCODE_DPAD_RIGHT', count: 1 },
+      { key: 'KEYCODE_DPAD_CENTER', count: 1 },
+    ]);
+  });
+
+  it('refuses a batch if the target tile changes during account lookup', async () => {
+    const h = harness(picker(['Bob', 'Carol', 'Alice'], 0));
+    h.beforeDump(() => { if (h.dumpCount() === 2) h.setNodes(picker(['Bob', 'Carol', 'Dave'], 0)); });
+    expect((await h.control.switchTo('Alice'))[0]).toBe(false);
+    expect(h.keys).toEqual([]);
+  });
+
+  it('refuses a batch if the focused account moves to a different index', async () => {
+    const h = harness(picker(['Bob', 'Carol', 'Alice'], 0));
+    h.beforeDump(() => { if (h.dumpCount() === 2) h.setNodes(picker(['Carol', 'Bob', 'Alice'], 1)); });
+    expect((await h.control.switchTo('Alice'))[0]).toBe(false);
+    expect(h.keys).toEqual([]);
+  });
+
+  it('sends no further arrows or CENTER when a batch leaves the picker', async () => {
+    const h = harness(picker(['Bob', 'Alice'], 0), () => home());
+    expect((await h.control.switchTo('Alice'))[0]).toBe(false);
+    expect(h.keys).toEqual(['KEYCODE_DPAD_RIGHT']);
   });
 
   it('matches the owner display-name alias and verifies signed-in navigation', async () => {
@@ -143,7 +214,7 @@ describe('modern Plex control adapter', () => {
   it('rechecks cancellation after reading the screen and before a press', async () => {
     const h = harness(picker(['Bob'], 0));
     let dumps = 0;
-    h.beforeDump(() => { if (++dumps === 3) h.cancelNow(); });
+    h.beforeDump(() => { if (++dumps === 2) h.cancelNow(); });
     expect((await h.control.switchTo('Bob', h.cancel))[0]).toBe(false);
     expect(h.keys).toEqual([]);
   });
