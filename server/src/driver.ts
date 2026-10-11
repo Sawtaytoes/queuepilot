@@ -202,9 +202,11 @@ async function driveProfile(
   // correct, the picker was on screen, the skip fired, play landed on top of the picker, and
   // the Shield tore the player down five seconds later. One ~50 ms dumpsys read closes that.
   // (docs/decisions/2026-09-23-the-screen-outranks-the-observation-and-a-session-proves-the-play.md)
-  if (ADB_ENABLED && adb.isOnboardingForeground()) return { error: PLEX_SETUP_REQUIRED, _profile: required };
-  const hasPickerUp = ADB_ENABLED && !hasActiveMismatch
-    && Boolean(await Promise.resolve(adb.isPickerForeground()));
+  // Modern Plex needs a costly accessibility dump for both questions. Inspect once
+  // so the skip decision sees onboarding and the picker from the same screen.
+  const screen = ADB_ENABLED ? adb.profileScreen() : { onboarding: false, picker: false };
+  if (screen.onboarding) return { error: PLEX_SETUP_REQUIRED, _profile: required };
+  const hasPickerUp = !hasActiveMismatch && screen.picker;
   if (hasPickerUp) {
     console.log(
       `[driver] the profile picker is on screen; walking it to '${required}' `
