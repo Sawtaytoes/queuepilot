@@ -40,6 +40,7 @@ import { toWeight } from '../engine/weight.js';
 import * as playback from '../playback.js';
 import * as driver from '../driver.js';
 import { plexServerAccessForProfile, plexServerClient } from '../plexSources.js';
+import { queueMetadataClient } from './queueMetadata.js';
 
 /**
  * What `buckets()` actually needs, which is NARROWER than `BucketsContext`.
@@ -259,9 +260,10 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
     }: PlexBucketsContext): Promise<BucketsResult> {
       if (cfg.source === 'queue') {
         let entries = resolve.loadEntries(setName);
+        let queueClient = c;
         const sharedClients = new Map<string, Promise<PlexClient | null>>();
         const clientForEntry: resolve.EntryClientResolver = async (entry) => {
-          if (!entry.plexServer) return c;
+          if (!entry.plexServer) return queueClient;
           let pending = sharedClients.get(entry.plexServer);
           if (!pending) {
             pending = plexServerAccessForProfile(binding.user_uuid, entry.plexServer)
@@ -283,6 +285,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         }
         if (cfg.reel) return resolve.buildReel(c, setName, cfg, entries, token, 60, clientForEntry);
         const watched = await select.watchedForSet(c, cfg, binding);
+        queueClient = await queueMetadataClient(c, entries, token);
         // The rng is REQUIRED, not optional: a channel (kind: anime) plays its members in a
         // shuffled order, and nextQueue only shuffles when handed one. Python defaulted it to
         // the `random` module; this call site did not, so every channel quietly played in
@@ -291,7 +294,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         // reads the book of record, and `engine/resolve.ts` holds no database handle
         // (see `resolve.LeadGate`).
         return resolve.nextQueue(
-          c, setName, cfg, entries, watched, token, defaultRng,
+          queueClient, setName, cfg, entries, watched, token, defaultRng,
           (entryKey, windowMs) => promote.canLeadOnce(setName, entryKey, windowMs),
           (entryKey) => queueEntryHistory.progressFor(setName, entryKey),
           clientForEntry,
