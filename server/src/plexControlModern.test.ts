@@ -8,7 +8,7 @@ const node = (id: string, focused = false, name = ''): Node => ({ 'resource-id':
 const picker = (names: string[], selected: number): Node[] => names.map((name, index) => node(`switch-user-item-${index}`, index === selected, name));
 const home = (): Node[] => [node('screen-home'), node('primary-navigation-home', true)];
 
-function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[] = (_key, nodes) => nodes) {
+function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[] = (_key, nodes) => nodes, maxPresses = 4) {
   let nodes = initial;
   let activity: string | null = ACTIVITY;
   let cancelled = false;
@@ -32,7 +32,7 @@ function harness(initial: Node[], onPress: (key: string, nodes: Node[]) => Node[
     offset: async () => offset,
     playerActive: () => playerActive,
     sleep: async () => {},
-  }, { maxPresses: 4, waitSeconds: 0.03 });
+  }, { maxPresses, waitSeconds: 0.03 });
   return {
     control, keys, batches, dumpCount: () => dumps, cancel: { isSet: () => cancelled },
     setOffset: (next: number) => { offset = next; },
@@ -69,6 +69,68 @@ describe('modern Plex control adapter', () => {
     });
     expect(await h.control.summonPicker()).toEqual(['Bob', true]);
     expect(h.keys).toEqual(['KEYCODE_DPAD_UP', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
+  });
+
+  it('checks onboarding and picker together with one screen dump', () => {
+    const h = harness(picker(['Bob', 'Alice'], 0));
+    expect(h.control.profileScreen()).toEqual({ onboarding: false, picker: true });
+    expect(h.dumpCount()).toBe(1);
+    h.setNodes([node('whats-new-onboarding-welcome')]);
+    expect(h.control.profileScreen()).toEqual({ onboarding: true, picker: false });
+    expect(h.dumpCount()).toBe(2);
+  });
+
+  const rail = (selected: number): Node[] => ['account', 'watchlist', 'search', 'home', 'libraries-test'].map((id, i) => ({
+    ...node(`primary-navigation-${id}`, i === selected),
+    focusable: 'true', enabled: 'true', bounds: `[66,${66 + i * 80}][386,${130 + i * 80}]`,
+  }));
+
+  it('batches visible menu focus stops, ignoring non-focusable headings', async () => {
+    let selected = 3;
+    const menu = () => [...rail(selected), { ...node('primary-navigation-heading'), focusable: 'false', bounds: '[66,250][386,270]' }];
+    const h = harness(menu(), (key) => {
+      if (key === 'KEYCODE_DPAD_UP') return menuAfterMove();
+      if (key === 'KEYCODE_DPAD_RIGHT') return [node('secondary-navigation-account-switch-user', true)];
+      if (key === 'KEYCODE_DPAD_CENTER') return picker(['Bob'], 0);
+      throw new Error(key);
+    }, 8);
+    function menuAfterMove() { selected -= 1; return menu(); }
+    expect(await h.control.summonPicker()).toEqual(['Bob', true]);
+    expect(h.batches).toEqual([
+      { key: 'KEYCODE_DPAD_UP', count: 3 },
+      { key: 'KEYCODE_DPAD_RIGHT', count: 1 },
+      { key: 'KEYCODE_DPAD_CENTER', count: 1 },
+    ]);
+    // Six screen reads with one-arrow navigation, four with measured menu movement.
+    expect(h.dumpCount()).toBe(4);
+  });
+
+  it('replans menu navigation after a missed arrow and counts each arrow against its budget', async () => {
+    let selected = 3;
+    const h = harness(rail(selected), (key) => {
+      if (key === 'KEYCODE_DPAD_UP') {
+        if (h.keys.length !== 2) selected -= 1;
+        return rail(selected);
+      }
+      if (key === 'KEYCODE_DPAD_RIGHT') return [node('secondary-navigation-account-switch-user', true)];
+      return picker(['Bob'], 0);
+    }, 8);
+    expect(await h.control.summonPicker()).toEqual(['Bob', true]);
+    expect(h.batches.slice(0, 2)).toEqual([{ key: 'KEYCODE_DPAD_UP', count: 3 }, { key: 'KEYCODE_DPAD_UP', count: 1 }]);
+    const bounded = harness(rail(4), () => rail(3), 2);
+    expect(await bounded.control.summonPicker()).toEqual([null, false]);
+    expect(bounded.batches).toEqual([{ key: 'KEYCODE_DPAD_UP', count: 2 }]);
+  });
+
+  it('uses single arrows when menu geometry is incomplete or ambiguous', async () => {
+    for (const change of [(nodes: Node[]) => { delete nodes[0]?.bounds; },
+      (nodes: Node[]) => { nodes[1]!.bounds = nodes[0]!.bounds!; }]) {
+      const nodes = rail(3);
+      change(nodes);
+      const h = harness(nodes, () => picker(['Bob'], 0));
+      expect(await h.control.summonPicker()).toEqual(['Bob', true]);
+      expect(h.batches).toEqual([{ key: 'KEYCODE_DPAD_UP', count: 1 }]);
+    }
   });
 
   it('batches the measured visible distance, reads it back, and verifies before committing', async () => {

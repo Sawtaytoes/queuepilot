@@ -18,6 +18,10 @@ export function isOnboardingForeground() {
   return CTL.onboarding;
 }
 
+export function profileScreen() {
+  return { onboarding: isOnboardingForeground(), picker: isPickerForeground() };
+}
+
 export function usesModernPlayback() { return false; }
 
 export async function ensurePlexOpen() {
