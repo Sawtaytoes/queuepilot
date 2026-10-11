@@ -4,6 +4,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-10-11 | [Curated lineups batch fresh entry metadata](2026-10-11-curated-lineups-batch-fresh-entry-metadata.md) *(performance — bounded home-server batches scoped to the selected profile, sequential resolution and fresh episode reads, individual fallback)* |
 | 2026-10-11 | [Modern Plex menu navigation uses visible focus stops](2026-10-11-modern-plex-menu-navigation-uses-visible-focus-stops.md) *(performance — batch the measured menu distance, verify the landing, and inspect onboarding/picker in one preflight snapshot)* |
 | 2026-10-09 | [Modern profile navigation batches the visible distance](2026-10-09-modern-profile-navigation-batches-visible-distance.md) *(performance — bounded arrow batches from visible tile indices, verified landing and fresh commit guard; off-screen targets retain single steps; remove redundant dumps and duplicate settling delays)* |
 | 2026-10-06 | [New Plex UI uses a separate control adapter](2026-10-06-new-plex-ui-uses-a-separate-control-adapter.md) *(compatibility / owner preference — detect the new UI, preserve the legacy adapter, and leave per-profile onboarding for the owner.)* |
