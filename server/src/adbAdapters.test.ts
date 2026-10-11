@@ -18,6 +18,7 @@ vi.mock('./plexControlModern.js', async (importOriginal) => ({
     switchTo: async (...args: unknown[]) => { ctl.calls.push(['modern', ...args]); return [true, 'modern']; },
     isPickerForeground: () => false,
     isOnboardingForeground: () => ctl.onboarding,
+    profileScreen: () => ({ onboarding: ctl.onboarding, picker: false }),
     selectedProfile: () => 'Alice',
   }),
 }));
@@ -31,6 +32,7 @@ describe('Plex UI adapter routing', () => {
     expect(await adb.switchTo('Bob', cancel, 'Alice')).toEqual([true, 'legacy']);
     expect(ctl.calls).toEqual([['legacy', 'Bob', cancel, 'Alice']]);
     expect(adb.isOnboardingForeground()).toBe(false);
+    expect(adb.profileScreen()).toEqual({ onboarding: false, picker: true });
     expect(adb.selectedProfile()).toBe('Bob');
   });
   it('routes the new Plex component to its own adapter and ignores remembered selection hints', async () => {
@@ -40,6 +42,7 @@ describe('Plex UI adapter routing', () => {
     expect(ctl.calls).toEqual([['modern', 'Alice', cancel]]);
     expect(adb.isPickerForeground()).toBe(false);
     expect(adb.isOnboardingForeground()).toBe(true);
+    expect(adb.profileScreen()).toEqual({ onboarding: true, picker: false });
     expect(adb.pickerReady('Bob')).toEqual([true, 'Alice']);
   });
   it('does not mistake an unrelated MainActivity for the new Plex UI', async () => {

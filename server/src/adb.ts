@@ -72,6 +72,10 @@ export function isOnboardingForeground(): boolean {
   return usesModernUi() && modern.isOnboardingForeground();
 }
 
+export function profileScreen(): { onboarding: boolean; picker: boolean } {
+  return usesModernUi() ? modern.profileScreen() : { onboarding: false, picker: legacy.isPickerForeground() };
+}
+
 export function selectedProfileFromXml(xml: string | null | undefined): string | null {
   return modernSelectedProfile(legacy.parseUiNodes(xml)) ?? legacy.selectedProfileFromXml(xml);
 }

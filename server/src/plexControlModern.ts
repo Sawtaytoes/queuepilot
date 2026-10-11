@@ -34,6 +34,25 @@ export function modernSelectedProfile(nodes: Node[]): string | null {
   return focused.length === 1 ? decode(focused[0]?.['content-desc'] || '').trim() || null : null;
 }
 
+// Count visible, enabled focus stops in the primary rail, rather than guessing a
+// fixed menu order. Headers and separators occupy child indices but take no focus.
+function accountDistance(nodes: Node[], focused: Node): number | null {
+  const stops = nodes.filter((node) => node['resource-id']?.startsWith('primary-navigation-')
+    && node.focusable === 'true' && node.enabled !== 'false').map((node) => {
+    const bounds = node.bounds?.match(/^\[(\d+),(\d+)\]\[(\d+),(\d+)\]$/);
+    return bounds ? { node, left: Number(bounds[1]), top: Number(bounds[2]), right: Number(bounds[3]) } : null;
+  });
+  if (stops.some((stop) => !stop)) return null;
+  const ordered = stops.filter((stop) => stop != null).sort((a, b) => a.top - b.top);
+  const account = ordered.findIndex(({ node }) => node['resource-id'] === ACCOUNT);
+  const current = ordered.findIndex(({ node }) => node === focused);
+  if (account < 0 || current <= account) return null;
+  const path = ordered.slice(account, current + 1);
+  if (path.some((stop, i) => stop.left !== path[0]?.left || stop.right !== path[0]?.right
+    || (i > 0 && stop.top === path[i - 1]?.top))) return null;
+  return current - account;
+}
+
 export interface ModernPlexIo {
   foreground(): string | null;
   dump(): string | null;
@@ -73,6 +92,11 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
     return nodes != null && isModernPlexOnboarding(nodes);
   }
 
+  function profileScreen(): { onboarding: boolean; picker: boolean } {
+    const nodes = read();
+    return { onboarding: nodes != null && isModernPlexOnboarding(nodes), picker: nodes != null && tiles(nodes).length > 0 };
+  }
+
   async function guardedPress(key: string, cancel: CancelFlag | null, guard: (nodes: Node[]) => boolean, justRead: Node[] | null = null, count = 1): Promise<boolean> {
     if (isCancelled(cancel)) return false;
     // Menu decisions are synchronous with their dump. Reuse that fresh tree instead of
@@ -106,9 +130,13 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
       const focus = nodes.find((node) => node.focused === 'true');
       const id = focus?.['resource-id'] || '';
       let key: string;
+      let count = 1;
       if (id === SWITCH) key = 'KEYCODE_DPAD_CENTER';
       else if (id === ACCOUNT) key = 'KEYCODE_DPAD_RIGHT';
-      else if (id.startsWith('primary-navigation-') || id.startsWith('secondary-navigation-account-')) key = 'KEYCODE_DPAD_UP';
+      else if (id.startsWith('primary-navigation-') || id.startsWith('secondary-navigation-account-')) {
+        key = 'KEYCODE_DPAD_UP';
+        if (focus && id.startsWith('primary-navigation-')) count = Math.min(accountDistance(nodes, focus) ?? 1, maxPresses - presses);
+      }
       else if (nodes.some((node) => node['resource-id'] === 'screen-home')) {
         // Back from the player can leave focus in the narrow, collapsed navigation rail.
         const rightEdge = Number(focus?.bounds?.match(/^\[\d+,\d+\]\[(\d+),\d+\]$/)?.[1]);
@@ -127,11 +155,11 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
         // Unknown screens (including onboarding/PIN dialogs) receive no input.
         return null;
       }
-      console.log(`[adb] modern menu focus '${id || 'content'}': ${key}`);
+      console.log(`[adb] modern menu focus '${id || 'content'}': ${count} ${key}`);
       if (!(await guardedPress(key, cancel, (live) => !tiles(live).length
         && (key !== 'KEYCODE_MEDIA_STOP' || io.playerActive?.() === true)
-        && live.find((node) => node.focused === 'true')?.['resource-id'] === focus?.['resource-id'], nodes))) return null;
-      presses += 1;
+        && live.find((node) => node.focused === 'true')?.['resource-id'] === focus?.['resource-id'], nodes, count))) return null;
+      presses += count;
       await sleep(350);
     }
     return null;
@@ -205,5 +233,5 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
     return [false, `modern Plex profile switch exceeded its bounded navigation budget for '${target}'`];
   }
 
-  return { isPickerForeground, isOnboardingForeground, selectedProfile, summonPicker, switchTo };
+  return { isPickerForeground, isOnboardingForeground, profileScreen, selectedProfile, summonPicker, switchTo };
 }
