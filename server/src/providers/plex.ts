@@ -74,6 +74,8 @@ interface Rng {
 export interface PlexProviderOptions {
   def?: ProviderDefinition | null;
   client?: PlexClient | null;
+  resolveProfileUser?: typeof profileUser;
+  clientForServer?: (serverId:string)=>Promise<PlexClient|null>;
 }
 
 // The 1/n² rewatch pick, moved verbatim from session.js. Memberless channels weight by
@@ -131,7 +133,7 @@ const defaultRng: Rng = { shuffle: defaultShuffle, random: () => Math.random() }
  * `client` is injectable so the parity gates can substitute plex-replay.js exactly as they
  * do today — the replay client is what proves this seam is real rather than decorative.
  */
-export function plexProvider({ def = null, client = null }: PlexProviderOptions = {}): Provider {
+export function plexProvider({ def = null, client = null, clientForServer, resolveProfileUser = profileUser }: PlexProviderOptions = {}): Provider {
   const c: PlexClient = client || liveClient();
 
   return {
@@ -205,7 +207,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
      */
     async profileBinding(binding: EngineBinding, profileTitle: string | null): Promise<EngineBinding> {
       if (binding.user_uuid || binding.account_id || binding.watch_count_accounts) return binding;
-      const user = await profileUser(profileTitle);
+      const user = await resolveProfileUser(profileTitle);
       // No row (ungated, hand-typed, or plex.tv unreachable) => unchanged, i.e. the admin
       // fallback this has always had. A gate that names a profile Plex does not know is
       // already a scan that hangs at the picker, so it is not this function's failure to fix.
@@ -264,6 +266,7 @@ export function plexProvider({ def = null, client = null }: PlexProviderOptions 
         const sharedClients = new Map<string, Promise<PlexClient | null>>();
         const clientForEntry: resolve.EntryClientResolver = async (entry) => {
           if (!entry.plexServer) return queueClient;
+          if(clientForServer)return clientForServer(entry.plexServer);
           let pending = sharedClients.get(entry.plexServer);
           if (!pending) {
             pending = plexServerAccessForProfile(binding.user_uuid, entry.plexServer)

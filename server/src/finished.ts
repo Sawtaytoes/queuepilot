@@ -40,7 +40,7 @@ import { isSetAvailable } from './season.js';
 import * as sets from './sets.js';
 import { SESSION } from './session.js';
 import type {
-  BucketsResult, NowPlaying, RoutingQueueCfg, RoutingSetCfg,
+  BucketsResult, NowPlaying, RoutingQueueCfg, RoutingSetCfg, PlexClient, Provider, EngineBinding,
 } from './types.js';
 
 /**
@@ -176,6 +176,7 @@ export async function applyQueueWriteSide(
 export async function reconcileQueue(
   setName: string,
   profileTitle: string | null = null,
+  scope?: {provider:Provider;binding:EngineBinding;token:string},
 ): Promise<{ reconciled: boolean }> {
   const reg = routing.loadSets();
   const cfg = reg && reg.sets[setName];
@@ -187,10 +188,10 @@ export async function reconcileQueue(
   // (`2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`).
   if (!cfg || !isSetAvailable(cfg) || cfg.source !== 'queue' || cfg.reel) return { reconciled: false };
   try {
-    const { binding, provider } = await scopedBinding(cfg, profileTitle);
+    const { binding, provider } = scope || await scopedBinding(cfg, profileTitle);
     // Same unguarded call as `startSession` — a provider with no `profileToken` throws here
     // and is caught below rather than silently reconciling under the wrong account.
-    const token = await provider.profileToken!(binding.user_uuid);
+    const token = scope?.token ?? await provider.profileToken!(binding.user_uuid);
     const res = await provider.buckets({ setName, cfg, binding, token, kind: 'movie' });
     const { marked } = await applyQueueWriteSide(setName, cfg, res);
     // The history that decided this just moved, and so did the file. Neither memo may serve
@@ -309,23 +310,26 @@ export function providerProgressVerdict(
  * increments viewCount and clears viewOffset. A partial stop retains viewOffset. The count
  * comparison is essential for a REWATCH, whose viewCount was already non-zero before play.
  */
-async function finalizeQueueProgress(
+export async function finalizeQueueProgress(
   setName: string,
   profileTitle: string | null,
   item: OwnedQueueItem,
   durationMs: number,
+  scope?: {client:PlexClient;token:string},
 ): Promise<void> {
   if (!item.queueOwnHistory || !item.queueEntryKey) return;
   try {
     const cfg = routing.loadSets()?.sets[setName];
     if (!cfg) return;
-    const { binding, provider } = await scopedBinding(cfg, profileTitle);
-    const token = await provider.profileToken!(binding.user_uuid);
-    const remote = item.plexServer
-      ? await plexServerAccessForProfile(binding.user_uuid, item.plexServer) : null;
-    if (item.plexServer && !remote) throw new Error('Shared Plex server is unavailable');
-    const mc = await (remote ? plexServerClient(remote) : liveClient())
-      .container(`/library/metadata/${item.ratingKey}`, remote?.token ?? token);
+    let client:PlexClient,token:string|null;
+    if(scope){client=scope.client;token=scope.token;}
+    else{
+      const {binding,provider}=await scopedBinding(cfg,profileTitle);token=await provider.profileToken!(binding.user_uuid);
+      const remote=item.plexServer?await plexServerAccessForProfile(binding.user_uuid,item.plexServer):null;
+      if(item.plexServer&&!remote)throw new Error('Shared Plex server is unavailable');
+      client=remote?plexServerClient(remote):liveClient();token=remote?.token ?? token;
+    }
+    const mc=await client.container(`/library/metadata/${item.ratingKey}`,token);
     const md = mc.Metadata?.[0];
     if (!md) throw new Error('Plex returned no item metadata');
     const verdict = providerProgressVerdict(
