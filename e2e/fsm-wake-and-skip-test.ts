@@ -28,7 +28,7 @@ stubDriverDeps();
 const {
   ADB_SCRIPT: RAW_ADB_SCRIPT, resetScript: RAW_RESET_SCRIPT,
 } = await import('./stubs/child-process.stub.mjs');
-const { CTL: RAW_CTL, reset } = await import('./stubs/control.mjs');
+const { CTL: RAW_CTL, reset, observe } = await import('./stubs/control.mjs');
 const adb = await import('../server/src/adb.js'); // REAL module, faked shell
 const driver = await import('../server/src/driver.js'); // stubbed adb/playback/profiles
 
@@ -60,7 +60,8 @@ interface DriverCtl {
   /** `"a|b"` -> the sameProfile answer to force. */
   same: Map<string, boolean>;
   playResults: unknown[];
-  lastSeen: { title: string | null; isObserved: boolean };
+  lastSeen: { title: string | null; isObserved: boolean; observedAt: number | null };
+  observationTtlSeconds: number;
   awake: boolean;
   onSwitch: (() => void) | null;
 }
@@ -143,16 +144,14 @@ const switches = () => CTL.calls.filter((c) => c[0] === 'switch_to');
 
 // (a) An OBSERVED LAST_SEEN == required exactly -> no picker walk.
 wireDriver();
-CTL.lastSeen.title = 'sawtaytoes';
-CTL.lastSeen.isObserved = true;
+observe('sawtaytoes');
 let r = await driveProfile('sawtaytoes', null);
 ok('(bug2a) observed LAST_SEEN==required: gate satisfied (null)', r === null);
 ok('(bug2a) observed LAST_SEEN==required: NO switchTo call', switches().length === 0);
 
 // (b) An OBSERVED LAST_SEEN is the DISPLAY name, required the USERNAME — alias short-circuits.
 wireDriver([['Bob Smith', 'sawtaytoes']]);
-CTL.lastSeen.title = 'Bob Smith';
-CTL.lastSeen.isObserved = true;
+observe('Bob Smith');
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2b) display-name==username alias: gate satisfied (null)', r === null);
 ok('(bug2b) display-name==username alias: NO picker/switch call', switches().length === 0);
@@ -192,8 +191,7 @@ ok('(bug2c2) second gated scan does NOT trust the claim: it walks again',
 
 // (d) Cold cache + a DIFFERENT signed-in profile -> a real switch is still driven.
 wireDriver([['Bob Smith', 'sawtaytoes'], ['Younger Kids']]);
-CTL.lastSeen.title = 'Younger Kids'; // signed in as someone else
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids'); // signed in as someone else
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2d) genuinely-wrong profile: drives the switch once',
   r === null && switches().length === 1, JSON.stringify(switches()));
@@ -203,8 +201,7 @@ ok('(bug2d) genuinely-wrong profile: drives the switch once',
 //     On 2026-09-23 the skip fired here, play landed on top of the picker, and the Shield
 //     tore the player down. The walk must run; the observation is true and irrelevant.
 wireDriver();
-CTL.lastSeen.title = 'sawtaytoes';
-CTL.lastSeen.isObserved = true;
+observe('sawtaytoes');
 CTL.foreground = 'com.plexapp.android/com.plexapp.shared.ui.userpicker.PickUserActivity';
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2e) picker on screen + observed match: walks the picker anyway',
@@ -214,19 +211,61 @@ ok('(bug2e) picker on screen: the walk starts from the remembered profile as its
 
 // (e2) ...and with Plex on Home (no picker), the same observation still skips the walk.
 wireDriver();
-CTL.lastSeen.title = 'sawtaytoes';
-CTL.lastSeen.isObserved = true;
+observe('sawtaytoes');
 CTL.foreground = 'com.plexapp.android/com.plexapp.plex.home.tv.HomeActivityTV';
 r = await driveProfile('sawtaytoes', null);
 ok('(bug2e2) no picker + observed match: still no walk', r === null && switches().length === 0,
   JSON.stringify(switches()));
 
+// (f) AGE OUTRANKS THE MEMORY TOO. An observation is true about the moment Plex made it and
+//     about nothing after it: a person can pick another profile on the TV and no signal
+//     reports that. On 2026-09-12 the morning kids' block left a correct, matching,
+//     two-hour-old observation behind, the midday scan skipped the walk on it, and both
+//     `younger_kids_shows` and then `older_kids_shorts_shows` scrobbled to the OWNER.
+//     (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+wireDriver();
+observe('sawtaytoes', 2 * 60 * 60); // two hours old, and still an exact match
+r = await driveProfile('sawtaytoes', null);
+ok('(bug3f) a STALE observation does not clear the gate: walks the picker',
+  r === null && switches().length === 1, JSON.stringify(switches()));
+ok('(bug3f) the stale title is still handed over as the picker hint',
+  switches()[0]?.[2] === 'sawtaytoes', JSON.stringify(switches()));
+
+// (f2) Just inside the window, the fast path survives — this is the queue-to-queue case the
+//      remembered observation exists for, and the owner's latency complaint of 2026-09-07.
+wireDriver();
+observe('sawtaytoes', 60); // a minute old
+r = await driveProfile('sawtaytoes', null);
+ok('(bug3f2) a FRESH observation still skips the walk', r === null && switches().length === 0,
+  JSON.stringify(switches()));
+
+// (f3) A TTL of 0 turns the fast path off outright, for a deployment that would rather spend
+//      the walk every time. A brand-new observation must not clear the gate either.
+wireDriver();
+observe('sawtaytoes');
+CTL.observationTtlSeconds = 0;
+r = await driveProfile('sawtaytoes', null);
+ok('(bug3f3) ttl 0 disables the skip even for a fresh observation',
+  r === null && switches().length === 1, JSON.stringify(switches()));
+CTL.observationTtlSeconds = 600;
+
+// (f4) The ADB claim carries NO timestamp, so it cannot become fresh by being recent. This
+//      pins the claim path against the new field as well as against `isObserved`.
+wireDriver([['Bob Smith', 'sawtaytoes']], true);
+CTL.lastSeen.title = null;
+CTL.lastSeen.isObserved = false;
+CTL.lastSeen.observedAt = null;
+await driveProfile('sawtaytoes', null);
+ok('(bug3f4) a switch claim records no observation time',
+  CTL.lastSeen.title === 'sawtaytoes' && CTL.lastSeen.isObserved === false
+    && CTL.lastSeen.observedAt === null,
+  JSON.stringify(CTL.lastSeen));
+
 // The new UI's onboarding must never be bypassed by a remembered account, or retried
 // into answering the owner's questions. It blocks playback with an actionable error.
 const { PLEX_SETUP_REQUIRED } = await import('../server/src/plexControlModern.js');
 wireDriver();
-CTL.lastSeen.title = 'Bob';
-CTL.lastSeen.isObserved = true;
+observe('Bob');
 CTL.onboarding = true;
 r = await driveProfile('Bob', null);
 ok('onboarding blocks a remembered profile without navigating', r?.error === PLEX_SETUP_REQUIRED && switches().length === 0);

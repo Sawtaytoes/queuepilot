@@ -1138,6 +1138,67 @@ the resolver, session queue or top-up path; the same numeric key may name a diff
 each server
 ([decision](docs/decisions/2026-09-25-a-plex-queue-can-mix-items-from-several-servers.md)).
 
+## The profile gate, and why it has failed three times
+
+A gated queue must play as the account it is bound to, or it writes somebody else's watch
+history. This has gone wrong three times and each fix closed a different hole, so read all of
+it before touching `driver.ts`, `playback.ts` or `profiles.ts`.
+
+**The rule that unifies them: NOTHING on the device can prove which profile Plex signed into.**
+Non-root ADB cannot read Plex's app data and `uiautomator` only sees the picker, so every
+answer comes from Plex — `/status/sessions` — and that answer only exists while something is
+playing.
+
+Four pieces of evidence, in descending authority:
+
+| Evidence | Proves | When it is available |
+| --- | --- | --- |
+| A live `/status/sessions` row for the target player | The account Plex will scrobble to | Only while a session is live |
+| `adb.profileScreen().picker` | The picker is up, so NOBODY is signed in | Always (~50 ms) |
+| `profiles.LAST_SEEN` with `isObserved` **and fresh** | The account at the moment it was read | Within `PROFILE_OBSERVATION_TTL_SECONDS` |
+| `adb.switchTo()` returning ok | That CENTER was pressed on the right tile | Always, and it has been wrong on the TV |
+
+⚠️ **An ADB success is a CLAIM, never an observation.** Write it with
+`profiles.recordProfileClaim()`, which clears `isObserved` *and* `observedAt`. Reading a claim
+back as proof is a cache confirming its own last guess, and it is how a kids' pool played under
+the owner's account on 2026-08-18
+([decision](docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)).
+
+⚠️ **THE SCREEN AND THE CLOCK BOTH OUTRANK THE MEMORY.** A remembered observation can be
+correct and still wrong to act on: the picker may be up over it (2026-09-23), or a person may
+have changed the profile at the TV since (2026-09-12, three hours of two kids' queues under the
+owner). Nothing on this deployment reports a profile picked at the TV, so the only defence is
+the TTL
+([screen](docs/decisions/2026-09-23-the-screen-outranks-the-observation-and-a-session-proves-the-play.md),
+[clock](docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)).
+
+⚠️ **ABSTENTION IS A PASS, AND THAT IS DELIBERATE — so do not treat the live audit as the last
+line.** `verifyAccount()` reports `isMismatch` and `hasSession` separately, and only a POSITIVE
+mismatch stops playback. Failing a play because Plex was slow is a worse household outcome than
+a mis-filed row, on a device whose session can take 25 s to appear. The net under it is the
+`gated_push` log plus `accountAudit.auditAttribution()`, which is why the push row is written
+**on the no-opinion path too**.
+
+⚠️ **The attribution audit matches on RATING KEYS, never on libraries.** Several queues
+legitimately draw from one library on different accounts — a family queue bound to the owner
+and a kids' queue bound to a child both play Shows. A library-scoped check fires on its first
+run, gets switched off, and then the real failure goes unseen again. Only an item THAT PUSH
+sent counts.
+
+⚠️ **A failed history read is not a clean run.** `AttributionReport.unreadable` is separate
+from `findings`, and the MQTT reply's `ok` describes the REQUEST while `findings` describes the
+ANSWER. Folding them is how a broken check reads as a passing one for a month.
+
+The audit is `GET /api/account-audit` and `queuepilot/cmd/queue/account-audit`, **evaluated on
+a read with no timer**, and this repo publishes on neither — same posture as the seasonal reset
+([decision](docs/decisions/2026-09-08-the-reset-is-exposed-on-the-api-and-mqtt-without-a-home-assistant-automation.md)).
+
+**Still open:** the `set: "auto"` path resolves through `waitForProfile({match: null})`, the
+PMS-log detector that cannot match on this deployment, because the Shield's requests reach PMS
+through the reverse proxy's address. Do not "fix" it by pointing the regular expression at the
+proxy — that address is shared with QueuePilot's own managed-token calls, so the detector would
+confirm whatever the gate just asked for.
+
 ## People on a queue
 
 A queue's audience is one vertical list with three sections — **Must be here**, **Nice to have**,

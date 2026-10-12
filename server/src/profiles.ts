@@ -22,7 +22,13 @@ import { statSync } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
 import { errMessage } from './errors.js';
 import type { CancelFlag } from './types.js';
-import { PMS_LOG_PATH, PROFILE_WAIT_SECONDS, PROFILE_SET_MAP, SHIELD_IP } from './env.js';
+import {
+  PMS_LOG_PATH,
+  PROFILE_OBSERVATION_TTL_SECONDS,
+  PROFILE_WAIT_SECONDS,
+  PROFILE_SET_MAP,
+  SHIELD_IP,
+} from './env.js';
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
@@ -62,20 +68,73 @@ export function _resetLineRe(): void {
 // last told, and that is exactly how a Younger Kids pool played under the owner's account on
 // 2026-08-18 (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md).
 // Only an observation may satisfy a gate; a claim is a hint for the picker walk and nothing more.
-export const LAST_SEEN: { title: string | null; isObserved: boolean } = {
+//
+// `observedAt` is the SECOND half of that rule, and it exists because `isObserved` alone still
+// let a gated queue play as the wrong account on 2026-09-12. An observation is a statement
+// about a moment, not a standing fact: nothing tells QueuePilot that a person picked a
+// different profile on the TV after the last proof, so an unexpiring one is a cache confirming
+// something that stopped being true hours ago. `PROFILE_OBSERVATION_TTL_SECONDS` bounds it.
+// (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+export const LAST_SEEN: {
+  title: string | null;
+  isObserved: boolean;
+  /** Epoch MILLISECONDS of the observation, or null when there is none. */
+  observedAt: number | null;
+} = {
   title: null,
   isObserved: false,
+  observedAt: null,
 };
+
+// Test seam. The TTL is the one rule here that a test cannot exercise without controlling the
+// clock, and `vi.useFakeTimers()` would also freeze the poll loops in `waitForProfile`.
+let now: () => number = () => Date.now();
+
+/** Point the module's clock somewhere else. Pass nothing to restore `Date.now`. */
+export function _setNow(clock?: () => number): void {
+  now = clock ?? (() => Date.now());
+}
 
 /** Record a profile that Plex itself identified, never one inferred from an ADB keypress. */
 export function recordObservedProfile(title: string): void {
   LAST_SEEN.title = title;
   LAST_SEEN.isObserved = true;
+  LAST_SEEN.observedAt = now();
+}
+
+/**
+ * Record a title an ADB switch CLAIMED. Keeps it as the picker's navigation hint and strips
+ * every trace of authority, so a later gate cannot read the claim back as proof.
+ */
+export function recordProfileClaim(title: string): void {
+  LAST_SEEN.title = title;
+  LAST_SEEN.isObserved = false;
+  LAST_SEEN.observedAt = null;
 }
 
 /** Keep a title as a picker hint, but prevent stale evidence from clearing a profile gate. */
 export function invalidateObservedProfile(): void {
   LAST_SEEN.isObserved = false;
+  LAST_SEEN.observedAt = null;
+}
+
+/**
+ * Is the current observation recent enough to clear a profile gate?
+ *
+ * False when there is no observation at all, and false once it is older than
+ * `PROFILE_OBSERVATION_TTL_SECONDS`. A TTL of 0 or less disables the fast path outright,
+ * which is the setting for a deployment that would rather spend the picker walk every time.
+ */
+export function isObservationFresh(): boolean {
+  if (!LAST_SEEN.isObserved || LAST_SEEN.observedAt == null) return false;
+  if (PROFILE_OBSERVATION_TTL_SECONDS <= 0) return false;
+  return now() - LAST_SEEN.observedAt <= PROFILE_OBSERVATION_TTL_SECONDS * 1000;
+}
+
+/** How old the current observation is, in seconds, or null when there is none. */
+export function observationAgeSeconds(): number | null {
+  if (LAST_SEEN.observedAt == null) return null;
+  return Math.max(0, Math.round((now() - LAST_SEEN.observedAt) / 1000));
 }
 
 // Map a Plex Home profile title to a set name, or null if unmapped. (config.set_for_profile)
