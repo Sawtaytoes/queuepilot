@@ -43,7 +43,7 @@ import { stubDriverDeps } from './stubs/hooks.mjs';
 import type { Device } from '../server/src/types.js';
 
 stubDriverDeps();
-const { CTL: RAW_CTL, reset, nCalls } = await import('./stubs/control.mjs');
+const { CTL: RAW_CTL, reset, nCalls, observe } = await import('./stubs/control.mjs');
 const driver = await import('../server/src/driver.js');
 
 /** What `playback.verifyAccount()` answers — see `AccountVerdict` in server/src/playback.ts. */
@@ -63,7 +63,12 @@ interface DriverCtl {
   switchResult: [boolean, string];
   same: Map<string, boolean>;
   playResults: { queued?: number; played?: boolean; error?: string }[];
-  lastSeen: { title: string | null; isObserved: boolean };
+  lastSeen: { title: string | null; isObserved: boolean; observedAt: number | null };
+  observationTtlSeconds: number;
+  gatedPushes: {
+    setId: string; profile: string | null; accountId: number; pushedAt: number;
+    ratingKeys: string[]; playQueueId: number | null;
+  }[];
   awake: boolean;
   onSwitch: (() => void) | null;
   accountVerdict: Verdict | null;
@@ -103,8 +108,7 @@ const drive = (kw: Record<string, unknown> = {}): Promise<Record<string, unknown
 // (a) THE 2026-08-18 FAILURE. Play succeeds, but Plex is playing as the OWNER.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true; // the gate is satisfied — and still lands on the wrong account
+observe('Younger Kids'); // the gate is satisfied — and still lands on the wrong account
 CTL.accountVerdict = { isMismatch: true, accountId: OWNER, title: 'sawtaytoes' };
 let res = await drive();
 ok('(a) wrong account: the audit ran', nCalls('verify_account') === 1);
@@ -155,8 +159,7 @@ ok('(b2) next queue: the verified profile skips the picker',
 // terminal — the difference between "it is wrong" and "I could not tell".
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.accountVerdict = {
   isMismatch: false, accountId: null, title: null, reason: 'no session appeared',
 };
@@ -165,14 +168,44 @@ ok('(c) abstain: reports played anyway', res.played === true, JSON.stringify(res
 ok('(c) abstain: no error', !res.error, JSON.stringify(res));
 ok('(c) abstain: playback is NOT stopped', nCalls('stop_playback') === 0);
 
+// THE NET UNDER THE ABSTENTION. The live check had no opinion, so this play is exactly the
+// kind that reached the owner's account unreported on 2026-09-12. The row must be logged, or
+// the attribution audit is blind to the only plays it is needed for.
+// (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+ok('(c) abstain: the push IS logged for the attribution audit',
+  CTL.gatedPushes.length === 1, JSON.stringify(CTL.gatedPushes));
+ok('(c) abstain: the logged row carries the set, the bound account and the pushed keys',
+  CTL.gatedPushes[0]?.setId === 'shorts'
+    && CTL.gatedPushes[0]?.accountId === YOUNGER_KIDS
+    && CTL.gatedPushes[0]?.profile === 'Younger Kids'
+    && Array.isArray(CTL.gatedPushes[0]?.ratingKeys)
+    && CTL.gatedPushes[0].ratingKeys.length > 0,
+  JSON.stringify(CTL.gatedPushes));
+
+// (c2) A CONFIRMED-CORRECT push is logged too. It is the baseline the report is read
+//      against: "this queue pushed and Plex agreed" is a different answer from "no record".
+reset();
+CTL.accountVerdict = { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' };
+await drive();
+ok('(c2) a matching audit still logs the push', CTL.gatedPushes.length === 1,
+  JSON.stringify(CTL.gatedPushes));
+
+// (c3) A play that NEVER HAPPENED is not a push. A row here would make the audit hunt Plex
+//      history for keys nothing ever sent, and every absence would read as a clean run.
+reset();
+observe('Younger Kids');
+CTL.playResults = [{ queued: 0, played: false, error: 'Companion refused' }];
+await drive();
+ok('(c3) a failed play logs NO push', CTL.gatedPushes.length === 0,
+  JSON.stringify(CTL.gatedPushes));
+
 // --------------------------------------------------------------------------- //
 // (d) No bound account (an ungated curated queue, or a set with no account_id). The SESSION
 //     wait still runs — it is what proves the push became playback — but there is nothing to
 //     compare the account against, so whatever account the session names is never a mismatch.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.accountVerdict = { isMismatch: false, accountId: OWNER, title: 'sawtaytoes' };
 res = await drive({ accountId: null });
 ok('(d) no bound account: the session wait still runs, once', nCalls('verify_account') === 1);
@@ -185,8 +218,7 @@ ok('(d) no bound account: plays exactly once when the session appears', nCalls('
 //     error must survive unchanged rather than being masked by an audit failure.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.playResults = [{ queued: 2, played: false, error: 'playMedia HTTP 500' }];
 CTL.accountVerdict = { isMismatch: true, accountId: OWNER, title: 'sawtaytoes' };
 res = await drive();
@@ -201,8 +233,7 @@ ok('(e) play failed: the ORIGINAL play error survives',
 //     when LAST_SEEN is cold or stale.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'sawtaytoes';
-CTL.lastSeen.isObserved = true;
+observe('sawtaytoes');
 CTL.accountObservation = { accountId: YOUNGER_KIDS, title: 'Younger Kids' };
 CTL.accountVerdict = { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' };
 res = await drive();
@@ -219,8 +250,7 @@ ok('(f) matching active session: playback starts', res.played === true, JSON.str
 //     must walk the picker and use the observed title as the starting-position hint.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.accountObservation = { accountId: OWNER, title: 'sawtaytoes' };
 CTL.accountVerdict = { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' };
 // Even a stale/misconfigured alias must not overrule the stronger account-id mismatch.
@@ -244,8 +274,7 @@ ok('(g) wrong active session: successful new play records the requested profile'
 //     read the account off the session that finally appears.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.accountVerdicts = [
   { isMismatch: false, accountId: null, title: null, reason: 'no session appeared on the target client' },
   { isMismatch: false, accountId: YOUNGER_KIDS, title: 'Younger Kids' },
@@ -269,8 +298,7 @@ ok('(h) no session after play: the second session is the trusted observation',
 //     an error on every scan.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.accountVerdict = {
   isMismatch: false, accountId: null, title: null, reason: 'no session appeared on the target client',
 };
@@ -284,8 +312,7 @@ ok('(i) never a session: no error, nothing stopped', !res.error && nCalls('stop_
 //     unknown. No retry, no error.
 // --------------------------------------------------------------------------- //
 reset();
-CTL.lastSeen.title = 'Younger Kids';
-CTL.lastSeen.isObserved = true;
+observe('Younger Kids');
 CTL.accountVerdict = {
   isMismatch: false, accountId: null, title: null, hasSession: true,
   reason: 'target session carries no User id',

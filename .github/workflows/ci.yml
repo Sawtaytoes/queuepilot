@@ -246,6 +246,12 @@ jobs:
       # `played: true`, and Plex scrobbled all three shorts to the OWNER — because nothing
       # between "CENTER was pressed" and "Companion answered 200" can see which profile Plex
       # actually signed into. account-audit-test pins the read-back that now can).
+      # And the two holes BOTH of those left: a remembered observation with no expiry (a
+      # correct, matching, two-hour-old one skipped the picker on 2026-09-12 and sent three
+      # hours of a kids' queue to the owner), and nothing noticing a wrong-account play that
+      # already happened. fsm-wake-and-skip pins the TTL; the attribution audit's own cases
+      # are vitest (server/src/accountAudit.test.ts) because it is a pure comparison over a
+      # stubbed history read.
       # The §B.3 TTL sweep + specials/extras filter run in the browserless block below.
       - name: Engine tests (offline)
         run: |

@@ -170,6 +170,18 @@ export const RESUME_PUSH_TRIGGER = bool('RESUME_PUSH_TRIGGER', true);
 export const PMS_LOG_PATH = str('PMS_LOG_PATH', '/pms-logs/Plex Media Server.log');
 export const SHIELD_IP = hostval('SHIELD_IP', 'shield_ip', '192.0.2.30');
 export const PROFILE_WAIT_SECONDS = int('PROFILE_WAIT_SECONDS', 120);
+// How long a profile OBSERVATION may clear a gate before the picker is walked again.
+//
+// The remembered observation exists to spare the picker walk between back-to-back queues,
+// which is the only case it is needed for: when a session is live, the preflight reads the
+// account from Plex directly and never consults this. What it must NOT do is answer for a
+// Shield that has been idle for hours — a person can pick another profile on the TV and
+// nothing reports that, so an unexpiring observation is how a kids' queue played under the
+// owner's account on 2026-09-12. Ten minutes keeps the fast path for the realistic
+// queue-to-queue case and spends ~16 s of picker walk after a long gap. 0 disables the fast
+// path altogether.
+// (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+export const PROFILE_OBSERVATION_TTL_SECONDS = float('PROFILE_OBSERVATION_TTL_SECONDS', 600);
 // Plex Home profile title -> set name. Titles must match plex.tv exactly.
 export const PROFILE_SET_MAP = json<Record<string, string>>('PROFILE_SET_MAP', {
   'Younger Kids': 'younger',
@@ -245,6 +257,21 @@ export const PLAYBACK_FSM_RETRY_BACKOFF = float('PLAYBACK_FSM_RETRY_BACKOFF', 1.
 export const PLAYBACK_SESSION_WAIT_SECONDS = float('PLAYBACK_SESSION_WAIT_SECONDS', 25);
 export const PLAYBACK_SESSION_RETRIES = int('PLAYBACK_SESSION_RETRIES', 1);
 
+// --- the attribution audit (accountAudit.ts) ----------------------------------- //
+// The net under the post-play audit's abstentions: it compares the `gated_push` log against
+// Plex history and names items a gated queue played under another account. EVALUATED ON A
+// READ — the route and the MQTT command are the whole trigger surface, and there is no timer.
+//
+// The lookback chooses which pushes a run examines; 7 days is long enough that a weekly look
+// never has a blind spot. The per-push window bounds how far after a push a history row may
+// still be attributed to it: 6 h covers an afternoon of one queue and stops a ratingKey
+// played again next week from being read as this push's fault.
+// (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+export const ACCOUNT_AUDIT_LOOKBACK_SECONDS = float(
+  'ACCOUNT_AUDIT_LOOKBACK_SECONDS', 7 * 24 * 60 * 60);
+export const ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS = float(
+  'ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS', 6 * 60 * 60);
+
 // --- MQTT (Mosquitto HA add-on) ----------------------------------------------- //
 // MQTT survives the port: HA's automations, the retained device registry and the discovery
 // sensor are real external consumers. What goes away is the INTERNAL round trip between the
@@ -318,6 +345,13 @@ export const T_CMD_RESET_WATCHED = str('T_CMD_RESET_WATCHED', 'queuepilot/cmd/qu
 // rather than silence. Not retained: it describes one reset, not a current state — the same
 // rule `resp/topup` and `resp/finished` follow.
 export const T_RESP_RESET_WATCHED = str('T_RESP_RESET_WATCHED', 'queuepilot/resp/reset-watched');
+// The attribution audit's MQTT door, alongside the HTTP route. Same posture as the reset
+// above: a SEAM, with nothing in this repo publishing on it and no Home Assistant dependency.
+// The payload may carry `{"lookbackSeconds": <n>}`; anything else uses the configured default.
+// (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+export const T_CMD_ACCOUNT_AUDIT = str('T_CMD_ACCOUNT_AUDIT', 'queuepilot/cmd/queue/account-audit');
+// The report. Not retained, for `resp/reset-watched`'s reason: it describes one run.
+export const T_RESP_ACCOUNT_AUDIT = str('T_RESP_ACCOUNT_AUDIT', 'queuepilot/resp/account-audit');
 // Cast sidecar command topic (decision 2026-08-03). The sidecar has always read this from
 // env (cast_sidecar/service.py:18); the publisher used to hardcode it in playback.js, so the
 // two halves could be re-pointed independently and silently diverge — the sidecar sitting on
