@@ -13,10 +13,12 @@ import { startTopupScheduler, type TopupScheduler } from './topupScheduler.js';
 import * as finished from './finished.js';
 import * as sets from './sets.js';
 import * as watchedReset from './watchedReset.js';
+import { auditAttribution, summarise } from './accountAudit.js';
 import {
   MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
   T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
   T_CMD_RESET_WATCHED, T_RESP_RESET_WATCHED,
+  T_CMD_ACCOUNT_AUDIT, T_RESP_ACCOUNT_AUDIT,
   T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_RESP_TOPUP, T_RESP_FINISHED, T_STATE,
   T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
   DEVICE_ANNOUNCE_SECONDS,
@@ -220,6 +222,35 @@ async function handleResetWatched(payload: Record<string, unknown>): Promise<voi
   }
 }
 
+/**
+ * Run the attribution audit — the MQTT door onto `auditAttribution()`, beside the HTTP route.
+ *
+ * Same posture as `handleResetWatched` above: this repo publishes on no topic and ships no
+ * Home Assistant automation. The topic is a seam for somebody else's scheduler.
+ *
+ * Answers on `resp/account-audit` whatever happened, INCLUDING a clean run and a failure. A
+ * run with nothing to report is the answer most of the time, and silence on a check nobody is
+ * watching is indistinguishable from a broker that dropped the message.
+ *
+ * ⚠️ The reply carries `ok` for the REQUEST, and `findings` for the ANSWER. They are not the
+ * same thing and must not be folded together: `ok: true, findings: []` is a clean week, while
+ * `ok: false` means the audit could not look — and a caller that treats "could not look" as
+ * "nothing wrong" is the failure this whole feature exists to stop.
+ * (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+ */
+async function handleAccountAudit(payload: Record<string, unknown>): Promise<void> {
+  try {
+    const asked = Number(payload.lookbackSeconds);
+    const report = await auditAttribution(
+      Number.isFinite(asked) && asked > 0 ? { lookbackSeconds: asked } : {},
+    );
+    pub(T_RESP_ACCOUNT_AUDIT, { ok: report.unreadable == null, ...report });
+    console.log(`[mqttd] account-audit: ${summarise(report)}`);
+  } catch (e) {
+    pub(T_RESP_ACCOUNT_AUDIT, { ok: false, error: errMessage(e) });
+  }
+}
+
 async function handlePreview(payload: PreviewPayload): Promise<void> {
   const setName = String(payload.set || '');
   const reply = String(payload.reply || '');
@@ -318,7 +349,7 @@ export function start(): MqttClient | null {
     console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
     c.subscribe([
       T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
-      T_CMD_RESET_WATCHED,
+      T_CMD_RESET_WATCHED, T_CMD_ACCOUNT_AUDIT,
     ]);
     announceDevices();
     publishDiscovery();
@@ -350,6 +381,10 @@ export function start(): MqttClient | null {
     }
     if (topic === T_CMD_RESET_WATCHED) {
       void handleResetWatched(payload);
+      return;
+    }
+    if (topic === T_CMD_ACCOUNT_AUDIT) {
+      void handleAccountAudit(payload);
       return;
     }
     if (topic === T_CMD_PREVIEW) {

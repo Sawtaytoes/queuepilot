@@ -26,12 +26,14 @@ import {
   PLAYBACK_FSM_SWITCH_ATTEMPTS,
   PLAYBACK_FSM_RETRY_BACKOFF,
   PLAYBACK_SESSION_RETRIES,
+  PROFILE_OBSERVATION_TTL_SECONDS,
 } from './env.js';
 import * as adb from './adb.js';
 import { PLEX_SETUP_REQUIRED } from './plexControlModern.js';
 import * as playback from './playback.js';
 import type { PlaybackResult } from './playback.js';
 import * as profiles from './profiles.js';
+import * as gatedPush from './store/db/gatedPush.js';
 import type { CancelFlag, Device, PlexPlayItem, PublishedStateExtra, PushResult } from './types.js';
 import { errMessage, isCancelled } from './errors.js';
 
@@ -142,9 +144,25 @@ export function isConnRefused(result: { error?: string } | null | undefined): bo
 // was signed in as somebody else. Only a profile Plex identified in a PMS log line or in the
 // target player's `/status/sessions` row may skip the walk.
 // (docs/decisions/2026-09-07-a-plex-session-observation-skips-the-profile-picker.md)
+//
+// AGE is load-bearing for the same reason `isObserved` is. An observation is true about the
+// moment Plex made it and about nothing afterwards: a person can pick another profile on the
+// TV and no signal reports that, so an observation with no expiry eventually answers for a
+// Shield it has not seen in hours. That is how `younger_kids_shows` and then
+// `older_kids_shorts_shows` both played under the owner's account on 2026-09-12 — the morning
+// block had left a correct, matching, two-hour-old observation behind.
+// (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
 async function onRequired(required: string): Promise<boolean> {
   const seen = profiles.LAST_SEEN.title;
   if (!seen || !profiles.LAST_SEEN.isObserved) return false;
+  if (!profiles.isObservationFresh()) {
+    console.log(
+      `[driver] the observation of '${seen}' is `
+      + `${profiles.observationAgeSeconds()}s old (ttl ${PROFILE_OBSERVATION_TTL_SECONDS}s); `
+      + 'too old to clear a profile gate',
+    );
+    return false;
+  }
   return Boolean(await Promise.resolve(adb.sameProfile(seen, required)));
 }
 
@@ -269,8 +287,7 @@ async function driveProfile(
       // when CENTER was pressed, never that Plex signed in. Recorded as the picker HINT for
       // the next walk (it saves a ~1.9s dump) and deliberately NOT marked observed, so it
       // cannot satisfy onRequired() and skip the walk on a later play.
-      profiles.LAST_SEEN.title = required;
-      profiles.LAST_SEEN.isObserved = false;
+      profiles.recordProfileClaim(required);
       return null;
     }
     // Onboarding is an owner decision, not a retryable navigation failure. Do not let a
@@ -495,8 +512,63 @@ export async function driveToPlaying({
         + 'profile observation remembered',
       );
     }
+
+    // Log the push for the ATTRIBUTION AUDIT, whatever the verdict above was.
+    //
+    // Written on the no-opinion path too, and that is the point: an abstention is exactly the
+    // case the later audit exists to cover, so skipping the row when the live check shrugged
+    // would blind the net to the only plays it is needed for. A confirmed-correct push is
+    // recorded as well, because "QueuePilot pushed this and Plex agrees" is the baseline the
+    // report is read against.
+    // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+    recordGatedPush({
+      setName,
+      requiredProfile,
+      accountId,
+      lineup,
+      // Plex has returned the playQueue id as both a number and a string; the column is an
+      // INTEGER, so normalise rather than letting SQLite coerce a string silently.
+      playQueueId: Number((result as PlaybackResult).playQueueID) || null,
+    });
   }
   return result;
+}
+
+/**
+ * Append one row to the gated-push log, best-effort.
+ *
+ * Wrapped because this is DIAGNOSTIC bookkeeping and playback has already succeeded by the
+ * time it runs: a locked database or a full disk must not turn a good play into an error the
+ * owner hears. The log line is the fallback record.
+ */
+function recordGatedPush({
+  setName,
+  requiredProfile,
+  accountId,
+  lineup,
+  playQueueId,
+}: {
+  setName: string | null;
+  requiredProfile: string | null;
+  accountId: number;
+  lineup: PlexPlayItem[] | (string | number)[] | undefined;
+  playQueueId: number | null;
+}): void {
+  if (!setName) return;
+  try {
+    const ratingKeys = (lineup ?? []).map((item) =>
+      item && typeof item === 'object' ? String(item.ratingKey) : String(item));
+    gatedPush.recordPush({
+      setId: setName,
+      profile: requiredProfile,
+      accountId,
+      pushedAt: Math.floor(Date.now() / 1000),
+      ratingKeys,
+      playQueueId,
+    });
+  } catch (e) {
+    console.log(`[driver] could not log the gated push for '${setName}': ${errMessage(e)}`);
+  }
 }
 
 // Exported for unit tests (parity with e2e/playback-fsm-test.py scenarios).
