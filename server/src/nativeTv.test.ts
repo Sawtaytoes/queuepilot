@@ -14,6 +14,7 @@ const f = vi.hoisted(() => ({
   finalize: vi.fn(),
   reconcile: vi.fn(),
   timeline: vi.fn(),
+  viewCount: 1,
 }));
 vi.mock("./store/db/open.js", async () => {
   const original = await vi.importActual<typeof import("./store/db/open.js")>("./store/db/open.js");
@@ -54,7 +55,7 @@ vi.mock("./engine/plex-live.js", () => ({
   liveClient: () => ({
     container: async () => ({
       machineIdentifier: "fixture-home-server",
-      Metadata: [{ viewCount: 1, duration: 30000, viewOffset: 4000 }],
+      Metadata: [{ viewCount: f.viewCount, duration: 30000, viewOffset: 4000 }],
     }),
   }),
 }));
@@ -77,7 +78,9 @@ vi.mock("./nativePlex.js", () => ({
     token: "fixture-server-token",
   }),
   nativeClient: () => ({
-    container: async () => ({ Metadata: [{ viewCount: 1, duration: 30000, viewOffset: 4000 }] }),
+    container: async () => ({
+      Metadata: [{ viewCount: f.viewCount, duration: 30000, viewOffset: 4000 }],
+    }),
   }),
   nativeTimeline: async (access: { baseUrl: string; token: string }, query: URLSearchParams) =>
     f.timeline(access.baseUrl + "/:/timeline?" + query, {
@@ -117,6 +120,7 @@ const event = (sequence = 1): NativeEvent => ({
   durationMs: 30000,
 });
 beforeEach(() => {
+  f.viewCount = 1;
   f.db = new DatabaseSync(":memory:");
   f.db.exec(SCHEMA_SQL);
   f.members.clear();
@@ -239,6 +243,23 @@ describe("native TV sessions", () => {
     expect(
       (await createNativePlan("watch", "fixture-profile")).items.map((i) => i.ratingKey),
     ).toEqual(["102", "103"]);
+  });
+  it("captures a fresh baseline when the same file starts again in another entry", async () => {
+    f.provider.buckets.mockResolvedValueOnce({
+      play: [
+        { ratingKey: "102", queueEntryKey: "entry-a" },
+        { ratingKey: "102", queueEntryKey: "entry-b" },
+      ],
+      led: [],
+    });
+    const plan = await createNativePlan("watch", "fixture-profile");
+    await nativeEvent(plan.id, plan.sessionKey, event());
+    await nativeEvent(plan.id, plan.sessionKey, { ...event(2), state: "ended", positionMs: 30000 });
+    f.viewCount = 2;
+    await nativeEvent(plan.id, plan.sessionKey, { ...event(3), index: 1 });
+    const persisted = readNativePlan(plan.id, plan.sessionKey);
+    expect(persisted.items[0]?.queueProviderViewCount).toBe(1);
+    expect(persisted.items[1]?.queueProviderViewCount).toBe(2);
   });
   it("requires authorization on plan creation and scoped session events", async () => {
     const app = nativeTvRoutes();

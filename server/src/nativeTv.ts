@@ -396,6 +396,7 @@ export async function nativeEvent(
         ? "stopped"
         : event.state;
       const query = new URLSearchParams({
+        type: "video",
         ratingKey: String(item.ratingKey),
         key: `/library/metadata/${item.ratingKey}`,
         state,
