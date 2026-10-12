@@ -31,7 +31,7 @@ import * as history from '../history.js';
  */
 export function undoSnapshot(mountPrefix: string): MiddlewareHandler {
   const MUTATING = ['POST', 'PATCH', 'PUT', 'DELETE'];
-  const MANAGED = ['/play', '/undo', '/redo', '/board-games'];
+  const MANAGED = ['/play', '/undo', '/redo', '/board-games', '/native'];
   const TOKEN_PATH = /^\/providers\/[^/]+\/token$/;
 
   return async (c, next) => {

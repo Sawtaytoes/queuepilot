@@ -67,7 +67,8 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * moves because a pre-8 image INSERTs into that column by name and would fail against a file
  * that no longer has it.
  */
-export const SCHEMA_VERSION = 8;
+// 9: durable native TV sessions and idempotent progress events. Additive tables only.
+export const SCHEMA_VERSION = 9;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
 const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;

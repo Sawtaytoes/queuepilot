@@ -848,3 +848,18 @@ CREATE TABLE IF NOT EXISTS board_game_known_how (
 );
 
 CREATE INDEX IF NOT EXISTS board_game_known_how_game ON board_game_known_how (game_id);
+
+-- Scoped, durable native TV sessions; no Plex or raw capability tokens are stored.
+CREATE TABLE IF NOT EXISTS native_tv_sessions (
+  id TEXT PRIMARY KEY,
+  key_hash TEXT NOT NULL,
+  data TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS native_tv_events (
+  session_id TEXT NOT NULL,
+  id TEXT NOT NULL,
+  sequence INTEGER NOT NULL,
+  data TEXT NOT NULL,
+  PRIMARY KEY(session_id,id),
+  UNIQUE(session_id,sequence)
+);
