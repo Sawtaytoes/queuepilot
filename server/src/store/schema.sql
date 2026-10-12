@@ -863,3 +863,49 @@ CREATE TABLE IF NOT EXISTS native_tv_events (
   PRIMARY KEY(session_id,id),
   UNIQUE(session_id,sequence)
 );
+
+-- ── The gated-push log — what QueuePilot pushed, and who it was bound to ─────────────────
+--
+-- decision 2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited. One row per
+-- PLAY that carried a profile binding, written after the push succeeded. It exists so the
+-- attribution audit can answer a question no other table can: *did the items this queue
+-- pushed end up on the account the queue is bound to?*
+--
+-- ⚠️ THE RATING KEYS ARE WHAT MAKES THE AUDIT PRECISE, and leaving them out is the obvious
+-- shortcut that breaks it. Without them the audit can only ask "did anything in section 5
+-- land on another account", and section 5 is legitimately played by several accounts — a
+-- family queue bound to the owner and a kids' queue bound to a child draw from the same
+-- libraries. The answer would be a false positive on the first run and the check would be
+-- switched off. With them it asks only about items THIS push put in the play queue.
+--
+-- There is deliberately NO section list here. It would only narrow the audit's history read,
+-- and that read is one request for a whole week (38 rows across every library, measured
+-- 2026-10-12), so the column would buy nothing and would have to be threaded through
+-- `materialize()` and `handoff()` to get here.
+--
+-- No FOREIGN KEY on `set_id`, for `lead_cooldown`'s reason: under STORE_BACKEND=yaml the
+-- `sets` table is empty and every row would be refused.
+CREATE TABLE IF NOT EXISTS gated_push (
+  -- A rowid alias, for paging and for a stable tiebreak when two pushes share a second.
+  --
+  -- NOT `AUTOINCREMENT`, and `schema.test.ts` is right to forbid it: every id in this file
+  -- that anything outside the database names is TEXT, because a set id is what an NFC card
+  -- carries. This id is named by nothing — not a card, not a topic, not a URL, not another
+  -- table — so a surrogate integer puts no translation table in front of anything. Plain
+  -- rowid assignment is also monotonic in practice here, because the audit prunes the OLDEST
+  -- rows and SQLite derives the next id from the highest one.
+  id            INTEGER PRIMARY KEY,
+  set_id        TEXT NOT NULL,
+  -- The set's `requires_profile` — the human-readable half, for the report only.
+  profile       TEXT,
+  -- The BOUND account (`binding.account_id`). The audit compares history against this.
+  account_id    INTEGER NOT NULL,
+  -- Unix epoch SECONDS.
+  pushed_at     INTEGER NOT NULL,
+  -- JSON array of STRING ratingKeys, in pushed order. Strings because Plex has shipped
+  -- ratingKey as both a number and a string, and the history rows are compared as strings.
+  rating_keys   TEXT NOT NULL CHECK (json_valid(rating_keys)),
+  play_queue_id INTEGER
+);
+
+CREATE INDEX IF NOT EXISTS gated_push_pushed_at ON gated_push (pushed_at);

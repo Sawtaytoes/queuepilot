@@ -157,3 +157,8 @@ follow-up below.
   seconds; it does not notice one that already happened. A periodic check that a gated set's
   recent history carries only its bound account would have caught this on 2026-07-23 instead of
   a month later.
+  **Closed on 2026-10-12** by
+  [a profile observation expires, and a gated push is audited afterwards](2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+  — and it took the SAME failure happening again, on 2026-09-12, to get it built. The check is
+  on-demand rather than periodic, and it matches on the ratingKeys a push actually sent rather
+  than on the set's libraries, because several accounts legitimately play the same libraries.

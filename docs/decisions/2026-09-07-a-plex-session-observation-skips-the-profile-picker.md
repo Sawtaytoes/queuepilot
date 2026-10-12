@@ -5,7 +5,13 @@
 - **Type:** Bug fix / playback latency / diagnostics
 - **Supersedes:** the PMS-log-only observation source and unconditional second-walk clauses of
   [2026-08-21](2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
-- **Superseded by:** —
+- **Superseded by:**
+  [2026-09-23](2026-09-23-the-screen-outranks-the-observation-and-a-session-proves-the-play.md)
+  *(the SCREEN now outranks a remembered observation)*;
+  [2026-10-12](2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
+  *(and so does its AGE — branch 3's idle continuation is bounded by
+  `PROFILE_OBSERVATION_TTL_SECONDS`. The observation stays trusted; it stops being trusted
+  forever.)*
 
 ## Decision
 

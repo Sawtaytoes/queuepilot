@@ -15,6 +15,9 @@ const STUBS = {
   './adb.js': new URL('./adb.stub.mjs', import.meta.url).href,
   './playback.js': new URL('./playback.stub.mjs', import.meta.url).href,
   './profiles.js': new URL('./profiles.stub.mjs', import.meta.url).href,
+  // The real one opens the book of record. These suites have no database, and a profile-gate
+  // assertion must not migrate a SQLite file as a side effect.
+  './store/db/gatedPush.js': new URL('./gatedPush.stub.mjs', import.meta.url).href,
 };
 
 const fromAdbFacade = parentIs('/server/src/adb');
