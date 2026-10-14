@@ -10,10 +10,15 @@
 // image. Inlining is also the only form that works identically under `tsx` in dev and the
 // bundle in prod, with no loader config in either.
 //
-// WHY NOT THE WOFF2 @charcuterie/tokens ALREADY SHIPS: Satori parses TTF/OTF/WOFF and not
-// WOFF2, and decompressing those woff2 yields a VARIABLE font whose `name` table Google
-// subset away — satori's opentype fork throws on its `fvar` axis names. Static per-weight
-// TTFs from Google Fonts, subset to latin, are what parse.
+// WHY NOT THE WOFF2 @charcuterie/tokens ALREADY SHIPS: the container is no longer the
+// problem — Satori 0.55+ decodes WOFF2 itself. The font inside is. Those woff2 are VARIABLE
+// fonts whose `name` table Google subset away, so the `fvar` axes point at name ids that do
+// not exist, and Satori's opentype fork (`@shuding/opentype.js` 1.4.0-beta.0) throws in
+// `parseFvarAxis`: "Cannot read properties of undefined (reading '256')" for Baloo 2 and
+// '257' for Outfit. Re-probed against satori 0.56.1 on 2026-10-13, both faces. Even a
+// variable font that parsed would not help: Satori applies no `wght` variation, so every
+// weight would render as the font's default instance. Static per-weight TTFs from Google
+// Fonts, subset to latin, are what parse and what carry a real 600 and 700.
 //
 // How these were made (one-time; re-run only to change a face or add a weight):
 //
