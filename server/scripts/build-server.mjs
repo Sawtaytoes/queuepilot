@@ -29,9 +29,17 @@ const result = await build({
   sourcemap: true,
   // Several transitive deps (mqtt's decoders, undici's internals) are CJS, and a
   // CJS module inlined into an ESM bundle still calls `require`, which does not
-  // exist in an ES module. This banner is the fleet's verbatim shim.
+  // exist in an ES module. This banner is the fleet's shim.
+  //
+  // The import is ALIASED. esbuild cannot see inside a banner, so it cannot rename around
+  // it, and Satori 0.55+ bundles fflate, whose ESM build has its own top-level
+  // `import { createRequire } from "module"`. Two top-level bindings of one name are a
+  // SyntaxError at LOAD — "Identifier 'createRequire' has already been declared" — which
+  // typecheck, the unit tests and every tsx-run gate all miss, because none of them runs
+  // this bundle. castkit hit the same thing with the same Satori and aliased it the same
+  // way (castkit#262).
   banner: {
-    js: "import{createRequire}from'node:module';const require=createRequire(import.meta.url);",
+    js: "import{createRequire as queuepilotCreateRequire}from'node:module';const require=queuepilotCreateRequire(import.meta.url);",
   },
   // ONE entry, and it is the case this comment always described.
   //
