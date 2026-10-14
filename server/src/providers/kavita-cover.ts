@@ -78,6 +78,10 @@ export async function readingListCoverSvg(label: string): Promise<string> {
     type: 'div',
     props: {
       style: {
+        // Satori 0.43+ lays out like a browser, and a browser's default is `content-box`:
+        // without this the padding lands OUTSIDE the 640x960 frame and the whole cover is
+        // drawn 768x1104 and cropped. Satori 0.29's Yoga was border-box by default.
+        boxSizing: 'border-box',
         width: WIDTH,
         height: HEIGHT,
         display: 'flex',
