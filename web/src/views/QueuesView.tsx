@@ -1,5 +1,6 @@
 import {
   Badge,
+  ButtonLink,
   EmptyState,
   IconButton,
   Spinner,
@@ -800,18 +801,18 @@ function Shelf({
             <Tip
               label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
             >
-              <a
+              <ButtonLink
+                appearance="ghost"
                 aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
                 className="shelfplay"
                 href={`/go/${encodeURIComponent(setId)}`}
-                rel="noreferrer"
-                // A new tab, so the shelf you launched from is still here on the way back —
-                // same reason `OpenQueueButton` does it.
-                target="_blank"
+                intent="accent"
+                isExternal
+                size="sm"
               >
                 {set?.vocabulary?.startIcon ||
                   PLEX_WORDS.startIcon}
-              </a>
+              </ButtonLink>
             </Tip>
           ) : (
             <Tip label="Play this queue on a device">
