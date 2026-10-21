@@ -230,18 +230,18 @@ describe('modern Plex control adapter', () => {
     expect(h.keys).toEqual(['KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
   });
 
-  // Shape of a real dump: the focused tile carries no id; its container names row and column.
-  const deepRow = (): Node[] => [node('screen-home'), node('row-scroller-0'), node('row-scroller-0-8'),
-    { ...node('', true, 'Episode 18'), bounds: '[127,576][367,928]' }];
+  // Both shapes seen on the TV: the focus is an unnamed child of the tile, or the tile itself.
+  const deepRow = (isNamedFocus = false): Node[] => [node('screen-home'), node('row-scroller-0'),
+    node('row-scroller-0-8', isNamedFocus), ...(isNamedFocus ? [] : [{ ...node('', true, 'Episode 18'), bounds: '[127,576][367,928]' }])];
   const toPicker = (key: string): Node[] => {
     if (key === 'KEYCODE_DPAD_RIGHT') return [node('secondary-navigation-account-switch-user', true)];
     if (key === 'KEYCODE_DPAD_CENTER') return picker(['Bob'], 0);
     throw new Error(`unexpected press ${key}`);
   };
 
-  it('leaves a deep Home row with one Back instead of a Left per column', async () => {
+  it.each([false, true])('leaves a deep Home row with one Back instead of a Left per column (named focus: %s)', async (isNamedFocus) => {
     let selected = 3;
-    const h = harness(deepRow(), (key) => {
+    const h = harness(deepRow(isNamedFocus), (key) => {
       if (key === 'KEYCODE_BACK') return rail(selected);
       if (key === 'KEYCODE_DPAD_UP') return rail(--selected);
       return toPicker(key);

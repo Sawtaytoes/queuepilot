@@ -44,9 +44,11 @@ attempt failed and the second one started from the rail.
   - From there, one batch of 3 UP reached `primary-navigation-account`, RIGHT reached
     `secondary-navigation-account-switch-user`, and CENTER opened the picker.
   - A batch of 8 LEFT from row 0 column 8 moved to column 5.
+- Run live with this code from row 2 column 20: Back, 3 Up, Right, Center, picker up. The
+  old walk needed 20 LEFTs there, past the 12-press budget, so it could never have finished.
 - Each tile's container is `row-scroller-<row>-<column>`, with the column absolute, not the
-  visible slot. A future change that needs a column count can read it there; the focused
-  node itself carries no resource id.
+  visible slot. The focused node is sometimes that container and sometimes an unnamed child
+  of it, so the Back rule keys on `screen-home` plus a focused node, not on either id.
 
 ## Evidence
 
