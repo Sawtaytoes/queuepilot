@@ -230,6 +230,47 @@ describe('modern Plex control adapter', () => {
     expect(h.keys).toEqual(['KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
   });
 
+  // Shape of a real dump: the focused tile carries no id; its container names row and column.
+  const deepRow = (): Node[] => [node('screen-home'), node('row-scroller-0'), node('row-scroller-0-8'),
+    { ...node('', true, 'Episode 18'), bounds: '[127,576][367,928]' }];
+  const toPicker = (key: string): Node[] => {
+    if (key === 'KEYCODE_DPAD_RIGHT') return [node('secondary-navigation-account-switch-user', true)];
+    if (key === 'KEYCODE_DPAD_CENTER') return picker(['Bob'], 0);
+    throw new Error(`unexpected press ${key}`);
+  };
+
+  it('leaves a deep Home row with one Back instead of a Left per column', async () => {
+    let selected = 3;
+    const h = harness(deepRow(), (key) => {
+      if (key === 'KEYCODE_BACK') return rail(selected);
+      if (key === 'KEYCODE_DPAD_UP') return rail(--selected);
+      return toPicker(key);
+    }, 12);
+    expect(await h.control.summonPicker()).toEqual(['Bob', true]);
+    expect(h.batches).toEqual([
+      { key: 'KEYCODE_BACK', count: 1 },
+      { key: 'KEYCODE_DPAD_UP', count: 3 },
+      { key: 'KEYCODE_DPAD_RIGHT', count: 1 },
+      { key: 'KEYCODE_DPAD_CENTER', count: 1 },
+    ]);
+    // A LEFT per column from column 8 spent the 12-press budget before CENTER.
+    expect(h.dumpCount()).toBe(5);
+  });
+
+  it('sends Back on Home only once, and acquires a missing focus with Left', async () => {
+    const h = harness(deepRow(), (key, nodes) => {
+      if (key === 'KEYCODE_BACK') return nodes;
+      if (key === 'KEYCODE_DPAD_LEFT') return rail(0);
+      return toPicker(key);
+    }, 12);
+    expect(await h.control.summonPicker()).toEqual(['Bob', true]);
+    expect(h.keys).toEqual(['KEYCODE_BACK', 'KEYCODE_DPAD_LEFT', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
+
+    const unfocused = harness([node('screen-home')], (key) => key === 'KEYCODE_DPAD_LEFT' ? rail(0) : toPicker(key));
+    expect(await unfocused.control.summonPicker()).toEqual(['Bob', true]);
+    expect(unfocused.keys).toEqual(['KEYCODE_DPAD_LEFT', 'KEYCODE_DPAD_RIGHT', 'KEYCODE_DPAD_CENTER']);
+  });
+
   it('leaves a protected Plex player before opening the profile picker', async () => {
     const h = harness([node('android:id/content')], (key) => {
       if (key === 'KEYCODE_MEDIA_STOP') return [node('screen-home'), node('primary-navigation-account', true)];
