@@ -111,6 +111,7 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
     const deadline = Date.now() + waitMs;
     let presses = 0;
     let backs = 0;
+    let homeBacks = 0;
     while (Date.now() < deadline && presses < maxPresses) {
       if (isCancelled(cancel)) return null;
       const nodes = read();
@@ -140,7 +141,15 @@ export function createModernPlexControl(io: ModernPlexIo, options: { maxPresses?
       else if (nodes.some((node) => node['resource-id'] === 'screen-home')) {
         // Back from the player can leave focus in the narrow, collapsed navigation rail.
         const rightEdge = Number(focus?.bounds?.match(/^\[\d+,\d+\]\[(\d+),\d+\]$/)?.[1]);
-        key = rightEdge > 0 && rightEdge <= 32 ? 'KEYCODE_DPAD_RIGHT' : 'KEYCODE_DPAD_LEFT';
+        if (rightEdge > 0 && rightEdge <= 32) key = 'KEYCODE_DPAD_RIGHT';
+        else if (focus && !id.startsWith('secondary-navigation-') && homeBacks < 1) {
+          // One BACK from any Home row tile opens the rail on Home, whatever the row and
+          // column. LEFT costs a press and a dump per column, and a batched LEFT is not a
+          // substitute: the row drops arrows that arrive while it scrolls (8 sent, 3 moved).
+          // Only one BACK: a second one on Home could leave Plex, so a miss falls back to LEFT.
+          key = 'KEYCODE_BACK';
+          homeBacks += 1;
+        } else key = 'KEYCODE_DPAD_LEFT';
       }
       else if (io.playerActive?.() && nodes.every((node) => !node.text && !node['content-desc']
         && (!node['resource-id'] || ['android:id/content', 'com.plexapp.android:id/action_bar_root'].includes(node['resource-id'])))) {
