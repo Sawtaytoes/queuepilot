@@ -18,8 +18,8 @@ policy, and lead windows. It never calls the ADB, Companion or room-control tran
 - `GET /api/native/people/:id/avatar` returns the person's QueuePilot photo when one is set
   ([person photos](person-photos.md)). Otherwise it returns an image from the person's
   explicitly linked Plex account when unambiguous. Missing artwork returns 404. Image
-  redirects are restricted
-  to HTTPS Plex image hosts and Gravatar; credentials are not forwarded.
+  redirects are restricted to HTTPS Plex image hosts and Gravatar; credentials are not
+  forwarded.
 - `POST /api/native/sessions`, body `{setId, start?}`, requires `X-Plex-Profile-Token` from Plex PIN
   authorization. Plex verifies the actual account UUID. The queue binding must match before
   selection. The response contains ordered media identities, resume/section positions, the
