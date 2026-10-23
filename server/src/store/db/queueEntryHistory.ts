@@ -108,3 +108,12 @@ export function undoLatestCompleted(setId: string, entryKey: string): string | n
     .run({ set_id: setId, entry_key: entryKey, item_key: row.item_key });
   return String(row.item_key);
 }
+
+/** Forget one item's ledger row — completion and position both. The native "Mark unwatched". */
+export function clearItem(setId: string, entryKey: string, itemKey: string): boolean {
+  const result = prepareChecked(bookOfRecord(),
+    `DELETE FROM queue_entry_history
+     WHERE set_id = :set_id AND entry_key = :entry_key AND item_key = :item_key`)
+    .run({ set_id: setId, entry_key: entryKey, item_key: itemKey });
+  return Number(result.changes) > 0;
+}
