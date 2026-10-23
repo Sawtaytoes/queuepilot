@@ -22,6 +22,9 @@ const f = vi.hoisted(() => ({
   clearItem: vi.fn(),
   clearDone: vi.fn(),
   bumpGeneration: vi.fn(),
+  addQueueItem: vi.fn(),
+  /** Per-path metadata the profile's own grant reads; `null` is a title it cannot see. */
+  metadata: {} as Record<string, Record<string, unknown> | null>,
   routing: {
     watch: { source: "queue", account_id: 1, enabled: true },
   } as Record<string, Record<string, unknown>>,
@@ -88,9 +91,13 @@ vi.mock("./nativePlex.js", () => ({
     token: "fixture-server-token",
   }),
   nativeClient: () => ({
-    container: async () => ({
-      Metadata: [{ viewCount: f.viewCount, duration: 30000, viewOffset: 4000 }],
-    }),
+    container: async (path: string) => {
+      const listed = f.metadata[path];
+      if (listed === null) return { Metadata: [] };
+      return {
+        Metadata: [{ viewCount: f.viewCount, duration: 30000, viewOffset: 4000, ...listed }],
+      };
+    },
   }),
   nativeTimeline: async (access: { baseUrl: string; token: string }, query: URLSearchParams) =>
     f.timeline(access.baseUrl + "/:/timeline?" + query, {
@@ -121,12 +128,24 @@ vi.mock("./engine/resolve.js", () => ({
 vi.mock("./engine/select.js", () => ({ watchedForSet: async () => new Set<string>() }));
 vi.mock("./queues.js", () => ({ clearDone: f.clearDone }));
 vi.mock("./cache.js", () => ({ bumpGeneration: f.bumpGeneration }));
+vi.mock("./queueItemAdd.js", () => ({
+  addQueueItem: f.addQueueItem,
+  QueueAddError: class QueueAddError extends Error {
+    constructor(
+      message: string,
+      readonly status: 400 | 403,
+    ) {
+      super(message);
+    }
+  },
+}));
 import {
   createNativePlan,
   continueNativePlan,
   nativeEvent,
   nativeFullQueue,
   nativeMarkWatched,
+  nativeAddToQueue,
   nativeQueues,
   readNativePlan,
   validateNativeEvent,
@@ -610,5 +629,99 @@ describe("native TV full queue, item start, and watched marks", () => {
         .status,
     ).toBe(403);
     expect(f.markCompleted).not.toHaveBeenCalled();
+  });
+});
+
+describe("native TV add to queue", () => {
+  const originalQueues = f.queues;
+  const originalRouting = f.routing;
+  const add = (setId: string, body: unknown, proof = "fixture-profile") =>
+    nativeTvRoutes().request(`/native/queues/${setId}/items`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Plex-Profile-Token": proof },
+      body: JSON.stringify(body),
+    });
+  beforeEach(() => {
+    f.queues = [
+      ...originalQueues,
+      { id: "rules", provider_kind: "plex", enabled: true, source: "rotation" },
+    ];
+    f.routing = {
+      ...originalRouting,
+      rules: { source: "rotation", account_id: 1, enabled: true },
+    };
+    f.metadata = {
+      "/library/metadata/401": { type: "movie", title: "Glass City" },
+      "/library/metadata/402": { type: "show", title: "Orbit Nine" },
+      "/library/metadata/403": { type: "episode", title: "The Signal" },
+      "/library/metadata/404": null,
+    };
+    f.addQueueItem.mockReset();
+    f.addQueueItem.mockResolvedValue({ added: true, key: "rk:401" });
+  });
+  afterEach(() => {
+    f.queues = originalQueues;
+    f.routing = originalRouting;
+    f.metadata = {};
+  });
+
+  it("adds a home-server movie at the top with the title the profile's grant reads", async () => {
+    await expect(nativeAddToQueue("watch", "fixture-profile", { ratingKey: "401" })).resolves.toEqual(
+      { added: true, key: "rk:401", title: "Glass City" },
+    );
+    expect(f.addQueueItem).toHaveBeenCalledWith(
+      "watch",
+      { ratingKey: "401", title: "Glass City" },
+      "top",
+    );
+  });
+
+  it("treats the home server's own id as a home item and another id as a shared server", async () => {
+    await nativeAddToQueue("watch", "fixture-profile", {
+      ratingKey: "402",
+      plexServer: "fixture-home-server",
+    });
+    expect(f.addQueueItem).toHaveBeenLastCalledWith(
+      "watch",
+      { ratingKey: "402", title: "Orbit Nine" },
+      "top",
+    );
+    await nativeAddToQueue("watch", "fixture-profile", {
+      ratingKey: "402",
+      plexServer: "fixture-shared-server",
+    });
+    expect(f.addQueueItem).toHaveBeenLastCalledWith(
+      "watch",
+      { ratingKey: "402", title: "Orbit Nine", plex_server: "fixture-shared-server" },
+      "top",
+    );
+  });
+
+  it("answers a duplicate the way the web route does", async () => {
+    f.addQueueItem.mockResolvedValue({ added: false, key: "rk:401", duplicateOf: "rk:401" });
+    const response = await add("watch", { ratingKey: 401 });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      added: false,
+      key: "rk:401",
+      duplicateOf: "rk:401",
+      title: "Glass City",
+    });
+  });
+
+  it("refuses what it cannot add, and writes nothing", async () => {
+    // A Rules queue chooses its own titles.
+    expect((await add("rules", { ratingKey: "401" })).status).toBe(409);
+    // Only a movie or a show is a queue entry.
+    expect((await add("watch", { ratingKey: "403" })).status).toBe(400);
+    expect((await add("watch", { ratingKey: "abc" })).status).toBe(400);
+    expect((await add("watch", {})).status).toBe(400);
+    // A title this profile's grant cannot read.
+    expect((await add("watch", { ratingKey: "404" })).status).toBe(404);
+    // Another profile, and no proof at all.
+    expect((await add("watch", { ratingKey: "401" }, "fixture-child")).status).toBe(403);
+    expect((await add("watch", { ratingKey: "401" }, "")).status).toBe(403);
+    expect((await add("missing", { ratingKey: "401" })).status).toBe(403);
+    expect(f.addQueueItem).not.toHaveBeenCalled();
   });
 });

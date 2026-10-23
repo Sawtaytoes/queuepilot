@@ -1,11 +1,9 @@
 import { Hono } from 'hono';
 import * as cache from '../cache.js';
-import { liveClient } from '../engine/plex-live.js';
 import { inProgress } from '../engine/resolve.js';
 import * as routing from '../engine/routing.js';
 import { toWeight } from '../engine/weight.js';
 import { COLLECTION_PREFIX_RE, isLegacyScalarEntry } from '../entryFormat.js';
-import { findDuplicateItem } from '../entryIdentity.js';
 import { normalizeEntryItemOrder } from '../entryItemOrder.js';
 import * as finished from '../finished.js';
 import * as mqttc from '../mqttc.js';
@@ -28,6 +26,7 @@ import type { ResolvedTile } from '../tiles.js';
 import type { End, EntryObject, QueueEntry, Start } from '../types.js';
 import { mapLimit } from './mapLimit.js';
 import { readBody } from './readBody.js';
+import { addQueueItem, QueueAddError } from '../queueItemAdd.js';
 
 /** A queue entry's manual start override ({season,episode,position_ms}); null = automatic
  *  next-unwatched. `position_ms` rides through here unchanged — this reads the stored mapping
@@ -619,35 +618,11 @@ export function queuesRoutes(): Hono {
     }
     if (value == null || value === '') return c.json({ error: 'empty value' }, 400);
     try {
-      // `added: false` is what `addItem` already answers for an exact key repeat, so the wire
-      // shape is unchanged; `duplicateOf` names the line that made it a repeat. The cfg is the
-      // ENGINE's (`routing.loadSets`), because it is the engine's resolver that runs — the
-      // registry entry `isQueueSet` reads is the file shape, which is a different object.
-      const cfg = routing.loadSets()?.sets[set];
-      const remoteServer = value && typeof value === 'object' && value.plex_server
-        ? String(value.plex_server) : null;
-      if (remoteServer) {
-        if (remoteServer === await plex.machineIdentifier()) {
-          return c.json({ error: 'Use the home server search for local Plex items' }, 400);
-        }
-        if (!cfg || value.ratingKey == null || !/^\d+$/.test(String(value.ratingKey))) {
-          return c.json({ error: 'A shared Plex item needs a valid rating key' }, 400);
-        }
-        const scope = await plex.profileScope(cfg.requires_profile || null);
-        const access = await plexServerAccessForProfile(scope.account ?? null, remoteServer);
-        if (!access) return c.json({ error: 'This queue profile cannot reach that Plex server' }, 403);
-        const metadata = await plexServerGet(access, `/library/metadata/${value.ratingKey}`);
-        const item = metadata.MediaContainer?.Metadata?.[0];
-        if (!item || (item.type !== 'movie' && item.type !== 'show')) {
-          return c.json({ error: 'That item is not available to this queue profile' }, 400);
-        }
-      }
-      if (cfg && !allowDuplicate) {
-        const dup = await findDuplicateItem(liveClient(), cfg, await queues.listSet(set), value);
-        if (dup) return c.json({ added: false, key: dup.key, duplicateOf: dup.key });
-      }
-      return c.json(await queues.addItem(set, value, position, { allowDuplicate }));
+      // The remote-server check, the duplicate guard and the write are shared with the native
+      // TV's add (`queueItemAdd.ts`), so the two routes cannot drift apart.
+      return c.json(await addQueueItem(set, value, position, { allowDuplicate }));
     } catch (e) {
+      if (e instanceof QueueAddError) return c.json({ error: e.message }, e.status);
       return c.json({ error: String(e) }, 500);
     }
   });

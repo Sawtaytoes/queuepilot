@@ -38,7 +38,7 @@ policy, and lead windows. It never calls the ADB, Companion or room-control tran
   finished, the engine can produce the next window within the sitting's playback length.
   Previously handed-over identities are excluded. Exhaustion returns `{complete:true}`.
 
-### Full queue, history, and watched marks
+### Full queue, history, watched marks, and adds
 
 Same `X-Plex-Profile-Token`, same checks as a session (`authorizeQueue()` in
 `server/src/nativeAccess.ts`). A stated refusal is 400/404/409 with `{error}`; anything else
@@ -65,6 +65,13 @@ is 403. Decision: `docs/decisions/2026-10-22-the-native-full-queue-history-and-w
 - `POST /api/native/queues/:setId/watched`, body `{entryKey, ratingKey, plexServer?,
   isWatched}` → `{entryKey, ratingKey, state}`. Queue-owned (`watch_history: queue`) items
   only; a Plex-history entry is 409 because QueuePilot never writes Plex's watched state.
+- `POST /api/native/queues/:setId/items`, body `{ratingKey, plexServer?}` →
+  `{added, key, duplicateOf?, title}`. Adds a movie or show to the top of a Picks queue the
+  profile plays as, through the web route's own `addQueueItem()` (shared-server check,
+  duplicate guard, write). The item is read through the profile's own grant first: 404 when
+  it cannot see it, 400 unless it is a movie or a show. `plexServer` may be the home server's
+  own id. A Rules queue is 409. Decision:
+  `docs/decisions/2026-10-23-the-native-tv-adds-a-title-to-a-picks-queue-it-plays-as.md`.
 
 Sessions and event receipts live in the book of record. Only a hash of the capability key
 is stored; Plex proof and server tokens are not persisted in these tables. Session access
