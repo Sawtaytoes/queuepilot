@@ -55,7 +55,7 @@ import { PersonFace } from "./PersonFace"
  * Each row's Photo button opens a panel under it — a Charcuterie `FileDropZone` (a real file
  * input, so it works from the keyboard and on a phone, with drag and drop on top), plus paste.
  * A chosen picture is shown in the circle it will be cropped to before anything is uploaded,
- * because the server crops to the CENTRE square and a face near the edge of a wide photo is
+ * because the server crops to the CENTER square and a face near the edge of a wide photo is
  * the thing the preview exists to catch.
  */
 export function PeopleModal() {
@@ -476,7 +476,7 @@ function PersonPhotoPanel({
     >
       <span className="photopreview">
         {shownUrl ? (
-          // The circle the face is drawn in, at a size you can judge a crop by. A centre
+          // The circle the face is drawn in, at a size you can judge a crop by. A center
           // `object-fit: cover` is exactly the server's crop, so this IS the stored picture.
           <img
             alt={

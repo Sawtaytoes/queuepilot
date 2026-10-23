@@ -18,7 +18,7 @@
 3. **The stored bytes are never the uploaded bytes.** `server/src/personPhoto.ts` takes the
    type from the magic bytes — JPEG, PNG or WebP, nothing else — refuses an upload over
    **15 MiB** (413) or a decode over **100 MP** (400), turns the picture upright from its EXIF
-   orientation, centre-crops it to **512 x 512** and re-encodes it as WebP at quality 82. sharp
+   orientation, center-crops it to **512 x 512** and re-encodes it as WebP at quality 82. sharp
    writes no metadata unless asked, so EXIF and GPS do not survive.
 4. **The API:**
    - `PUT /api/people/:id/photo` — the raw image as the body (`Content-Type` is ignored for
@@ -38,10 +38,10 @@
    player only ever loads that URL, so it needs no change.
 6. **The web face is Charcuterie's `Avatar`.** `PersonFace` stops being a hand-rolled circle
    and adapts the library component: it chooses the photo URL (with the version in it) and keys
-   the colour on the id. A group never has a photo. Every face is the library's `sm` step.
+   the color on the id. A group never has a photo. Every face is the library's `sm` step.
 7. **The editor:** each row in the people editor has a **Photo** button that opens a panel
    with a Charcuterie `FileDropZone` (file picker and drop) plus paste. A chosen picture is
-   previewed in the same centre circle the server will crop to, and is uploaded only on
+   previewed in the same center circle the server will crop to, and is uploaded only on
    **Save photo**. **Remove photo** deletes it.
 8. **A photo write is not undoable.** `undoSnapshot.ts` skips `/people/:id/photo`, for the
    board-game routes' reason: the row lives in no snapshot, so an undo would restore files that
@@ -52,7 +52,7 @@
 
 ## Context
 
-Before this a face was a coloured initial on every web screen. The TV drew a Plex Home user's
+Before this a face was a colored initial on every web screen. The TV drew a Plex Home user's
 `thumb`, and only for a person holding exactly one Plex account. Most household Plex accounts
 have no picture, so the TV showed placeholders too. The household's pictures exist in other
 apps, and none of them is a source QueuePilot can read.
@@ -60,7 +60,7 @@ apps, and none of them is a source QueuePilot can read.
 `@charcuterie/ui` gained an `Avatar` with an `imageUrl` and an initials fallback after
 `PersonFace` was written as a stand-in for exactly that gap. It also ships `FileDropZone`. The
 fleet survey (`rg -uu` over the app repos) found no shared image-crop component; the crop is
-done on the server, where it can be centre-only and predictable.
+done on the server, where it can be center-only and predictable.
 
 ## Why
 
@@ -80,14 +80,14 @@ done on the server, where it can be centre-only and predictable.
   server bundle and installed in the runtime image, so nothing new enters the lockfile.
   Provenance for the no-Chinese-origin rule: sharp is by Lovell Fuller (UK); libvips by John
   Cupitt and Kirk Martinez (UK, University of Southampton origin).
-- **Centre crop, not saliency.** The preview in the editor is a centre `object-fit: cover`. A
+- **Center crop, not saliency.** The preview in the editor is a center `object-fit: cover`. A
   saliency crop on the server would store a different square from the one the person approved.
 - **The version in the URL.** A replaced photo is a new URL, so the old one can be cached for a
   year and a stale face is impossible.
 - **Charcuterie's `Avatar` over a photo in the hand-rolled circle.** Adding an `<img>` to the
   stand-in would be fixing a shared shape per app. The library one already handles a photo that
-  fails to load. Faces repaint to the library's categorical colours, keyed on the same id, so
-  a rename still does not move anybody's colour.
+  fails to load. Faces repaint to the library's categorical colors, keyed on the same id, so
+  a rename still does not move anybody's color.
 - **One size.** At this app's density the library's `sm` Avatar is about 30 px, which is
   larger than the old 26 px face and big enough to recognize a photo. `md` (about 34 px) made
   initials heavier than the names printed beside them. The old 19 px face has no library step;

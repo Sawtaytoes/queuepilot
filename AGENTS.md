@@ -90,7 +90,7 @@ things bite:
 
 - **The stored bytes are never the uploaded bytes.** `server/src/personPhoto.ts` reads the type
   from the MAGIC BYTES (JPEG, PNG, WebP — nothing else, never SVG), caps the upload at 15 MiB
-  and the decode at 100 MP, turns it upright, centre-crops it to 512 x 512 and re-encodes WebP.
+  and the decode at 100 MP, turns it upright, center-crops it to 512 x 512 and re-encodes WebP.
   sharp writes no metadata unless asked, which is what strips EXIF and GPS — so never add
   `withMetadata()` / `keepExif()` there. `personPhoto.test.ts` proves the strip on a JPEG that
   carries a GPS block.
@@ -156,7 +156,7 @@ Five things bite here.
   third role. Every person and group has a visible Must / Nice / Exclude control, so moving a
   row does not depend on drag and drop or a hidden menu. A group keeps its own rule summary
   beside this queue placement. `PersonFace` is Charcuterie's `Avatar`, adapted: it picks the
-  person's photo and the colour key, and nothing else. It was a hand-rolled stand-in until
+  person's photo and the color key, and nothing else. It was a hand-rolled stand-in until
   2026-10-22, when the library's `Avatar` (photo with an initials fallback) replaced it.
 
 `queue_people` and `group_people` carry **no foreign key on the parent**, and `queue_people`

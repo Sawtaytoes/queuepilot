@@ -4,7 +4,7 @@ import { initials, personPhotoUrl } from "../lib/people"
 import { usePeople } from "../state/people"
 
 /**
- * One person or group, as a face — their QueuePilot photo when they have one, a coloured
+ * One person or group, as a face — their QueuePilot photo when they have one, a colored
  * initial otherwise.
  *
  * ### This is Charcuterie's `Avatar`, adapted
@@ -20,7 +20,7 @@ import { usePeople } from "../state/people"
  *  - **Which photo.** A person's `photoVersion` comes from the people slice, so no caller has
  *    to thread it through. A GROUP never has one — `kind` is what keeps a group whose id
  *    happens to equal a person's from wearing that person's face.
- *  - **The colour key is the ID**, never the name, so a rename does not repaint somebody.
+ *  - **The color key is the ID**, never the name, so a rename does not repaint somebody.
  *  - **Required vs nice-to-have.** A nice-to-have face is drawn `soft` rather than `solid`, and
  *    the callers that show one (`PeopleRow`, `QueuePeopleBadge`) say "nice to have" in text as
  *    well.

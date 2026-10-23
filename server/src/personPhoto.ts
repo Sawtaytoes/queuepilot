@@ -6,7 +6,7 @@
 // An upload is a phone photo, a screenshot, or a picture saved out of another app. Every one
 // of those can carry EXIF, and a phone photo usually carries GPS — the exact location of the
 // house. So the stored bytes are never the uploaded bytes: the image is decoded, turned upright
-// from its EXIF orientation, centre-cropped to a square, scaled to 512 px and re-encoded. sharp
+// from its EXIF orientation, center-cropped to a square, scaled to 512 px and re-encoded. sharp
 // writes NO metadata unless asked (`withMetadata` / `keepExif` are never called here), so the
 // EXIF and GPS blocks do not survive the re-encode; `personPhoto.test.ts` proves it on a JPEG
 // that carries both.
@@ -85,8 +85,8 @@ export function sniffImageType(bytes: Uint8Array): SniffedImageType | null {
 /**
  * Validate and re-encode one upload. Throws `PhotoRejected` with the status to answer.
  *
- * The crop is the CENTRE square, deliberately not sharp's `attention` strategy: the people
- * editor previews the upload with `object-fit: cover`, which is a centre crop, so the preview
+ * The crop is the CENTER square, deliberately not sharp's `attention` strategy: the people
+ * editor previews the upload with `object-fit: cover`, which is a center crop, so the preview
  * a person approves is the picture that gets stored.
  */
 export async function normalizePersonPhoto(upload: Uint8Array): Promise<NormalizedPhoto> {
@@ -111,7 +111,7 @@ export async function normalizePersonPhoto(upload: Uint8Array): Promise<Normaliz
       // Upright from the EXIF orientation BEFORE the crop, or a portrait phone photo is
       // cropped sideways. The orientation tag itself is then gone with the rest of the EXIF.
       .autoOrient()
-      .resize(PHOTO_EDGE, PHOTO_EDGE, { fit: 'cover', position: 'centre' })
+      .resize(PHOTO_EDGE, PHOTO_EDGE, { fit: 'cover', position: 'center' })
       .webp({ quality: 82 })
       .toBuffer({ resolveWithObject: true });
   } catch (e) {

@@ -4594,7 +4594,7 @@ body.rowdragging
    CONTAINER-INDEPENDENT, every rule (decision `2026-08-21-a-class-name-is-not-a-style`).
 
    The face itself has NO rule here. It is Charcuterie's `Avatar` as of 2026-10-22, configured
-   by props in `PersonFace.tsx` — its size, colour and photo are the library's, and an app rule
+   by props in `PersonFace.tsx` — its size, color and photo are the library's, and an app rule
    on it would be the silent override `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`
    forbids. Everything else on this screen is a Charcuterie component too: the audience choices
    are a `SegmentedControl`, the empty states are `EmptyState`s, and the activity control is a
@@ -4711,7 +4711,7 @@ body.rowdragging
 }
 /* The photo panel under a row (`PersonPhotoPanel`). LAYOUT only — the drop zone and the
    buttons are Charcuterie components configured by props. The preview is an `<img>` in the
-   circle the face is drawn in, at a size you can judge a crop by; `object-fit: cover` centred
+   circle the face is drawn in, at a size you can judge a crop by; `object-fit: cover` centerd
    is exactly the server's crop, so the preview IS the stored picture. */
 #peoplemodal .photopanel {
   display: flex;

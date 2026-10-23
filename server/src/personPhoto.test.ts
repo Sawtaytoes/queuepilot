@@ -60,7 +60,7 @@ const pngClaiming = (width: number, height: number): Buffer => {
   ihdr.writeUInt32BE(width, 0);
   ihdr.writeUInt32BE(height, 4);
   ihdr.writeUInt8(8, 8); // bit depth
-  ihdr.writeUInt8(2, 9); // truecolour
+  ihdr.writeUInt8(2, 9); // truecolor
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
@@ -87,7 +87,7 @@ describe('sniffImageType', () => {
 });
 
 describe('normalizePersonPhoto', () => {
-  it('stores a centre-cropped 512 px square WebP', async () => {
+  it('stores a center-cropped 512 px square WebP', async () => {
     const photo = await normalizePersonPhoto(await solid(800, 400).png().toBuffer());
     expect(photo.mime).toBe('image/webp');
     expect([photo.width, photo.height]).toEqual([PHOTO_EDGE, PHOTO_EDGE]);

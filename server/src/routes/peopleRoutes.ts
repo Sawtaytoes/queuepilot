@@ -25,7 +25,7 @@
 // those paints a checklist or a tray, and a birth year is household data with no business
 // crossing the wire to do it. Four fields go out — id, display name, roster position, and the
 // photo VERSION — which is WP-6's rule plus the one thing a face needs. A tray needs a NAME and
-// a FACE; the face is the person's own photo when they have one and a colour hashed from the
+// a FACE; the face is the person's own photo when they have one and a color hashed from the
 // id otherwise. The version is a hash, not the picture: the bytes are a separate,
 // cacheable `GET /api/people/:id/photo` and never ride on a list read.
 import { Hono, type Context } from 'hono';
@@ -349,7 +349,7 @@ export function peopleRoutes(): Hono {
    * `application/octet-stream`) OR `multipart/form-data` with the file in a `photo` field.
    * The TYPE is read from the bytes, never from the header (`personPhoto.ts`): JPEG, PNG and
    * WebP only, at most 15 MiB, and at most 100 MP decoded. Whatever arrives is re-encoded to a
-   * centre-cropped 512 x 512 WebP with every byte of metadata — EXIF, GPS — gone.
+   * center-cropped 512 x 512 WebP with every byte of metadata — EXIF, GPS — gone.
    *
    * 404 no such person · 413 too large · 415 not one of the three types · 400 unreadable.
    */
