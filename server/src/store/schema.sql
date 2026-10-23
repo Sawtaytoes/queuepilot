@@ -860,6 +860,10 @@ CREATE TABLE IF NOT EXISTS native_tv_events (
   id TEXT NOT NULL,
   sequence INTEGER NOT NULL,
   data TEXT NOT NULL,
+  -- Epoch ms when the server accepted the event. The TV's watch history groups plays into
+  -- sittings by it. NULL on an event written before 2026-10-22; history then reads the
+  -- session's start instead and says the time is approximate.
+  recorded_at INTEGER,
   PRIMARY KEY(session_id,id),
   UNIQUE(session_id,sequence)
 );

@@ -7,9 +7,40 @@ import {
   readNativePlan,
   nativeAvatar,
   avatarBytes,
+  nativeFullQueue,
+  nativeWatchHistory,
+  nativeMarkWatched,
   type NativeEvent,
 } from "../nativeTv.js";
+import { NativeRequestError } from "../nativeAccess.js";
+import type { NativeStart } from "../nativeQueueDetail.js";
 import { readBody } from "./readBody.js";
+
+/** A stated refusal keeps its status; anything else is the 403 these routes always answered. */
+const refusal = (e: unknown, fallback: string): { body: { error: string }; status: 400 | 403 | 404 | 409 } => ({
+  body: { error: e instanceof Error ? e.message : fallback },
+  status: e instanceof NativeRequestError ? e.status : 403,
+});
+
+/** The optional "start from this item" of a new session, or null when absent or malformed. */
+function startFrom(raw: unknown): NativeStart | null | "invalid" {
+  if (raw == null) return null;
+  if (typeof raw !== "object") return "invalid";
+  const start = raw as Record<string, unknown>;
+  const entryKey = typeof start.entryKey === "string" ? start.entryKey : "";
+  const ratingKey =
+    typeof start.ratingKey === "string" || typeof start.ratingKey === "number"
+      ? String(start.ratingKey)
+      : "";
+  const mode = start.mode === undefined ? "continue" : start.mode;
+  if (!entryKey || !ratingKey || (mode !== "continue" && mode !== "only")) return "invalid";
+  return {
+    entryKey,
+    ratingKey,
+    plexServer: typeof start.plexServer === "string" && start.plexServer ? start.plexServer : null,
+    mode,
+  };
+}
 export function nativeTvRoutes(): Hono {
   const app = new Hono();
   app.get("/native/queues", async (c) => {
@@ -37,12 +68,64 @@ export function nativeTvRoutes(): Hono {
       const body = await readBody(c),
         proof = c.req.header("X-Plex-Profile-Token") || "";
       c.header("Cache-Control", "no-store");
-      return c.json(await createNativePlan(String(body.setId || ""), proof));
+      const start = startFrom(body.start);
+      if (start === "invalid")
+        return c.json(
+          { error: "start needs an entryKey, a ratingKey, and a mode of continue or only" },
+          400,
+        );
+      return c.json(await createNativePlan(String(body.setId || ""), proof, start));
     } catch (e) {
+      const { body, status } = refusal(e, "Native playback could not start");
+      return c.json(body, status);
+    }
+  });
+  app.get("/native/queues/:setId/full", async (c) => {
+    try {
+      c.header("Cache-Control", "no-store");
       return c.json(
-        { error: e instanceof Error ? e.message : "Native playback could not start" },
-        403,
+        await nativeFullQueue(c.req.param("setId"), c.req.header("X-Plex-Profile-Token") || ""),
       );
+    } catch (e) {
+      const { body, status } = refusal(e, "The queue could not be read");
+      return c.json(body, status);
+    }
+  });
+  app.post("/native/queues/:setId/watched", async (c) => {
+    try {
+      const body = await readBody(c);
+      if (
+        typeof body.entryKey !== "string" ||
+        !(typeof body.ratingKey === "string" || typeof body.ratingKey === "number") ||
+        typeof body.isWatched !== "boolean"
+      )
+        return c.json({ error: "Send entryKey, ratingKey, and a boolean isWatched" }, 400);
+      c.header("Cache-Control", "no-store");
+      return c.json(
+        await nativeMarkWatched(c.req.param("setId"), c.req.header("X-Plex-Profile-Token") || "", {
+          entryKey: body.entryKey,
+          ratingKey: String(body.ratingKey),
+          plexServer: typeof body.plexServer === "string" ? body.plexServer : null,
+          isWatched: body.isWatched,
+        }),
+      );
+    } catch (e) {
+      const { body, status } = refusal(e, "The watched state could not be saved");
+      return c.json(body, status);
+    }
+  });
+  app.get("/native/history", async (c) => {
+    try {
+      c.header("Cache-Control", "no-store");
+      return c.json(
+        await nativeWatchHistory(
+          c.req.header("X-Plex-Profile-Token") || "",
+          Number(c.req.query("days") || 30),
+        ),
+      );
+    } catch (e) {
+      const { body, status } = refusal(e, "The watch history could not be read");
+      return c.json(body, status);
     }
   });
   app.get("/native/sessions/:id", (c) => {
