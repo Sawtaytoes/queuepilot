@@ -4,6 +4,8 @@
 import { connect, type IClientPublishOptions, type MqttClient } from 'mqtt';
 import { randomUUID } from 'node:crypto';
 import * as session from './session.js';
+import { createChooser } from './chooser.js';
+import { chooserCatalog, chooserPerson } from './chooserCatalog.js';
 import * as enginePreview from './engine/preview.js';
 import * as engineRouting from './engine/routing.js';
 import * as adb from './adb.js';
@@ -81,6 +83,15 @@ const pub: Publish = (topic, payload, opts = {}) => {
   const settings: IClientPublishOptions = { qos: opts.qos ?? 1, retain: Boolean(opts.retain) };
   c.publish(topic, body, settings);
 };
+
+const chooser = createChooser({
+  catalog: chooserCatalog,
+  person: chooserPerson,
+  publish: (reader, state, event, queue) => {
+    pub(`queuepilot/chooser/${reader}/state`, state, { retain: true });
+    pub(`queuepilot/resp/chooser/${reader}`, { event, ...state, ...(queue ? { queue } : {}) });
+  },
+});
 
 function publishState(extra: StateExtra = {}): void {
   const state: PublishedSessionState & { boot?: boolean } = {
@@ -349,7 +360,7 @@ export function start(): MqttClient | null {
     console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
     c.subscribe([
       T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
-      T_CMD_RESET_WATCHED, T_CMD_ACCOUNT_AUDIT,
+      T_CMD_RESET_WATCHED, T_CMD_ACCOUNT_AUDIT, 'queuepilot/cmd/chooser/+',
     ]);
     announceDevices();
     publishDiscovery();
@@ -358,7 +369,7 @@ export function start(): MqttClient | null {
     announceTimer = setInterval(announceDevices, Math.max(30, DEVICE_ANNOUNCE_SECONDS) * 1000);
   });
   c.on('error', (e) => console.log(`[mqttd] ${e.message}`));
-  c.on('message', (topic, buf) => {
+  c.on('message', (topic, buf, packet) => {
     // One parse for five command topics, so it stays `unknown` here and each handler declares
     // the shape it reads. A non-object body (or junk) reads as `{}`, exactly as before.
     let payload: Record<string, unknown> = {};
@@ -366,6 +377,10 @@ export function start(): MqttClient | null {
       const parsed: unknown = JSON.parse(buf.toString() || '{}');
       payload = parsed !== null && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
     } catch { payload = {}; }
+    if (topic.startsWith('queuepilot/cmd/chooser/')) {
+      if (!packet.retain) void chooser.handle(topic.slice('queuepilot/cmd/chooser/'.length), payload);
+      return;
+    }
     if (topic === T_CMD_START) {
       // fire-and-forget async
       void handleStart(payload as SessionStartPayload);
@@ -399,6 +414,7 @@ export function start(): MqttClient | null {
 }
 
 export function stop(): void {
+  chooser.clear();
   if (announceTimer) clearInterval(announceTimer);
   topupScheduler?.stop();
   topupScheduler = null;
