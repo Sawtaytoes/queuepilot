@@ -36,7 +36,7 @@ import {
 import { isRandomOrder } from "../lib/kind"
 import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { queueNumbers, queueTitle } from "../lib/people"
+import { queueListNumbers, queueTitle } from "../lib/people"
 import { ROUTE_PATHS } from "../lib/routePaths"
 import {
   collectionOrderCount,
@@ -142,6 +142,7 @@ function RulesShelf({
   isCollapsed,
   members,
   people,
+  title,
 }: {
   channel: RegistrySet
   filter: string
@@ -149,6 +150,8 @@ function RulesShelf({
   isCollapsed: boolean
   members: readonly QueueMember[]
   people: readonly Person[]
+  /** `queueTitle`'s answer — the Picks shelves and the native TV catalog say the same. */
+  title: string
 }) {
   const [items, setItems] = useState<
     RulesPreviewItem[] | null
@@ -268,7 +271,7 @@ function RulesShelf({
 
   const isHiddenByFilter = !shelfMatches(
     filter,
-    [channel.label],
+    [title, channel.label],
     items ?? [],
   )
 
@@ -296,7 +299,7 @@ function RulesShelf({
           className="open"
           to={`/channels/${encodeURIComponent(channel.id)}`}
         >
-          <span className="lbl">{channel.label}</span>
+          <span className="lbl">{title}</span>
           {items ? (
             <span className="sec">{items.length}</span>
           ) : null}
@@ -1130,10 +1133,11 @@ export function QueuesView({
   const labelForKind = (kind: string) =>
     reg?.sets.find((set) => set.provider_kind === kind)
       ?.vocabulary?.name || kind
-  const numbers = queueNumbers(
-    shelfIds
-      .map((id) => reg?.sets.find((s) => s.id === id))
-      .filter((s): s is NonNullable<typeof s> => s != null),
+  // `queueListNumbers` is the Picks shelves in nested order, then the Rules shelves — the two
+  // sections this page draws. The native TV catalog calls the same function over the same
+  // registry, so a queue wears the same number on both.
+  const numbers = queueListNumbers(
+    reg?.sets ?? [],
     people.byQueue,
   )
   /**
@@ -1289,6 +1293,10 @@ export function QueuesView({
                   }
                   members={people.byQueue[channel.id] ?? []}
                   people={people.people}
+                  title={queueTitle(
+                    channel,
+                    numbers.get(channel.id) ?? null,
+                  )}
                 />
               </Fragment>
             ))}

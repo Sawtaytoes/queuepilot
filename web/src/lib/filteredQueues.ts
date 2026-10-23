@@ -15,33 +15,11 @@ import type { RegistrySet } from "./types"
  * by the people/kind bar or because the reference is a typo — keeps its own place instead of
  * disappearing. Losing a queue quietly is the worse failure; showing one out of place is
  * visible and self-explains.
+ *
+ * The implementation lives in `shared/queueTitle.ts`, because the native TV catalog numbers
+ * duplicate queues in this nested order too and must agree with the Queues page.
  */
-export function nestFilteredQueues(
-  ids: readonly string[],
-  byId: (id: string) => RegistrySet | null | undefined,
-): string[] {
-  const present = new Set(ids)
-  const childrenOf = new Map<string, string[]>()
-
-  for (const id of ids) {
-    const parentId = byId(id)?.filtered_from
-
-    if (!parentId || !present.has(parentId)) continue
-
-    childrenOf.set(parentId, [
-      ...(childrenOf.get(parentId) ?? []),
-      id,
-    ])
-  }
-
-  const nested = new Set([...childrenOf.values()].flat())
-
-  return ids.flatMap((id) =>
-    nested.has(id)
-      ? []
-      : [id, ...(childrenOf.get(id) ?? [])],
-  )
-}
+export { nestFilteredQueues } from "../../../shared/queueTitle"
 
 /** The queue a filtered one views, resolved to `{id, label}` for the line under its name. */
 export function filteredParent(

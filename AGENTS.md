@@ -1232,7 +1232,16 @@ after its **activity** — "Movies & Shows", numbered only when two nameless one
 identically — and the faces beside it say which one it is
 ([decision](docs/decisions/2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in.md)).
 `queueTitle(set, number)` is the one function that answers this, and the Admin grid, the Picks
-shelves and What to Watch/Play all call it.
+and Rules shelves, What to Watch/Play and the **native TV catalog** all call it.
+
+⚠️ **It lives in `shared/queueTitle.ts`, and both workspaces import it by relative path** —
+with `queueNumbers`, `queueListNumbers` (the Queues page's numbering: Picks nested, then
+non-superseded Rules) and the activity labels. Do not write a second copy on either side: the
+server's own copy printed "Movies & Shows · 2" for every Plex queue on the TV, named or not,
+while the web printed "Anime"
+([decision](docs/decisions/2026-10-22-a-queue-title-is-one-shared-rule-for-the-web-and-the-tv.md)).
+`shared/` is not a workspace and imports nothing — not even a type — because two different
+programs compile it. A NAMED queue takes no duplicate number and uses none up.
 
 Four traps, each of which has a comment at its site:
 
