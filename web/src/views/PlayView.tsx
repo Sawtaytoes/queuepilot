@@ -23,7 +23,7 @@ import {
 import { api } from "../lib/api"
 import { channelAccountLabel } from "../lib/channels"
 import { isRandomOrder } from "../lib/kind"
-import { queueNumbers, queueTitle } from "../lib/people"
+import { queueListNumbers, queueTitle } from "../lib/people"
 import { WATCH_PLAY_PATH } from "../lib/routePaths"
 import type { PeopleMatch } from "../lib/tonight"
 import {
@@ -567,9 +567,11 @@ export function PlayView() {
    * Computed on the registry rather than on `shown`, so a filter never renumbers what is
    * left. "Movies & Shows 2" has to be the same card whether or not Linus is ticked; a
    * number that moves with the filter is a different card every time you look.
+   * `queueListNumbers`, the Queues page's own numbering, so the two screens and the native TV
+   * catalog cannot give one queue two numbers.
    */
   const numbers = useMemo(
-    () => queueNumbers(reg?.sets ?? [], people.byQueue),
+    () => queueListNumbers(reg?.sets ?? [], people.byQueue),
     [reg, people.byQueue],
   )
 

@@ -11,12 +11,10 @@ import {
   effectiveMinPresent,
   groupPlayProfile,
   membershipProblems,
-  numberDuplicates,
   optionalRoster,
   queueMatchesSelection,
   requiredRoster,
   type GroupMembership,
-  type QueueMember,
   type ResolvedMember,
 } from './queuePeople.js';
 
@@ -233,37 +231,5 @@ describe('choosing people is a FILTER, not a claim about who is in the room', ()
     expect(queueMatchesSelection(olderKids, ['grace'])).toBe(true);
     expect(queueMatchesSelection(olderKids, ['ada', 'grace'])).toBe(true);
     expect(queueMatchesSelection(olderKids, ['linus'])).toBe(false);
-  });
-});
-
-describe('duplicates are legal and get a number', () => {
-  const member = (id: string): QueueMember => ({ id, kind: 'person', position: 0, role: 'required' });
-
-  it('leaves the first of its kind unnumbered and numbers the rest', () => {
-    const numbers = numberDuplicates([
-      { activity: 'watching', id: 'a', members: [member('ada')] },
-      { activity: 'watching', id: 'b', members: [member('ada')] },
-      { activity: 'watching', id: 'c', members: [member('ada')] },
-    ]);
-    expect([...numbers.values()]).toEqual([null, 2, 3]);
-  });
-
-  it('does not collide two queues that differ by activity or by people', () => {
-    const numbers = numberDuplicates([
-      { activity: 'watching', id: 'a', members: [member('ada')] },
-      { activity: 'reading', id: 'b', members: [member('ada')] },
-      { activity: 'watching', id: 'c', members: [member('grace')] },
-    ]);
-    expect([...numbers.values()]).toEqual([null, null, null]);
-  });
-
-  it('treats the same people in a different order as the same card', () => {
-    // They read identically on screen, so they must collide — otherwise two cards look the
-    // same and only one of them carries a number.
-    const numbers = numberDuplicates([
-      { activity: 'watching', id: 'a', members: [member('ada'), member('grace')] },
-      { activity: 'watching', id: 'b', members: [member('grace'), member('ada')] },
-    ]);
-    expect([...numbers.values()]).toEqual([null, 2]);
   });
 });

@@ -9,6 +9,10 @@ policy, and lead windows. It never calls the ADB, Companion or room-control tran
 - `GET /api/native/queues?people=<comma-separated-person-ids>` returns Plex queues and a
   projected roster. Empty selection means no filter. Required/optional members and group
   minimums use `queueMatchesSelection`; selecting people does not pick a playback profile.
+  Each queue's `title` is the one the web Queues page prints: `queueTitle` and
+  `queueListNumbers` from `shared/queueTitle.ts`, numbered over the whole registry before
+  the people filter, so a typed name is kept verbatim and a nameless queue reads
+  "Movies & Shows", "Movies & Shows 2", ….
 - `GET /api/native/people/:id/avatar` returns an image from the person's explicitly linked
   Plex account when unambiguous. Missing artwork returns 404. Image redirects are restricted
   to HTTPS Plex image hosts and Gravatar; credentials are not forwarded.

@@ -30,6 +30,9 @@ COPY e2e/broker/package.json ./e2e/broker/
 # Bootstrap the pinned native pnpm binary; Node 26 does not include Corepack.
 RUN --mount=type=cache,id=queuepilot-pnpm,target=/pnpm/store,sharing=locked pnpm --filter queuepilot-web... install --frozen-lockfile --store-dir /pnpm/store
 COPY web/ ./web/
+# The queue-title rule both web/ and server/ import by relative path (`shared/queueTitle.ts`).
+# It is not a workspace and has no dependencies, so it needs no install — only its source.
+COPY shared/ ./shared/
 WORKDIR /repo/web
 # `pnpm run build` is plain `vite build`; the `.br`/`.gz` siblings the server's static
 # handler serves are emitted by `precompressAssets()` from `@charcuterie/server/vite`,
@@ -62,6 +65,8 @@ COPY e2e/broker/package.json ./e2e/broker/
 # server-build stage has no use for React, Vite or Playwright.
 RUN --mount=type=cache,id=queuepilot-pnpm,target=/pnpm/store,sharing=locked pnpm --filter queuepilot-server... install --frozen-lockfile --store-dir /pnpm/store
 COPY server/ ./server/
+# esbuild bundles `shared/queueTitle.ts` into dist/index.js, so the runtime stage needs nothing.
+COPY shared/ ./shared/
 WORKDIR /repo/server
 RUN pnpm run build
 
