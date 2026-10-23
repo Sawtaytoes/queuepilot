@@ -3,6 +3,7 @@
 // TV catalog leans on. Invented cast: Ada, Grace and Linus.
 import { describe, expect, it } from 'vitest';
 import {
+  isSupersededTier,
   queueListNumbers,
   queueNumbers,
   queueTitle,
@@ -107,5 +108,15 @@ describe('queueListNumbers — the Queues page order', () => {
     expect(numbers.get('rules_a')).toBeNull();
     expect(numbers.get('picks_a')).toBeNull();
     expect(numbers.get('rules_b')).toBe(2);
+  });
+});
+
+describe('isSupersededTier', () => {
+  it('is true only for a Rules set that names its replacement', () => {
+    expect(isSupersededTier({ source: 'rotation', superseded_by: 'rules_a,rules_b' })).toBe(true);
+    expect(isSupersededTier({ source: 'rotation', superseded_by: null })).toBe(false);
+    expect(isSupersededTier({ source: 'rotation' })).toBe(false);
+    // Only a Rules set can be a legacy tier; a stray field on a Picks set is not one.
+    expect(isSupersededTier({ source: 'queue', superseded_by: 'rules_a' })).toBe(false);
   });
 });

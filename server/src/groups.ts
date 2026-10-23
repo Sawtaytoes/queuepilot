@@ -40,6 +40,7 @@ import type { Document, YAMLSeq } from 'yaml';
 import type { SetRegistryEntry } from './types.js';
 
 import { store } from './store/index.js';
+import { isSupersededTier } from '../../shared/queueTitle.js';
 
 /** The provider accounts one group stands for, keyed by provider KIND. */
 export type ProfileAccounts = Record<string, string[]>;
@@ -175,14 +176,8 @@ export function accountsForSet(set: SetRegistryEntry): ProfileAccounts {
   return out;
 }
 
-/**
- * A legacy tier kept readable during the migration soak. Only a rotation set can carry it,
- * so this is a narrowing rather than a field read — `superseded_by` is not on `QueueSet` and
- * TypeScript is right to say so.
- */
-const isSuperseded = (set: SetRegistryEntry): boolean => (
-  set.source === 'rotation' && Boolean(set.superseded_by)
-);
+/** A legacy tier kept readable during the migration soak — `shared/queueTitle.ts`. */
+const isSuperseded = (set: SetRegistryEntry): boolean => isSupersededTier(set);
 
 const claimsAccount = (group: Group, setAccounts: ProfileAccounts): boolean => (
   Object.entries(setAccounts).some(([kind, names]) => (
