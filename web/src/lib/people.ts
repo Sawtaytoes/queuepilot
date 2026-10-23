@@ -1,10 +1,8 @@
 import type {
-  Activity,
   GroupWithRoster,
   MemberRole,
   Person,
   QueueMember,
-  RegistrySet,
 } from "./types"
 
 /**
@@ -20,13 +18,17 @@ import type {
  * does is turn people and groups into candidates and turn a placement back into a member list.
  */
 
-/** What each activity is called on screen. The queue's name IS this — there is no other. */
-export const ACTIVITY_LABELS: Record<Activity, string> = {
-  "board-games": "Board Games",
-  reading: "Reading",
-  "video-games": "Video Games",
-  watching: "Movies & Shows",
-}
+/**
+ * What a queue is CALLED, and the duplicate number beside it. One rule in `shared/`, imported
+ * here and by the server's native TV catalog, so the TV and this app cannot name the same queue
+ * two ways (decision `2026-10-22-a-queue-title-is-one-shared-rule-for-the-web-and-the-tv`).
+ */
+export {
+  ACTIVITY_LABELS,
+  queueListNumbers,
+  queueNumbers,
+  queueTitle,
+} from "../../../shared/queueTitle"
 
 /** The three places a person can be. `roster` is "Everyone else" — the absence of a member. */
 export const TRAYS = [
@@ -273,87 +275,6 @@ function renumber(
           : 1,
     )
     .map((m) => ({ ...m, position: next[m.role]++ }))
-}
-
-/**
- * The number a queue wears after its activity, or null for the first of its kind.
- *
- * There is no queue name, so two queues sharing people and activity read identically — "Allow,
- * and add a number." Registry order decides, so the number is stable and creating a second
- * queue never renumbers the first.
- */
-export function queueNumbers(
-  sets: readonly Pick<
-    RegistrySet,
-    "id" | "activity" | "source"
-  >[],
-  membersBySet: Readonly<Record<string, QueueMember[]>>,
-): Map<string, number | null> {
-  const seen = new Map<string, number>()
-  const out = new Map<string, number | null>()
-
-  for (const set of sets) {
-    const signature = [
-      // SOURCE is in the signature, and it has to be. A curated queue and a filtered pool are
-      // two different things on two different pages and never sit beside each other, so a
-      // pool eating number 1 makes the Ordered Queues page start at 3 — which reads as a bug
-      // rather than as a disambiguation. Measured, not guessed: the landing fixture's first
-      // three curated Movies queues came out 3, 4 and 5.
-      set.source,
-      set.activity,
-      ...(membersBySet[set.id] ?? [])
-        .map((m) => `${m.role}:${m.kind}:${m.id}`)
-        .sort(),
-    ].join("|")
-    const count = (seen.get(signature) ?? 0) + 1
-    seen.set(signature, count)
-    out.set(set.id, count === 1 ? null : count)
-  }
-
-  return out
-}
-
-/**
- * WHAT A QUEUE CARD SAYS.
- *
- * The queue's own name when somebody typed one, and its ACTIVITY when nobody did — numbered
- * only when two nameless queues would otherwise read identically
- * (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`):
- *
- *     Manga & Webtoons     a name, kept verbatim
- *     Movies               a name, kept verbatim
- *     Movies & Shows       no name — the activity
- *     Movies & Shows 2     …and the second one of those
- *
- * `has_explicit_label` and NOT `label`, because the server makes `label` printable by falling
- * back to the id: a nameless queue would otherwise print `movies_shows` here. An older
- * payload without the flag reads as "no name typed", which is the safe direction — it prints
- * the activity rather than an id.
- *
- * The NUMBER is only ever appended to the activity. Two queues called "Movies" are the
- * owner's own doing and he can tell them apart; two called "Movies & Shows" are the app's,
- * and numbering them is the app's job.
- */
-export function queueTitle(
-  set: {
-    activity: Activity
-    has_explicit_label?: boolean
-    label?: string
-  },
-  duplicateNumber: number | null,
-): string {
-  const typed = set.has_explicit_label
-    ? (set.label ?? "").trim()
-    : ""
-
-  if (typed) return typed
-
-  const label =
-    ACTIVITY_LABELS[set.activity] ?? set.activity
-
-  return duplicateNumber == null
-    ? label
-    : `${label} ${duplicateNumber}`
 }
 
 /**

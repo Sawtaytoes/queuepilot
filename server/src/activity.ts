@@ -34,20 +34,15 @@
 // The one thing the derivation cannot do is split `watching` into Movies and Shows. It is not
 // supposed to: they are one activity by the decision above.
 
-/** The activities a queue can be under. Wire values — they reach `sets.yaml` when overridden
- *  and the query string when the Tonight form filters, so they are kebab-case and stable. */
-export const ACTIVITIES = ['watching', 'reading', 'video-games', 'board-games'] as const;
+// The activities a queue can be under, and what each one is called on screen. Wire values —
+// they reach `sets.yaml` when overridden and the query string when the Tonight form filters, so
+// they are kebab-case and stable. "Movies & Shows" is one activity on purpose — see the header.
+//
+// They live in `shared/queueTitle.ts` with the queue-title rule, because the web app and the
+// native TV catalog both print them and two copies of a display string drift.
+import { ACTIVITIES, ACTIVITY_LABELS, type Activity } from '../../shared/queueTitle.js';
 
-export type Activity = (typeof ACTIVITIES)[number];
-
-/** What each one is called on screen. "Movies & Shows" is one activity on purpose — see the
- *  header. */
-export const ACTIVITY_LABELS: Readonly<Record<Activity, string>> = {
-  'board-games': 'Board Games',
-  reading: 'Reading',
-  'video-games': 'Video Games',
-  watching: 'Movies & Shows',
-};
+export { ACTIVITIES, ACTIVITY_LABELS, type Activity };
 
 /**
  * Provider kind -> the activity it serves.

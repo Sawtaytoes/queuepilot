@@ -13,8 +13,8 @@
 // tell two of them apart — *"No need to add extra names where they're irrelevant."* So this
 // file has no generated-name function, no override, no revert and no separator; all four were
 // drawn in the mockup and none of them ship. Two queues that share people and activity are
-// legal, and the second one gets a NUMBER, which is `numberDuplicates()` at the bottom and is
-// a display rule rather than a naming one.
+// legal, and the second one gets a NUMBER, which is `queueListNumbers()` in
+// `shared/queueTitle.ts` — a display rule rather than a naming one, shared with the web app.
 //
 // ── The constraint that outranks everything else here ────────────────────────────────────
 //
@@ -38,7 +38,6 @@
 // ── Personal data ────────────────────────────────────────────────────────────────────────
 //
 // CODE here, DATA in `/config/queuepilot.sqlite`. Fixtures are Ada, Grace and Linus.
-import type { Activity } from './activity.js';
 import type { ProfileAccounts } from './groups.js';
 import { mergeAccounts, norm, type Person } from './people.js';
 
@@ -288,44 +287,4 @@ export function queueMatchesSelection(
   }
 
   return true;
-}
-
-// ── Duplicates get a number ───────────────────────────────────────────────────────────── //
-
-/** One queue, reduced to the two things that name it. */
-export interface NameableQueue {
-  id: string;
-  activity: Activity;
-  members: readonly QueueMember[];
-}
-
-/**
- * The number a queue wears after its activity, or `null` for the first of its kind.
- *
- * "Allow, and add a number." Two queues may share people and activity, and with names gone
- * this is the only thing telling two otherwise identical cards apart. Keyed on the order the
- * caller hands over, so the number is stable: the first `watching` queue for Ada is unnumbered
- * forever, and creating a second one never renumbers the first.
- *
- * The signature is the activity plus the SORTED member list, so two queues that list the same
- * people in a different tray order are the same card and do collide — which is right, because
- * they read identically.
- */
-export function numberDuplicates(queues: readonly NameableQueue[]): Map<string, number | null> {
-  const seen = new Map<string, number>();
-  const out = new Map<string, number | null>();
-
-  for (const queue of queues) {
-    const signature = [
-      queue.activity,
-      ...queue.members
-        .map((member) => `${member.role}:${member.kind}:${member.id}`)
-        .sort(),
-    ].join('|');
-    const count = (seen.get(signature) ?? 0) + 1;
-    seen.set(signature, count);
-    out.set(queue.id, count === 1 ? null : count);
-  }
-
-  return out;
 }
