@@ -193,6 +193,19 @@ export function nestFilteredQueues(
   )
 }
 
+/**
+ * A LEGACY TIER kept readable during a migration soak: a Rules set (`source: rotation`) that
+ * names the sets that replaced it in `superseded_by`. It stays in the registry so an old NFC
+ * card or MQTT payload that names it still resolves, and it is out of EVERY picker — the web
+ * Queues page, the web pickers, the duplicate numbering, and the native TV catalog all ask
+ * this one predicate.
+ */
+export const isSupersededTier = (set: {
+  source?: unknown
+  superseded_by?: unknown
+}): boolean =>
+  set.source === "rotation" && Boolean(set.superseded_by)
+
 /** A registry set, reduced to what the Queues page lists and numbers it by. */
 export interface ListedQueue extends NumberedQueue {
   filtered_from?: string | null
@@ -231,7 +244,7 @@ export function queueListNumbers<
   const rules = sets
     .filter(
       (set) =>
-        set.source === "rotation" && !set.superseded_by,
+        set.source === "rotation" && !isSupersededTier(set),
     )
     .map((set) => set.id)
 

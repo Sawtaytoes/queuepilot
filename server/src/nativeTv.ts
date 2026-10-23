@@ -9,7 +9,7 @@ import {
 } from "./store/db/people.js";
 import { membersByQueue } from "./store/db/queuePeople.js";
 import { queueMatchesSelection, type ResolvedMember } from "./queuePeople.js";
-import { queueListNumbers, queueTitle } from "../../shared/queueTitle.js";
+import { isSupersededTier, queueListNumbers, queueTitle } from "../../shared/queueTitle.js";
 import * as sets from "./sets.js";
 import * as routing from "./engine/routing.js";
 import { providerFor } from "./providers/index.js";
@@ -132,7 +132,14 @@ export async function nativeQueues(selected: readonly string[]): Promise<unknown
     return user ? user.username || user.name : binding.plex_user;
   };
   const queues = registry.sets
-    .filter((s) => (s.provider_kind || providerIdForSet({ ...s })) === "plex" && isSetAvailable(s))
+    // A superseded legacy tier is out of every web picker, so it is out of this one too. Its id
+    // still plays through `createNativePlan` — hiding it from the catalog is not refusing it.
+    .filter(
+      (s) =>
+        (s.provider_kind || providerIdForSet({ ...s })) === "plex" &&
+        isSetAvailable(s) &&
+        !isSupersededTier(s),
+    )
     .map((s) => ({ s, members: nativeAudience(audiences.get(s.filtered_from || s.id) ?? []) }))
     .filter(({ members }) => queueMatchesSelection(members, selected))
     .map(({ s, members }) => ({

@@ -13,6 +13,8 @@ policy, and lead windows. It never calls the ADB, Companion or room-control tran
   `queueListNumbers` from `shared/queueTitle.ts`, numbered over the whole registry before
   the people filter, so a typed name is kept verbatim and a nameless queue reads
   "Movies & Shows", "Movies & Shows 2", ….
+  A superseded legacy Rules tier (`isSupersededTier`) is not listed, exactly as no web picker
+  lists it; its id still plays through `POST /api/native/sessions`.
 - `GET /api/native/people/:id/avatar` returns an image from the person's explicitly linked
   Plex account when unambiguous. Missing artwork returns 404. Image redirects are restricted
   to HTTPS Plex image hosts and Gravatar; credentials are not forwarded.

@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react"
 
+import { isSupersededTier } from "../../../shared/queueTitle"
 import { api, writeCount } from "../lib/api"
 import type {
   NowState,
@@ -154,7 +155,8 @@ export const rotationChannels = (
 ) =>
   reg
     ? reg.sets.filter(
-        (s) => s.source === "rotation" && !s.superseded_by,
+        (s) =>
+          s.source === "rotation" && !isSupersededTier(s),
       )
     : []
 
