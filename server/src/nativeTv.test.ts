@@ -341,8 +341,15 @@ describe("native TV queue titles", () => {
       grace_shorts: "Shorts",
       rules_one: "Movies & Shows",
       rules_two: "Movies & Shows 2",
-      legacy_tier: "Old Tier",
     });
+  });
+
+  it("offers no superseded legacy tier, the way no web picker does", async () => {
+    const ids = ((await nativeQueues([])) as { queues: { id: string }[] }).queues.map(
+      (queue) => queue.id,
+    );
+    expect(ids).not.toContain("legacy_tier");
+    expect(ids).toContain("grace_shorts");
   });
 
   it("keeps a queue's number when the people filter hides its siblings", async () => {
