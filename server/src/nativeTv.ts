@@ -10,15 +10,26 @@ import {
 import { membersByQueue } from "./store/db/queuePeople.js";
 import { queueMatchesSelection, type ResolvedMember } from "./queuePeople.js";
 import { isSupersededTier, queueListNumbers, queueTitle } from "../../shared/queueTitle.js";
+import { authorizeQueue, NativeRequestError } from "./nativeAccess.js";
+import {
+  expandEntry,
+  fullQueueFor,
+  spliceStart,
+  type FullQueue,
+  type NativeStart,
+} from "./nativeQueueDetail.js";
+import { historyFor, type NativeHistory } from "./nativeHistory.js";
+import * as cache from "./cache.js";
+import * as queues from "./queues.js";
+import * as resolve from "./engine/resolve.js";
+import * as select from "./engine/select.js";
 import * as sets from "./sets.js";
 import * as routing from "./engine/routing.js";
-import { providerFor } from "./providers/index.js";
 import { providerIdForSet } from "./providers/blocks.js";
 import { isSetAvailable } from "./season.js";
 import { playbackLength } from "./engine/playbackLength.js";
 import { wireKindForSet } from "./kind.js";
 import * as plex from "./plex.js";
-import { liveClient } from "./engine/plex-live.js";
 import type { PlexServerAccess } from "./plexSources.js";
 import { plexProvider } from "./providers/plex.js";
 import {
@@ -47,6 +58,8 @@ export interface NativeItem extends PlexPlayItem {
 }
 export interface NativePlan {
   id: string;
+  /** Epoch ms. Absent on a plan written before 2026-10-22; read `expiresAt - 24h` then. */
+  createdAt?: number;
   setId: string;
   profileName: string;
   profileUuid: string | null;
@@ -105,20 +118,31 @@ export function nativeAudience(
   });
 }
 
-export async function nativeQueues(selected: readonly string[]): Promise<unknown> {
+/**
+ * Every queue's title, as the web Queues page prints it. `queueTitle` and `queueListNumbers`
+ * are the web's own functions (`shared/queueTitle.ts`), called over the WHOLE registry in
+ * registry order — every provider, not only Plex — because that is the list the page numbers.
+ * A filtered queue is numbered with its parent's people, the alias `/api/queue-people` makes.
+ * The catalog, the full queue and the history all name a queue through this.
+ */
+export async function nativeQueueTitles(): Promise<Map<string, string>> {
   const registry = await sets.getRegistry(),
     audiences = membersByQueue();
-  // THE SAME TITLE THE WEB QUEUES PAGE PRINTS. `queueTitle` and `queueListNumbers` are the
-  // web's own functions (`shared/queueTitle.ts`), called over the WHOLE registry in registry
-  // order — every provider, not only Plex — because that is the list the page numbers. A
-  // filtered queue is numbered with its parent's people, the alias `/api/queue-people` makes.
-  // This used to print "Movies & Shows · N" for every Plex queue, named or not.
   const numbers = queueListNumbers(
     registry.sets,
     Object.fromEntries(
       registry.sets.map((s) => [s.id, audiences.get(s.filtered_from || s.id) ?? []]),
     ),
   );
+  return new Map(registry.sets.map((s) => [s.id, queueTitle(s, numbers.get(s.id) ?? null)]));
+}
+
+export async function nativeQueues(selected: readonly string[]): Promise<unknown> {
+  const registry = await sets.getRegistry(),
+    audiences = membersByQueue();
+  // THE SAME TITLE THE WEB QUEUES PAGE PRINTS. This used to print "Movies & Shows · N" for
+  // every Plex queue, named or not.
+  const titles = await nativeQueueTitles();
   const homeUsers = await nativeHomeUsers();
   const routingSets = routing.loadSets()?.sets || {};
   const playbackProfile = (id: string, required?: string | null): string | null => {
@@ -145,7 +169,7 @@ export async function nativeQueues(selected: readonly string[]): Promise<unknown
     .map(({ s, members }) => ({
       id: s.id,
       activity: "watching",
-      title: queueTitle(s, numbers.get(s.id) ?? null),
+      title: titles.get(s.id) ?? s.id,
       kind: wireKindForSet(s),
       people: [...new Set(members.flatMap((m) => m.people))],
       requiredProfile: playbackProfile(s.id, s.requires_profile),
@@ -184,53 +208,21 @@ async function grantForPlan(
 export async function createNativePlan(
   setId: string,
   proof: string,
+  start?: NativeStart | null,
 ): Promise<NativePlan & { sessionKey: string }> {
-  return planForProfile(setId, await nativeVerifiedProfile(proof), undefined, proof);
+  return planForProfile(setId, await nativeVerifiedProfile(proof), undefined, proof, start);
 }
 async function planForProfile(
   setId: string,
   profile: plex.HomeUser,
   previous?: NativePlan,
   proof?: string,
+  start?: NativeStart | null,
 ): Promise<NativePlan & { sessionKey: string }> {
-  const set = await sets.getSet(setId),
-    cfg = routing.loadSets()?.sets[setId];
-  if (!set || !cfg || !isSetAvailable(set)) throw new Error("This queue is unavailable");
-  const provider = providerFor(providerIdForSet({ ...cfg }));
-  if (provider.kind !== "plex") throw new Error("Only Plex queues can play on this TV");
-  const profileName = profile.admin ? profile.username || profile.name : profile.name;
-  if (cfg.requires_profile && ![profile.name, profile.username].includes(cfg.requires_profile))
-    throw new Error(`Switch to the queue's Plex profile: ${cfg.requires_profile}`);
-  let binding = routing.bindingFor(cfg, profileName);
-  binding = await plexProvider({
-    resolveProfileUser: async (title) =>
-      [profile.name, profile.username].includes(title || null) ? profile : null,
-  }).profileBinding!(binding, cfg.requires_profile || profileName);
-  if (
-    (binding.user_uuid || null) !== (profile.uuid || null) ||
-    (binding.account_id != null && binding.account_id !== profile.id)
-  )
-    throw new Error(
-      `This queue plays as ${binding.plex_user || "the server owner"}. Switch Plex profile first.`,
-    );
-  const identity = (await liveClient().container("/identity")) as { machineIdentifier?: string };
-  if (!identity.machineIdentifier)
-    throw new Error("The home Plex server identity could not be verified");
-  const credential = proof || (await nativeScopeProof(profile.uuid));
-  const servers = new Map<string, PlexServerAccess>();
-  const home = await nativeGrant(credential, identity.machineIdentifier);
-  servers.set(home.id, home);
-  const serverFor = async (id: string): Promise<PlexServerAccess> => {
-    const existing = servers.get(id);
-    if (existing) return existing;
-    const access = await nativeGrant(credential, id);
-    servers.set(id, access);
-    return access;
-  };
-  const selector = plexProvider({
-    client: nativeClient(home),
-    clientForServer: async (id) => nativeClient(await serverFor(id)),
-  });
+  const queueAccess = await authorizeQueue(setId, profile, proof);
+  const { cfg, binding, profileName, credential, home, servers, selector, serverFor } =
+    queueAccess;
+  const identity = { machineIdentifier: queueAccess.homeServerId };
   const token = home.token;
   if (cfg.source === "queue") await watchedReset.applySeasonalReset(setId, cfg);
   let result = await selector.buckets({
@@ -254,11 +246,26 @@ async function planForProfile(
         kind: wireKindForSet(cfg),
       });
   }
-  if (!result.play.length) throw new Error("This queue has nothing left to play");
+  let lineup = result.play as PlexPlayItem[];
+  let led = result.led || [];
+  let headOffset = result.offset || 0;
+  if (start) {
+    // A picked item replaces the head of the lineup; nothing before it is marked or skipped.
+    if (cfg.source !== "queue")
+      throw new NativeRequestError("Only a Picks queue can start from an item", 409);
+    const desc = resolve.loadEntries(setId).find((entry) => entry.key === start.entryKey);
+    if (!desc) throw new NativeRequestError("That entry is not in this queue", 404);
+    const watched = await select.watchedForSet(queueAccess.client, cfg, binding);
+    lineup = spliceStart(await expandEntry(queueAccess, desc, watched), start, lineup);
+    // The queue did not LEAD this sitting, the viewer chose. No lead window is spent.
+    led = [];
+    headOffset = 0;
+  }
+  if (!lineup.length) throw new Error("This queue has nothing left to play");
   const target = previous ? previous.target : playbackLength(cfg);
   const remaining = !previous || target == null ? 2000 : Math.max(0, target - previous.handed);
   const seen = new Set(previous?.seen || []);
-  const selection = result.play
+  const selection = lineup
     .filter((raw) => {
       const item = raw as PlexPlayItem;
       return !previous || !seen.has(`${item.plexServer || ""}:${item.ratingKey}`);
@@ -303,7 +310,7 @@ async function planForProfile(
           ? (queueHistory.progressFor(setId, item.queueEntryKey).get(String(item.ratingKey))
               ?.positionMs ?? 0)
           : index === 0
-            ? result.offset || Number(md.viewOffset) || 0
+            ? headOffset || Number(md.viewOffset) || 0
             : Number(md.viewOffset) || 0),
     });
   }
@@ -314,7 +321,7 @@ async function planForProfile(
     profileUuid: profile.uuid,
     expiresAt: Date.now() + 24 * 3600000,
     items,
-    led: result.led || [],
+    led,
     cursor: 0,
     sequence: 0,
     started: false,
@@ -330,7 +337,10 @@ async function planForProfile(
     ],
     target,
     handed: (previous?.handed || 0) + items.length,
-    refill: target === null || (previous?.handed || 0) + items.length < target,
+    refill:
+      start?.mode !== "only" &&
+      (target === null || (previous?.handed || 0) + items.length < target),
+    createdAt: Date.now(),
   };
   const sessionKey = randomBytes(32).toString("base64url");
   prepareChecked(
@@ -477,12 +487,13 @@ export async function nativeEvent(
       try {
         prepareChecked(
           db,
-          "INSERT INTO native_tv_events(session_id,id,sequence,data) VALUES(:session_id,:id,:sequence,:data)",
+          "INSERT INTO native_tv_events(session_id,id,sequence,data,recorded_at) VALUES(:session_id,:id,:sequence,:data,:recorded_at)",
         ).run({
           session_id: id,
           id: event.id,
           sequence: event.sequence,
           data: JSON.stringify(event),
+          recorded_at: Date.now(),
         });
         prepareChecked(db, "UPDATE native_tv_sessions SET data=:data WHERE id=:id").run({
           id,
@@ -601,4 +612,76 @@ export async function continueNativePlan(
       return { complete: true };
     throw error;
   }
+}
+
+/**
+ * The WHOLE ordered queue for the verified profile: every entry, every item, watched ones
+ * included, with where tonight's lineup ends. Same authorization as starting a session.
+ */
+export async function nativeFullQueue(setId: string, proof: string): Promise<FullQueue> {
+  const access = await authorizeQueue(setId, await nativeVerifiedProfile(proof), proof);
+  const titles = await nativeQueueTitles();
+  return fullQueueFor(access, titles.get(setId) ?? setId);
+}
+
+/** The verified profile's watch history, queue → sitting → items. */
+export async function nativeWatchHistory(proof: string, days: number): Promise<NativeHistory> {
+  const profile = await nativeVerifiedProfile(proof);
+  const titles = await nativeQueueTitles();
+  return historyFor(profile, proof, days, (setId) => titles.get(setId) ?? setId);
+}
+
+export interface NativeWatchedMark {
+  entryKey: string;
+  ratingKey: string;
+  plexServer?: string | null;
+  isWatched: boolean;
+}
+
+/**
+ * Mark one item of a queue-owned (`watch_history: queue`) entry watched or unwatched.
+ *
+ * The queue's private ledger is the only watched state QueuePilot writes, so a provider-history
+ * entry is refused: its watched mark lives in Plex, and nothing here scrobbles to Plex. Marking
+ * watched is the web's "complete one leaf"; marking unwatched forgets that item's row (its
+ * position too) and clears the entry's `done`, so the engine offers the item again. Either way
+ * the ordinary reconcile then decides whether the entry as a whole is finished.
+ */
+export async function nativeMarkWatched(
+  setId: string,
+  proof: string,
+  mark: NativeWatchedMark,
+): Promise<{ entryKey: string; ratingKey: string; state: "watched" | "unwatched" }> {
+  const access = await authorizeQueue(setId, await nativeVerifiedProfile(proof), proof);
+  if (access.cfg.source !== "queue")
+    throw new NativeRequestError("Only a Picks queue item can be marked watched", 409);
+  const desc = resolve.loadEntries(setId).find((entry) => entry.key === mark.entryKey);
+  if (!desc?.key) throw new NativeRequestError("That entry is not in this queue", 404);
+  // A queue-owned entry reads its state from the ledger, so no Plex watched set is needed.
+  const entry = await expandEntry(access, desc, new Set());
+  if (entry.watchHistory !== "queue")
+    throw new NativeRequestError(
+      "This entry uses Plex's watch history. Mark it watched in Plex.",
+      409,
+    );
+  const ratingKey = String(mark.ratingKey);
+  if (
+    !entry.items.some(
+      (item) =>
+        item.ratingKey === ratingKey && (item.plexServer || null) === (mark.plexServer || null),
+    )
+  )
+    throw new NativeRequestError("That item is not in this queue entry", 404);
+  if (mark.isWatched) queueHistory.markCompleted(setId, desc.key, ratingKey);
+  else {
+    queueHistory.clearItem(setId, desc.key, ratingKey);
+    await queues.clearDone(setId, [desc.key]);
+  }
+  await finished.reconcileQueue(setId, access.profileName, {
+    provider: access.selector,
+    binding: access.binding,
+    token: access.token,
+  });
+  await cache.bumpGeneration();
+  return { entryKey: desc.key, ratingKey, state: mark.isWatched ? "watched" : "unwatched" };
 }
