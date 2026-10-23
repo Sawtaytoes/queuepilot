@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { SCHEMA_SQL } from "./store/schema.generated.js";
 const f = vi.hoisted(() => ({
@@ -6,7 +6,7 @@ const f = vi.hoisted(() => ({
   queues: [
     { id: "watch", provider_kind: "plex", enabled: true, source: "queue" },
     { id: "read", provider_kind: "kavita", enabled: true, source: "queue" },
-  ],
+  ] as { id: string; [field: string]: unknown }[],
   members: new Map(),
   rosters: new Map(),
   minimums: new Map(),
@@ -282,5 +282,75 @@ describe("native TV sessions", () => {
       body: JSON.stringify(event()),
     });
     expect(progress.status).toBe(403);
+  });
+});
+
+describe("native TV queue titles", () => {
+  // The registry the web Queues page would draw, in registry order. Nameless sets carry their
+  // id as `label`, the way the registry makes a label printable, and no `has_explicit_label`.
+  const plexQueue = (id: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    label: id,
+    has_explicit_label: false,
+    activity: "watching",
+    provider_kind: "plex",
+    enabled: true,
+    source: "queue",
+    ...extra,
+  });
+  const named = (label: string) => ({ label, has_explicit_label: true });
+  const registry = [
+    plexQueue("ada_named", named("Movies")),
+    plexQueue("ada_first"),
+    plexQueue("ada_reading", { activity: "reading", provider_kind: "kavita" }),
+    plexQueue("ada_second"),
+    // Written last, drawn under its parent — so it is the second card of its kind, not the third.
+    plexQueue("ada_window", { filtered_from: "ada_first" }),
+    plexQueue("grace_shorts", { source: "rotation", ...named("Shorts") }),
+    plexQueue("rules_one", { source: "rotation" }),
+    plexQueue("rules_two", { source: "rotation" }),
+    plexQueue("legacy_tier", {
+      source: "rotation",
+      superseded_by: "grace_shorts",
+      ...named("Old Tier"),
+    }),
+  ];
+  const original = f.queues;
+  const titles = async () =>
+    Object.fromEntries(
+      ((await nativeQueues([])) as { queues: { id: string; title: string }[] }).queues.map(
+        (queue) => [queue.id, queue.title],
+      ),
+    );
+  beforeEach(() => {
+    f.queues = registry;
+    const ada = [{ kind: "person", id: "ada", role: "required", position: 0 }];
+    for (const id of ["ada_named", "ada_first", "ada_reading", "ada_second"])
+      f.members.set(id, ada);
+  });
+  afterEach(() => {
+    f.queues = original;
+  });
+
+  it("prints the title the web Queues page prints, for every Plex queue", async () => {
+    expect(await titles()).toEqual({
+      ada_named: "Movies",
+      ada_first: "Movies & Shows",
+      ada_window: "Movies & Shows 2",
+      ada_second: "Movies & Shows 3",
+      grace_shorts: "Shorts",
+      rules_one: "Movies & Shows",
+      rules_two: "Movies & Shows 2",
+      legacy_tier: "Old Tier",
+    });
+  });
+
+  it("keeps a queue's number when the people filter hides its siblings", async () => {
+    // Numbered over the whole registry before the filter, like the web page: hiding Ada's
+    // queues must not turn the second Rules queue into the first.
+    f.members.set("rules_two", [{ kind: "person", id: "grace", role: "required", position: 0 }]);
+    f.members.set("rules_one", [{ kind: "person", id: "grace", role: "required", position: 0 }]);
+    const shown = (await nativeQueues(["grace"])) as { queues: { id: string; title: string }[] };
+    expect(shown.queues.find((queue) => queue.id === "rules_two")?.title).toBe("Movies & Shows 2");
   });
 });

@@ -1,0 +1,5 @@
+{
+  "//": "Not a workspace and never installed: it only marks shared/*.ts as ES modules, so the server's NodeNext program reads them as ESM. The root manifest deliberately has no type field. Both web/ and server/ import these files by relative path.",
+  "private": true,
+  "type": "module"
+}

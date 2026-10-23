@@ -42,7 +42,7 @@ import { flashTile } from "../lib/flip"
 import { isRandomOrder } from "../lib/kind"
 import { titleWithYear } from "../lib/mediaTitle"
 import { activeSet, isPlayingItem } from "../lib/nowPlaying"
-import { queueNumbers, queueTitle } from "../lib/people"
+import { queueListNumbers, queueTitle } from "../lib/people"
 import { queueItemAddBody } from "../lib/searchGroups"
 import {
   collectionOrderCount,
@@ -271,13 +271,14 @@ export function QueueView({
   // that reads like a bug rather than like the queue on screen (decision
   // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). The duplicate NUMBER
   // comes off the whole registry, because "Movies & Shows 2" is only meaningful against its
-  // siblings.
+  // siblings — `queueListNumbers`, the same numbering the Queues page draws.
   const queueName = regSet
     ? queueTitle(
         regSet,
-        queueNumbers(reg?.sets ?? [], people.byQueue).get(
-          regSet.id,
-        ) ?? null,
+        queueListNumbers(
+          reg?.sets ?? [],
+          people.byQueue,
+        ).get(regSet.id) ?? null,
       )
     : (q?.label ?? "this queue")
 

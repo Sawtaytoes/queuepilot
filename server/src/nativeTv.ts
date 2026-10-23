@@ -8,7 +8,8 @@ import {
   getPerson,
 } from "./store/db/people.js";
 import { membersByQueue } from "./store/db/queuePeople.js";
-import { queueMatchesSelection, numberDuplicates, type ResolvedMember } from "./queuePeople.js";
+import { queueMatchesSelection, type ResolvedMember } from "./queuePeople.js";
+import { queueListNumbers, queueTitle } from "../../shared/queueTitle.js";
 import * as sets from "./sets.js";
 import * as routing from "./engine/routing.js";
 import { providerFor } from "./providers/index.js";
@@ -107,14 +108,16 @@ export function nativeAudience(
 export async function nativeQueues(selected: readonly string[]): Promise<unknown> {
   const registry = await sets.getRegistry(),
     audiences = membersByQueue();
-  const numbers = numberDuplicates(
-    registry.sets
-      .filter((s) => (s.provider_kind || providerIdForSet({ ...s })) === "plex")
-      .map((s) => ({
-        id: s.id,
-        activity: "watching" as const,
-        members: audiences.get(s.filtered_from || s.id) ?? [],
-      })),
+  // THE SAME TITLE THE WEB QUEUES PAGE PRINTS. `queueTitle` and `queueListNumbers` are the
+  // web's own functions (`shared/queueTitle.ts`), called over the WHOLE registry in registry
+  // order — every provider, not only Plex — because that is the list the page numbers. A
+  // filtered queue is numbered with its parent's people, the alias `/api/queue-people` makes.
+  // This used to print "Movies & Shows · N" for every Plex queue, named or not.
+  const numbers = queueListNumbers(
+    registry.sets,
+    Object.fromEntries(
+      registry.sets.map((s) => [s.id, audiences.get(s.filtered_from || s.id) ?? []]),
+    ),
   );
   const homeUsers = await nativeHomeUsers();
   const routingSets = routing.loadSets()?.sets || {};
@@ -135,7 +138,7 @@ export async function nativeQueues(selected: readonly string[]): Promise<unknown
     .map(({ s, members }) => ({
       id: s.id,
       activity: "watching",
-      title: `Movies & Shows${numbers.get(s.id) ? " · " + numbers.get(s.id) : ""}`,
+      title: queueTitle(s, numbers.get(s.id) ?? null),
       kind: wireKindForSet(s),
       people: [...new Set(members.flatMap((m) => m.people))],
       requiredProfile: playbackProfile(s.id, s.requires_profile),

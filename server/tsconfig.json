@@ -22,9 +22,12 @@
     "declarationMap": false,
     // The preset's `rootDir` is relative and, inherited, resolves against the
     // preset's own directory — `node_modules/@charcuterie/tsconfig/src` — which
-    // makes every file in this package TS6059. Re-anchor it here. `.` and not
-    // `src`, because `migrate-tiers.mts` sits beside `src/`, not inside it.
-    "rootDir": ".",
+    // makes every file in this package TS6059. Re-anchor it here. `..` (the
+    // repo root) and not `.` or `src`: `migrate-tiers.mts` sits beside `src/`,
+    // and `shared/queueTitle.ts` — the queue-title rule the web app imports
+    // too — sits beside `server/`. A file outside rootDir is TS6059 even
+    // under noEmit.
+    "rootDir": "..",
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
