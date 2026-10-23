@@ -71,7 +71,7 @@ ok(`every non-empty shelf names its lane (${JSON.stringify(laneClauses)})`,
   && laneClauses.every((c) => (c.hasItems ? /priority|pool/.test(c.text) : c.text === '')));
 const shelfHeadingBranding = await page.$$eval('.shelf h2', (els) =>
   els.map((el) => ({
-    hasFaceMarker: Boolean(el.querySelector('.pface')),
+    hasFaceMarker: Boolean(el.querySelector('[data-person-face]')),
     hasProviderLabel: Boolean(el.querySelector('.qprovider')),
     hasAudienceChevron: Boolean(el.querySelector('.chev')),
     headingAlignment: getComputedStyle(el).alignItems,

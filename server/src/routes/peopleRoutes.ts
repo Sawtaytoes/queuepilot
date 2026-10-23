@@ -23,13 +23,21 @@
 // ⚠️ **`/people` PROJECTS, and widening it is a deliberate act.** The stored `Person` also
 // carries provider accounts, a birth year, a maximum game weight and a beginner flag. None of
 // those paints a checklist or a tray, and a birth year is household data with no business
-// crossing the wire to do it. Three fields go out — id, display name, roster position — which
-// is WP-6's rule, kept here unchanged rather than relaxed because a second screen turned up.
-// A tray needs a NAME and a FACE, and the face is hashed from the id.
-import { Hono } from 'hono';
+// crossing the wire to do it. Four fields go out — id, display name, roster position, and the
+// photo VERSION — which is WP-6's rule plus the one thing a face needs. A tray needs a NAME and
+// a FACE; the face is the person's own photo when they have one and a color hashed from the
+// id otherwise. The version is a hash, not the picture: the bytes are a separate,
+// cacheable `GET /api/people/:id/photo` and never ride on a list read.
+import { Hono, type Context } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 
 import { errMessage } from '../errors.js';
 import { slugify, storedGroups } from '../groups.js';
+import {
+  MAX_PHOTO_UPLOAD_BYTES,
+  normalizePersonPhoto,
+  PhotoRejected,
+} from '../personPhoto.js';
 import * as sets from '../sets.js';
 import {
   isMemberKind,
@@ -55,12 +63,19 @@ import {
   upsertPerson,
 } from '../store/db/people.js';
 import {
+  deletePersonPhoto,
+  photoVersionsByPerson,
+  readPersonPhoto,
+  writePersonPhoto,
+} from '../store/db/personPhotos.js';
+import {
   bumpQueuePeopleVersion,
   membersByQueue,
   orphanQueueMembers,
   queueMembers,
   setQueueMembers,
 } from '../store/db/queuePeople.js';
+import { photoResponse } from './photoResponse.js';
 import { readBody } from './readBody.js';
 
 /**
@@ -84,6 +99,7 @@ export function peopleRoutes(): Hono {
     try {
       const rosters = rosterMembersByGroup();
       const minimums = minPresentByGroup();
+      const photos = photoVersionsByPerson();
       return c.json({
         // A GROUP is a saved set of people, so it rides along here rather than in a second
         // call: the trays show people and groups side by side, as one pool of cards.
@@ -93,11 +109,13 @@ export function peopleRoutes(): Hono {
           minPresent: minimums.get(group.id) ?? null,
           roster: rosters.get(group.id) ?? [],
         })),
-        // THE PROJECTION — see the header. Three fields, and no accounts, birth year, weight
-        // ceiling or beginner flag.
+        // THE PROJECTION — see the header. Four fields, and no accounts, birth year, weight
+        // ceiling or beginner flag. `photoVersion` is null for somebody with no photo, which is
+        // what tells a face to draw initials WITHOUT first asking for a picture that 404s.
         people: listPeople().map((person) => ({
           displayName: person.displayName,
           id: person.id,
+          photoVersion: photos.get(person.id) ?? null,
           position: person.position,
         })),
         // Members naming somebody who is gone. Reported, never deleted — the table carries no
@@ -298,6 +316,119 @@ export function peopleRoutes(): Hono {
     }
   });
 
+  // ── A person's photo ────────────────────────────────────────────────────────────────── //
+  //
+  // decision 2026-10-22-a-person-photo-is-a-row-in-the-book-of-record. QueuePilot's OWN photo,
+  // stored as a re-encoded 512 x 512 WebP in `person_photos`. Same door as the other roster
+  // writes above: no route here has a guard the others lack, and none is weaker.
+
+  /**
+   * The photo's bytes. 404 when the person has none (or does not exist), so an `<img>` falls
+   * back to the initials.
+   *
+   * CACHING. The ETag is the content hash, so a revalidation is a 304 with no body. A request
+   * that names the CURRENT version in `?v=` — which is how the web builds the URL, from
+   * `/api/people`'s `photoVersion` — is immutable for a year, because a new photo is a new
+   * version and therefore a new URL. Anything else (the TV, a bare curl) gets `no-cache` and
+   * revalidates every time, so a replaced photo is never shown stale.
+   */
+  app.get('/people/:id/photo', (c) => {
+    try {
+      const photo = readPersonPhoto(c.req.param('id'));
+      if (!photo) return c.json({ error: 'no photo' }, 404);
+      return photoResponse(c, photo);
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 500);
+    }
+  });
+
+  /**
+   * Set or replace a person's photo.
+   *
+   * Body: the image itself (`Content-Type: image/jpeg` / `image/png` / `image/webp`, or
+   * `application/octet-stream`) OR `multipart/form-data` with the file in a `photo` field.
+   * The TYPE is read from the bytes, never from the header (`personPhoto.ts`): JPEG, PNG and
+   * WebP only, at most 15 MiB, and at most 100 MP decoded. Whatever arrives is re-encoded to a
+   * center-cropped 512 x 512 WebP with every byte of metadata — EXIF, GPS — gone.
+   *
+   * 404 no such person · 413 too large · 415 not one of the three types · 400 unreadable.
+   */
+  app.put(
+    '/people/:id/photo',
+    bodyLimit({
+      // Headroom over the image cap for multipart framing; `normalizePersonPhoto` enforces the
+      // exact cap on the FILE. This limit is what stops a stream from being read without end.
+      maxSize: MAX_PHOTO_UPLOAD_BYTES + 256 * 1024,
+      onError: (c) =>
+        c.json(
+          { error: `a photo may be at most ${MAX_PHOTO_UPLOAD_BYTES / 1024 / 1024} MB` },
+          413,
+        ),
+    }),
+    async (c) => {
+      const id = c.req.param('id');
+      try {
+        if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+
+        const upload = await uploadedBytes(c);
+        if (!upload)
+          return c.json({ error: 'a multipart upload needs the image in a "photo" field' }, 400);
+
+        const photo = await normalizePersonPhoto(upload);
+        const db = bookOfRecord();
+        db.withTransaction(() => {
+          writePersonPhoto(
+            {
+              bytes: photo.bytes,
+              height: photo.height,
+              mime: photo.mime,
+              personId: id,
+              version: photo.version,
+              width: photo.width,
+            },
+            db,
+          );
+          // The roster's projection changed (`photoVersion`), so every screen reading it has
+          // to hear about it — same counter a rename moves.
+          bumpPeopleVersion(db);
+        });
+
+        return c.json({
+          ok: true,
+          photo: {
+            bytes: photo.bytes.byteLength,
+            height: photo.height,
+            mime: photo.mime,
+            url: `/api/people/${encodeURIComponent(id)}/photo?v=${photo.version}`,
+            version: photo.version,
+            width: photo.width,
+          },
+        });
+      } catch (e) {
+        if (e instanceof PhotoRejected) return c.json({ error: e.message }, e.status);
+        return c.json({ error: errMessage(e) }, 400);
+      }
+    },
+  );
+
+  /** Remove a person's photo; their face goes back to initials. Idempotent — removing a photo
+   *  that is not there answers `removed: false`, not an error. */
+  app.delete('/people/:id/photo', (c) => {
+    const id = c.req.param('id');
+    try {
+      if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+      const db = bookOfRecord();
+      let removed = false;
+      db.withTransaction(() => {
+        removed = deletePersonPhoto(id, db);
+        if (removed) bumpPeopleVersion(db);
+      });
+      return c.json({ ok: true, removed });
+    } catch (e) {
+      return c.json({ error: errMessage(e) }, 400);
+    }
+  });
+
   /**
    * One group's membership RULE. Body: `{minPresent, roster: [{personId, role}]}`.
    *
@@ -352,13 +483,36 @@ export function peopleRoutes(): Hono {
   return app;
 }
 
-/** One person in the shape `/people` projects — three fields, so a write answers with exactly
- *  what a read would have said. Widening this widens the read too; see the file header. */
-function projected(id: string): { displayName: string; id: string; position: number } | null {
+/** One person in the shape `/people` projects, so a write answers with exactly what a read
+ *  would have said. Widening this widens the read too; see the file header. */
+function projected(
+  id: string,
+): { displayName: string; id: string; photoVersion: string | null; position: number } | null {
   const person = getPerson(id);
   return person
-    ? { displayName: person.displayName, id: person.id, position: person.position }
+    ? {
+        displayName: person.displayName,
+        id: person.id,
+        photoVersion: readPersonPhoto(id)?.version ?? null,
+        position: person.position,
+      }
     : null;
+}
+
+/**
+ * The uploaded image's bytes — the raw body, or the `photo` field of a multipart form. Null for
+ * a multipart form with no file in it.
+ */
+async function uploadedBytes(c: Context): Promise<Uint8Array | null> {
+  const type = (c.req.header('content-type') ?? '').toLowerCase();
+  if (type.startsWith('multipart/form-data')) {
+    const form = await c.req.parseBody({ all: true });
+    const field = form.photo;
+    const file = (Array.isArray(field) ? field[0] : field) as unknown;
+    if (!(file instanceof File)) return null;
+    return new Uint8Array(await file.arrayBuffer());
+  }
+  return new Uint8Array(await c.req.arrayBuffer());
 }
 
 const roleOf = (raw: unknown): MemberRole => {

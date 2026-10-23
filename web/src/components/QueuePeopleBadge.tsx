@@ -22,7 +22,8 @@ import { PersonFace } from "./PersonFace"
  * using auto-names."*
  *
  * The visible label remains. Colour and initials supplement the words; they never replace
- * them. Optional people keep the smaller dashed face used by `PeopleRow`.
+ * them. Optional people keep the soft face used by `PeopleRow`. A person with a QueuePilot
+ * photo shows it here too.
  */
 export function QueuePeopleBadge({
   groups,
@@ -49,8 +50,8 @@ export function QueuePeopleBadge({
               id={member.id}
               isOptional={member.role === "optional"}
               key={`${member.kind}:${member.id}`}
+              kind={member.kind}
               label={labelFor(member)}
-              size="sm"
             />
           ))}
         </span>

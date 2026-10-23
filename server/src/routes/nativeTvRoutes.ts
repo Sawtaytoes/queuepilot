@@ -14,6 +14,8 @@ import {
 } from "../nativeTv.js";
 import { NativeRequestError } from "../nativeAccess.js";
 import type { NativeStart } from "../nativeQueueDetail.js";
+import { readPersonPhoto } from "../store/db/personPhotos.js";
+import { photoResponse } from "./photoResponse.js";
 import { readBody } from "./readBody.js";
 
 /** A stated refusal keeps its status; anything else is the 403 these routes always answered. */
@@ -52,6 +54,10 @@ export function nativeTvRoutes(): Hono {
   });
   app.get("/native/people/:id/avatar", async (c) => {
     try {
+      // QueuePilot's own photo first; the Plex Home thumb is the fallback
+      // (decision 2026-10-22-a-person-photo-is-a-row-in-the-book-of-record).
+      const owned = readPersonPhoto(c.req.param("id"));
+      if (owned) return photoResponse(c, owned);
       const url = await nativeAvatar(c.req.param("id"));
       if (!url) return c.body(null, 404);
       const image = await avatarBytes(url);
