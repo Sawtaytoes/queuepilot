@@ -15,6 +15,16 @@ const f = vi.hoisted(() => ({
   reconcile: vi.fn(),
   timeline: vi.fn(),
   viewCount: 1,
+  entries: [] as { key: string; [field: string]: unknown }[],
+  resolveMember: vi.fn(),
+  ledger: new Map<string, { isCompleted: boolean; positionMs: number; durationMs: number }>(),
+  markCompleted: vi.fn(),
+  clearItem: vi.fn(),
+  clearDone: vi.fn(),
+  bumpGeneration: vi.fn(),
+  routing: {
+    watch: { source: "queue", account_id: 1, enabled: true },
+  } as Record<string, Record<string, unknown>>,
 }));
 vi.mock("./store/db/open.js", async () => {
   const original = await vi.importActual<typeof import("./store/db/open.js")>("./store/db/open.js");
@@ -35,7 +45,7 @@ vi.mock("./sets.js", () => ({
   getSet: async (id: string) => f.queues.find((q) => q.id === id),
 }));
 vi.mock("./engine/routing.js", () => ({
-  loadSets: () => ({ sets: { watch: { source: "queue", account_id: 1, enabled: true } } }),
+  loadSets: () => ({ sets: f.routing }),
   bindingFor: () => ({ user_uuid: null, account_id: 1 }),
 }));
 vi.mock("./providers/index.js", () => ({ providerFor: () => f.provider }));
@@ -96,14 +106,27 @@ vi.mock("./finished.js", () => ({
 vi.mock("./watchedReset.js", () => ({ applySeasonalReset: async () => {} }));
 vi.mock("./promote.js", () => ({ recordLead: async () => {} }));
 vi.mock("./store/db/queueEntryHistory.js", () => ({
-  progressFor: () => new Map(),
+  progressFor: () => f.ledger,
   savePosition: () => {},
-  markCompleted: () => {},
+  markCompleted: f.markCompleted,
+  clearItem: f.clearItem,
 }));
+vi.mock("./engine/resolve.js", () => ({
+  loadEntries: () => f.entries,
+  resolveMember: f.resolveMember,
+  sectionOf: () => null,
+  inProgress: (viewOffset?: number, viewCount?: number) =>
+    Number(viewOffset) > 0 && Number(viewCount) < 1,
+}));
+vi.mock("./engine/select.js", () => ({ watchedForSet: async () => new Set<string>() }));
+vi.mock("./queues.js", () => ({ clearDone: f.clearDone }));
+vi.mock("./cache.js", () => ({ bumpGeneration: f.bumpGeneration }));
 import {
   createNativePlan,
   continueNativePlan,
   nativeEvent,
+  nativeFullQueue,
+  nativeMarkWatched,
   nativeQueues,
   readNativePlan,
   validateNativeEvent,
@@ -111,6 +134,7 @@ import {
   type NativeEvent,
 } from "./nativeTv.js";
 import { nativeTvRoutes } from "./routes/nativeTvRoutes.js";
+import { layoutFor } from "./nativeQueueDetail.js";
 const event = (sequence = 1): NativeEvent => ({
   id: `event-${sequence}-fixture`,
   sequence,
@@ -359,5 +383,232 @@ describe("native TV queue titles", () => {
     f.members.set("rules_one", [{ kind: "person", id: "grace", role: "required", position: 0 }]);
     const shown = (await nativeQueues(["grace"])) as { queues: { id: string; title: string }[] };
     expect(shown.queues.find((queue) => queue.id === "rules_two")?.title).toBe("Movies & Shows 2");
+  });
+});
+
+describe("native TV full queue, item start, and watched marks", () => {
+  // One queue-owned show (three episodes and an inline special) and one Plex-history film.
+  const episode = (ratingKey: string, season: number, number: number, title: string) => ({
+    ratingKey,
+    title,
+    show: "Signal Garden",
+    season,
+    episode: number,
+    type: "episode",
+    viewCount: 0,
+  });
+  const originalQueues = f.queues;
+  const originalRouting = f.routing;
+  beforeEach(() => {
+    f.queues = [
+      ...originalQueues,
+      { id: "rules", provider_kind: "plex", enabled: true, source: "rotation" },
+    ];
+    f.routing = {
+      ...originalRouting,
+      rules: { source: "rotation", account_id: 1, enabled: true },
+    };
+    f.entries = [
+      { key: "signal-garden", title: "Signal Garden", watchHistory: "queue" },
+      { key: "harbor-lights", title: "Harbor Lights", watchHistory: "provider" },
+    ];
+    f.ledger = new Map([
+      ["201", { isCompleted: true, positionMs: 0, durationMs: 0 }],
+      ["202", { isCompleted: false, positionMs: 600000, durationMs: 1400000 }],
+    ]);
+    f.resolveMember.mockReset();
+    f.resolveMember.mockImplementation(async (_client: unknown, desc: { key: string }) =>
+      desc.key === "signal-garden"
+        ? {
+            type: "show",
+            title: "Signal Garden",
+            items: [
+              episode("201", 1, 1, "Seedlings"),
+              episode("202", 1, 2, "Static Bloom"),
+              episode("203", 1, 3, "Night Watering"),
+              episode("290", 0, 1, "Greenhouse Special"),
+            ],
+          }
+        : {
+            type: "movie",
+            title: "Harbor Lights",
+            ratingKey: "301",
+            items: [{ ratingKey: "301", title: "Harbor Lights", viewCount: 0 }],
+          },
+    );
+    f.provider.buckets.mockResolvedValue({
+      play: [
+        { ratingKey: "202", queueEntryKey: "signal-garden", queueOwnHistory: true },
+        { ratingKey: "203", queueEntryKey: "signal-garden", queueOwnHistory: true },
+        { ratingKey: "301", queueEntryKey: "harbor-lights" },
+      ],
+      led: [],
+    });
+    f.markCompleted.mockClear();
+    f.clearItem.mockClear();
+    f.clearDone.mockClear();
+    f.bumpGeneration.mockClear();
+  });
+  afterEach(() => {
+    f.queues = originalQueues;
+    f.routing = originalRouting;
+    f.entries = [];
+    f.ledger = new Map();
+  });
+
+  it("lists every item with its state, the next item, and where the lineup ends", async () => {
+    const full = await nativeFullQueue("watch", "fixture-profile");
+    expect(full).toMatchObject({
+      setId: "watch",
+      kind: "picks",
+      layout: "list",
+      isWholeQueue: true,
+      lineup: { count: 3, endPosition: 4 },
+      isTruncated: false,
+    });
+    expect(full.entries.map((entry) => entry.entryKey)).toEqual(["signal-garden", "harbor-lights"]);
+    const items = full.entries.flatMap((entry) => entry.items);
+    expect(
+      items.map(({ ratingKey, state, offsetMs, isNext, lineupIndex, isSpecial }) => ({
+        ratingKey,
+        state,
+        offsetMs,
+        isNext,
+        lineupIndex,
+        isSpecial,
+      })),
+    ).toEqual([
+      { ratingKey: "201", state: "watched", offsetMs: 0, isNext: false, lineupIndex: null, isSpecial: false },
+      { ratingKey: "202", state: "in_progress", offsetMs: 600000, isNext: true, lineupIndex: 0, isSpecial: false },
+      { ratingKey: "203", state: "unwatched", offsetMs: 0, isNext: false, lineupIndex: 1, isSpecial: false },
+      { ratingKey: "290", state: "unwatched", offsetMs: 0, isNext: false, lineupIndex: null, isSpecial: true },
+      { ratingKey: "301", state: "unwatched", offsetMs: 0, isNext: false, lineupIndex: 2, isSpecial: false },
+    ]);
+    expect(items.map((item) => item.canMarkWatched)).toEqual([true, true, true, true, false]);
+    expect(items.every((item) => item.serverId === "fixture-home-server")).toBe(true);
+  });
+
+  it("lays a queue out as a grid only when movies outnumber episodes", () => {
+    const of = (movies: number, episodes: number) =>
+      layoutFor([
+        ...Array.from({ length: movies }, () => ({ type: "movie" })),
+        ...Array.from({ length: episodes }, () => ({ type: "episode" })),
+      ]);
+    expect(of(3, 2)).toBe("grid");
+    expect(of(2, 2)).toBe("list");
+    expect(of(1, 4)).toBe("list");
+    expect(of(0, 0)).toBe("list");
+  });
+
+  it("reads the full queue only for the profile the queue plays as", async () => {
+    await expect(nativeFullQueue("watch", "fixture-child")).rejects.toThrow("Switch Plex profile");
+    const response = await nativeTvRoutes().request("/native/queues/watch/full");
+    expect(response.status).toBe(403);
+  });
+
+  it("answers a Rules queue with its lineup only", async () => {
+    f.provider.buckets.mockResolvedValue({
+      play: [{ ratingKey: "301", title: "Harbor Lights", type: "movie" }],
+      led: [],
+    });
+    const full = await nativeFullQueue("rules", "fixture-profile");
+    expect(full).toMatchObject({ kind: "rules", isWholeQueue: false, layout: "grid" });
+    expect(full.entries[0]?.items.map((item) => item.canMarkWatched)).toEqual([false]);
+  });
+
+  it("starts at a picked item and leaves the earlier unwatched item in the queue", async () => {
+    f.routing = { ...f.routing, watch: { ...f.routing.watch, length: "infinite" } };
+    const plan = await createNativePlan("watch", "fixture-profile", {
+      entryKey: "signal-garden",
+      ratingKey: "203",
+      mode: "continue",
+    });
+    // The pick, the rest of its entry, then the engine's lineup without the earlier episode.
+    expect(plan.items.map((item) => item.ratingKey)).toEqual(["203", "290", "301"]);
+    expect(plan.items[0]?.queueEntryKey).toBe("signal-garden");
+    expect(plan.items[0]?.queueOwnHistory).toBe(true);
+    expect(plan.refill).toBe(true);
+    // Nothing was marked: 202 is still half-watched and comes up again.
+    expect(f.markCompleted).not.toHaveBeenCalled();
+    const full = await nativeFullQueue("watch", "fixture-profile");
+    const earlier = full.entries[0]?.items.find((item) => item.ratingKey === "202");
+    expect(earlier?.state).toBe("in_progress");
+  });
+
+  it("plays only the picked item and does not refill", async () => {
+    // An endless queue would refill; "play only this" still stops after the one item.
+    f.routing = { ...f.routing, watch: { ...f.routing.watch, length: "infinite" } };
+    const plan = await createNativePlan("watch", "fixture-profile", {
+      entryKey: "harbor-lights",
+      ratingKey: "301",
+      mode: "only",
+    });
+    expect(plan.items.map((item) => item.ratingKey)).toEqual(["301"]);
+    expect(plan.refill).toBe(false);
+  });
+
+  it("refuses a start the queue cannot honor, with a stated status", async () => {
+    const app = nativeTvRoutes();
+    const post = (body: unknown) =>
+      app.request("/native/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Plex-Profile-Token": "fixture-profile" },
+        body: JSON.stringify(body),
+      });
+    expect((await post({ setId: "watch", start: { entryKey: "signal-garden" } })).status).toBe(400);
+    expect(
+      (await post({ setId: "watch", start: { entryKey: "nowhere", ratingKey: "203" } })).status,
+    ).toBe(404);
+    expect(
+      (await post({ setId: "watch", start: { entryKey: "signal-garden", ratingKey: "999" } }))
+        .status,
+    ).toBe(404);
+    expect(
+      (await post({ setId: "rules", start: { entryKey: "signal-garden", ratingKey: "203" } }))
+        .status,
+    ).toBe(409);
+  });
+
+  it("marks a queue-owned item watched and unwatched through the queue's ledger", async () => {
+    expect(
+      await nativeMarkWatched("watch", "fixture-profile", {
+        entryKey: "signal-garden",
+        ratingKey: "203",
+        isWatched: true,
+      }),
+    ).toEqual({ entryKey: "signal-garden", ratingKey: "203", state: "watched" });
+    expect(f.markCompleted).toHaveBeenCalledWith("watch", "signal-garden", "203");
+    expect(f.reconcile).toHaveBeenCalledOnce();
+    expect(f.bumpGeneration).toHaveBeenCalledOnce();
+    await nativeMarkWatched("watch", "fixture-profile", {
+      entryKey: "signal-garden",
+      ratingKey: "201",
+      isWatched: false,
+    });
+    expect(f.clearItem).toHaveBeenCalledWith("watch", "signal-garden", "201");
+    expect(f.clearDone).toHaveBeenCalledWith("watch", ["signal-garden"]);
+  });
+
+  it("refuses a watched mark it cannot keep", async () => {
+    const app = nativeTvRoutes();
+    const mark = (body: unknown, proof = "fixture-profile") =>
+      app.request("/native/queues/watch/watched", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Plex-Profile-Token": proof },
+        body: JSON.stringify(body),
+      });
+    // Plex owns this film's watched state; QueuePilot never scrobbles to Plex.
+    expect(
+      (await mark({ entryKey: "harbor-lights", ratingKey: "301", isWatched: true })).status,
+    ).toBe(409);
+    expect(
+      (await mark({ entryKey: "signal-garden", ratingKey: "999", isWatched: true })).status,
+    ).toBe(404);
+    expect((await mark({ entryKey: "signal-garden", ratingKey: "203" })).status).toBe(400);
+    expect(
+      (await mark({ entryKey: "signal-garden", ratingKey: "203", isWatched: true }, "fixture-child"))
+        .status,
+    ).toBe(403);
+    expect(f.markCompleted).not.toHaveBeenCalled();
   });
 });
