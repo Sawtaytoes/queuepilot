@@ -10,6 +10,7 @@ import {
   nativeFullQueue,
   nativeWatchHistory,
   nativeMarkWatched,
+  nativeAddToQueue,
   type NativeEvent,
 } from "../nativeTv.js";
 import { NativeRequestError } from "../nativeAccess.js";
@@ -117,6 +118,23 @@ export function nativeTvRoutes(): Hono {
       );
     } catch (e) {
       const { body, status } = refusal(e, "The watched state could not be saved");
+      return c.json(body, status);
+    }
+  });
+  app.post("/native/queues/:setId/items", async (c) => {
+    try {
+      const body = await readBody(c);
+      if (!(typeof body.ratingKey === "string" || typeof body.ratingKey === "number"))
+        return c.json({ error: "Send the ratingKey of a movie or a show" }, 400);
+      c.header("Cache-Control", "no-store");
+      return c.json(
+        await nativeAddToQueue(c.req.param("setId"), c.req.header("X-Plex-Profile-Token") || "", {
+          ratingKey: String(body.ratingKey),
+          plexServer: typeof body.plexServer === "string" ? body.plexServer : null,
+        }),
+      );
+    } catch (e) {
+      const { body, status } = refusal(e, "The title could not be added");
       return c.json(body, status);
     }
   });
