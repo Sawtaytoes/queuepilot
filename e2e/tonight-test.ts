@@ -71,10 +71,15 @@ try {
       JSON.stringify(body.people.map((p) => p.id)),
     );
     // It PROJECTS: a birth year and a provider account paint no checklist and this repo is
-    // public. A widening is a deliberate act, so it gets to fail here first.
+    // public. A widening is a deliberate act, so it gets to fail here first. `photoVersion` was
+    // one — a content hash that says whether to ask for the face's photo, never the bytes
+    // (decision 2026-10-22-a-person-photo-is-a-row-in-the-book-of-record).
     ok(
-      '…and carries only id / displayName / position',
-      body.people.every((p) => JSON.stringify(Object.keys(p).sort()) === '["displayName","id","position"]'),
+      '…and carries only id / displayName / photoVersion / position',
+      body.people.every(
+        (p) =>
+          JSON.stringify(Object.keys(p).sort()) === '["displayName","id","photoVersion","position"]',
+      ),
       JSON.stringify(Object.keys(body.people[0] ?? {})),
     );
   }

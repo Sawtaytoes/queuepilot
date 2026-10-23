@@ -112,7 +112,7 @@ try {
   await settle('.shelf');
   await page.screenshot({ path: `__screenshots__/queuepeople-${TAG}-queues.png` });
 
-  const faces = await page.$$eval('.shelf h2 .pface', (nodes) => nodes.length);
+  const faces = await page.$$eval('.shelf h2 [data-person-face]', (nodes) => nodes.length);
   const names = await page.$$eval('.shelf h2 .qpname', (nodes) => nodes.length);
   const titles = await page.$$eval('.shelf h2 .lbl', (nodes) =>
     nodes.slice(0, 4).map((n) => n.textContent ?? ''),

@@ -106,7 +106,7 @@ try {
   await page.waitForTimeout(1500);
   await page.screenshot({ path: `__screenshots__/landingpeople-${TAG}-landing.png` });
 
-  const faces = await page.$$eval('#play .pface', (nodes) => nodes.length);
+  const faces = await page.$$eval('#play [data-person-face]', (nodes) => nodes.length);
   const anybody = await page.$$eval('#play .qpeople.none', (nodes) => nodes.length);
   console.log(
     faces === 0

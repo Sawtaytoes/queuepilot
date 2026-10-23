@@ -12,4 +12,7 @@ export const smokeServers = {
   calendar: `http://localhost:${SMOKE_BASE_PORT + 1}`,
   tonight: `http://localhost:${SMOKE_BASE_PORT + 2}`,
   boardGames: `http://localhost:${SMOKE_BASE_PORT + 3}`,
+  // The photo spec's OWN server. It writes (a person, a photo, a delete), and the route specs
+  // run in parallel against `landing` — a write there would change what they measure.
+  photos: `http://localhost:${SMOKE_BASE_PORT + 4}`,
 } as const;

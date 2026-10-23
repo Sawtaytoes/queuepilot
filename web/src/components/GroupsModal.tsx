@@ -415,8 +415,8 @@ export function GroupsModal() {
                     <span className="grouppickname">
                       <PersonFace
                         id={group.id}
+                        kind="group"
                         label={group.label}
-                        size="sm"
                       />
                       <strong>{group.label}</strong>
                     </span>

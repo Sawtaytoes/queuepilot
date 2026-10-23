@@ -21,6 +21,11 @@ import * as history from '../history.js';
  * place: a control that appears to take back the thing you just did and does not. The finish
  * panel carries its own Undo, scoped to exactly the claims it created.
  *
+ * A PERSON'S PHOTO IS EXCLUDED, for the board-game routes' second reason: the photo is a row in
+ * the BOOK OF RECORD (`person_photos`), which no snapshot holds, so an undo would restore YAML
+ * that never changed and leave the photo in place — and a 15 MB upload would push a full copy
+ * of the managed files for nothing. Removing a photo is its own control in the people editor.
+ *
  * THE PREFIX IS STRIPPED BY HAND, and that is the whole reason this is a factory taking
  * `mountPrefix`. Express mounted the original on a path prefix (`app.use('/api', ...)`), so
  * `req.path` inside it had already lost the `/api`, which is why the exclusion list reads
@@ -33,6 +38,7 @@ export function undoSnapshot(mountPrefix: string): MiddlewareHandler {
   const MUTATING = ['POST', 'PATCH', 'PUT', 'DELETE'];
   const MANAGED = ['/play', '/undo', '/redo', '/board-games', '/native'];
   const TOKEN_PATH = /^\/providers\/[^/]+\/token$/;
+  const PHOTO_PATH = /^\/people\/[^/]+\/photo$/;
 
   return async (c, next) => {
     const full = c.req.path;
@@ -41,7 +47,8 @@ export function undoSnapshot(mountPrefix: string): MiddlewareHandler {
 
     const isMutating = MUTATING.includes(c.req.method);
     const isManaged = MANAGED.some((p) => mounted === p || mounted.startsWith(`${p}/`))
-      || TOKEN_PATH.test(mounted);
+      || TOKEN_PATH.test(mounted)
+      || PHOTO_PATH.test(mounted);
     if (isMutating && !isManaged) {
       try {
         await history.snapshot();

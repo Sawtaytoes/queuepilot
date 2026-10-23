@@ -4,9 +4,9 @@ import {
   byTray,
   candidates,
   describeRule,
-  hueFor,
   initials,
   moveToTray,
+  personPhotoUrl,
   queueNumbers,
   queuePeopleLabel,
   queueTitle,
@@ -49,13 +49,17 @@ describe("a face is how you find somebody on a card", () => {
     expect(initials("  ")).toBe("?")
   })
 
-  it("derives the hue from the ID, so a rename never moves a colour", () => {
-    expect(hueFor("ada")).toBe(hueFor("ada"))
-    expect(hueFor("ada")).not.toBe(hueFor("grace"))
-    for (const id of ["ada", "grace", "linus", "kids"]) {
-      expect(hueFor(id)).toBeGreaterThanOrEqual(0)
-      expect(hueFor(id)).toBeLessThan(360)
-    }
+  it("builds a photo URL only for somebody who has a photo", () => {
+    expect(personPhotoUrl("ada", null)).toBeUndefined()
+    expect(personPhotoUrl("ada", undefined)).toBeUndefined()
+    // The version is in the URL, so a replaced photo is a new URL and the old one can be
+    // cached forever.
+    expect(personPhotoUrl("ada", "0123abcd")).toBe(
+      "/api/people/ada/photo?v=0123abcd",
+    )
+    expect(personPhotoUrl("a b", "v1")).toBe(
+      "/api/people/a%20b/photo?v=v1",
+    )
   })
 })
 

@@ -371,6 +371,42 @@ CREATE TABLE IF NOT EXISTS person_accounts (
 
 CREATE INDEX IF NOT EXISTS person_accounts_lookup ON person_accounts (kind, account_key);
 
+-- A person's PHOTO — QueuePilot's own, uploaded through the people editor
+-- (decision 2026-10-22-a-person-photo-is-a-row-in-the-book-of-record). Before this a face was
+-- initials everywhere on the web and a Plex Home thumb on the TV, and most household Plex
+-- accounts have no picture.
+--
+-- ── Why a BLOB in this file, and not a directory under /config ───────────────────────────
+--
+-- The bytes are SMALL and BOUNDED: every upload is re-encoded server-side to one 512 x 512
+-- WebP (`server/src/personPhoto.ts`), typically 20–60 KB, and the CHECK below refuses anything
+-- over 1 MiB, so a household roster adds well under a megabyte. At that size a row costs
+-- nothing, and it buys three things a file would not:
+--   * ONE BACKUP UNIT. `/config/queuepilot.sqlite` is already the file a restore puts back; a
+--     photo directory beside it is a second thing to remember and can disagree with it.
+--   * THE CASCADE. Removing a person removes their photo through the foreign key, in the same
+--     transaction — no orphaned file for a person who no longer exists.
+--   * ATOMIC REPLACE. An upload is one UPSERT; a reader never sees half a file.
+--
+-- ⚠️ `cache.sqlite` would be the WRONG file: it is deletable by design, and a photo is the
+-- owner's data, not a derivation of a provider read.
+--
+-- `version` is the ETag — a hash prefix of `bytes`, so it changes exactly when the picture
+-- does and the web can put it in the URL as a cache-buster. `/api/people` projects only the
+-- version; the bytes are served by `GET /api/people/:id/photo` and never ride on a list read.
+CREATE TABLE IF NOT EXISTS person_photos (
+  person_id  TEXT PRIMARY KEY REFERENCES people (id) ON DELETE CASCADE ON UPDATE CASCADE,
+  -- What `bytes` is. Always 'image/webp' today; the column exists so a format change later
+  -- is a data change and not a guess.
+  mime       TEXT NOT NULL CHECK (mime IN ('image/webp', 'image/jpeg', 'image/png')),
+  bytes      BLOB NOT NULL CHECK (length(bytes) > 0 AND length(bytes) <= 1048576),
+  width      INTEGER NOT NULL CHECK (width > 0),
+  height     INTEGER NOT NULL CHECK (height > 0),
+  version    TEXT NOT NULL,
+  -- ISO 8601.
+  updated_at TEXT NOT NULL
+);
+
 -- Which people a group stands for — the "saved set of people" half of the decision.
 --
 -- ⚠️ NO FOREIGN KEY ON `group_id`, and this one is not a bridge-release compromise like

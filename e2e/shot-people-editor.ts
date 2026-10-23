@@ -102,7 +102,7 @@ try {
     await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-modal.png` });
 
     const rows = await page.$$eval('#peoplemodal .peoplerow', (n) => n.length);
-    const faces = await page.$$eval('#peoplemodal .pface', (n) => n.length);
+    const faces = await page.$$eval('#peoplemodal [data-person-face]', (n) => n.length);
     console.log(`${rows} editable name rows, ${faces} faces — the AFTER state`);
 
     // THE CONFIRMATION. It is the one control here that cannot be inferred from a still of the

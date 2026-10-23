@@ -10,8 +10,8 @@ import { PersonFace } from "./PersonFace"
  * WHO A QUEUE IS FOR, as a row of avatar badges and names.
  *
  * The queue list inherits the trays: required members come first and optional members follow.
- * Every surface uses the same face marker. Required faces are large; optional faces are small
- * and dashed. This is what replaced the queue's name — every movies queue is called "Movies",
+ * Every surface uses the same face marker. Required faces are solid; optional faces are soft and
+ * carry no visible name. This is what replaced the queue's name — every movies queue is called "Movies",
  * and this row is what tells two of them apart.
  *
  * Every face carries its name in text as well as in colour. Optional members keep their
@@ -55,6 +55,7 @@ export function PeopleRow({
         >
           <PersonFace
             id={member.id}
+            kind={member.kind}
             label={labelFor(member)}
           />
           <span className="qpname">{labelFor(member)}</span>
@@ -64,15 +65,15 @@ export function PeopleRow({
         <span
           className="qperson opt"
           key={`${member.kind}:${member.id}`}
-          // Optional faces are small on purpose — the row would stop being readable at four
-          // people otherwise. The visible name remains beside the badge.
+          // Optional faces carry no printed name on purpose — the row would stop being readable
+          // at four people otherwise. The name is in the title and in visually hidden text.
           title={`${labelFor(member)} — nice to have`}
         >
           <PersonFace
             id={member.id}
             isOptional
+            kind={member.kind}
             label={labelFor(member)}
-            size="sm"
           />
           <VisuallyHidden>
             {labelFor(member)} — nice to have

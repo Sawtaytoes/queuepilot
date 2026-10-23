@@ -141,6 +141,7 @@ export function PeopleTrays({
                       <div className="audienceidentity">
                         <PersonFace
                           id={candidate.id}
+                          kind={candidate.kind}
                           label={candidate.label}
                         />
                         <span className="audiencecopy">
