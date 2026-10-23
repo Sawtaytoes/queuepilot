@@ -2786,6 +2786,16 @@ html.modal-open {
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard);
 }
+/* A face rides INSIDE the pill's padding rather than setting its height. Charcuterie's
+   `Avatar` is 1.9 x its own type size (about 28px), the chip's line is about 22px, and
+   letting the face grow the line made every person chip 7px taller than "Anyone" beside it
+   and pushed the page down. The negative block margin takes back what the face overhangs, so
+   the chip keeps one height with or without a face and the photo stays big enough to
+   recognize; the inline one tucks the circle toward the rounded end, as an input chip does. */
+.filterchip > [data-person-face] {
+  margin-block: -5px;
+  margin-inline-start: -7px;
+}
 .filterchip:hover {
   border-color: var(--color-border-strong);
   color: var(--color-content-primary);
@@ -3544,7 +3554,7 @@ body.name-editable #apphead h1 {
   flex: none;
   padding-left: 5px;
 }
-.optionfaces .pface + .pface {
+.optionfaces > [data-person-face] + [data-person-face] {
   margin-left: -5px;
 }
 .optionpeople-label {
@@ -4591,50 +4601,14 @@ body.rowdragging
 
 /* ---- WP-5: who a queue is for (`PersonFace.tsx`, `PeopleRow.tsx`, `PeopleTrays.tsx`) ----
 
-   CONTAINER-INDEPENDENT, every rule. `.pface` is worn by a SHARED component that appears in
-   a shelf heading, in a board card and (later) on the Tonight form, so a descendant rule
-   scoped to `#shelves` would render it unstyled everywhere else while looking styled in the
-   diff (decision `2026-08-21-a-class-name-is-not-a-style`).
+   CONTAINER-INDEPENDENT, every rule (decision `2026-08-21-a-class-name-is-not-a-style`).
 
-   `PersonFace` is the app's stand-in for an `Avatar` that `@charcuterie/ui@3.10.0` does not
-   have — a genuine library gap, not a decision to keep the shape local. It says so at the top
-   of its own file. Everything else on this screen IS a Charcuterie component: the audience
-   choices are a `SegmentedControl`, the empty states are `EmptyState`s, and the activity
-   control is a `Picker`. */
-
-.pface {
-  --pface-size: 26px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  inline-size: var(--pface-size);
-  block-size: var(--pface-size);
-  border-radius: 50%;
-  font-size: calc(var(--pface-size) * 0.42);
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  /* A hue from the id, a fixed saturation and lightness from the theme. Only the HUE is
-     data — the contrast pair is not left to a hash, which is how a colour-by-hash avatar
-     ends up unreadable one time in six. */
-  background: oklch(0.62 0.13 var(--pface-hue, 0));
-  color: #fff;
-  /* Colour is never the only channel: the initials are inside the circle and the full name is
-     text beside it. A bare coloured dot fails WCAG 1.4.1 and says nothing to a screen
-     reader. */
-  text-shadow: 0 1px 1px rgb(0 0 0 / 35%);
-}
-.pface.sm {
-  --pface-size: 19px;
-}
-/* NICE TO HAVE, drawn as the editor draws it: smaller, and dashed. The dash is the second
-   channel — the size difference alone is a 7px one, which is not a distinction anybody would
-   read as "optional". */
-.pface.opt {
-  background: oklch(0.62 0.06 var(--pface-hue, 0) / 55%);
-  border: 1px dashed currentColor;
-  box-shadow: none;
-}
+   The face itself has NO rule here. It is Charcuterie's `Avatar` as of 2026-10-22, configured
+   by props in `PersonFace.tsx` — its size, color and photo are the library's, and an app rule
+   on it would be the silent override `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`
+   forbids. Everything else on this screen is a Charcuterie component too: the audience choices
+   are a `SegmentedControl`, the empty states are `EmptyState`s, and the activity control is a
+   `Picker`. */
 
 .qpeople {
   display: inline-flex;
@@ -4732,15 +4706,62 @@ body.rowdragging
 }
 .peoplerowmain {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   min-inline-size: 0;
 }
 /* The field is the row. `min-inline-size: 0` is what lets it shrink inside the flex row rather
-   than pushing the Save button off the end of a 390px modal. */
+   than pushing the buttons off the end of a 390px modal. The row WRAPS since the Photo button
+   joined Save and Remove: below about 10rem of field the buttons drop to a second line instead
+   of squeezing the name to a few letters. */
 .peoplename {
-  flex: 1 1 auto;
+  flex: 1 1 10rem;
   min-inline-size: 0;
+}
+/* The photo panel under a row (`PersonPhotoPanel`). LAYOUT only — the drop zone and the
+   buttons are Charcuterie components configured by props. The preview is an `<img>` in the
+   circle the face is drawn in, at a size you can judge a crop by; `object-fit: cover` centerd
+   is exactly the server's crop, so the preview IS the stored picture. */
+#peoplemodal .photopanel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  padding-block: 6px;
+}
+#peoplemodal .photopreview {
+  display: grid;
+  place-items: center;
+  flex: none;
+  inline-size: 96px;
+  block-size: 96px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-sunken);
+}
+#peoplemodal .photopreview img {
+  inline-size: 100%;
+  block-size: 100%;
+  object-fit: cover;
+  object-position: center;
+}
+#peoplemodal .photoempty {
+  color: var(--color-content-muted);
+  font-size: 0.8rem;
+}
+#peoplemodal .photocontrols {
+  display: flex;
+  flex: 1 1 14rem;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+}
+#peoplemodal .photobuttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .peoplerownote {
   margin: 0;

@@ -68,6 +68,11 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
  * that no longer has it.
  */
 // 9: durable native TV sessions and idempotent progress events. Additive tables only.
+// `person_photos` (2026-10-22) is additive and deliberately does NOT move the number. No older
+// image reads or writes it, and its one rule that touches other rows — the cascade when a person
+// is removed — is enforced by SQLite's foreign key, not by app code an older image lacks. A
+// rollback therefore keeps working and simply shows initials; bumping would refuse the file for
+// no protection at all.
 export const SCHEMA_VERSION = 9;
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */

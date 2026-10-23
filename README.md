@@ -53,5 +53,6 @@ pnpm --filter queuepilot-web dev
 
 - [Installation and provider setup](docs/setup.md)
 - [How Plex playback reaches a Shield or Android TV](docs/plex-on-android-tv.md)
+- [Person photos: uploading, storage and the API](docs/person-photos.md)
 - [Why QueuePilot uses queues instead of Plex playlists](docs/why-queues-not-plex-playlists.md)
 - [Decision records](docs/decisions/README.md)

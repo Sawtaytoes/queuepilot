@@ -946,6 +946,12 @@ export type Person = {
   displayName: string
   /** Roster order. Not an identity: a reorder must never change who somebody is. */
   position: number
+  /**
+   * The person's QueuePilot photo, as a content hash — null (or absent, from an older server)
+   * when they have none. The bytes are `GET /api/people/:id/photo`; this is what decides
+   * whether to ask, and it goes in the URL so a replaced photo is a new URL.
+   */
+  photoVersion?: string | null
 }
 
 /**

@@ -317,7 +317,6 @@ export function LandingFilterBar({
               <PersonFace
                 id={person.id}
                 label={person.displayName}
-                size="sm"
               />
               {person.displayName}
               <span className="filtercount">
@@ -446,7 +445,6 @@ function MorePeople({
                 <PersonFace
                   id={person.id}
                   label={person.displayName}
-                  size="sm"
                 />
                 <span className="optionlabel">
                   {person.displayName}
