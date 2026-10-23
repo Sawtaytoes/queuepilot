@@ -295,6 +295,7 @@ async function main(): Promise<void> {
     // ---- the client ----------------------------------------------------------------- //
     const states: StateMessage[] = [];
     const topups: unknown[] = [];
+    const chooserEvents: Record<string, unknown>[] = [];
     const discovery: Record<string, unknown>[] = [];
 
     client = mqtt.connect({
@@ -306,7 +307,7 @@ async function main(): Promise<void> {
 
     await new Promise<void>((resolve) => {
       client!.on('connect', () => {
-        client!.subscribe([T_STATE, T_RESP_TOPUP, T_DISCOVERY], resolve);
+        client!.subscribe([T_STATE, T_RESP_TOPUP, T_DISCOVERY, 'queuepilot/resp/chooser/desk'], resolve);
       });
     });
 
@@ -321,6 +322,7 @@ async function main(): Promise<void> {
         states.push(parsed as StateMessage);
       }
       if (topic === T_RESP_TOPUP) topups.push(parsed);
+      if (topic === 'queuepilot/resp/chooser/desk' && parsed && typeof parsed === 'object') chooserEvents.push(parsed as Record<string, unknown>);
       if (topic === T_DISCOVERY && parsed && typeof parsed === 'object') {
         discovery.push(parsed as Record<string, unknown>);
       }
@@ -332,6 +334,28 @@ async function main(): Promise<void> {
     // ---- 3: the topics HA speaks ---------------------------------------------------- //
     for (const topic of [T_CMD_START, T_CMD_ADVANCE, T_CMD_TOPUP, T_CMD_PREVIEW]) {
       ok(`subscribed to ${topic}`, subscribed.has(topic));
+    }
+
+    // Person cards use their own reader-local seam and cannot start a session by scanning.
+    ok('subscribed to person-card chooser', subscribed.has('queuepilot/cmd/chooser/+'));
+    const personResponse = await fetch(`${base}/api/people`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ displayName: 'Ada' }),
+    });
+    ok('fixture person created', personResponse.status === 201);
+    const statesBeforeScan = states.length;
+    client.publish('queuepilot/cmd/chooser/desk', JSON.stringify({ action: 'scan', personId: 'ada', eventId: 'sample-scan', atMs: Date.now() }));
+    for (let attempt = 0; attempt < 50 && !chooserEvents.length; attempt += 1) await sleep(50);
+    const choice = chooserEvents[0];
+    ok('scan publishes a visible chooser over the broker', choice?.event === 'show' && choice?.isActive === true);
+    ok('scan alone never enters the playback path', states.length === statesBeforeScan);
+    const choices = choice?.queues as { id: string; kind: string }[] | undefined;
+    ok('chooser reads the real queue catalog', Array.isArray(choices) && choices.some((queue) => queue.id === 'bob'));
+    if (choice) {
+      client.publish('queuepilot/cmd/chooser/desk', JSON.stringify({ action: 'choose', sessionId: choice.sessionId, revision: choice.revision, queueId: 'bob' }));
+      for (let attempt = 0; attempt < 50 && !chooserEvents.some((event) => event.event === 'play'); attempt += 1) await sleep(50);
+      const play = chooserEvents.find((event) => event.event === 'play');
+      ok('tap publishes the explicit room-control intent', (play?.queue as { id?: string })?.id === 'bob' && play?.isActive === false);
+      ok('room automation remains the only hardware-control caller', states.length === statesBeforeScan);
     }
 
     // ---- 4: the discovery config ---------------------------------------------------- //
