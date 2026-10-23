@@ -434,7 +434,6 @@ export function TonightView({
                     <PersonFace
                       id={person.id}
                       label={person.displayName}
-                      size="sm"
                     />
                     <span>{person.displayName}</span>
                   </span>

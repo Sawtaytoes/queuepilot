@@ -201,6 +201,49 @@ export async function removePerson(id: string): Promise<{
   return answer.unfiled
 }
 
+/**
+ * Set or replace somebody's photo.
+ *
+ * The file goes up AS ITSELF — the raw bytes, not JSON and not base64 — and the server decides
+ * what it is from the bytes, crops it square, scales it to 512 px and strips its metadata. So
+ * the browser does no resizing of its own: what the editor previewed is the same centre square
+ * the server stores. Not `api()`, which only speaks JSON; the error shape is the same.
+ */
+export async function setPersonPhoto(
+  id: string,
+  file: Blob,
+): Promise<void> {
+  const res = await fetch(
+    `/api/people/${encodeURIComponent(id)}/photo`,
+    {
+      body: file,
+      headers: {
+        "Content-Type":
+          file.type || "application/octet-stream",
+      },
+      method: "PUT",
+    },
+  )
+  if (!res.ok) {
+    const payload = (await res
+      .json()
+      .catch(() => ({}))) as { error?: string }
+    throw new Error(payload.error || res.statusText)
+  }
+  await loadPeople()
+}
+
+/** Remove somebody's photo; their face goes back to initials. */
+export async function removePersonPhoto(
+  id: string,
+): Promise<void> {
+  await api(
+    "DELETE",
+    `/api/people/${encodeURIComponent(id)}/photo`,
+  )
+  await loadPeople()
+}
+
 // ── People-group editor writes ─────────────────────────────────────────────────────────── //
 
 /** Create the stored group shell. Its people rule is written separately by the editor. */

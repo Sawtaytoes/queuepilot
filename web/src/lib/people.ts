@@ -66,6 +66,23 @@ export type Candidate = {
   size: number
 }
 
+/**
+ * Where a person's photo is served, or undefined when they have none.
+ *
+ * The VERSION is in the URL, and that is what makes the photo cacheable for a year: the server
+ * answers `immutable` only to a URL naming the current version, and a replaced photo has a new
+ * version and therefore a new URL. Undefined — not a URL that 404s — for somebody without one,
+ * so the face draws initials without a wasted request.
+ */
+export function personPhotoUrl(
+  id: string,
+  photoVersion: string | null | undefined,
+): string | undefined {
+  return photoVersion
+    ? `/api/people/${encodeURIComponent(id)}/photo?v=${encodeURIComponent(photoVersion)}`
+    : undefined
+}
+
 /** Two letters at most, upper-cased — what fits inside a 26px circle. */
 export function initials(label: string): string {
   const words = String(label ?? "")
@@ -81,22 +98,6 @@ export function initials(label: string): string {
     (words[0] as string).slice(0, 1) +
     (words[1] as string).slice(0, 1)
   ).toUpperCase()
-}
-
-/**
- * A stable hue for one id, 0-359.
- *
- * The APP owns this, not the library: Folio hashes a repo name into a hue and hands the
- * result to a prop, and this is the same division. A hue derived from the ID and not from the
- * NAME, so renaming somebody does not change their colour — the face is how you find them on
- * a card, and a colour that moves is worse than no colour.
- */
-export function hueFor(id: string): number {
-  let hash = 0
-  for (const char of String(id ?? "")) {
-    hash = (hash * 31 + char.charCodeAt(0)) % 360000
-  }
-  return hash % 360
 }
 
 /** Say a group's rule in one sentence. Mirrors `server/src/queuePeople.ts describeMembership`
@@ -288,9 +289,9 @@ function renumber(
  * on 2026-08-26: *"it's not clear now that we're using auto-names."*
  *
  * REQUIRED members only, and it is not an oversight. The nice-to-have tray is what a face can
- * say with a dashed ring and a line of text cannot; listing both would put four names in a
+ * say with a soft face and a line of text cannot; listing both would put four names in a
  * dropdown badge and tell you less than two do. It is the same reduction the shelf makes when
- * it draws optional faces at `sm`.
+ * it draws optional faces without a printed name.
  *
  * Three names at most, then a `+n` — the badge sits at the right-hand end of an option row
  * that already holds a name, and a long one pushes the row into a wrap or an ellipsis.
