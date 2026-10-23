@@ -104,7 +104,7 @@ export async function normalizePersonPhoto(upload: Uint8Array): Promise<Normaliz
   let output: { data: Buffer; info: OutputInfo };
   try {
     output = await sharp(upload, {
-      // A truncated or corrupt file is refused rather than stored half-grey.
+      // A truncated or corrupt file is refused rather than stored half-gray.
       failOn: 'error',
       limitInputPixels: MAX_PHOTO_INPUT_PIXELS,
     })
