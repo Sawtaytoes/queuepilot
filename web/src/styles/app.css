@@ -2786,6 +2786,16 @@ html.modal-open {
     border-color var(--duration-fast) var(--ease-standard),
     color var(--duration-fast) var(--ease-standard);
 }
+/* A face rides INSIDE the pill's padding rather than setting its height. Charcuterie's
+   `Avatar` is 1.9 x its own type size (about 28px), the chip's line is about 22px, and
+   letting the face grow the line made every person chip 7px taller than "Anyone" beside it
+   and pushed the page down. The negative block margin takes back what the face overhangs, so
+   the chip keeps one height with or without a face and the photo stays big enough to
+   recognize; the inline one tucks the circle toward the rounded end, as an input chip does. */
+.filterchip > [data-person-face] {
+  margin-block: -5px;
+  margin-inline-start: -7px;
+}
 .filterchip:hover {
   border-color: var(--color-border-strong);
   color: var(--color-content-primary);
