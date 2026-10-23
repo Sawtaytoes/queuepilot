@@ -42,6 +42,7 @@ import {
   verifiedFetch,
 } from "./nativePlex.js";
 import * as finished from "./finished.js";
+import { addQueueItem, QueueAddError } from "./queueItemAdd.js";
 import * as watchedReset from "./watchedReset.js";
 import * as promote from "./promote.js";
 import * as queueHistory from "./store/db/queueEntryHistory.js";
@@ -684,4 +685,60 @@ export async function nativeMarkWatched(
   });
   await cache.bumpGeneration();
   return { entryKey: desc.key, ratingKey, state: mark.isWatched ? "watched" : "unwatched" };
+}
+
+export interface NativeQueueAdd {
+  ratingKey: string;
+  /** The TV's own server; the home server's id, or none, adds a home-server item. */
+  plexServer?: string | null;
+}
+
+/**
+ * Add one movie or show to a Picks queue, from the TV's title screen.
+ *
+ * Same authorization as starting the queue: `authorizeQueue()` passes only for the profile the
+ * queue plays as, so a profile adds to exactly the queues it would watch them in. The item is
+ * read through THAT profile's own grant first, so a title the profile cannot see is never
+ * written; the add itself is the web route's (`addQueueItem`): remote-server check, duplicate
+ * guard, then `queues.addItem` at the top, where the web's search adds it. A Rules queue picks
+ * its own titles and refuses with 409.
+ */
+export async function nativeAddToQueue(
+  setId: string,
+  proof: string,
+  add: NativeQueueAdd,
+): Promise<{ added: boolean; key: string; duplicateOf?: string; title: string }> {
+  const access = await authorizeQueue(setId, await nativeVerifiedProfile(proof), proof);
+  if (access.cfg.source !== "queue")
+    throw new NativeRequestError(
+      "A Rules queue chooses its own titles. Add this to a Picks queue.",
+      409,
+    );
+  const ratingKey = String(add.ratingKey);
+  if (!/^[0-9]+$/.test(ratingKey)) throw new NativeRequestError("Send a numeric ratingKey", 400);
+  const remote = add.plexServer && add.plexServer !== access.homeServerId ? add.plexServer : null;
+  const server = remote ? await access.serverFor(remote) : access.home;
+  const metadata = await nativeClient(server).container(
+    `/library/metadata/${ratingKey}`,
+    server.token,
+  );
+  const item = metadata.Metadata?.[0] as { type?: string; title?: string } | undefined;
+  if (!item) throw new NativeRequestError("That title is not available to this profile", 404);
+  if (item.type !== "movie" && item.type !== "show")
+    throw new NativeRequestError("Only a movie or a show can be added to a queue", 400);
+  const title = String(item.title || ratingKey);
+  try {
+    const result = await addQueueItem(
+      setId,
+      { ratingKey, title, ...(remote ? { plex_server: remote } : {}) },
+      "top",
+    );
+    return { ...result, title };
+  } catch (error) {
+    // A stated 400 keeps its status; the 403 (the queue profile cannot reach that server) and
+    // anything else fall through to the 403 every native refusal answers.
+    if (error instanceof QueueAddError && error.status === 400)
+      throw new NativeRequestError(error.message, 400);
+    throw error;
+  }
 }
