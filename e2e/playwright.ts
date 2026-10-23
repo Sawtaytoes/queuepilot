@@ -128,6 +128,9 @@ export interface Locator {
    *  field in the app where typing alone deliberately does not write. */
   press(key: string, options?: TimeoutOptions & { delay?: number }): Promise<void>;
   check(options?: TimeoutOptions): Promise<void>;
+  /** Hand a file to an `<input type="file">` — the person-photo harness picks a fixture photo
+   *  through the people editor's `FileDropZone` this way. */
+  setInputFiles(files: string | string[], options?: TimeoutOptions): Promise<void>;
   count(): Promise<number>;
   first(): Locator;
   last(): Locator;

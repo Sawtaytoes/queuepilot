@@ -80,6 +80,34 @@ is the gate: it boots twice over one fixture, once unconfirmed and once confirme
 the set ids, the group ids, the `requires_profile` membership and the `/g/<id>` status codes as
 EXACT STRINGS. A count passes even when every id was replaced.
 
+### A person's photo is QueuePilot's own, and it is a ROW
+
+The owner, 2026-10-22: *"None of my family members have pictures. We should add those to
+QueuePilot itself."* A photo is uploaded in the people editor (each row's **Photo** button:
+Charcuterie `FileDropZone`, drop, or paste) and stored in `person_photos` in the book of record
+([decision](docs/decisions/2026-10-22-a-person-photo-is-a-row-in-the-book-of-record.md)). Five
+things bite:
+
+- **The stored bytes are never the uploaded bytes.** `server/src/personPhoto.ts` reads the type
+  from the MAGIC BYTES (JPEG, PNG, WebP — nothing else, never SVG), caps the upload at 15 MiB
+  and the decode at 100 MP, turns it upright, centre-crops it to 512 x 512 and re-encodes WebP.
+  sharp writes no metadata unless asked, which is what strips EXIF and GPS — so never add
+  `withMetadata()` / `keepExif()` there. `personPhoto.test.ts` proves the strip on a JPEG that
+  carries a GPS block.
+- **A row, not a file under `/config`, and not `cache.sqlite`.** One backup unit, the cascade
+  when a person is removed, and an atomic replace. `cache.sqlite` is deletable by design.
+- **`/api/people` carries `photoVersion`, never the bytes.** The web builds
+  `/api/people/:id/photo?v=<version>`, which the server answers `immutable`; any other request
+  gets `no-cache` + ETag. A null version means "draw initials, do not ask".
+- **The TV needs no change.** `GET /api/native/people/:id/avatar` serves the owned photo first
+  and falls back to the single Plex Home thumb exactly as before. The player only ever loads
+  that URL (`queuepilot-player` `loadQueueAvatar`).
+- **Photo writes are not undoable**, and `undoSnapshot.ts` skips them for the board-game
+  routes' reason: the photo is a row no snapshot holds. Remove photo is the undo.
+
+Fixture photos for screenshots are the invented drawings in `e2e/fixtures/photos/`; never a
+real photograph. `e2e/shot-person-photos.ts` is the before/after harness.
+
 ## A queue is people plus an activity
 
 WP-5. A queue is **required people + optional people + one activity**. It is not a name. The
@@ -127,9 +155,9 @@ Five things bite here.
   have / Everyone else — and "Everyone else" is the ABSENCE of a `queue_people` row, not a
   third role. Every person and group has a visible Must / Nice / Exclude control, so moving a
   row does not depend on drag and drop or a hidden menu. A group keeps its own rule summary
-  beside this queue placement. `PersonFace` is the app's stand-in for an `Avatar`
-  `@charcuterie/ui@3.10.0` does not have — a real library gap, and small enough to delete in
-  one commit when it is filled.
+  beside this queue placement. `PersonFace` is Charcuterie's `Avatar`, adapted: it picks the
+  person's photo and the colour key, and nothing else. It was a hand-rolled stand-in until
+  2026-10-22, when the library's `Avatar` (photo with an initials fallback) replaced it.
 
 `queue_people` and `group_people` carry **no foreign key on the parent**, and `queue_people`
 cannot carry one at all — `member_id` names a row in `people` OR in `groups`. A person's
@@ -969,7 +997,7 @@ A queue's displayed name is its ACTIVITY
 ([decision](docs/decisions/2026-08-25-a-queue-is-people-plus-an-activity.md)), so any control
 that lists queues by name reads "Movies & Shows", "Movies & Shows 2", "Movies & Shows 3" and
 names nothing. Shelves and landing cards answer that with `PeopleRow`; a **menu row or a
-picker option** cannot hold 26px faces, so it gets `queuePeopleLabel` instead — as a
+picker option** cannot hold a row of faces, so it gets `queuePeopleLabel` instead — as a
 `SelectListbox` option `badge`, or as `<QueuePeopleBadge>` inside a `MenuItem`'s `label`.
 Three call sites today: both Add-to menus (`Toolbar`, `PendingView`) and the selection bar's
 Move-to picker. **Add a fourth list of queues and it gets the chip too** — fixing one of three

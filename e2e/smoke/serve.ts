@@ -9,8 +9,11 @@
 //   * CALENDAR (base port + 1) — every combination of a season window and a reset date;
 //   * TONIGHT  (base port + 2) — What to Watch/Play, with its queues filed to people;
 //   * BOARD GAMES (base port + 3) — the board-game shelf and one result card.
+//   * PHOTOS   (base port + 4) — the landing fixture again, for the one spec that WRITES
+//                                 (`person-photos.spec.ts`), so it never moves data under
+//                                 the read-only route specs.
 //
-// The board-game server starts LAST, so its answering is Playwright's signal that all four are
+// The board-game server starts LAST, so its answering is Playwright's signal that all five are
 // up (the Tonight harness has written its trays by then; it awaits them).
 //
 // Each harness spawns its server DETACHED, in its own process group, because tsx forks the
@@ -71,6 +74,15 @@ try {
   });
   children.push(calendar.child);
 
+  // The person-photo spec writes, so it gets a landing server of its own (base port + 4).
+  const photos = await startFixtureServer(SMOKE_BASE_PORT + 4, {
+    groups: 'landing.groups.yaml',
+    people: 'landing.people-mapping.yaml',
+    queues: 'landing.queues.yaml',
+    sets: 'landing.sets.yaml',
+  });
+  children.push(photos.child);
+
   const tonight = await startTonightServer(SMOKE_BASE_PORT + 2);
   children.push(tonight.child);
 
@@ -78,7 +90,7 @@ try {
   children.push(boardGames.child);
 
   console.log(
-    `smoke servers up: ${[landing, calendar, tonight, boardGames].map(({ base }) => base).join(' ')}`,
+    `smoke servers up: ${[landing, calendar, photos, tonight, boardGames].map(({ base }) => base).join(' ')}`,
   );
 } catch (error) {
   console.error('smoke servers failed to start:', error);
