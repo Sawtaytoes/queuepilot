@@ -5338,6 +5338,21 @@ body.rowdragging
   margin-top: 12px;
   max-width: 24rem;
 }
+/* `@charcuterie/ui` ships no text input — `Field` wraps the control it is given and paints
+   none — so the PIN box is painted here with the same values as `#setmodal .field
+   input[type="text"]` and `#tonight .gueststep input`, so the three are the same box. */
+.settings-management .settings-pin-form input {
+  background: var(--color-surface-overlay);
+  border: 1px solid var(--color-border-default);
+  border-radius: 8px;
+  color: var(--color-content-primary);
+  display: block;
+  font: inherit;
+  inline-size: 12rem;
+  letter-spacing: 0.3em;
+  margin-top: 5px;
+  padding: 9px 11px;
+}
 .settings-management .settings-pin-actions {
   display: flex;
   flex-wrap: wrap;

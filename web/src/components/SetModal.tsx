@@ -960,7 +960,6 @@ export function SetModal() {
           happens on an Infinite queue — it never finishes.
         </p>
         <Checkbox
-          description="The QueuePilot TV asks for the TV PIN before it opens or plays this queue. Set the PIN in Settings; with no PIN, nothing is locked."
           id="set-locked-on-tv"
           isChecked={isLockedOnTv}
           key={`${modalKey}-lockedontv`}
@@ -972,6 +971,11 @@ export function SetModal() {
           }
           onChange={setIsLockedOnTv}
         />
+        <p className="subhint" id="set-locked-on-tv-hint">
+          The QueuePilot TV asks for the TV PIN before it
+          opens or plays this queue. Set the PIN in
+          Settings; with no PIN, nothing is locked.
+        </p>
         {/* The queue's DEFAULT batch. Owner, 2026-08-15: "There's no way to globally set how
             many chapters to read before going to the next one… For Plex, 1 episode is no big
             [deal], but for Webtoons and Manga, I'd prefer to default to 3 chapters (by choice
