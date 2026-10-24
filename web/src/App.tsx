@@ -46,6 +46,7 @@ import { PlayView } from "./views/PlayView"
 import { QueuesView } from "./views/QueuesView"
 import { QueueView } from "./views/QueueView"
 import { ResultView } from "./views/ResultView"
+import { SettingsView } from "./views/SettingsView"
 import { TonightView } from "./views/TonightView"
 
 /**
@@ -152,6 +153,10 @@ export const appRouteElements = (
     <Route
       element={<CalendarPage />}
       path={ROUTE_PATHS.calendar}
+    />
+    <Route
+      element={<SettingsPage />}
+      path={ROUTE_PATHS.settings}
     />
     <Route
       element={<ChannelsPage />}
@@ -460,6 +465,28 @@ function CalendarPage() {
       sub="Every queue with a date, and the dates it keeps. Change one here or in the queue itself — it is the same setting."
     >
       <CalendarView />
+    </Page>
+  )
+}
+
+/**
+ * SETTINGS — the household TV PIN. `queue-view` hides the Queues toolbar, as on Calendar.
+ */
+function SettingsPage() {
+  return (
+    <Page
+      back={{
+        label: "‹ QueuePilot",
+        target: ROUTE_PATHS.home,
+      }}
+      bodyClass="queue-view"
+      documentTitle="Settings — QueuePilot"
+      editableSetId={null}
+      heading="Settings"
+      isSubHidden={false}
+      sub="Household settings that belong to no one queue."
+    >
+      <SettingsView />
     </Page>
   )
 }

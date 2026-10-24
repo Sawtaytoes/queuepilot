@@ -11,18 +11,48 @@ import {
   nativeWatchHistory,
   nativeMarkWatched,
   nativeAddToQueue,
+  nativeUnlock,
+  type NativeCaller,
   type NativeEvent,
 } from "../nativeTv.js";
 import { NativeRequestError } from "../nativeAccess.js";
+import { clearPin, hasPin, NativeLockError, setPin } from "../nativeLock.js";
 import type { NativeStart } from "../nativeQueueDetail.js";
 import { readPersonPhoto } from "../store/db/personPhotos.js";
 import { photoResponse } from "./photoResponse.js";
 import { readBody } from "./readBody.js";
 
+type RefusalStatus = 400 | 403 | 404 | 409 | 423 | 429;
+interface RefusalBody {
+  error: string;
+  /** 423: the queue is locked on the TV and this device has no valid unlock. */
+  isLocked?: true;
+  /** 429: seconds before another PIN attempt is accepted. */
+  retryAfterSeconds?: number;
+  /** 403 from the unlock route: wrong PINs left before the household waits. */
+  attemptsLeft?: number;
+}
+
 /** A stated refusal keeps its status; anything else is the 403 these routes always answered. */
-const refusal = (e: unknown, fallback: string): { body: { error: string }; status: 400 | 403 | 404 | 409 } => ({
-  body: { error: e instanceof Error ? e.message : fallback },
-  status: e instanceof NativeRequestError ? e.status : 403,
+const refusal = (e: unknown, fallback: string): { body: RefusalBody; status: RefusalStatus } => {
+  const body: RefusalBody = { error: e instanceof Error ? e.message : fallback };
+  if (e instanceof NativeLockError) {
+    if (e.status === 423) body.isLocked = true;
+    if (e.retryAfterSeconds != null) body.retryAfterSeconds = e.retryAfterSeconds;
+    if (e.attemptsLeft != null) body.attemptsLeft = e.attemptsLeft;
+    return { body, status: e.status };
+  }
+  return { body, status: e instanceof NativeRequestError ? e.status : 403 };
+};
+
+/**
+ * The three headers a native request authorizes with. The Plex token names the household
+ * DEVICE (never the profile a queue plays as); the device id and the unlock are the TV PIN's.
+ */
+const callerOf = (c: { req: { header: (name: string) => string | undefined } }): NativeCaller => ({
+  proof: c.req.header("X-Plex-Profile-Token") || "",
+  deviceId: c.req.header("X-QueuePilot-Device") || "",
+  unlockToken: c.req.header("X-QueuePilot-Unlock") || "",
 });
 
 /** The optional "start from this item" of a new session, or null when absent or malformed. */
@@ -81,7 +111,7 @@ export function nativeTvRoutes(): Hono {
           { error: "start needs an entryKey, a ratingKey, and a mode of continue or only" },
           400,
         );
-      return c.json(await createNativePlan(String(body.setId || ""), proof, start));
+      return c.json(await createNativePlan(String(body.setId || ""), { ...callerOf(c), proof }, start));
     } catch (e) {
       const { body, status } = refusal(e, "Native playback could not start");
       return c.json(body, status);
@@ -91,7 +121,7 @@ export function nativeTvRoutes(): Hono {
     try {
       c.header("Cache-Control", "no-store");
       return c.json(
-        await nativeFullQueue(c.req.param("setId"), c.req.header("X-Plex-Profile-Token") || ""),
+        await nativeFullQueue(c.req.param("setId"), callerOf(c)),
       );
     } catch (e) {
       const { body, status } = refusal(e, "The queue could not be read");
@@ -109,7 +139,7 @@ export function nativeTvRoutes(): Hono {
         return c.json({ error: "Send entryKey, ratingKey, and a boolean isWatched" }, 400);
       c.header("Cache-Control", "no-store");
       return c.json(
-        await nativeMarkWatched(c.req.param("setId"), c.req.header("X-Plex-Profile-Token") || "", {
+        await nativeMarkWatched(c.req.param("setId"), callerOf(c), {
           entryKey: body.entryKey,
           ratingKey: String(body.ratingKey),
           plexServer: typeof body.plexServer === "string" ? body.plexServer : null,
@@ -128,7 +158,7 @@ export function nativeTvRoutes(): Hono {
         return c.json({ error: "Send the ratingKey of a movie or a show" }, 400);
       c.header("Cache-Control", "no-store");
       return c.json(
-        await nativeAddToQueue(c.req.param("setId"), c.req.header("X-Plex-Profile-Token") || "", {
+        await nativeAddToQueue(c.req.param("setId"), callerOf(c), {
           ratingKey: String(body.ratingKey),
           plexServer: typeof body.plexServer === "string" ? body.plexServer : null,
         }),
@@ -138,14 +168,27 @@ export function nativeTvRoutes(): Hono {
       return c.json(body, status);
     }
   });
+  /**
+   * Trade the household TV PIN for an unlock on this device: `{pin}` → `{unlockToken,
+   * expiresAt}`. 403 + `attemptsLeft` for a wrong PIN, 429 + `retryAfterSeconds` after five in a
+   * row, 409 when no PIN is set (nothing is locked), 400 without `X-QueuePilot-Device`.
+   */
+  app.post("/native/unlock", async (c) => {
+    c.header("Cache-Control", "no-store");
+    try {
+      const body = await readBody(c);
+      return c.json(await nativeUnlock(callerOf(c), body.pin));
+    } catch (e) {
+      const { body, status } = refusal(e, "The TV could not be unlocked");
+      if (body.retryAfterSeconds != null) c.header("Retry-After", String(body.retryAfterSeconds));
+      return c.json(body, status);
+    }
+  });
   app.get("/native/history", async (c) => {
     try {
       c.header("Cache-Control", "no-store");
       return c.json(
-        await nativeWatchHistory(
-          c.req.header("X-Plex-Profile-Token") || "",
-          Number(c.req.query("days") || 30),
-        ),
+        await nativeWatchHistory(callerOf(c), Number(c.req.query("days") || 30)),
       );
     } catch (e) {
       const { body, status } = refusal(e, "The watch history could not be read");
@@ -167,7 +210,6 @@ export function nativeTvRoutes(): Hono {
           c.req.param("id"),
           c.req.header("X-Native-Session-Key") || "",
           (await readBody(c)) as unknown as NativeEvent,
-          c.req.header("X-Plex-Profile-Token") || undefined,
         ),
       );
     } catch (e) {
@@ -186,11 +228,7 @@ export function nativeTvRoutes(): Hono {
   app.post("/native/sessions/:id/continue", async (c) => {
     try {
       return c.json(
-        await continueNativePlan(
-          c.req.param("id"),
-          c.req.header("X-Native-Session-Key") || "",
-          c.req.header("X-Plex-Profile-Token") || undefined,
-        ),
+        await continueNativePlan(c.req.param("id"), c.req.header("X-Native-Session-Key") || ""),
       );
     } catch (e) {
       return c.json(
@@ -198,6 +236,35 @@ export function nativeTvRoutes(): Hono {
         409,
       );
     }
+  });
+  return app;
+}
+
+/**
+ * The WEB side of the TV PIN: whether one is set, set or change it, and clear it. Mounted
+ * outside `/native` on purpose — the TV app authorizes `/native/*` with a Plex token, and the
+ * PIN that locks the TV must not be changeable with the very device it locks. The PIN is never
+ * returned, only whether one exists.
+ */
+export function tvLockRoutes(): Hono {
+  const app = new Hono();
+  app.get("/tv-lock", (c) => {
+    c.header("Cache-Control", "no-store");
+    return c.json({ hasPin: hasPin() });
+  });
+  app.put("/tv-lock/pin", async (c) => {
+    try {
+      const body = await readBody(c);
+      await setPin(body.pin);
+      return c.json({ hasPin: true });
+    } catch (e) {
+      if (e instanceof NativeLockError) return c.json({ error: e.message }, e.status);
+      return c.json({ error: "The TV PIN could not be saved" }, 500);
+    }
+  });
+  app.delete("/tv-lock/pin", (c) => {
+    clearPin();
+    return c.json({ hasPin: false });
   });
   return app;
 }

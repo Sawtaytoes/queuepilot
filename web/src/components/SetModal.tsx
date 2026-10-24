@@ -1,4 +1,5 @@
 import { Button, Checkbox } from "@charcuterie/ui"
+import { Lock } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
 import { api } from "../lib/api"
@@ -206,6 +207,7 @@ export function SetModal() {
     number | typeof INFINITE
   >(1)
   const [isPoweringOff, setIsPoweringOff] = useState(false)
+  const [isLockedOnTv, setIsLockedOnTv] = useState(false)
   const [profiles, setProfiles] = useState<Profile[]>([])
   // The repeating {provider, profile, libraries} blocks. Always a list — a set written
   // before blocks existed arrives as the single implicit Plex block it has always meant, so
@@ -283,6 +285,7 @@ export function SetModal() {
       editing?.length ?? editing?.length_default ?? 1,
     )
     setIsPoweringOff(Boolean(editing?.power_off_when_done))
+    setIsLockedOnTv(Boolean(editing?.is_locked_on_tv))
     // Prefill: edit uses the stored TTL; a new priority picks queue defaults to 24h
     // (matches the seeded movie queues in sets.yaml). Random-pool picks stay blank =
     // keep forever (legacy anime).
@@ -547,6 +550,8 @@ export function SetModal() {
       // control gains no key. `power_off_when_done` is likewise absent unless it is on.
       length: playbackLength,
       power_off_when_done: isPoweringOff,
+      // Sparse like power-off: only `true` is written.
+      is_locked_on_tv: isLockedOnTv,
       // An empty list drops the key server-side, which is how the single-Plex-block case
       // stays on the legacy shape above.
       providers: isLegacyShape
@@ -954,6 +959,19 @@ export function SetModal() {
           and Home Assistant does the turning off. Nothing
           happens on an Infinite queue — it never finishes.
         </p>
+        <Checkbox
+          description="The QueuePilot TV asks for the TV PIN before it opens or plays this queue. Set the PIN in Settings; with no PIN, nothing is locked."
+          id="set-locked-on-tv"
+          isChecked={isLockedOnTv}
+          key={`${modalKey}-lockedontv`}
+          label={
+            <span className="set-lock-label">
+              <Lock aria-hidden="true" size={16} />
+              Locked on TV
+            </span>
+          }
+          onChange={setIsLockedOnTv}
+        />
         {/* The queue's DEFAULT batch. Owner, 2026-08-15: "There's no way to globally set how
             many chapters to read before going to the next one… For Plex, 1 episode is no big
             [deal], but for Webtoons and Manga, I'd prefer to default to 3 chapters (by choice

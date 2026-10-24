@@ -10,7 +10,9 @@ import {
 import { membersByQueue } from "./store/db/queuePeople.js";
 import { queueMatchesSelection, type ResolvedMember } from "./queuePeople.js";
 import { isSupersededTier, queueListNumbers, queueTitle } from "../../shared/queueTitle.js";
-import { authorizeQueue, NativeRequestError } from "./nativeAccess.js";
+import { authorizeQueue, NativeRequestError, profileNameOf, queuePlayAs } from "./nativeAccess.js";
+import { isQueueLocked, isUnlocked, unlock, type NativeDevice } from "./nativeLock.js";
+import { storedGroups } from "./groups.js";
 import {
   expandEntry,
   fullQueueFor,
@@ -29,7 +31,6 @@ import { providerIdForSet } from "./providers/blocks.js";
 import { isSetAvailable } from "./season.js";
 import { playbackLength } from "./engine/playbackLength.js";
 import { wireKindForSet } from "./kind.js";
-import * as plex from "./plex.js";
 import type { PlexServerAccess } from "./plexSources.js";
 import { plexProvider } from "./providers/plex.js";
 import {
@@ -96,6 +97,54 @@ export interface NativeEvent {
 }
 const hash = (s: string): string => createHash("sha256").update(s).digest("hex");
 
+/**
+ * What a native request presents, read from its headers by the route. `proof` is the TV's Plex
+ * token (`X-Plex-Profile-Token`); it identifies a HOUSEHOLD DEVICE and nothing more — a queue
+ * never plays with it (see `nativeAccess.ts`). A bare string is the proof alone.
+ */
+export interface NativeCaller {
+  proof: string;
+  /** `X-QueuePilot-Device`. */
+  deviceId?: string;
+  /** `X-QueuePilot-Unlock`. */
+  unlockToken?: string;
+}
+
+/** Verify the caller as a household device. Throws (403) for anybody outside the Plex Home. */
+export async function nativeDevice(caller: NativeCaller | string): Promise<NativeDevice> {
+  const c = typeof caller === "string" ? { proof: caller } : caller;
+  return {
+    account: await nativeVerifiedProfile(c.proof),
+    deviceId: c.deviceId ?? "",
+    unlockToken: c.unlockToken ?? "",
+  };
+}
+
+/** `POST /api/native/unlock`: trade the household TV PIN for an unlock on this device. */
+export async function nativeUnlock(
+  caller: NativeCaller,
+  pin: unknown,
+): Promise<{ unlockToken: string; expiresAt: number }> {
+  const device = await nativeDevice(caller);
+  return unlock(device.account, device.deviceId, pin);
+}
+
+/**
+ * The audience line the web prints beside a queue (`queuePeopleLabel` in
+ * `web/src/lib/people.ts`): the REQUIRED members by name, three at most and then `+n`, and
+ * "Anybody" when nobody is required. Optional members are faces, not text.
+ */
+export function audienceText(
+  members: readonly { kind: string; id: string; role: string }[],
+  nameOf: (member: { kind: string; id: string }) => string,
+): string {
+  const names = members.filter((m) => m.role === "required").map(nameOf);
+  if (!names.length) return "Anybody";
+  return names.length <= 3
+    ? names.join(", ")
+    : `${names.slice(0, 3).join(", ")} +${names.length - 3}`;
+}
+
 export function nativeAudience(
   members: readonly { kind: string; id: string; role: string; position?: number }[],
 ): ResolvedMember[] {
@@ -146,16 +195,19 @@ export async function nativeQueues(selected: readonly string[]): Promise<unknown
   const titles = await nativeQueueTitles();
   const homeUsers = await nativeHomeUsers();
   const routingSets = routing.loadSets()?.sets || {};
-  const playbackProfile = (id: string, required?: string | null): string | null => {
-    if (required) return required;
+  // WHOM EACH QUEUE PLAYS AS, for display only. The TV never gates on it any more: the server
+  // plays each queue as this profile whoever is signed in (`nativeAccess.authorizeQueue`).
+  const playsAs = (id: string, required?: string | null): string | null => {
     const cfg = routingSets[id];
-    if (!cfg) return null;
-    const binding = routing.bindingFor(cfg);
-    const user = homeUsers.find((u) =>
-      binding.account_id === 1 && !binding.user_uuid ? u.admin : u.uuid === binding.user_uuid,
-    );
-    return user ? user.username || user.name : binding.plex_user;
+    const user = cfg ? queuePlayAs(cfg, homeUsers) : null;
+    return user ? user.name || profileNameOf(user) : required || null;
   };
+  const people = listPeople();
+  const groups = storedGroups();
+  const nameOf = (member: { kind: string; id: string }): string =>
+    member.kind === "group"
+      ? (groups.find((g) => g.id === member.id)?.label ?? member.id)
+      : (people.find((p) => p.id === member.id)?.displayName ?? member.id);
   const queues = registry.sets
     // A superseded legacy tier is out of every web picker, so it is out of this one too. Its id
     // still plays through `createNativePlan` — hiding it from the catalog is not refusing it.
@@ -173,11 +225,13 @@ export async function nativeQueues(selected: readonly string[]): Promise<unknown
       title: titles.get(s.id) ?? s.id,
       kind: wireKindForSet(s),
       people: [...new Set(members.flatMap((m) => m.people))],
-      requiredProfile: playbackProfile(s.id, s.requires_profile),
+      audience: audienceText(members, nameOf),
+      playsAs: playsAs(s.id, s.requires_profile),
+      isLocked: isQueueLocked(s),
     }));
   return {
     queues,
-    people: listPeople().map((p) => ({
+    people: people.map((p) => ({
       id: p.id,
       displayName: p.displayName,
       avatar: `/api/native/people/${encodeURIComponent(p.id)}/avatar`,
@@ -186,14 +240,16 @@ export async function nativeQueues(selected: readonly string[]): Promise<unknown
 }
 
 const grants = new Map<string, { proof: string; servers: Map<string, PlexServerAccess> }>();
-async function grantForPlan(
-  plan: NativePlan,
-  serverId: string,
-  proof?: string,
-): Promise<PlexServerAccess> {
+/**
+ * The plan's grant for one server, for its QUEUE'S profile. After a restart the grant is minted
+ * again from the owner's token (`nativeScopeProof`) and checked against the plan's profile. The
+ * TV's own token is deliberately not an input: it names the device, and a queue playing as
+ * somebody else must never scrobble to the device's account.
+ */
+async function grantForPlan(plan: NativePlan, serverId: string): Promise<PlexServerAccess> {
   let cached = grants.get(plan.id);
   if (!cached) {
-    const credential = proof || (await nativeScopeProof(plan.profileUuid));
+    const credential = await nativeScopeProof(plan.profileUuid);
     const profile = await nativeVerifiedProfile(credential);
     if (profile.uuid !== plan.profileUuid) throw new Error("Native session authorization failed");
     cached = { proof: credential, servers: new Map() };
@@ -208,20 +264,20 @@ async function grantForPlan(
 
 export async function createNativePlan(
   setId: string,
-  proof: string,
+  caller: NativeCaller | string,
   start?: NativeStart | null,
 ): Promise<NativePlan & { sessionKey: string }> {
-  return planForProfile(setId, await nativeVerifiedProfile(proof), undefined, proof, start);
+  return planForQueue(setId, await nativeDevice(caller), undefined, start);
 }
-async function planForProfile(
+/** `device` null: a continuation of a sitting its session key already authorized. */
+async function planForQueue(
   setId: string,
-  profile: plex.HomeUser,
+  device: NativeDevice | null,
   previous?: NativePlan,
-  proof?: string,
   start?: NativeStart | null,
 ): Promise<NativePlan & { sessionKey: string }> {
-  const queueAccess = await authorizeQueue(setId, profile, proof);
-  const { cfg, binding, profileName, credential, home, servers, selector, serverFor } =
+  const queueAccess = await authorizeQueue(setId, device);
+  const { cfg, binding, profile, profileName, credential, home, servers, selector, serverFor } =
     queueAccess;
   const identity = { machineIdentifier: queueAccess.homeServerId };
   const token = home.token;
@@ -398,7 +454,6 @@ export async function nativeEvent(
   id: string,
   key: string,
   event: NativeEvent,
-  proof?: string,
 ): Promise<{ ok: true; duplicate?: boolean; cursor: number }> {
   const previous = events.get(id) || Promise.resolve();
   const pending = previous
@@ -412,7 +467,7 @@ export async function nativeEvent(
       if (duplicate) return { ok: true as const, duplicate: true, cursor: plan.cursor };
       validateNativeEvent(plan, event);
       const item = plan.items[event.index]!;
-      const access = await grantForPlan(plan, item.plexServer || plan.homeServerId || "", proof);
+      const access = await grantForPlan(plan, item.plexServer || plan.homeServerId || "");
       const state = ["ended", "skip", "section-end", "error"].includes(event.state)
         ? "stopped"
         : event.state;
@@ -464,10 +519,10 @@ export async function nativeEvent(
             event.durationMs,
             { client: nativeClient(access), token: access.token },
           );
-        const home = await grantForPlan(plan, plan.homeServerId || "", proof);
+        const home = await grantForPlan(plan, plan.homeServerId || "");
         const scoped = plexProvider({
           client: nativeClient(home),
-          clientForServer: async (id) => nativeClient(await grantForPlan(plan, id, proof)),
+          clientForServer: async (id) => nativeClient(await grantForPlan(plan, id)),
         });
         await finished.reconcileQueue(plan.setId, plan.profileName, {
           provider: scoped,
@@ -598,16 +653,15 @@ export async function avatarBytes(
 export async function continueNativePlan(
   id: string,
   key: string,
-  proof?: string,
 ): Promise<(NativePlan & { sessionKey: string }) | { complete: true }> {
   const previous = readNativePlan(id, key);
   if (previous.cursor !== previous.items.length)
     throw new Error("The current lineup has not finished");
   if (!previous.refill) return { complete: true };
-  const profile = (await nativeHomeUsers()).find((p) => (p.uuid || null) === previous.profileUuid);
-  if (!profile) throw new Error("The playback profile is no longer available");
   try {
-    return await planForProfile(previous.setId, profile, previous, proof || grants.get(id)?.proof);
+    // The session key is the authorization; the queue is resolved again, so the refill plays
+    // as whatever profile the queue is configured for now.
+    return await planForQueue(previous.setId, null, previous);
   } catch (error) {
     if (error instanceof Error && /nothing left|no new eligible/i.test(error.message))
       return { complete: true };
@@ -616,20 +670,37 @@ export async function continueNativePlan(
 }
 
 /**
- * The WHOLE ordered queue for the verified profile: every entry, every item, watched ones
- * included, with where tonight's lineup ends. Same authorization as starting a session.
+ * The WHOLE ordered queue, read as the queue's own profile: every entry, every item, watched
+ * ones included, with where tonight's lineup ends. Same authorization as starting a session.
  */
-export async function nativeFullQueue(setId: string, proof: string): Promise<FullQueue> {
-  const access = await authorizeQueue(setId, await nativeVerifiedProfile(proof), proof);
+export async function nativeFullQueue(
+  setId: string,
+  caller: NativeCaller | string,
+): Promise<FullQueue> {
+  const access = await authorizeQueue(setId, await nativeDevice(caller));
   const titles = await nativeQueueTitles();
   return fullQueueFor(access, titles.get(setId) ?? setId);
 }
 
-/** The verified profile's watch history, queue → sitting → items. */
-export async function nativeWatchHistory(proof: string, days: number): Promise<NativeHistory> {
-  const profile = await nativeVerifiedProfile(proof);
+/**
+ * The household's watch history, queue → sitting → items, for EVERY queue — not one profile's.
+ * A queue locked on the TV is left out unless this device holds a valid unlock, and the count
+ * left out is returned so the TV can say so rather than show a silently short list.
+ */
+export async function nativeWatchHistory(
+  caller: NativeCaller | string,
+  days: number,
+): Promise<NativeHistory> {
+  const device = await nativeDevice(caller);
   const titles = await nativeQueueTitles();
-  return historyFor(profile, proof, days, (setId) => titles.get(setId) ?? setId);
+  const registry = await sets.getRegistry();
+  const isUnlockedHere = isUnlocked(device);
+  const hidden = new Set(
+    registry.sets.filter((s) => isQueueLocked(s) && !isUnlockedHere).map((s) => s.id),
+  );
+  return historyFor(device.account, days, (setId) => titles.get(setId) ?? setId, {
+    isHidden: (setId) => hidden.has(setId),
+  });
 }
 
 export interface NativeWatchedMark {
@@ -650,10 +721,10 @@ export interface NativeWatchedMark {
  */
 export async function nativeMarkWatched(
   setId: string,
-  proof: string,
+  caller: NativeCaller | string,
   mark: NativeWatchedMark,
 ): Promise<{ entryKey: string; ratingKey: string; state: "watched" | "unwatched" }> {
-  const access = await authorizeQueue(setId, await nativeVerifiedProfile(proof), proof);
+  const access = await authorizeQueue(setId, await nativeDevice(caller));
   if (access.cfg.source !== "queue")
     throw new NativeRequestError("Only a Picks queue item can be marked watched", 409);
   const desc = resolve.loadEntries(setId).find((entry) => entry.key === mark.entryKey);
@@ -696,19 +767,18 @@ export interface NativeQueueAdd {
 /**
  * Add one movie or show to a Picks queue, from the TV's title screen.
  *
- * Same authorization as starting the queue: `authorizeQueue()` passes only for the profile the
- * queue plays as, so a profile adds to exactly the queues it would watch them in. The item is
- * read through THAT profile's own grant first, so a title the profile cannot see is never
- * written; the add itself is the web route's (`addQueueItem`): remote-server check, duplicate
+ * Same authorization as starting the queue: any household device, plus the TV PIN for a locked
+ * queue. The item is read through the QUEUE'S profile grant first, so a title the queue's
+ * profile cannot see is never written; the add itself is the web route's (`addQueueItem`): remote-server check, duplicate
  * guard, then `queues.addItem` at the top, where the web's search adds it. A Rules queue picks
  * its own titles and refuses with 409.
  */
 export async function nativeAddToQueue(
   setId: string,
-  proof: string,
+  caller: NativeCaller | string,
   add: NativeQueueAdd,
 ): Promise<{ added: boolean; key: string; duplicateOf?: string; title: string }> {
-  const access = await authorizeQueue(setId, await nativeVerifiedProfile(proof), proof);
+  const access = await authorizeQueue(setId, await nativeDevice(caller));
   if (access.cfg.source !== "queue")
     throw new NativeRequestError(
       "A Rules queue chooses its own titles. Add this to a Picks queue.",

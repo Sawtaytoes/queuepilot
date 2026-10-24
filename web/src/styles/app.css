@@ -5315,3 +5315,38 @@ body.rowdragging
     padding-inline: 8px;
   }
 }
+
+/* ---- SETTINGS: the QueuePilot TV PIN. Scoped to #settings, never borrowed. ---- */
+.settings-management {
+  display: grid;
+  gap: 16px;
+  max-width: 56rem;
+}
+.settings-management .settings-line {
+  align-items: center;
+  color: var(--color-content-secondary);
+  display: flex;
+  gap: 8px;
+  margin: 0;
+}
+.settings-management .settings-line svg {
+  flex: none;
+}
+.settings-management .settings-pin-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  max-width: 24rem;
+}
+.settings-management .settings-pin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The "Locked on TV" box leads with its Lucide lock. */
+#setmodal .set-lock-label {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
