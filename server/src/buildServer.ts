@@ -5,7 +5,7 @@ import { launcherRoutes } from './providers/launcher.js';
 import { accountAuditRoutes } from './routes/accountAuditRoutes.js';
 import { boardGameRoutes } from './routes/boardGameRoutes.js';
 import { historyRoutes } from './routes/historyRoutes.js';
-import { nativeTvRoutes } from './routes/nativeTvRoutes.js';
+import { nativeTvRoutes, tvLockRoutes } from './routes/nativeTvRoutes.js';
 import { playbackRoutes } from './routes/playbackRoutes.js';
 import { plexMetadataRoutes } from './routes/plexMetadataRoutes.js';
 import { groupRoutes } from './routes/groupRoutes.js';
@@ -65,6 +65,7 @@ export function buildServer({ publicDir }: BuildServerOptions): Hono {
   api.route('/', tonightRoutes());
   api.route('/', playbackRoutes());
   api.route('/', nativeTvRoutes());
+  api.route('/', tvLockRoutes());
   api.route('/', accountAuditRoutes());
   api.route('/', sseRoutes());
   root.route(API_PREFIX, api);

@@ -28,6 +28,8 @@ const f = vi.hoisted(() => ({
   routing: {
     watch: { source: "queue", account_id: 1, enabled: true },
   } as Record<string, Record<string, unknown>>,
+  /** Which Home profile each mint was asked for (null = the owner). */
+  scopeProof: vi.fn(async (uuid: string | null) => (uuid ? `fixture-switched-${uuid}` : "fixture-owner")),
 }));
 vi.mock("./store/db/open.js", async () => {
   const original = await vi.importActual<typeof import("./store/db/open.js")>("./store/db/open.js");
@@ -49,8 +51,14 @@ vi.mock("./sets.js", () => ({
 }));
 vi.mock("./engine/routing.js", () => ({
   loadSets: () => ({ sets: f.routing }),
-  bindingFor: () => ({ user_uuid: null, account_id: 1 }),
+  // A queue gated by `requires_profile` carries no account of its own until `profileBinding`
+  // resolves the title; an ungated one is the owner's.
+  bindingFor: (cfg?: { requires_profile?: string }) =>
+    cfg?.requires_profile
+      ? { user_uuid: null, account_id: null }
+      : { user_uuid: null, account_id: 1 },
 }));
+vi.mock("./groups.js", () => ({ storedGroups: () => [{ id: "friends", label: "Friends" }] }));
 vi.mock("./providers/index.js", () => ({ providerFor: () => f.provider }));
 vi.mock("./providers/blocks.js", () => ({ providerIdForSet: () => "plex" }));
 vi.mock("./plex.js", () => ({
@@ -80,11 +88,14 @@ vi.mock("./nativePlex.js", () => ({
   ],
   nativeVerifiedProfile: async (proof: string) => {
     if (!proof) throw new Error("Plex sign-in is required");
-    return proof === "fixture-child"
+    // A Plex account outside the owner's Home, exactly as `nativeVerifiedProfile` refuses it.
+    if (proof === "fixture-stranger")
+      throw new Error("This profile is not enrolled with this QueuePilot server");
+    return proof === "fixture-child" || proof.startsWith("fixture-switched-grace")
       ? { id: 2, uuid: "grace-uuid", admin: false, name: "Grace" }
       : { id: 1, uuid: null, admin: true, name: "Ada", username: "ada" };
   },
-  nativeScopeProof: async () => "fixture-profile",
+  nativeScopeProof: (uuid: string | null) => f.scopeProof(uuid),
   nativeGrant: async () => ({
     id: "fixture-home-server",
     baseUrl: "https://media.example.com",
@@ -152,7 +163,8 @@ import {
   safeAvatarUrl,
   type NativeEvent,
 } from "./nativeTv.js";
-import { nativeTvRoutes } from "./routes/nativeTvRoutes.js";
+import { nativeTvRoutes, tvLockRoutes } from "./routes/nativeTvRoutes.js";
+import { resetLockState, LOCKOUT_MS } from "./nativeLock.js";
 import { layoutFor } from "./nativeQueueDetail.js";
 const event = (sequence = 1): NativeEvent => ({
   id: `event-${sequence}-fixture`,
@@ -174,7 +186,11 @@ beforeEach(() => {
   f.provider.buckets.mockReset();
   f.provider.profileBinding.mockReset();
   f.provider.profileToken.mockReset();
-  f.provider.profileBinding.mockImplementation(async (binding) => binding);
+  f.provider.profileBinding.mockImplementation(async (binding, title) =>
+    title === "Grace" ? { ...binding, plex_user: "Grace", user_uuid: "grace-uuid", account_id: 2 } : binding,
+  );
+  f.scopeProof.mockClear();
+  resetLockState();
   f.provider.profileToken.mockResolvedValue("fixture-server-token");
   f.provider.buckets.mockResolvedValue({
     play: [{ ratingKey: "102", title: "The signal" }],
@@ -217,22 +233,57 @@ describe("native TV sessions", () => {
     f.minimums.set("friends", 1);
     expect(((await nativeQueues(["grace"])) as { queues: unknown[] }).queues).toHaveLength(1);
   });
-  it("selects through the provider and returns identities without media credentials", async () => {
+  it("selects through the provider, hands over the queue profile's grant, and stores no credential", async () => {
     const plan = await createNativePlan("watch", "fixture-profile");
     expect(plan.items[0]?.resumeMs).toBe(4000);
     expect(f.provider.buckets).toHaveBeenCalledOnce();
-    expect(JSON.stringify(plan)).not.toContain("fixture-server-token");
+    // The playback grant rides on the response only, so the TV streams as the queue's profile.
+    expect(plan.grants).toEqual([
+      { serverId: "fixture-home-server", baseUrl: "https://media.example.com", token: "fixture-server-token" },
+    ]);
+    const { grants: _grants, ...rest } = plan;
+    expect(JSON.stringify(rest)).not.toContain("fixture-server-token");
     expect(JSON.stringify(plan)).not.toContain("fixture-profile");
+    expect(JSON.stringify(f.db.prepare("SELECT data FROM native_tv_sessions").all())).not.toContain(
+      "fixture-server-token",
+    );
+    expect(JSON.stringify(readNativePlan(plan.id, plan.sessionKey))).not.toContain("fixture-server-token");
     expect(() => readNativePlan(plan.id, "wrong-key")).toThrow("authorization");
     expect(readNativePlan(plan.id, plan.sessionKey).setId).toBe("watch");
     // The database holds only the capability hash, so reopening does not need raw secrets.
     const row = f.db.prepare("SELECT key_hash,data FROM native_tv_sessions").get();
     expect(JSON.stringify(row)).not.toContain(plan.sessionKey);
   });
-  it("refuses a valid profile proof for another profile before selecting or writing history", async () => {
-    await expect(createNativePlan("watch", "fixture-child")).rejects.toThrow("Switch Plex profile");
+  it("plays a queue as its own profile for any household device, and refuses an outsider", async () => {
+    // Signed in as a child, an owner queue plays as the owner: grants are minted for the
+    // QUEUE'S profile, never taken from the device's own token.
+    const plan = await createNativePlan("watch", "fixture-child");
+    expect(plan.profileUuid).toBeNull();
+    expect(f.scopeProof).toHaveBeenCalledWith(null);
+    expect(f.scopeProof).not.toHaveBeenCalledWith("grace-uuid");
+    f.provider.buckets.mockClear();
+    // An account outside the Plex Home is refused before anything is selected or written.
+    await expect(createNativePlan("watch", "fixture-stranger")).rejects.toThrow("not enrolled");
     expect(f.provider.buckets).not.toHaveBeenCalled();
     expect(f.timeline).not.toHaveBeenCalled();
+  });
+  it("plays a gated queue as the profile it names, whoever is signed in", async () => {
+    f.queues = [...f.queues, { id: "kids", provider_kind: "plex", enabled: true, source: "queue", requires_profile: "Grace" }];
+    f.routing = { ...f.routing, kids: { source: "queue", enabled: true, requires_profile: "Grace" } };
+    try {
+      const plan = await createNativePlan("kids", "fixture-profile");
+      expect(plan).toMatchObject({ profileUuid: "grace-uuid", profileName: "Grace" });
+      expect(f.scopeProof).toHaveBeenCalledWith("grace-uuid");
+      // Progress scrobbles through the queue profile's grant, never the device's.
+      await nativeEvent(plan.id, plan.sessionKey, event());
+      expect(f.timeline).toHaveBeenCalledOnce();
+      // A profile the Plex Home no longer has is a stated refusal, never the owner's history.
+      f.routing = { ...f.routing, kids: { source: "queue", enabled: true, requires_profile: "Nobody" } };
+      await expect(createNativePlan("kids", "fixture-profile")).rejects.toThrow("not in this Plex Home");
+    } finally {
+      f.queues = f.queues.filter((q) => q.id !== "kids");
+      delete f.routing.kids;
+    }
   });
   it("persists idempotent progress and never controls an external player", async () => {
     const plan = await createNativePlan("watch", "fixture-profile");
@@ -519,8 +570,9 @@ describe("native TV full queue, item start, and watched marks", () => {
     expect(of(0, 0)).toBe("list");
   });
 
-  it("reads the full queue only for the profile the queue plays as", async () => {
-    await expect(nativeFullQueue("watch", "fixture-child")).rejects.toThrow("Switch Plex profile");
+  it("reads the full queue for any household device, and for nobody else", async () => {
+    await expect(nativeFullQueue("watch", "fixture-child")).resolves.toMatchObject({ setId: "watch" });
+    await expect(nativeFullQueue("watch", "fixture-stranger")).rejects.toThrow("not enrolled");
     const response = await nativeTvRoutes().request("/native/queues/watch/full");
     expect(response.status).toBe(403);
   });
@@ -625,7 +677,8 @@ describe("native TV full queue, item start, and watched marks", () => {
     ).toBe(404);
     expect((await mark({ entryKey: "signal-garden", ratingKey: "203" })).status).toBe(400);
     expect(
-      (await mark({ entryKey: "signal-garden", ratingKey: "203", isWatched: true }, "fixture-child"))
+      // An account outside the Plex Home; a Home member may mark any queue now.
+      (await mark({ entryKey: "signal-garden", ratingKey: "203", isWatched: true }, "fixture-stranger"))
         .status,
     ).toBe(403);
     expect(f.markCompleted).not.toHaveBeenCalled();
@@ -718,10 +771,189 @@ describe("native TV add to queue", () => {
     expect((await add("watch", {})).status).toBe(400);
     // A title this profile's grant cannot read.
     expect((await add("watch", { ratingKey: "404" })).status).toBe(404);
-    // Another profile, and no proof at all.
-    expect((await add("watch", { ratingKey: "401" }, "fixture-child")).status).toBe(403);
+    // An account outside the Plex Home, and no proof at all.
+    expect((await add("watch", { ratingKey: "401" }, "fixture-stranger")).status).toBe(403);
     expect((await add("watch", { ratingKey: "401" }, "")).status).toBe(403);
     expect((await add("missing", { ratingKey: "401" })).status).toBe(403);
     expect(f.addQueueItem).not.toHaveBeenCalled();
+  });
+});
+
+describe("native TV catalog: every queue, its audience, whom it plays as, and its lock", () => {
+  const originalQueues = f.queues;
+  const originalRouting = f.routing;
+  beforeEach(() => {
+    f.queues = [
+      ...originalQueues,
+      { id: "kids", provider_kind: "plex", enabled: true, source: "queue", requires_profile: "Grace", is_locked_on_tv: true },
+    ];
+    f.routing = { ...originalRouting, kids: { source: "queue", enabled: true, requires_profile: "Grace" } };
+    f.members.set("watch", [
+      { kind: "person", id: "ada", role: "required", position: 0 },
+      { kind: "group", id: "friends", role: "required", position: 1 },
+      { kind: "person", id: "grace", role: "optional", position: 2 },
+    ]);
+  });
+  afterEach(() => {
+    f.queues = originalQueues;
+    f.routing = originalRouting;
+  });
+  const catalog = async () =>
+    ((await nativeQueues([])) as {
+      queues: { id: string; audience: string; playsAs: string | null; isLocked: boolean }[];
+    }).queues;
+
+  it("lists every queue with its audience text and play-as profile, and no profile gate", async () => {
+    const queues = await catalog();
+    expect(queues.map((q) => q.id)).toEqual(["watch", "kids"]);
+    expect(queues[0]).toMatchObject({ audience: "Ada, Friends", playsAs: "Ada", isLocked: false });
+    expect(queues[1]).toMatchObject({ audience: "Anybody", playsAs: "Grace" });
+    // The 0.5.5 TV gated on this field; with it gone, an older TV plays every queue too.
+    expect(queues[0]).not.toHaveProperty("requiredProfile");
+  });
+
+  it("reports a marked queue as locked only while a TV PIN exists", async () => {
+    expect((await catalog())[1]?.isLocked).toBe(false);
+    await tvLockRoutes().request("/tv-lock/pin", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin: "2468" }),
+    });
+    expect((await catalog())[1]?.isLocked).toBe(true);
+    expect((await catalog())[0]?.isLocked).toBe(false);
+  });
+});
+
+describe("native TV PIN lock", () => {
+  const originalQueues = f.queues;
+  const device = "fixture-device-0001";
+  const headers = (extra: Record<string, string> = {}) => ({
+    "Content-Type": "application/json",
+    "X-Plex-Profile-Token": "fixture-profile",
+    "X-QueuePilot-Device": device,
+    ...extra,
+  });
+  const app = () => nativeTvRoutes();
+  const unlockWith = (pin: unknown, extra: Record<string, string> = {}) =>
+    app().request("/native/unlock", { method: "POST", headers: headers(extra), body: JSON.stringify({ pin }) });
+  const setPinTo = (pin: unknown) =>
+    tvLockRoutes().request("/tv-lock/pin", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ pin }),
+    });
+  beforeEach(async () => {
+    f.queues = originalQueues.map((q) => (q.id === "watch" ? { ...q, is_locked_on_tv: true } : q));
+    expect((await setPinTo("2468")).status).toBe(200);
+  });
+  afterEach(() => {
+    f.queues = originalQueues;
+    vi.useRealTimers();
+  });
+
+  it("stores only a salted scrypt hash, and validates the PIN's shape", async () => {
+    const row = f.db.prepare("SELECT hash FROM native_tv_pin").get() as { hash: string };
+    expect(row.hash).toMatch(/^scrypt\$16384\$8\$1\$/);
+    expect(row.hash).not.toContain("2468");
+    for (const bad of ["123", "123456789", "12a4", 1234, null])
+      expect((await setPinTo(bad)).status).toBe(400);
+    expect(await (await tvLockRoutes().request("/tv-lock")).json()).toEqual({ hasPin: true });
+  });
+
+  it("refuses every route of a locked queue with 423 until the device unlocks it", async () => {
+    const full = await app().request("/native/queues/watch/full", { headers: headers() });
+    expect(full.status).toBe(423);
+    expect(await full.json()).toMatchObject({ isLocked: true });
+    const start = await app().request("/native/sessions", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ setId: "watch" }),
+    });
+    expect(start.status).toBe(423);
+    const watched = await app().request("/native/queues/watch/watched", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ entryKey: "x", ratingKey: "1", isWatched: true }),
+    });
+    expect(watched.status).toBe(423);
+    const added = await app().request("/native/queues/watch/items", {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify({ ratingKey: "401" }),
+    });
+    expect(added.status).toBe(423);
+    expect(f.provider.buckets).not.toHaveBeenCalled();
+
+    const unlocked = await unlockWith("2468");
+    expect(unlocked.status).toBe(200);
+    const { unlockToken, expiresAt } = (await unlocked.json()) as { unlockToken: string; expiresAt: number };
+    expect(expiresAt - Date.now()).toBeGreaterThan(3.9 * 3600_000);
+    const opened = await app().request("/native/sessions", {
+      method: "POST",
+      headers: headers({ "X-QueuePilot-Unlock": unlockToken }),
+      body: JSON.stringify({ setId: "watch" }),
+    });
+    expect(opened.status).toBe(200);
+
+    // Bound to the device AND the account it was issued to.
+    const otherDevice = await app().request("/native/queues/watch/full", {
+      headers: headers({ "X-QueuePilot-Unlock": unlockToken, "X-QueuePilot-Device": "fixture-device-0002" }),
+    });
+    expect(otherDevice.status).toBe(423);
+    const otherAccount = await app().request("/native/queues/watch/full", {
+      headers: headers({ "X-QueuePilot-Unlock": unlockToken, "X-Plex-Profile-Token": "fixture-child" }),
+    });
+    expect(otherAccount.status).toBe(423);
+
+    // Changing the PIN revokes every unlock.
+    await setPinTo("1357");
+    const revoked = await app().request("/native/queues/watch/full", {
+      headers: headers({ "X-QueuePilot-Unlock": unlockToken }),
+    });
+    expect(revoked.status).toBe(423);
+  });
+
+  it("counts wrong PINs for the household and locks every attempt out after five", async () => {
+    for (let left = 4; left >= 1; left--) {
+      const wrong = await unlockWith("0000");
+      expect(wrong.status).toBe(403);
+      expect(await wrong.json()).toMatchObject({ attemptsLeft: left });
+    }
+    const fifth = await unlockWith("0000");
+    expect(fifth.status).toBe(429);
+    expect(fifth.headers.get("Retry-After")).toBe(String(LOCKOUT_MS / 1000));
+    // Even the right PIN, and from another device, waits out the lockout.
+    expect((await unlockWith("2468", { "X-QueuePilot-Device": "fixture-device-0002" })).status).toBe(429);
+    vi.useFakeTimers({ now: Date.now() + LOCKOUT_MS + 1000, toFake: ["Date"] });
+    expect((await unlockWith("2468")).status).toBe(200);
+  });
+
+  it("needs a device id and a household account, and answers 409 with no PIN set", async () => {
+    expect(
+      (await app().request("/native/unlock", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Plex-Profile-Token": "fixture-profile" },
+        body: JSON.stringify({ pin: "2468" }),
+      })).status,
+    ).toBe(400);
+    expect((await unlockWith("2468", { "X-Plex-Profile-Token": "fixture-stranger" })).status).toBe(403);
+    await tvLockRoutes().request("/tv-lock/pin", { method: "DELETE" });
+    expect((await unlockWith("2468")).status).toBe(409);
+    // With no PIN, the marked queue opens like any other.
+    const full = await app().request("/native/queues/watch/full", { headers: headers() });
+    expect(full.status).not.toBe(423);
+  });
+
+  it("keeps a started sitting going without asking again", async () => {
+    const { unlockToken } = (await (await unlockWith("2468")).json()) as { unlockToken: string };
+    const plan = await createNativePlan("watch", {
+      proof: "fixture-profile",
+      deviceId: device,
+      unlockToken,
+    });
+    resetLockState();
+    await nativeEvent(plan.id, plan.sessionKey, { ...event(1), state: "ended", positionMs: 30000 });
+    // The session key authorizes the refill; the lock is not asked again mid-sitting.
+    await expect(continueNativePlan(plan.id, plan.sessionKey)).resolves.toBeDefined();
   });
 });
