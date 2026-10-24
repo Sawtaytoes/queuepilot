@@ -4,7 +4,7 @@
 - **Date:** 2026-10-23
 - **Type:** API / native TV / authorization
 - **Supersedes:** —
-- **Superseded by:** —
+- **Superseded by:** In part — item 2, by [The native TV plays each queue as its own profile, and locks chosen queues with a PIN](2026-10-23-the-native-tv-plays-each-queue-as-its-own-profile-and-locks-queues-with-a-pin.md)
 
 ## Decision
 

@@ -93,7 +93,11 @@ export function SettingsView() {
   return (
     <div className="settings-management" id="settings">
       <Card heading="QueuePilot TV PIN">
-        <p className="settings-line" data-testid="tv-pin-status">
+        <p
+          className="settings-line"
+          data-is-loaded={hasPin !== null}
+          data-testid="tv-pin-status"
+        >
           <Tv aria-hidden="true" size={20} />
           {hasPin === null
             ? "Loading the TV PIN status…"
