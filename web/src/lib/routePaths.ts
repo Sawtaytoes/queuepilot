@@ -19,6 +19,7 @@
  *   `/queues`                       all Picks and Rules queues
  *   `/calendar`                     CALENDAR — every queue that has a date, and its dates
  *   `/people`                       roster and saved audience-group management
+ *   `/settings`                     household settings — the QueuePilot TV PIN
  *   `/q/<id>`                       one curated queue / channel as a grid
  *   `/channels/<id>`                one rule-based queue
  *
@@ -88,6 +89,8 @@ export const ROUTE_PATHS = {
   queue: "/q/:setId",
   queues: "/queues/*",
   result: "/result/:gameId?",
+  /** SETTINGS — household settings that belong to no one queue: the QueuePilot TV PIN. */
+  settings: "/settings",
   watchPlay: `${WATCH_PLAY_PATH}/:step?`,
 } as const
 

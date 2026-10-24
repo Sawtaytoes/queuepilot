@@ -4,6 +4,7 @@ import {
   CATEGORICAL_SEQUENCE,
 } from "@charcuterie/tokens"
 import type { NavRailItem } from "@charcuterie/ui"
+import { Settings } from "lucide-react"
 
 import {
   ROUTE_PATHS,
@@ -103,6 +104,23 @@ export const PRIMARY_NAVIGATION_ITEMS: readonly NavRailItem[] =
         </NavigationIcon>
       ),
       label: "Calendar",
+    },
+    {
+      /**
+       * SETTINGS — the household QueuePilot TV PIN. Appended for the Calendar's reason: the
+       * destinations above keep their positions and their hues. The first Lucide glyph on the
+       * rail (the fleet's icon set); the hand-drawn ones above use the same 24-unit grid and
+       * stroke, so the rail reads as one set until they are swapped too.
+       */
+      href: ROUTE_PATHS.settings,
+      icon: (
+        <Settings
+          aria-hidden="true"
+          size={20}
+          strokeWidth={1.8}
+        />
+      ),
+      label: "Settings",
     },
   ]
 

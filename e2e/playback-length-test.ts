@@ -231,6 +231,22 @@ await ok('power-off saves on a curated queue too', async () => {
   assert.match(blockFor(id), /power_off_when_done: true/);
 });
 
+await ok('"Locked on TV" is opt-in, stored by absence, on both kinds of set', async () => {
+  // Rides the same sparse writer as power-off, so it is pinned beside it. The flag only marks a
+  // queue; the TV PIN that makes it bite lives in the book of record (`native_tv_pin`).
+  const curated = await sets.createSet({
+    kind: 'movies', label: 'Late Films', sections: [1], source: 'queue', is_locked_on_tv: true,
+  });
+  assert.match(blockFor(curated.id), /is_locked_on_tv: true/);
+  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === curated.id)?.is_locked_on_tv, true);
+  await sets.updateSet(curated.id, { is_locked_on_tv: false });
+  assert.doesNotMatch(blockFor(curated.id), /is_locked_on_tv/);
+  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === curated.id)?.is_locked_on_tv, false);
+  const pool = await sets.createSet(rotation('Locked Pool'));
+  await sets.updateSet(pool.id, { is_locked_on_tv: true });
+  assert.match(blockFor(pool.id), /is_locked_on_tv: true/);
+});
+
 await ok('the registry tells the editor what null resolves to', async () => {
   const rw = await sets.createSet(rotation('Default Rewatch', { behavior: 'rewatch' }));
   const pg = await sets.createSet(rotation('Default Progress'));

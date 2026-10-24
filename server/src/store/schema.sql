@@ -904,6 +904,17 @@ CREATE TABLE IF NOT EXISTS native_tv_events (
   UNIQUE(session_id,sequence)
 );
 
+-- The household TV PIN that opens a queue marked "Locked on TV" (`is_locked_on_tv` on the set).
+-- At most one row, keyed 'household'. `hash` is `scrypt$<N>$<r>$<p>$<salt b64>$<key b64>`;
+-- the PIN itself is never stored. No row means no PIN, and with no PIN nothing is locked.
+-- Additive, so it does not move SCHEMA_VERSION: an older image never reads it, and a rollback
+-- simply plays every queue unlocked, which is what that image always did.
+CREATE TABLE IF NOT EXISTS native_tv_pin (
+  id         TEXT PRIMARY KEY CHECK (id = 'household'),
+  hash       TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 -- ── The gated-push log — what QueuePilot pushed, and who it was bound to ─────────────────
 --
 -- decision 2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited. One row per

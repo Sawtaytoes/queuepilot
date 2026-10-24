@@ -615,6 +615,11 @@ export type RegistrySet = {
    */
   power_off_when_done?: boolean
   /**
+   * "Locked on TV": the QueuePilot TV asks for the household TV PIN (Settings) before it opens
+   * or plays this queue. Inert while no PIN is set. Absent = unlocked.
+   */
+  is_locked_on_tv?: boolean
+  /**
    * Per-show overrides of the pool's `on_complete`, keyed by ratingKey (`section-<id>` for a
    * whole item bucket) - the same keying `starts` and `weights` use.
    *

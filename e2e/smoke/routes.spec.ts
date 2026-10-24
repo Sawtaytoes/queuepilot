@@ -39,6 +39,8 @@ const routes: RouteCase[] = [
   // The fallback: an unknown path paints the task home and keeps its address.
   { name: 'unknown path', path: '/no/such/route', ready: LANDING_READY, server: 'landing' },
   { name: 'calendar', path: '/calendar', ready: '#calendar-rows > li', server: 'calendar' },
+  // The PIN status paints only after `/api/tv-lock` answers, so the marker proves the data.
+  { name: 'settings', path: '/settings', ready: '#settings [data-testid="tv-pin-status"][data-is-loaded="true"]', server: 'landing' },
   {
     name: 'what to watch/play',
     path: '/what-to-watch-play',

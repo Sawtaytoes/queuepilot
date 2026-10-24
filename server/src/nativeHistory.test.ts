@@ -19,7 +19,19 @@ vi.mock("./engine/resolve.js", () => ({ loadEntries: () => [] }));
 vi.mock("./engine/plex-live.js", () => ({
   liveClient: () => ({ container: async () => ({ machineIdentifier: "fixture-home-server" }) }),
 }));
+vi.mock("./nativeAccess.js", () => ({
+  // The real one is `nativeAccess.queuePlayAs`; history only needs "who can read this queue".
+  queuePlayAs: (cfg: { requires_profile?: string }, users: { name: string; admin: boolean }[]) =>
+    cfg.requires_profile
+      ? (users.find((u) => u.name === cfg.requires_profile) ?? null)
+      : (users.find((u) => u.admin) ?? null),
+}));
 vi.mock("./nativePlex.js", () => ({
+  nativeHomeUsers: async () => [
+    { id: 1, uuid: null, admin: true, restricted: false, name: "Ada", username: "ada" },
+    { id: 2, uuid: "grace-uuid", admin: false, restricted: true, name: "Grace", username: null },
+  ],
+  nativeScopeProof: async (uuid: string | null) => (uuid ? "fixture-child" : "fixture-owner"),
   nativeGrant: async (_proof: string, id: string) => ({ id, token: "fixture-server-token" }),
   nativeClient: () => ({
     container: async () => ({
@@ -42,9 +54,8 @@ import {
   groupHistory,
   historyFor,
   ledgerPlays,
+  householdPlays,
   nativePlays,
-  profilePlays,
-  queuePlaysAs,
   type HistoryPlay,
 } from "./nativeHistory.js";
 import type { HomeUser } from "./plex.js";
@@ -187,59 +198,60 @@ describe("native TV watch history", () => {
     expect(legacy).toMatchObject({ isTimeApproximate: true, startedAt: NOW - 4 * 3600_000 });
   });
 
-  it("counts a ledger row only for a queue that plays as the profile", () => {
-    expect(queuePlaysAs(f.routing.family_shows as never, ada)).toBe(true);
-    expect(queuePlaysAs(f.routing.family_shows as never, grace)).toBe(false);
-    expect(queuePlaysAs(f.routing.grace_films as never, grace)).toBe(true);
-    expect(queuePlaysAs(f.routing.grace_films as never, ada)).toBe(false);
-    f.bindings.family_shows = { user_uuid: "grace-uuid", account_id: 2 };
-    expect(queuePlaysAs(f.routing.family_shows as never, grace)).toBe(true);
-
+  it("counts a ledger row for every queue, whoever it plays as", () => {
     const completed = Math.floor((NOW - 3600_000) / 1000);
     const insert = f.db.prepare(
       `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
        VALUES(?,?,?,?,?,?,?)`,
     );
     insert.run("grace_films", "lighthouse", "601", completed, 1, 0, 0);
+    insert.run("family_shows", "harbor-tales", "501", completed, 1, 0, 0);
     // A partial position has no time, so it never reaches the history.
     insert.run("grace_films", "lighthouse", "602", 0, 0, 500000, 6000000);
-    const rows = ledgerPlays(NOW - 24 * 3600_000, f.routing as never, grace, () => null);
-    expect(rows.map((row) => [row.setId, row.ratingKey, row.endedAt, row.source])).toEqual([
+    // A queue the registry no longer knows is not a queue anybody can open.
+    insert.run("retired_queue", "gone", "701", completed, 1, 0, 0);
+    const rows = ledgerPlays(NOW - 24 * 3600_000, f.routing as never, () => null);
+    expect(rows.map((row) => [row.setId, row.ratingKey, row.endedAt, row.source]).sort()).toEqual([
+      ["family_shows", "501", completed * 1000, "queue-ledger"],
       ["grace_films", "601", completed * 1000, "queue-ledger"],
     ]);
-    expect(ledgerPlays(NOW - 24 * 3600_000, f.routing as never, ada, () => null)).toEqual([]);
   });
 
-  it("keeps only this profile's native plays and drops the ledger row a native play wrote", () => {
+  it("keeps every profile's native plays and drops the ledger row a native play wrote", () => {
     const at = NOW - 3600_000;
-    const mine = { ...play("family_shows", "501", at, at + 20 * MINUTE), entryKey: "harbor-tales", profileUuid: null };
-    const theirs = { ...play("grace_films", "601", at, at + 90 * MINUTE), profileUuid: "grace-uuid" };
+    const owners = { ...play("family_shows", "501", at, at + 20 * MINUTE), entryKey: "harbor-tales", profileUuid: null };
+    const childs = { ...play("grace_films", "601", at, at + 90 * MINUTE), profileUuid: "grace-uuid" };
     const echo = { ...play("family_shows", "501", at + 21 * MINUTE), entryKey: "harbor-tales", source: "queue-ledger" as const };
     const elsewhere = { ...play("family_shows", "502", at + 120 * MINUTE), entryKey: "harbor-tales", source: "queue-ledger" as const };
-    const kept = profilePlays(ada, [mine, theirs], [echo, elsewhere]);
+    const kept = householdPlays([owners, childs], [echo, elsewhere]);
     expect(kept.map((p) => [p.ratingKey, p.source])).toEqual([
       ["501", "native-tv"],
+      ["601", "native-tv"],
       ["502", "queue-ledger"],
     ]);
     expect(kept.every((p) => !("profileUuid" in p))).toBe(true);
   });
 
-  it("answers queue, sitting, and item for the verified profile, with ledger rows titled", async () => {
+  it("answers queue, sitting, and item for every queue, titled through each queue's profile", async () => {
     const completed = Math.floor((NOW - 2 * 3600_000) / 1000);
-    f.db
-      .prepare(
-        `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
-         VALUES(?,?,?,?,1,0,0)`,
-      )
-      .run("family_shows", "harbor-tales", "501", completed);
-    const history = await historyFor(ada, "fixture-profile", 30, () => "Movies & Shows", NOW);
+    const insert = f.db.prepare(
+      `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
+       VALUES(?,?,?,?,1,0,0)`,
+    );
+    insert.run("family_shows", "harbor-tales", "501", completed);
+    insert.run("grace_films", "lighthouse", "501", completed);
+    const history = await historyFor(grace, 30, (setId) => `Title of ${setId}`, { now: NOW });
     expect(history).toMatchObject({
-      profile: { uuid: null, name: "ada" },
+      // The signed-in account is reported, and does NOT filter what is returned.
+      profile: { uuid: "grace-uuid", name: "Grace" },
+      hiddenLockedQueues: 0,
       sittingGapMinutes: 75,
       since: NOW - 30 * 24 * 3600_000,
     });
-    expect(history.queues).toHaveLength(1);
-    expect(history.queues[0]?.title).toBe("Movies & Shows");
+    expect(history.queues.map((q) => q.title).sort()).toEqual([
+      "Title of family_shows",
+      "Title of grace_films",
+    ]);
     expect(history.queues[0]?.sittings[0]?.items[0]).toMatchObject({
       ratingKey: "501",
       title: "Lantern Walk",
@@ -248,6 +260,21 @@ describe("native TV watch history", () => {
       episode: 4,
       source: "queue-ledger",
     });
-    expect((await historyFor(grace, "fixture-child", 30, () => "x", NOW)).queues).toEqual([]);
+  });
+
+  it("leaves out a queue the device may not see, and says how many it left out", async () => {
+    const completed = Math.floor((NOW - 2 * 3600_000) / 1000);
+    const insert = f.db.prepare(
+      `INSERT INTO queue_entry_history(set_id,entry_key,item_key,completed_at,is_completed,position_ms,duration_ms)
+       VALUES(?,?,?,?,1,0,0)`,
+    );
+    insert.run("family_shows", "harbor-tales", "501", completed);
+    insert.run("grace_films", "lighthouse", "601", completed);
+    const history = await historyFor(ada, 30, (setId) => setId, {
+      isHidden: (setId) => setId === "grace_films",
+      now: NOW,
+    });
+    expect(history.queues.map((q) => q.setId)).toEqual(["family_shows"]);
+    expect(history.hiddenLockedQueues).toBe(1);
   });
 });
