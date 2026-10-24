@@ -677,7 +677,8 @@ describe("native TV full queue, item start, and watched marks", () => {
     ).toBe(404);
     expect((await mark({ entryKey: "signal-garden", ratingKey: "203" })).status).toBe(400);
     expect(
-      (await mark({ entryKey: "signal-garden", ratingKey: "203", isWatched: true }, "fixture-child"))
+      // An account outside the Plex Home; a Home member may mark any queue now.
+      (await mark({ entryKey: "signal-garden", ratingKey: "203", isWatched: true }, "fixture-stranger"))
         .status,
     ).toBe(403);
     expect(f.markCompleted).not.toHaveBeenCalled();

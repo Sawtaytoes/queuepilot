@@ -1,9 +1,4 @@
-import {
-  Alert,
-  Button,
-  Card,
-  Field,
-} from "@charcuterie/ui"
+import { Alert, Button, Card, Field } from "@charcuterie/ui"
 import { Lock, LockOpen, Tv } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 
@@ -156,16 +151,27 @@ export function SettingsView() {
           </div>
         </form>
         {message ? (
-          <Alert heading={message.text} intent={message.intent} />
+          <Alert
+            heading={message.text}
+            intent={message.intent}
+          />
         ) : null}
       </Card>
 
       <Card heading="Queues locked on the TV">
-        <p className="settings-line" data-testid="tv-locked-queues">
+        <p
+          className="settings-line"
+          data-testid="tv-locked-queues"
+        >
           <Lock aria-hidden="true" size={20} />
           {lockedQueues.length
             ? lockedQueues
-                .map((set) => queueTitle(set, numbers.get(set.id) ?? null))
+                .map((set) =>
+                  queueTitle(
+                    set,
+                    numbers.get(set.id) ?? null,
+                  ),
+                )
                 .join(", ")
             : "No queue is marked. Open a queue's settings and turn on “Locked on TV” to lock it."}
         </p>
