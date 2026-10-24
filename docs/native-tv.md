@@ -56,7 +56,12 @@ Decision: `docs/decisions/2026-10-23-the-native-tv-plays-each-queue-as-its-own-p
 - `POST /api/native/sessions`, body `{setId, start?}`, requires `X-Plex-Profile-Token` from Plex PIN
   authorization. Plex verifies the actual account UUID belongs to the household. The session
   plays as the queue's own profile (`profileName`, `profileUuid` in the plan). The response contains ordered media identities, resume/section positions, the
-  home server identity, and a random `sessionKey`; it contains no Plex credentials or media URLs.
+  home server identity, a random `sessionKey`, and `grants: [{serverId, baseUrl, token}]` — the
+  QUEUE PROFILE's server-scoped Plex grant for each server the plan's items live on, so a TV
+  signed in as another (possibly restricted) profile streams the items as the queue's profile.
+  Grants are in the response only: never stored in `native_tv_sessions` and never returned by
+  `GET /api/native/sessions/:id`; `continue` returns fresh ones with the next window. No
+  owner token and no profile switch token is ever returned.
   `start` = `{entryKey, ratingKey, plexServer?, mode: "continue" | "only"}` (Picks queues only)
   begins at a picked item: `continue` plays it, the rest of its entry that is not watched, then
   the engine's lineup; `only` plays it alone and does not refill. Nothing before the pick is

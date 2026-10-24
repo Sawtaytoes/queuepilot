@@ -15,9 +15,13 @@
 2. **The server plays every queue as the queue's own profile.** `queuePlayAs()` reads it from
    the queue: `requires_profile`, else the routing binding, else the server owner. The server
    mints that profile's token with the owner's Home-user switch (`nativeScopeProof`, memoized
-   ten minutes in memory) and uses it for item reads, the playback grants handed to the TV,
-   scrobbles and timelines, and watched marks, so history lands on the queue's profile whoever
-   holds the remote. A named profile the Plex Home no longer has is a stated refusal — never a
+   ten minutes in memory) and uses it for item reads, scrobbles and timelines, and watched
+   marks. A new session also hands the TV that profile's server-scoped grant for each server
+   its items live on (`grants: [{serverId, baseUrl, token}]`, in the response only, never
+   stored), because a TV signed in as a restricted profile cannot stream an owner queue's
+   items with its own token. This reverses the 2026-10-22 plan's "no credentials" rule for
+   the server-scoped grant only; no owner or switch token ever leaves the server. So history
+   lands on the queue's profile whoever holds the remote. A named profile the Plex Home no longer has is a stated refusal — never a
    silent fallback to the owner. Applies to the catalog, `/full`, sessions (including `start`),
    `/watched`, `/items`, and history.
 3. **The catalog lists every queue** with `audience` (the web's audience line: required members,

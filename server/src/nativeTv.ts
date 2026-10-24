@@ -87,6 +87,19 @@ export interface NativePlan {
   };
   startedPositions: number[];
 }
+/**
+ * The QUEUE profile's grant for one server, handed to the TV with a new plan so it streams the
+ * items as the profile the queue plays as — a TV signed in as a restricted profile could not
+ * otherwise open an owner queue's items. In the RESPONSE only: never in `native_tv_sessions`,
+ * never in `GET /native/sessions/:id`. The TV keeps them in memory for the sitting.
+ */
+export interface NativePlaybackGrant {
+  serverId: string;
+  baseUrl: string;
+  token: string;
+}
+export type NativePlanResponse = NativePlan & { sessionKey: string; grants: NativePlaybackGrant[] };
+
 export interface NativeEvent {
   id: string;
   sequence: number;
@@ -266,7 +279,7 @@ export async function createNativePlan(
   setId: string,
   caller: NativeCaller | string,
   start?: NativeStart | null,
-): Promise<NativePlan & { sessionKey: string }> {
+): Promise<NativePlanResponse> {
   return planForQueue(setId, await nativeDevice(caller), undefined, start);
 }
 /** `device` null: a continuation of a sitting its session key already authorized. */
@@ -275,7 +288,7 @@ async function planForQueue(
   device: NativeDevice | null,
   previous?: NativePlan,
   start?: NativeStart | null,
-): Promise<NativePlan & { sessionKey: string }> {
+): Promise<NativePlanResponse> {
   const queueAccess = await authorizeQueue(setId, device);
   const { cfg, binding, profile, profileName, credential, home, servers, selector, serverFor } =
     queueAccess;
@@ -405,7 +418,12 @@ async function planForQueue(
     "INSERT INTO native_tv_sessions (id, key_hash, data) VALUES (:id, :key_hash, :data)",
   ).run({ id: plan.id, key_hash: hash(sessionKey), data: JSON.stringify(plan) });
   grants.set(plan.id, { proof: credential, servers });
-  return { ...plan, sessionKey };
+  const playback: NativePlaybackGrant[] = [];
+  for (const serverId of new Set([home.id, ...items.map((item) => item.plexServer || home.id)])) {
+    const access = await serverFor(serverId);
+    playback.push({ serverId, baseUrl: access.baseUrl, token: access.token });
+  }
+  return { ...plan, sessionKey, grants: playback };
 }
 
 export function readNativePlan(id: string, key: string): NativePlan {
@@ -653,7 +671,7 @@ export async function avatarBytes(
 export async function continueNativePlan(
   id: string,
   key: string,
-): Promise<(NativePlan & { sessionKey: string }) | { complete: true }> {
+): Promise<NativePlanResponse | { complete: true }> {
   const previous = readNativePlan(id, key);
   if (previous.cursor !== previous.items.length)
     throw new Error("The current lineup has not finished");

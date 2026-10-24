@@ -233,12 +233,21 @@ describe("native TV sessions", () => {
     f.minimums.set("friends", 1);
     expect(((await nativeQueues(["grace"])) as { queues: unknown[] }).queues).toHaveLength(1);
   });
-  it("selects through the provider and returns identities without media credentials", async () => {
+  it("selects through the provider, hands over the queue profile's grant, and stores no credential", async () => {
     const plan = await createNativePlan("watch", "fixture-profile");
     expect(plan.items[0]?.resumeMs).toBe(4000);
     expect(f.provider.buckets).toHaveBeenCalledOnce();
-    expect(JSON.stringify(plan)).not.toContain("fixture-server-token");
+    // The playback grant rides on the response only, so the TV streams as the queue's profile.
+    expect(plan.grants).toEqual([
+      { serverId: "fixture-home-server", baseUrl: "https://media.example.com", token: "fixture-server-token" },
+    ]);
+    const { grants: _grants, ...rest } = plan;
+    expect(JSON.stringify(rest)).not.toContain("fixture-server-token");
     expect(JSON.stringify(plan)).not.toContain("fixture-profile");
+    expect(JSON.stringify(f.db.prepare("SELECT data FROM native_tv_sessions").all())).not.toContain(
+      "fixture-server-token",
+    );
+    expect(JSON.stringify(readNativePlan(plan.id, plan.sessionKey))).not.toContain("fixture-server-token");
     expect(() => readNativePlan(plan.id, "wrong-key")).toThrow("authorization");
     expect(readNativePlan(plan.id, plan.sessionKey).setId).toBe("watch");
     // The database holds only the capability hash, so reopening does not need raw secrets.
