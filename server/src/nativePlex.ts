@@ -132,13 +132,24 @@ export async function nativeTimeline(
   }
   await response.arrayBuffer();
 }
+/**
+ * A Plex token for one Home profile, minted with the owner's token through plex.tv's Home-user
+ * switch (null uuid = the owner). Every native queue route plays as the queue's own profile, so
+ * this runs on most TV requests; a minted token is kept for ten minutes rather than asking
+ * plex.tv to switch on every page. Memory only, never persisted.
+ */
+const SCOPE_PROOF_TTL_MS = 10 * 60_000;
+const scopeProofs = new Map<string, { token: string; expiresAt: number }>();
 export async function nativeScopeProof(uuid: string | null): Promise<string> {
   if (!uuid) return PLEX_TOKEN;
+  const cached = scopeProofs.get(uuid);
+  if (cached && cached.expiresAt > Date.now()) return cached.token;
   const result = (await cloud(
     "/api/v2/home/users/" + encodeURIComponent(uuid) + "/switch",
     PLEX_TOKEN,
     "POST",
   )) as { authToken?: string };
   if (!result.authToken) throw new Error("The playback profile needs reauthorization");
+  scopeProofs.set(uuid, { token: result.authToken, expiresAt: Date.now() + SCOPE_PROOF_TTL_MS });
   return result.authToken;
 }

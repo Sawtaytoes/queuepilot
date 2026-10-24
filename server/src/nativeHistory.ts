@@ -1,19 +1,25 @@
 /**
  * The native TV's WATCH HISTORY: queue → sitting → what was watched in that queue sitting, for
- * one verified Plex profile (decision `2026-10-22-the-native-full-queue-history-and-watched-api`).
+ * EVERY queue of the household (decision `2026-10-22-the-native-full-queue-history-and-watched-api`,
+ * widened by `2026-10-23-the-native-tv-plays-each-queue-as-its-own-profile-and-locks-queues-with-a-pin`).
+ *
+ * It used to answer for one verified profile only, because the TV had to BE a queue's profile
+ * to play it. The TV is a household device now and every queue plays as its own profile, so a
+ * history filtered to the signed-in account would hide most of what was watched on it. A queue
+ * locked on the TV is left out unless the device holds an unlock (the caller decides that).
  *
  * ⚠️ WHICH PLAYS COUNT — exactly two records, both already written by QueuePilot:
  *
  *  1. A NATIVE TV PLAY: an item of a native session (`native_tv_sessions`) that received at
- *     least one `playing` event (`native_tv_events`). It belongs to the profile the session was
- *     verified as. Finished when an `ended` or `section-end` event arrived; otherwise partial,
+ *     least one `playing` event (`native_tv_events`). It played as the queue's own profile (the
+ *     session's `profileUuid`). Finished when an `ended` or `section-end` event arrived; otherwise partial,
  *     at the last reported position.
  *  2. A QUEUE-LEDGER COMPLETION: a `queue_entry_history` row with `is_completed = 1` and a
  *     non-zero `completed_at`. That ledger exists only for `watch_history: queue` entries, and
  *     it is written when QueuePilot attributes a play to the entry — a play QueuePilot started
  *     on another Plex app, a Plex play the web's "Track the current Plex play here" adopted, a
  *     native play, or a manual "Mark watched" (the ledger cannot tell the last one apart). The
- *     ledger is per QUEUE, not per profile, so a row counts for the profile the queue PLAYS AS:
+ *     ledger is per QUEUE, and its titles are read through the profile the queue PLAYS AS:
  *     its `requires_profile`, or the server owner for an ungated queue. A ledger row within
  *     `LEDGER_DUPLICATE_MS` of a native play of the same item in the same queue is that native
  *     play's own completion and is dropped.
@@ -26,7 +32,8 @@ import { bookOfRecord, prepareChecked } from "./store/db/open.js";
 import * as routing from "./engine/routing.js";
 import * as resolve from "./engine/resolve.js";
 import { liveClient } from "./engine/plex-live.js";
-import { nativeClient, nativeGrant } from "./nativePlex.js";
+import { nativeClient, nativeGrant, nativeHomeUsers, nativeScopeProof } from "./nativePlex.js";
+import { queuePlayAs } from "./nativeAccess.js";
 import type * as plex from "./plex.js";
 import type { NativeEvent, NativePlan } from "./nativeTv.js";
 import type { RoutingSetCfg } from "./types.js";
@@ -78,7 +85,10 @@ export interface HistoryQueue {
 }
 
 export interface NativeHistory {
+  /** The household account the TV is signed in as. History is NOT filtered to it. */
   profile: { uuid: string | null; name: string };
+  /** Queues with plays in range that are locked on the TV and not unlocked on this device. */
+  hiddenLockedQueues: number;
   sittingGapMinutes: number;
   since: number;
   queues: HistoryQueue[];
@@ -154,21 +164,10 @@ export function nativePlays(since: number): OwnedPlay[] {
   return plays;
 }
 
-/** Does this queue PLAY AS this profile when nobody picks one? */
-export function queuePlaysAs(cfg: RoutingSetCfg, profile: plex.HomeUser): boolean {
-  if (cfg.requires_profile)
-    return [profile.name, profile.username].includes(cfg.requires_profile);
-  const binding = routing.bindingFor(cfg);
-  if (binding.user_uuid) return binding.user_uuid === profile.uuid;
-  if (binding.account_id == null || binding.account_id === 1) return profile.admin;
-  return binding.account_id === profile.id;
-}
-
-/** Ledger completions since `since` for the queues that play as this profile. */
+/** Ledger completions since `since`, for every queue the registry still knows. */
 export function ledgerPlays(
   since: number,
   cfgs: Readonly<Record<string, RoutingSetCfg>>,
-  profile: plex.HomeUser,
   entryServer: (setId: string, entryKey: string) => string | null,
 ): HistoryPlay[] {
   const rows = prepareChecked<{
@@ -182,7 +181,7 @@ export function ledgerPlays(
      WHERE is_completed = 1 AND completed_at >= :since`,
   ).all({ since: Math.max(1, Math.floor(since / 1000)) });
   return rows
-    .filter((row) => cfgs[row.set_id] && queuePlaysAs(cfgs[row.set_id]!, profile))
+    .filter((row) => cfgs[row.set_id])
     .map((row) => ({
       setId: row.set_id,
       entryKey: row.entry_key,
@@ -247,13 +246,11 @@ export function groupHistory(
   return queues.sort((a, b) => b.lastWatchedAt - a.lastWatchedAt);
 }
 
-/** Join both sources for one profile and drop the ledger rows a native play already wrote. */
-export function profilePlays(
-  profile: plex.HomeUser,
+/** Join both sources and drop the ledger rows a native play already wrote. */
+export function householdPlays(
   native: readonly OwnedPlay[],
   ledger: readonly HistoryPlay[],
 ): HistoryPlay[] {
-  const mine = native.filter((play) => (play.profileUuid || null) === (profile.uuid || null));
   const kept = ledger.filter(
     (row) =>
       !native.some(
@@ -261,24 +258,37 @@ export function profilePlays(
       ),
   );
   return [
-    ...mine.map(({ profileUuid: _profileUuid, ...play }): HistoryPlay => play),
+    ...native.map(({ profileUuid: _profileUuid, ...play }): HistoryPlay => play),
     ...kept,
   ];
 }
 
-/** Fill in titles for ledger rows from Plex, through this profile's own grants. */
-async function describeLedgerPlays(proof: string, plays: HistoryPlay[]): Promise<void> {
+/**
+ * Fill in titles for ledger rows from Plex, through each queue's OWN play-as profile — the
+ * account that can see what the queue holds. One grant per (profile, server).
+ */
+async function describeLedgerPlays(
+  plays: HistoryPlay[],
+  cfgs: Readonly<Record<string, RoutingSetCfg>>,
+): Promise<void> {
   const missing = plays.filter((play) => play.title == null);
   if (!missing.length) return;
   const identity = (await liveClient().container("/identity")) as { machineIdentifier?: string };
-  const byServer = new Map<string, HistoryPlay[]>();
+  const users = await nativeHomeUsers();
+  const byGrant = new Map<string, { uuid: string | null; server: string; list: HistoryPlay[] }>();
   for (const play of missing) {
+    const cfg = cfgs[play.setId];
+    const user = cfg ? queuePlayAs(cfg, users) : null;
+    if (!user) continue;
     const server = play.plexServer || identity.machineIdentifier || "";
-    byServer.set(server, [...(byServer.get(server) ?? []), play]);
+    const key = `${user.uuid ?? "owner"}\u0000${server}`;
+    const group = byGrant.get(key) ?? { uuid: user.uuid, server, list: [] };
+    group.list.push(play);
+    byGrant.set(key, group);
   }
-  for (const [server, list] of byServer) {
+  for (const { uuid, server, list } of byGrant.values()) {
     try {
-      const access = await nativeGrant(proof, server);
+      const access = await nativeGrant(await nativeScopeProof(uuid), server);
       const keys = [...new Set(list.map((play) => play.ratingKey))];
       for (let at = 0; at < keys.length; at += 100) {
         const mc = await nativeClient(access).container(
@@ -303,11 +313,14 @@ async function describeLedgerPlays(proof: string, plays: HistoryPlay[]): Promise
 }
 
 export async function historyFor(
-  profile: plex.HomeUser,
-  proof: string,
+  account: plex.HomeUser,
   days: number,
   titleOf: (setId: string) => string,
-  now = Date.now(),
+  { isHidden = () => false, now = Date.now() }: {
+    /** A queue this device may not see (locked on the TV, no unlock). */
+    isHidden?: (setId: string) => boolean;
+    now?: number;
+  } = {},
 ): Promise<NativeHistory> {
   const since = now - Math.max(1, Math.min(365, Math.floor(days) || 30)) * DAY_MS;
   const cfgs = routing.loadSets()?.sets ?? {};
@@ -325,14 +338,13 @@ export async function historyFor(
     }
     return servers.get(key) ?? null;
   };
-  const plays = profilePlays(
-    profile,
-    nativePlays(since),
-    ledgerPlays(since, cfgs, profile, entryServer),
-  );
-  await describeLedgerPlays(proof, plays);
+  const all = householdPlays(nativePlays(since), ledgerPlays(since, cfgs, entryServer));
+  const hiddenQueues = new Set(all.filter((play) => isHidden(play.setId)).map((p) => p.setId));
+  const plays = all.filter((play) => !hiddenQueues.has(play.setId));
+  await describeLedgerPlays(plays, cfgs);
   return {
-    profile: { uuid: profile.uuid, name: profile.admin ? profile.username || profile.name : profile.name },
+    profile: { uuid: account.uuid, name: account.admin ? account.username || account.name : account.name },
+    hiddenLockedQueues: hiddenQueues.size,
     sittingGapMinutes: SITTING_GAP_MINUTES,
     since,
     queues: groupHistory(plays, titleOf),

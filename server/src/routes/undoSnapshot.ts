@@ -26,6 +26,10 @@ import * as history from '../history.js';
  * that never changed and leave the photo in place — and a 15 MB upload would push a full copy
  * of the managed files for nothing. Removing a photo is its own control in the people editor.
  *
+ * THE TV PIN IS EXCLUDED, for the photo's reason and one more: it is a row in the BOOK OF
+ * RECORD (`native_tv_pin`), so an undo could not take it back, and a credential's write has no
+ * business pushing a copy of the managed files onto a stack anybody can step through.
+ *
  * THE PREFIX IS STRIPPED BY HAND, and that is the whole reason this is a factory taking
  * `mountPrefix`. Express mounted the original on a path prefix (`app.use('/api', ...)`), so
  * `req.path` inside it had already lost the `/api`, which is why the exclusion list reads
@@ -36,7 +40,7 @@ import * as history from '../history.js';
  */
 export function undoSnapshot(mountPrefix: string): MiddlewareHandler {
   const MUTATING = ['POST', 'PATCH', 'PUT', 'DELETE'];
-  const MANAGED = ['/play', '/undo', '/redo', '/board-games', '/native'];
+  const MANAGED = ['/play', '/undo', '/redo', '/board-games', '/native', '/tv-lock'];
   const TOKEN_PATH = /^\/providers\/[^/]+\/token$/;
   const PHOTO_PATH = /^\/people\/[^/]+\/photo$/;
 

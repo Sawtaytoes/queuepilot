@@ -320,6 +320,12 @@ interface SetRegistryCommon {
    * belongs in an automation rather than in a queue builder.
    */
   power_off_when_done: boolean;
+  /**
+   * "Locked on TV": the QueuePilot TV asks for the household TV PIN before it opens or plays
+   * this queue, and the server refuses it (423) without an unlock. Stored sparsely — absent
+   * means unlocked — and inert while no PIN is set (`nativeLock.ts`).
+   */
+  is_locked_on_tv: boolean;
   /** IMMUTABLE — HA automations / NFC cards / MQTT reference it. */
   id: string;
   /**

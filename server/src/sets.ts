@@ -542,6 +542,7 @@ function normalize(ent: RawSet): SetRegistryEntry | null {
       source: isRotation ? 'rotation' : 'queue',
     }) ?? 1,
     power_off_when_done: ent.power_off_when_done === true,
+    is_locked_on_tv: ent.is_locked_on_tv === true,
     id,
     label: String(ent.label || id),
     // Whether a name was TYPED, which `label` above cannot say — it falls back to the id so
@@ -886,6 +887,7 @@ function writeLineupKnobs(
   const oc = toOnComplete(body.on_complete);
   if (oc) obj.on_complete = oc;
   if (body.power_off_when_done === true) obj.power_off_when_done = true;
+  if (body.is_locked_on_tv === true) obj.is_locked_on_tv = true;
 }
 
 // Create a set. Curated queues (source omitted / 'queue') carry only label/kind/sections;
@@ -1140,6 +1142,8 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
       // already kind-aware (it stores sparsely against `defaultFor`, which answers for a
       // curated queue as readily as a channel), so this list was the only thing in the way.
       'length', 'power_off_when_done',
+      // "Locked on TV" — every kind of set the TV can play. Sparse, like power-off.
+      'is_locked_on_tv',
     ];
     if (isRotation) {
       allow.push(
@@ -1482,6 +1486,11 @@ export async function updateSet(id: string, patch: Record<string, unknown>): Pro
         // or an older caller keeps working, and still written sparsely; the editor never sends
         // it, so a set saved through the UI sheds it.
         if (v !== true) { node.delete('refill'); continue; }
+      }
+      if (k === 'is_locked_on_tv') {
+        // Sparse: only `true` is written, so a queue that never touched the switch stays
+        // byte-identical on disk.
+        if (v !== true) { node.delete('is_locked_on_tv'); continue; }
       }
       if (k === 'power_off_when_done') {
         // Sparse: only `true` is written. Absent means "leave the room alone", which is what

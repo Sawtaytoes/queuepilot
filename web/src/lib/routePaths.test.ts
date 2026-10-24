@@ -75,6 +75,12 @@ describe("the route table", () => {
     expect(match("/calendars").route).toBe("fallback")
   })
 
+  test("/settings holds the household QueuePilot TV PIN", () => {
+    expect(match("/settings").route).toBe("settings")
+    expect(match("/settings/").route).toBe("settings")
+    expect(match("/settingsx").route).toBe("fallback")
+  })
+
   test("the retired queue-kind indexes have redirect routes", () => {
     expect(match("/picks").route).toBe("legacyPicks")
     expect(match("/channels").route).toBe("legacyChannels")
