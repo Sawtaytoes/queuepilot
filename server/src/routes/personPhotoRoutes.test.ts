@@ -195,3 +195,24 @@ describe('DELETE /api/people/:id/photo', () => {
     expect(photos.photoVersionsByPerson().has('ada')).toBe(false);
   });
 });
+
+
+describe('person-card chooser photos', () => {
+  it('projects the owned versioned photo, changes its URL on replacement, and omits absent photos', async () => {
+    const { chooserPerson } = await import('../chooserCatalog.js');
+    const first = await sharp({ create: { background: '#126faa', channels: 3, height: 64, width: 64 } }).png().toBuffer();
+    expect((await put('grace', new Uint8Array(first), 'image/png')).status).toBe(200);
+    const selected = chooserPerson('grace');
+    expect(selected).toEqual({ id: 'grace', name: 'Grace', artworkPath: `/api/people/grace/photo?v=${photos.readPersonPhoto('grace')?.version}` });
+    const response = await api.request(selected!.artworkPath!);
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toContain('immutable');
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(Buffer.from(photos.readPersonPhoto('grace')!.bytes));
+    const replacement = await sharp({ create: { background: '#aa6f12', channels: 3, height: 64, width: 64 } }).png().toBuffer();
+    expect((await put('grace', new Uint8Array(replacement), 'image/png')).status).toBe(200);
+    expect(chooserPerson('grace')?.artworkPath).not.toBe(selected?.artworkPath);
+    photos.deletePersonPhoto('grace');
+    expect(chooserPerson('grace')).toEqual({ id: 'grace', name: 'Grace' });
+    expect(chooserPerson('missing')).toBeUndefined();
+  });
+});
