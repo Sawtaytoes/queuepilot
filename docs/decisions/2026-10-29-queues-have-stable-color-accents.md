@@ -20,7 +20,7 @@ identity. It does not materialize playback, mutate history, reserve random draws
 or slow down catalog matching. Images are served directly, without redirects,
 through CastKit’s existing authorized media proxy.
 
-## Context
+## Why
 
 The owner requested different colors for queue choices and asked for them in
 QueuePilot as well. Similar queue names require visible identity cues.
