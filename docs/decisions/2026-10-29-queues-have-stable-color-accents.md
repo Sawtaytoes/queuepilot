@@ -20,12 +20,12 @@ identity. It does not materialize playback, mutate history, reserve random draws
 or slow down catalog matching. Images are served directly, without redirects,
 through CastKit’s existing authorized media proxy.
 
-## Why
+## Context
 
 The owner requested different colors for queue choices and asked for them in
 QueuePilot as well. Similar queue names require visible identity cues.
 
-## Consequences
+## Why
 
 Queue shelves gain a colored leading edge. The existing finite palette can repeat;
 queue titles and people remain the authoritative identity. There is no new stored
