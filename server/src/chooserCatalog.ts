@@ -1,6 +1,7 @@
 import { nativeAudience, nativeQueueTitles } from './nativeTv.js';
 import { membersByQueue } from './store/db/queuePeople.js';
 import { listPeople } from './store/db/people.js';
+import { photoVersionsByPerson } from './store/db/personPhotos.js';
 import { queueMatchesSelection } from './queuePeople.js';
 import { isSupersededTier } from '../../shared/queueTitle.js';
 import { providerIdForSet } from './providers/blocks.js';
@@ -26,5 +27,11 @@ export const chooserCatalog = async (selected: string[]): Promise<ChooserQueue[]
 /** IDs come from the caller's explicit card binding, never a guessed name match. */
 export const chooserPerson = (id: string) => {
   const person = listPeople().find((entry) => entry.id === id);
-  return person ? { id: person.id, name: person.displayName } : undefined;
+  if (!person) return undefined;
+  const version = photoVersionsByPerson().get(person.id);
+  return {
+    id: person.id,
+    name: person.displayName,
+    ...(version ? { artworkPath: `/api/people/${encodeURIComponent(person.id)}/photo?v=${encodeURIComponent(version)}` } : {}),
+  };
 };
