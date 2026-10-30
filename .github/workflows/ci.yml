@@ -462,6 +462,9 @@ jobs:
       - name: Kavita covers + provider tiles (offline)
         run: $TSX e2e/kavita-covers-test.ts
 
+      - name: Android reader handoff document (four windows)
+        run: $TSX e2e/reader-handoff-test.ts
+
       # Two bugs found on the live "Manga & Webtoons" queue, both invisible to every gate
       # above because both stubs happened to be chapter-based and library-driven:
       #   * a VOLUME-based manga read as fully read. Kavita puts nothing in
