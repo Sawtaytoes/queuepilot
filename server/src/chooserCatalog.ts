@@ -20,6 +20,7 @@ export const chooserCatalog = async (selected: string[]): Promise<ChooserQueue[]
     && isSetAvailable(set) && !isSupersededTier(set)
     && queueMatchesSelection(nativeAudience(audiences.get(set.filtered_from || set.id) ?? []), selected),
   ).map((set) => ({
+    artworkPath: `/api/chooser/poster/${encodeURIComponent(set.id)}`,
     id: set.id, title: titles.get(set.id) ?? set.id, kind: wireKindForSet(set),
     ...(set.requires_profile ? { profile: set.requires_profile } : {}),
   }));
