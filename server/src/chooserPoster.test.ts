@@ -53,3 +53,15 @@ test('unknown queues have no artwork or provider calls', async () => {
   expect(await chooserPoster('missing')).toBeNull();
   expect(h.buckets).not.toHaveBeenCalled();
 });
+
+test('owner queues use the configured admin token when the profile UUID is null', async () => {
+  h.profileBinding.mockResolvedValue({ account_id: null, user_uuid: null });
+  h.profileToken.mockResolvedValue(null);
+  expect(await chooserPoster('learning')).not.toBeNull();
+  expect(h.buckets).toHaveBeenCalledWith(expect.objectContaining({ token: null }));
+});
+test('a missing managed-user token never falls back to the owner token', async () => {
+  h.profileToken.mockResolvedValue(null);
+  expect(await chooserPoster('learning')).toBeNull();
+  expect(h.buckets).not.toHaveBeenCalled();
+});

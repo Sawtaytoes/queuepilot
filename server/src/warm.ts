@@ -10,6 +10,7 @@
 // tiles.resolveTile) rather than a parallel prefetch list, so the warmer can never warm the
 // cache into a shape the request path won't hit. Low-priority: bounded concurrency, every
 // failure swallowed — a warm miss just means the first real request pays for that one tile.
+import { warmChooserPosters } from './chooserPosterCache.js';
 import * as queues from './queues.js';
 import * as sets from './sets.js';
 import * as tiles from './tiles.js';
@@ -55,6 +56,7 @@ async function warmOnce(): Promise<void> {
   if (isRunning) return; // never overlap a run with itself
   isRunning = true;
   try {
+    await warmChooserPosters();
     const reg = await sets.getRegistry();
     const all = await queues.listAll();
     const work: WarmJob[] = [];
