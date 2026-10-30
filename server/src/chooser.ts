@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 
-export interface ChooserQueue { id: string; title: string; kind: string; profile?: string }
+export interface ChooserQueue { id: string; title: string; kind: string; profile?: string; artworkPath?: string }
 export interface ChooserPerson { id: string; name: string; artworkPath?: string }
 export interface ChooserState {
   sessionId: string;
