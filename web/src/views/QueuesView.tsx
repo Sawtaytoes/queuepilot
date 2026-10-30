@@ -281,8 +281,7 @@ function RulesShelf({
       className={`shelf rules-shelf${isCollapsed ? " collapsed" : ""}`}
       data-provider={channel.provider_kind || undefined}
       style={{
-        borderInlineStart: `6px solid var(--color-categorical-${getCategoricalIndex(channel.id)}-solid)`,
-        paddingInlineStart: 12,
+        boxShadow: `-6px 0 0 var(--color-categorical-${getCategoricalIndex(channel.id)}-solid)`,
       }}
       data-set={channel.id}
       hidden={isHiddenByFilter}
@@ -734,8 +733,7 @@ function Shelf({
       // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={providerKind || undefined}
       style={{
-        borderInlineStart: `6px solid var(--color-categorical-${getCategoricalIndex(setId)}-solid)`,
-        paddingInlineStart: 12,
+        boxShadow: `-6px 0 0 var(--color-categorical-${getCategoricalIndex(setId)}-solid)`,
       }}
       data-set={setId}
       hidden={isHiddenByFilter}
