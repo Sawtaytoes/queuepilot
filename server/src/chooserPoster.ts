@@ -22,7 +22,7 @@ export async function chooserPoster(setId: string) {
   if (provider.profileBinding) binding = await provider.profileBinding(binding, profile);
   if (!provider.profileToken) return null;
   const token = await provider.profileToken(binding.user_uuid);
-  if (!token) return null;
+  if (binding.user_uuid && !token) return null;
   const result = await provider.buckets({ setName: setId, cfg, binding, token, kind: wireKindForSet(cfg) });
   const first = result.play[0];
   if (!first || !('ratingKey' in first)) return null;
