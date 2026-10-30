@@ -1,4 +1,5 @@
 # Decision records — queuepilot (was plex-channels)
+- [2026-10-30: Chooser posters warm before scans](2026-10-30-chooser-posters-warm-before-scans.md)
 - [2026-10-29: Queues have stable color accents](2026-10-29-queues-have-stable-color-accents.md)
 
 One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newest first.
