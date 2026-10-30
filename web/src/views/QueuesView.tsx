@@ -1,3 +1,4 @@
+import { getCategoricalIndex } from "@charcuterie/tokens"
 import {
   Badge,
   ButtonLink,
@@ -279,6 +280,9 @@ function RulesShelf({
     <section
       className={`shelf rules-shelf${isCollapsed ? " collapsed" : ""}`}
       data-provider={channel.provider_kind || undefined}
+      style={{
+        boxShadow: `-6px 0 0 var(--color-categorical-${getCategoricalIndex(channel.id)}-solid)`,
+      }}
       data-set={channel.id}
       hidden={isHiddenByFilter}
     >
@@ -728,6 +732,9 @@ function Shelf({
       // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
       // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={providerKind || undefined}
+      style={{
+        boxShadow: `-6px 0 0 var(--color-categorical-${getCategoricalIndex(setId)}-solid)`,
+      }}
       data-set={setId}
       hidden={isHiddenByFilter}
     >
