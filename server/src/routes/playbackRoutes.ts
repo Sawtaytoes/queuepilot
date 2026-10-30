@@ -1,4 +1,5 @@
-import { chooserPoster } from '../chooserPoster.js';
+import { cachedChooserPoster, chooserPosterPaths } from '../chooserPosterCache.js';
+import { isSetAvailable } from '../season.js';
 import { Hono } from 'hono';
 import { binaryResponse } from './binaryResponse.js';
 import type { Device } from '../types.js';
@@ -18,24 +19,13 @@ import { readBody } from './readBody.js';
 /** Playback + channels, over the MQTT bridge: devices, play, session state, now-playing. */
 export function playbackRoutes(): Hono {
   const app = new Hono();
-  const posters = new Map<string, { expires: number; image: ReturnType<typeof chooserPoster> }>();
+  app.get('/chooser/posters', async (c) => c.json({ posters: await chooserPosterPaths() }));
   app.get('/chooser/poster/:id', async (c) => {
-    // This URL intentionally stays stable; browsers may reuse artwork briefly,
-    // but every later scan can request a fresh sample without changing the queue.
-    c.header('Cache-Control', 'private, max-age=30');
-    try {
-      const id = c.req.param('id');
-      let cached = posters.get(id);
-      if (!cached || cached.expires < Date.now()) {
-        if (posters.size >= 128) posters.delete(posters.keys().next().value || '');
-        cached = { expires: Date.now() + 30_000, image: chooserPoster(id).catch(() => null) };
-        posters.set(id, cached);
-      }
-      const image = await cached.image;
-      return image ? binaryResponse({ ...image, cacheControl: 'private, max-age=30' }) : c.body(null, 404);
-    } catch {
-      return c.body(null, 503);
-    }
+    const id = c.req.param('id');
+    const set = await sets.getSet(id);
+    if (!set || !isSetAvailable(set)) return c.body(null, 404);
+    const image = await cachedChooserPoster(id);
+    return image ? binaryResponse({ ...image, cacheControl: 'private, max-age=300' }) : c.body(null, 404);
   });
 
   // The "Play on ▾" dropdown — the Python service's retained device registry.
