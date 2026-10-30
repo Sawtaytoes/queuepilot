@@ -21,10 +21,11 @@ import { providerFor } from './index.js';
 // The lineup itself is built in ONE place, shared with top-up — see that module's header for
 // why a second copy of the `buckets()` call was a bug waiting to be reintroduced.
 import { pullLineup } from './pullLineup.js';
+import { readerHandoff } from './readerHandoff.js';
 
 /** What `launchDescriptor()` answers with: either a redirect target or an error + status. */
 export type LaunchDescriptor =
-  | { url: string; readingListId?: number | string | null; count: number; status: 302; error?: undefined }
+  | { url: string; providerKind: string; readingListId?: number | string | null; count: number; status: 302; error?: undefined }
   | { error: string; status: number; url?: undefined };
 
 /**
@@ -115,7 +116,7 @@ export async function launchDescriptor(
       ? { error: out.error, status: 409 }
       : { error: 'no reader URL', status: 500 };
   }
-  return { url: out.url, readingListId: out.readingListId, count: play.length, status: 302 };
+  return { url: out.url, providerKind: provider.kind, readingListId: out.readingListId, count: play.length, status: 302 };
 }
 
 /**
@@ -129,6 +130,8 @@ export function launcherRoutes(): Hono {
   const app = new Hono();
 
   app.get('/go/:setId', async (c) => {
+    c.header('Cache-Control', 'no-store');
+    c.header('Vary', 'User-Agent');
     try {
       // `?only=<entryKey>` is "read THIS one now" — the ▶ on a single tile. The pull
       // counterpart of the play-one-entry key the push path already threads; without it a
@@ -143,6 +146,11 @@ export function launcherRoutes(): Hono {
       // 302, not 301: the target chapter changes every time you read one, so this must
       // never be cached by the browser as a permanent move.
       c.header('Cache-Control', 'no-store');
+      if (d.providerKind === 'kavita' && /Android/i.test(c.req.header('User-Agent') || '')) {
+        c.header('Referrer-Policy', 'no-referrer');
+        c.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
+        return c.html(readerHandoff(d.url));
+      }
       return c.redirect(d.url, 302);
     } catch (e) {
       return c.text(errMessage(e), 500);
