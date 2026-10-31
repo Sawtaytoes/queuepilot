@@ -6,6 +6,7 @@ import {
   IconButton,
   Spinner,
 } from "@charcuterie/ui"
+import { getAccentEdgeClassName } from "@charcuterie/ui/src/Card/cardAccentEdge.ts"
 import {
   Fragment,
   useCallback,
@@ -278,11 +279,8 @@ function RulesShelf({
 
   return (
     <section
-      className={`shelf rules-shelf${isCollapsed ? " collapsed" : ""}`}
+      className={`shelf rules-shelf ${getAccentEdgeClassName({ categorical: getCategoricalIndex(channel.id) })}${isCollapsed ? " collapsed" : ""}`}
       data-provider={channel.provider_kind || undefined}
-      style={{
-        boxShadow: `-6px 0 0 var(--color-categorical-${getCategoricalIndex(channel.id)}-solid)`,
-      }}
       data-set={channel.id}
       hidden={isHiddenByFilter}
     >
@@ -727,14 +725,11 @@ function Shelf({
 
   return (
     <section
-      className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
+      className={`shelf ${getAccentEdgeClassName({ categorical: getCategoricalIndex(setId) })}${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
       // This shelf's counts, rings and badges are about THIS queue, so they wear its
       // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
       // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={providerKind || undefined}
-      style={{
-        boxShadow: `-6px 0 0 var(--color-categorical-${getCategoricalIndex(setId)}-solid)`,
-      }}
       data-set={setId}
       hidden={isHiddenByFilter}
     >
