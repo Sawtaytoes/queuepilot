@@ -29,7 +29,7 @@ test('queue shelves retain their colors after reload and use the shared categori
   // The shared edge overlays the shelf. Hiding it must not move its content.
   const withoutEdge = await page.addStyleTag({ content: '.shelf::before { box-shadow: none !important; }' });
   expect(await shelves.first().locator('.lbl').boundingBox()).toEqual(titleBounds);
-  await withoutEdge.evaluate((element) => element.remove());
+  await withoutEdge.evaluate((element) => element.parentNode?.removeChild(element));
   await page.reload();
   await expect(shelves.first()).toBeVisible();
   const after = await shelves.evaluateAll((elements) => elements.map((element) => ({
