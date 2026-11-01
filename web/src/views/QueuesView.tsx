@@ -1,12 +1,13 @@
 import { getCategoricalIndex } from "@charcuterie/tokens"
 import {
   Badge,
+  Card,
+  useAdaptiveColumns,
   ButtonLink,
   EmptyState,
   IconButton,
   Spinner,
 } from "@charcuterie/ui"
-import { getAccentEdgeClassName } from "@charcuterie/ui/src/Card/cardAccentEdge.ts"
 import {
   Fragment,
   useCallback,
@@ -33,6 +34,7 @@ import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {
   filteredParent,
+  groupQueueFamilies,
   nestFilteredQueues,
 } from "../lib/filteredQueues"
 import { isRandomOrder } from "../lib/kind"
@@ -278,18 +280,21 @@ function RulesShelf({
   )
 
   return (
-    <section
-      className={`shelf rules-shelf ${getAccentEdgeClassName({ categorical: getCategoricalIndex(channel.id) })}${isCollapsed ? " collapsed" : ""}`}
+    <Card
+      accentEdge={{ categorical: getCategoricalIndex(channel.id) }}
+      className={`shelf rules-shelf${isCollapsed ? " collapsed" : ""}`}
       data-provider={channel.provider_kind || undefined}
       data-set={channel.id}
       hidden={isHiddenByFilter}
+      aria-label={title}
     >
       <h2>
         <IconButton
           appearance="ghost"
           className="collapse-toggle"
           intent="neutral"
-          label="collapse queue"
+          aria-expanded={!isCollapsed}
+          label={isCollapsed ? "Preview queue" : "Collapse queue"}
           onClick={() =>
             toggleCollapsed(channel.id, isCollapsed)
           }
@@ -305,9 +310,7 @@ function RulesShelf({
           {items ? (
             <span className="sec">{items.length}</span>
           ) : null}
-          <span className="lanes-sec">
-            {items ? "eligible" : "eligible titles"}
-          </span>
+
         </Link>
         <SeasonMark set={channel} />
         <PeopleRow
@@ -315,7 +318,10 @@ function RulesShelf({
           members={members}
           people={people}
         />
-        <span className="shelfspacer" />
+      </h2>
+      <div className="queue-card-meta">
+        <Badge appearance="soft" intent="neutral" size="sm">Rules</Badge>
+        <span className="lanes-sec">Eligible titles</span>
         <span className="shelfactions">
           <Tip label="Edit queue">
             <IconButton
@@ -330,7 +336,7 @@ function RulesShelf({
             </IconButton>
           </Tip>
         </span>
-      </h2>
+      </div>
       <div className="strip-wrap" ref={wrapRef}>
         <button
           aria-label="scroll left"
@@ -407,7 +413,7 @@ function RulesShelf({
           ›
         </button>
       </div>
-    </section>
+    </Card>
   )
 }
 
@@ -724,14 +730,16 @@ function Shelf({
   }
 
   return (
-    <section
-      className={`shelf ${getAccentEdgeClassName({ categorical: getCategoricalIndex(setId) })}${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
+    <Card
+      accentEdge={{ categorical: getCategoricalIndex(setId) }}
+      className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
       // This shelf's counts, rings and badges are about THIS queue, so they wear its
       // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
       // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={providerKind || undefined}
       data-set={setId}
       hidden={isHiddenByFilter}
+      aria-label={label}
     >
       <h2>
         {/* `ghost` is the appearance for an icon row — nothing until hovered — which is
@@ -742,7 +750,8 @@ function Shelf({
           appearance="ghost"
           className="collapse-toggle"
           intent="neutral"
-          label="collapse queue"
+          aria-expanded={!isCollapsed}
+          label={isCollapsed ? "Preview queue" : "Collapse queue"}
           onClick={() =>
             toggleCollapsed(setId, isCollapsed)
           }
@@ -756,9 +765,6 @@ function Shelf({
         <Link className="open" to={`/q/${setId}`}>
           <span className="lbl">{label}</span>
           <span className="sec">{items.length}</span>
-          {laneClause ? (
-            <span className="lanes-sec">{laneClause}</span>
-          ) : null}
         </Link>
         {/* WHAT THIS SHELF IS. The badge says the queue is a view; the line beside it names
             what it is a view OF, because "Filtered" alone leaves the reader to guess which of
@@ -793,7 +799,9 @@ function Shelf({
             ? "Paused"
             : "Playing"}
         </span>
-        <span className="shelfspacer" />
+      </h2>
+      <div className="queue-card-meta">
+        <span className="lanes-sec">{laneClause || "Empty queue"}</span>
         <span className="shelfactions">
           {/* HOW this queue starts, never WHICH provider it is — the same rule
             `OpenQueueButton` follows on the queue's own page. This shelf used to open the
@@ -875,7 +883,7 @@ function Shelf({
             </Tip>
           )}
         </span>
-      </h2>
+      </div>
       <div className="strip-wrap" ref={wrapRef}>
         <button
           aria-label="scroll left"
@@ -943,7 +951,7 @@ function Shelf({
           ›
         </button>
       </div>
-    </section>
+    </Card>
   )
 }
 
@@ -1170,37 +1178,7 @@ export function QueuesView({
       .map((person) => person.displayName)
   })()
 
-  return (
-    <div className="view" id="home">
-      <div id="gslot-narrow">{toolbar}</div>
-      <LandingFilterBar
-        basePath={ROUTE_PATHS.queues.replace("/*", "")}
-        countFor={countFor}
-        hasQueueFor={hasQueueFor}
-        labelForKind={labelForKind}
-        only={only}
-        people={rosterOrder(people.people)}
-        providerKinds={providerKinds}
-        search={search}
-        selected={selected}
-      />
-      <div className="queue-section-heading picks-queue-heading">
-        <div>
-          <h2>Picks</h2>
-          <p>Queues whose titles you choose and arrange.</p>
-        </div>
-      </div>
-      <div id="shelves" ref={shelvesRef}>
-        {[
-          ...shownShelfIds.exact,
-          ...shownShelfIds.also,
-        ].map((id, index) => {
-          // The rule goes BEFORE the first also-in shelf, inside the same drag container —
-          // `useHomeDrags` reorders `#shelves`' children and a separate wrapper per tier
-          // would make a drag across the line impossible.
-          const isFirstAlso =
-            shownShelfIds.also.length > 0 &&
-            index === shownShelfIds.exact.length
+  const renderShelf = (id: string) => {
           const q = data!.sets[id]!
           const registrySet = setById(id)
           // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
@@ -1216,12 +1194,8 @@ export function QueuesView({
               )
             : q.label
 
-          return (
-            <Fragment key={id}>
-              {isFirstAlso ? (
-                <AlsoInDivider names={alsoNames} />
-              ) : null}
-              <Shelf
+    return (
+<Shelf
                 groups={people.groups}
                 isCollapsed={
                   !hasCollapsePreference ||
@@ -1259,9 +1233,59 @@ export function QueuesView({
                     : "priority"
                 }
               />
-            </Fragment>
-          )
-        })}
+    )
+  }
+  const families = [
+    ...groupQueueFamilies(shownShelfIds.exact, setById).map((ids) => ({ ids, isAlso: false })),
+    ...groupQueueFamilies(shownShelfIds.also, setById).map((ids) => ({ ids, isAlso: true })),
+  ]
+  const matches = (id: string) => {
+    const queue = data?.sets[id]
+    const set = setById(id)
+    return Boolean(queue && shelfMatches(filter, [set ? queueTitle(set, numbers.get(id) ?? null) : queue.label, queue.label], queue.items))
+  }
+  const layout = useAdaptiveColumns({
+    itemBlockSize: 220,
+    itemCount: families.filter(({ids}) => ids.some(matches)).length + rulesChannels.length,
+    chromeBlockSize: 300,
+    minColumnInlineSize: 340,
+    maxAutoColumns: 4,
+  })
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
+    maxInlineSize: layout.contentMaxInlineSize,
+  }
+  return (
+    <div className="view" id="home">
+      <div id="gslot-narrow">{toolbar}</div>
+      <LandingFilterBar
+        basePath={ROUTE_PATHS.queues.replace("/*", "")}
+        countFor={countFor}
+        hasQueueFor={hasQueueFor}
+        labelForKind={labelForKind}
+        only={only}
+        people={rosterOrder(people.people)}
+        providerKinds={providerKinds}
+        search={search}
+        selected={selected}
+      />
+      <div className="queue-section-heading picks-queue-heading">
+        <div>
+          <h2>Picks</h2>
+          <p>Queues whose titles you choose and arrange.</p>
+        </div>
+      </div>
+      <div className="queue-grid-measure" ref={layout.containerRef}>
+      <div className="queue-card-grid" id="shelves" ref={shelvesRef} style={gridStyle}>
+        {families.map(({ids, isAlso}, index) => (
+          <Fragment key={ids[0]}>
+            {isAlso && !families[index - 1]?.isAlso ? <AlsoInDivider names={alsoNames} /> : null}
+            <div className="queue-family" hidden={!ids.some(matches)}>
+              {ids.map((id) => <Fragment key={id}>{renderShelf(id)}</Fragment>)}
+            </div>
+          </Fragment>
+        ))}
+      </div>
       </div>
       {rulesChannels.length ? (
         <section
@@ -1274,7 +1298,7 @@ export function QueuesView({
               <p>Queues filled from eligibility filters.</p>
             </div>
           </div>
-          <div className="rules-queue-shelves">
+          <div className="rules-queue-shelves queue-card-grid" style={gridStyle}>
             {[
               ...shownRulesChannels.exact,
               ...shownRulesChannels.also,

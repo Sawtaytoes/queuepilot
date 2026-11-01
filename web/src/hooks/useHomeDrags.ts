@@ -95,7 +95,7 @@ export function useHomeDrags(
 
       const others = [
         ...shelvesEl!.querySelectorAll<HTMLElement>(
-          ".shelf:not(.dragging)",
+          ".queue-family:not(.dragging)",
         ),
       ].filter((s) => !s.hidden)
 
@@ -108,12 +108,15 @@ export function useHomeDrags(
       for (const s of others) {
         const r = s.getBoundingClientRect()
         const cy = r.top + r.height / 2
-        const d = Math.abs(e.clientY - cy)
+        const cx = r.left + r.width / 2
+        // Grid rows can share a Y coordinate. Choose the nearest card in both axes.
+        const d = Math.hypot(e.clientX - cx, e.clientY - cy)
 
         if (d < bestDist) {
           bestDist = d
           best = s
-          isAfter = e.clientY > cy
+          isAfter = e.clientY > r.bottom ||
+            (e.clientY >= r.top && e.clientX > cx)
         }
       }
 
@@ -203,7 +206,7 @@ export function useHomeDrags(
 
       if (!handle) return
 
-      const shelf = handle.closest<HTMLElement>(".shelf")
+      const shelf = handle.closest<HTMLElement>(".queue-family")
 
       if (!shelf) return
 
