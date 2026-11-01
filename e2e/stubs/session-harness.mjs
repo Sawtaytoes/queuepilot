@@ -24,6 +24,8 @@ export const SESSION_CTL = {
   plays: [],    // playRatingKeys(keys, opts)
   states: [],   // _publishState payloads
   lastPlayed: [],
+  activeProfileTitle: null,
+  accountCalls: [],
   profileTitle: null,     // what waitForProfile resolves to (null = nobody signed in)
   waitCalls: [],
   switchCalls: [],
@@ -36,6 +38,8 @@ export function resetSession() {
   SESSION_CTL.states = [];
   SESSION_CTL.lastPlayed = [];
   SESSION_CTL.profileTitle = null;
+  SESSION_CTL.activeProfileTitle = null;
+  SESSION_CTL.accountCalls = [];
   SESSION_CTL.waitCalls = [];
   SESSION_CTL.switchCalls = [];
   SESSION_CTL.playResult = { queued: 1, played: true, mode: 'client', client: 'SHIELD' };
@@ -59,6 +63,10 @@ const STUB_SRC = {
     export async function playRatingKeys(keys, opts = {}) {
       SESSION_CTL.plays.push({ keys: [...keys], ...opts });
       return SESSION_CTL.playResult;
+    }
+    export async function currentAccount({ device = null } = {}) {
+      SESSION_CTL.accountCalls.push(device?.id || null);
+      return { title: SESSION_CTL.activeProfileTitle, accountId: null, hasSession: Boolean(SESSION_CTL.activeProfileTitle) };
     }
     export async function currentSession() { return null; }
     export async function seekTo() { return { ok: true }; }
