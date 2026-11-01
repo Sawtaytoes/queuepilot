@@ -35,3 +35,30 @@ export function filteredParent(
     label: byId(parentId)?.label || parentId,
   }
 }
+
+/** Keep a parent and its filtered descendants in one grid cell and drag unit.
+ * Call separately for exact and also-in tiers so a near match never moves above its divider.
+ * Missing parents remain visible as standalone families.
+ */
+export function groupQueueFamilies(
+  ids: readonly string[],
+  byId: (id: string) => RegistrySet | null | undefined,
+): string[][] {
+  const families: string[][] = []
+  const familyById = new Map<string, string[]>()
+  for (const id of ids) {
+    const parent = byId(id)?.filtered_from
+    const family = parent
+      ? familyById.get(parent)
+      : undefined
+    if (family) {
+      family.push(id)
+      familyById.set(id, family)
+    } else {
+      const next = [id]
+      families.push(next)
+      familyById.set(id, next)
+    }
+  }
+  return families
+}

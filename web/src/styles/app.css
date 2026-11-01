@@ -604,28 +604,46 @@ button {
   margin: 0;
 }
 
-/* ---- HOME: Plex-style horizontal shelves ---- */
-/* `content-visibility: auto` skips layout and paint for shelves that are off-screen.
-   The Home page carries ~10 of them and only two are ever visible, so this takes most
-   of the first-paint layout cost off the critical path. `contain-intrinsic-size` is
-   what makes it safe: without a size estimate a skipped shelf measures 0 and the
-   scrollbar jumps as you scroll into it. 320px is a shelf's real height (tile +
-   caption + heading). */
+/* Queue surfaces are Charcuterie Card. Only content layout lives here. */
 .shelf {
-  margin-bottom: 28px;
-  /* Keep content clear of Charcuterie’s shared 3px inset accent edge. */
-  padding-inline-start: 12px;
-  contain-intrinsic-size: auto 320px;
-  content-visibility: auto;
+  min-inline-size: 0;
+}
+.queue-card-grid {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+  margin-inline: auto;
+}
+.queue-family {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-inline-size: 0;
+}
+.queue-card-grid > .alsodivide {
+  grid-column: 1 / -1;
 }
 .shelf h2 {
-  margin: 0 0 10px;
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px 8px;
+}
+.shelf h2 .qpeople,
+.shelf h2 .livepill {
+  grid-column: 1 / -1;
+}
+.shelf .shelfactions {
+  margin-inline-start: auto;
+}
+.queue-card-meta {
   display: flex;
   align-items: center;
-  gap: 2px;
-}
-#shelves {
-  padding-top: 8px;
+  flex-wrap: wrap;
+  gap: 8px;
+  color: var(--color-content-muted);
+  font-size: 0.85rem;
 }
 .queue-section-heading {
   align-items: end;
@@ -674,23 +692,24 @@ button {
 .shelf.collapsed .collapse-toggle {
   transform: rotate(-90deg);
 } /* ▾ down (open) → ► right (collapsed) */
-.shelf.collapsed {
-  margin-bottom: 12px;
-}
 .shelf.collapsed .strip-wrap {
   display: none;
 }
 .shelf h2 .open {
-  background: none;
-  border: none;
   color: var(--color-content-primary);
+  font-family: var(--font-display);
   font-size: 1.2rem;
   font-weight: 600;
-  padding: 4px 2px;
-  display: inline-flex;
+  display: flex;
+  min-inline-size: 0;
   align-items: baseline;
-  line-height: 1;
+  justify-content: space-between;
+  line-height: 1.25;
   gap: 10px;
+}
+.shelf h2 .lbl {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 .shelf h2 .open:hover {
   color: var(--color-intent-accent-solid);
@@ -698,18 +717,9 @@ button {
 .shelf h2 .sec {
   color: var(--color-content-muted);
   font-weight: 400;
-  font-size: 0.85rem;
-}
-/* WHICH LANE, or the split between the two — "3 priority · 9 pool", or "random pool" on a
-   shelf that has only one. Quieter than the count beside it and set apart by a rule, because
-   it answers a different question: `.sec` says how big the queue is, this says how it plays.
-   A shelf with no entries has neither. */
-.shelf h2 .lanes-sec {
-  color: var(--color-content-muted);
-  font-weight: 400;
-  font-size: 0.85rem;
-  padding-left: 10px;
-  border-left: 1px solid var(--color-border-default);
+  font-size: 1rem;
+  flex: none;
+  font-variant-numeric: tabular-nums;
 }
 /* The line at the top of a FILTERED queue's own page. It says what the page is before any of
    the controls under it are offered, and it names the one operation that is not available
@@ -729,7 +739,6 @@ button {
    link identifies the relationship without a second competing border. */
 .shelf.filtered {
   margin-inline-start: 14px;
-  padding-inline-start: 20px;
 }
 /* WHAT IT FILTERS, beside the badge that says it does. Quiet, because the queue's own name is
    the heading and this is the footnote under it — but a LINK, because "which queue is that"
@@ -745,43 +754,21 @@ button {
   color: var(--color-intent-accent-solid);
   text-decoration: underline;
 }
-.shelf h2 .shelfspacer {
-  flex: 1;
-}
+
 .shelfactions {
   align-items: center;
   display: flex;
   gap: 2px;
 }
-/* `IconButton`s, `ghost`. The REVEAL is what these classes keep: the heading's controls
-   are invisible until the shelf is hovered, so the Home page is posters and titles until
-   you reach for something. That is a relationship between the `h2` and its children, and
-   no component prop describes it. */
-.shelf h2 .shelfedit,
-.shelf h2 .shelfdrag {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.shelf h2:hover .shelfedit,
-.shelf h2:hover .shelfdrag,
-.shelf.dragging .shelfdrag {
-  opacity: 1;
-}
-.shelf h2 .shelfdrag {
+.shelf .shelfdrag {
   cursor: grab;
   touch-action: none;
 }
-.shelf.dragging {
+.queue-family.dragging {
   opacity: 0.55;
 }
-.shelf.dragging .shelfdrag {
+.queue-family.dragging .shelfdrag {
   cursor: grabbing;
-}
-@media (pointer: coarse) {
-  .shelf h2 .shelfedit,
-  .shelf h2 .shelfdrag {
-    opacity: 0.7;
-  }
 }
 
 .strip-wrap {
@@ -1745,16 +1732,16 @@ body.hdrag #shelves .strip li.tile:not(.dragging) {
   transition: transform 0.18s ease;
 }
 /* Shelf (whole-row) reorder: lift the dragged shelf instead of dimming it flat. */
-.shelf.dragging {
+.queue-family.dragging {
   opacity: 0.9;
 }
-.shelf.dragging .strip-wrap {
+.queue-family.dragging .strip-wrap {
   box-shadow: var(--shadow-high);
   outline: 2px solid var(--color-intent-accent-solid);
   outline-offset: 4px;
   border-radius: 10px;
 }
-body.sdrag .shelf:not(.dragging) {
+body.sdrag .queue-family:not(.dragging) {
   transition: transform 0.18s ease;
 }
 
@@ -1981,20 +1968,6 @@ body.queue-view #tools {
    `.playcard .playbtn`'s `flex-shrink: 0` below is app layout.
    (decisions `2026-08-21-a-component-configured-by-props-not-a-borrowed-class`,
    `2026-08-02-adopting-a-component-means-deleting-its-skin`) */
-/* `IconButton`, `ghost` + `intent="accent"` — the accent is what set this control apart
-   from the two neutral ones beside it, and it is a prop now. The reveal stays. */
-.shelf h2 .shelfplay {
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.shelf h2:hover .shelfplay {
-  opacity: 1;
-}
-@media (pointer: coarse) {
-  .shelf h2 .shelfplay {
-    opacity: 0.8;
-  }
-}
 
 /* ---- Channels view ---- */
 .chhead {
@@ -5245,49 +5218,6 @@ body.rowdragging
   gap: 8px;
 }
 
-@media (max-width: 760px) {
-  #home .shelf h2 {
-    align-items: start;
-    display: grid;
-    column-gap: 8px;
-    grid-template-columns: auto minmax(0, 1fr);
-    row-gap: 5px;
-  }
-  #home .shelf .collapse-toggle {
-    align-self: center;
-    grid-column: 1;
-    grid-row: 1;
-  }
-  #home .shelf h2 .open {
-    display: grid;
-    gap: 3px 8px;
-    grid-column: 2;
-    grid-template-columns: minmax(0, 1fr) auto;
-    line-height: 1.2;
-    padding-block: 3px;
-    width: 100%;
-  }
-  #home .shelf h2 .lbl {
-    min-width: 0;
-  }
-  #home .shelf h2 .sec {
-    align-self: start;
-  }
-  #home .shelf h2 .lanes-sec {
-    border-left: 0;
-    grid-column: 1 / -1;
-    padding-left: 0;
-  }
-  #home .shelf h2 .qpeople,
-  #home .shelf h2 .livepill,
-  #home .shelf h2 .shelfactions {
-    grid-column: 2;
-  }
-  #home .shelf h2 .shelfspacer {
-    display: none;
-  }
-}
-
 /* ---- The result's own row of actions ---- */
 #result .tgo {
   flex-direction: row;
@@ -5360,4 +5290,12 @@ body.rowdragging
   align-items: center;
   display: inline-flex;
   gap: 6px;
+}
+
+.queue-family[hidden],
+.shelf[hidden] {
+  display: none;
+}
+.shelf h2 > :not(.collapse-toggle):not(.open) {
+  grid-column: 1 / -1;
 }
