@@ -17,7 +17,7 @@
 // Fragility, accepted knowingly (carried across from the Python): the profile stamp only exists
 // on DEBUG-level PMS log lines, and this needs the Plex app's log volume mounted read-only into
 // the container. If Plex's debug logging is off, waits time out and the caller says so.
-import { deviceHost, deviceKey } from './deviceScope.js';
+import { deviceHost, deviceKey, deviceOperationCancelled } from './deviceScope.js';
 import { promises as fs } from 'node:fs';
 import { statSync } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
@@ -106,6 +106,7 @@ export function _setNow(clock?: () => number): void {
 
 /** Record a profile that Plex itself identified, never one inferred from an ADB keypress. */
 export function recordObservedProfile(title: string): void {
+  if (deviceOperationCancelled()) return;
   LAST_SEEN.title = title;
   LAST_SEEN.isObserved = true;
   LAST_SEEN.observedAt = now();
@@ -116,6 +117,7 @@ export function recordObservedProfile(title: string): void {
  * every trace of authority, so a later gate cannot read the claim back as proof.
  */
 export function recordProfileClaim(title: string): void {
+  if (deviceOperationCancelled()) return;
   LAST_SEEN.title = title;
   LAST_SEEN.isObserved = false;
   LAST_SEEN.observedAt = null;
@@ -123,6 +125,7 @@ export function recordProfileClaim(title: string): void {
 
 /** Keep a title as a picker hint, but prevent stale evidence from clearing a profile gate. */
 export function invalidateObservedProfile(): void {
+  if (deviceOperationCancelled()) return;
   LAST_SEEN.isObserved = false;
   LAST_SEEN.observedAt = null;
 }

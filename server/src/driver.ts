@@ -1,4 +1,4 @@
-import { withDevice } from './deviceScope.js';
+import { withDevice, deviceOperationCancelled } from './deviceScope.js';
 // Playback state machine: sample the Shield's real state, then drive it to `playing`.
 //
 // Ported from the retired Python driver (PLAYBACK_FSM). Replaces the fire-and-forget tail
@@ -36,7 +36,7 @@ import type { PlaybackResult } from './playback.js';
 import * as profiles from './profiles.js';
 import * as gatedPush from './store/db/gatedPush.js';
 import type { CancelFlag, Device, PlexPlayItem, PublishedStateExtra, PushResult } from './types.js';
-import { errMessage, isCancelled } from './errors.js';
+import { errMessage, isCancelled as flagIsCancelled } from './errors.js';
 
 /**
  * What `setPublishState()` accepts: mqttd's `publishState(extra)`, handed down through
@@ -65,9 +65,9 @@ const sleep = (s: number): Promise<void> => new Promise((r) => {
   setTimeout(r, Math.max(0, Number(s) || 0) * 1000);
 });
 
-// isCancelled is now imported from ./errors.js — byte-for-byte the same isSet-then-is_set
-// probe this module inlined (see CancelFlag in types.ts). Still re-exported on `_internals`,
-// which is where the FSM tests reach for it.
+// Explicit cancellation and sitting replacement both end an in-flight transition.
+const isCancelled = (flag: CancelFlag | null | undefined): boolean =>
+  flagIsCancelled(flag) || deviceOperationCancelled();
 
 // Surface a mid-flight transition on queuepilot/state (what HA's status sensor shows).
 // Lazy / soft: mqttd or the session may not have injected a publisher yet, in which case this
@@ -187,6 +187,7 @@ async function driveProfile(
   let hasActiveMismatch = false;
   if (accountId != null) {
     const active = await playback.currentAccount({ device, timeoutMs: 1_000 });
+    if (isCancelled(cancel)) return { cancelled: true };
     if (active.accountId != null) {
       if (active.accountId === Number(accountId)) {
         profiles.recordObservedProfile(active.title || required);
@@ -271,6 +272,7 @@ async function driveProfile(
     } catch (e) {
       out = [false, errMessage(e)];
     }
+    if (isCancelled(cancel)) return { cancelled: true };
     let ok: boolean;
     let detail: unknown;
     if (Array.isArray(out)) {
@@ -415,6 +417,7 @@ async function driveToPlayingOnDevice({
   // unreachable -> device_on -> plex_foreground. Best-effort head start (the play step
   // re-verifies foreground itself); ADB off/unreachable falls back to whatever HA launched.
   if (ADB_ENABLED) await ensurePlex();
+  if (isCancelled(cancel)) return { cancelled: true };
 
   // plex_foreground -> signed_in(required). Only when the set/card demands a profile.
   if (requiredProfile) {
@@ -460,6 +463,7 @@ async function driveToPlayingOnDevice({
     const first = lineup?.[0];
     const sourceServer = first && typeof first === 'object' ? first.plexServer ?? null : null;
     let verdict = await playback.verifyAccount(accountId, { device, sourceServer, userUuid });
+    if (isCancelled(cancel)) return { cancelled: true };
     for (let retry = 1; !verdict.hasSession && retry <= Math.max(0, PLAYBACK_SESSION_RETRIES); retry++) {
       if (isCancelled(cancel)) return { cancelled: true };
       console.log(
@@ -472,6 +476,7 @@ async function driveToPlayingOnDevice({
       if (!result || !(result as PlaybackResult).played) return result;
       if (isCancelled(cancel)) return { cancelled: true };
       verdict = await playback.verifyAccount(accountId, { device, sourceServer, userUuid });
+      if (isCancelled(cancel)) return { cancelled: true };
     }
     if (!verdict.hasSession) {
       console.log(
