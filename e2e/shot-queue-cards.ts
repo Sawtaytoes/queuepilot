@@ -7,7 +7,7 @@ import { killServer } from './stubs/server-process.mjs';
 const tag = process.env.QUEUE_CARDS_SHOT_TAG || 'after';
 const server = await startFixtureServer(Number(process.env.QUEUE_CARDS_SHOT_PORT || 19428), {
   groups: 'landing.groups.yaml', people: 'landing.people-mapping.yaml',
-  queues: 'landing.queues.yaml', sets: 'landing.sets.yaml',
+  queues: 'landing.queues.yaml', sets: 'queue-cards.sets.yaml',
 });
 const browser = await chromium.launch({ headless: true });
 try {

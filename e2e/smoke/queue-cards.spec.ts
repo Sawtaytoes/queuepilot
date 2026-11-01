@@ -11,7 +11,7 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
     groups: 'landing.groups.yaml',
     people: 'landing.people-mapping.yaml',
     queues: 'landing.queues.yaml',
-    sets: 'landing.sets.yaml',
+    sets: 'queue-cards.sets.yaml',
   });
   try {
     const errors: string[] = [];
@@ -41,6 +41,14 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
     await first.getByRole('button', { name: 'Collapse queue', exact: true }).click();
     await page.reload();
     await expect(cards.first().locator('.strip-wrap')).toBeHidden();
+
+    const child = page.locator('.shelf[data-set="bob_strips"]');
+    await expect(child).toBeVisible();
+    await expect(child.locator('.shelfdrag')).toHaveCount(0);
+    await expect(page.locator('.queue-family').filter({ has: child }).locator('.shelf')).toHaveCount(2);
+    await page.locator('#qfilter').fill('Strips');
+    await expect(child).toBeVisible();
+    await expect(page.locator('.shelf[data-set="bob_reading"]')).toBeHidden();
 
     // Hidden cards and their family wrappers must not leave empty grid cells.
     await page.locator('#qfilter').fill('no-such-queue-52536254');
@@ -88,7 +96,7 @@ test('poster drops target the adjacent column in either direction', async ({ pag
   test.skip((testInfo.project.use.viewport?.width ?? 0) < 1900, 'cross-column gesture in Wide View');
   const server = await startFixtureServer(SMOKE_BASE_PORT + 20 + testInfo.workerIndex, {
     groups: 'landing.groups.yaml', people: 'landing.people-mapping.yaml',
-    queues: 'landing.queues.yaml', sets: 'landing.sets.yaml',
+    queues: 'landing.queues.yaml', sets: 'queue-cards.sets.yaml',
   });
   try {
     const ready = page.waitForResponse(r => r.url().includes('/api/queues?fresh=1'));
@@ -110,7 +118,7 @@ test('poster drops target the adjacent column in either direction', async ({ pag
       const end = await target.locator('.strip-wrap').boundingBox();
       if (!start || !end) throw new Error('missing poster geometry');
       const response = page.waitForResponse(r => r.url().endsWith('/api/queues/move') && r.request().method() === 'PATCH');
-      await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+      await page.mouse.move(start.x + 15, start.y + start.height * .75);
       await page.mouse.down();
       await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 10 });
       await expect(target).toHaveClass(/drop-target/);
