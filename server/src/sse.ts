@@ -227,7 +227,7 @@ export function startLiveUpdates(): void {
     nowRevision += 1;
     LAST_NOW = SESSION.isPreparing || (lastNowSitting != null && lastNowSitting !== SESSION.sittingId)
       || (LAST_NOW?.deviceId != null && LAST_NOW.deviceId !== (state?.deviceId || 'shield'))
-      ? null : LAST_NOW ?? mqttc.lastNowPlaying();
+      ? null : LAST_NOW;
     lastNowSitting = SESSION.sittingId;
     broadcast('state', state || {});
     // The active-queue badge keys off state.set, so a new session must repaint it even when
