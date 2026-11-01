@@ -16,7 +16,6 @@
 // Kept out of mqttd.js so it can be tested with no broker: `announceDevices` takes the
 // publish function as an argument.
 import { configuredPlaybackTargets } from './playbackTargets.js';
-import { playerDevices } from './playback.js';
 import type { PlayerDevice } from './playback.js';
 import type { Device } from './types.js';
 import { errMessage } from './errors.js';
@@ -112,6 +111,8 @@ export async function announceDevices(pub: Publish): Promise<void> {
 
     let swept = false;
     try {
+      // Resolving an already-known target must not initialize the playback stack.
+      const { playerDevices } = await import('./playback.js');
       for (const row of await playerDevices()) {
         const id = row.machineIdentifier || row.name;
         if (!id) continue;
