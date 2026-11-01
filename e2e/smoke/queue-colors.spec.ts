@@ -22,13 +22,18 @@ test('queue shelves retain their colors after reload and use the shared categori
   })));
   expect(colors.length).toBeGreaterThan(1);
   expect(colors.every((entry) => entry.color.endsWith('3px 0px 0px 0px inset'))).toBe(true);
-  expect(colors.every((entry) => entry.shadow === 'none' && entry.pointerEvents === 'none')).toBe(true);
+  // Cards keep their raised surface shadow; the categorical inset belongs only to
+  // the noninteractive overlay, so it cannot replace the card's elevation.
+  expect(colors.every((entry) => entry.shadow !== 'none' && !entry.shadow.includes('inset'))).toBe(true);
+  expect(colors.every((entry) => entry.pointerEvents === 'none')).toBe(true);
   expect(new Set(colors.map((entry) => entry.color)).size).toBeGreaterThan(1);
   const titleBounds = await shelves.first().locator('.lbl').boundingBox();
   await testInfo.attach('queue-edges', { body: await page.screenshot(), contentType: 'image/png' });
   // The shared edge overlays the shelf. Hiding it must not move its content.
   const withoutEdge = await page.addStyleTag({ content: '.shelf::before { box-shadow: none !important; }' });
   expect(await shelves.first().locator('.lbl').boundingBox()).toEqual(titleBounds);
+  expect(await shelves.evaluateAll((elements) => elements.map((element) => getComputedStyle(element).boxShadow)))
+    .toEqual(colors.map((entry) => entry.shadow));
   await withoutEdge.evaluate((element) => element.parentNode?.removeChild(element));
   await page.reload();
   await expect(shelves.first()).toBeVisible();
