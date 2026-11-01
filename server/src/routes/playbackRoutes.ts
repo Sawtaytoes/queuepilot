@@ -123,8 +123,8 @@ export function playbackRoutes(): Hono {
           const sent = mqttc.endActivity({
             set: originalSet,
             target: targetId ? String(targetId) : null,
-        });
-        return c.json({ ok: true, sent, stopped: stopped.ok, stopError: stopped.error });
+          });
+          return c.json({ ok: true, sent, stopped: stopped.ok, stopError: stopped.error });
         });
       }
       if (act !== 'stop' && act !== 'pause' && act !== 'resume' && act !== 'next') {
