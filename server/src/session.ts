@@ -1,4 +1,4 @@
-import { withDevice, invalidateDeviceOperations } from './deviceScope.js';
+import { withDevice, invalidateDeviceOperations, deviceOperationCancelled } from './deviceScope.js';
 import * as devices from './devices.js';
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
 //
@@ -204,6 +204,7 @@ async function startSessionOnDevice(
   if (_activeCancel) _activeCancel.set!();
   const cancel = opts.cancel || cancelFlag();
   _activeCancel = cancel;
+  const isSuperseded = (): boolean => isCancelled(cancel) || deviceOperationCancelled();
 
   if (ADB_ENABLED) {
     try { await adb.ensurePlexOpen(); } catch (e) {
@@ -211,6 +212,7 @@ async function startSessionOnDevice(
     }
   }
 
+  if (isSuperseded()) return { cancelled: true };
   let setName: string | null = payload.set || 'auto';
   const cardProfile = payload.profile || null;
   // "Play THIS entry" — an entry key from the web grid's per-tile ▶, narrowing the lineup to
@@ -327,6 +329,7 @@ async function startSessionOnDevice(
   if (typeof provider.profileBinding === 'function') {
     binding = await provider.profileBinding(binding, profileTitle);
   }
+  if (isSuperseded()) return { cancelled: true };
   // Product kind on the session / retained state — never the legacy wire spellings.
   const kind = wireKindForSet(cfg);
   SESSION.device = typeof payload.target === 'object' ? payload.target ?? null : null;
@@ -347,6 +350,7 @@ async function startSessionOnDevice(
   // here — a latent requirement of the push path, not of the interface. Adding a guard would
   // change behaviour, so the assertion preserves the throw instead.
   const tok = await provider.profileToken!(binding.user_uuid);
+  if (isSuperseded()) return { cancelled: true };
 
   // THE SEASONAL RESET, EVALUATED ON THIS READ — there is no timer anywhere in the feature
   // (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
@@ -370,9 +374,11 @@ async function startSessionOnDevice(
     }
   }
 
+  if (isSuperseded()) return { cancelled: true };
   const res = await provider.buckets({
     setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk, only,
   });
+  if (isSuperseded()) return { cancelled: true };
 
   if (cfg.source === 'queue') {
     // D4 write-side: persist finished + revive stale-done + TTL sweep. This stays ABOVE the
@@ -383,6 +389,7 @@ async function startSessionOnDevice(
     // runs it: the end of PLAYBACK reconciles the same set the same way, so the file agrees
     // with Plex without waiting for the next scan. One copy, so the two cannot drift.
     await finished.applyQueueWriteSide(setName, cfg, res);
+    if (isSuperseded()) return { cancelled: true };
     if (res.done?.length) console.log(`[session] ${setName} finished (kept): ${res.done}`);
     if (res.unresolved?.length) console.log(`[session] ${setName} unresolved: ${res.unresolved}`);
     if (!res.play?.length) {
@@ -456,6 +463,7 @@ async function startSessionOnDevice(
   // The Plex-only read the `PlayItem` union exists to make visible: `String(it.ratingKey)` is
   // `'undefined'` for a Kavita item and `season`/`episode` are simply absent. Left exactly as
   // it was — the pull path does not reach `startSession`, so this stays unreachable.
+  if (isSuperseded()) return { cancelled: true };
   SESSION.queue = playItems.map((item) => {
     const it = item as Partial<PlexPlayItem>;
     return {
@@ -531,6 +539,7 @@ async function startSessionOnDevice(
       client = null;
     }
   }
+  if (isSuperseded()) return { cancelled: true };
   resume.arm({ plan, device: device as Device | null, setName, client });
   section.arm({ plan: sections, setName });
   section.forgetBoundaries(); // a new sitting never inherits the last one's stop-and-advance
@@ -600,6 +609,7 @@ async function startSessionOnDevice(
 
   // `cancelled` is a PUSH-result field (a pull handoff has no device to cancel), so the read
   // below is total over both members of `HandoffResult` without widening either.
+  if (isSuperseded()) return { cancelled: true };
   let result: HandoffResult & { cancelled?: boolean };
   if (PLAYBACK_FSM) {
     result = await provider.handoff(artifact, {
@@ -616,6 +626,7 @@ async function startSessionOnDevice(
     result = await provider.handoff(artifact, { useFsm: false, device: device as Device | null });
   }
 
+  if (isSuperseded()) return { cancelled: true };
   if (result?.cancelled) return result;
   if (result?.error) {
     _publishState({ error: result.error, playback: result, ...SESSION.asDict() });
@@ -630,6 +641,7 @@ async function startSessionOnDevice(
   // cancel, a Plex error — and none of them may consume a 24h window.
   for (const key of ledKeys) {
     await promote.recordLead(setName, key);
+    if (isSuperseded()) return { cancelled: true };
     console.log(`[session] ${setName}: '${key}' led — its window restarts now`);
   }
   _publishState({ playback: result, ...SESSION.asDict() });
