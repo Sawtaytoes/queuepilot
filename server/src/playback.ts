@@ -1056,10 +1056,10 @@ export async function currentSession(
 // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
 
 function configuredSessionTarget(device: Device | null): ClientTarget | null {
-  const machineIdentifier = device?.machineIdentifier || SHIELD_CLIENT_MACHINE_ID || null;
-  const name = device?.name || SHIELD_CLIENT_NAME || null;
+  const machineIdentifier = device ? device.machineIdentifier || null : SHIELD_CLIENT_MACHINE_ID || null;
+  const name = device ? device.name || null : SHIELD_CLIENT_NAME || null;
   if (!machineIdentifier && !name) return null;
-  return { machineIdentifier, name, uri: device?.uri || SHIELD_CLIENT_URI || null };
+  return { machineIdentifier, name, uri: device ? device.uri : SHIELD_CLIENT_URI || null };
 }
 
 async function sessionTarget(device: Device | null): Promise<ClientTarget | null> {
@@ -1619,6 +1619,8 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
 
 // Convenience re-export shape for tests that want the Python-ish names as an object.
 export const _internals = {
+  configuredSessionTarget,
+  sessionBelongsTo,
   playToken,
   applyAudioLanguage,
   queueGroups,

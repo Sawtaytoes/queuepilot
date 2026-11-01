@@ -147,6 +147,7 @@ export function arm({ plan, device = null, setName = null, client = null }: {
    */
   client?: ClientTarget | null;
 } = {}): number {
+  stopWatch();
   ARMED.plan = plan instanceof Map ? plan : new Map();
   ARMED.seen = new Set();
   ARMED.device = device;
@@ -225,6 +226,7 @@ export function considerSession(
 // position", so the next one is booked for then instead of grinding through fifty-eight polls
 // that all say "not yet". A pause simply makes the booked read early, and it re-books.
 
+let GENERATION = 0;
 let TIMER: NodeJS.Timeout | null = null;
 let UNSUBSCRIBE: (() => void) | null = null;
 const LOGGED = new Set<string>(); // ratingKeys whose retryable decline has been logged once
@@ -238,6 +240,7 @@ export type PushSubscriber = (
 ) => () => void;
 
 export function stopWatch(): void {
+  GENERATION += 1;
   if (TIMER) {
     clearTimeout(TIMER);
     TIMER = null;
@@ -304,6 +307,8 @@ export function startWatch({
   stopWatch();
   LOGGED.clear();
   if (!ARMED.plan.size && !section.armedCount()) return false;
+  const generation = GENERATION;
+  const isCurrent = (): boolean => generation === GENERATION;
   const startedAt = now();
   let isStopped = false;
   let isReading = false;
@@ -318,11 +323,11 @@ export function startWatch({
 
   const finish = (): void => {
     isStopped = true;
-    stopWatch();
+    if (isCurrent()) stopWatch();
   };
 
   const schedule = (delayMs: number, via: WatchTrigger = 'poll'): void => {
-    if (isStopped) return;
+    if (isStopped || !isCurrent()) return;
     if (TIMER) clearTimeout(TIMER);
     TIMER = setTimeout(() => { void read(via); }, delayMs);
     // Kept as a runtime probe, not narrowed away: `unref` exists on Node's Timeout but a test
@@ -333,7 +338,7 @@ export function startWatch({
   const totalPending = (): number => pendingCount() + section.pendingCount();
 
   const read = async (via: WatchTrigger): Promise<void> => {
-    if (isStopped) return;
+    if (isStopped || !isCurrent()) return;
     if (now() - startedAt > maxMs || totalPending() === 0) {
       finish();
       return;
@@ -348,6 +353,7 @@ export function startWatch({
       let session: ObservedSession | null = null;
       try {
         session = await fetchSession();
+        if (isStopped || !isCurrent()) return;
       } catch {
         return; // a transient Plex hiccup must never kill the watcher
       }
@@ -364,6 +370,7 @@ export function startWatch({
           && section.isAmbiguous(String(session.ratingKey))) {
           // Two windows on one file: only the live playQueue can say which occurrence this is.
           try { place = await fetchPlace(); } catch { place = null; }
+          if (isStopped || !isCurrent()) return;
         }
         let sec: section.SectionDecision;
         try {
@@ -461,8 +468,10 @@ export function startWatch({
       }
     } finally {
       isReading = false;
-      if (totalPending() === 0) finish();
-      else schedule(nextDelayMs, nextVia);
+      if (isCurrent()) {
+        if (totalPending() === 0) finish();
+        else schedule(nextDelayMs, nextVia);
+      }
     }
   };
 
@@ -474,7 +483,7 @@ export function startWatch({
     let isNullLogged = false;
     try {
       UNSUBSCRIBE = subscribePush((ratingKey) => {
-        if (isStopped) return;
+        if (isStopped || !isCurrent()) return;
         if (!ratingKey) {
           // The recorded failure mode: a playing state the feed cannot name. Unusable as a
           // trigger, and NOT guessed at — the poll below still covers this item.

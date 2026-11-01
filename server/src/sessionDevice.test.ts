@@ -1,3 +1,4 @@
+vi.mock('./mqttc.js', () => ({ lastState: () => null, onNowPlaying: vi.fn(), offNowPlaying: vi.fn() }));
 import { afterEach, expect, it, vi } from 'vitest';
 import { SESSION, advanceSession } from './session.js';
 import * as playback from './playback.js';

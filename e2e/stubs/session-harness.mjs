@@ -150,6 +150,8 @@ export function stubSessionDeps() {
 // Write a temp sets.yaml + queues.yaml pair and point the engine at them. Returns the temp
 // queues path so a test can read back what the write-side persisted.
 export function useFixtures({ sets, queues }) {
+  // The session imports telemetry helpers; an offline fixture must never inherit a live broker.
+  process.env.MQTT_HOST = '';
   const dir = mkdtempSync(path.join(tmpdir(), 'session-'));
   const setsPath = path.join(dir, 'sets.yaml');
   const queuesPath = path.join(dir, 'queues.yaml');

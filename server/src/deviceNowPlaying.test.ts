@@ -15,7 +15,7 @@ it('polls only the selected configured player, reports seconds, and stops cleanl
   expect(read).not.toHaveBeenCalled();
   active = 'den';
   await vi.advanceTimersByTimeAsync(1500);
-  expect(read).toHaveBeenCalledWith(device);
+  expect(read).toHaveBeenCalledWith(device, { playQueueID: null, userUuid: null });
   expect(publish).toHaveBeenLastCalledWith('den', expect.objectContaining({ state: 'paused', position: 12, duration: 90, deviceId: 'den' }));
   stop();
   const calls = read.mock.calls.length;
@@ -37,4 +37,26 @@ it('discards a late reading after switching devices and does not turn read failu
   await vi.advanceTimersByTimeAsync(0);
   expect(publish).not.toHaveBeenCalled();
   fail();
+});
+it('passes the active queue and profile to source-aware session reads', async () => {
+  vi.useFakeTimers();
+  const playback = await import('./playback.js');
+  vi.mocked(playback.currentSession).mockResolvedValue({ ratingKey: 'shared-episode', state: 'playing', viewOffset: 1000 });
+  const publish = vi.fn();
+  const stop = startDeviceNowPlaying({ targets: [device], active: () => 'den', context: () => ({ playQueueID: 42, userUuid: 'grace-profile' }), publish });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(playback.currentSession).toHaveBeenCalledWith(expect.objectContaining({ device, playQueueID: 42, userUuid: 'grace-profile', throwOnError: true }));
+  expect(publish).toHaveBeenCalledWith('den', expect.objectContaining({ state: 'playing', ratingKey: 'shared-episode' }));
+  stop();
+});
+it('discards an observation from an earlier queue on the same device', async () => {
+  vi.useFakeTimers();
+  let queue = 42;
+  let resolve!: (v: null) => void;
+  const publish = vi.fn();
+  const stop = startDeviceNowPlaying({ targets: [device], active: () => 'den', context: () => ({ playQueueID: queue, userUuid: 'grace-profile' }), read: () => new Promise<null>((r) => { resolve = r; }), publish });
+  queue = 43; resolve(null);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(publish).not.toHaveBeenCalled();
+  stop();
 });

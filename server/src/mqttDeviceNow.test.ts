@@ -20,6 +20,11 @@ it('keeps the legacy default feed out of a secondary sitting and restores it on 
   expect(listener).not.toHaveBeenCalled();
   expect(mqttc.lastNowPlaying()?.ratingKey).toBe('den-episode');
   message(T_STATE, { deviceId: null });
-  expect(mqttc.lastNowPlaying()?.state).toBe('idle');
+  expect(mqttc.lastNowPlaying()).toBeNull();
+  message(T_STATE, { deviceId: 'den' });
+  expect(mqttc.lastNowPlaying()).toBeNull();
+  expect(listener).not.toHaveBeenCalled();
+  mqttc.recordDeviceNowPlaying('den', { state: 'playing', ratingKey: 'new-den-episode' });
+  expect(listener).toHaveBeenCalledTimes(1);
   mqttc.offNowPlaying(listener);
 });

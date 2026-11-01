@@ -1,3 +1,4 @@
+vi.mock('./mqttc.js', () => ({ lastState: () => null, onNowPlaying: vi.fn(), offNowPlaying: vi.fn() }));
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 vi.mock('./env.js', async (original) => ({ ...await original<typeof import('./env.js')>(), ADB_ENABLED: true, ADB_TARGET: '192.0.2.30:5555', SHIELD_IP: '192.0.2.30' }));

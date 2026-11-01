@@ -120,11 +120,15 @@ if (HOST) {
       // the one publishState() writes — object-ness is still the only thing checked.
       try {
         const row = asRecord(text);
-        if (row) LAST_STATE = row as unknown as PublishedSessionState;
+        if (row) {
+          const next = row as unknown as PublishedSessionState;
+          if ((next.deviceId || 'shield') !== (LAST_STATE?.deviceId || 'shield')) deviceNow.delete(next.deviceId || 'shield');
+          LAST_STATE = next;
+        }
       } catch { /* ignore */ }
       LAST_NOW = deviceNow.get(LAST_STATE?.deviceId || 'shield') ?? null;
       stateListeners.forEach((fn) => fn(LAST_STATE));
-      nowListeners.forEach((fn) => fn(LAST_NOW));
+      // A cached snapshot is UI state, never a new playback/history observation.
       return;
     }
     if (topic === T_NOW_PLAYING) {
