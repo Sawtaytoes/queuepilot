@@ -1181,6 +1181,9 @@ built wrong, a lineup Plex reordered, and something else already on screen. Both
 unconditional — a scan is a button press, and the report always arrives the morning after a
 redeploy has thrown the evidence away.
 
+Plex queue creation always sends `continuous=0`: QueuePilot owns selection and refill,
+including single-episode and infinite sittings. See [the episode expansion decision](docs/decisions/2026-11-01-plex-does-not-expand-selected-episodes.md).
+
 A Plex playQueue can interleave home-server and shared-server items. Each stored shared item
 carries `plex_server`, and playback hosts the playQueue on the first item's server before it
 appends consecutive source runs. Never strip the server identity down to a bare rating key in

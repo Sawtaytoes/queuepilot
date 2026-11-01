@@ -671,18 +671,17 @@ export async function findClient(device: Device | null = null): Promise<ClientTa
 }
 
 // Create a video playQueue from an ordered list of ratingKeys; return its id.
-// continuous=false tells the client to STOP when the queue ends (per-scan max_items cap).
+// QueuePilot owns selection and refill. Plex continuous mode expands a single episode
+// into its series and bypasses the mixed lineup, skipped items, and playback length.
 export async function createPlayQueue(
   items: PlexQueueItemInput[] | null | undefined,
   {
     token = null,
-    continuous = true,
     host = null,
     machineIdentifier: queueHostId = null,
     streamBaseUrl = null,
   }: {
     token?: string | null;
-    continuous?: boolean;
     host?: string | null;
     machineIdentifier?: string | null;
     streamBaseUrl?: string | null;
@@ -696,7 +695,7 @@ export async function createPlayQueue(
   const q = new URLSearchParams({
     type: 'video',
     uri: queueSourceUri(first.server, first.ratingKeys),
-    continuous: continuous ? '1' : '0',
+    continuous: '0',
     'X-Plex-Client-Identifier': CLIENT_ID,
   });
   const data = await plexReq('POST', `/playQueues?${q}`, { token, host });
@@ -1402,9 +1401,9 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
 } = {}): Promise<PlaybackResult> {
   const refs = queueItemRefs(items);
   const ratingKeys = refs.map((item) => item.ratingKey);
-  // Only the two knobs this path reads off the set. `getSet()` is still JS, so the wider
+  // Only the audio preference this path reads off the set. `getSet()` is still JS, so the wider
   // `SetRegistryEntry` it really returns is not visible here yet.
-  let cfg: { audio_language?: string | null; max_items?: number | null } = {};
+  let cfg: { audio_language?: string | null } = {};
   if (setName) {
     try { cfg = (await getSet(setName)) || {}; } catch { cfg = {}; }
   }
@@ -1461,10 +1460,7 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
   const tok = await playToken(setName, userUuid);
   const modernPlayback = adb.usesModernPlayback(device);
   const client = await findClient(device);
-  // A per-scan cap (max_items) means "play exactly these and stop": drop continuous so the
-  // client doesn't auto-advance into related content once the queue ends.
-  const cap = cfg.max_items;
-  const isCapped = typeof cap === 'number' && Number.isInteger(cap) && cap > 0;
+  // Even an infinite sitting refills through QueuePilot, never Plex series expansion.
   let pqId: number | string | null = null;
   let queueHost: PlayQueueHost;
   try {
@@ -1478,12 +1474,11 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
   // (decision `2026-08-26-a-scan-logs-the-lineup-it-built`).
   console.log(
     `[play] ${setName ?? '(no set)'}: ${ratingKeys.length} key(s), head rk=${ratingKeys[0]}, `
-    + `offset=${Math.round(intOffset(offset) / 1000)}s, continuous=${!isCapped}`,
+    + `offset=${Math.round(intOffset(offset) / 1000)}s, continuous=false`,
   );
   try {
     pqId = await createPlayQueue(refs, {
       token: queueHost.token,
-      continuous: !isCapped,
       host: queueHost.apiBaseUrl,
       machineIdentifier: queueHost.machineIdentifier,
       streamBaseUrl: queueHost.streamBaseUrl,
@@ -1528,7 +1523,7 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
       } else if (built && built.ratingKeys.length !== ratingKeys.length) {
         console.log(
           `[play] ⚠ Plex kept ${built.ratingKeys.length} of ${ratingKeys.length} item(s) in `
-          + `playQueue ${pqId} — the head is right, the tail is short`,
+          + `playQueue ${pqId} — the returned queue size differs`,
         );
       } else if (built) {
         console.log(`[play] playQueue ${pqId}: ${built.ratingKeys.length} item(s), head rk=${builtHead}`);
