@@ -1,3 +1,5 @@
+import { withDevice, withCancellation, invalidateDeviceOperations, deviceOperationCancelled } from './deviceScope.js';
+import * as devices from './devices.js';
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
 //
 // Selection and delivery both go through a PROVIDER (./providers) rather than a Plex client:
@@ -60,6 +62,9 @@ interface SessionQueueItem {
  * is the session itself — it is a real method, NOT an arrow function, and typing it as one
  * would break the `this` it reads. */
 interface SessionSingleton {
+  sittingId: number;
+  isPreparing: boolean;
+  device: Device | null;
   kind: string | null;
   set: string | null;
   profile: string | null;
@@ -127,6 +132,9 @@ export type SessionResult =
 
 // Mutable session (mirrors service.Session) for advance + last-played.
 export const SESSION: SessionSingleton = {
+  sittingId: 0,
+  isPreparing: false,
+  device: null,
   kind: null,
   set: null,
   profile: null,
@@ -142,24 +150,31 @@ export const SESSION: SessionSingleton = {
   asDict() {
     return {
       kind: this.kind, set: this.set, profile: this.profile,
-      queue_len: this.queue.length, cursor: this.cursor,
+      queue_len: this.queue.length, cursor: this.cursor, deviceId: this.device?.id ?? null,
     };
   },
 };
 
-let _publishState: PublishState = () => {};
+let _statePublisher: PublishState = () => {};
+let _preparationError: string | undefined;
+function _publishState(extra: SessionStateExtra): void {
+  if (SESSION.isPreparing && !deviceOperationCancelled() && typeof extra.error === 'string') {
+    _preparationError = extra.error;
+  }
+  _statePublisher(extra);
+}
 let _publishLastPlayed: PublishLastPlayed = () => {};
 export function setPublishers(
   { state, lastPlayed }: { state?: PublishState; lastPlayed?: PublishLastPlayed } = {},
 ): void {
-  if (state) _publishState = state;
+  if (state) _statePublisher = state;
   if (lastPlayed) _publishLastPlayed = lastPlayed;
   // The SAME publisher the session uses, handed to the driver so the FSM path's mid-flight
   // "awaiting" reaches the state topic. `?? null` only because driver's setter is typed
   // `PublishStateFn | null`; it stored the undefined before and guards with a truthiness test
   // either way, so nothing changes. No cast: both sides are `PublishedStateExtra` now, which
   // is what makes an arity slip here a compile error rather than a silent dropped payload.
-  driver.setPublishState?.(state ?? null);
+  driver.setPublishState?.(state ? _publishState : null);
 }
 
 function cancelFlag(): Required<CancelFlag> {
@@ -191,7 +206,7 @@ function lastPlayedFromItem(item: PlayItem | null | undefined): LastPlayed | nul
 /**
  * Start a session from an MQTT/API payload.
  */
-export async function startSession(
+async function startSessionOnDevice(
   payload: SessionStartPayload = {},
   opts: { cancel?: CancelFlag } = {},
 ): Promise<SessionResult> {
@@ -200,6 +215,7 @@ export async function startSession(
   if (_activeCancel) _activeCancel.set!();
   const cancel = opts.cancel || cancelFlag();
   _activeCancel = cancel;
+  const isSuperseded = (): boolean => isCancelled(cancel) || deviceOperationCancelled();
 
   if (ADB_ENABLED) {
     try { await adb.ensurePlexOpen(); } catch (e) {
@@ -207,6 +223,7 @@ export async function startSession(
     }
   }
 
+  if (isSuperseded()) return { cancelled: true };
   let setName: string | null = payload.set || 'auto';
   const cardProfile = payload.profile || null;
   // "Play THIS entry" — an entry key from the web grid's per-tile ▶, narrowing the lineup to
@@ -231,7 +248,8 @@ export async function startSession(
 
   if (isAuto) {
     _publishState({ awaiting: 'profile', ...SESSION.asDict() });
-    const title = await profiles.waitForProfile({ cancel, match: null });
+    const active = await playback.currentAccount({ device: typeof payload.target === 'object' ? payload.target : null, timeoutMs: 1_000 });
+    const title = active?.title ?? await profiles.waitForProfile({ cancel, match: null });
     if (isCancelled(cancel)) return { cancelled: true };
     if (!title) {
       _publishState({ error: 'no profile is signed in on the Shield. Open Plex and pick one.', ...SESSION.asDict() });
@@ -322,8 +340,10 @@ export async function startSession(
   if (typeof provider.profileBinding === 'function') {
     binding = await provider.profileBinding(binding, profileTitle);
   }
+  if (isSuperseded()) return { cancelled: true };
   // Product kind on the session / retained state — never the legacy wire spellings.
   const kind = wireKindForSet(cfg);
+  SESSION.device = typeof payload.target === 'object' ? payload.target ?? null : null;
   SESSION.kind = kind;
   SESSION.set = setName;
   SESSION.profile = profileTitle;
@@ -341,6 +361,7 @@ export async function startSession(
   // here — a latent requirement of the push path, not of the interface. Adding a guard would
   // change behaviour, so the assertion preserves the throw instead.
   const tok = await provider.profileToken!(binding.user_uuid);
+  if (isSuperseded()) return { cancelled: true };
 
   // THE SEASONAL RESET, EVALUATED ON THIS READ — there is no timer anywhere in the feature
   // (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
@@ -364,9 +385,11 @@ export async function startSession(
     }
   }
 
+  if (isSuperseded()) return { cancelled: true };
   const res = await provider.buckets({
     setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk, only,
   });
+  if (isSuperseded()) return { cancelled: true };
 
   if (cfg.source === 'queue') {
     // D4 write-side: persist finished + revive stale-done + TTL sweep. This stays ABOVE the
@@ -377,6 +400,7 @@ export async function startSession(
     // runs it: the end of PLAYBACK reconciles the same set the same way, so the file agrees
     // with Plex without waiting for the next scan. One copy, so the two cannot drift.
     await finished.applyQueueWriteSide(setName, cfg, res);
+    if (isSuperseded()) return { cancelled: true };
     if (res.done?.length) console.log(`[session] ${setName} finished (kept): ${res.done}`);
     if (res.unresolved?.length) console.log(`[session] ${setName} unresolved: ${res.unresolved}`);
     if (!res.play?.length) {
@@ -450,6 +474,7 @@ export async function startSession(
   // The Plex-only read the `PlayItem` union exists to make visible: `String(it.ratingKey)` is
   // `'undefined'` for a Kavita item and `season`/`episode` are simply absent. Left exactly as
   // it was — the pull path does not reach `startSession`, so this stays unreachable.
+  if (isSuperseded()) return { cancelled: true };
   SESSION.queue = playItems.map((item) => {
     const it = item as Partial<PlexPlayItem>;
     return {
@@ -525,6 +550,7 @@ export async function startSession(
       client = null;
     }
   }
+  if (isSuperseded()) return { cancelled: true };
   resume.arm({ plan, device: device as Device | null, setName, client });
   section.arm({ plan: sections, setName });
   section.forgetBoundaries(); // a new sitting never inherits the last one's stop-and-advance
@@ -594,6 +620,7 @@ export async function startSession(
 
   // `cancelled` is a PUSH-result field (a pull handoff has no device to cancel), so the read
   // below is total over both members of `HandoffResult` without widening either.
+  if (isSuperseded()) return { cancelled: true };
   let result: HandoffResult & { cancelled?: boolean };
   if (PLAYBACK_FSM) {
     result = await provider.handoff(artifact, {
@@ -610,6 +637,7 @@ export async function startSession(
     result = await provider.handoff(artifact, { useFsm: false, device: device as Device | null });
   }
 
+  if (isSuperseded()) return { cancelled: true };
   if (result?.cancelled) return result;
   if (result?.error) {
     _publishState({ error: result.error, playback: result, ...SESSION.asDict() });
@@ -624,6 +652,7 @@ export async function startSession(
   // cancel, a Plex error — and none of them may consume a 24h window.
   for (const key of ledKeys) {
     await promote.recordLead(setName, key);
+    if (isSuperseded()) return { cancelled: true };
     console.log(`[session] ${setName}: '${key}' led — its window restarts now`);
   }
   _publishState({ playback: result, ...SESSION.asDict() });
@@ -631,17 +660,57 @@ export async function startSession(
 }
 
 export async function advanceSession(): Promise<SessionResult> {
+  if (SESSION.isPreparing) return { error: 'session is preparing' };
   if (!SESSION.queue.length) return { error: 'no active session' };
+  const sittingId = SESSION.sittingId;
+  const cancelled = () => SESSION.sittingId !== sittingId || SESSION.isPreparing;
   SESSION.cursor = Math.min(SESSION.cursor + 1, SESSION.queue.length - 1);
   const rest = SESSION.queue.slice(SESSION.cursor);
   if (!rest.length) {
     _publishState({ error: 'end of queue', ...SESSION.asDict() });
     return { error: 'end of queue' };
   }
-  const result = await playback.playRatingKeys(rest, {
-    setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid,
-  });
+  const result = await withDevice(SESSION.device, () => withCancellation(cancelled, () => playback.playRatingKeys(rest, {
+    setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid, device: SESSION.device,
+  })), true);
+  if (cancelled()) return { cancelled: true };
   _publishLastPlayed(lastPlayedFromItem(rest[0]));
   _publishState({ playback: result, ...SESSION.asDict() });
   return result;
+}
+
+/** Resolve wire IDs before any device action, including the initial Plex launch. */
+export function startSession(payload: SessionStartPayload = {}, opts: { cancel?: CancelFlag } = {}): Promise<SessionResult> {
+  let device: Device | null = null;
+  if (payload.target) {
+    device = typeof payload.target === 'string' ? devices.known(payload.target) as Device | null : payload.target;
+    if (!device) return Promise.resolve({ error: `unknown device '${String(payload.target)}'` });
+  }
+  invalidateDeviceOperations();
+  resume.stopWatch();
+  const sittingId = ++SESSION.sittingId;
+  SESSION.isPreparing = true;
+  _preparationError = undefined;
+  const clearFailedPreparation = (): void => {
+    if (SESSION.sittingId !== sittingId) return;
+    resume.disarm();
+    section.disarm();
+    Object.assign(SESSION, { device: null, kind: null, set: null, profile: null,
+      queue: [], cursor: 0, userUuid: null, playQueueID: null, queuedTotal: 0, target: null });
+  };
+  return withDevice(device, async () => {
+    try {
+      const result = await startSessionOnDevice({ ...payload, target: device }, opts);
+      if (SESSION.sittingId === sittingId && !('ok' in result && result.ok)) {
+        clearFailedPreparation();
+        _publishState({ ...('error' in result ? { error: _preparationError ?? result.error } : {}), ...SESSION.asDict() });
+      }
+      return result;
+    } catch (error) {
+      clearFailedPreparation();
+      throw error;
+    } finally {
+      if (SESSION.sittingId === sittingId) SESSION.isPreparing = false;
+    }
+  }, true);
 }

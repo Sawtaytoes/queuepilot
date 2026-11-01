@@ -24,6 +24,8 @@ export const SESSION_CTL = {
   plays: [],    // playRatingKeys(keys, opts)
   states: [],   // _publishState payloads
   lastPlayed: [],
+  activeProfileTitle: null,
+  accountCalls: [],
   profileTitle: null,     // what waitForProfile resolves to (null = nobody signed in)
   waitCalls: [],
   switchCalls: [],
@@ -36,6 +38,8 @@ export function resetSession() {
   SESSION_CTL.states = [];
   SESSION_CTL.lastPlayed = [];
   SESSION_CTL.profileTitle = null;
+  SESSION_CTL.activeProfileTitle = null;
+  SESSION_CTL.accountCalls = [];
   SESSION_CTL.waitCalls = [];
   SESSION_CTL.switchCalls = [];
   SESSION_CTL.playResult = { queued: 1, played: true, mode: 'client', client: 'SHIELD' };
@@ -59,6 +63,10 @@ const STUB_SRC = {
     export async function playRatingKeys(keys, opts = {}) {
       SESSION_CTL.plays.push({ keys: [...keys], ...opts });
       return SESSION_CTL.playResult;
+    }
+    export async function currentAccount({ device = null } = {}) {
+      SESSION_CTL.accountCalls.push(device?.id || null);
+      return { title: SESSION_CTL.activeProfileTitle, accountId: null, hasSession: Boolean(SESSION_CTL.activeProfileTitle) };
     }
     export async function currentSession() { return null; }
     export async function seekTo() { return { ok: true }; }
@@ -142,6 +150,8 @@ export function stubSessionDeps() {
 // Write a temp sets.yaml + queues.yaml pair and point the engine at them. Returns the temp
 // queues path so a test can read back what the write-side persisted.
 export function useFixtures({ sets, queues }) {
+  // The session imports telemetry helpers; an offline fixture must never inherit a live broker.
+  process.env.MQTT_HOST = '';
   const dir = mkdtempSync(path.join(tmpdir(), 'session-'));
   const setsPath = path.join(dir, 'sets.yaml');
   const queuesPath = path.join(dir, 'queues.yaml');

@@ -1821,6 +1821,8 @@ export interface MemberTile extends Tile {
  * `default` is a wire field name and stays as-is despite the workspace `is`-prefix rule.
  */
 export interface Device {
+  /** Explicit authorized ADB endpoint, supplied by deployment configuration. */
+  adbTarget?: string;
   id: string;
   name: string;
   /** `''` when the env didn't provide one (and the plex.tv sweep didn't fill it in). */
@@ -1881,6 +1883,8 @@ export interface PlayingContext {
  * `queue_len`: it is a wire name (it crosses MQTT to HA), not a local.
  */
 export interface SessionState {
+  /** Active playback device; absent means the existing default player. */
+  deviceId?: string | null;
   kind: string | null;
   set: string | null;
   profile: string | null;
