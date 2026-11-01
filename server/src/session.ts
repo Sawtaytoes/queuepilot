@@ -1,4 +1,4 @@
-import { withDevice } from './deviceScope.js';
+import { withDevice, invalidateDeviceOperations } from './deviceScope.js';
 import * as devices from './devices.js';
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
 //
@@ -659,5 +659,7 @@ export function startSession(payload: SessionStartPayload = {}, opts: { cancel?:
     device = typeof payload.target === 'string' ? devices.known(payload.target) as Device | null : payload.target;
     if (!device) return Promise.resolve({ error: `unknown device '${String(payload.target)}'` });
   }
-  return withDevice(device, () => startSessionOnDevice({ ...payload, target: device }, opts));
+  invalidateDeviceOperations();
+  resume.stopWatch();
+  return withDevice(device, () => startSessionOnDevice({ ...payload, target: device }, opts), true);
 }

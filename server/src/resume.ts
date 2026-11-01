@@ -1,3 +1,4 @@
+import { withCancellation } from './deviceScope.js';
 // Resume-on-advance: make EVERY queued episode start at its own resume point, not just the
 // first one.
 //
@@ -394,7 +395,7 @@ export function startWatch({
           }
           if (sec.action === 'seek' && sec.ms != null) {
             try {
-              const r = await seek(sec.ms);
+              const r = await withCancellation(() => isStopped || !isCurrent(), () => seek(sec.ms!));
               log(r && r.seeked === false
                 ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${r.error}`
                 : `[section] rk=${sec.rk} starts at ${Math.round(sec.ms / 1000)}s`);
@@ -406,7 +407,7 @@ export function startWatch({
               log('[section] the end mark is due but no advance was wired — the item plays on');
             } else {
               try {
-                const r = await advance();
+                const r = await withCancellation(() => isStopped || !isCurrent(), () => advance!());
                 log(r && r.ok === false
                   ? `[section] skipNext failed at the end mark: ${r.error}`
                   : `[section] rk=${sec.rk} stopped at its end mark; the lineup advances`);
@@ -459,7 +460,7 @@ export function startWatch({
       const ms = decision.ms;
       if (ms == null) return;
       try {
-        const r = await seek(ms);
+        const r = await withCancellation(() => isStopped || !isCurrent(), () => seek(ms));
         log(r && r.seeked === false
           ? `[resume] seek to ${Math.round(ms / 1000)}s failed: ${r.error}`
           : `[resume] resumed rk=${decision.rk} at ${Math.round(ms / 1000)}s via ${via} (it restarts at 0 otherwise)`);

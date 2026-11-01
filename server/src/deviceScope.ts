@@ -3,14 +3,24 @@ import { ADB_TARGET, SHIELD_IP } from './env.js';
 import type { Device } from './types.js';
 import { isAdbTarget } from './playbackTargets.js';
 
-const scope = new AsyncLocalStorage<Device | null>();
+let generation = 0;
+const scope = new AsyncLocalStorage<{ device: Device | null; generation: number }>();
+const cancellation = new AsyncLocalStorage<() => boolean>();
 
-/** Bind a whole operation, including its asynchronous continuations, to one player. */
-export function withDevice<T>(device: Device | null, work: () => T): T {
-  return scope.run(device, work);
+/** A replacement sitting invalidates pending device actions, including manual seeks. */
+export const invalidateDeviceOperations = (): void => { generation += 1; };
+export const deviceOperationCancelled = (): boolean => Boolean(cancellation.getStore()?.())
+  || (scope.getStore() != null && scope.getStore()!.generation !== generation);
+export function withCancellation<T>(cancelled: () => boolean, work: () => T): T {
+  return cancellation.run(cancelled, work);
 }
 
-export const scopedDevice = (): Device | null => scope.getStore() ?? null;
+/** Bind a whole operation, including its asynchronous continuations, to one player. */
+export function withDevice<T>(device: Device | null, work: () => T, isNewOperation = false): T {
+  return scope.run({ device, generation: isNewOperation ? generation : scope.getStore()?.generation ?? generation }, work);
+}
+
+export const scopedDevice = (): Device | null => scope.getStore()?.device ?? null;
 export const deviceKey = (): string => scopedDevice()?.default ? 'shield' : scopedDevice()?.id ?? 'shield';
 export function deviceHost(): string | null {
   const device = scopedDevice();

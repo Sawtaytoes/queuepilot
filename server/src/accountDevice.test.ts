@@ -7,3 +7,9 @@ it('never substitutes default identity fields into an explicitly selected second
   expect(_internals.sessionBelongsTo({ Player: { machineIdentifier: 'default-player', title: 'Default TV' } }, target!)).toBe(false);
   expect(_internals.sessionBelongsTo({ Player: { machineIdentifier: 'other-id', title: 'Den TV' } }, target!)).toBe(true);
 });
+
+it('rejects a conflicting machine ID even when both players use the same display name', () => {
+  const target = { name: 'Shared TV name', machineIdentifier: 'den-player', uri: 'http://192.0.2.31:32500' };
+  expect(_internals.sessionBelongsTo({ Player: { machineIdentifier: 'default-player', title: 'Shared TV name' } }, target)).toBe(false);
+  expect(_internals.sessionBelongsTo({ Player: { machineIdentifier: 'den-player', title: 'Shared TV name' } }, target)).toBe(true);
+});

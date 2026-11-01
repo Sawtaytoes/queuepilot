@@ -77,7 +77,9 @@ Android TV Plex versions use the explicitly authorized `adb_target` for playback
 transport instead of expecting a Companion HTTP listener. The URI and ADB endpoint must
 name the same host. Enable network debugging on the player and authorize the server's
 persisted ADB key once. A discovered client without an explicit ADB endpoint never inherits
-another player's ADB connection. Unknown requested target IDs are rejected.
+another player's ADB connection. Unknown requested target IDs are rejected. A configured machine identifier is authoritative;
+a matching display name cannot override a different identifier. Update a pinned identifier
+if reinstalling Plex changes it.
 
 Play, profile switching, pause, resume, next, stop, seek, resume-on-advance, and session
 advance all retain the selected player. Profile observations are kept per player.

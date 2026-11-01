@@ -1,4 +1,4 @@
-import { withDevice } from './deviceScope.js';
+import { withDevice, deviceOperationCancelled } from './deviceScope.js';
 // Playback: build a Plex playQueue and tell the Family Room Shield to play it.
 //
 // CLIENT mode is the live path
@@ -598,6 +598,7 @@ async function plexReq(
     Accept: 'application/json',
     ...(extraHeaders || {}),
   };
+  if (deviceOperationCancelled()) throw new Error('playback operation was replaced');
   const res = await request(url, {
     dispatcher: agent,
     method,
@@ -1025,10 +1026,8 @@ export async function currentSession(
   }
   if (device && !wanted) return null;
   const mine = md.find((m) => {
-    const p = m.Player || {};
     if (!wanted) return true;
-    return (wanted.machineIdentifier && p.machineIdentifier === wanted.machineIdentifier)
-      || (wanted.name && p.title === wanted.name);
+    return sessionBelongsTo(m, wanted);
   });
   const m = mine || (wanted ? null : md[0]);
   if (!m) return null;
@@ -1072,10 +1071,8 @@ async function sessionTarget(device: Device | null): Promise<ClientTarget | null
 
 function sessionBelongsTo(m: PlaybackMetadata, wanted: ClientTarget): boolean {
   const player = m.Player || {};
-  return Boolean(
-    (wanted.machineIdentifier && player.machineIdentifier === wanted.machineIdentifier)
-    || (wanted.name && player.title === wanted.name),
-  );
+  if (wanted.machineIdentifier) return player.machineIdentifier === wanted.machineIdentifier;
+  return Boolean(wanted.name && player.title === wanted.name);
 }
 
 async function readAccountForTarget(
@@ -1325,6 +1322,7 @@ async function seekToOnDevice(
   } = {},
 ): Promise<SeekResult> {
   const ms = intOffset(offsetMs);
+  if (deviceOperationCancelled()) return { seeked: false, error: 'playback operation was replaced' };
   if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
   const target = client ?? await findClient(device);
   if (!target) return { seeked: false, error: 'target client not found' };
@@ -1343,6 +1341,7 @@ async function seekToOnDevice(
     if (selected.plexServer) return { seeked: false, error: 'Seeking shared-server items is unavailable in the new Plex app' };
     // The new route only applies its offset when opening a player. Leave the current
     // player, then adopt the SAME queue at its server-confirmed current item.
+    if (deviceOperationCancelled()) return { seeked: false, error: 'playback operation was replaced' };
     const stopped = adb.modernPlayerCommand('stop');
     if (!stopped.ok) return { seeked: false, error: stopped.error };
     const sent = await adb.playModernQueue(remembered.machineIdentifier, playQueueID, ms, session.ratingKey);

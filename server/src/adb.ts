@@ -2,7 +2,7 @@
 // the single-activity Plex UI uses a separate, accessibility-driven adapter.
 // Transport, wake/launch and profile aliases are shared, not UI navigation.
 import * as legacy from './adbLegacy.js';
-import { adbTarget } from './deviceScope.js';
+import { adbTarget, deviceOperationCancelled } from './deviceScope.js';
 import { ADB_ENABLED } from './env.js';
 import type { CancelFlag, Device } from './types.js';
 import { modernQueueLink, plexOwnsMediaButtons } from './plexPlaybackModern.js';
@@ -35,6 +35,7 @@ export function usesModernPlayback(device: Device | null = null): boolean {
 }
 
 export async function playModernQueue(serverId: string, queueId: string | number, offsetMs: number, ratingKey: string): Promise<{ ok: boolean; error?: string }> {
+  if (deviceOperationCancelled()) return { ok: false, error: 'playback operation was replaced' };
   if (!usesModernPlayback()) return { ok: false, error: 'new Plex UI is not foreground' };
   if (modern.isOnboardingForeground()) return { ok: false, error: 'Plex profile setup is required on the TV' };
   const link = modernQueueLink(serverId, queueId, offsetMs, ratingKey);
@@ -47,12 +48,14 @@ export async function playModernQueue(serverId: string, queueId: string | number
     if (!usesModernPlayback()) return { ok: false, error: 'Plex left foreground before starting the queue' };
   }
   // Link contains only validated identifiers, digits and percent-encoded URI data.
+  if (deviceOperationCancelled()) return { ok: false, error: 'playback operation was replaced' };
   const output = legacy.run(['shell', `am start -a android.intent.action.VIEW -p com.plexapp.android -d '${link}'`]);
   return output != null && !/Error:|Exception/.test(output)
     ? { ok: true } : { ok: false, error: 'Plex rejected the playback deep link' };
 }
 
 export function modernPlayerCommand(verb: 'stop' | 'pause' | 'play' | 'skipNext'): { ok: boolean; error?: string } {
+  if (deviceOperationCancelled()) return { ok: false, error: 'playback operation was replaced' };
   const dump = legacy.run(['shell', 'dumpsys media_session']);
   if (!usesModernPlayback() || !plexOwnsMediaButtons(dump)) {
     return { ok: false, error: 'Plex does not own the active player controls' };

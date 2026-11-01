@@ -38,7 +38,7 @@
 // * Long waits are `async`/await so a future Node driver can interleave with waitForProfile.
 // * Pure helpers (order index/offset, XML selection parse) are exported for offline unit tests.
 
-import { adbTarget } from './deviceScope.js';
+import { adbTarget, deviceOperationCancelled } from './deviceScope.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -134,7 +134,7 @@ function envForAdb(): NodeJS.ProcessEnv {
 
 /** Run an adb command. Returns stdout on success, null on any failure. */
 export function run(args: string[], timeoutSec: number | null = null): string | null {
-  if (!adbTarget()) return null;
+  if (!adbTarget() || deviceOperationCancelled()) return null;
   const timeoutMs = (timeoutSec == null ? ADB_TIMEOUT : timeoutSec) * 1000;
   try {
     const p = spawnSync(ADB_BIN, ['-s', adbTarget()!, ...args], {
@@ -173,7 +173,7 @@ export function run(args: string[], timeoutSec: number | null = null): string | 
  * Returns null only when adb could not be run at all.
  */
 function deviceState(): string | null {
-  if (!adbTarget()) return null;
+  if (!adbTarget() || deviceOperationCancelled()) return null;
   try {
     const p = spawnSync(ADB_BIN, ['-s', adbTarget()!, 'get-state'], {
       encoding: 'utf8',
@@ -208,7 +208,7 @@ function connectOnce(): string | null {
 
 /** Idempotent — 'already connected' is success. Returns true if the device is up. */
 export function connect(): boolean {
-  if (!adbTarget()) return false;
+  if (!adbTarget() || deviceOperationCancelled()) return false;
   let state = connectOnce();
   if (state === 'device') return true;
 
@@ -237,7 +237,7 @@ export function connect(): boolean {
  * would strand it.
  */
 function disconnect(): void {
-  if (!adbTarget()) return;
+  if (!adbTarget() || deviceOperationCancelled()) return;
   try {
     spawnSync(ADB_BIN, ['disconnect', adbTarget()!], {
       encoding: 'utf8',
