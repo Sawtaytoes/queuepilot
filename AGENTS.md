@@ -185,6 +185,10 @@ member looks orphaned there and the answer is a thing to look at, never a thing 
 
 ## UI / Charcuterie
 
+The media queue index uses Charcuterie cards and adaptive columns; parent queues and
+filtered views move together. See [the card layout decision](docs/decisions/2026-11-01-media-queues-use-charcuterie-cards.md).
+The older single-baseline shelf-heading guidance below is superseded by that record.
+
 - **Every picker is a `Listbox`, never a native `Select`.** `Listbox` for a short list,
   `Combobox` when it is long enough to want typing. Rich options are what `<option>`
   *cannot* do, not the dividing line: a plain list of strings still gets a `Listbox`,

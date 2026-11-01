@@ -2,11 +2,12 @@ import { getCategoricalIndex } from "@charcuterie/tokens"
 import {
   Badge,
   ButtonLink,
+  Card,
   EmptyState,
   IconButton,
   Spinner,
+  useAdaptiveColumns,
 } from "@charcuterie/ui"
-import { getAccentEdgeClassName } from "@charcuterie/ui/src/Card/cardAccentEdge.ts"
 import {
   Fragment,
   useCallback,
@@ -33,6 +34,7 @@ import { api } from "../lib/api"
 import { activeBinding } from "../lib/channels"
 import {
   filteredParent,
+  groupQueueFamilies,
   nestFilteredQueues,
 } from "../lib/filteredQueues"
 import { isRandomOrder } from "../lib/kind"
@@ -89,7 +91,11 @@ import {
   setStatus,
   useStore,
 } from "../state/store"
-import { toggleCollapsed, useUi } from "../state/ui"
+import {
+  setCollapsed,
+  toggleCollapsed,
+  useUi,
+} from "../state/ui"
 
 /**
  * QUEUES — the configurator. Every ordered queue is a horizontal poster shelf, so
@@ -142,6 +148,7 @@ function RulesShelf({
   filter,
   groups,
   isCollapsed,
+  onToggle,
   members,
   people,
   title,
@@ -150,6 +157,7 @@ function RulesShelf({
   filter: string
   groups: readonly GroupWithRoster[]
   isCollapsed: boolean
+  onToggle: () => void
   members: readonly QueueMember[]
   people: readonly Person[]
   /** `queueTitle`'s answer — the Picks shelves and the native TV catalog say the same. */
@@ -278,21 +286,52 @@ function RulesShelf({
   )
 
   return (
-    <section
-      className={`shelf rules-shelf ${getAccentEdgeClassName({ categorical: getCategoricalIndex(channel.id) })}${isCollapsed ? " collapsed" : ""}`}
+    <Card
+      accentEdge={{
+        categorical: getCategoricalIndex(channel.id),
+      }}
+      className={`shelf rules-shelf${isCollapsed ? " collapsed" : ""}`}
       data-provider={channel.provider_kind || undefined}
       data-set={channel.id}
+      footer={
+        <div className="queue-card-meta">
+          <Badge
+            appearance="soft"
+            intent="neutral"
+            size="sm"
+          >
+            Rules
+          </Badge>
+          <span className="lanes-sec">Eligible titles</span>
+          <span className="shelfactions">
+            <Tip label="Edit queue">
+              <IconButton
+                appearance="ghost"
+                className="shelfedit"
+                intent="neutral"
+                label="Edit queue"
+                onClick={() => openDynModal(channel.id)}
+                size="sm"
+              >
+                <SettingsIcon />
+              </IconButton>
+            </Tip>
+          </span>
+        </div>
+      }
       hidden={isHiddenByFilter}
+      aria-label={title}
     >
       <h2>
         <IconButton
           appearance="ghost"
           className="collapse-toggle"
           intent="neutral"
-          label="collapse queue"
-          onClick={() =>
-            toggleCollapsed(channel.id, isCollapsed)
+          aria-expanded={!isCollapsed}
+          label={
+            isCollapsed ? "Preview queue" : "Collapse queue"
           }
+          onClick={onToggle}
           size="sm"
         >
           <ChevronDownIcon />
@@ -305,9 +344,6 @@ function RulesShelf({
           {items ? (
             <span className="sec">{items.length}</span>
           ) : null}
-          <span className="lanes-sec">
-            {items ? "eligible" : "eligible titles"}
-          </span>
         </Link>
         <SeasonMark set={channel} />
         <PeopleRow
@@ -315,22 +351,8 @@ function RulesShelf({
           members={members}
           people={people}
         />
-        <span className="shelfspacer" />
-        <span className="shelfactions">
-          <Tip label="Edit queue">
-            <IconButton
-              appearance="ghost"
-              className="shelfedit"
-              intent="neutral"
-              label="Edit queue"
-              onClick={() => openDynModal(channel.id)}
-              size="sm"
-            >
-              <SettingsIcon />
-            </IconButton>
-          </Tip>
-        </span>
       </h2>
+
       <div className="strip-wrap" ref={wrapRef}>
         <button
           aria-label="scroll left"
@@ -407,13 +429,14 @@ function RulesShelf({
           ›
         </button>
       </div>
-    </section>
+    </Card>
   )
 }
 
 function Shelf({
   groups,
   isCollapsed,
+  onToggle,
   filteredFrom,
   isHiddenByFilter,
   items,
@@ -441,6 +464,7 @@ function Shelf({
   groups: readonly GroupWithRoster[]
   items: QueueItem[]
   isCollapsed: boolean
+  onToggle: () => void
   isHiddenByFilter: boolean
   now: NowState
   playingSet: string | null
@@ -724,14 +748,106 @@ function Shelf({
   }
 
   return (
-    <section
-      className={`shelf ${getAccentEdgeClassName({ categorical: getCategoricalIndex(setId) })}${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
+    <Card
+      accentEdge={{
+        categorical: getCategoricalIndex(setId),
+      }}
+      className={`shelf${isCollapsed ? " collapsed" : ""}${isLive ? " live" : ""}${filteredFrom ? " filtered" : ""}`}
       // This shelf's counts, rings and badges are about THIS queue, so they wear its
       // provider's colour; the page's own "New queue" / filter chrome sits outside and stays
       // Charcuterie. (decision `2026-08-15-a-queue-wears-its-providers-colour`)
       data-provider={providerKind || undefined}
       data-set={setId}
+      footer={
+        <div className="queue-card-meta">
+          <span className="lanes-sec">
+            {laneClause || "Empty queue"}
+          </span>
+          <span className="shelfactions">
+            {/* HOW this queue starts, never WHICH provider it is — the same rule
+            `OpenQueueButton` follows on the queue's own page. This shelf used to open the
+            device menu unconditionally, so a pull queue offered a Shield and a phone for
+            something none of them can open; with no broker it simply answered "MQTT not
+            connected" (reported 2026-08-17 on a Steam queue, and true for Kavita and the
+            board-game picker since each of those shipped).
+            (decision `2026-08-15-a-provider-carries-its-own-vocabulary`) */}
+            {isPullSet(set) ? (
+              <Tip
+                label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
+              >
+                <ButtonLink
+                  appearance="ghost"
+                  aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
+                  className="shelfplay"
+                  href={`/go/${encodeURIComponent(setId)}`}
+                  intent="accent"
+                  isExternal
+                  size="sm"
+                >
+                  {set?.vocabulary?.startIcon ||
+                    PLEX_WORDS.startIcon}
+                </ButtonLink>
+              </Tip>
+            ) : (
+              <Tip label="Play this queue on a device">
+                {/* ⚠️ `.shelfplay` is LOAD-BEARING as a selector, not only as a hover state:
+                `PlayMenu`'s outside-click handler asks `t.closest(".shelfplay")`, so a
+                control that opens that menu and does not wear the class opens a menu that
+                shuts on the same click — measured, and the whole of #173. */}
+                <IconButton
+                  appearance="ghost"
+                  className="shelfplay"
+                  intent="accent"
+                  label="Play this queue on a device"
+                  onClick={(e) =>
+                    openPlayMenu({
+                      anchor:
+                        e.currentTarget.getBoundingClientRect(),
+                      setId,
+                    })
+                  }
+                  size="sm"
+                >
+                  <PlayIcon />
+                </IconButton>
+              </Tip>
+            )}
+            <Tip label="Edit queue">
+              <IconButton
+                appearance="ghost"
+                className="shelfedit"
+                intent="neutral"
+                label="Edit queue"
+                onClick={() => openSetModal(setId)}
+                size="sm"
+              >
+                <SettingsIcon />
+              </IconButton>
+            </Tip>
+            {/* NO DRAG HANDLE on a filtered queue. Its place in the list is not a preference —
+              it is pinned under the queue it views (`lib/filteredQueues.ts`), so a handle
+              would offer a move that the next render undoes. */}
+            {filteredFrom ? null : (
+              <Tip label="Drag to reorder queues">
+                {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
+                `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
+                second. */}
+                <IconButton
+                  appearance="ghost"
+                  className="shelfdrag"
+                  intent="neutral"
+                  label="Drag to reorder queues"
+                  size="sm"
+                >
+                  <DragIcon />
+                </IconButton>
+              </Tip>
+            )}
+          </span>
+        </div>
+      }
       hidden={isHiddenByFilter}
+      aria-label={label}
     >
       <h2>
         {/* `ghost` is the appearance for an icon row — nothing until hovered — which is
@@ -742,10 +858,11 @@ function Shelf({
           appearance="ghost"
           className="collapse-toggle"
           intent="neutral"
-          label="collapse queue"
-          onClick={() =>
-            toggleCollapsed(setId, isCollapsed)
+          aria-expanded={!isCollapsed}
+          label={
+            isCollapsed ? "Preview queue" : "Collapse queue"
           }
+          onClick={onToggle}
           size="sm"
         >
           <ChevronDownIcon />
@@ -756,9 +873,6 @@ function Shelf({
         <Link className="open" to={`/q/${setId}`}>
           <span className="lbl">{label}</span>
           <span className="sec">{items.length}</span>
-          {laneClause ? (
-            <span className="lanes-sec">{laneClause}</span>
-          ) : null}
         </Link>
         {/* WHAT THIS SHELF IS. The badge says the queue is a view; the line beside it names
             what it is a view OF, because "Filtered" alone leaves the reader to guess which of
@@ -793,89 +907,8 @@ function Shelf({
             ? "Paused"
             : "Playing"}
         </span>
-        <span className="shelfspacer" />
-        <span className="shelfactions">
-          {/* HOW this queue starts, never WHICH provider it is — the same rule
-            `OpenQueueButton` follows on the queue's own page. This shelf used to open the
-            device menu unconditionally, so a pull queue offered a Shield and a phone for
-            something none of them can open; with no broker it simply answered "MQTT not
-            connected" (reported 2026-08-17 on a Steam queue, and true for Kavita and the
-            board-game picker since each of those shipped).
-            (decision `2026-08-15-a-provider-carries-its-own-vocabulary`) */}
-          {isPullSet(set) ? (
-            <Tip
-              label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
-            >
-              <ButtonLink
-                appearance="ghost"
-                aria-label={`${set?.vocabulary?.verb || PLEX_WORDS.verb} this queue in ${set?.vocabulary?.name || PLEX_WORDS.name}`}
-                className="shelfplay"
-                href={`/go/${encodeURIComponent(setId)}`}
-                intent="accent"
-                isExternal
-                size="sm"
-              >
-                {set?.vocabulary?.startIcon ||
-                  PLEX_WORDS.startIcon}
-              </ButtonLink>
-            </Tip>
-          ) : (
-            <Tip label="Play this queue on a device">
-              {/* ⚠️ `.shelfplay` is LOAD-BEARING as a selector, not only as a hover state:
-                `PlayMenu`'s outside-click handler asks `t.closest(".shelfplay")`, so a
-                control that opens that menu and does not wear the class opens a menu that
-                shuts on the same click — measured, and the whole of #173. */}
-              <IconButton
-                appearance="ghost"
-                className="shelfplay"
-                intent="accent"
-                label="Play this queue on a device"
-                onClick={(e) =>
-                  openPlayMenu({
-                    anchor:
-                      e.currentTarget.getBoundingClientRect(),
-                    setId,
-                  })
-                }
-                size="sm"
-              >
-                <PlayIcon />
-              </IconButton>
-            </Tip>
-          )}
-          <Tip label="Edit queue">
-            <IconButton
-              appearance="ghost"
-              className="shelfedit"
-              intent="neutral"
-              label="Edit queue"
-              onClick={() => openSetModal(setId)}
-              size="sm"
-            >
-              <SettingsIcon />
-            </IconButton>
-          </Tip>
-          {/* NO DRAG HANDLE on a filtered queue. Its place in the list is not a preference —
-              it is pinned under the queue it views (`lib/filteredQueues.ts`), so a handle
-              would offer a move that the next render undoes. */}
-          {filteredFrom ? null : (
-            <Tip label="Drag to reorder queues">
-              {/* `.shelfdrag` is the drag HANDLE — `useHomeDrags` opens on
-                `closest(".shelfdrag")` — so the class is a DOM handle first and a cursor
-                second. */}
-              <IconButton
-                appearance="ghost"
-                className="shelfdrag"
-                intent="neutral"
-                label="Drag to reorder queues"
-                size="sm"
-              >
-                <DragIcon />
-              </IconButton>
-            </Tip>
-          )}
-        </span>
       </h2>
+
       <div className="strip-wrap" ref={wrapRef}>
         <button
           aria-label="scroll left"
@@ -943,7 +976,7 @@ function Shelf({
           ›
         </button>
       </div>
-    </section>
+    </Card>
   )
 }
 
@@ -1170,6 +1203,125 @@ export function QueuesView({
       .map((person) => person.displayName)
   })()
 
+  const toggleQueue = (
+    id: string,
+    isCollapsed: boolean,
+  ) => {
+    if (hasCollapsePreference) {
+      toggleCollapsed(id, isCollapsed)
+    } else {
+      // No saved preference means all cards are collapsed, not an empty collapsed set.
+      setCollapsed(
+        new Set(
+          queueIds.filter((queueId) => queueId !== id),
+        ),
+      )
+    }
+  }
+  const renderShelf = (id: string) => {
+    const q = data!.sets[id]!
+    const registrySet = setById(id)
+    // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
+    // printed the activity unconditionally until 2026-08-26, which renamed
+    // "Manga & Webtoons" to "Reading" on a queue the owner had deliberately named
+    // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
+    // `q.label` stays the FILTER's haystack below either way, so typing "manga"
+    // finds it even when the shelf is showing the activity.
+    const title = registrySet
+      ? queueTitle(registrySet, numbers.get(id) ?? null)
+      : q.label
+
+    return (
+      <Shelf
+        onToggle={() =>
+          toggleQueue(
+            id,
+            !hasCollapsePreference || collapsed.has(id),
+          )
+        }
+        groups={people.groups}
+        isCollapsed={
+          !hasCollapsePreference || collapsed.has(id)
+        }
+        isHiddenByFilter={
+          !shelfMatches(filter, [title, q.label], q.items)
+        }
+        items={q.items}
+        label={title}
+        members={people.byQueue[id] ?? []}
+        now={now}
+        people={people.people}
+        playingSet={playingSet}
+        providerKind={registrySet?.provider_kind ?? ""}
+        filteredFrom={filteredParent(registrySet, setById)}
+        set={registrySet ?? null}
+        setId={id}
+        // The registry row first, the queues payload as the fallback — the same
+        // pair `QueueView` and `App` resolve the lane from, so one queue cannot
+        // read as priority-by-default on its shelf and random-by-default on its
+        // own page.
+        setLane={
+          isRandomOrder(registrySet ?? q)
+            ? "random"
+            : "priority"
+        }
+      />
+    )
+  }
+  const families = [
+    ...groupQueueFamilies(shownShelfIds.exact, setById).map(
+      (ids) => ({ ids, isAlso: false }),
+    ),
+    ...groupQueueFamilies(shownShelfIds.also, setById).map(
+      (ids) => ({ ids, isAlso: true }),
+    ),
+  ]
+  const matches = (id: string) => {
+    const queue = data?.sets[id]
+    const set = setById(id)
+    return Boolean(
+      queue &&
+        shelfMatches(
+          filter,
+          [
+            set
+              ? queueTitle(set, numbers.get(id) ?? null)
+              : queue.label,
+            queue.label,
+          ],
+          queue.items,
+        ),
+    )
+  }
+  const layout = useAdaptiveColumns({
+    itemBlockSize: 220,
+    itemCount:
+      families.filter(({ ids }) => ids.some(matches))
+        .length +
+      [
+        ...shownRulesChannels.exact,
+        ...shownRulesChannels.also,
+      ].filter((channel) =>
+        shelfMatches(
+          filter,
+          [
+            queueTitle(
+              channel,
+              numbers.get(channel.id) ?? null,
+            ),
+            channel.label,
+          ],
+          [],
+        ),
+      ).length,
+    chromeBlockSize: 300,
+    minColumnInlineSize: 340,
+    maxAutoColumns: 4,
+  })
+  const gridStyle = {
+    gridTemplateColumns: `repeat(${layout.columns}, minmax(0, 1fr))`,
+    maxInlineSize: layout.contentMaxInlineSize,
+  }
   return (
     <div className="view" id="home">
       <div id="gslot-narrow">{toolbar}</div>
@@ -1190,78 +1342,34 @@ export function QueuesView({
           <p>Queues whose titles you choose and arrange.</p>
         </div>
       </div>
-      <div id="shelves" ref={shelvesRef}>
-        {[
-          ...shownShelfIds.exact,
-          ...shownShelfIds.also,
-        ].map((id, index) => {
-          // The rule goes BEFORE the first also-in shelf, inside the same drag container —
-          // `useHomeDrags` reorders `#shelves`' children and a separate wrapper per tier
-          // would make a drag across the line impossible.
-          const isFirstAlso =
-            shownShelfIds.also.length > 0 &&
-            index === shownShelfIds.exact.length
-          const q = data!.sets[id]!
-          const registrySet = setById(id)
-          // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
-          // printed the activity unconditionally until 2026-08-26, which renamed
-          // "Manga & Webtoons" to "Reading" on a queue the owner had deliberately named
-          // (decision `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`).
-          // `q.label` stays the FILTER's haystack below either way, so typing "manga"
-          // finds it even when the shelf is showing the activity.
-          const title = registrySet
-            ? queueTitle(
-                registrySet,
-                numbers.get(id) ?? null,
-              )
-            : q.label
-
-          return (
-            <Fragment key={id}>
-              {isFirstAlso ? (
+      <div
+        className="queue-grid-measure"
+        ref={layout.containerRef}
+      >
+        <div
+          className="queue-card-grid"
+          id="shelves"
+          ref={shelvesRef}
+          style={gridStyle}
+        >
+          {families.map(({ ids, isAlso }, index) => (
+            <Fragment key={ids[0]}>
+              {isAlso && !families[index - 1]?.isAlso ? (
                 <AlsoInDivider names={alsoNames} />
               ) : null}
-              <Shelf
-                groups={people.groups}
-                isCollapsed={
-                  !hasCollapsePreference ||
-                  collapsed.has(id)
-                }
-                isHiddenByFilter={
-                  !shelfMatches(
-                    filter,
-                    [title, q.label],
-                    q.items,
-                  )
-                }
-                items={q.items}
-                label={title}
-                members={people.byQueue[id] ?? []}
-                now={now}
-                people={people.people}
-                playingSet={playingSet}
-                providerKind={
-                  registrySet?.provider_kind ?? ""
-                }
-                filteredFrom={filteredParent(
-                  registrySet,
-                  setById,
-                )}
-                set={registrySet ?? null}
-                setId={id}
-                // The registry row first, the queues payload as the fallback — the same
-                // pair `QueueView` and `App` resolve the lane from, so one queue cannot
-                // read as priority-by-default on its shelf and random-by-default on its
-                // own page.
-                setLane={
-                  isRandomOrder(registrySet ?? q)
-                    ? "random"
-                    : "priority"
-                }
-              />
+              <div
+                className="queue-family"
+                hidden={!ids.some(matches)}
+              >
+                {ids.map((id) => (
+                  <Fragment key={id}>
+                    {renderShelf(id)}
+                  </Fragment>
+                ))}
+              </div>
             </Fragment>
-          )
-        })}
+          ))}
+        </div>
       </div>
       {rulesChannels.length ? (
         <section
@@ -1274,7 +1382,10 @@ export function QueuesView({
               <p>Queues filled from eligibility filters.</p>
             </div>
           </div>
-          <div className="rules-queue-shelves">
+          <div
+            className="rules-queue-shelves queue-card-grid"
+            style={gridStyle}
+          >
             {[
               ...shownRulesChannels.exact,
               ...shownRulesChannels.also,
@@ -1286,6 +1397,13 @@ export function QueuesView({
                   <AlsoInDivider names={alsoNames} />
                 ) : null}
                 <RulesShelf
+                  onToggle={() =>
+                    toggleQueue(
+                      channel.id,
+                      !hasCollapsePreference ||
+                        collapsed.has(channel.id),
+                    )
+                  }
                   channel={channel}
                   filter={filter}
                   groups={people.groups}
