@@ -1,3 +1,4 @@
+import { startDeviceNowPlaying } from './deviceNowPlaying.js';
 // queuepilot-web: the browser editor for the curated queues (queues.yaml) and the
 // set registry (sets.yaml). This is the whole application; the only other process in the
 // container is the Python cast_sidecar. Read-only against Plex (search + poster proxy);
@@ -109,6 +110,7 @@ const app = buildServer({ publicDir: PUBLIC_DIR });
 serve({ fetch: app.fetch, port: WEB_PORT }, () => {
   console.log(`[queuepilot-web] listening on :${WEB_PORT}`);
   mqttd.start();
+  startDeviceNowPlaying();
   warm.start();
 
   // The collection sync's own MQTT subscription, on the `board-game-picker/…` base it inherited

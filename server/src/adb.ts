@@ -2,7 +2,8 @@
 // the single-activity Plex UI uses a separate, accessibility-driven adapter.
 // Transport, wake/launch and profile aliases are shared, not UI navigation.
 import * as legacy from './adbLegacy.js';
-import { ADB_ENABLED, ADB_TARGET } from './env.js';
+import { adbTarget } from './deviceScope.js';
+import { ADB_ENABLED } from './env.js';
 import type { CancelFlag, Device } from './types.js';
 import { modernQueueLink, plexOwnsMediaButtons } from './plexPlaybackModern.js';
 import { createModernPlexControl, isModernPlexActivity, modernSelectedProfile } from './plexControlModern.js';
@@ -25,11 +26,11 @@ function usesModernUi(): boolean {
 }
 
 export function usesModernPlayback(device: Device | null = null): boolean {
-  if (!ADB_ENABLED || !usesModernUi()) return false;
+  if (!ADB_ENABLED || !adbTarget() || !legacy.connect() || !usesModernUi()) return false;
   // ADB is configured for one physical player. Never send another player's command here.
   if (!device) return true;
   if (device.mode !== 'client' || !device.uri) return false;
-  try { return new URL(device.uri).hostname === ADB_TARGET.split(':')[0]; }
+  try { return new URL(device.uri).hostname === adbTarget()!.split(':')[0]; }
   catch { return false; }
 }
 

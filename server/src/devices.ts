@@ -15,6 +15,7 @@
 //
 // Kept out of mqttd.js so it can be tested with no broker: `announceDevices` takes the
 // publish function as an argument.
+import { configuredPlaybackTargets } from './playbackTargets.js';
 import { playerDevices } from './playback.js';
 import type { PlayerDevice } from './playback.js';
 import type { Device } from './types.js';
@@ -57,11 +58,10 @@ const REGISTRY = new Map<string, RetainedDevice>();
 
 /**
  * Resolve a start command's `target` id to its announced device entry, or null.
- * Unknown/absent ids fall back to the env-default Shield at the call site, exactly as the
- * Python service did — an id that aged out must not fail the scan.
+ * An explicit unknown id is refused by the command boundary; it never selects the default.
  */
-export const known = (id: string | null | undefined): RetainedDevice | null => (
-  REGISTRY.get(String(id ?? '')) || null
+export const known = (id: string | null | undefined): AnnouncedDevice | null => (
+  REGISTRY.get(String(id ?? '')) || (id === DEFAULT_ID ? shieldEntry() : null) || configuredPlaybackTargets().find((d) => d.id === id) || null
 );
 
 /** Test seam: forget what we believe is retained on the broker. */
@@ -107,18 +107,23 @@ export async function announceDevices(pub: Publish): Promise<void> {
     // One timestamp for the whole round, so every entry announced together reads as one sweep.
     const seen = Math.floor(Date.now() / 1000);
     const shield = shieldEntry();
-    const next = new Map<string, AnnouncedDevice>([[shield.id, shield]]);
+    const configured = configuredPlaybackTargets();
+    const next = new Map<string, AnnouncedDevice>([shield, ...configured].map((d) => [d.id, d]));
 
     let swept = false;
     try {
       for (const row of await playerDevices()) {
         const id = row.machineIdentifier || row.name;
         if (!id) continue;
+        const pinned = configured.find((d) => (d.machineIdentifier && d.machineIdentifier === row.machineIdentifier) || d.name.toLowerCase() === String(row.name || '').toLowerCase());
+        if (pinned) continue;
         if (isShield(row, shield)) {
           shield.machineIdentifier = shield.machineIdentifier || row.machineIdentifier || '';
           shield.uri = shield.uri || row.uri || null;
           continue;
         }
+        // Configured wire IDs cannot be shadowed by a discovered client.
+        if (next.has(id)) continue;
         next.set(id, {
           id,
           name: row.name,

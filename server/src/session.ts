@@ -1,3 +1,5 @@
+import { withDevice } from './deviceScope.js';
+import * as devices from './devices.js';
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
 //
 // Selection and delivery both go through a PROVIDER (./providers) rather than a Plex client:
@@ -60,6 +62,7 @@ interface SessionQueueItem {
  * is the session itself — it is a real method, NOT an arrow function, and typing it as one
  * would break the `this` it reads. */
 interface SessionSingleton {
+  device: Device | null;
   kind: string | null;
   set: string | null;
   profile: string | null;
@@ -127,6 +130,7 @@ export type SessionResult =
 
 // Mutable session (mirrors service.Session) for advance + last-played.
 export const SESSION: SessionSingleton = {
+  device: null,
   kind: null,
   set: null,
   profile: null,
@@ -142,7 +146,7 @@ export const SESSION: SessionSingleton = {
   asDict() {
     return {
       kind: this.kind, set: this.set, profile: this.profile,
-      queue_len: this.queue.length, cursor: this.cursor,
+      queue_len: this.queue.length, cursor: this.cursor, deviceId: this.device?.id ?? null,
     };
   },
 };
@@ -191,7 +195,7 @@ function lastPlayedFromItem(item: PlayItem | null | undefined): LastPlayed | nul
 /**
  * Start a session from an MQTT/API payload.
  */
-export async function startSession(
+async function startSessionOnDevice(
   payload: SessionStartPayload = {},
   opts: { cancel?: CancelFlag } = {},
 ): Promise<SessionResult> {
@@ -231,7 +235,8 @@ export async function startSession(
 
   if (isAuto) {
     _publishState({ awaiting: 'profile', ...SESSION.asDict() });
-    const title = await profiles.waitForProfile({ cancel, match: null });
+    const active = await playback.currentAccount({ device: typeof payload.target === 'object' ? payload.target : null, timeoutMs: 1_000 });
+    const title = active?.title ?? await profiles.waitForProfile({ cancel, match: null });
     if (isCancelled(cancel)) return { cancelled: true };
     if (!title) {
       _publishState({ error: 'no profile is signed in on the Shield. Open Plex and pick one.', ...SESSION.asDict() });
@@ -324,6 +329,7 @@ export async function startSession(
   }
   // Product kind on the session / retained state — never the legacy wire spellings.
   const kind = wireKindForSet(cfg);
+  SESSION.device = typeof payload.target === 'object' ? payload.target ?? null : null;
   SESSION.kind = kind;
   SESSION.set = setName;
   SESSION.profile = profileTitle;
@@ -639,9 +645,19 @@ export async function advanceSession(): Promise<SessionResult> {
     return { error: 'end of queue' };
   }
   const result = await playback.playRatingKeys(rest, {
-    setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid,
+    setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid, device: SESSION.device,
   });
   _publishLastPlayed(lastPlayedFromItem(rest[0]));
   _publishState({ playback: result, ...SESSION.asDict() });
   return result;
+}
+
+/** Resolve wire IDs before any device action, including the initial Plex launch. */
+export function startSession(payload: SessionStartPayload = {}, opts: { cancel?: CancelFlag } = {}): Promise<SessionResult> {
+  let device: Device | null = null;
+  if (payload.target) {
+    device = typeof payload.target === 'string' ? devices.known(payload.target) as Device | null : payload.target;
+    if (!device) return Promise.resolve({ error: `unknown device '${String(payload.target)}'` });
+  }
+  return withDevice(device, () => startSessionOnDevice({ ...payload, target: device }, opts));
 }

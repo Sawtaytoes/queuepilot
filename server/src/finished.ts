@@ -241,17 +241,20 @@ function announceFinished(): void {
   if (!setName) return;
 
   const target = SESSION.target;
+  const deviceId = SESSION.device?.id ?? null;
+  const played = SESSION.queuedTotal;
 
   void (async () => {
     // Read at announce time, not cached at start: the owner may have toggled it mid-sitting,
     // and this is one YAML read against a file the registry already caches.
     const entry = await sets.getSet(setName).catch(() => null);
     _publishFinished({
-      isComplete: target != null && SESSION.queuedTotal >= target,
-      played: SESSION.queuedTotal,
+      isComplete: target != null && played >= target,
+      played,
       power_off: Boolean(entry && (entry as { power_off_when_done?: boolean }).power_off_when_done),
       set: setName,
       target,
+      deviceId,
     });
   })();
 }
@@ -265,6 +268,7 @@ export function setFinishedPublisher(fn: (payload: FinishedPayload) => void): vo
 
 /** The `resp/finished` payload — one SITTING ending, not one item. */
 export interface FinishedPayload {
+  deviceId?: string | null;
   set: string | null;
   /** How many items this sitting handed over in total. */
   played: number;
@@ -432,10 +436,18 @@ export async function adoptQueuePlayback(
 }
 
 export function watchPlaybackEnd(): void {
+  let deviceId: string | null = null;
   let wasOn: string | null = null;
   let previous: NowPlaying | null = null;
   let timer: NodeJS.Timeout | undefined;
   mqttc.onNowPlaying((now: NowPlaying | null) => {
+    const nextDevice = String(now?.deviceId || mqttc.lastState()?.deviceId || 'shield');
+    if (nextDevice !== deviceId) {
+      wasOn = null;
+      previous = null;
+      if (timer) clearTimeout(timer);
+      deviceId = nextDevice;
+    }
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
     const activeSet = SESSION.set;
     const matches = nowRk ? SESSION.queue.filter((item) => item.ratingKey === nowRk) : [];

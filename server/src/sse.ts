@@ -213,6 +213,7 @@ export function startLiveUpdates(): void {
 
   // Session state changes (a play result landing) push to the UI the same way.
   mqttc.onState((state: PublishedSessionState | null) => {
+    LAST_NOW = mqttc.lastNowPlaying();
     broadcast('state', state || {});
     // The active-queue badge keys off state.set, so a new session must repaint it even when
     // the Plex-side payload hasn't changed yet.
@@ -222,9 +223,13 @@ export function startLiveUpdates(): void {
   // Live playback pushes the same way — every state/attribute change on the Shield's
   // media_player, so the highlight follows the queue as it auto-advances.
   mqttc.onNowPlaying(async (now: NowPlaying | null) => {
+    const deviceId = mqttc.lastState()?.deviceId || 'shield';
     try {
-      LAST_NOW = await withContext(now);
+      const enriched = await withContext(now);
+      if (deviceId !== (mqttc.lastState()?.deviceId || 'shield')) return;
+      LAST_NOW = enriched;
     } catch {
+      if (deviceId !== (mqttc.lastState()?.deviceId || 'shield')) return;
       LAST_NOW = now || null; // an unresolvable key still moves the play/pause state
     }
     // Precise, free cache invalidation (B3.1): the now-playing event already tells us which

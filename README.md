@@ -56,3 +56,38 @@ pnpm --filter queuepilot-web dev
 - [Person photos: uploading, storage and the API](docs/person-photos.md)
 - [Why QueuePilot uses queues instead of Plex playlists](docs/why-queues-not-plex-playlists.md)
 - [Decision records](docs/decisions/README.md)
+
+### Additional Android TV playback targets
+
+The default player keeps its existing `shield_*` settings and `shield` wire ID. Add
+explicit players to the deployment's `config.yaml` when Plex does not advertise them:
+
+```yaml
+playback_targets:
+  - id: den-tv
+    name: Den TV
+    machine_identifier: den-player-client-id
+    uri: http://192.0.2.31:32500
+    adb_target: 192.0.2.31:5555
+```
+
+Restart QueuePilot after changing host configuration. The player appears in the existing
+Play on picker even without Companion discovery. `uri` identifies the Plex client; new
+Android TV Plex versions use the explicitly authorized `adb_target` for playback and
+transport instead of expecting a Companion HTTP listener. The URI and ADB endpoint must
+name the same host. Enable network debugging on the player and authorize the server's
+persisted ADB key once. A discovered client without an explicit ADB endpoint never inherits
+another player's ADB connection. Unknown requested target IDs are rejected.
+
+Play, profile switching, pause, resume, next, stop, seek, resume-on-advance, and session
+advance all retain the selected player. Profile observations are kept per player.
+The existing engine manages one sitting at a time; selecting another device replaces that
+managed sitting. It does not stop unrelated playback already running on either device.
+For an explicit secondary target, QueuePilot reads Plex session telemetry while that sitting
+is active; it does not use the default player's now-playing feed for its controls or history.
+
+Session state and automatic finish events include `deviceId`. Manual activity-off commands
+retain their existing `target` ID. Integrations that turn rooms off must route those IDs
+explicitly; `target` on a finish event is still a numeric playback length, not a device ID.
+Actual playback and profile attribution must be verified on each newly configured device;
+an authorized ADB connection alone is not playback verification.

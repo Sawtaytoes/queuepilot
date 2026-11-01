@@ -42,6 +42,7 @@ export function playbackRoutes(): Hono {
   app.post('/play', async (c) => {
     const { set: setId, kind: kindReq, target, profile, only, behavior } = await readBody(c);
     const tgt = target ? String(target) : undefined;
+    if (tgt && !devices.known(tgt)) return c.json({ error: `unknown device '${tgt}'` }, 400);
     // PR 4: an explicit profile names the binding on a profiles[] function channel (the
     // Play-landing profile selector); the auto path keeps letting the Shield decide.
     const prof = profile ? String(profile) : undefined;
@@ -95,8 +96,9 @@ export function playbackRoutes(): Hono {
     const act = String(action || '');
     // Same resolution mqttd.handleStart() does for a start command's `target`: the UI
     // sends the registry ID, playback wants the announced ENTRY (it reads .uri/.mode/.name).
-    const dev = target ? (devices.known(String(target)) as Device | null) : null;
-    if (target && !dev) return c.json({ error: `unknown device '${String(target)}'` }, 400);
+    const targetId = target || mqttc.lastState()?.deviceId || null;
+    const dev = targetId ? (devices.known(String(targetId)) as Device | null) : null;
+    if (targetId && !dev) return c.json({ error: `unknown device '${String(targetId)}'` }, 400);
     try {
       if (act === 'seek') {
         const r = await playback.seekTo(offset as number, { device: dev });
@@ -116,7 +118,7 @@ export function playbackRoutes(): Hono {
         const st = mqttc.lastState();
         const sent = mqttc.endActivity({
           set: st?.set || null,
-          target: target ? String(target) : null,
+          target: targetId ? String(targetId) : null,
         });
         return c.json({ ok: true, sent, stopped: stopped.ok, stopError: stopped.error });
       }

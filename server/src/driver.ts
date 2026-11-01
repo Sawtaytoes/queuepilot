@@ -1,3 +1,4 @@
+import { withDevice } from './deviceScope.js';
 // Playback state machine: sample the Shield's real state, then drive it to `playing`.
 //
 // Ported from the retired Python driver (PLAYBACK_FSM). Replaces the fire-and-forget tail
@@ -385,7 +386,7 @@ async function drivePlay(
 // `userUuid` is the ACTIVE binding's managed-user uuid — the account the playQueue must be
 // built as. It is passed through untouched; playback.playToken explains why the set's
 // top-level user_uuid cannot be trusted for a multi-profile channel.
-export async function driveToPlaying({
+async function driveToPlayingOnDevice({
   items,
   ratingKeys,
   requiredProfile = null,
@@ -584,3 +585,7 @@ export const _internals = {
   isCancelled,
   publishAwait,
 };
+
+export function driveToPlaying(...args: Parameters<typeof driveToPlayingOnDevice>): ReturnType<typeof driveToPlayingOnDevice> {
+  return withDevice(args[0]?.device ?? null, () => driveToPlayingOnDevice(...args));
+}
