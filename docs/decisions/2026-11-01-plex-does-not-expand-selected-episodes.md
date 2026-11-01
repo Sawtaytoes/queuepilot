@@ -11,7 +11,8 @@
 QueuePilot creates Plex video play queues with `continuous=0`. This applies to finite
 and infinite sittings, including a lineup with one episode. QueuePilot owns selection,
 ordering, skips, and refill; Plex must not replace that selection with subsequent episodes
-from the same series. Infinite playback continues through QueuePilot's existing top-up.
+from the same series. Rotation sittings continue through QueuePilot's existing top-up. Curated infinite
+queues currently have no top-up path; this change does not add one.
 
 ## Context
 
