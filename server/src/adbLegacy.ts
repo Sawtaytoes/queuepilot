@@ -38,6 +38,7 @@
 // * Long waits are `async`/await so a future Node driver can interleave with waitForProfile.
 // * Pure helpers (order index/offset, XML selection parse) are exported for offline unit tests.
 
+import { adbTarget, deviceOperationCancelled } from './deviceScope.js';
 import { spawnSync } from 'node:child_process';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -54,7 +55,6 @@ import {
   ADB_PROFILE_ORDER_CACHE,
   ADB_PROFILE_ORDER_TTL,
   ADB_RESTART_TO_PICKER,
-  ADB_TARGET,
   ADB_TIMEOUT,
 } from './env.js';
 
@@ -134,9 +134,10 @@ function envForAdb(): NodeJS.ProcessEnv {
 
 /** Run an adb command. Returns stdout on success, null on any failure. */
 export function run(args: string[], timeoutSec: number | null = null): string | null {
+  if (!adbTarget() || deviceOperationCancelled()) return null;
   const timeoutMs = (timeoutSec == null ? ADB_TIMEOUT : timeoutSec) * 1000;
   try {
-    const p = spawnSync(ADB_BIN, ['-s', ADB_TARGET, ...args], {
+    const p = spawnSync(ADB_BIN, ['-s', adbTarget()!, ...args], {
       encoding: 'utf8',
       env: envForAdb(),
       timeout: timeoutMs,
@@ -172,8 +173,9 @@ export function run(args: string[], timeoutSec: number | null = null): string | 
  * Returns null only when adb could not be run at all.
  */
 function deviceState(): string | null {
+  if (!adbTarget() || deviceOperationCancelled()) return null;
   try {
-    const p = spawnSync(ADB_BIN, ['-s', ADB_TARGET, 'get-state'], {
+    const p = spawnSync(ADB_BIN, ['-s', adbTarget()!, 'get-state'], {
       encoding: 'utf8',
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
@@ -184,7 +186,7 @@ function deviceState(): string | null {
     if (/\boffline\b/.test(text)) return 'offline';
     return String(p.stdout ?? '').trim() || null;
   } catch (e) {
-    console.log(`[adb] get-state ${ADB_TARGET}: ${errMessage(e)}`);
+    console.log(`[adb] get-state ${adbTarget()}: ${errMessage(e)}`);
     return null;
   }
 }
@@ -192,13 +194,13 @@ function deviceState(): string | null {
 /** `adb connect` then `get-state`. Null when adb itself could not run. */
 function connectOnce(): string | null {
   try {
-    spawnSync(ADB_BIN, ['connect', ADB_TARGET], {
+    spawnSync(ADB_BIN, ['connect', adbTarget()!], {
       encoding: 'utf8',
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
     });
   } catch (e) {
-    console.log(`[adb] connect ${ADB_TARGET}: ${errMessage(e)}`);
+    console.log(`[adb] connect ${adbTarget()}: ${errMessage(e)}`);
     return null;
   }
   return deviceState();
@@ -206,6 +208,7 @@ function connectOnce(): string | null {
 
 /** Idempotent — 'already connected' is success. Returns true if the device is up. */
 export function connect(): boolean {
+  if (!adbTarget() || deviceOperationCancelled()) return false;
   let state = connectOnce();
   if (state === 'device') return true;
 
@@ -217,12 +220,12 @@ export function connect(): boolean {
   // failures, every profile-gated play dead, with a key the Shield still trusted. An
   // explicit disconnect is the only thing that drops the record and forces a new handshake.
   if (state === 'unauthorized' || state === 'offline') {
-    console.log(`[adb] ${ADB_TARGET} is ${state}; dropping the stale record and re-handshaking`);
+    console.log(`[adb] ${adbTarget()} is ${state}; dropping the stale record and re-handshaking`);
     disconnect();
     state = connectOnce();
   }
 
-  if (state !== 'device') console.log(`[adb] ${ADB_TARGET} is ${state ?? 'unreachable'}`);
+  if (state !== 'device') console.log(`[adb] ${adbTarget()} is ${state ?? 'unreachable'}`);
   return state === 'device';
 }
 
@@ -234,14 +237,15 @@ export function connect(): boolean {
  * would strand it.
  */
 function disconnect(): void {
+  if (!adbTarget() || deviceOperationCancelled()) return;
   try {
-    spawnSync(ADB_BIN, ['disconnect', ADB_TARGET], {
+    spawnSync(ADB_BIN, ['disconnect', adbTarget()!], {
       encoding: 'utf8',
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
     });
   } catch (e) {
-    console.log(`[adb] disconnect ${ADB_TARGET}: ${errMessage(e)}`);
+    console.log(`[adb] disconnect ${adbTarget()}: ${errMessage(e)}`);
   }
 }
 
@@ -809,7 +813,7 @@ export async function switchTo(
   knownCurrent: string | null = null,
 ): Promise<[boolean, string]> {
   if (!ADB_ENABLED) return [false, 'ADB_ENABLED is off'];
-  if (!connect()) return [false, `cannot reach ${ADB_TARGET} over adb`];
+  if (!connect()) return [false, `cannot reach ${adbTarget()} over adb`];
 
   const deadline = Date.now() + ADB_PICKER_WAIT_SECONDS * 1000;
 

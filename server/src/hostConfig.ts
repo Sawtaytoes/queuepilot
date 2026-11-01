@@ -37,6 +37,9 @@ function loadHostConfig(): HostConfig {
 
 const HOST = loadHostConfig();
 
+/** Structured deployment settings; never sourced from a browser request. */
+export const hostdata = (key: string): unknown => HOST[key];
+
 /** Resolve a host value: an env override wins, then the /config YAML, then the placeholder. */
 export const hostval = (envKey: string, yamlKey: string, fallback: string): string => {
   const v = process.env[envKey];

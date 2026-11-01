@@ -158,7 +158,11 @@ export function NowPlayingBar() {
     setIsBusy(true)
 
     try {
-      await api("POST", "/api/control", { action, offset })
+      await api("POST", "/api/control", {
+        action,
+        offset,
+        target: payload.deviceId,
+      })
     } catch (e) {
       setStatus(
         `${action} failed: ${(e as Error).message}`,

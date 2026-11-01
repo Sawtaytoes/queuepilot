@@ -56,7 +56,8 @@ export const connected = (): boolean => Boolean(client && client.connected);
 
 const DEVICES = new Map<string, AnnouncedDevice>(); // id -> announcement payload (retained registry)
 let LAST_STATE: PublishedSessionState | null = null; // last retained queuepilot/state payload
-let LAST_NOW: NowPlaying | null = null; // last retained queuepilot/now-playing payload
+let LAST_NOW: NowPlaying | null = null;
+const deviceNow = new Map<string, NowPlaying | null>(); // last retained queuepilot/now-playing payload
 
 /**
  * Off-the-wire JSON as a plain object, or null for "not an object".
@@ -119,22 +120,26 @@ if (HOST) {
       // the one publishState() writes — object-ness is still the only thing checked.
       try {
         const row = asRecord(text);
-        if (row) LAST_STATE = row as unknown as PublishedSessionState;
+        if (row) {
+          const next = row as unknown as PublishedSessionState;
+          if ((next.deviceId || 'shield') !== (LAST_STATE?.deviceId || 'shield')) deviceNow.delete(next.deviceId || 'shield');
+          LAST_STATE = next;
+        }
       } catch { /* ignore */ }
+      LAST_NOW = deviceNow.get(LAST_STATE?.deviceId || 'shield') ?? null;
       stateListeners.forEach((fn) => fn(LAST_STATE));
+      // A cached snapshot is UI state, never a new playback/history observation.
       return;
     }
     if (topic === T_NOW_PLAYING) {
-      // A cleared retained topic means "nothing playing" — distinct from junk, which we drop.
-      if (!text) LAST_NOW = null;
+      if (!text) recordDeviceNowPlaying('shield', null);
       else {
         try {
           const row = asRecord(text);
-          if (row === null) return; // a non-object payload is junk, not "nothing playing"
-          LAST_NOW = row as NowPlaying;
+          if (row === null) return;
+          recordDeviceNowPlaying('shield', row as NowPlaying);
         } catch { return; }
       }
-      nowListeners.forEach((fn) => fn(LAST_NOW));
     }
   });
 }
@@ -209,3 +214,12 @@ export function endActivity(
   return payload;
 }
 
+
+/** Accept telemetry only for its own device; a default-room push cannot control another sitting. */
+export function recordDeviceNowPlaying(deviceId: string, now: NowPlaying | null): void {
+  const tagged = now ? { ...now, deviceId } : null;
+  deviceNow.set(deviceId, tagged);
+  if (deviceId !== (LAST_STATE?.deviceId || 'shield')) return;
+  LAST_NOW = tagged;
+  nowListeners.forEach((fn) => fn(tagged));
+}

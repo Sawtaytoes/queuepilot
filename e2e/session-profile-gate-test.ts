@@ -36,6 +36,8 @@ interface SessionCtl {
   states: unknown[];
   lastPlayed: unknown[];
   profileTitle: string | null;
+  activeProfileTitle: string | null;
+  accountCalls: unknown[];
   waitCalls: unknown[];
   switchCalls: unknown[];
   playResult: unknown;
@@ -88,10 +90,11 @@ function check(name: string, cond: boolean, detail = ''): void {
   if (!cond) FAILS.push(name);
 }
 
-async function run(payload: SessionStartPayload, signedInAs: string | null = null) {
+async function run(payload: SessionStartPayload, signedInAs: string | null = null, activeAs: string | null = null) {
   resetSession();
   STATES.length = 0;
   SESSION_CTL.profileTitle = signedInAs;
+  SESSION_CTL.activeProfileTitle = activeAs;
   const res = await session.startSession(payload);
   return {
     res,
@@ -138,6 +141,13 @@ check('conflict does not play', !c.played);
 // 7. set=auto is unchanged: the first signed-in profile decides the tier.
 c = await run({ set: 'auto', kind: 'cartoons' }, 'Older');
 check('auto still resolves the tier from the log', c.played, String(c.lastError));
+
+// A secondary player can report its active profile without any new PMS log line.
+c = await run({ set: 'auto', kind: 'cartoons', target: {
+  id: 'den', name: 'Den TV', machineIdentifier: 'den-player', uri: 'http://192.0.2.31:32500', mode: 'client', default: false,
+} }, null, 'Older');
+check('auto observes the selected player rather than the default', c.played && SESSION_CTL.accountCalls[0] === 'den');
+check('an active-session profile does not wait on an unrelated log', SESSION_CTL.waitCalls.length === 0);
 
 console.log();
 if (FAILS.length) {

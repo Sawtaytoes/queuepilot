@@ -111,15 +111,13 @@ session.setPublishers({ state: publishState, lastPlayed: publishLastPlayed });
   finished.setFinishedPublisher((payload) => pub(T_RESP_FINISHED, payload));
 
 async function handleStart(payload: SessionStartPayload): Promise<void> {
-  // `target` comes off the wire as a device-registry ID (the web UI's "Play on ▾" publishes
-  // `d.id`), but session/playback want the announced ENTRY — they read `.uri`, `.mode` and
-  // `.name` off it. Resolve it against the registry we announce, as the deleted Python
-  // service did; an unknown or aged-out id falls back to the env-default Shield rather than
-  // failing the scan. Without this a swept device could be listed and picked but never
-  // played: playback saw a bare string whose `.uri`/`.name` were undefined.
-  if (payload && typeof payload.target === 'string' && payload.target) {
-    const device = devices.known(payload.target) as Device | null;
-    if (!device) console.log(`[mqttd] unknown target '${payload.target}' — using the default device`);
+  // MQTT accepts only a registry ID, never a caller-supplied host or ADB endpoint.
+  if (payload.target) {
+    const device = typeof payload.target === 'string' ? devices.known(payload.target) as Device | null : null;
+    if (!device) {
+      publishState({ error: `unknown device '${String(payload.target)}'` });
+      return;
+    }
     payload = { ...payload, target: device };
   }
   const { target } = payload;

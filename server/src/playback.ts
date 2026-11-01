@@ -1,3 +1,4 @@
+import { withDevice, deviceOperationCancelled } from './deviceScope.js';
 // Playback: build a Plex playQueue and tell the Family Room Shield to play it.
 //
 // CLIENT mode is the live path
@@ -80,6 +81,10 @@ export interface SeekResult {
 
 /** What `currentSession()` reports — resume.js's trigger shape. */
 export interface CurrentSession {
+  state?: string;
+  title?: string;
+  show?: string;
+  duration?: number;
   ratingKey: string;
   viewOffset: number;
 }
@@ -165,11 +170,14 @@ interface PlexPart {
 /** The Metadata fields the playback + resume paths read. A superset of no shared type:
  * `PlexMetadata` in types.ts is the ENGINE's view and carries neither `Player` nor `Media`. */
 interface PlaybackMetadata {
+  title?: string;
+  grandparentTitle?: string;
+  duration?: number;
   ratingKey?: string | number;
   /** Present when an item in the play queue comes from a different Plex server. */
   source?: string;
   viewOffset?: number;
-  Player?: { machineIdentifier?: string; title?: string };
+  Player?: { machineIdentifier?: string; title?: string; state?: string };
   User?: { id?: unknown; title?: unknown };
   Media?: { Part?: PlexPart[] }[];
 }
@@ -590,6 +598,7 @@ async function plexReq(
     Accept: 'application/json',
     ...(extraHeaders || {}),
   };
+  if (deviceOperationCancelled()) throw new Error('playback operation was replaced');
   const res = await request(url, {
     dispatcher: agent,
     method,
@@ -969,7 +978,7 @@ function intOffset(offset: number | string | null | undefined): number {
 export async function currentSession(
   {
     device = null, client = null, timeoutMs = RESUME_POLL_TIMEOUT_MS,
-    playQueueID = null, userUuid = null,
+    playQueueID = null, userUuid = null, includeTelemetry = false, throwOnError = false,
   }: {
     device?: Device | null;
     /**
@@ -981,6 +990,8 @@ export async function currentSession(
     timeoutMs?: number;
     playQueueID?: number | string | null;
     userUuid?: string | null;
+    includeTelemetry?: boolean;
+    throwOnError?: boolean;
   } = {},
 ): Promise<CurrentSession | null> {
   let data: PlexReqJson;
@@ -1001,7 +1012,8 @@ export async function currentSession(
       host: source?.host ?? null,
       timeoutMs,
     });
-  } catch {
+  } catch (error) {
+    if (throwOnError) throw error;
     return null;
   }
   const md = (data && data.MediaContainer && data.MediaContainer.Metadata) || [];
@@ -1012,15 +1024,16 @@ export async function currentSession(
   if (!wanted) {
     try { wanted = await findClient(device); } catch { wanted = null; }
   }
+  if (device && !wanted) return null;
   const mine = md.find((m) => {
-    const p = m.Player || {};
     if (!wanted) return true;
-    return (wanted.machineIdentifier && p.machineIdentifier === wanted.machineIdentifier)
-      || (wanted.name && p.title === wanted.name);
+    return sessionBelongsTo(m, wanted);
   });
   const m = mine || (wanted ? null : md[0]);
   if (!m) return null;
-  return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0) };
+  if (!includeTelemetry) return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0) };
+  return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0),
+    state: m.Player?.state || 'playing', title: m.title || '', show: m.grandparentTitle || '', duration: Number(m.duration || 0) };
 }
 
 // --- the active-session account observation + post-play audit --------------------------- //
@@ -1042,10 +1055,10 @@ export async function currentSession(
 // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
 
 function configuredSessionTarget(device: Device | null): ClientTarget | null {
-  const machineIdentifier = device?.machineIdentifier || SHIELD_CLIENT_MACHINE_ID || null;
-  const name = device?.name || SHIELD_CLIENT_NAME || null;
+  const machineIdentifier = device ? device.machineIdentifier || null : SHIELD_CLIENT_MACHINE_ID || null;
+  const name = device ? device.name || null : SHIELD_CLIENT_NAME || null;
   if (!machineIdentifier && !name) return null;
-  return { machineIdentifier, name, uri: device?.uri || SHIELD_CLIENT_URI || null };
+  return { machineIdentifier, name, uri: device ? device.uri : SHIELD_CLIENT_URI || null };
 }
 
 async function sessionTarget(device: Device | null): Promise<ClientTarget | null> {
@@ -1058,10 +1071,8 @@ async function sessionTarget(device: Device | null): Promise<ClientTarget | null
 
 function sessionBelongsTo(m: PlaybackMetadata, wanted: ClientTarget): boolean {
   const player = m.Player || {};
-  return Boolean(
-    (wanted.machineIdentifier && player.machineIdentifier === wanted.machineIdentifier)
-    || (wanted.name && player.title === wanted.name),
-  );
+  if (wanted.machineIdentifier) return player.machineIdentifier === wanted.machineIdentifier;
+  return Boolean(wanted.name && player.title === wanted.name);
 }
 
 async function readAccountForTarget(
@@ -1232,7 +1243,7 @@ export async function verifyAccount(
  * client identifier, not by who owns the session, so the admin token controls a managed
  * user's player — which is the whole point when a kids' queue is on screen.
  */
-async function playerCommand(
+async function playerCommandOnDevice(
   verb: 'stop' | 'pause' | 'play' | 'skipNext',
   device: Device | null = null,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -1293,7 +1304,7 @@ export async function transport(
 // applies only to the item it starts on. So every episode after the first restarts at 0:00 no
 // matter what progress it has — verified on the Shield 2026-08-11 (an episode with a 3m09s
 // marker began at 0:09). Seeking after the advance is the only way to honour the rest.
-export async function seekTo(
+async function seekToOnDevice(
   offsetMs: number | string | null | undefined,
   {
     device = null,
@@ -1311,6 +1322,7 @@ export async function seekTo(
   } = {},
 ): Promise<SeekResult> {
   const ms = intOffset(offsetMs);
+  if (deviceOperationCancelled()) return { seeked: false, error: 'playback operation was replaced' };
   if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
   const target = client ?? await findClient(device);
   if (!target) return { seeked: false, error: 'target client not found' };
@@ -1329,6 +1341,7 @@ export async function seekTo(
     if (selected.plexServer) return { seeked: false, error: 'Seeking shared-server items is unavailable in the new Plex app' };
     // The new route only applies its offset when opening a player. Leave the current
     // player, then adopt the SAME queue at its server-confirmed current item.
+    if (deviceOperationCancelled()) return { seeked: false, error: 'playback operation was replaced' };
     const stopped = adb.modernPlayerCommand('stop');
     if (!stopped.ok) return { seeked: false, error: stopped.error };
     const sent = await adb.playModernQueue(remembered.machineIdentifier, playQueueID, ms, session.ratingKey);
@@ -1376,7 +1389,7 @@ export async function seekTo(
   }
 }
 
-export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefined, {
+async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undefined, {
   setName = null,
   device = null,
   offset = 0,
@@ -1605,6 +1618,8 @@ export async function playRatingKeys(items: PlexQueueItemInput[] | null | undefi
 
 // Convenience re-export shape for tests that want the Python-ish names as an object.
 export const _internals = {
+  configuredSessionTarget,
+  sessionBelongsTo,
   playToken,
   applyAudioLanguage,
   queueGroups,
@@ -1612,3 +1627,15 @@ export const _internals = {
   plexReq,
   sleep,
 };
+
+export function playRatingKeys(...args: Parameters<typeof playRatingKeysOnDevice>): ReturnType<typeof playRatingKeysOnDevice> {
+  return withDevice(args[1]?.device ?? null, () => playRatingKeysOnDevice(...args));
+}
+
+export function seekTo(...args: Parameters<typeof seekToOnDevice>): ReturnType<typeof seekToOnDevice> {
+  return withDevice(args[1]?.device ?? null, () => seekToOnDevice(...args));
+}
+
+function playerCommand(...args: Parameters<typeof playerCommandOnDevice>): ReturnType<typeof playerCommandOnDevice> {
+  return withDevice(args[1] ?? null, () => playerCommandOnDevice(...args));
+}

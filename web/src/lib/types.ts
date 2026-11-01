@@ -740,6 +740,7 @@ export type Device = {
 /** What is on screen right now (`GET /api/now`, and the `now` SSE event). */
 export type NowState = {
   now: {
+    deviceId?: string
     state?: string
     ratingKey?: string
     plexServer?: string | null
