@@ -155,19 +155,26 @@ export const SESSION: SessionSingleton = {
   },
 };
 
-let _publishState: PublishState = () => {};
+let _statePublisher: PublishState = () => {};
+let _preparationError: string | undefined;
+function _publishState(extra: SessionStateExtra): void {
+  if (SESSION.isPreparing && !deviceOperationCancelled() && typeof extra.error === 'string') {
+    _preparationError = extra.error;
+  }
+  _statePublisher(extra);
+}
 let _publishLastPlayed: PublishLastPlayed = () => {};
 export function setPublishers(
   { state, lastPlayed }: { state?: PublishState; lastPlayed?: PublishLastPlayed } = {},
 ): void {
-  if (state) _publishState = state;
+  if (state) _statePublisher = state;
   if (lastPlayed) _publishLastPlayed = lastPlayed;
   // The SAME publisher the session uses, handed to the driver so the FSM path's mid-flight
   // "awaiting" reaches the state topic. `?? null` only because driver's setter is typed
   // `PublishStateFn | null`; it stored the undefined before and guards with a truthiness test
   // either way, so nothing changes. No cast: both sides are `PublishedStateExtra` now, which
   // is what makes an arity slip here a compile error rather than a silent dropped payload.
-  driver.setPublishState?.(state ?? null);
+  driver.setPublishState?.(state ? _publishState : null);
 }
 
 function cancelFlag(): Required<CancelFlag> {
@@ -679,6 +686,7 @@ export function startSession(payload: SessionStartPayload = {}, opts: { cancel?:
   resume.stopWatch();
   const sittingId = ++SESSION.sittingId;
   SESSION.isPreparing = true;
+  _preparationError = undefined;
   const clearFailedPreparation = (): void => {
     if (SESSION.sittingId !== sittingId) return;
     resume.disarm();
@@ -691,7 +699,7 @@ export function startSession(payload: SessionStartPayload = {}, opts: { cancel?:
       const result = await startSessionOnDevice({ ...payload, target: device }, opts);
       if (SESSION.sittingId === sittingId && !('ok' in result && result.ok)) {
         clearFailedPreparation();
-        _publishState({ ...('error' in result ? { error: result.error } : {}), ...SESSION.asDict() });
+        _publishState({ ...('error' in result ? { error: _preparationError ?? result.error } : {}), ...SESSION.asDict() });
       }
       return result;
     } catch (error) {
