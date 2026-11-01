@@ -15,6 +15,7 @@ import * as sets from '../sets.js';
 import { lastNow, withContext } from '../sse.js';
 import { isAutoRewatch, wireKindForSet } from '../kind.js';
 import { readBody } from './readBody.js';
+import { withDevice, deviceOperationCancelled } from '../deviceScope.js';
 
 /** Playback + channels, over the MQTT bridge: devices, play, session state, now-playing. */
 export function playbackRoutes(): Hono {
@@ -114,13 +115,17 @@ export function playbackRoutes(): Hono {
       // end this, and a Shield that has already dropped off the network is the common way
       // the stop fails. The error is reported alongside so the toast can say what happened.
       if (act === 'power_off') {
-        const stopped = await playback.transport('stop', dev);
-        const st = mqttc.lastState();
-        const sent = mqttc.endActivity({
-          set: st?.set || null,
-          target: targetId ? String(targetId) : null,
+        return withDevice(dev, async () => {
+          const st = mqttc.lastState();
+          const originalSet = st?.set || null;
+          const stopped = await playback.transport('stop', dev);
+          if (deviceOperationCancelled()) return c.json({ error: 'playback operation was replaced' }, 409);
+          const sent = mqttc.endActivity({
+            set: originalSet,
+            target: targetId ? String(targetId) : null,
         });
         return c.json({ ok: true, sent, stopped: stopped.ok, stopError: stopped.error });
+        });
       }
       if (act !== 'stop' && act !== 'pause' && act !== 'resume' && act !== 'next') {
         return c.json({ error: `unknown action '${act}'` }, 400);

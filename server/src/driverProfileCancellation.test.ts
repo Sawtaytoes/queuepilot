@@ -12,7 +12,7 @@ vi.mock('./store/db/gatedPush.js', () => ({ recordPush: vi.fn() }));
 import { driveToPlaying } from './driver.js';
 import { withDevice, invalidateDeviceOperations } from './deviceScope.js';
 import * as profiles from './profiles.js';
-const device = { id: 'test-player', name: 'Test TV', uri: 'http://192.0.2.33:32500', mode: 'client', default: false };
+const device = { id: 'test-player', name: 'Test TV', machineIdentifier: 'test-player-id', uri: 'http://192.0.2.33:32500', mode: 'client', default: false };
 for (const boundary of ['preflight', 'audit'] as const) {
   it(`discards the superseded ${boundary} account response on the same player`, async () => {
     let entered = false;
