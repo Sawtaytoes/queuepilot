@@ -6,7 +6,9 @@ vi.mock('./engine/routing.js', () => ({ loadSets: () => ({ sets: { 'queue-b': { 
 vi.mock('./providers/index.js', () => ({ providerFor: () => ({ profileBinding: async () => ({}), profileToken: () => { ctl.tokenEntered = true; return new Promise<string>((r) => { ctl.release = r; }); } }) }));
 vi.mock('./store/db/queueEntryHistory.js', () => ({ savePosition: vi.fn() }));
 vi.mock('./sets.js', async (original) => ({ ...await original<typeof import('./sets.js')>(), getSet: vi.fn(async () => ({ id: 'queue-b', power_off_when_done: true })) }));
-import { SESSION, startSession } from './session.js';
+import { SESSION, startSession, advanceSession } from './session.js';
+import * as playback from './playback.js';
+import { topup } from './topup.js';
 import * as finished from './finished.js';
 import * as history from './store/db/queueEntryHistory.js';
 it('does not let the old device finish or update history for a sitting held in token preparation', async () => {
@@ -20,6 +22,14 @@ it('does not let the old device finish or update history for a sitting held in t
   await vi.waitFor(() => expect(ctl.tokenEntered).toBe(true));
   expect(SESSION.device?.id).toBe('player-b');
   expect(SESSION.isPreparing).toBe(true);
+  const play = vi.spyOn(playback, 'playRatingKeys');
+  const read = vi.spyOn(playback, 'readPlayQueue');
+  const cursor = SESSION.cursor;
+  expect(await advanceSession()).toEqual({ error: 'session is preparing' });
+  expect(SESSION.cursor).toBe(cursor);
+  expect(play).not.toHaveBeenCalled();
+  expect((await topup()).reason).toBe('session is preparing');
+  expect(read).not.toHaveBeenCalled();
   emit({ deviceId: 'player-a', state: 'idle' });
   emit({ deviceId: 'player-a', state: 'playing', ratingKey: '123', position: 20 });
   await Promise.resolve();

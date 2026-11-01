@@ -1,4 +1,4 @@
-import { withDevice, invalidateDeviceOperations, deviceOperationCancelled } from './deviceScope.js';
+import { withDevice, withCancellation, invalidateDeviceOperations, deviceOperationCancelled } from './deviceScope.js';
 import * as devices from './devices.js';
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
 //
@@ -660,16 +660,20 @@ async function startSessionOnDevice(
 }
 
 export async function advanceSession(): Promise<SessionResult> {
+  if (SESSION.isPreparing) return { error: 'session is preparing' };
   if (!SESSION.queue.length) return { error: 'no active session' };
+  const sittingId = SESSION.sittingId;
+  const cancelled = () => SESSION.sittingId !== sittingId || SESSION.isPreparing;
   SESSION.cursor = Math.min(SESSION.cursor + 1, SESSION.queue.length - 1);
   const rest = SESSION.queue.slice(SESSION.cursor);
   if (!rest.length) {
     _publishState({ error: 'end of queue', ...SESSION.asDict() });
     return { error: 'end of queue' };
   }
-  const result = await playback.playRatingKeys(rest, {
+  const result = await withDevice(SESSION.device, () => withCancellation(cancelled, () => playback.playRatingKeys(rest, {
     setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid, device: SESSION.device,
-  });
+  })), true);
+  if (cancelled()) return { cancelled: true };
   _publishLastPlayed(lastPlayedFromItem(rest[0]));
   _publishState({ playback: result, ...SESSION.asDict() });
   return result;
