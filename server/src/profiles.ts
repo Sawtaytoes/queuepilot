@@ -17,6 +17,7 @@
 // Fragility, accepted knowingly (carried across from the Python): the profile stamp only exists
 // on DEBUG-level PMS log lines, and this needs the Plex app's log volume mounted read-only into
 // the container. If Plex's debug logging is off, waits time out and the caller says so.
+import { deviceHost, deviceKey, deviceOperationCancelled } from './deviceScope.js';
 import { promises as fs } from 'node:fs';
 import { statSync } from 'node:fs';
 import type { FileHandle } from 'node:fs/promises';
@@ -27,26 +28,22 @@ import {
   PROFILE_OBSERVATION_TTL_SECONDS,
   PROFILE_WAIT_SECONDS,
   PROFILE_SET_MAP,
-  SHIELD_IP,
 } from './env.js';
 
 const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-let _lineRe: RegExp | null = null;
+const lineRes = new Map<string, RegExp>();
 function lineRe(): RegExp {
-  if (_lineRe === null) {
-    const ip = escapeRe(SHIELD_IP);
-    _lineRe = new RegExp('\\[' + ip + ':\\d+[^\\]]*\\].*Signed-in Token \\((.+?)\\)');
+  const host = deviceHost();
+  if (!host) return /$a/;
+  let re = lineRes.get(host);
+  if (!re) {
+    re = new RegExp('\\[' + escapeRe(host) + ':\\d+[^\\]]*\\].*Signed-in Token \\((.+?)\\)');
+    lineRes.set(host, re);
   }
-  return _lineRe;
+  return re;
 }
-
-// Test seam: profiles.py rebuilds `_LINE_RE` after tests reassign SHIELD_IP. The env is read
-// once at import here, so tests point PMS_LOG_PATH via env before importing; this lets a test
-// force a rebuild if it must.
-export function _resetLineRe(): void {
-  _lineRe = null;
-}
+export function _resetLineRe(): void { lineRes.clear(); }
 
 // The most recent profile the Shield was seen acting as, updated by every wait below. adb.js's
 // switch will use it as a HINT (the picker opens on the current user) — never as anything that
@@ -75,16 +72,28 @@ export function _resetLineRe(): void {
 // different profile on the TV after the last proof, so an unexpiring one is a cache confirming
 // something that stopped being true hours ago. `PROFILE_OBSERVATION_TTL_SECONDS` bounds it.
 // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
-export const LAST_SEEN: {
+interface ProfileObservation {
   title: string | null;
   isObserved: boolean;
-  /** Epoch MILLISECONDS of the observation, or null when there is none. */
   observedAt: number | null;
-} = {
-  title: null,
-  isObserved: false,
-  observedAt: null,
-};
+}
+const observations = new Map<string, ProfileObservation>();
+function observation(): ProfileObservation {
+  const key = deviceKey();
+  let value = observations.get(key);
+  if (!value) {
+    value = { title: null, isObserved: false, observedAt: null };
+    observations.set(key, value);
+  }
+  return value;
+}
+// Keep the existing API while isolating observations across asynchronous device scopes.
+export const LAST_SEEN: ProfileObservation = new Proxy({} as ProfileObservation, {
+  get: (_target, key) => Reflect.get(observation(), key),
+  ownKeys: () => Reflect.ownKeys(observation()),
+  getOwnPropertyDescriptor: (_target, key) => Object.getOwnPropertyDescriptor(observation(), key),
+  set: (_target, key, value: unknown) => Reflect.set(observation(), key, value),
+});
 
 // Test seam. The TTL is the one rule here that a test cannot exercise without controlling the
 // clock, and `vi.useFakeTimers()` would also freeze the poll loops in `waitForProfile`.
@@ -97,6 +106,7 @@ export function _setNow(clock?: () => number): void {
 
 /** Record a profile that Plex itself identified, never one inferred from an ADB keypress. */
 export function recordObservedProfile(title: string): void {
+  if (deviceOperationCancelled()) return;
   LAST_SEEN.title = title;
   LAST_SEEN.isObserved = true;
   LAST_SEEN.observedAt = now();
@@ -107,6 +117,7 @@ export function recordObservedProfile(title: string): void {
  * every trace of authority, so a later gate cannot read the claim back as proof.
  */
 export function recordProfileClaim(title: string): void {
+  if (deviceOperationCancelled()) return;
   LAST_SEEN.title = title;
   LAST_SEEN.isObserved = false;
   LAST_SEEN.observedAt = null;
@@ -114,6 +125,7 @@ export function recordProfileClaim(title: string): void {
 
 /** Keep a title as a picker hint, but prevent stale evidence from clearing a profile gate. */
 export function invalidateObservedProfile(): void {
+  if (deviceOperationCancelled()) return;
   LAST_SEEN.isObserved = false;
   LAST_SEEN.observedAt = null;
 }

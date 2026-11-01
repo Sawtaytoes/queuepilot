@@ -1,0 +1,23 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import * as resume from './resume.js';
+afterEach(() => { resume.disarm(); vi.useRealTimers(); });
+it('invalidates an outstanding observation before replacing the global plan or watcher', async () => {
+  vi.useFakeTimers();
+  let resolve!: (s: { ratingKey: string; viewOffset: number }) => void;
+  const held = new Promise<{ ratingKey: string; viewOffset: number }>((r) => { resolve = r; });
+  const oldSeek = vi.fn(async () => ({ seeked: true }));
+  resume.arm({ plan: new Map([['123', 5000]]) });
+  resume.startWatch({ fetchSession: () => held, seek: oldSeek, intervalMs: 10, log: () => {} });
+  await vi.advanceTimersByTimeAsync(10);
+  const newSeek = vi.fn(async () => ({ seeked: true }));
+  resume.arm({ plan: new Map([['123', 9000]]) });
+  resume.startWatch({ fetchSession: async () => ({ ratingKey: '123', viewOffset: 0 }), seek: newSeek, intervalMs: 1000, log: () => {} });
+  resolve({ ratingKey: '123', viewOffset: 0 });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(oldSeek).not.toHaveBeenCalled();
+  expect(newSeek).not.toHaveBeenCalled();
+  expect(resume.pendingCount()).toBe(1);
+  expect(resume.watching()).toBe(true);
+  await vi.advanceTimersByTimeAsync(1000);
+  expect(newSeek).toHaveBeenCalledWith(9000);
+});

@@ -92,8 +92,8 @@ try {
     User: { id: 333, title: 'Name Match' },
   }];
   observed = await playback.currentAccount();
-  check('the configured player name remains a fallback when its machine id changes',
-    observed.accountId === 333 && observed.title === 'Name Match',
+  check('a pinned machine id cannot be overridden by another player with the same name',
+    observed.accountId === null && !observed.hasSession,
     JSON.stringify(observed));
 } finally {
   await new Promise<void>((resolve, reject) => {

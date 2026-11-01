@@ -23,6 +23,7 @@ vi.mock('./plexControlModern.js', async (importOriginal) => ({
   }),
 }));
 import * as adb from './adb.js';
+import { invalidateDeviceOperations, withDevice } from './deviceScope.js';
 
 beforeEach(() => { ctl.activity = ''; ctl.connected = true; ctl.onboarding = true; ctl.output = ''; ctl.calls = []; });
 describe('Plex UI adapter routing', () => {
@@ -92,4 +93,14 @@ describe('Plex UI adapter routing', () => {
     const commands = ctl.calls.filter((call) => call[0] === 'run').map((call) => String(call[2]));
     expect(commands.indexOf('input keyevent KEYCODE_MEDIA_STOP')).toBeLessThan(commands.findIndex((command) => command.startsWith('am start')));
   });
+  it('does not reopen an old queue if replaced during the player settling delay', async () => {
+    ctl.activity = 'com.plexapp.android/tv.plex.app.MainActivity';
+    ctl.onboarding = false;
+    ctl.output = 'Media button session is com.plexapp.android/native';
+    const pending = withDevice(null, () => adb.playModernQueue('test-server', 42, 0, '123'));
+    invalidateDeviceOperations();
+    expect((await pending).ok).toBe(false);
+    expect(ctl.calls.some((call) => String(call[2]).startsWith('am start'))).toBe(false);
+  });
+
 });
