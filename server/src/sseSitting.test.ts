@@ -19,6 +19,15 @@ vi.mock('./warm.js', () => ({ kick: vi.fn() }));
 import { SESSION } from './session.js';
 import { startLiveUpdates, lastNow, withContext } from './sse.js';
 startLiveUpdates();
+it('keeps retained telemetry enrichment through an unchanged startup state event', async () => {
+  let release!: (value: null) => void;
+  hooks.context.mockImplementationOnce(() => new Promise<null>((r) => { release = r; }));
+  const pending = hooks.now!({ deviceId: 'test-player', state: 'playing', ratingKey: 'retained', position: 10 });
+  hooks.state!({ deviceId: 'test-player', set: 'sample' } as PublishedSessionState);
+  release(null);
+  await pending;
+  expect(lastNow()?.ratingKey).toBe('retained');
+});
 it('never restores an old same-player cache through preparation and success state events', async () => {
   hooks.cached = { deviceId: 'test-player', state: 'playing', ratingKey: 'old-episode', position: 10 };
   hooks.context.mockResolvedValue(null);

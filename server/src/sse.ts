@@ -197,6 +197,7 @@ export function sseRoutes(): Hono {
  * test can build the Hono root and drive it with `root.fetch()` without starting watchers.
  */
 export function startLiveUpdates(): void {
+  let selectedDeviceId = mqttc.lastState()?.deviceId || 'shield';
   // Watch the DIRECTORY (the atomic rename-replace writes would orphan a file watch) and
   // debounce bursts.
   let timer: NodeJS.Timeout | null = null;
@@ -224,7 +225,9 @@ export function startLiveUpdates(): void {
 
   // Session state changes (a play result landing) push to the UI the same way.
   mqttc.onState((state: PublishedSessionState | null) => {
-    nowRevision += 1;
+    const nextDeviceId = state?.deviceId || 'shield';
+    if (SESSION.isPreparing || selectedDeviceId !== nextDeviceId) nowRevision += 1;
+    selectedDeviceId = nextDeviceId;
     LAST_NOW = SESSION.isPreparing || (lastNowSitting != null && lastNowSitting !== SESSION.sittingId)
       || (LAST_NOW?.deviceId != null && LAST_NOW.deviceId !== (state?.deviceId || 'shield'))
       ? null : LAST_NOW;
@@ -239,6 +242,7 @@ export function startLiveUpdates(): void {
   // media_player, so the highlight follows the queue as it auto-advances.
   mqttc.onNowPlaying(async (now: NowPlaying | null) => {
     const revision = ++nowRevision;
+    if (SESSION.isPreparing) return;
     const sittingId = SESSION.sittingId;
     const deviceId = mqttc.lastState()?.deviceId || 'shield';
     const isCurrent = () => revision === nowRevision && sittingId === SESSION.sittingId
