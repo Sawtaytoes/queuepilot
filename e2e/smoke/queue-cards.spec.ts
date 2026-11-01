@@ -16,7 +16,9 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
   try {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(String(error)));
+    const revalidated = page.waitForResponse(r => r.url().includes('/api/queues?fresh=1'));
     await page.goto(`${server.base}/queues`);
+    await (await revalidated).finished();
     const cards = page.locator('#shelves .shelf');
     await expect(cards.first()).toBeVisible();
     await expect(page.locator('#revalidating')).toHaveCount(0, { timeout: 60_000 });
@@ -33,6 +35,7 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
     await first.getByRole('button', { name: 'Preview queue', exact: true }).click();
     await expect(first.locator('.strip-wrap')).toBeVisible();
     await expect(first.locator('li.tile').first()).toBeVisible();
+    await expect(cards.nth(1).locator('.strip-wrap')).toBeHidden();
     await expectNoHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath('expanded.png'), fullPage: true });
     await first.getByRole('button', { name: 'Collapse queue', exact: true }).click();
@@ -78,4 +81,45 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
   } finally {
     killServer(server.child);
   }
+});
+
+// This claim requires side-by-side columns; the main card test covers all four windows.
+test('poster drops target the adjacent column in either direction', async ({ page }, testInfo) => {
+  test.skip((testInfo.project.use.viewport?.width ?? 0) < 1900, 'cross-column gesture in Wide View');
+  const server = await startFixtureServer(SMOKE_BASE_PORT + 20 + testInfo.workerIndex, {
+    groups: 'landing.groups.yaml', people: 'landing.people-mapping.yaml',
+    queues: 'landing.queues.yaml', sets: 'landing.sets.yaml',
+  });
+  try {
+    const ready = page.waitForResponse(r => r.url().includes('/api/queues?fresh=1'));
+    await page.goto(`${server.base}/queues`);
+    await (await ready).finished();
+    const left = page.locator('#shelves .queue-family').nth(0).locator('.shelf').first();
+    const right = page.locator('#shelves .queue-family').nth(1).locator('.shelf').first();
+    await left.locator('.collapse-toggle').click();
+    await right.locator('.collapse-toggle').click();
+    const leftId = await left.getAttribute('data-set');
+    const rightId = await right.getAttribute('data-set');
+    // The first fixture queue has titles absent from the second. Use its last one.
+    const tile = left.locator('li.tile').last();
+    const key = await tile.getAttribute('data-key');
+    for (const [source, target, targetId] of [[left, right, rightId], [right, left, leftId]] as const) {
+      const moved = source.locator(`li.tile[data-key=${JSON.stringify(key)}]`);
+      await moved.scrollIntoViewIfNeeded();
+      const start = await moved.locator('.thumb').boundingBox();
+      const end = await target.locator('.strip-wrap').boundingBox();
+      if (!start || !end) throw new Error('missing poster geometry');
+      const response = page.waitForResponse(r => r.url().endsWith('/api/queues/move') && r.request().method() === 'PATCH');
+      await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 10 });
+      await expect(target).toHaveClass(/drop-target/);
+      await page.mouse.up();
+      const saved = await response;
+      expect(saved.ok()).toBe(true);
+      expect(saved.request().postDataJSON().toSet).toBe(targetId);
+      await expect(target.locator(`li.tile[data-key=${JSON.stringify(key)}]`)).toHaveCount(1);
+      await expect(source.locator(`li.tile[data-key=${JSON.stringify(key)}]`)).toHaveCount(0);
+    }
+  } finally { killServer(server.child); }
 });

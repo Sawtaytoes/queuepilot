@@ -605,7 +605,9 @@ button {
 }
 
 /* Queue surfaces are Charcuterie Card. Only content layout lives here. */
-.shelf { min-inline-size: 0; }
+.shelf {
+  min-inline-size: 0;
+}
 .queue-card-grid {
   display: grid;
   gap: 16px;
@@ -618,7 +620,9 @@ button {
   gap: 8px;
   min-inline-size: 0;
 }
-.queue-card-grid > .alsodivide { grid-column: 1 / -1; }
+.queue-card-grid > .alsodivide {
+  grid-column: 1 / -1;
+}
 .shelf h2 {
   margin: 0;
   display: grid;
@@ -630,7 +634,9 @@ button {
 .shelf h2 .livepill {
   grid-column: 1 / -1;
 }
-.shelf .shelfactions { margin-inline-start: auto; }
+.shelf .shelfactions {
+  margin-inline-start: auto;
+}
 .queue-card-meta {
   display: flex;
   align-items: center;
@@ -701,8 +707,13 @@ button {
   line-height: 1.25;
   gap: 10px;
 }
-.shelf h2 .lbl { min-inline-size: 0; overflow-wrap: anywhere; }
-.shelf h2 .open:hover { color: var(--color-intent-accent-solid); }
+.shelf h2 .lbl {
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
+}
+.shelf h2 .open:hover {
+  color: var(--color-intent-accent-solid);
+}
 .shelf h2 .sec {
   color: var(--color-content-muted);
   font-weight: 400;
@@ -749,11 +760,20 @@ button {
   display: flex;
   gap: 2px;
 }
-.shelf .shelfdrag { cursor: grab; touch-action: none; }
-.queue-family.dragging { opacity: 0.55; }
-.queue-family.dragging .shelfdrag { cursor: grabbing; }
+.shelf .shelfdrag {
+  cursor: grab;
+  touch-action: none;
+}
+.queue-family.dragging {
+  opacity: 0.55;
+}
+.queue-family.dragging .shelfdrag {
+  cursor: grabbing;
+}
 
-.strip-wrap { position: relative; }
+.strip-wrap {
+  position: relative;
+}
 ul.strip {
   list-style: none;
   margin: 0;
@@ -5198,7 +5218,6 @@ body.rowdragging
   gap: 8px;
 }
 
-
 /* ---- The result's own row of actions ---- */
 #result .tgo {
   flex-direction: row;
@@ -5273,5 +5292,10 @@ body.rowdragging
   gap: 6px;
 }
 
-.queue-family[hidden], .shelf[hidden] { display: none; }
-.shelf h2 > :not(.collapse-toggle):not(.open) { grid-column: 1 / -1; }
+.queue-family[hidden],
+.shelf[hidden] {
+  display: none;
+}
+.shelf h2 > :not(.collapse-toggle):not(.open) {
+  grid-column: 1 / -1;
+}

@@ -48,7 +48,9 @@ export function groupQueueFamilies(
   const familyById = new Map<string, string[]>()
   for (const id of ids) {
     const parent = byId(id)?.filtered_from
-    const family = parent ? familyById.get(parent) : undefined
+    const family = parent
+      ? familyById.get(parent)
+      : undefined
     if (family) {
       family.push(id)
       familyById.set(id, family)

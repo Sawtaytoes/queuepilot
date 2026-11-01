@@ -115,7 +115,8 @@ export function useHomeDrags(
         if (d < bestDist) {
           bestDist = d
           best = s
-          isAfter = e.clientY > r.bottom ||
+          isAfter =
+            e.clientY > r.bottom ||
             (e.clientY >= r.top && e.clientX > cx)
         }
       }
@@ -206,7 +207,8 @@ export function useHomeDrags(
 
       if (!handle) return
 
-      const shelf = handle.closest<HTMLElement>(".queue-family")
+      const shelf =
+        handle.closest<HTMLElement>(".queue-family")
 
       if (!shelf) return
 
@@ -294,8 +296,8 @@ export function useHomeDrags(
       // Page auto-scroll for cross-shelf hauls.
       autoScroll(e.clientY, 90)
 
-      // Which shelf is the pointer over (a little vertical slack so the gap rows
-      // count)?
+      // Match both axes: neighboring cards can have strips at the same Y.
+      // Keep vertical slack for the gap between a strip and its caption.
       let target: HTMLElement | null = null
 
       for (const strip of stripsOnScreen()) {
@@ -304,6 +306,8 @@ export function useHomeDrags(
           .getBoundingClientRect()
 
         if (
+          e.clientX >= r.left &&
+          e.clientX <= r.right &&
           e.clientY >= r.top - 14 &&
           e.clientY <= r.bottom + 14
         ) {

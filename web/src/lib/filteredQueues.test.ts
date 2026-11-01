@@ -134,14 +134,29 @@ describe("filteredParent", () => {
   })
 })
 
-
 describe("groupQueueFamilies", () => {
   it("keeps nested filtered views with their parent during a grid reorder", () => {
-    const byId = registry(set("reading"), set("strips", "reading"), set("short", "strips"), set("movies"))
-    expect(groupQueueFamilies(["reading", "strips", "short", "movies"], byId)).toEqual([["reading", "strips", "short"], ["movies"]])
+    const byId = registry(
+      set("reading"),
+      set("strips", "reading"),
+      set("short", "strips"),
+      set("movies"),
+    )
+    expect(
+      groupQueueFamilies(
+        ["reading", "strips", "short", "movies"],
+        byId,
+      ),
+    ).toEqual([["reading", "strips", "short"], ["movies"]])
   })
   it("keeps a filtered view when its parent belongs to another people tier", () => {
-    const byId = registry(set("reading"), set("strips", "reading"), set("movies"))
-    expect(groupQueueFamilies(["strips", "movies"], byId)).toEqual([["strips"], ["movies"]])
+    const byId = registry(
+      set("reading"),
+      set("strips", "reading"),
+      set("movies"),
+    )
+    expect(
+      groupQueueFamilies(["strips", "movies"], byId),
+    ).toEqual([["strips"], ["movies"]])
   })
 })
