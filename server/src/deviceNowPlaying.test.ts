@@ -60,3 +60,21 @@ it('discards an observation from an earlier queue on the same device', async () 
   expect(publish).not.toHaveBeenCalled();
   stop();
 });
+it('does not observe a preparing sitting or reuse an older sitting’s delayed response', async () => {
+  vi.useFakeTimers();
+  let context = { playQueueID: 42, userUuid: 'grace-profile', sittingId: 1, isPreparing: true };
+  let resolve!: (v: null) => void;
+  const read = vi.fn(() => new Promise<null>((r) => { resolve = r; }));
+  const publish = vi.fn();
+  const stop = startDeviceNowPlaying({ targets: [device], active: () => 'den', context: () => context, read, publish });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(read).not.toHaveBeenCalled();
+  context = { ...context, isPreparing: false };
+  await vi.advanceTimersByTimeAsync(1500);
+  expect(read).toHaveBeenCalledTimes(1);
+  context = { ...context, sittingId: 2 };
+  resolve(null);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(publish).not.toHaveBeenCalled();
+  stop();
+});

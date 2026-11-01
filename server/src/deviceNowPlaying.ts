@@ -3,14 +3,14 @@ import * as mqttc from './mqttc.js';
 import * as playback from './playback.js';
 import type { Device, NowPlaying } from './types.js';
 
-interface SessionContext { playQueueID: number | string | null; userUuid: string | null }
+interface SessionContext { sittingId?: number; isPreparing?: boolean; playQueueID: number | string | null; userUuid: string | null }
 
 /** Secondary clients need telemetry even when they do not advertise Plex Companion. */
 export function startDeviceNowPlaying({
   targets = configuredPlaybackTargets(),
   active = () => mqttc.lastState()?.deviceId ?? null,
   context = () => ({ playQueueID: null, userUuid: null }),
-  read = (device: Device, ctx: SessionContext) => playback.currentSession({ device, ...ctx, timeoutMs: 1_000, includeTelemetry: true, throwOnError: true }),
+  read = (device: Device, ctx: SessionContext) => playback.currentSession({ device, playQueueID: ctx.playQueueID, userUuid: ctx.userUuid, timeoutMs: 1_000, includeTelemetry: true, throwOnError: true }),
   publish = mqttc.recordDeviceNowPlaying,
   intervalMs = 1_500,
 }: {
@@ -26,11 +26,11 @@ export function startDeviceNowPlaying({
   const tick = async (): Promise<void> => {
     const id = active();
     const ctx = context();
-    const device = targets.find((d) => d.id === id);
+    const device = ctx.isPreparing ? undefined : targets.find((d) => d.id === id);
     try {
       if (device) {
         const observed = await read(device, ctx);
-        if (!isStopped && active() === id && context().playQueueID === ctx.playQueueID && context().userUuid === ctx.userUuid) {
+        if (!isStopped && !context().isPreparing && context().sittingId === ctx.sittingId && active() === id && context().playQueueID === ctx.playQueueID && context().userUuid === ctx.userUuid) {
           publish(device.id, observed ? {
             deviceId: device.id, state: observed.state, ratingKey: observed.ratingKey,
             title: observed.title, show: observed.show,

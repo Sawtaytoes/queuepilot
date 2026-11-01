@@ -10,7 +10,8 @@ it('does not let a replaced profile lookup overwrite the active device or sittin
   const pending = startSession({ set: 'sample', target: { ...active, id: 'old' } });
   await vi.waitFor(() => expect(ctl.entered).toBe(true));
   expect(await startSession({ set: 'missing' })).toEqual({ error: 'disabled' });
+  const replacementDevice = SESSION.device;
   ctl.resolve!({});
   expect(await pending).toEqual({ cancelled: true });
-  expect(SESSION.device).toBe(active);
+  expect(SESSION.device).toBe(replacementDevice);
 });

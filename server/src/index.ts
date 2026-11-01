@@ -111,7 +111,7 @@ const app = buildServer({ publicDir: PUBLIC_DIR });
 serve({ fetch: app.fetch, port: WEB_PORT }, () => {
   console.log(`[queuepilot-web] listening on :${WEB_PORT}`);
   mqttd.start();
-  startDeviceNowPlaying({ context: () => ({ playQueueID: SESSION.playQueueID, userUuid: SESSION.userUuid }) });
+  startDeviceNowPlaying({ context: () => ({ playQueueID: SESSION.playQueueID, userUuid: SESSION.userUuid, sittingId: SESSION.sittingId, isPreparing: SESSION.isPreparing }) });
   warm.start();
 
   // The collection sync's own MQTT subscription, on the `board-game-picker/…` base it inherited

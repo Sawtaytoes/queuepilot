@@ -238,8 +238,9 @@ function isOnScreen(now: NowPlaying | null): boolean {
 function announceFinished(): void {
   const setName = SESSION.set;
 
-  if (!setName) return;
+  if (!setName || SESSION.isPreparing) return;
 
+  const sittingId = SESSION.sittingId;
   const target = SESSION.target;
   const deviceId = SESSION.device?.id ?? null;
   const played = SESSION.queuedTotal;
@@ -248,6 +249,7 @@ function announceFinished(): void {
     // Read at announce time, not cached at start: the owner may have toggled it mid-sitting,
     // and this is one YAML read against a file the registry already caches.
     const entry = await sets.getSet(setName).catch(() => null);
+    if (SESSION.isPreparing || SESSION.sittingId !== sittingId) return;
     _publishFinished({
       isComplete: target != null && played >= target,
       played,
@@ -436,17 +438,20 @@ export async function adoptQueuePlayback(
 }
 
 export function watchPlaybackEnd(): void {
+  let sittingId = -1;
   let deviceId: string | null = null;
   let wasOn: string | null = null;
   let previous: NowPlaying | null = null;
   let timer: NodeJS.Timeout | undefined;
   mqttc.onNowPlaying((now: NowPlaying | null) => {
     const nextDevice = String(now?.deviceId || mqttc.lastState()?.deviceId || 'shield');
-    if (nextDevice !== deviceId) {
+    if (SESSION.isPreparing || nextDevice !== (SESSION.device?.id || 'shield')) return;
+    if (nextDevice !== deviceId || sittingId !== SESSION.sittingId) {
       wasOn = null;
       previous = null;
       if (timer) clearTimeout(timer);
       deviceId = nextDevice;
+      sittingId = SESSION.sittingId;
     }
     const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
     const activeSet = SESSION.set;

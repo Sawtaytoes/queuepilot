@@ -62,6 +62,8 @@ interface SessionQueueItem {
  * is the session itself — it is a real method, NOT an arrow function, and typing it as one
  * would break the `this` it reads. */
 interface SessionSingleton {
+  sittingId: number;
+  isPreparing: boolean;
   device: Device | null;
   kind: string | null;
   set: string | null;
@@ -130,6 +132,8 @@ export type SessionResult =
 
 // Mutable session (mirrors service.Session) for advance + last-played.
 export const SESSION: SessionSingleton = {
+  sittingId: 0,
+  isPreparing: false,
   device: null,
   kind: null,
   set: null,
@@ -673,5 +677,28 @@ export function startSession(payload: SessionStartPayload = {}, opts: { cancel?:
   }
   invalidateDeviceOperations();
   resume.stopWatch();
-  return withDevice(device, () => startSessionOnDevice({ ...payload, target: device }, opts), true);
+  const sittingId = ++SESSION.sittingId;
+  SESSION.isPreparing = true;
+  const clearFailedPreparation = (): void => {
+    if (SESSION.sittingId !== sittingId) return;
+    resume.disarm();
+    section.disarm();
+    Object.assign(SESSION, { device: null, kind: null, set: null, profile: null,
+      queue: [], cursor: 0, userUuid: null, playQueueID: null, queuedTotal: 0, target: null });
+  };
+  return withDevice(device, async () => {
+    try {
+      const result = await startSessionOnDevice({ ...payload, target: device }, opts);
+      if (SESSION.sittingId === sittingId && !('ok' in result && result.ok)) {
+        clearFailedPreparation();
+        _publishState({ ...('error' in result ? { error: result.error } : {}), ...SESSION.asDict() });
+      }
+      return result;
+    } catch (error) {
+      clearFailedPreparation();
+      throw error;
+    } finally {
+      if (SESSION.sittingId === sittingId) SESSION.isPreparing = false;
+    }
+  }, true);
 }
