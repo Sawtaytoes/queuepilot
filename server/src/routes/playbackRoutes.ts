@@ -12,7 +12,7 @@ import * as playback from '../playback.js';
 import * as providerBlocks from '../providers/blocks.js';
 import { coverUrl, providerFor } from '../providers/index.js';
 import * as sets from '../sets.js';
-import { lastNow, withContext } from '../sse.js';
+import { lastNow } from '../sse.js';
 import { isAutoRewatch, wireKindForSet } from '../kind.js';
 import { readBody } from './readBody.js';
 import { withDevice, deviceOperationCancelled } from '../deviceScope.js';
@@ -144,8 +144,9 @@ export function playbackRoutes(): Hono {
   // we STARTED) — authoritative for "which queue is active" in a way the Plex-side payload
   // can't be, since Plex has no idea our queues exist.
   app.get('/now', async (c) => {
-    // A retained payload can land before the first fetch, so fall back to resolving it here.
-    const now = lastNow() || (await withContext(mqttc.lastNowPlaying()));
+    // Use the lifecycle's ordered, sitting-owned snapshot. A raw retained payload can still
+    // describe the previous sitting while the replacement's first observation is pending.
+    const now = lastNow();
     const st = mqttc.lastState();
     return c.json({ now, set: st?.set || null, kind: st?.kind || null, mqtt: mqttc.connected() });
   });

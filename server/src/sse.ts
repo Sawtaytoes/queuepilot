@@ -90,12 +90,23 @@ export function broadcast<TType extends SseEvent['type']>(
 // Attach the parent series/collection to the raw HA payload so the UI can match a playing
 // episode to its SERIES tile. Only worth resolving while something is actually on screen.
 let LAST_NOW: NowPlaying | null = null; // withContext()-enriched, kept fresh by onNowPlaying
+let lastNowSitting: number | null = null;
+let nowRevision = 0;
 const sharedContexts = new Map<string, PlayingContext>();
 
 /** The enriched now-playing snapshot, for `/api/now` and the on-connect replay. */
-export const lastNow = (): NowPlaying | null => LAST_NOW;
+export const lastNow = (): NowPlaying | null =>
+  SESSION.isPreparing || lastNowSitting !== SESSION.sittingId ? null : LAST_NOW;
 
 export async function withContext(
+  now: NowPlaying | null | undefined,
+): Promise<NowPlaying | null> {
+  const sittingId = SESSION.sittingId;
+  const enriched = await enrichContext(now);
+  return SESSION.isPreparing || sittingId !== SESSION.sittingId ? null : enriched;
+}
+
+async function enrichContext(
   now: NowPlaying | null | undefined,
 ): Promise<NowPlaying | null> {
   if (!now || !now.ratingKey) return now || null;
@@ -129,7 +140,7 @@ export async function withContext(
 
 /** The `{now, set}` snapshot every `now` frame carries (live push and on-connect replay). */
 const nowPayload = (set?: string | null) => ({
-  now: LAST_NOW,
+  now: lastNow(),
   set: set === undefined ? (mqttc.lastState() || {}).set || null : set,
 });
 
@@ -213,7 +224,11 @@ export function startLiveUpdates(): void {
 
   // Session state changes (a play result landing) push to the UI the same way.
   mqttc.onState((state: PublishedSessionState | null) => {
-    LAST_NOW = mqttc.lastNowPlaying();
+    nowRevision += 1;
+    LAST_NOW = SESSION.isPreparing || (lastNowSitting != null && lastNowSitting !== SESSION.sittingId)
+      || (LAST_NOW?.deviceId != null && LAST_NOW.deviceId !== (state?.deviceId || 'shield'))
+      ? null : LAST_NOW ?? mqttc.lastNowPlaying();
+    lastNowSitting = SESSION.sittingId;
     broadcast('state', state || {});
     // The active-queue badge keys off state.set, so a new session must repaint it even when
     // the Plex-side payload hasn't changed yet.
@@ -223,15 +238,20 @@ export function startLiveUpdates(): void {
   // Live playback pushes the same way — every state/attribute change on the Shield's
   // media_player, so the highlight follows the queue as it auto-advances.
   mqttc.onNowPlaying(async (now: NowPlaying | null) => {
+    const revision = ++nowRevision;
+    const sittingId = SESSION.sittingId;
     const deviceId = mqttc.lastState()?.deviceId || 'shield';
+    const isCurrent = () => revision === nowRevision && sittingId === SESSION.sittingId
+      && !SESSION.isPreparing && deviceId === (mqttc.lastState()?.deviceId || 'shield');
     try {
       const enriched = await withContext(now);
-      if (deviceId !== (mqttc.lastState()?.deviceId || 'shield')) return;
+      if (!isCurrent()) return;
       LAST_NOW = enriched;
     } catch {
-      if (deviceId !== (mqttc.lastState()?.deviceId || 'shield')) return;
+      if (!isCurrent()) return;
       LAST_NOW = now || null; // an unresolvable key still moves the play/pause state
     }
+    lastNowSitting = sittingId;
     // Precise, free cache invalidation (B3.1): the now-playing event already tells us which
     // show is on screen. When something is playing, drop that show's cached allLeaves so the
     // next /api/queues refetches exactly the one show whose watched-state may have moved, and
@@ -247,6 +267,6 @@ export function startLiveUpdates(): void {
     } catch {
       /* cache is best-effort */
     }
-    broadcast('now', nowPayload());
+    if (isCurrent()) broadcast('now', nowPayload());
   });
 }
