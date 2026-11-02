@@ -4581,7 +4581,8 @@ body.rowdragging
 
 .qpeople {
   display: inline-flex;
-  align-items: baseline;
+  /* Optional photo-only badges have no text baseline to share with named groups. */
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
   min-inline-size: 0;
