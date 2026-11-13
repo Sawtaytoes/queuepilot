@@ -20,24 +20,36 @@ import type {
   PickCriteria,
   PlayerCountFitness,
   RulesKnown,
-} from './types.js';
+} from "./types.js"
 
-const FITNESS: readonly PlayerCountFitness[] = ['bestOnly', 'bestOrRecommended', 'any'];
-const RULES: readonly RulesKnown[] = ['any', 'someone', 'everyone'];
+const FITNESS: readonly PlayerCountFitness[] = [
+  "bestOnly",
+  "bestOrRecommended",
+  "any",
+]
+const RULES: readonly RulesKnown[] = [
+  "any",
+  "someone",
+  "everyone",
+]
 const INTERACTIONS: readonly InteractionType[] = [
-  'competitive',
-  'cooperative',
-  'semiCooperative',
-  'solo',
-  'team',
-  'traitor',
-];
+  "competitive",
+  "cooperative",
+  "semiCooperative",
+  "solo",
+  "team",
+  "traitor",
+]
 
 /** How many cards the shortlist control may reveal. Three — the decision says three. */
-export const SHORTLIST_SIZE = 3;
+export const SHORTLIST_SIZE = 3
 
 const stringsOf = (value: unknown): string[] =>
-  Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  Array.isArray(value)
+    ? value.filter(
+        (item): item is string => typeof item === "string",
+      )
+    : []
 
 /**
  * `null` for "no ceiling", a number for a real one, and an error for anything else.
@@ -50,51 +62,75 @@ const optionalNumber = (
   value: unknown,
   field: string,
 ): { value: number | null } | { error: string } => {
-  if (value === undefined || value === null || value === '') return { value: null };
-  const n = Number(value);
-  if (!Number.isFinite(n)) return { error: `${field} must be a number or null` };
-  return { value: n };
-};
+  if (value === undefined || value === null || value === "")
+    return { value: null }
+  const n = Number(value)
+  if (!Number.isFinite(n))
+    return { error: `${field} must be a number or null` }
+  return { value: n }
+}
 
 export function parsePickCriteria(
   body: Record<string, unknown>,
 ): { criteria: PickCriteria } | { error: string } {
-  const playerCount = Number(body.playerCount);
+  const playerCount = Number(body.playerCount)
   if (!Number.isInteger(playerCount) || playerCount < 1) {
-    return { error: 'playerCount must be a whole number of 1 or more' };
+    return {
+      error:
+        "playerCount must be a whole number of 1 or more",
+    }
   }
 
-  const fitness = body.fitness ?? 'bestOrRecommended';
+  const fitness = body.fitness ?? "bestOrRecommended"
   if (!FITNESS.includes(fitness as PlayerCountFitness)) {
-    return { error: `fitness must be one of ${FITNESS.join(', ')}` };
+    return {
+      error: `fitness must be one of ${FITNESS.join(", ")}`,
+    }
   }
 
-  const rulesKnown = body.rulesKnown ?? 'any';
+  const rulesKnown = body.rulesKnown ?? "any"
   if (!RULES.includes(rulesKnown as RulesKnown)) {
-    return { error: `rulesKnown must be one of ${RULES.join(', ')}` };
+    return {
+      error: `rulesKnown must be one of ${RULES.join(", ")}`,
+    }
   }
 
-  const rawInteraction = body.interactionType;
+  const rawInteraction = body.interactionType
   const interactionType =
-    rawInteraction === undefined || rawInteraction === null || rawInteraction === ''
+    rawInteraction === undefined ||
+    rawInteraction === null ||
+    rawInteraction === ""
       ? null
-      : (rawInteraction as InteractionType);
-  if (interactionType !== null && !INTERACTIONS.includes(interactionType)) {
-    return { error: `interactionType must be null or one of ${INTERACTIONS.join(', ')}` };
+      : (rawInteraction as InteractionType)
+  if (
+    interactionType !== null &&
+    !INTERACTIONS.includes(interactionType)
+  ) {
+    return {
+      error: `interactionType must be null or one of ${INTERACTIONS.join(", ")}`,
+    }
   }
 
-  const maxWeight = optionalNumber(body.maxWeight, 'maxWeight');
-  if ('error' in maxWeight) return maxWeight;
-  const maxPlaytime = optionalNumber(body.maxPlaytime, 'maxPlaytime');
-  if ('error' in maxPlaytime) return maxPlaytime;
+  const maxWeight = optionalNumber(
+    body.maxWeight,
+    "maxWeight",
+  )
+  if ("error" in maxWeight) return maxWeight
+  const maxPlaytime = optionalNumber(
+    body.maxPlaytime,
+    "maxPlaytime",
+  )
+  if ("error" in maxPlaytime) return maxPlaytime
 
-  const seed = body.seed === undefined ? undefined : Number(body.seed);
-  if (seed !== undefined && !Number.isFinite(seed)) return { error: 'seed must be a number' };
+  const seed =
+    body.seed === undefined ? undefined : Number(body.seed)
+  if (seed !== undefined && !Number.isFinite(seed))
+    return { error: "seed must be a number" }
 
   // `personIds: []` and an absent `personIds` are the SAME answer, and both mean "nobody
   // named". The engine reads `playerIds: null` as that; an empty array would be read as "a
   // table of nought people", which no game fits.
-  const personIds = stringsOf(body.personIds);
+  const personIds = stringsOf(body.personIds)
 
   return {
     criteria: {
@@ -110,5 +146,5 @@ export function parsePickCriteria(
       rulesKnown: rulesKnown as RulesKnown,
       ...(seed === undefined ? {} : { seed }),
     },
-  };
+  }
 }

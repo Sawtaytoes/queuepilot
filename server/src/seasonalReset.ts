@@ -15,8 +15,8 @@
 
 /** A `reset_watched_on` value, parsed. Months are 1-12 and days are 1-31, as a person writes them. */
 export interface ResetDate {
-  month: number;
-  day: number;
+  month: number
+  day: number
 }
 
 /**
@@ -31,32 +31,39 @@ export interface ResetDate {
  * `e2e/`, and a value whose meaning depends on where it is read is a value that plays the
  * Halloween queue in January.
  */
-export function parseResetDate(raw: unknown): ResetDate | null {
-  const text = String(raw ?? '').trim();
-  if (!text) return null;
-  const match = /^(\d{1,2})[-/](\d{1,2})$/.exec(text);
-  if (!match) return null;
-  const month = Number(match[1]);
-  const day = Number(match[2]);
-  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
-  if (!Number.isInteger(day) || day < 1 || day > 31) return null;
+export function parseResetDate(
+  raw: unknown,
+): ResetDate | null {
+  const text = String(raw ?? "").trim()
+  if (!text) return null
+  const match = /^(\d{1,2})[-/](\d{1,2})$/.exec(text)
+  if (!match) return null
+  const month = Number(match[1])
+  const day = Number(match[2])
+  if (!Number.isInteger(month) || month < 1 || month > 12)
+    return null
+  if (!Number.isInteger(day) || day < 1 || day > 31)
+    return null
   // A day past the end of its own month is a typo, not a date to clamp: `02-31` means nobody
   // knows what was meant, and guessing 28 February would fire the reset three days early
   // every year with nothing on screen to say so.
-  if (day > daysInMonth(month, 2024)) return null; // 2024 is a leap year: 29 February passes
-  return { month, day };
+  if (day > daysInMonth(month, 2024)) return null // 2024 is a leap year: 29 February passes
+  return { month, day }
 }
 
 /** The stored spelling of a parsed date — zero padded, so the file always reads `11-01`. */
 export function formatResetDate(date: ResetDate): string {
-  return `${String(date.month).padStart(2, '0')}-${String(date.day).padStart(2, '0')}`;
+  return `${String(date.month).padStart(2, "0")}-${String(date.day).padStart(2, "0")}`
 }
 
 /** How many days a month has in a given year. February is the only interesting one. */
-export function daysInMonth(month: number, year: number): number {
+export function daysInMonth(
+  month: number,
+  year: number,
+): number {
   // Day 0 of the NEXT month is the last day of this one. `month` is 1-based and the Date
   // constructor's month is 0-based, so `month` here already names the next one.
-  return new Date(year, month, 0).getDate();
+  return new Date(year, month, 0).getDate()
 }
 
 /**
@@ -70,29 +77,43 @@ export function daysInMonth(month: number, year: number): number {
  * still happens every year, one day later in three years out of four. It is never SKIPPED,
  * which is what a strict reading would do.
  */
-export function mostRecentOccurrence(date: ResetDate, now: Date): Date {
-  const thisYear = occurrenceIn(date, now.getFullYear());
-  if (thisYear.getTime() <= now.getTime()) return thisYear;
-  return occurrenceIn(date, now.getFullYear() - 1);
+export function mostRecentOccurrence(
+  date: ResetDate,
+  now: Date,
+): Date {
+  const thisYear = occurrenceIn(date, now.getFullYear())
+  if (thisYear.getTime() <= now.getTime()) return thisYear
+  return occurrenceIn(date, now.getFullYear() - 1)
 }
 
 function occurrenceIn(date: ResetDate, year: number): Date {
-  return new Date(year, date.month - 1, date.day, 0, 0, 0, 0);
+  return new Date(
+    year,
+    date.month - 1,
+    date.day,
+    0,
+    0,
+    0,
+    0,
+  )
 }
 
 /** What `isResetDue` needs to answer. Every field is what the caller already holds. */
 export interface ResetDueQuery {
   /** The set's `reset_watched_on`, raw off the cfg. Absent / unparseable = the queue is off. */
-  resetWatchedOn: unknown;
+  resetWatchedOn: unknown
   /** Epoch SECONDS of the last reset, or null when this queue has never reset. */
-  lastResetAt: number | null;
-  now: Date;
+  lastResetAt: number | null
+  now: Date
 }
 
 /** Why a queue is not due, when it is not. Reported so a log line can say which. */
 export type ResetDueVerdict =
   | { isDue: true; occurrence: Date; reason: string }
-  | { isDue: false; why: 'not-configured' | 'already-reset' };
+  | {
+      isDue: false
+      why: "not-configured" | "already-reset"
+    }
 
 /**
  * Is this queue past its reset date, and has it not already reset for that occurrence?
@@ -105,13 +126,22 @@ export type ResetDueVerdict =
  * still 1 November 2026 and the stamp is at or after it. On 1 November 2027 the occurrence
  * moves and the stamp is behind it, so it fires — once.
  */
-export function isResetDue(query: ResetDueQuery): ResetDueVerdict {
-  const date = parseResetDate(query.resetWatchedOn);
-  if (!date) return { isDue: false, why: 'not-configured' };
-  const occurrence = mostRecentOccurrence(date, query.now);
-  const stampMs = query.lastResetAt == null ? null : query.lastResetAt * 1000;
+export function isResetDue(
+  query: ResetDueQuery,
+): ResetDueVerdict {
+  const date = parseResetDate(query.resetWatchedOn)
+  if (!date) return { isDue: false, why: "not-configured" }
+  const occurrence = mostRecentOccurrence(date, query.now)
+  const stampMs =
+    query.lastResetAt == null
+      ? null
+      : query.lastResetAt * 1000
   if (stampMs != null && stampMs >= occurrence.getTime()) {
-    return { isDue: false, why: 'already-reset' };
+    return { isDue: false, why: "already-reset" }
   }
-  return { isDue: true, occurrence, reason: formatResetDate(date) };
+  return {
+    isDue: true,
+    occurrence,
+    reason: formatResetDate(date),
+  }
 }

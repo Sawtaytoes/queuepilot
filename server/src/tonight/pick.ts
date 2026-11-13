@@ -36,44 +36,52 @@
 // instead of asserting that something came back.
 //
 // CODE here, DATA in `/config/queuepilot.sqlite`. Fixtures are Ada, Grace and Linus.
-import { activityLabel } from '../activity.js';
-import { isSetAvailable } from '../season.js';
-import type { Activity } from '../activity.js';
-import type { GroupMembership, QueueMember, ResolvedMember } from '../queuePeople.js';
-import type { PlayItem } from '../types.js';
 
-import { effectiveMinPresent, queueMatchesSelection, requiredRoster } from '../queuePeople.js';
-import { type TonightTile, tileForSet } from './routing.js';
+import type { Activity } from "../activity.js"
+import { activityLabel } from "../activity.js"
+import type {
+  GroupMembership,
+  QueueMember,
+  ResolvedMember,
+} from "../queuePeople.js"
+import {
+  effectiveMinPresent,
+  queueMatchesSelection,
+  requiredRoster,
+} from "../queuePeople.js"
+import { isSetAvailable } from "../season.js"
+import type { PlayItem } from "../types.js"
+import { type TonightTile, tileForSet } from "./routing.js"
 
 /** One queue a Tonight session could draw, reduced to what the draw and the card need. */
 export interface TonightCandidate {
-  setId: string;
+  setId: string
   /** The label the queue carries today. WP-5's answer is that the ACTIVITY is the name and
    *  the people are the badges; until the shelf paints that everywhere, this is what a card
    *  can honestly show, falling back to the wire id. */
-  setLabel: string;
-  tile: TonightTile;
-  queueActivity: Activity;
+  setLabel: string
+  tile: TonightTile
+  queueActivity: Activity
   /** The BACKEND's identity — a provider id, which is always present. `providerKind` can be
    *  the empty string for a provider this build has not configured, so the id is what the
    *  one-backend rule counts. */
-  providerId: string;
-  providerKind: string;
+  providerId: string
+  providerKind: string
   /** The provider's PRODUCT name, off the set's own vocabulary. */
-  providerLabel: string;
-  delivery: 'pull' | 'push';
+  providerLabel: string
+  delivery: "pull" | "push"
   /** `queue` = curated entries; `rotation` = a rules pool drawn at launch. */
-  source: 'queue' | 'rotation';
+  source: "queue" | "rotation"
 }
 
 /** What one drawn queue looks like on the result card. */
 export interface TonightPick extends TonightCandidate {
   /** What would come up next, when it can be answered without starting anything. */
-  upNext: { title: string; detail: string | null } | null;
+  upNext: { title: string; detail: string | null } | null
   /** Why `upNext` is null. Never a silent absence. */
-  upNextReason: string | null;
+  upNextReason: string | null
   /** Where Go goes for a PULL queue. `null` for a push queue, which opens the device menu. */
-  launchUrl: string | null;
+  launchUrl: string | null
 }
 
 // ── The people filter ───────────────────────────────────────────────────────────────────
@@ -93,59 +101,74 @@ export interface TonightPick extends TonightCandidate {
  */
 export function toResolvedMembers(
   members: readonly QueueMember[],
-  membershipFor: (groupId: string) => GroupMembership | null,
+  membershipFor: (
+    groupId: string,
+  ) => GroupMembership | null,
 ): ResolvedMember[] {
   return members.map((member) => {
-    if (member.kind === 'person') {
-      return { ...member, minPresent: 1, people: [member.id], requiredPeople: [member.id] };
+    if (member.kind === "person") {
+      return {
+        ...member,
+        minPresent: 1,
+        people: [member.id],
+        requiredPeople: [member.id],
+      }
     }
-    const membership = membershipFor(member.id);
-    if (!membership) return { ...member, minPresent: 1, people: [], requiredPeople: [] };
-    const required = requiredRoster(membership).map((row) => row.personId);
+    const membership = membershipFor(member.id)
+    if (!membership)
+      return {
+        ...member,
+        minPresent: 1,
+        people: [],
+        requiredPeople: [],
+      }
+    const required = requiredRoster(membership).map(
+      (row) => row.personId,
+    )
     return {
       ...member,
       minPresent: effectiveMinPresent(membership),
       people: membership.roster.map((row) => row.personId),
       requiredPeople: required,
-    };
-  });
+    }
+  })
 }
 
 /** One set, as much of it as the candidate filter reads. Structural on purpose: the two
  *  registry shapes (`QueueSet` / `RotationSet`) both satisfy it and neither is imported. */
 export interface CandidateSet {
-  id: string;
+  id: string
   /** The registry's, so it falls back to the id. Read `has_explicit_label` before showing it. */
-  label: string;
+  label: string
   /** Whether a name was TYPED. Absent on a hand-built fixture, which reads as "no name". */
-  has_explicit_label?: boolean;
-  enabled: boolean;
+  has_explicit_label?: boolean
+  enabled: boolean
   /** The SEASON WINDOW, `MM-DD` / `MM-DD`. Optional here for the same reason
    *  `has_explicit_label` is: a hand-built fixture that omits them is a queue with no window,
    *  which is in season all year. `season.isSetAvailable` reads them beside `enabled`. */
-  season_start?: string | null;
-  season_end?: string | null;
-  activity: Activity;
-  behavior?: string | null;
-  provider_kind: string;
-  delivery: 'pull' | 'push';
-  source: 'queue' | 'rotation';
-  vocabulary?: { name?: string };
+  season_start?: string | null
+  season_end?: string | null
+  activity: Activity
+  behavior?: string | null
+  provider_kind: string
+  delivery: "pull" | "push"
+  source: "queue" | "rotation"
+  vocabulary?: { name?: string }
 }
 
 export interface CandidateInput {
-  tile: TonightTile;
-  personIds: readonly string[];
-  sets: readonly CandidateSet[];
+  tile: TonightTile
+  personIds: readonly string[]
+  sets: readonly CandidateSet[]
   /** Every queue's members, keyed on set id — one statement, not one per set. */
-  membersByQueue: ReadonlyMap<string, QueueMember[]>;
-  membershipFor: (groupId: string) => GroupMembership | null;
+  membersByQueue: ReadonlyMap<string, QueueMember[]>
+  membershipFor: (groupId: string) => GroupMembership | null
   /** The BACKEND behind a set: its provider id, or `null` when the set is mixed or broken. */
-  providerIdFor: (setId: string) => string | null;
+  providerIdFor: (setId: string) => string | null
   /** Set ids already turned down this evening — the reroll's memory. */
-  excludedSetIds?: readonly string[];
+  excludedSetIds?: readonly string[]
   /** Once a session has drawn a backend, it stays on it. */
-  boundBackend?: string | null;
+  boundBackend?: string | null
 }
 
 /**
@@ -165,32 +188,39 @@ export function candidatesFor({
   sets,
   tile,
 }: CandidateInput): TonightCandidate[] {
-  const excluded = new Set(excludedSetIds);
-  const out: TonightCandidate[] = [];
+  const excluded = new Set(excludedSetIds)
+  const out: TonightCandidate[] = []
 
   for (const set of sets) {
     // AVAILABLE, not merely enabled: What to Watch/Play is the surface the season window was
     // asked for, and it asks the SAME predicate the five engine-side consumers ask. There is
     // no second calendar rule anywhere in this app.
-    if (!isSetAvailable(set)) continue;
-    if (excluded.has(set.id)) continue;
-    if (tileForSet(set) !== tile) continue;
+    if (!isSetAvailable(set)) continue
+    if (excluded.has(set.id)) continue
+    if (tileForSet(set) !== tile) continue
 
-    const providerId = providerIdFor(set.id);
+    const providerId = providerIdFor(set.id)
     // A mixed queue is a push target and a pull URL at once, and what it hands off is an open
     // decision. `launchDescriptor` refuses one with a 501; offering it here would draw a card
     // whose Go cannot work.
-    if (!providerId) continue;
-    if (boundBackend && providerId !== boundBackend) continue;
+    if (!providerId) continue
+    if (boundBackend && providerId !== boundBackend)
+      continue
 
-    const members = membersByQueue.get(set.id) ?? [];
-    if (!queueMatchesSelection(toResolvedMembers(members, membershipFor), personIds)) continue;
+    const members = membersByQueue.get(set.id) ?? []
+    if (
+      !queueMatchesSelection(
+        toResolvedMembers(members, membershipFor),
+        personIds,
+      )
+    )
+      continue
 
     out.push({
       delivery: set.delivery,
       providerId,
       providerKind: set.provider_kind,
-      providerLabel: set.vocabulary?.name ?? '',
+      providerLabel: set.vocabulary?.name ?? "",
       queueActivity: set.activity,
       setId: set.id,
       // The queue's own name when it has one, its ACTIVITY when it has not. `set.label`
@@ -198,20 +228,28 @@ export function candidatesFor({
       // `movies_shows` (decision
       // `2026-08-26-a-queue-name-is-optional-and-the-activity-fills-in`). No NUMBER here:
       // this is one card for one draw, not a list where two could sit side by side.
-      setLabel: set.has_explicit_label ? set.label : activityLabel(set.activity),
+      setLabel: set.has_explicit_label
+        ? set.label
+        : activityLabel(set.activity),
       source: set.source,
       tile,
-    });
+    })
   }
 
-  return out;
+  return out
 }
 
 // ── The draw ────────────────────────────────────────────────────────────────────────────
 
 /** A uniform draw from `[0, size)`. Injected `random` is `Math.random`'s contract. */
-const indexOf = (size: number, random: () => number): number =>
-  Math.min(size - 1, Math.max(0, Math.floor(random() * size)));
+const indexOf = (
+  size: number,
+  random: () => number,
+): number =>
+  Math.min(
+    size - 1,
+    Math.max(0, Math.floor(random() * size)),
+  )
 
 /**
  * Which backend this session runs on.
@@ -225,10 +263,12 @@ export function chooseBackend(
   candidates: readonly TonightCandidate[],
   random: () => number,
 ): string | null {
-  const backends = [...new Set(candidates.map((one) => one.providerId))];
-  if (backends.length === 0) return null;
-  if (backends.length === 1) return backends[0] ?? null;
-  return backends[indexOf(backends.length, random)] ?? null;
+  const backends = [
+    ...new Set(candidates.map((one) => one.providerId)),
+  ]
+  if (backends.length === 0) return null
+  if (backends.length === 1) return backends[0] ?? null
+  return backends[indexOf(backends.length, random)] ?? null
 }
 
 /**
@@ -242,15 +282,15 @@ export function orderCandidates(
   candidates: readonly TonightCandidate[],
   random: () => number,
 ): TonightCandidate[] {
-  const out = [...candidates];
+  const out = [...candidates]
   for (let i = out.length - 1; i > 0; i -= 1) {
-    const j = indexOf(i + 1, random);
-    const a = out[i] as TonightCandidate;
-    const b = out[j] as TonightCandidate;
-    out[i] = b;
-    out[j] = a;
+    const j = indexOf(i + 1, random)
+    const a = out[i] as TonightCandidate
+    const b = out[j] as TonightCandidate
+    out[i] = b
+    out[j] = a
   }
-  return out;
+  return out
 }
 
 /**
@@ -264,15 +304,17 @@ export function drawQueues(
   candidates: readonly TonightCandidate[],
   random: () => number,
 ): { backend: string | null; ordered: TonightCandidate[] } {
-  const backend = chooseBackend(candidates, random);
-  if (!backend) return { backend: null, ordered: [] };
+  const backend = chooseBackend(candidates, random)
+  if (!backend) return { backend: null, ordered: [] }
   return {
     backend,
     ordered: orderCandidates(
-      candidates.filter((one) => one.providerId === backend),
+      candidates.filter(
+        (one) => one.providerId === backend,
+      ),
       random,
     ),
-  };
+  }
 }
 
 // ── What comes up next ──────────────────────────────────────────────────────────────────
@@ -285,31 +327,50 @@ export function drawQueues(
  * answers with its title rather than throwing: an unnamed card is a worse failure than a
  * slightly thin one.
  */
-export function playItemLabel(item: PlayItem): { title: string; detail: string | null } {
-  const row = item as unknown as Record<string, unknown>;
-  const title = typeof row.title === 'string' && row.title ? row.title : '';
+export function playItemLabel(item: PlayItem): {
+  title: string
+  detail: string | null
+} {
+  const row = item as unknown as Record<string, unknown>
+  const title =
+    typeof row.title === "string" && row.title
+      ? row.title
+      : ""
 
   // Plex: a show carries its series name separately, and the episode number is what a person
   // is actually looking for.
-  if ('ratingKey' in row) {
-    const show = typeof row.show === 'string' ? row.show : '';
-    const season = typeof row.season === 'number' ? row.season : null;
-    const episode = typeof row.episode === 'number' ? row.episode : null;
-    const code = season != null && episode != null
-      ? `S${String(season).padStart(2, '0')}E${String(episode).padStart(2, '0')}`
-      : null;
-    if (show) return { detail: [code, title].filter(Boolean).join(' · ') || null, title: show };
-    return { detail: code, title: title || 'Next up' };
+  if ("ratingKey" in row) {
+    const show =
+      typeof row.show === "string" ? row.show : ""
+    const season =
+      typeof row.season === "number" ? row.season : null
+    const episode =
+      typeof row.episode === "number" ? row.episode : null
+    const code =
+      season != null && episode != null
+        ? `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`
+        : null
+    if (show)
+      return {
+        detail:
+          [code, title].filter(Boolean).join(" · ") || null,
+        title: show,
+      }
+    return { detail: code, title: title || "Next up" }
   }
 
   // Kavita: `number` is the chapter or the volume, and `unit` says which.
-  if ('chapterId' in row) {
-    const unit = row.unit === 'volume' ? 'Vol' : 'Ch';
-    const number = row.number == null ? null : String(row.number);
-    return { detail: number ? `${unit} ${number}` : null, title: title || 'Next up' };
+  if ("chapterId" in row) {
+    const unit = row.unit === "volume" ? "Vol" : "Ch"
+    const number =
+      row.number == null ? null : String(row.number)
+    return {
+      detail: number ? `${unit} ${number}` : null,
+      title: title || "Next up",
+    }
   }
 
-  return { detail: null, title: title || 'Next up' };
+  return { detail: null, title: title || "Next up" }
 }
 
 /** The first entry a curated queue has not finished with — the head of its lineup, read out
@@ -318,7 +379,7 @@ export function firstUnfinishedEntry(
   entries: readonly { done: boolean; display: string }[],
 ): string | null {
   for (const entry of entries) {
-    if (!entry.done && entry.display) return entry.display;
+    if (!entry.done && entry.display) return entry.display
   }
-  return null;
+  return null
 }

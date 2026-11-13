@@ -19,29 +19,37 @@
 // It is durable by definition — losing it lets a queue reset a second time and throw away the
 // evening's watching — so it lives in `queuepilot.sqlite` beside `lead_cooldown` rather than in
 // the deletable Plex cache.
-import { bookOfRecord, prepareChecked } from './open.js';
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 /** Why a queue is settled through `settledAt`. */
 export type WatchedResetReason =
   /** The first read after a date was set. Nothing was cleared. */
-  | 'adopted'
+  | "adopted"
   /** A person pressed the button, or a caller posted to the route / topic. */
-  | 'manual'
+  | "manual"
   /** The `MM-DD` occurrence that fired the reset. */
-  | (string & {});
+  | (string & {})
 
 export interface WatchedResetSettlement {
-  settledAt: number;
-  reason: WatchedResetReason | null;
+  settledAt: number
+  reason: WatchedResetReason | null
 }
 
-export function settlementFor(setId: string): WatchedResetSettlement | null {
-  const row = prepareChecked<{ settled_at: number; reason: string | null }>(
+export function settlementFor(
+  setId: string,
+): WatchedResetSettlement | null {
+  const row = prepareChecked<{
+    settled_at: number
+    reason: string | null
+  }>(
     bookOfRecord(),
-    'SELECT settled_at, reason FROM queue_watched_reset WHERE set_id = :set_id',
-  ).get({ set_id: setId });
-  if (!row) return null;
-  return { settledAt: Number(row.settled_at), reason: row.reason ?? null };
+    "SELECT settled_at, reason FROM queue_watched_reset WHERE set_id = :set_id",
+  ).get({ set_id: setId })
+  if (!row) return null
+  return {
+    settledAt: Number(row.settled_at),
+    reason: row.reason ?? null,
+  }
 }
 
 /**
@@ -50,7 +58,11 @@ export function settlementFor(setId: string): WatchedResetSettlement | null {
  * The time is passed in rather than read from the clock here, so a caller's `now` and the row
  * it writes cannot disagree by the width of the operation between them.
  */
-export function settle(setId: string, atSec: number, reason: WatchedResetReason): void {
+export function settle(
+  setId: string,
+  atSec: number,
+  reason: WatchedResetReason,
+): void {
   prepareChecked(
     bookOfRecord(),
     `INSERT INTO queue_watched_reset (set_id, settled_at, reason)
@@ -61,13 +73,13 @@ export function settle(setId: string, atSec: number, reason: WatchedResetReason)
     set_id: setId,
     settled_at: Math.floor(atSec),
     reason,
-  });
+  })
 }
 
 /** Forget a queue's settlement — a set deletion, or a test. */
 export function clearSettlement(setId: string): void {
   prepareChecked(
     bookOfRecord(),
-    'DELETE FROM queue_watched_reset WHERE set_id = :set_id',
-  ).run({ set_id: setId });
+    "DELETE FROM queue_watched_reset WHERE set_id = :set_id",
+  ).run({ set_id: setId })
 }

@@ -1,55 +1,91 @@
 // The MQTT service — session start/advance/preview/devices/discovery/state. Sole owner of
 // these topics since the Python service was deleted (2026-08-12); cast play is delegated to
 // cast_sidecar. HA and the web UI talk MQTT exactly as before.
-import { connect, type IClientPublishOptions, type MqttClient } from 'mqtt';
-import { randomUUID } from 'node:crypto';
-import * as session from './session.js';
-import { createChooser } from './chooser.js';
-import { chooserCatalog, chooserPerson } from './chooserCatalog.js';
-import * as enginePreview from './engine/preview.js';
-import * as engineRouting from './engine/routing.js';
-import * as adb from './adb.js';
-import * as devices from './devices.js';
-import * as topup from './topup.js';
-import { startTopupScheduler, type TopupScheduler } from './topupScheduler.js';
-import * as finished from './finished.js';
-import * as sets from './sets.js';
-import * as watchedReset from './watchedReset.js';
-import { auditAttribution, summarise } from './accountAudit.js';
+
+import { randomUUID } from "node:crypto"
 import {
-  MQTT_HOST, MQTT_PORT, MQTT_USER, MQTT_PASS,
-  T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
-  T_CMD_RESET_WATCHED, T_RESP_RESET_WATCHED,
-  T_CMD_ACCOUNT_AUDIT, T_RESP_ACCOUNT_AUDIT,
-  T_RESP_PREVIEW_BASE, T_RESP_LAST_PLAYED, T_RESP_SOUNDTRACK, T_RESP_TOPUP, T_RESP_FINISHED, T_STATE,
-  T_DISCOVERY_BASE, DISCOVERY_OBJECT_ID,
+  connect,
+  type IClientPublishOptions,
+  type MqttClient,
+} from "mqtt"
+import {
+  auditAttribution,
+  summarise,
+} from "./accountAudit.js"
+import * as adb from "./adb.js"
+import { createChooser } from "./chooser.js"
+import {
+  chooserCatalog,
+  chooserPerson,
+} from "./chooserCatalog.js"
+import * as devices from "./devices.js"
+import * as enginePreview from "./engine/preview.js"
+import * as engineRouting from "./engine/routing.js"
+import {
   DEVICE_ANNOUNCE_SECONDS,
-} from './env.js';
-import { errMessage, isNodeError } from './errors.js';
+  DISCOVERY_OBJECT_ID,
+  MQTT_HOST,
+  MQTT_PASS,
+  MQTT_PORT,
+  MQTT_USER,
+  T_CMD_ACCOUNT_AUDIT,
+  T_CMD_ADVANCE,
+  T_CMD_PREVIEW,
+  T_CMD_RESET_WATCHED,
+  T_CMD_SOUNDTRACK,
+  T_CMD_START,
+  T_CMD_TOPUP,
+  T_DISCOVERY_BASE,
+  T_RESP_ACCOUNT_AUDIT,
+  T_RESP_FINISHED,
+  T_RESP_LAST_PLAYED,
+  T_RESP_PREVIEW_BASE,
+  T_RESP_RESET_WATCHED,
+  T_RESP_SOUNDTRACK,
+  T_RESP_TOPUP,
+  T_STATE,
+} from "./env.js"
+import { errMessage, isNodeError } from "./errors.js"
+import * as finished from "./finished.js"
+import * as session from "./session.js"
+import * as sets from "./sets.js"
+import * as topup from "./topup.js"
+import {
+  startTopupScheduler,
+  type TopupScheduler,
+} from "./topupScheduler.js"
 import type {
-  Device, PublishedSessionState, PublishedStateExtra, SessionStartPayload,
-} from './types.js';
+  Device,
+  PublishedSessionState,
+  PublishedStateExtra,
+  SessionStartPayload,
+} from "./types.js"
+import * as watchedReset from "./watchedReset.js"
 
 /**
  * The publish primitive every helper below uses, and what `devices.announceDevices()` is
  * handed. Named locally because it is this file's own seam (devices.js takes it as a
  * parameter), not a domain shape.
  */
-type Publish = (topic: string, payload: unknown, opts?: { qos?: 0 | 1 | 2; retain?: boolean }) => void;
+type Publish = (
+  topic: string,
+  payload: unknown,
+  opts?: { qos?: 0 | 1 | 2; retain?: boolean },
+) => void
 
 /** The `extra` half of `publishState()` — every key any caller passes, i.e. everything on
  * `PublishedSessionState` that `asDict()` does not already supply, plus this file's own
  * `boot` (the connect handler stamps it). Aliases the shared `PublishedStateExtra` rather
  * than re-spelling it: this publisher is injected into session.js and on into driver.js, and
  * a per-file copy of its parameter type is how those ends drifted apart. */
-type StateExtra = PublishedStateExtra;
+type StateExtra = PublishedStateExtra
 
 /** `queuepilot/cmd/generic/preview` payload. Untrusted: `reply` is attacker-controlled and
  * is validated against the preview base below. */
 interface PreviewPayload {
-  set?: unknown;
-  reply?: unknown;
-  profile?: unknown;
+  set?: unknown
+  reply?: unknown
+  profile?: unknown
 }
 
 /**
@@ -59,89 +95,126 @@ interface PreviewPayload {
  * and the preview shape belongs to engine/preview.js, not here.
  */
 interface PreviewData {
-  buckets?: unknown[];
-  routing?: unknown;
-  [field: string]: unknown;
+  buckets?: unknown[]
+  routing?: unknown
+  [field: string]: unknown
 }
 
 /** `queuepilot/cmd/soundtrack/resolve` payload — the retired resolver's, kept so the answer
  * can echo the requested title. */
 interface SoundtrackPayload {
-  title?: string | null;
+  title?: string | null
 }
 
-let client: MqttClient | null = null;
-let announceTimer: NodeJS.Timeout | null = null;
-let topupScheduler: TopupScheduler | null = null;
+let client: MqttClient | null = null
+let announceTimer: NodeJS.Timeout | null = null
+let topupScheduler: TopupScheduler | null = null
 
 // The one place anything in this file reaches the broker: JSON-encodes non-string payloads,
 // defaults to qos 1, and drops the message when the client is not connected.
 const pub: Publish = (topic, payload, opts = {}) => {
-  const c = client;
-  if (!c?.connected) return;
-  const body = typeof payload === 'string' ? payload : JSON.stringify(payload);
-  const settings: IClientPublishOptions = { qos: opts.qos ?? 1, retain: Boolean(opts.retain) };
-  c.publish(topic, body, settings);
-};
+  const c = client
+  if (!c?.connected) return
+  const body =
+    typeof payload === "string"
+      ? payload
+      : JSON.stringify(payload)
+  const settings: IClientPublishOptions = {
+    qos: opts.qos ?? 1,
+    retain: Boolean(opts.retain),
+  }
+  c.publish(topic, body, settings)
+}
 
 const chooser = createChooser({
   catalog: chooserCatalog,
   person: chooserPerson,
   publish: (reader, state, event, queue) => {
-    pub(`queuepilot/chooser/${reader}/state`, state, { retain: true });
-    pub(`queuepilot/resp/chooser/${reader}`, { event, ...state, ...(queue ? { queue } : {}) });
+    pub(`queuepilot/chooser/${reader}/state`, state, {
+      retain: true,
+    })
+    pub(`queuepilot/resp/chooser/${reader}`, {
+      event,
+      ...state,
+      ...(queue ? { queue } : {}),
+    })
   },
-});
+})
 
 function publishState(extra: StateExtra = {}): void {
-  const state: PublishedSessionState & { boot?: boolean } = {
-    ...session.SESSION.asDict(), ...extra, engine: 'node',
-  };
-  pub(T_STATE, state, { retain: true });
+  const state: PublishedSessionState & { boot?: boolean } =
+    {
+      ...session.SESSION.asDict(),
+      ...extra,
+      engine: "node",
+    }
+  pub(T_STATE, state, { retain: true })
 }
 
-function publishLastPlayed(item: session.LastPlayed | null): void {
-  if (!item) return;
-  pub(T_RESP_LAST_PLAYED, item, { retain: true });
+function publishLastPlayed(
+  item: session.LastPlayed | null,
+): void {
+  if (!item) return
+  pub(T_RESP_LAST_PLAYED, item, { retain: true })
 }
 
-session.setPublishers({ state: publishState, lastPlayed: publishLastPlayed });
-  // A sitting ending is an ANNOUNCEMENT, not a command: `power_off` rides on it and HA decides
-  // what to do with the room. Not retained — it describes one moment.
-  finished.setFinishedPublisher((payload) => pub(T_RESP_FINISHED, payload));
+session.setPublishers({
+  state: publishState,
+  lastPlayed: publishLastPlayed,
+})
+// A sitting ending is an ANNOUNCEMENT, not a command: `power_off` rides on it and HA decides
+// what to do with the room. Not retained — it describes one moment.
+finished.setFinishedPublisher((payload) =>
+  pub(T_RESP_FINISHED, payload),
+)
 
-async function handleStart(payload: SessionStartPayload): Promise<void> {
+async function handleStart(
+  payload: SessionStartPayload,
+): Promise<void> {
   // MQTT accepts only a registry ID, never a caller-supplied host or ADB endpoint.
   if (payload.target) {
-    const device = typeof payload.target === 'string' ? devices.known(payload.target) as Device | null : null;
+    const device =
+      typeof payload.target === "string"
+        ? (devices.known(payload.target) as Device | null)
+        : null
     if (!device) {
-      publishState({ error: `unknown device '${String(payload.target)}'` });
-      return;
+      publishState({
+        error: `unknown device '${String(payload.target)}'`,
+      })
+      return
     }
-    payload = { ...payload, target: device };
+    payload = { ...payload, target: device }
   }
-  const { target } = payload;
-  console.log('[mqttd] session/start', JSON.stringify({
-    set: payload.set,
-    kind: payload.kind,
-    profile: payload.profile,
-    // `target?.id || target` in the original: a Device logs its id, and anything else (a
-    // string id this handler could not resolve) logs itself.
-    target: target && typeof target === 'object' ? target.id : target,
-  }));
+  const { target } = payload
+  console.log(
+    "[mqttd] session/start",
+    JSON.stringify({
+      set: payload.set,
+      kind: payload.kind,
+      profile: payload.profile,
+      // `target?.id || target` in the original: a Device logs its id, and anything else (a
+      // string id this handler could not resolve) logs itself.
+      target:
+        target && typeof target === "object"
+          ? target.id
+          : target,
+    }),
+  )
   try {
-    await session.startSession(payload);
+    await session.startSession(payload)
   } catch (e) {
-    console.log(`[mqttd] start failed: ${(isNodeError(e) && e.stack) || errMessage(e)}`);
-    publishState({ error: errMessage(e) });
+    console.log(
+      `[mqttd] start failed: ${(isNodeError(e) && e.stack) || errMessage(e)}`,
+    )
+    publishState({ error: errMessage(e) })
   }
 }
 
 async function handleAdvance(): Promise<void> {
   try {
-    await session.advanceSession();
+    await session.advanceSession()
   } catch (e) {
-    publishState({ error: errMessage(e) });
+    publishState({ error: errMessage(e) })
   }
 }
 
@@ -163,28 +236,48 @@ async function handleAdvance(): Promise<void> {
  * stamping `T_STATE` (retained) on every tick would churn the retained payload every few
  * minutes for something no reader of that topic cares about.
  */
-async function handleTopup(scope: 'session' | 'pull' | 'all' = 'all'): Promise<void> {
+async function handleTopup(
+  scope: "session" | "pull" | "all" = "all",
+): Promise<void> {
   try {
-    const sessionResult = scope === 'pull' ? null : await topup.topup();
-    const lists = scope === 'session' ? [] : await topup.topupPullLists();
-    const results = [...(sessionResult ? [sessionResult] : []), ...lists];
-    const failures = results.filter((result) => !result.ok);
-    const first = sessionResult ?? lists[0] ?? { ok: true, reason: 'no pull lists configured' };
+    const sessionResult =
+      scope === "pull" ? null : await topup.topup()
+    const lists =
+      scope === "session"
+        ? []
+        : await topup.topupPullLists()
+    const results = [
+      ...(sessionResult ? [sessionResult] : []),
+      ...lists,
+    ]
+    const failures = results.filter((result) => !result.ok)
+    const first = sessionResult ??
+      lists[0] ?? {
+        ok: true,
+        reason: "no pull lists configured",
+      }
     pub(T_RESP_TOPUP, {
       ...first,
       ok: failures.length === 0,
       scope,
-      ...(failures.length ? {
-        error: failures.map((result) => `${result.set ?? '(no set)'}: ${result.error ?? 'unknown error'}`).join('; '),
-      } : {}),
+      ...(failures.length
+        ? {
+            error: failures
+              .map(
+                (result) =>
+                  `${result.set ?? "(no set)"}: ${result.error ?? "unknown error"}`,
+              )
+              .join("; "),
+          }
+        : {}),
       // Only when there is something to say: a deployment with no pull provider omits the
       // optional list detail.
       ...(lists.length ? { lists } : {}),
-    });
+    })
   } catch (e) {
     // topup() is written not to throw; if it ever does, that is a bug worth seeing on the
     // broker rather than a silently swallowed tick.
-    pub(T_RESP_TOPUP, { ok: false, error: errMessage(e) });
+    pub(T_RESP_TOPUP, { ok: false, error: errMessage(e) })
   }
 }
 
@@ -207,27 +300,43 @@ async function handleTopup(scope: 'session' | 'pull' | 'all' = 'all'): Promise<v
  * unknown queue is otherwise indistinguishable from a broker that dropped the message, and this
  * is a command whose whole point is that nobody is watching when it runs.
  */
-async function handleResetWatched(payload: Record<string, unknown>): Promise<void> {
-  const setId = String(payload.set ?? '').trim();
+async function handleResetWatched(
+  payload: Record<string, unknown>,
+): Promise<void> {
+  const setId = String(payload.set ?? "").trim()
   if (!setId) {
-    pub(T_RESP_RESET_WATCHED, { ok: false, error: 'no set named' });
-    return;
+    pub(T_RESP_RESET_WATCHED, {
+      ok: false,
+      error: "no set named",
+    })
+    return
   }
   try {
     // Refused rather than reset when it is not a curated queue: a rotation pool owns no done
     // flags, no queue_entry_history and no lead cooldowns, so "reset" would report three zeros
     // and read as a success. `sets.updateSet` refuses `reset_watched_on` on one for the same
     // reason.
-    const set = await sets.getSet(setId);
-    if (!set || set.source !== 'queue') {
-      pub(T_RESP_RESET_WATCHED, { ok: false, set: setId, error: 'unknown curated queue' });
-      return;
+    const set = await sets.getSet(setId)
+    if (!set || set.source !== "queue") {
+      pub(T_RESP_RESET_WATCHED, {
+        ok: false,
+        set: setId,
+        error: "unknown curated queue",
+      })
+      return
     }
-    const result = await watchedReset.resetQueueWatchedState(setId);
-    pub(T_RESP_RESET_WATCHED, { ok: true, ...result });
-    console.log(`[mqttd] reset-watched ${setId}: ${result.total} cleared`);
+    const result =
+      await watchedReset.resetQueueWatchedState(setId)
+    pub(T_RESP_RESET_WATCHED, { ok: true, ...result })
+    console.log(
+      `[mqttd] reset-watched ${setId}: ${result.total} cleared`,
+    )
   } catch (e) {
-    pub(T_RESP_RESET_WATCHED, { ok: false, set: setId, error: errMessage(e) });
+    pub(T_RESP_RESET_WATCHED, {
+      ok: false,
+      set: setId,
+      error: errMessage(e),
+    })
   }
 }
 
@@ -247,47 +356,73 @@ async function handleResetWatched(payload: Record<string, unknown>): Promise<voi
  * "nothing wrong" is the failure this whole feature exists to stop.
  * (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
  */
-async function handleAccountAudit(payload: Record<string, unknown>): Promise<void> {
+async function handleAccountAudit(
+  payload: Record<string, unknown>,
+): Promise<void> {
   try {
-    const asked = Number(payload.lookbackSeconds);
+    const asked = Number(payload.lookbackSeconds)
     const report = await auditAttribution(
-      Number.isFinite(asked) && asked > 0 ? { lookbackSeconds: asked } : {},
-    );
-    pub(T_RESP_ACCOUNT_AUDIT, { ok: report.unreadable == null, ...report });
-    console.log(`[mqttd] account-audit: ${summarise(report)}`);
+      Number.isFinite(asked) && asked > 0
+        ? { lookbackSeconds: asked }
+        : {},
+    )
+    pub(T_RESP_ACCOUNT_AUDIT, {
+      ok: report.unreadable == null,
+      ...report,
+    })
+    console.log(
+      `[mqttd] account-audit: ${summarise(report)}`,
+    )
   } catch (e) {
-    pub(T_RESP_ACCOUNT_AUDIT, { ok: false, error: errMessage(e) });
+    pub(T_RESP_ACCOUNT_AUDIT, {
+      ok: false,
+      error: errMessage(e),
+    })
   }
 }
 
-async function handlePreview(payload: PreviewPayload): Promise<void> {
-  const setName = String(payload.set || '');
-  const reply = String(payload.reply || '');
-  const profile = String(payload.profile || '') || '';
+async function handlePreview(
+  payload: PreviewPayload,
+): Promise<void> {
+  const setName = String(payload.set || "")
+  const reply = String(payload.reply || "")
+  const profile = String(payload.profile || "") || ""
   // The reply topic is attacker-controlled input, so it stays confined to the preview base.
   if (!reply.startsWith(T_RESP_PREVIEW_BASE)) {
-    console.log(`[mqttd] refused preview reply ${reply}`);
-    return;
+    console.log(`[mqttd] refused preview reply ${reply}`)
+    return
   }
   try {
-    const data = await enginePreview.previewRotation(setName, profile) as PreviewData;
-    try { data.routing = engineRouting.forSet(setName, profile); } catch { /* ignore */ }
-    pub(reply, data);
-    console.log(`[mqttd] preview ${setName}: ${(data.buckets || []).length} buckets`);
+    const data = (await enginePreview.previewRotation(
+      setName,
+      profile,
+    )) as PreviewData
+    try {
+      data.routing = engineRouting.forSet(setName, profile)
+    } catch {
+      /* ignore */
+    }
+    pub(reply, data)
+    console.log(
+      `[mqttd] preview ${setName}: ${(data.buckets || []).length} buckets`,
+    )
   } catch (e) {
-    pub(reply, { set: setName, error: errMessage(e) });
+    pub(reply, { set: setName, error: errMessage(e) })
   }
 }
 
-function handleSoundtrack(payload: SoundtrackPayload | null | undefined): void {
+function handleSoundtrack(
+  payload: SoundtrackPayload | null | undefined,
+): void {
   // The soundtrack resolver (MA → YouTube-Music → Ollama) was Python-only and went with it on
   // 2026-08-12; no live automation published to this topic. Answer clearly so HA never hangs.
   pub(T_RESP_SOUNDTRACK, {
     command_string: null,
     tier: null,
     query: payload?.title || null,
-    error: 'soundtrack resolver is retired (it was Python-only, and unused)',
-  });
+    error:
+      "soundtrack resolver is retired (it was Python-only, and unused)",
+  })
 }
 
 // The registry round lives in devices.js (Shield + the plex.tv player sweep, with
@@ -295,129 +430,158 @@ function handleSoundtrack(payload: SoundtrackPayload | null | undefined): void {
 // inside setInterval would take the announcer down silently, and a dead announcer looks
 // exactly like the ghost registry we just fixed.
 function announceDevices(): void {
-  devices.announceDevices(pub).catch((e: unknown) => console.log(`[devices] ${errMessage(e)}`));
+  devices
+    .announceDevices(pub)
+    .catch((e: unknown) =>
+      console.log(`[devices] ${errMessage(e)}`),
+    )
 }
 
 function publishDiscovery(): void {
-  const topic = `${T_DISCOVERY_BASE}/sensor/${DISCOVERY_OBJECT_ID}/config`;
+  const topic = `${T_DISCOVERY_BASE}/sensor/${DISCOVERY_OBJECT_ID}/config`
   const cfg = {
-    name: 'Status',
+    name: "Status",
     unique_id: DISCOVERY_OBJECT_ID,
     object_id: DISCOVERY_OBJECT_ID,
     state_topic: T_STATE,
-    value_template: (
-      '{% if value_json.error %}error'
-      + '{% elif value_json.awaiting %}waiting'
-      + '{% elif value_json.playback %}playing'
-      + '{% else %}idle{% endif %}'
-    ),
+    value_template:
+      "{% if value_json.error %}error" +
+      "{% elif value_json.awaiting %}waiting" +
+      "{% elif value_json.playback %}playing" +
+      "{% else %}idle{% endif %}",
     json_attributes_topic: T_STATE,
-    icon: 'mdi:plex',
+    icon: "mdi:plex",
     device: {
-      identifiers: ['queuepilot'],
-      name: 'QueuePilot',
-      manufacturer: 'queuepilot',
-      model: 'Media queue controller',
+      identifiers: ["queuepilot"],
+      name: "QueuePilot",
+      manufacturer: "queuepilot",
+      model: "Media queue controller",
     },
-  };
-  pub(topic, cfg, { retain: true });
-  console.log(`[mqttd] published discovery for ${DISCOVERY_OBJECT_ID}`);
+  }
+  pub(topic, cfg, { retain: true })
+  console.log(
+    `[mqttd] published discovery for ${DISCOVERY_OBJECT_ID}`,
+  )
 }
 
 export function start(): MqttClient | null {
-  topupScheduler?.stop();
+  topupScheduler?.stop()
   topupScheduler = startTopupScheduler({
     // A push lineup exists only while a session is live. This is the in-process twin of the
     // old HA state-attribute condition, without a broker round trip to ask the app about its
     // own state.
     runSession: async () => {
-      if (!session.SESSION.set) return;
-      await handleTopup('session');
+      if (!session.SESSION.set) return
+      await handleTopup("session")
     },
     // Pull artifacts outlive a TV session, so they keep their own slower cadence.
-    runPullLists: async () => handleTopup('pull'),
-  });
+    runPullLists: async () => handleTopup("pull"),
+  })
 
   if (!MQTT_HOST) {
-    console.log('[mqttd] MQTT_HOST unset — Node playback service not started; top-up results will not publish');
-    return null;
+    console.log(
+      "[mqttd] MQTT_HOST unset — Node playback service not started; top-up results will not publish",
+    )
+    return null
   }
   // Bound to a const as well as to `client`, so the handlers below keep the narrowing that a
   // module-level `let` loses inside a closure. Same client object either way.
   const c = connect({
     host: MQTT_HOST,
     port: MQTT_PORT,
-    protocol: MQTT_PORT === 8883 ? 'mqtts' : 'mqtt',
+    protocol: MQTT_PORT === 8883 ? "mqtts" : "mqtt",
     username: MQTT_USER,
     password: MQTT_PASS,
     reconnectPeriod: 5000,
     clientId: `queuepilot-node-${randomUUID().slice(0, 8)}`,
-  });
-  client = c;
-  c.on('connect', () => {
-    console.log(`[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`);
+  })
+  client = c
+  c.on("connect", () => {
+    console.log(
+      `[mqttd] connected ${MQTT_HOST}:${MQTT_PORT}`,
+    )
     c.subscribe([
-      T_CMD_START, T_CMD_ADVANCE, T_CMD_SOUNDTRACK, T_CMD_PREVIEW, T_CMD_TOPUP,
-      T_CMD_RESET_WATCHED, T_CMD_ACCOUNT_AUDIT, 'queuepilot/cmd/chooser/+',
-    ]);
-    announceDevices();
-    publishDiscovery();
-    publishState({ boot: true });
-    if (announceTimer) clearInterval(announceTimer);
-    announceTimer = setInterval(announceDevices, Math.max(30, DEVICE_ANNOUNCE_SECONDS) * 1000);
-  });
-  c.on('error', (e) => console.log(`[mqttd] ${e.message}`));
-  c.on('message', (topic, buf, packet) => {
+      T_CMD_START,
+      T_CMD_ADVANCE,
+      T_CMD_SOUNDTRACK,
+      T_CMD_PREVIEW,
+      T_CMD_TOPUP,
+      T_CMD_RESET_WATCHED,
+      T_CMD_ACCOUNT_AUDIT,
+      "queuepilot/cmd/chooser/+",
+    ])
+    announceDevices()
+    publishDiscovery()
+    publishState({ boot: true })
+    if (announceTimer) clearInterval(announceTimer)
+    announceTimer = setInterval(
+      announceDevices,
+      Math.max(30, DEVICE_ANNOUNCE_SECONDS) * 1000,
+    )
+  })
+  c.on("error", (e) => console.log(`[mqttd] ${e.message}`))
+  c.on("message", (topic, buf, packet) => {
     // One parse for five command topics, so it stays `unknown` here and each handler declares
     // the shape it reads. A non-object body (or junk) reads as `{}`, exactly as before.
-    let payload: Record<string, unknown> = {};
+    let payload: Record<string, unknown> = {}
     try {
-      const parsed: unknown = JSON.parse(buf.toString() || '{}');
-      payload = parsed !== null && typeof parsed === 'object' ? parsed as Record<string, unknown> : {};
-    } catch { payload = {}; }
-    if (topic.startsWith('queuepilot/cmd/chooser/')) {
-      if (!packet.retain) void chooser.handle(topic.slice('queuepilot/cmd/chooser/'.length), payload);
-      return;
+      const parsed: unknown = JSON.parse(
+        buf.toString() || "{}",
+      )
+      payload =
+        parsed !== null && typeof parsed === "object"
+          ? (parsed as Record<string, unknown>)
+          : {}
+    } catch {
+      payload = {}
+    }
+    if (topic.startsWith("queuepilot/cmd/chooser/")) {
+      if (!packet.retain)
+        void chooser.handle(
+          topic.slice("queuepilot/cmd/chooser/".length),
+          payload,
+        )
+      return
     }
     if (topic === T_CMD_START) {
       // fire-and-forget async
-      void handleStart(payload as SessionStartPayload);
-      return;
+      void handleStart(payload as SessionStartPayload)
+      return
     }
     if (topic === T_CMD_ADVANCE) {
-      void handleAdvance();
-      return;
+      void handleAdvance()
+      return
     }
     if (topic === T_CMD_TOPUP) {
-      void handleTopup();
-      return;
+      void handleTopup()
+      return
     }
     if (topic === T_CMD_RESET_WATCHED) {
-      void handleResetWatched(payload);
-      return;
+      void handleResetWatched(payload)
+      return
     }
     if (topic === T_CMD_ACCOUNT_AUDIT) {
-      void handleAccountAudit(payload);
-      return;
+      void handleAccountAudit(payload)
+      return
     }
     if (topic === T_CMD_PREVIEW) {
-      void handlePreview(payload as PreviewPayload);
-      return;
+      void handlePreview(payload as PreviewPayload)
+      return
     }
     if (topic === T_CMD_SOUNDTRACK) {
-      handleSoundtrack(payload as SoundtrackPayload);
+      handleSoundtrack(payload as SoundtrackPayload)
     }
-  });
-  return client;
+  })
+  return client
 }
 
 export function stop(): void {
-  chooser.clear();
-  if (announceTimer) clearInterval(announceTimer);
-  topupScheduler?.stop();
-  topupScheduler = null;
-  if (client) client.end(true);
-  client = null;
+  chooser.clear()
+  if (announceTimer) clearInterval(announceTimer)
+  topupScheduler?.stop()
+  topupScheduler = null
+  if (client) client.end(true)
+  client = null
 }
 
-void adb; // reserved for future device-health sampling on announce
+void adb // reserved for future device-health sampling on announce

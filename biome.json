@@ -1,0 +1,60 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+  "extends": [
+    "@charcuterie/biome-config",
+    "@charcuterie/biome-config/app"
+  ],
+  "files": {
+    "includes": [
+      "biome.json",
+      "eslint.config.mjs",
+      "web/**",
+      "server/**",
+      "shared/**",
+      "!**/node_modules",
+      "!**/dist",
+      "!web/public",
+      "!web/index.html"
+    ]
+  },
+  "overrides": [
+    {
+      "includes": ["web/**"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useExhaustiveDependencies": "warn"
+          },
+          "style": {
+            "noNonNullAssertion": "off"
+          },
+          "a11y": {
+            "noLabelWithoutControl": {
+              "level": "error",
+              "options": {
+                "inputComponents": [
+                  "CheckboxGroup",
+                  "SearchDropdown",
+                  "SelectListbox"
+                ]
+              }
+            },
+            "noNoninteractiveTabindex": "off",
+            "noStaticElementInteractions": "off",
+            "useKeyWithClickEvents": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["web/src/styles/app.css"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDescendingSpecificity": "off"
+          }
+        }
+      }
+    }
+  ]
+}

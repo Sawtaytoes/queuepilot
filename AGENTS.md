@@ -353,20 +353,30 @@ The older single-baseline shelf-heading guidance below is superseded by that rec
   the user's own focus
   ([decision](docs/decisions/2026-08-02-uncontrolled-components-are-keyed-on-their-second-writer.md)).
   The `#chchannel` / `#chprofile` pair in `ChannelsView.tsx` is the worked example.
-- **The picker rule is machine-enforced, by Biome, with no second linter.** `web/biome.json`
+- **The picker rule is machine-enforced, by Biome and by ESLint.** The root `biome.json`
   extends **both** `@charcuterie/biome-config` and `@charcuterie/biome-config/app`; the
   second is a delta that bans a raw `<select>`, a `<Select>` and the `Select` import via
-  `noRestrictedElements` + `noRestrictedImports`. It replaces the note that used to sit
-  here saying the rule ran nowhere in this repo — it does now, and it is an error.
+  `noRestrictedElements` + `noRestrictedImports`. The root `eslint.config.mjs` is the
+  fleet preset, `createAppConfig` from `@charcuterie/eslint-config`, which adds
+  `charcuterie/no-raw-select` and `charcuterie/prefer-listbox-over-select` over `web/`.
 
   **Both entries, and the order matters.** Biome does not resolve a nested `extends` inside
   an extended config, so a lone `/app` would give you the picker rules and silently revert
   the entire house style — 60 columns, no semicolons, the Tailwind CSS parser — to Biome's
   stock defaults, with no error at all.
 
-  The equivalent ESLint rules (`charcuterie/no-raw-select`,
-  `charcuterie/prefer-listbox-over-select`) still do not run here, and do not need to:
-  this repo lints with Biome and the ban is expressed natively.
+- **Lint covers `web/`, `server/` and `shared/`, from the root: `pnpm run lint`.** It runs
+  `biome check` and then `eslint .` in check mode, and CI runs the same script; `pnpm run
+  lint:fix` writes. Both configs are adopted whole from Charcuterie, and a house rule that
+  belongs to the fleet is changed there, never turned off here. `.mjs`, because the root
+  declares no module `type`. ESLint arrived on 2026-11-13, after the code, and three house
+  rules found 2,198 renames that each need a decision — many are wire and YAML fields such
+  as `ok`, `done` and `keep_completed`, which a rename would break. `id-length`,
+  `@typescript-eslint/naming-convention` and `react/no-multi-comp` are therefore staged at
+  `warn` in `eslint.config.mjs`, with the counts, and the root script passes
+  `--max-warnings 2198`: a new finding fails the run. Lower that number as the sweep removes
+  findings; do not raise it. `e2e/` is not linted yet
+  ([decision](docs/decisions/2026-11-13-eslint-joins-biome-and-three-house-rules-are-staged.md)).
 
 ## Routing
 
@@ -1536,7 +1546,7 @@ the source of truth. The fast loop, from the repo root (pnpm 12.9.1, frozen work
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm --filter queuepilot-web run lint:biome
+pnpm run lint   # Biome + ESLint over web/, server/ and shared/
 pnpm --filter queuepilot-web run typecheck && pnpm --filter queuepilot-web run test
 pnpm --filter queuepilot-server run typecheck && pnpm --filter queuepilot-e2e run typecheck
 pnpm --filter queuepilot-web run build && pnpm --filter queuepilot-server run build
@@ -1661,6 +1671,17 @@ on screen", and there is no group on screen any more — the landing filters by 
 group is not an address ([decision](docs/decisions/2026-08-26-the-landing-filters-by-people-and-the-group-chips-go.md)).
 `groups-test.ts` still pins the WRITE it sat beside, so what is gone with it is a browser
 assertion about a control that no longer exists.
+
+**Every `tsx` browser harness runs with CSS animations frozen.** `e2e/playwright.ts` wraps
+`chromium.launch`, so each page and context it opens gets a stylesheet that zeroes every CSS
+`animation-duration` and `animation-delay`. Since `@charcuterie/ui` 4.28.0 a closing `Modal`,
+`Menu` or `Picker` panel stays in the page for its exit animation, and a harness that counted a
+selector right after a close, or clicked an option while its panel was still growing, raced the
+animation and lost on a busy CI runner. Charcuterie measures that exit by `animation-duration`,
+so at zero the panel leaves at once. **Transitions are deliberately NOT frozen**: the drag
+reorder moves its siblings with a CSS `transition: transform` (`web/src/lib/flip.ts`), and the
+drag gates must keep exercising it. Do not widen the freeze to transitions, and do not remove
+it to "test the real thing"; overlay motion belongs to the VRT and to a person's review.
 
 > ### The browser gates will not launch in an agent sandbox — that is the container
 >

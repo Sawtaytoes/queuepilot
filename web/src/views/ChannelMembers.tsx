@@ -156,7 +156,6 @@ export function ChannelMembers({
     }
 
     void reload(channel.id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.id, memberCount, accountUuid])
 
   /**

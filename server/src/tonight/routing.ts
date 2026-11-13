@@ -38,7 +38,7 @@
 // (decision 2026-08-13-a-queue-draws-from-exactly-one-provider).
 //
 // CODE here, DATA in `/config/queuepilot.sqlite`. Fixtures are Ada, Grace and Linus.
-import type { Activity } from '../activity.js';
+import type { Activity } from "../activity.js"
 
 /**
  * The six tiles, in the settled order. Surprise Me is last and stays last.
@@ -47,18 +47,20 @@ import type { Activity } from '../activity.js';
  * stable, and they are spelled identically in `web/src/lib/tonight.ts`.
  */
 export const TONIGHT_TILES = [
-  'video-games',
-  'board-games',
-  'movies',
-  'shows',
-  'reading',
-  'surprise',
-] as const;
+  "video-games",
+  "board-games",
+  "movies",
+  "shows",
+  "reading",
+  "surprise",
+] as const
 
-export type TonightTile = (typeof TONIGHT_TILES)[number];
+export type TonightTile = (typeof TONIGHT_TILES)[number]
 
-export const isTonightTile = (value: unknown): value is TonightTile =>
-  TONIGHT_TILES.includes(value as TonightTile);
+export const isTonightTile = (
+  value: unknown,
+): value is TonightTile =>
+  TONIGHT_TILES.includes(value as TonightTile)
 
 /**
  * How Pick draws for a tile.
@@ -72,14 +74,17 @@ export const isTonightTile = (value: unknown): value is TonightTile =>
  *   * `narrow-first` — Surprise Me. It chooses nothing until the browser's second screen
  *     supplies Media, Games or Reading, then delegates to the chosen activity's real engine.
  */
-export type PickEngine = 'board-games' | 'narrow-first' | 'queue-first';
+export type PickEngine =
+  | "board-games"
+  | "narrow-first"
+  | "queue-first"
 
 export interface TileRoute {
-  tile: TonightTile;
+  tile: TonightTile
   /** The queue activity whose sets this tile draws from; `null` when it draws from no queue. */
-  queueActivity: Activity | null;
+  queueActivity: Activity | null
   /** Provider kinds that serve this tile IN THIS BUILD — what `provider_kind` can hold. */
-  providerKinds: readonly string[];
+  providerKinds: readonly string[]
   /**
    * Backends the settled decisions name for this tile that are NOT built. Listed so the map
    * is the whole answer rather than the built half of it.
@@ -88,8 +93,8 @@ export interface TileRoute {
    * activity decision §1. YouTube is named as a future provider by the absorb brief §7 and
    * is explicitly not built — there is no Filtered Pool variant of it.
    */
-  plannedProviderKinds: readonly string[];
-  engine: PickEngine;
+  plannedProviderKinds: readonly string[]
+  engine: PickEngine
 }
 
 /**
@@ -101,52 +106,56 @@ export interface TileRoute {
  * `e2e/tonight-routing-test.ts` compares the two field by field. Change one and the gate
  * fails until you change the other.
  */
-export const TILE_ROUTES: Readonly<Record<TonightTile, TileRoute>> = {
-  'board-games': {
-    engine: 'board-games',
+export const TILE_ROUTES: Readonly<
+  Record<TonightTile, TileRoute>
+> = {
+  "board-games": {
+    engine: "board-games",
     plannedProviderKinds: [],
-    providerKinds: ['board-game-picker'],
-    queueActivity: 'board-games',
-    tile: 'board-games',
+    providerKinds: ["board-game-picker"],
+    queueActivity: "board-games",
+    tile: "board-games",
   },
   movies: {
-    engine: 'queue-first',
-    plannedProviderKinds: ['youtube'],
-    providerKinds: ['plex'],
-    queueActivity: 'watching',
-    tile: 'movies',
+    engine: "queue-first",
+    plannedProviderKinds: ["youtube"],
+    providerKinds: ["plex"],
+    queueActivity: "watching",
+    tile: "movies",
   },
   reading: {
-    engine: 'queue-first',
+    engine: "queue-first",
     plannedProviderKinds: [],
-    providerKinds: ['kavita'],
-    queueActivity: 'reading',
-    tile: 'reading',
+    providerKinds: ["kavita"],
+    queueActivity: "reading",
+    tile: "reading",
   },
   shows: {
-    engine: 'queue-first',
-    plannedProviderKinds: ['youtube'],
-    providerKinds: ['plex'],
-    queueActivity: 'watching',
-    tile: 'shows',
+    engine: "queue-first",
+    plannedProviderKinds: ["youtube"],
+    providerKinds: ["plex"],
+    queueActivity: "watching",
+    tile: "shows",
   },
   surprise: {
-    engine: 'narrow-first',
+    engine: "narrow-first",
     plannedProviderKinds: [],
     providerKinds: [],
     queueActivity: null,
-    tile: 'surprise',
+    tile: "surprise",
   },
-  'video-games': {
-    engine: 'queue-first',
-    plannedProviderKinds: ['cemu', 'dolphin', 'eden'],
-    providerKinds: ['mister', 'steam'],
-    queueActivity: 'video-games',
-    tile: 'video-games',
+  "video-games": {
+    engine: "queue-first",
+    plannedProviderKinds: ["cemu", "dolphin", "eden"],
+    providerKinds: ["mister", "steam"],
+    queueActivity: "video-games",
+    tile: "video-games",
   },
-};
+}
 
-export const routeForTile = (tile: TonightTile): TileRoute => TILE_ROUTES[tile];
+export const routeForTile = (
+  tile: TonightTile,
+): TileRoute => TILE_ROUTES[tile]
 
 /**
  * Which tile a set sits under.
@@ -164,27 +173,31 @@ export const routeForTile = (tile: TonightTile): TileRoute => TILE_ROUTES[tile];
  * compensate — settle the content-type question and give this function a column to read.
  */
 export function tileForSet(set: {
-  activity: Activity;
-  behavior?: string | null;
+  activity: Activity
+  behavior?: string | null
 }): TonightTile {
   switch (set.activity) {
-    case 'board-games':
-      return 'board-games';
-    case 'reading':
-      return 'reading';
+    case "board-games":
+      return "board-games"
+    case "reading":
+      return "reading"
     // MiSTer, Steam and the three launchers that are not built are ONE tile. No tile names a
     // device, and there is no Retro Games tile.
-    case 'video-games':
-      return 'video-games';
+    case "video-games":
+      return "video-games"
     default:
-      return set.behavior === 'rewatch' ? 'movies' : 'shows';
+      return set.behavior === "rewatch" ? "movies" : "shows"
   }
 }
 
 /** The tiles a queue activity can appear under — the map read backwards. `watching` answers
  *  two, which is the open question in one place; every other activity answers one. */
-export const tilesForQueueActivity = (activity: Activity): TonightTile[] =>
-  TONIGHT_TILES.filter((tile) => TILE_ROUTES[tile].queueActivity === activity);
+export const tilesForQueueActivity = (
+  activity: Activity,
+): TonightTile[] =>
+  TONIGHT_TILES.filter(
+    (tile) => TILE_ROUTES[tile].queueActivity === activity,
+  )
 
 /**
  * Why four tiles share one engine, written down because the implementation plan's table
@@ -210,13 +223,15 @@ export const tilesForQueueActivity = (activity: Activity): TonightTile[] =>
  * the one place that already knows what is left. The filters the form collects are reported
  * back on the answer as "not applied", by name, rather than being silently dropped.
  */
-export const WHY_QUEUE_FIRST: Readonly<Partial<Record<TonightTile, string>>> = {
+export const WHY_QUEUE_FIRST: Readonly<
+  Partial<Record<TonightTile, string>>
+> = {
   movies:
-    'Runtime and Seen before are collected but not applied yet: both are facts about an item, '
-    + 'and the queue picks the item when it starts.',
-  reading: '',
-  shows: '',
-  'video-games':
-    'Knows how to play is collected but not applied yet: there is no video-game known-how '
-    + 'table, and a play count may never become a claim.',
-};
+    "Runtime and Seen before are collected but not applied yet: both are facts about an item, " +
+    "and the queue picks the item when it starts.",
+  reading: "",
+  shows: "",
+  "video-games":
+    "Knows how to play is collected but not applied yet: there is no video-game known-how " +
+    "table, and a play count may never become a claim.",
+}

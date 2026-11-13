@@ -94,7 +94,6 @@ export function SectionModal() {
     setStartMs(stored?.startMs ?? null)
     setEndMs(stored?.endMs ?? null)
     setSeed((n) => n + 1)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry])
 
   const isPlayingThis =

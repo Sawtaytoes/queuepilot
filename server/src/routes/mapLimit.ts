@@ -10,15 +10,18 @@ export async function mapLimit<TItem, TOut>(
   limit: number,
   fn: (item: TItem, index: number) => Promise<TOut>,
 ): Promise<TOut[]> {
-  const out = new Array<TOut>(items.length);
-  let i = 0;
+  const out = new Array<TOut>(items.length)
+  let i = 0
   await Promise.all(
-    Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (i < items.length) {
-        const idx = i++;
-        out[idx] = await fn(items[idx] as TItem, idx);
-      }
-    }),
-  );
-  return out;
+    Array.from(
+      { length: Math.min(limit, items.length) },
+      async () => {
+        while (i < items.length) {
+          const idx = i++
+          out[idx] = await fn(items[idx] as TItem, idx)
+        }
+      },
+    ),
+  )
+  return out
 }

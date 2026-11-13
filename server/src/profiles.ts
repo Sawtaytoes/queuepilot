@@ -17,33 +17,44 @@
 // Fragility, accepted knowingly (carried across from the Python): the profile stamp only exists
 // on DEBUG-level PMS log lines, and this needs the Plex app's log volume mounted read-only into
 // the container. If Plex's debug logging is off, waits time out and the caller says so.
-import { deviceHost, deviceKey, deviceOperationCancelled } from './deviceScope.js';
-import { promises as fs } from 'node:fs';
-import { statSync } from 'node:fs';
-import type { FileHandle } from 'node:fs/promises';
-import { errMessage } from './errors.js';
-import type { CancelFlag } from './types.js';
+
+import { promises as fs, statSync } from "node:fs"
+import type { FileHandle } from "node:fs/promises"
+import {
+  deviceHost,
+  deviceKey,
+  deviceOperationCancelled,
+} from "./deviceScope.js"
 import {
   PMS_LOG_PATH,
   PROFILE_OBSERVATION_TTL_SECONDS,
-  PROFILE_WAIT_SECONDS,
   PROFILE_SET_MAP,
-} from './env.js';
+  PROFILE_WAIT_SECONDS,
+} from "./env.js"
+import { errMessage } from "./errors.js"
+import type { CancelFlag } from "./types.js"
 
-const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const escapeRe = (s: string): string =>
+  s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 
-const lineRes = new Map<string, RegExp>();
+const lineRes = new Map<string, RegExp>()
 function lineRe(): RegExp {
-  const host = deviceHost();
-  if (!host) return /$a/;
-  let re = lineRes.get(host);
+  const host = deviceHost()
+  if (!host) return /$a/
+  let re = lineRes.get(host)
   if (!re) {
-    re = new RegExp('\\[' + escapeRe(host) + ':\\d+[^\\]]*\\].*Signed-in Token \\((.+?)\\)');
-    lineRes.set(host, re);
+    re = new RegExp(
+      "\\[" +
+        escapeRe(host) +
+        ":\\d+[^\\]]*\\].*Signed-in Token \\((.+?)\\)",
+    )
+    lineRes.set(host, re)
   }
-  return re;
+  return re
 }
-export function _resetLineRe(): void { lineRes.clear(); }
+export function _resetLineRe(): void {
+  lineRes.clear()
+}
 
 // The most recent profile the Shield was seen acting as, updated by every wait below. adb.js's
 // switch will use it as a HINT (the picker opens on the current user) — never as anything that
@@ -73,43 +84,52 @@ export function _resetLineRe(): void { lineRes.clear(); }
 // something that stopped being true hours ago. `PROFILE_OBSERVATION_TTL_SECONDS` bounds it.
 // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
 interface ProfileObservation {
-  title: string | null;
-  isObserved: boolean;
-  observedAt: number | null;
+  title: string | null
+  isObserved: boolean
+  observedAt: number | null
 }
-const observations = new Map<string, ProfileObservation>();
+const observations = new Map<string, ProfileObservation>()
 function observation(): ProfileObservation {
-  const key = deviceKey();
-  let value = observations.get(key);
+  const key = deviceKey()
+  let value = observations.get(key)
   if (!value) {
-    value = { title: null, isObserved: false, observedAt: null };
-    observations.set(key, value);
+    value = {
+      title: null,
+      isObserved: false,
+      observedAt: null,
+    }
+    observations.set(key, value)
   }
-  return value;
+  return value
 }
 // Keep the existing API while isolating observations across asynchronous device scopes.
-export const LAST_SEEN: ProfileObservation = new Proxy({} as ProfileObservation, {
-  get: (_target, key) => Reflect.get(observation(), key),
-  ownKeys: () => Reflect.ownKeys(observation()),
-  getOwnPropertyDescriptor: (_target, key) => Object.getOwnPropertyDescriptor(observation(), key),
-  set: (_target, key, value: unknown) => Reflect.set(observation(), key, value),
-});
+export const LAST_SEEN: ProfileObservation = new Proxy(
+  {} as ProfileObservation,
+  {
+    get: (_target, key) => Reflect.get(observation(), key),
+    ownKeys: () => Reflect.ownKeys(observation()),
+    getOwnPropertyDescriptor: (_target, key) =>
+      Object.getOwnPropertyDescriptor(observation(), key),
+    set: (_target, key, value: unknown) =>
+      Reflect.set(observation(), key, value),
+  },
+)
 
 // Test seam. The TTL is the one rule here that a test cannot exercise without controlling the
 // clock, and `vi.useFakeTimers()` would also freeze the poll loops in `waitForProfile`.
-let now: () => number = () => Date.now();
+let now: () => number = () => Date.now()
 
 /** Point the module's clock somewhere else. Pass nothing to restore `Date.now`. */
 export function _setNow(clock?: () => number): void {
-  now = clock ?? (() => Date.now());
+  now = clock ?? (() => Date.now())
 }
 
 /** Record a profile that Plex itself identified, never one inferred from an ADB keypress. */
 export function recordObservedProfile(title: string): void {
-  if (deviceOperationCancelled()) return;
-  LAST_SEEN.title = title;
-  LAST_SEEN.isObserved = true;
-  LAST_SEEN.observedAt = now();
+  if (deviceOperationCancelled()) return
+  LAST_SEEN.title = title
+  LAST_SEEN.isObserved = true
+  LAST_SEEN.observedAt = now()
 }
 
 /**
@@ -117,17 +137,17 @@ export function recordObservedProfile(title: string): void {
  * every trace of authority, so a later gate cannot read the claim back as proof.
  */
 export function recordProfileClaim(title: string): void {
-  if (deviceOperationCancelled()) return;
-  LAST_SEEN.title = title;
-  LAST_SEEN.isObserved = false;
-  LAST_SEEN.observedAt = null;
+  if (deviceOperationCancelled()) return
+  LAST_SEEN.title = title
+  LAST_SEEN.isObserved = false
+  LAST_SEEN.observedAt = null
 }
 
 /** Keep a title as a picker hint, but prevent stale evidence from clearing a profile gate. */
 export function invalidateObservedProfile(): void {
-  if (deviceOperationCancelled()) return;
-  LAST_SEEN.isObserved = false;
-  LAST_SEEN.observedAt = null;
+  if (deviceOperationCancelled()) return
+  LAST_SEEN.isObserved = false
+  LAST_SEEN.observedAt = null
 }
 
 /**
@@ -138,23 +158,33 @@ export function invalidateObservedProfile(): void {
  * which is the setting for a deployment that would rather spend the picker walk every time.
  */
 export function isObservationFresh(): boolean {
-  if (!LAST_SEEN.isObserved || LAST_SEEN.observedAt == null) return false;
-  if (PROFILE_OBSERVATION_TTL_SECONDS <= 0) return false;
-  return now() - LAST_SEEN.observedAt <= PROFILE_OBSERVATION_TTL_SECONDS * 1000;
+  if (!LAST_SEEN.isObserved || LAST_SEEN.observedAt == null)
+    return false
+  if (PROFILE_OBSERVATION_TTL_SECONDS <= 0) return false
+  return (
+    now() - LAST_SEEN.observedAt <=
+    PROFILE_OBSERVATION_TTL_SECONDS * 1000
+  )
 }
 
 /** How old the current observation is, in seconds, or null when there is none. */
 export function observationAgeSeconds(): number | null {
-  if (LAST_SEEN.observedAt == null) return null;
-  return Math.max(0, Math.round((now() - LAST_SEEN.observedAt) / 1000));
+  if (LAST_SEEN.observedAt == null) return null
+  return Math.max(
+    0,
+    Math.round((now() - LAST_SEEN.observedAt) / 1000),
+  )
 }
 
 // Map a Plex Home profile title to a set name, or null if unmapped. (config.set_for_profile)
-export function setForProfile(title: string): string | null {
-  return PROFILE_SET_MAP[title] ?? null;
+export function setForProfile(
+  title: string,
+): string | null {
+  return PROFILE_SET_MAP[title] ?? null
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
+const sleep = (ms: number): Promise<void> =>
+  new Promise((r) => setTimeout(r, ms))
 
 /**
  * Options for `waitForProfile`. `poll` is in SECONDS (not ms) and `timeout` is too — both
@@ -163,10 +193,10 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
  */
 export interface WaitForProfileOptions {
   /** null = fall back to the deploy-time `PROFILE_WAIT_SECONDS`. */
-  timeout?: number | null;
-  cancel?: CancelFlag | null;
-  poll?: number;
-  match?: string | null;
+  timeout?: number | null
+  cancel?: CancelFlag | null
+  poll?: number
+  match?: string | null
 }
 
 // Block until the Shield makes a PMS request under a signed-in profile.
@@ -182,82 +212,98 @@ export interface WaitForProfileOptions {
 //
 // `cancel` is any object with a `.isSet()` method (mirrors the Python threading.Event); poll
 // is the seconds between reads (default 0.5, matching the Python).
-export async function waitForProfile(
-  { timeout = null, cancel = null, poll = 0.5, match = null }: WaitForProfileOptions = {},
-): Promise<string | null> {
-  const timeoutS = timeout == null ? PROFILE_WAIT_SECONDS : timeout;
-  const deadline = Date.now() + timeoutS * 1000;
-  const path = PMS_LOG_PATH;
+export async function waitForProfile({
+  timeout = null,
+  cancel = null,
+  poll = 0.5,
+  match = null,
+}: WaitForProfileOptions = {}): Promise<string | null> {
+  const timeoutS =
+    timeout == null ? PROFILE_WAIT_SECONDS : timeout
+  const deadline = Date.now() + timeoutS * 1000
+  const path = PMS_LOG_PATH
 
-  let fh: FileHandle;
+  let fh: FileHandle
   try {
-    fh = await fs.open(path, 'r');
+    fh = await fs.open(path, "r")
   } catch (e) {
-    console.log(`[profiles] cannot open ${path}: ${errMessage(e)}`);
-    return null;
+    console.log(
+      `[profiles] cannot open ${path}: ${errMessage(e)}`,
+    )
+    return null
   }
 
   try {
     // Seek to end: track the byte offset we have consumed, plus the inode for rotation
     // detection, exactly like the Python's f.seek(0, SEEK_END) + fstat().st_ino.
-    const st = await fh.stat();
-    let pos = st.size;
-    let ino = st.ino;
-    let carry = ''; // a partial trailing line held until its newline arrives
+    const st = await fh.stat()
+    let pos = st.size
+    let ino = st.ino
+    let carry = "" // a partial trailing line held until its newline arrives
 
     while (Date.now() < deadline) {
-      if (cancel && cancel.isSet && cancel.isSet()) return null;
+      if (cancel && cancel.isSet && cancel.isSet())
+        return null
 
-      const cur = await fh.stat();
+      const cur = await fh.stat()
       if (cur.size > pos) {
-        const len = cur.size - pos;
-        const buf = Buffer.alloc(len);
-        const { bytesRead } = await fh.read(buf, 0, len, pos);
-        pos += bytesRead;
-        const text = carry + buf.toString('utf8', 0, bytesRead);
-        const lines = text.split('\n');
-        carry = lines.pop() ?? ''; // last element is a partial line (no trailing \n)
+        const len = cur.size - pos
+        const buf = Buffer.alloc(len)
+        const { bytesRead } = await fh.read(
+          buf,
+          0,
+          len,
+          pos,
+        )
+        pos += bytesRead
+        const text =
+          carry + buf.toString("utf8", 0, bytesRead)
+        const lines = text.split("\n")
+        carry = lines.pop() ?? "" // last element is a partial line (no trailing \n)
         for (const line of lines) {
           // Group 1 is mandatory in the pattern, so `!== undefined` here is exactly the
           // old `if (m)` — it is only spelled this way because the match array is
           // index-checked under noUncheckedIndexedAccess.
-          const title = lineRe().exec(line)?.[1];
+          const title = lineRe().exec(line)?.[1]
           if (title !== undefined) {
             // An OBSERVATION: the Shield served a request under this profile. The other
             // trusted observation is `/status/sessions`; both go through the same writer.
-            recordObservedProfile(title);
-            if (match === null || title === match) return title;
+            recordObservedProfile(title)
+            if (match === null || title === match)
+              return title
             // Signed in, but as the wrong profile: keep waiting for the switch.
-            console.log(`[profiles] saw '${title}', holding out for '${match}'`);
+            console.log(
+              `[profiles] saw '${title}', holding out for '${match}'`,
+            )
           }
         }
-        continue; // there may be more buffered — loop again before sleeping
+        continue // there may be more buffered — loop again before sleeping
       }
 
       // No new data: check for rotation/truncation before sleeping (mirrors the Python).
       try {
-        const check = statSync(path);
+        const check = statSync(path)
         if (check.ino !== ino) {
           // Rotated: the new file's whole content is fresh — reopen and read from 0.
-          await fh.close();
-          fh = await fs.open(path, 'r');
-          const ns = await fh.stat();
-          ino = ns.ino;
-          pos = 0;
-          carry = '';
-          continue;
+          await fh.close()
+          fh = await fs.open(path, "r")
+          const ns = await fh.stat()
+          ino = ns.ino
+          pos = 0
+          carry = ""
+          continue
         }
         if (check.size < pos) {
-          pos = 0; // truncated in place
-          carry = '';
+          pos = 0 // truncated in place
+          carry = ""
         }
       } catch {
         /* stat failed transiently — keep going */
       }
-      await sleep(poll * 1000);
+      await sleep(poll * 1000)
     }
-    return null;
+    return null
   } finally {
-    await fh.close();
+    await fh.close()
   }
 }

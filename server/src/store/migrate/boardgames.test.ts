@@ -23,30 +23,45 @@
 // EVERY TITLE AND EVERY PERSON HERE IS INVENTED. This repo is public, and a fixture seeded
 // from the live collection is exactly the shortcut the absorb's own rules forbid. The cast is
 // Ada, Grace and Linus.
-import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { DatabaseSync } from 'node:sqlite';
-import { join } from 'node:path';
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { DatabaseSync } from "node:sqlite"
+import {
+  afterAll,
+  beforeEach,
+  describe,
+  expect,
+  test,
+} from "vitest"
 
-const dir = mkdtempSync(join(tmpdir(), 'qp-boardgames-'));
+const dir = mkdtempSync(join(tmpdir(), "qp-boardgames-"))
 
-writeFileSync(join(dir, 'sets.yaml'), 'sets: []\n');
-writeFileSync(join(dir, 'queues.yaml'), '{}\n');
-writeFileSync(join(dir, 'groups.yaml'), 'groups: []\n');
-writeFileSync(join(dir, 'pending.yaml'), 'seen_through: 0\n');
+writeFileSync(join(dir, "sets.yaml"), "sets: []\n")
+writeFileSync(join(dir, "queues.yaml"), "{}\n")
+writeFileSync(join(dir, "groups.yaml"), "groups: []\n")
+writeFileSync(
+  join(dir, "pending.yaml"),
+  "seen_through: 0\n",
+)
 
-process.env.QUEUES_PATH = join(dir, 'queues.yaml');
-process.env.SETS_PATH = join(dir, 'sets.yaml');
-process.env.GROUPS_PATH = join(dir, 'groups.yaml');
-process.env.PENDING_PATH = join(dir, 'pending.yaml');
-process.env.STORE_BACKEND = 'sqlite';
-process.env.STORE_YAML_MIRROR = '0';
+process.env.QUEUES_PATH = join(dir, "queues.yaml")
+process.env.SETS_PATH = join(dir, "sets.yaml")
+process.env.GROUPS_PATH = join(dir, "groups.yaml")
+process.env.PENDING_PATH = join(dir, "pending.yaml")
+process.env.STORE_BACKEND = "sqlite"
+process.env.STORE_YAML_MIRROR = "0"
 
-const SOURCE = join(dir, 'source.sqlite');
-const SEED = join(dir, 'seed.yaml');
-process.env.BOARD_GAME_IMPORT_PATH = SOURCE;
-process.env.BOARD_GAME_GROUPING_SEED_PATH = SEED;
+const SOURCE = join(dir, "source.sqlite")
+const SEED = join(dir, "seed.yaml")
+process.env.BOARD_GAME_IMPORT_PATH = SOURCE
+process.env.BOARD_GAME_GROUPING_SEED_PATH = SEED
 
 const {
   ensureBoardGamesImported,
@@ -55,7 +70,7 @@ const {
   resetBoardGameImportState,
   retireBoardGameSource,
   seedGroupingRules,
-} = await import('./boardgames.js');
+} = await import("./boardgames.js")
 const {
   boardGameCounts,
   getBoardGame,
@@ -65,9 +80,11 @@ const {
   rekeyBoardGamePerson,
   searchBoardGames,
   unresolvedPersonIds,
-} = await import('../db/boardgames.js');
-const { bookOfRecord, closeBookOfRecord } = await import('../db/open.js');
-const { upsertPerson } = await import('../db/people.js');
+} = await import("../db/boardgames.js")
+const { bookOfRecord, closeBookOfRecord } = await import(
+  "../db/open.js"
+)
+const { upsertPerson } = await import("../db/people.js")
 
 /**
  * The source app's schema, as `PRAGMA table_xinfo` reports it on a RUNNING database — which is
@@ -130,15 +147,19 @@ CREATE TABLE player_known_games (
   player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
   confirmed_at TEXT NOT NULL, PRIMARY KEY (player_id, game_id));
-`;
+`
 
-const NOW = '2026-01-01T00:00:00.000Z';
+const NOW = "2026-01-01T00:00:00.000Z"
 
 /** Build a source collection. Three titles, four boxes, and one of everything that matters. */
-function writeSource({ excludedSource = 'owner' }: { excludedSource?: string | null } = {}): void {
-  rmSync(SOURCE, { force: true });
-  const db = new DatabaseSync(SOURCE);
-  db.exec(SOURCE_SCHEMA);
+function writeSource({
+  excludedSource = "owner",
+}: {
+  excludedSource?: string | null
+} = {}): void {
+  rmSync(SOURCE, { force: true })
+  const db = new DatabaseSync(SOURCE)
+  db.exec(SOURCE_SCHEMA)
 
   const game = db.prepare(
     `INSERT INTO games (id, name, min_players, max_players, best_with, recommended_with, weight,
@@ -146,104 +167,289 @@ function writeSource({ excludedSource = 'owner' }: { excludedSource?: string | n
        categories, publishers, year_published, bgg_id, rating, source, created_at, updated_at,
        image_path)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'import', ?, ?, ?)`,
-  );
-  game.run('harbour-lantern', 'Harbour Lantern', 2, 5, '[3,4]', '[2,5]', 2.4, 30, 60, 10,
-    '["competitive"]', 'derived', '["Card Game"]', '["Northwind Press"]', 2019, 100001, 7.4,
-    NOW, NOW, '/images/aaaa-600.webp');
-  game.run('tidewright', 'Tidewright', 1, 4, '[2]', '[1,3]', 3.6, 45, 90, 12,
-    '["cooperative"]', 'owner', '[]', '["Saltmarsh Games"]', 2021, 100002, 8.1,
-    NOW, NOW, null);
-  game.run('quarry-duel', 'Quarry Duel', 2, 2, '[2]', '[]', 1.8, 15, 20, 8,
-    '["competitive"]', 'derived', '[]', '[]', 2016, null, null, NOW, NOW, null);
+  )
+  game.run(
+    "harbour-lantern",
+    "Harbour Lantern",
+    2,
+    5,
+    "[3,4]",
+    "[2,5]",
+    2.4,
+    30,
+    60,
+    10,
+    '["competitive"]',
+    "derived",
+    '["Card Game"]',
+    '["Northwind Press"]',
+    2019,
+    100001,
+    7.4,
+    NOW,
+    NOW,
+    "/images/aaaa-600.webp",
+  )
+  game.run(
+    "tidewright",
+    "Tidewright",
+    1,
+    4,
+    "[2]",
+    "[1,3]",
+    3.6,
+    45,
+    90,
+    12,
+    '["cooperative"]',
+    "owner",
+    "[]",
+    '["Saltmarsh Games"]',
+    2021,
+    100002,
+    8.1,
+    NOW,
+    NOW,
+    null,
+  )
+  game.run(
+    "quarry-duel",
+    "Quarry Duel",
+    2,
+    2,
+    "[2]",
+    "[]",
+    1.8,
+    15,
+    20,
+    8,
+    '["competitive"]',
+    "derived",
+    "[]",
+    "[]",
+    2016,
+    null,
+    null,
+    NOW,
+    NOW,
+    null,
+  )
 
   const box = db.prepare(
     `INSERT INTO boxes (id, game_id, label, kind, bgg_id, homebox_entity_id, location_text,
        image_path, created_at, version_nickname, version_year, version_languages)
      VALUES (?, ?, ?, ?, ?, NULL, NULL, ?, ?, ?, ?, ?)`,
-  );
-  box.run('box-1', 'harbour-lantern', 'Harbour Lantern', 'standalone', 100001,
-    '/images/aaaa-600.webp', NOW, 'Deluxe', 2019, '["English"]');
-  box.run('box-2', 'harbour-lantern', 'Harbour Lantern: Deep Water', 'expansion', 100003,
-    null, NOW, null, null, '[]');
-  box.run('box-3', 'tidewright', 'Tidewright', 'standalone', 100002, '/images/bbbb-600.webp',
-    NOW, null, null, '[]');
-  box.run('box-4', 'quarry-duel', 'Quarry Duel', 'nonsense-kind', null, null, NOW, null, null,
-    '[]');
+  )
+  box.run(
+    "box-1",
+    "harbour-lantern",
+    "Harbour Lantern",
+    "standalone",
+    100001,
+    "/images/aaaa-600.webp",
+    NOW,
+    "Deluxe",
+    2019,
+    '["English"]',
+  )
+  box.run(
+    "box-2",
+    "harbour-lantern",
+    "Harbour Lantern: Deep Water",
+    "expansion",
+    100003,
+    null,
+    NOW,
+    null,
+    null,
+    "[]",
+  )
+  box.run(
+    "box-3",
+    "tidewright",
+    "Tidewright",
+    "standalone",
+    100002,
+    "/images/bbbb-600.webp",
+    NOW,
+    null,
+    null,
+    "[]",
+  )
+  box.run(
+    "box-4",
+    "quarry-duel",
+    "Quarry Duel",
+    "nonsense-kind",
+    null,
+    null,
+    NOW,
+    null,
+    null,
+    "[]",
+  )
 
   const override = db.prepare(
     `INSERT INTO game_overrides (game_id, min_players, max_players, best_with, recommended_with,
        weight, min_age, interaction_types, is_excluded, notes, updated_at, is_excluded_source,
        image_path)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  );
+  )
   // Excluded BY HAND. This is the row the whole `is_excluded_source` argument is about.
-  override.run('harbour-lantern', null, null, null, null, null, null, null, 1, null, NOW,
-    excludedSource, '/images/cccc-600.webp');
+  override.run(
+    "harbour-lantern",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    1,
+    null,
+    NOW,
+    excludedSource,
+    "/images/cccc-600.webp",
+  )
   // Excluded by a sync — the one a sync is allowed to take back.
-  override.run('tidewright', null, null, null, null, null, null, null, 1, null, NOW, 'sync', null);
+  override.run(
+    "tidewright",
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    null,
+    1,
+    null,
+    NOW,
+    "sync",
+    null,
+  )
   // Not excluded, and it overrides the player count the box claims.
-  override.run('quarry-duel', 2, 6, '[4]', null, 2.1, null, '["team"]', 0, 'Great with four.',
-    NOW, null, null);
+  override.run(
+    "quarry-duel",
+    2,
+    6,
+    "[4]",
+    null,
+    2.1,
+    null,
+    '["team"]',
+    0,
+    "Great with four.",
+    NOW,
+    null,
+    null,
+  )
 
   const link = db.prepare(
     `INSERT INTO game_links (id, game_id, kind, label, url, source, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-  link.run('link-1', 'harbour-lantern', 'rulebook', 'Rulebook', 'https://example.test/1',
-    'owner', NOW);
-  link.run('link-2', 'harbour-lantern', 'howToPlay', 'Watch it', 'https://example.test/2',
-    'derived', NOW);
-  link.run('link-3', 'tidewright', 'nonsense-kind', 'Player aid', 'https://example.test/3',
-    'derived', NOW);
+  )
+  link.run(
+    "link-1",
+    "harbour-lantern",
+    "rulebook",
+    "Rulebook",
+    "https://example.test/1",
+    "owner",
+    NOW,
+  )
+  link.run(
+    "link-2",
+    "harbour-lantern",
+    "howToPlay",
+    "Watch it",
+    "https://example.test/2",
+    "derived",
+    NOW,
+  )
+  link.run(
+    "link-3",
+    "tidewright",
+    "nonsense-kind",
+    "Player aid",
+    "https://example.test/3",
+    "derived",
+    NOW,
+  )
 
   db.prepare(
     `INSERT INTO game_modules (id, game_id, name, source, box_id, is_hidden, created_at)
      VALUES ('mod-1', 'harbour-lantern', 'Deep Water', 'derived', 'box-2', 1, ?)`,
-  ).run(NOW);
+  ).run(NOW)
 
-  db.prepare("INSERT INTO categories (name, created_at) VALUES ('Two Player', ?)").run(NOW);
+  db.prepare(
+    "INSERT INTO categories (name, created_at) VALUES ('Two Player', ?)",
+  ).run(NOW)
   db.prepare(
     "INSERT INTO game_categories (game_id, name) VALUES ('quarry-duel', 'Two Player')",
-  ).run();
+  ).run()
 
   const grouping = db.prepare(
     `INSERT INTO owner_groupings (box_label, game_id, game_name, created_at, listing_bgg_id)
      VALUES (?, ?, ?, ?, ?)`,
-  );
-  grouping.run('Harbour Lantern: Deep Water', 'harbour-lantern', 'Harbour Lantern', NOW, 100001);
+  )
+  grouping.run(
+    "Harbour Lantern: Deep Water",
+    "harbour-lantern",
+    "Harbour Lantern",
+    NOW,
+    100001,
+  )
   // The owner's own answer for a box a seeded prefix rule ALSO matches, and disagrees about.
-  grouping.run('Quarry Duel: Amber', 'quarry-duel', 'Quarry Duel', NOW, null);
+  grouping.run(
+    "Quarry Duel: Amber",
+    "quarry-duel",
+    "Quarry Duel",
+    NOW,
+    null,
+  )
 
   db.prepare(
     `INSERT INTO grouping_reviews (box_label, game_id, status, reason, reviewed_at, parent_game_id)
      VALUES ('Tidewright Expeditions', NULL, 'possibleEdition', 'Shares a prefix.', NULL,
              'tidewright')`,
-  ).run();
+  ).run()
 
   const player = db.prepare(
     "INSERT INTO players (id, display_name, birth_year, max_weight, is_beginner, created_at) VALUES (?, ?, NULL, ?, 0, ?)",
-  );
-  player.run('player-ada', 'Ada', 4.5, NOW);
-  player.run('player-grace', 'Grace', null, NOW);
+  )
+  player.run("player-ada", "Ada", 4.5, NOW)
+  player.run("player-grace", "Grace", null, NOW)
 
   db.prepare(
     "INSERT INTO plays (id, game_id, played_at, notes) VALUES ('play-1', 'quarry-duel', ?, NULL)",
-  ).run('2026-01-02T20:00:00.000Z');
+  ).run("2026-01-02T20:00:00.000Z")
   db.prepare(
     "INSERT INTO plays (id, game_id, played_at, notes) VALUES ('play-2', 'quarry-duel', ?, NULL)",
-  ).run('2026-01-03T20:00:00.000Z');
+  ).run("2026-01-03T20:00:00.000Z")
   db.prepare(
     "INSERT INTO play_players (play_id, player_id) VALUES ('play-1', 'player-ada')",
-  ).run();
+  ).run()
 
   const known = db.prepare(
-    'INSERT INTO player_known_games (player_id, game_id, confirmed_at) VALUES (?, ?, ?)',
-  );
-  known.run('player-ada', 'quarry-duel', '2026-01-02T20:00:00.000Z');
-  known.run('player-ada', 'tidewright', '2026-01-02T20:00:00.000Z');
-  known.run('player-grace', 'quarry-duel', '2026-01-04T20:00:00.000Z');
+    "INSERT INTO player_known_games (player_id, game_id, confirmed_at) VALUES (?, ?, ?)",
+  )
+  known.run(
+    "player-ada",
+    "quarry-duel",
+    "2026-01-02T20:00:00.000Z",
+  )
+  known.run(
+    "player-ada",
+    "tidewright",
+    "2026-01-02T20:00:00.000Z",
+  )
+  known.run(
+    "player-grace",
+    "quarry-duel",
+    "2026-01-04T20:00:00.000Z",
+  )
 
-  db.close();
+  db.close()
 }
 
 const SEED_YAML = `version: 1
@@ -267,58 +473,61 @@ reviews:
 - box_label: tidewright expeditions
   reason: A separate campaign game that shares the name.
 - box_label: quarry duel skirmish
-`;
+`
 
 const clearStore = (): void => {
-  const db = bookOfRecord();
-  db.exec('DELETE FROM store_meta');
-  db.exec('DELETE FROM people');
+  const db = bookOfRecord()
+  db.exec("DELETE FROM store_meta")
+  db.exec("DELETE FROM people")
   for (const table of [
-    'board_game_known_how',
-    'board_game_play_people',
-    'board_game_plays',
-    'board_game_grouping_reviews',
-    'board_game_groupings',
-    'board_game_category_members',
-    'board_game_categories',
-    'board_game_modules',
-    'board_game_links',
-    'board_game_overrides',
-    'board_game_boxes',
-    'board_games',
+    "board_game_known_how",
+    "board_game_play_people",
+    "board_game_plays",
+    "board_game_grouping_reviews",
+    "board_game_groupings",
+    "board_game_category_members",
+    "board_game_categories",
+    "board_game_modules",
+    "board_game_links",
+    "board_game_overrides",
+    "board_game_boxes",
+    "board_games",
   ]) {
-    db.exec(`DELETE FROM ${table}`);
+    db.exec(`DELETE FROM ${table}`)
   }
-};
+}
 
 beforeEach(() => {
-  rmSync(SEED, { force: true });
+  rmSync(SEED, { force: true })
   for (const name of readdirSync(dir)) {
-    if (name.includes('.retired-')) rmSync(join(dir, name), { force: true });
+    if (name.includes(".retired-"))
+      rmSync(join(dir, name), { force: true })
   }
-  writeSource();
-  clearStore();
-  resetBoardGameImportState();
-});
+  writeSource()
+  clearStore()
+  resetBoardGameImportState()
+})
 
 afterAll(() => {
-  closeBookOfRecord();
-  rmSync(dir, { force: true, recursive: true });
-});
+  closeBookOfRecord()
+  rmSync(dir, { force: true, recursive: true })
+})
 
-describe('the board-game absorb', () => {
-  it('does nothing at all when there is no collection to absorb', () => {
-    rmSync(SOURCE, { force: true });
-    const result = importBoardGames();
-    expect(result.imported).toBe(false);
-    expect(result.source).toBeNull();
-    expect(boardGameCounts()).toMatchObject({ board_games: 0 });
-  });
+describe("the board-game absorb", () => {
+  test("does nothing at all when there is no collection to absorb", () => {
+    rmSync(SOURCE, { force: true })
+    const result = importBoardGames()
+    expect(result.imported).toBe(false)
+    expect(result.source).toBeNull()
+    expect(boardGameCounts()).toMatchObject({
+      board_games: 0,
+    })
+  })
 
-  it('copies every table, and the counts match the source either side', () => {
-    const result = importBoardGames();
-    expect(result.problems).toEqual([]);
-    expect(result.imported).toBe(true);
+  test("copies every table, and the counts match the source either side", () => {
+    const result = importBoardGames()
+    expect(result.problems).toEqual([])
+    expect(result.imported).toBe(true)
     expect(boardGameCounts()).toEqual({
       board_game_boxes: 4,
       board_game_categories: 1,
@@ -332,211 +541,280 @@ describe('the board-game absorb', () => {
       board_game_play_people: 1,
       board_game_plays: 2,
       board_games: 3,
-    });
-  });
+    })
+  })
 
-  it('carries `is_excluded_source` across, so an owner exclusion is not a sync exclusion', () => {
-    importBoardGames();
+  test("carries `is_excluded_source` across, so an owner exclusion is not a sync exclusion", () => {
+    importBoardGames()
     const rows = bookOfRecord()
-      .prepare<{ game_id: string; is_excluded_source: string | null }>(
-        'SELECT game_id, is_excluded_source FROM board_game_overrides ORDER BY game_id',
+      .prepare<{
+        game_id: string
+        is_excluded_source: string | null
+      }>(
+        "SELECT game_id, is_excluded_source FROM board_game_overrides ORDER BY game_id",
       )
-      .all();
+      .all()
     expect(rows).toEqual([
-      { game_id: 'harbour-lantern', is_excluded_source: 'owner' },
-      { game_id: 'quarry-duel', is_excluded_source: null },
-      { game_id: 'tidewright', is_excluded_source: 'sync' },
-    ]);
-  });
+      {
+        game_id: "harbour-lantern",
+        is_excluded_source: "owner",
+      },
+      { game_id: "quarry-duel", is_excluded_source: null },
+      { game_id: "tidewright", is_excluded_source: "sync" },
+    ])
+  })
 
-  it('rolls the WHOLE absorb back rather than writing a half-collection', () => {
+  test("rolls the WHOLE absorb back rather than writing a half-collection", () => {
     // An `is_excluded_source` this app does not recognise fails the column CHECK. The point of
     // the assertion is not the CHECK — it is that a failure anywhere leaves NOTHING behind, so
     // a partial copy can never be mistaken for an authoritative one.
-    writeSource({ excludedSource: 'somebody-else' });
-    const result = importBoardGames();
-    expect(result.imported).toBe(false);
-    expect(result.problems.length).toBeGreaterThan(0);
-    expect(boardGameCounts()).toMatchObject({ board_game_overrides: 0, board_games: 0 });
-  });
+    writeSource({ excludedSource: "somebody-else" })
+    const result = importBoardGames()
+    expect(result.imported).toBe(false)
+    expect(result.problems.length).toBeGreaterThan(0)
+    expect(boardGameCounts()).toMatchObject({
+      board_game_overrides: 0,
+      board_games: 0,
+    })
+  })
 
-  it('drops the vestigial `is_hidden` column and keeps the module', () => {
-    importBoardGames();
-    const columns = bookOfRecord()
-      .pragma('table_xinfo(board_game_modules)') as { name: string }[];
-    expect(columns.map((column) => column.name)).not.toContain('is_hidden');
-    expect(boardGameCounts().board_game_modules).toBe(1);
-  });
+  test("drops the vestigial `is_hidden` column and keeps the module", () => {
+    importBoardGames()
+    const columns = bookOfRecord().pragma(
+      "table_xinfo(board_game_modules)",
+    ) as { name: string }[]
+    expect(
+      columns.map((column) => column.name),
+    ).not.toContain("is_hidden")
+    expect(boardGameCounts().board_game_modules).toBe(1)
+  })
 
-  it('stores a listing id as TEXT and hands the engine a number', () => {
-    importBoardGames();
+  test("stores a listing id as TEXT and hands the engine a number", () => {
+    importBoardGames()
     const raw = bookOfRecord()
-      .prepare<{ bgg_id: unknown }>("SELECT bgg_id FROM board_games WHERE id = 'harbour-lantern'")
-      .get();
-    expect(typeof raw?.bgg_id).toBe('string');
-    expect(getBoardGame('harbour-lantern')?.bggId).toBe(100001);
+      .prepare<{ bgg_id: unknown }>(
+        "SELECT bgg_id FROM board_games WHERE id = 'harbour-lantern'",
+      )
+      .get()
+    expect(typeof raw?.bgg_id).toBe("string")
+    expect(getBoardGame("harbour-lantern")?.bggId).toBe(
+      100001,
+    )
     // Nullable by design — a game need not exist on any external listing.
-    expect(getBoardGame('quarry-duel')?.bggId).toBeNull();
-  });
+    expect(getBoardGame("quarry-duel")?.bggId).toBeNull()
+  })
 
-  it('folds the override onto the imported row, and NULL means "not overridden"', () => {
-    importBoardGames();
-    const game = getBoardGame('quarry-duel');
-    expect(game?.minPlayers).toBe(2);
+  test('folds the override onto the imported row, and NULL means "not overridden"', () => {
+    importBoardGames()
+    const game = getBoardGame("quarry-duel")
+    expect(game?.minPlayers).toBe(2)
     // Overridden up from the box claim of 2.
-    expect(game?.maxPlayers).toBe(6);
-    expect(game?.bestWith).toEqual([4]);
+    expect(game?.maxPlayers).toBe(6)
+    expect(game?.bestWith).toEqual([4])
     // The override leaves this one alone, so the imported value stands.
-    expect(game?.recommendedWith).toEqual([]);
-    expect(game?.interactionTypes).toEqual(['team']);
-    expect(game?.interactionTypesSource).toBe('owner');
-    expect(game?.notes).toBe('Great with four.');
-    expect(game?.playCount).toBe(2);
-  });
+    expect(game?.recommendedWith).toEqual([])
+    expect(game?.interactionTypes).toEqual(["team"])
+    expect(game?.interactionTypesSource).toBe("owner")
+    expect(game?.notes).toBe("Great with four.")
+    expect(game?.playCount).toBe(2)
+  })
 
-  it('falls a cover back owner → import → the first box that has art', () => {
-    importBoardGames();
-    expect(getBoardGame('harbour-lantern')?.imagePath).toBe('/images/cccc-600.webp');
-    expect(getBoardGame('harbour-lantern')?.imageSource).toBe('owner');
+  test("falls a cover back owner → import → the first box that has art", () => {
+    importBoardGames()
+    expect(getBoardGame("harbour-lantern")?.imagePath).toBe(
+      "/images/cccc-600.webp",
+    )
+    expect(
+      getBoardGame("harbour-lantern")?.imageSource,
+    ).toBe("owner")
     // No cover of its own and no box art either.
-    expect(getBoardGame('quarry-duel')?.imagePath).toBeNull();
-    expect(getBoardGame('quarry-duel')?.imageSource).toBeNull();
-  });
+    expect(
+      getBoardGame("quarry-duel")?.imagePath,
+    ).toBeNull()
+    expect(
+      getBoardGame("quarry-duel")?.imageSource,
+    ).toBeNull()
+  })
 
-  it('never offers an excluded game, and answers an empty search with nothing', () => {
-    importBoardGames();
-    const games = listBoardGames();
-    expect(games.map((game) => game.id)).toEqual(['harbour-lantern', 'quarry-duel', 'tidewright']);
-    expect(searchBoardGames(games, { query: '' })).toEqual([]);
+  test("never offers an excluded game, and answers an empty search with nothing", () => {
+    importBoardGames()
+    const games = listBoardGames()
+    expect(games.map((game) => game.id)).toEqual([
+      "harbour-lantern",
+      "quarry-duel",
+      "tidewright",
+    ])
+    expect(searchBoardGames(games, { query: "" })).toEqual(
+      [],
+    )
     // `harbour-lantern` matches the term and is excluded by hand.
-    expect(searchBoardGames(games, { query: 'lantern' })).toEqual([]);
-    expect(searchBoardGames(games, { query: 'quarry' }).map((g) => g.id)).toEqual(['quarry-duel']);
+    expect(
+      searchBoardGames(games, { query: "lantern" }),
+    ).toEqual([])
+    expect(
+      searchBoardGames(games, { query: "quarry" }).map(
+        (g) => g.id,
+      ),
+    ).toEqual(["quarry-duel"])
     // A publisher name should find its games.
-    expect(searchBoardGames(games, { query: 'northwind' })).toEqual([]);
-    expect(searchBoardGames(games, { categories: ['Two Player'], query: 'quarry' }).length).toBe(1);
-  });
+    expect(
+      searchBoardGames(games, { query: "northwind" }),
+    ).toEqual([])
+    expect(
+      searchBoardGames(games, {
+        categories: ["Two Player"],
+        query: "quarry",
+      }).length,
+    ).toBe(1)
+  })
 
-  it('normalises an unrecognised box kind and link kind rather than refusing the row', () => {
-    importBoardGames();
-    const game = getBoardGame('quarry-duel');
-    expect(game?.boxes[0]?.kind).toBe('standalone');
-    expect(getBoardGame('tidewright')?.links[0]?.kind).toBe('reference');
-  });
+  test("normalises an unrecognised box kind and link kind rather than refusing the row", () => {
+    importBoardGames()
+    const game = getBoardGame("quarry-duel")
+    expect(game?.boxes[0]?.kind).toBe("standalone")
+    expect(getBoardGame("tidewright")?.links[0]?.kind).toBe(
+      "reference",
+    )
+  })
 
-  it('is a no-op on a second run, and re-runs when the source changes', () => {
-    expect(importBoardGames().imported).toBe(true);
-    expect(importBoardGames().imported).toBe(false);
-    expect(importBoardGames({ force: true }).imported).toBe(true);
-  });
-});
+  test("is a no-op on a second run, and re-runs when the source changes", () => {
+    expect(importBoardGames().imported).toBe(true)
+    expect(importBoardGames().imported).toBe(false)
+    expect(importBoardGames({ force: true }).imported).toBe(
+      true,
+    )
+  })
+})
 
-describe('the grouping-rule seed', () => {
-  it('adds one row per PREFIX and leaves the owner rows exactly as they were', () => {
-    writeFileSync(SEED, SEED_YAML);
-    const result = importBoardGames();
-    expect(result.problems).toEqual([]);
+describe("the grouping-rule seed", () => {
+  test("adds one row per PREFIX and leaves the owner rows exactly as they were", () => {
+    writeFileSync(SEED, SEED_YAML)
+    const result = importBoardGames()
+    expect(result.problems).toEqual([])
     // Four prefixes out of three rules — the two spellings of one franchise are two rows.
-    expect(result.seededGroupings).toBe(4);
-    expect(boardGameCounts().board_game_groupings).toBe(6);
+    expect(result.seededGroupings).toBe(4)
+    expect(boardGameCounts().board_game_groupings).toBe(6)
 
     const owner = bookOfRecord()
       .prepare<{ box_label: string; game_id: string }>(
         "SELECT box_label, game_id FROM board_game_groupings WHERE source = 'owner' ORDER BY box_label",
       )
-      .all();
+      .all()
     expect(owner).toEqual([
-      { box_label: 'Harbour Lantern: Deep Water', game_id: 'harbour-lantern' },
+      {
+        box_label: "Harbour Lantern: Deep Water",
+        game_id: "harbour-lantern",
+      },
       // ⚠️ The seed carries a prefix rule that ALSO matches this box and names a DIFFERENT
       // title for it. The owner's answer is untouched, which is the whole point of `source`.
-      { box_label: 'Quarry Duel: Amber', game_id: 'quarry-duel' },
-    ]);
-  });
+      {
+        box_label: "Quarry Duel: Amber",
+        game_id: "quarry-duel",
+      },
+    ])
+  })
 
-  it('keeps the file order, because the first matching prefix wins', () => {
-    writeFileSync(SEED, SEED_YAML);
-    importBoardGames();
+  test("keeps the file order, because the first matching prefix wins", () => {
+    writeFileSync(SEED, SEED_YAML)
+    importBoardGames()
     const prefixes = bookOfRecord()
       .prepare<{ prefix: string }>(
         "SELECT prefix FROM board_game_groupings WHERE source = 'migration' ORDER BY position",
       )
       .all()
-      .map((row) => row.prefix);
+      .map((row) => row.prefix)
     expect(prefixes).toEqual([
-      'quarry duel amber',
-      'quarry duel',
-      'tidewright reborn',
-      'tidewright rise of the tide',
-    ]);
-  });
+      "quarry duel amber",
+      "quarry duel",
+      "tidewright reborn",
+      "tidewright rise of the tide",
+    ])
+  })
 
-  it('carries the exception and the from-expansions flag', () => {
-    writeFileSync(SEED, SEED_YAML);
-    importBoardGames();
+  test("carries the exception and the from-expansions flag", () => {
+    writeFileSync(SEED, SEED_YAML)
+    importBoardGames()
     const rule = bookOfRecord()
-      .prepare<{ except_contains: string | null; is_game_from_expansions: number; listing_bgg_id: string | null }>(
+      .prepare<{
+        except_contains: string | null
+        is_game_from_expansions: number
+        listing_bgg_id: string | null
+      }>(
         "SELECT except_contains, is_game_from_expansions, listing_bgg_id FROM board_game_groupings WHERE prefix = 'quarry duel amber'",
       )
-      .get();
+      .get()
     expect(rule).toEqual({
-      except_contains: 'solo challenger',
+      except_contains: "solo challenger",
       is_game_from_expansions: 1,
       listing_bgg_id: null,
-    });
-  });
+    })
+  })
 
-  it('answers a review the owner has not, and skips one they already did', () => {
-    writeFileSync(SEED, SEED_YAML);
-    const result = importBoardGames();
+  test("answers a review the owner has not, and skips one they already did", () => {
+    writeFileSync(SEED, SEED_YAML)
+    const result = importBoardGames()
     // Two in the seed; one of them names a box the owner's own open review already names, and
     // an answer already given wins.
-    expect(result.seededReviews).toBe(1);
+    expect(result.seededReviews).toBe(1)
     const rows = bookOfRecord()
-      .prepare<{ box_label: string; source: string; status: string; reviewed_at: string | null }>(
-        'SELECT box_label, source, status, reviewed_at FROM board_game_grouping_reviews ORDER BY box_label',
+      .prepare<{
+        box_label: string
+        source: string
+        status: string
+        reviewed_at: string | null
+      }>(
+        "SELECT box_label, source, status, reviewed_at FROM board_game_grouping_reviews ORDER BY box_label",
       )
-      .all();
+      .all()
     expect(rows).toEqual([
       // The owner's open question, untouched — still unanswered.
       {
-        box_label: 'Tidewright Expeditions',
+        box_label: "Tidewright Expeditions",
         reviewed_at: null,
-        source: 'owner',
-        status: 'possibleEdition',
+        source: "owner",
+        status: "possibleEdition",
       },
       {
-        box_label: 'quarry duel skirmish',
-        reviewed_at: expect.any(String) as unknown as string,
-        source: 'migration',
-        status: 'confirmedSeparate',
+        box_label: "quarry duel skirmish",
+        reviewed_at: expect.any(
+          String,
+        ) as unknown as string,
+        source: "migration",
+        status: "confirmedSeparate",
       },
-    ]);
-  });
+    ])
+  })
 
-  it('does not double the rules on a re-run', () => {
-    writeFileSync(SEED, SEED_YAML);
-    importBoardGames();
-    importBoardGames({ force: true });
-    expect(boardGameCounts().board_game_groupings).toBe(6);
-    expect(boardGameCounts().board_game_grouping_reviews).toBe(2);
-  });
+  test("does not double the rules on a re-run", () => {
+    writeFileSync(SEED, SEED_YAML)
+    importBoardGames()
+    importBoardGames({ force: true })
+    expect(boardGameCounts().board_game_groupings).toBe(6)
+    expect(
+      boardGameCounts().board_game_grouping_reviews,
+    ).toBe(2)
+  })
 
-  it('refuses a prefix that is a pattern, and writes NOTHING', () => {
-    writeFileSync(SEED, `version: 1\ngroupings:\n- prefix: "^quarry duel.*"\n  game_id: q\n  game_name: Q\n`);
-    const result = importBoardGames();
-    expect(result.imported).toBe(false);
-    expect(result.problems.join(' ')).toContain('LITERAL');
-    expect(boardGameCounts().board_games).toBe(0);
-  });
+  test("refuses a prefix that is a pattern, and writes NOTHING", () => {
+    writeFileSync(
+      SEED,
+      `version: 1\ngroupings:\n- prefix: "^quarry duel.*"\n  game_id: q\n  game_name: Q\n`,
+    )
+    const result = importBoardGames()
+    expect(result.imported).toBe(false)
+    expect(result.problems.join(" ")).toContain("LITERAL")
+    expect(boardGameCounts().board_games).toBe(0)
+  })
 
-  it('refuses a seed with no version, and writes NOTHING', () => {
-    writeFileSync(SEED, 'groupings: []\n');
-    const result = importBoardGames();
-    expect(result.imported).toBe(false);
-    expect(boardGameCounts().board_games).toBe(0);
-  });
-});
+  test("refuses a seed with no version, and writes NOTHING", () => {
+    writeFileSync(SEED, "groupings: []\n")
+    const result = importBoardGames()
+    expect(result.imported).toBe(false)
+    expect(boardGameCounts().board_games).toBe(0)
+  })
+})
 
-describe('the two tables keyed on a person', () => {
+describe("the two tables keyed on a person", () => {
   // ⚠️ THE LIVE COLLECTION'S ACTUAL SHAPE, as of the absorb: several plays and ZERO
   // participant rows. Every play in the source arrived through the anonymous landing, which
   // posts no participants, so `play_players` is empty while `plays` is not.
@@ -548,103 +826,127 @@ describe('the two tables keyed on a person', () => {
   //
   // This test pins the empty table as the CORRECT result. It fails if some later change
   // decides an empty participant list is a gap worth filling.
-  it('carries a play with NOBODY at the table across as exactly that', () => {
-    const source = new DatabaseSync(SOURCE);
-    source.exec("DELETE FROM play_players");
+  test("carries a play with NOBODY at the table across as exactly that", () => {
+    const source = new DatabaseSync(SOURCE)
+    source.exec("DELETE FROM play_players")
     source.exec(
       "INSERT INTO plays (id, game_id, played_at, notes) VALUES ('play-3', 'tidewright', '2026-01-05T20:00:00.000Z', NULL)",
-    );
-    source.close();
+    )
+    source.close()
 
-    const result = importBoardGames({ force: true });
-    expect(result.imported).toBe(true);
+    const result = importBoardGames({ force: true })
+    expect(result.imported).toBe(true)
 
     // Three plays in, three plays out — and not one participant row invented for any of them.
-    expect(boardGameCounts().board_game_plays).toBe(3);
-    expect(boardGameCounts().board_game_play_people).toBe(0);
-    for (const play of listBoardGamePlays()) expect(play.playerIds).toEqual([]);
+    expect(boardGameCounts().board_game_plays).toBe(3)
+    expect(boardGameCounts().board_game_play_people).toBe(0)
+    for (const play of listBoardGamePlays())
+      expect(play.playerIds).toEqual([])
 
     // And the known-how table is untouched by all of it: it still holds exactly the claims the
     // source stated, and gained nothing from three plays with no people on them.
-    expect(listBoardGameKnownHow()).toHaveLength(3);
-  });
+    expect(listBoardGameKnownHow()).toHaveLength(3)
+  })
 
-  it('holds the SOURCE app’s player ids until the gated people import re-keys them', () => {
-    importBoardGames();
-    expect(listBoardGameKnownHow().map((row) => row.playerId).sort()).toEqual([
-      'player-ada',
-      'player-ada',
-      'player-grace',
-    ]);
-    expect(listBoardGamePlays()[0]?.playerIds).toEqual([]);
+  test("holds the SOURCE app’s player ids until the gated people import re-keys them", () => {
+    importBoardGames()
+    expect(
+      listBoardGameKnownHow()
+        .map((row) => row.playerId)
+        .sort(),
+    ).toEqual(["player-ada", "player-ada", "player-grace"])
+    expect(listBoardGamePlays()[0]?.playerIds).toEqual([])
     // Every one of them is unresolved, and that is the expected state before the mapping is
     // confirmed — not a fault.
-    expect(unresolvedPersonIds()).toEqual(['player-ada', 'player-grace']);
-  });
+    expect(unresolvedPersonIds()).toEqual([
+      "player-ada",
+      "player-grace",
+    ])
+  })
 
-  it('re-keys onto a person and then resolves cleanly', () => {
-    importBoardGames();
+  test("re-keys onto a person and then resolves cleanly", () => {
+    importBoardGames()
     upsertPerson({
       accounts: {},
       birthYear: null,
       createdAt: NOW,
-      displayName: 'Ada',
-      id: 'ada',
+      displayName: "Ada",
+      id: "ada",
       isBeginner: false,
       maxWeight: null,
       position: 0,
-      source: 'board-game-picker',
-      sourceId: 'player-ada',
-    });
+      source: "board-game-picker",
+      sourceId: "player-ada",
+    })
     upsertPerson({
       accounts: {},
       birthYear: null,
       createdAt: NOW,
-      displayName: 'Grace',
-      id: 'grace',
+      displayName: "Grace",
+      id: "grace",
       isBeginner: false,
       maxWeight: null,
       position: 1,
-      source: 'board-game-picker',
-      sourceId: 'player-grace',
-    });
+      source: "board-game-picker",
+      sourceId: "player-grace",
+    })
 
-    expect(rekeyBoardGamePerson('player-ada', 'ada')).toBe(3);
-    expect(rekeyBoardGamePerson('player-grace', 'grace')).toBe(1);
-    expect(unresolvedPersonIds()).toEqual([]);
+    expect(rekeyBoardGamePerson("player-ada", "ada")).toBe(
+      3,
+    )
+    expect(
+      rekeyBoardGamePerson("player-grace", "grace"),
+    ).toBe(1)
+    expect(unresolvedPersonIds()).toEqual([])
     // Nothing was lost on the way: three claims in, three claims out.
-    expect(listBoardGameKnownHow().length).toBe(3);
-    expect(listBoardGamePlays().find((play) => play.id === 'play-1')?.playerIds).toEqual(['ada']);
-  });
+    expect(listBoardGameKnownHow().length).toBe(3)
+    expect(
+      listBoardGamePlays().find(
+        (play) => play.id === "play-1",
+      )?.playerIds,
+    ).toEqual(["ada"])
+  })
 
-  it('writes the person id straight away when the people import ran FIRST', () => {
+  test("writes the person id straight away when the people import ran FIRST", () => {
     upsertPerson({
       accounts: {},
       birthYear: null,
       createdAt: NOW,
-      displayName: 'Ada',
-      id: 'ada',
+      displayName: "Ada",
+      id: "ada",
       isBeginner: false,
       maxWeight: null,
       position: 0,
-      source: 'board-game-picker',
-      sourceId: 'player-ada',
-    });
-    importBoardGames();
-    expect(listBoardGameKnownHow().filter((row) => row.playerId === 'ada').length).toBe(2);
-    expect(unresolvedPersonIds()).toEqual(['player-grace']);
-  });
+      source: "board-game-picker",
+      sourceId: "player-ada",
+    })
+    importBoardGames()
+    expect(
+      listBoardGameKnownHow().filter(
+        (row) => row.playerId === "ada",
+      ).length,
+    ).toBe(2)
+    expect(unresolvedPersonIds()).toEqual(["player-grace"])
+  })
 
-  it('keeps the FRESHER claim when two source players become one human', () => {
-    importBoardGames();
+  test("keeps the FRESHER claim when two source players become one human", () => {
+    importBoardGames()
     // Both source players know the same game, with different timestamps. A play may RENEW a
     // claim and must never invent one, so the merge must not make a claim look older.
-    expect(rekeyBoardGamePerson('player-ada', 'merged')).toBe(3);
-    expect(rekeyBoardGamePerson('player-grace', 'merged')).toBe(1);
-    const claim = listBoardGameKnownHow().find((row) => row.gameId === 'quarry-duel');
-    expect(claim?.confirmedAt).toBe('2026-01-04T20:00:00.000Z');
-  });
-});
+    expect(
+      rekeyBoardGamePerson("player-ada", "merged"),
+    ).toBe(3)
+    expect(
+      rekeyBoardGamePerson("player-grace", "merged"),
+    ).toBe(1)
+    const claim = listBoardGameKnownHow().find(
+      (row) => row.gameId === "quarry-duel",
+    )
+    expect(claim?.confirmedAt).toBe(
+      "2026-01-04T20:00:00.000Z",
+    )
+  })
+})
 
 // ── THE SOURCE FILE IS RETIRED IN THE SAME CHANGE AS THE FIRST WRITER (WP-4d) ───────────── //
 //
@@ -655,58 +957,62 @@ describe('the two tables keyed on a person', () => {
 // These tests are the proof that it cannot happen any more. The one that matters is the last
 // one: write a row the way a sync writes it, change the source file the way a re-stage would,
 // restart, and find the row still there.
-describe('the retirement of the source file', () => {
-  it('latches after the first absorb and moves the source file aside', () => {
-    expect(isBoardGameSourceRetired()).toBe(false);
-    ensureBoardGamesImported();
+describe("the retirement of the source file", () => {
+  test("latches after the first absorb and moves the source file aside", () => {
+    expect(isBoardGameSourceRetired()).toBe(false)
+    ensureBoardGamesImported()
 
-    expect(isBoardGameSourceRetired()).toBe(true);
-    expect(existsSync(SOURCE)).toBe(false);
-    const asideNames = readdirSync(dir).filter((name) => name.includes('.retired-'));
-    expect(asideNames.length).toBe(1);
+    expect(isBoardGameSourceRetired()).toBe(true)
+    expect(existsSync(SOURCE)).toBe(false)
+    const asideNames = readdirSync(dir).filter((name) =>
+      name.includes(".retired-"),
+    )
+    expect(asideNames.length).toBe(1)
     // Moved aside, never deleted — getting back is meant to be awkward, not impossible.
-    expect(asideNames[0]?.startsWith('source.sqlite.retired-')).toBe(true);
-  });
+    expect(
+      asideNames[0]?.startsWith("source.sqlite.retired-"),
+    ).toBe(true)
+  })
 
-  it('refuses a re-absorb once retired — INCLUDING under `force`', () => {
-    ensureBoardGamesImported();
-    writeSource();
+  test("refuses a re-absorb once retired — INCLUDING under `force`", () => {
+    ensureBoardGamesImported()
+    writeSource()
 
     // `force` exists to re-run an absorb that a fingerprint check would skip. It must not be a
     // way to re-run a whole-table REPLACE over a collection this app now writes.
-    const forced = importBoardGames({ force: true });
-    expect(forced.imported).toBe(false);
-    expect(forced.reason).toContain('retired');
-  });
+    const forced = importBoardGames({ force: true })
+    expect(forced.imported).toBe(false)
+    expect(forced.reason).toContain("retired")
+  })
 
-  it('does NOT latch a container that has no collection yet', () => {
-    rmSync(SOURCE, { force: true });
-    ensureBoardGamesImported();
+  test("does NOT latch a container that has no collection yet", () => {
+    rmSync(SOURCE, { force: true })
+    ensureBoardGamesImported()
 
     // A fresh container must still be able to receive a collection later. Latching on an empty
     // store would lock it out of ever getting one.
-    expect(isBoardGameSourceRetired()).toBe(false);
-    expect(boardGameCounts().board_games).toBe(0);
+    expect(isBoardGameSourceRetired()).toBe(false)
+    expect(boardGameCounts().board_games).toBe(0)
 
-    writeSource();
-    resetBoardGameImportState();
-    ensureBoardGamesImported();
-    expect(boardGameCounts().board_games).toBe(3);
-    expect(isBoardGameSourceRetired()).toBe(true);
-  });
+    writeSource()
+    resetBoardGameImportState()
+    ensureBoardGamesImported()
+    expect(boardGameCounts().board_games).toBe(3)
+    expect(isBoardGameSourceRetired()).toBe(true)
+  })
 
-  it('leaves the door open when the absorb rolled back', () => {
+  test("leaves the door open when the absorb rolled back", () => {
     // A rolled-back absorb left the tables as they were. Retiring then would freeze a
     // collection nobody meant to keep.
-    writeFileSync(SEED, 'version: 2\n');
-    const result = ensureBoardGamesImported();
-    expect(result.problems.length).toBeGreaterThan(0);
-    expect(isBoardGameSourceRetired()).toBe(false);
-  });
+    writeFileSync(SEED, "version: 2\n")
+    const result = ensureBoardGamesImported()
+    expect(result.problems.length).toBeGreaterThan(0)
+    expect(isBoardGameSourceRetired()).toBe(false)
+  })
 
-  it('🐞 A SYNC’S ROWS SURVIVE A RESTART', () => {
-    ensureBoardGamesImported();
-    const db = bookOfRecord();
+  test("🐞 A SYNC’S ROWS SURVIVE A RESTART", () => {
+    ensureBoardGamesImported()
+    const db = bookOfRecord()
 
     // A writer does what the BGG sync does: adds a title the source file has never heard of,
     // and excludes another one with `is_excluded_source = 'sync'`.
@@ -714,36 +1020,38 @@ describe('the retirement of the source file', () => {
       `INSERT INTO board_games (id, name, min_players, max_players, created_at, updated_at)
        VALUES ('tidewright-tides', 'Tidewright: Tides', 2, 4, '2026-08-25T00:00:00.000Z',
                '2026-08-25T00:00:00.000Z')`,
-    );
+    )
     db.exec(
       `INSERT INTO board_game_links (id, game_id, kind, label, url, source, created_at)
        VALUES ('link-new', 'tidewright-tides', 'rulebook', 'Rulebook',
                'https://example.invalid/rulebook.pdf', 'derived', '2026-08-25T00:00:00.000Z')`,
-    );
+    )
 
     // Now the exact event this whole latch exists to survive: the source file comes back,
     // with DIFFERENT content, and the app restarts. Before WP-4d this re-absorbed and the two
     // rows above stopped existing, with no error and nobody watching.
-    writeSource({ excludedSource: 'sync' });
-    resetBoardGameImportState();
-    ensureBoardGamesImported();
+    writeSource({ excludedSource: "sync" })
+    resetBoardGameImportState()
+    ensureBoardGamesImported()
 
-    expect(getBoardGame('tidewright-tides')?.name).toBe('Tidewright: Tides');
+    expect(getBoardGame("tidewright-tides")?.name).toBe(
+      "Tidewright: Tides",
+    )
     expect(
       db
         .prepare<{ c: number }>(
           "SELECT COUNT(*) AS c FROM board_game_links WHERE id = 'link-new'",
         )
         .get()?.c,
-    ).toBe(1);
+    ).toBe(1)
     // And the absorbed rows are still the ones the absorb wrote, not a second copy of them.
-    expect(boardGameCounts().board_games).toBe(4);
-  });
+    expect(boardGameCounts().board_games).toBe(4)
+  })
 
-  it('keeps reading the grouping seed after retirement, because a seed can only ADD', () => {
-    ensureBoardGamesImported();
-    expect(isBoardGameSourceRetired()).toBe(true);
-    const before = boardGameCounts().board_game_groupings;
+  test("keeps reading the grouping seed after retirement, because a seed can only ADD", () => {
+    ensureBoardGamesImported()
+    expect(isBoardGameSourceRetired()).toBe(true)
+    const before = boardGameCounts().board_game_groupings
 
     // The source file is a second BOOK OF RECORD and is retired. The seed is not: every insert
     // is `ON CONFLICT DO NOTHING`, so it can never take a rule back — and it is the only way to
@@ -751,28 +1059,30 @@ describe('the retirement of the source file', () => {
     writeFileSync(
       SEED,
       [
-        'version: 1',
-        'groupings:',
-        '  - prefix: tidewright tides',
-        '    game_id: tidewright-tides',
+        "version: 1",
+        "groupings:",
+        "  - prefix: tidewright tides",
+        "    game_id: tidewright-tides",
         '    game_name: "Tidewright: Tides"',
-        '',
-      ].join('\n'),
-    );
-    expect(seedGroupingRules().seededGroupings).toBe(1);
-    expect(boardGameCounts().board_game_groupings).toBe(before + 1);
+        "",
+      ].join("\n"),
+    )
+    expect(seedGroupingRules().seededGroupings).toBe(1)
+    expect(boardGameCounts().board_game_groupings).toBe(
+      before + 1,
+    )
 
     // Fingerprinted on its own, so an unchanged seed does no work on the next start.
-    expect(seedGroupingRules().seededGroupings).toBe(0);
-  });
+    expect(seedGroupingRules().seededGroupings).toBe(0)
+  })
 
-  it('sets the latch even when the file cannot be moved aside', () => {
+  test("sets the latch even when the file cannot be moved aside", () => {
     // `/config` can be read-only and another process can hold the file. Neither is a reason to
     // leave the door open and let the next start REPLACE a collection this app is writing.
-    rmSync(SOURCE, { force: true });
-    const outcome = retireBoardGameSource();
-    expect(outcome.retired).toBe(true);
-    expect(outcome.movedTo).toBeNull();
-    expect(isBoardGameSourceRetired()).toBe(true);
-  });
-});
+    rmSync(SOURCE, { force: true })
+    const outcome = retireBoardGameSource()
+    expect(outcome.retired).toBe(true)
+    expect(outcome.movedTo).toBeNull()
+    expect(isBoardGameSourceRetired()).toBe(true)
+  })
+})

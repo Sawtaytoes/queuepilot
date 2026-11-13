@@ -82,26 +82,26 @@
 // over a plain state object. `pending.yaml` is written whole every time and has no
 // hand-authored structure to preserve, so giving it a document API would be inventing a
 // requirement WP-2 then has to keep.
-import type { Document } from 'yaml';
+import type { Document } from "yaml"
 
-import { STORE_BACKEND } from '../config.js';
-import * as groupsStore from './groups.js';
-import * as pendingStore from './pending.js';
-import * as queuesStore from './queues.js';
-import * as setsStore from './sets.js';
+import { STORE_BACKEND } from "../config.js"
 // The SQLite implementations. They import the interfaces below with `import type`, so the
 // cycle this reads like is erased at compile time and there is no runtime one.
-import { store as sqliteGroups } from './db/groups.js';
-import { store as sqlitePending } from './db/pending.js';
-import { store as sqliteQueues } from './db/queues.js';
-import { store as sqliteSets } from './db/sets.js';
+import { store as sqliteGroups } from "./db/groups.js"
+import { store as sqlitePending } from "./db/pending.js"
+import { store as sqliteQueues } from "./db/queues.js"
+import { store as sqliteSets } from "./db/sets.js"
+import * as groupsStore from "./groups.js"
+import * as pendingStore from "./pending.js"
+import * as queuesStore from "./queues.js"
+import * as setsStore from "./sets.js"
 
-export type { PendingState } from './pending.js';
+export type { PendingState } from "./pending.js"
 
 /** A file's `(mtimeMs, size)` — what the two registry memos are keyed on. */
 export interface StoreStat {
-  mtimeMs: number;
-  size: number;
+  mtimeMs: number
+  size: number
 }
 
 /** What every store can say about its own backing file. */
@@ -113,15 +113,15 @@ export interface FileStore {
    * watches the containing directory, and log lines name the file. Nothing else should read
    * it, and nothing should open it.
    */
-  readonly path: string;
+  readonly path: string
 }
 
 /** A YAML file the app round-trips through the comment-preserving `Document` API. */
 export interface DocumentStore extends FileStore {
   /** Parse the file into a `Document`, seeding or synthesizing an empty one as that store does. */
-  readDoc(): Promise<Document>;
+  readDoc(): Promise<Document>
   /** Serialize and write it back, atomically where the mount allows it. */
-  writeDoc(doc: Document): Promise<void>;
+  writeDoc(doc: Document): Promise<void>
 }
 
 /**
@@ -130,11 +130,11 @@ export interface DocumentStore extends FileStore {
  * `groups.yaml` is not, and never was.
  */
 export interface LockedDocumentStore extends DocumentStore {
-  withLock<T>(fn: () => Promise<T>): Promise<T>;
+  withLock<T>(fn: () => Promise<T>): Promise<T>
   /** `(mtimeMs, size)`, or null when the file is not there yet. */
-  stat(): Promise<StoreStat | null>;
+  stat(): Promise<StoreStat | null>
   /** The same pair as an ETag-shaped string. A stat, not a read. */
-  revision(): string;
+  revision(): string
   /**
    * The WHOLE store as one opaque blob, or null when there is nothing stored yet. `history.ts`
    * takes one before every mutating request and restores it byte for byte on undo.
@@ -144,21 +144,21 @@ export interface LockedDocumentStore extends DocumentStore {
    * redesign. The plan's "fold `.history.json` in, it is only 7 KB" is right about the size and
    * wrong about the cost. It is named here so that answer is deliberate.
    */
-  readRawSnapshot(): Promise<string | null>;
+  readRawSnapshot(): Promise<string | null>
   /** Put a snapshot back, byte for byte. */
-  writeRawSnapshot(text: string): Promise<void>;
+  writeRawSnapshot(text: string): Promise<void>
 }
 
 /** The set registry's file. `readSync` takes a path because the offline e2e harnesses drive
  * `engine/routing.ts loadSets()` against a fixture. */
 export interface SetsStore extends LockedDocumentStore {
-  ensureFile(): Promise<void>;
-  readSync(file?: string): unknown;
+  ensureFile(): Promise<void>
+  readSync(file?: string): unknown
 }
 
 /** The curated queues' file. */
 export interface QueuesStore extends LockedDocumentStore {
-  readSync(): unknown;
+  readSync(): unknown
 }
 
 /**
@@ -167,22 +167,22 @@ export interface QueuesStore extends LockedDocumentStore {
  * worse failure.
  */
 export interface GroupsStore extends DocumentStore {
-  readSync(): Record<string, unknown>;
-  exists(): Promise<boolean>;
-  seed(groups: readonly unknown[]): Promise<boolean>;
+  readSync(): Record<string, unknown>
+  exists(): Promise<boolean>
+  seed(groups: readonly unknown[]): Promise<boolean>
 }
 
 /** The Pending decisions file — a state object, not a document. */
 export interface PendingStore extends FileStore {
-  read(): Promise<pendingStore.PendingState>;
-  write(next: pendingStore.PendingState): Promise<void>;
+  read(): Promise<pendingStore.PendingState>
+  write(next: pendingStore.PendingState): Promise<void>
 }
 
 export interface Store {
-  sets: SetsStore;
-  queues: QueuesStore;
-  groups: GroupsStore;
-  pending: PendingStore;
+  sets: SetsStore
+  queues: QueuesStore
+  groups: GroupsStore
+  pending: PendingStore
   /**
    * Every file whose change should repaint an open tab, for `sse.ts`'s directory watcher.
    *
@@ -190,7 +190,7 @@ export interface Store {
    * same way a renamed queue does. `pending.yaml` is deliberately absent: it is written only
    * by the app's own Pending screen, which already repaints on its own action.
    */
-  watchTargets(): string[];
+  watchTargets(): string[]
 }
 
 function watchTargets(): string[] {
@@ -199,7 +199,11 @@ function watchTargets(): string[] {
   // they are the state itself. When the mirror is switched off this list becomes the empty
   // set and `sse.ts`'s watcher goes with it; that is a change for the release that removes the
   // bridge, not for this one.
-  return [queuesStore.path, setsStore.path, groupsStore.path];
+  return [
+    queuesStore.path,
+    setsStore.path,
+    groupsStore.path,
+  ]
 }
 
 /**
@@ -211,7 +215,7 @@ function watchTargets(): string[] {
  * `bookOfRecord()` is lazy and nothing calls it.
  */
 export const store: Store =
-  STORE_BACKEND === 'yaml'
+  STORE_BACKEND === "yaml"
     ? {
         sets: setsStore,
         queues: queuesStore,
@@ -225,4 +229,4 @@ export const store: Store =
         groups: sqliteGroups,
         pending: sqlitePending,
         watchTargets,
-      };
+      }

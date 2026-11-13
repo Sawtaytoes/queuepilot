@@ -34,54 +34,62 @@
 // the absorbed engine speaks `number | null`. `asBggText` is the ONE place the conversion
 // happens on the way in, the way `toBggId` is the one place on the way out. A `NaN` written as
 // text would compare false against everything and be invisible.
-import type { InteractionType } from '../../boardgames/types.js';
-import type { SourceRow } from '../../boardgames/import/bgg.js';
+
+import type { SourceRow } from "../../boardgames/import/bgg.js"
 import {
   type GroupingReview,
   type GroupingRules,
   groupBoxes,
   normalize,
   slugify,
-} from '../../boardgames/import/grouping.js';
-import { loadGroupingRules } from './boardgameRules.js';
-import { bookOfRecord, prepareChecked } from './open.js';
-import type { SqliteDatabase } from '../sqlite.js';
+} from "../../boardgames/import/grouping.js"
+import type { InteractionType } from "../../boardgames/types.js"
+import type { SqliteDatabase } from "../sqlite.js"
+import { loadGroupingRules } from "./boardgameRules.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 export interface ImportStats {
-  rowsRead: number;
-  rowsOwned: number;
-  games: number;
-  boxes: number;
-  reviews: GroupingReview[];
+  rowsRead: number
+  rowsOwned: number
+  games: number
+  boxes: number
+  reviews: GroupingReview[]
   /** Titles with no complexity number — they dodge every weight filter. */
-  gamesWithoutWeight: number;
+  gamesWithoutWeight: number
   /** Titles with no poll data — the box's own claim is all there is. */
-  gamesWithoutPlayerCountVotes: number;
+  gamesWithoutPlayerCountVotes: number
   /** Interaction type is a guess for all of these. */
-  gamesWithUntaggedInteraction: number;
+  gamesWithUntaggedInteraction: number
 }
 
 // `SourceRow` is declared ONCE, in `boardgames/import/bgg.ts`, and imported here as a TYPE so
 // nothing in the store layer's runtime graph reaches the fetch module. Two copies of this shape
 // would drift a field at a time, and a field that drifts is a column that silently stops being
 // written.
-export type { SourceRow };
+export type { SourceRow }
 
 /** A listing id as the TEXT column holds it. Non-finite becomes NULL, never the string `NaN`. */
-export const asBggText = (value: number | null | undefined): string | null =>
-  value == null || !Number.isFinite(value) ? null : String(Math.trunc(value));
+export const asBggText = (
+  value: number | null | undefined,
+): string | null =>
+  value == null || !Number.isFinite(value)
+    ? null
+    : String(Math.trunc(value))
 
 const parseStringList = (json: string | null): string[] => {
-  if (!json) return [];
+  if (!json) return []
   try {
-    const parsed: unknown = JSON.parse(json);
+    const parsed: unknown = JSON.parse(json)
     return Array.isArray(parsed)
-      ? parsed.filter((value): value is string => typeof value === 'string')
-      : [];
+      ? parsed.filter(
+          (value): value is string =>
+            typeof value === "string",
+        )
+      : []
   } catch {
-    return [];
+    return []
   }
-};
+}
 
 /**
  * A PLACEHOLDER, and named so it cannot be mistaken for the real thing.
@@ -95,44 +103,60 @@ const parseStringList = (json: string | null): string[] => {
  * derivation, off an upstream item's mechanics. This one is what stands in until that pass
  * runs. Two different answers to one question, so they do not share a name.
  */
-const guessInteractionTypes = (row: SourceRow | undefined): InteractionType[] =>
-  row?.maxPlayers === 1 ? ['solo'] : ['competitive'];
+const guessInteractionTypes = (
+  row: SourceRow | undefined,
+): InteractionType[] =>
+  row?.maxPlayers === 1 ? ["solo"] : ["competitive"]
 
 const merge = (rows: SourceRow[]) => {
-  const numbers = (pick: (row: SourceRow) => number | null) =>
-    rows.map(pick).filter((value): value is number => value !== null);
+  const numbers = (
+    pick: (row: SourceRow) => number | null,
+  ) =>
+    rows
+      .map(pick)
+      .filter((value): value is number => value !== null)
 
-  const mins = numbers((row) => row.minPlayers);
-  const maxes = numbers((row) => row.maxPlayers);
-  const weights = numbers((row) => row.weight);
-  const ratings = numbers((row) => row.rating);
-  const minTimes = numbers((row) => row.minPlaytime);
-  const maxTimes = numbers((row) => row.maxPlaytime);
-  const ages = numbers((row) => row.minAge);
-  const years = numbers((row) => row.yearPublished);
+  const mins = numbers((row) => row.minPlayers)
+  const maxes = numbers((row) => row.maxPlayers)
+  const weights = numbers((row) => row.weight)
+  const ratings = numbers((row) => row.rating)
+  const minTimes = numbers((row) => row.minPlaytime)
+  const maxTimes = numbers((row) => row.maxPlaytime)
+  const ages = numbers((row) => row.minAge)
+  const years = numbers((row) => row.yearPublished)
 
   const average = (values: number[]) =>
-    values.length === 0 ? null : values.reduce((sum, value) => sum + value, 0) / values.length;
+    values.length === 0
+      ? null
+      : values.reduce((sum, value) => sum + value, 0) /
+        values.length
 
   return {
     // A title's range is the UNION of its boxes' ranges: a combined big box plays more players
     // than any one season of it does alone.
-    bestWith: [...new Set(rows.flatMap((row) => row.bestWith))].sort((a, b) => a - b),
+    bestWith: [
+      ...new Set(rows.flatMap((row) => row.bestWith)),
+    ].sort((a, b) => a - b),
     maxPlayers: maxes.length > 0 ? Math.max(...maxes) : 1,
-    maxPlaytime: maxTimes.length > 0 ? Math.max(...maxTimes) : null,
+    maxPlaytime:
+      maxTimes.length > 0 ? Math.max(...maxTimes) : null,
     // The strictest age any box claims — the safe direction when the question is "can the kid
     // play this".
     minAge: ages.length > 0 ? Math.max(...ages) : null,
     minPlayers: mins.length > 0 ? Math.min(...mins) : 1,
-    minPlaytime: minTimes.length > 0 ? Math.min(...minTimes) : null,
+    minPlaytime:
+      minTimes.length > 0 ? Math.min(...minTimes) : null,
     rating: average(ratings),
-    recommendedWith: [...new Set(rows.flatMap((row) => row.recommendedWith))].sort(
-      (a, b) => a - b,
-    ),
+    recommendedWith: [
+      ...new Set(
+        rows.flatMap((row) => row.recommendedWith),
+      ),
+    ].sort((a, b) => a - b),
     weight: average(weights),
-    yearPublished: years.length > 0 ? Math.min(...years) : null,
-  };
-};
+    yearPublished:
+      years.length > 0 ? Math.min(...years) : null,
+  }
+}
 
 /**
  * Write already-parsed rows into the book of record.
@@ -147,17 +171,24 @@ export function importBoardGameRows(
   rules: GroupingRules = loadGroupingRules(db),
 ): ImportStats {
   const grouping = groupBoxes(
-    rows.map((row) => ({ bggId: row.bggId, kind: row.kind, name: row.name })),
+    rows.map((row) => ({
+      bggId: row.bggId,
+      kind: row.kind,
+      name: row.name,
+    })),
     rules,
-  );
+  )
 
   /** Box name → every source row with that name. A duplicate is a second physical copy. */
-  const rowsByName = new Map<string, SourceRow[]>();
+  const rowsByName = new Map<string, SourceRow[]>()
   for (const row of rows) {
-    rowsByName.set(row.name, [...(rowsByName.get(row.name) ?? []), row]);
+    rowsByName.set(row.name, [
+      ...(rowsByName.get(row.name) ?? []),
+      row,
+    ])
   }
 
-  const now = new Date().toISOString();
+  const now = new Date().toISOString()
 
   const upsertGame = prepareChecked(
     db,
@@ -186,12 +217,12 @@ export function importBoardGameRows(
        updated_at = excluded.updated_at`,
     // interaction_types, categories and publishers are NOT in the SET list on purpose — see
     // the file header. A re-import must not blank any of the three.
-  );
+  )
 
   const deleteImportedBoxes = prepareChecked(
     db,
-    'DELETE FROM board_game_boxes WHERE game_id = :game_id',
-  );
+    "DELETE FROM board_game_boxes WHERE game_id = :game_id",
+  )
 
   const insertBox = prepareChecked(
     db,
@@ -202,7 +233,7 @@ export function importBoardGameRows(
        :id, :game_id, :label, :kind, :bgg_id, :location_text, :image_path,
        :version_nickname, :version_year, :version_languages, :now
      )`,
-  );
+  )
 
   /**
    * What a box knows that no import can tell it: its cached art, where it physically lives, and
@@ -215,18 +246,18 @@ export function importBoardGameRows(
    * LABEL, which is what identifies a box.
    */
   const boxKeepsakes = prepareChecked<{
-    label: string;
-    location_text: string | null;
-    image_path: string | null;
-    version_nickname: string | null;
-    version_year: number | null;
-    version_languages: string | null;
+    label: string
+    location_text: string | null
+    image_path: string | null
+    version_nickname: string | null
+    version_year: number | null
+    version_languages: string | null
   }>(
     db,
     `SELECT label, location_text, image_path, version_nickname,
             version_year, version_languages
        FROM board_game_boxes WHERE game_id = :game_id`,
-  );
+  )
 
   /**
    * Drop only the UNANSWERED prompts, and only for box labels THIS import actually saw.
@@ -238,7 +269,7 @@ export function importBoardGameRows(
   const clearReviews = db.prepare(
     `DELETE FROM board_game_grouping_reviews
       WHERE reviewed_at IS NULL AND box_label IN (SELECT value FROM json_each(?))`,
-  );
+  )
 
   const insertReview = prepareChecked(
     db,
@@ -246,7 +277,7 @@ export function importBoardGameRows(
        (box_label, game_id, parent_game_id, status, reason, reviewed_at, source)
      VALUES (:box_label, :game_id, :parent_game_id, :status, :reason, NULL, 'owner')
      ON CONFLICT(box_label) DO NOTHING`,
-  );
+  )
 
   const stats: ImportStats = {
     boxes: 0,
@@ -257,29 +288,46 @@ export function importBoardGameRows(
     reviews: grouping.reviews,
     rowsOwned: rows.length,
     rowsRead: rows.length,
-  };
+  }
 
   // Every box label this run carried, answered or not — that is the scope it is entitled to
   // clear.
-  const importedBoxLabels = [...new Set(grouping.games.flatMap((game) => game.boxNames))];
+  const importedBoxLabels = [
+    ...new Set(
+      grouping.games.flatMap((game) => game.boxNames),
+    ),
+  ]
 
   db.withTransaction(() => {
-    clearReviews.run(JSON.stringify(importedBoxLabels));
+    clearReviews.run(JSON.stringify(importedBoxLabels))
 
     for (const game of grouping.games) {
-      const gameRows = game.boxNames.flatMap((name) => rowsByName.get(name) ?? []);
-      const standaloneRows = gameRows.filter((row) => row.kind === 'standalone');
+      const gameRows = game.boxNames.flatMap(
+        (name) => rowsByName.get(name) ?? [],
+      )
+      const standaloneRows = gameRows.filter(
+        (row) => row.kind === "standalone",
+      )
       // A title built purely out of "expansion" rows still needs numbers, so fall back to all
       // of them rather than merging an empty list into 1–1 players.
-      const statRows = standaloneRows.length > 0 ? standaloneRows : gameRows;
-      const merged = merge(statRows);
-      const interactionTypes = guessInteractionTypes(statRows[0] ?? gameRows[0]);
+      const statRows =
+        standaloneRows.length > 0
+          ? standaloneRows
+          : gameRows
+      const merged = merge(statRows)
+      const interactionTypes = guessInteractionTypes(
+        statRows[0] ?? gameRows[0],
+      )
 
       upsertGame.run({
         best_with: JSON.stringify(merged.bestWith),
         bgg_id: asBggText(
           game.listingBggId ??
-            statRows.find((row) => normalize(row.name) === normalize(game.name))?.bggId ??
+            statRows.find(
+              (row) =>
+                normalize(row.name) ===
+                normalize(game.name),
+            )?.bggId ??
             statRows[0]?.bggId ??
             null,
         ),
@@ -294,38 +342,46 @@ export function importBoardGameRows(
         now,
         // A row names the publisher per BOX; a title takes the UNION, which is right for a
         // franchise that changed hands mid-run.
-        publishers: JSON.stringify([...new Set(gameRows.flatMap((row) => row.publishers))]),
+        publishers: JSON.stringify([
+          ...new Set(
+            gameRows.flatMap((row) => row.publishers),
+          ),
+        ]),
         rating: merged.rating,
-        recommended_with: JSON.stringify(merged.recommendedWith),
+        recommended_with: JSON.stringify(
+          merged.recommendedWith,
+        ),
         weight: merged.weight,
         year_published: merged.yearPublished,
-      });
+      })
 
       const keepsakes = new Map(
-        boxKeepsakes.all({ game_id: game.id }).map((box) => [box.label, box]),
-      );
+        boxKeepsakes
+          .all({ game_id: game.id })
+          .map((box) => [box.label, box]),
+      )
 
-      deleteImportedBoxes.run({ game_id: game.id });
+      deleteImportedBoxes.run({ game_id: game.id })
 
       // `boxNames` lists a title once per physical copy and `rowsByName` already returns every
       // copy — so iterate the DISTINCT titles, or each copy is inserted copies-many times and
       // collides on its own id.
-      const usedBoxIds = new Set<string>();
+      const usedBoxIds = new Set<string>()
 
       for (const boxName of new Set(game.boxNames)) {
-        const boxRows = rowsByName.get(boxName) ?? [];
+        const boxRows = rowsByName.get(boxName) ?? []
         boxRows.forEach((row, copyIndex) => {
           // Two titles inside one game can still slugify identically — a symbol was all that
           // separated them — so the id is de-duplicated here rather than trusting the slug.
-          let id = `${game.id}--${slugify(boxName)}${copyIndex > 0 ? `--${copyIndex + 1}` : ''}`;
-          let suffix = 2;
+          let id = `${game.id}--${slugify(boxName)}${copyIndex > 0 ? `--${copyIndex + 1}` : ""}`
+          let suffix = 2
           while (usedBoxIds.has(id)) {
-            id = `${game.id}--${slugify(boxName)}--dup${suffix}`;
-            suffix += 1;
+            id = `${game.id}--${slugify(boxName)}--dup${suffix}`
+            suffix += 1
           }
-          usedBoxIds.add(id);
+          usedBoxIds.add(id)
 
-          const kept = keepsakes.get(boxName);
+          const kept = keepsakes.get(boxName)
 
           insertBox.run({
             bgg_id: asBggText(row.bggId),
@@ -339,20 +395,31 @@ export function importBoardGameRows(
             version_languages: JSON.stringify(
               row.versionLanguages.length > 0
                 ? row.versionLanguages
-                : parseStringList(kept?.version_languages ?? null),
+                : parseStringList(
+                    kept?.version_languages ?? null,
+                  ),
             ),
-            version_nickname: row.versionNickname ?? kept?.version_nickname ?? null,
-            version_year: row.versionYear ?? kept?.version_year ?? null,
-          });
-          stats.boxes += 1;
-        });
+            version_nickname:
+              row.versionNickname ??
+              kept?.version_nickname ??
+              null,
+            version_year:
+              row.versionYear ?? kept?.version_year ?? null,
+          })
+          stats.boxes += 1
+        })
       }
 
-      if (merged.weight === null) stats.gamesWithoutWeight += 1;
-      if (merged.bestWith.length === 0 && merged.recommendedWith.length === 0) {
-        stats.gamesWithoutPlayerCountVotes += 1;
+      if (merged.weight === null)
+        stats.gamesWithoutWeight += 1
+      if (
+        merged.bestWith.length === 0 &&
+        merged.recommendedWith.length === 0
+      ) {
+        stats.gamesWithoutPlayerCountVotes += 1
       }
-      if (interactionTypes.includes('competitive')) stats.gamesWithUntaggedInteraction += 1;
+      if (interactionTypes.includes("competitive"))
+        stats.gamesWithUntaggedInteraction += 1
     }
 
     for (const review of grouping.reviews) {
@@ -362,7 +429,7 @@ export function importBoardGameRows(
         parent_game_id: review.parentGameId,
         reason: review.reason,
         status: review.status,
-      });
+      })
     }
 
     // A merge moves boxes onto the surviving title. The next import recreates them there but
@@ -370,11 +437,12 @@ export function importBoardGameRows(
     // somewhere else is dropped.
     const assignedElsewhere = prepareChecked(
       db,
-      'DELETE FROM board_game_boxes WHERE label = :label AND game_id != :game_id',
-    );
+      "DELETE FROM board_game_boxes WHERE label = :label AND game_id != :game_id",
+    )
     for (const label of importedBoxLabels) {
-      const gameId = grouping.assignments.get(label);
-      if (gameId) assignedElsewhere.run({ game_id: gameId, label });
+      const gameId = grouping.assignments.get(label)
+      if (gameId)
+        assignedElsewhere.run({ game_id: gameId, label })
     }
 
     // Only `source = 'import'`. A title somebody created by hand survives having no boxes.
@@ -382,13 +450,13 @@ export function importBoardGameRows(
       `DELETE FROM board_games
         WHERE source = 'import'
           AND id NOT IN (SELECT DISTINCT game_id FROM board_game_boxes)`,
-    ).run();
-  });
+    ).run()
+  })
 
   // NOTE: an import deliberately does NOT seed ways to play out of the expansion boxes. It used
   // to, and the answer was that most expansions are not a choice anybody makes at the table —
   // they are simply in the box — so listing every one of them as a way to play is noise on
   // titles that never wanted the feature. They are added per title, from the Collection screen.
 
-  return stats;
+  return stats
 }

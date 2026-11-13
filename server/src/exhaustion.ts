@@ -26,8 +26,8 @@
 // second implementation again, wearing a different hat. `setQueueWatchedStateReset` stays, and
 // its one caller is `e2e/completion-mode-test.ts`, which replaces the clear with a recorder to
 // prove the exhaustion rule decides WHEN and nothing else.
-import * as queues from './queues.js';
-import { resetQueueWatchedState } from './watchedReset.js';
+import * as queues from "./queues.js"
+import { resetQueueWatchedState } from "./watchedReset.js"
 
 /**
  * Clear one queue's watched state so a new round can start.
@@ -35,7 +35,9 @@ import { resetQueueWatchedState } from './watchedReset.js';
  * The signature is `resetQueueWatchedState(setId)`'s first parameter, so a substitute a gate
  * supplies needs to know nothing about reasons or counts.
  */
-export type QueueWatchedStateReset = (setName: string) => Promise<void>;
+export type QueueWatchedStateReset = (
+  setName: string,
+) => Promise<void>
 
 /**
  * The real clear, adapted to this seam's shape rather than the other way round.
@@ -52,11 +54,15 @@ export type QueueWatchedStateReset = (setName: string) => Promise<void>;
  * BEFORE `provider.buckets()`, and `restartIfExhausted` runs in the write side AFTER it, so
  * within one play the seasonal reset always goes first.
  */
-const resetForExhaustion: QueueWatchedStateReset = async (setName) => {
-  await resetQueueWatchedState(setName, { reason: 'exhausted' });
-};
+const resetForExhaustion: QueueWatchedStateReset = async (
+  setName,
+) => {
+  await resetQueueWatchedState(setName, {
+    reason: "exhausted",
+  })
+}
 
-let _reset: QueueWatchedStateReset = resetForExhaustion;
+let _reset: QueueWatchedStateReset = resetForExhaustion
 
 /**
  * Replace the clear.
@@ -65,8 +71,10 @@ let _reset: QueueWatchedStateReset = resetForExhaustion;
  * prove the exhaustion rule decides WHEN independently of what the clear does;
  * `e2e/completion-mode-test.ts` is its one caller.
  */
-export function setQueueWatchedStateReset(reset: QueueWatchedStateReset): void {
-  _reset = reset;
+export function setQueueWatchedStateReset(
+  reset: QueueWatchedStateReset,
+): void {
+  _reset = reset
 }
 
 /**
@@ -84,10 +92,12 @@ export function setQueueWatchedStateReset(reset: QueueWatchedStateReset): void {
  *    the restart back. That is the conservative half: a Plex hiccup makes the queue wait a
  *    scan, where the other reading would wipe the round while an entry was still unwatched.
  */
-export async function isExhausted(setName: string): Promise<boolean> {
-  const entries = await queues.listSet(setName);
-  if (!entries.length) return false;
-  return entries.every((entry) => entry.done);
+export async function isExhausted(
+  setName: string,
+): Promise<boolean> {
+  const entries = await queues.listSet(setName)
+  if (!entries.length) return false
+  return entries.every((entry) => entry.done)
 }
 
 /**
@@ -100,8 +110,11 @@ export async function isExhausted(setName: string): Promise<boolean> {
 export async function restartIfExhausted(
   setName: string,
 ): Promise<{ restarted: boolean }> {
-  if (!await isExhausted(setName)) return { restarted: false };
-  await _reset(setName);
-  console.log(`[finished] ${setName}: every entry is done — cleared, and a new round starts`);
-  return { restarted: true };
+  if (!(await isExhausted(setName)))
+    return { restarted: false }
+  await _reset(setName)
+  console.log(
+    `[finished] ${setName}: every entry is done — cleared, and a new round starts`,
+  )
+  return { restarted: true }
 }

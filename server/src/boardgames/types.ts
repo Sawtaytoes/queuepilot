@@ -21,12 +21,12 @@
  * the must-have facet, and the one the picker's request validation is written around.
  */
 export type InteractionType =
-  | 'competitive'
-  | 'cooperative'
-  | 'semiCooperative'
-  | 'team'
-  | 'traitor'
-  | 'solo';
+  | "competitive"
+  | "cooperative"
+  | "semiCooperative"
+  | "team"
+  | "traitor"
+  | "solo"
 
 /**
  * What the community thinks of playing this game at a given player count — the whole reason the
@@ -35,62 +35,66 @@ export type InteractionType =
  * `unknown` is NOT a soft `notRecommended`. A niche game with three votes must stay pickable,
  * flagged rather than filtered.
  */
-export type PlayerCountVerdict = 'best' | 'recommended' | 'notRecommended' | 'unknown';
+export type PlayerCountVerdict =
+  | "best"
+  | "recommended"
+  | "notRecommended"
+  | "unknown"
 
 /**
  * Where a field's value came from. Every derived value carries one, because a guess that cannot
  * be told apart from a fact is how a collection loses the owner's trust.
  */
-export type FieldSource = 'import' | 'owner' | 'derived';
+export type FieldSource = "import" | "owner" | "derived"
 
 /** A title. Not a box — one title can be several physical boxes on a shelf. */
 export interface Game {
-  id: string;
-  name: string;
+  id: string
+  name: string
   /** The box claim. Recorded, but never the thing filtered on alone. */
-  minPlayers: number;
-  maxPlayers: number;
+  minPlayers: number
+  maxPlayers: number
   /** Counts the community calls `best`. May be empty. */
-  bestWith: number[];
+  bestWith: number[]
   /** Counts the community calls `recommended`. May be empty. */
-  recommendedWith: number[];
+  recommendedWith: number[]
   /** BGG-style 1.0–5.0 complexity. `null` when unknown — never 0. */
-  weight: number | null;
-  minPlaytime: number | null;
-  maxPlaytime: number | null;
-  minAge: number | null;
+  weight: number | null
+  minPlaytime: number | null
+  maxPlaytime: number | null
+  minAge: number | null
   /**
    * A game is often more than one of these — a co-op box with a solo mode is both, and plenty
    * of titles are co-op AND versus. Never empty; `['competitive']` is the floor.
    */
-  interactionTypes: InteractionType[];
-  interactionTypesSource: FieldSource;
+  interactionTypes: InteractionType[]
+  interactionTypesSource: FieldSource
   /** BGG's auto mechanic/category tags — a palette, not the truth. */
-  categories: string[];
+  categories: string[]
   /** The owner's own categories (Roll 'n Write, …), theirs to manage. */
-  ownerCategories: string[];
-  yearPublished: number | null;
+  ownerCategories: string[]
+  yearPublished: number | null
   /** Who made it. Searchable — a publisher name should find its games. */
-  publishers: string[];
+  publishers: string[]
   /** Nullable by design: a game need not exist on BGG. */
-  bggId: number | null;
+  bggId: number | null
   /** Community rating, mild tiebreak only. */
-  rating: number | null;
+  rating: number | null
   /** Owned but never want to be offered it. */
-  isExcluded: boolean;
-  notes: string | null;
+  isExcluded: boolean
+  notes: string | null
   /** The poster the UI shows. Owner override wins; otherwise the first box that has art. */
-  imagePath: string | null;
+  imagePath: string | null
   /** `owner` when the owner picked or uploaded it; `import` when enrichment did. */
-  imageSource: FieldSource | null;
+  imageSource: FieldSource | null
   /** Every physical box that belongs to this title. */
-  boxes: Box[];
+  boxes: Box[]
   /** Rulebooks, how-to-play videos, anything else. Often empty. */
-  links: GameLink[];
+  links: GameLink[]
   /** Ways to play this one: modules, deck sets, arcs. Often empty. */
-  modules: GameModule[];
+  modules: GameModule[]
   /** Denormalised for the collection screen. */
-  playCount: number;
+  playCount: number
 }
 
 /**
@@ -104,16 +108,16 @@ export interface Game {
  * they are rows rather than a blob.
  */
 export interface GameModule {
-  id: string;
-  gameId: string;
-  name: string;
+  id: string
+  gameId: string
+  name: string
   /**
    * `derived` was seeded from an expansion box and a re-derive may rename it. `owner` was typed
    * by hand, and nothing automated touches it.
    */
-  source: Extract<FieldSource, 'owner' | 'derived'>;
+  source: Extract<FieldSource, "owner" | "derived">
   /** The box it came from, when it came from one. */
-  boxId: string | null;
+  boxId: string | null
 }
 
 /**
@@ -123,7 +127,10 @@ export interface GameModule {
  *
  * `reference` is the escape hatch — a forum thread, a player aid, a house-rules doc.
  */
-export type GameLinkKind = 'rulebook' | 'howToPlay' | 'reference';
+export type GameLinkKind =
+  | "rulebook"
+  | "howToPlay"
+  | "reference"
 
 /**
  * A way out of the app and into something that explains the game you were just handed.
@@ -135,57 +142,57 @@ export type GameLinkKind = 'rulebook' | 'howToPlay' | 'reference';
  * only route there is.
  */
 export interface GameLink {
-  id: string;
-  gameId: string;
-  kind: GameLinkKind;
+  id: string
+  gameId: string
+  kind: GameLinkKind
   /** What the button says. "Rulebook", "Watch It Played", … */
-  label: string;
-  url: string;
+  label: string
+  url: string
   /**
    * `owner` is typed by hand and is never touched by a linker. `derived` was written by one,
    * and the same linker may replace it on the next run.
    */
-  source: Extract<FieldSource, 'owner' | 'derived'>;
+  source: Extract<FieldSource, "owner" | "derived">
 }
 
 /** A physical thing on a shelf. This is what you go and fetch. */
 export interface Box {
-  id: string;
-  gameId: string;
-  label: string;
-  kind: 'standalone' | 'expansion';
-  bggId: number | null;
-  locationText: string | null;
+  id: string
+  gameId: string
+  label: string
+  kind: "standalone" | "expansion"
+  bggId: number | null
+  locationText: string | null
   /** Served from this app's origin, never hotlinked. `null` in v1. */
-  imagePath: string | null;
+  imagePath: string | null
   /** The BGG edition name from the collection export. */
-  versionNickname: string | null;
-  versionYear: number | null;
-  versionLanguages: string[];
+  versionNickname: string | null
+  versionYear: number | null
+  versionLanguages: string[]
 }
 
 export interface Player {
-  id: string;
-  displayName: string;
-  birthYear: number | null;
+  id: string
+  displayName: string
+  birthYear: number | null
   /** This person's personal complexity ceiling, 1.0–5.0. */
-  maxWeight: number | null;
-  isBeginner: boolean;
+  maxWeight: number | null
+  isBeginner: boolean
 }
 
 export interface Group {
-  id: string;
-  name: string;
-  playerIds: string[];
+  id: string
+  name: string
+  playerIds: string[]
 }
 
 export interface Play {
-  id: string;
-  gameId: string;
+  id: string
+  gameId: string
   /** ISO 8601. */
-  playedAt: string;
-  playerIds: string[];
-  notes: string | null;
+  playedAt: string
+  playerIds: string[]
+  notes: string | null
 }
 
 /**
@@ -196,13 +203,13 @@ export interface Play {
  * all.
  */
 export interface KnownGame {
-  playerId: string;
-  gameId: string;
+  playerId: string
+  gameId: string
   /**
    * ISO 8601 — when this was last known to be true. Set when it is ticked, refreshed when that
    * person logs a play. It never expires on its own; the UI just says how long ago it was.
    */
-  confirmedAt: string;
+  confirmedAt: string
 }
 
 /**
@@ -218,29 +225,35 @@ export interface KnownGame {
  * `null` max means "whatever the game allows". Enforced in the UI *and* in `pick()`, because a
  * constraint that lives only in a component is one API call away from not existing.
  */
-export const PLAYER_COUNT_LIMITS: Record<InteractionType, { min: number; max: number | null }> = {
+export const PLAYER_COUNT_LIMITS: Record<
+  InteractionType,
+  { min: number; max: number | null }
+> = {
   competitive: { min: 1, max: null },
   cooperative: { min: 2, max: null },
   semiCooperative: { min: 2, max: null },
   solo: { min: 1, max: 1 },
   team: { min: 2, max: null },
   traitor: { min: 3, max: null },
-};
+}
 
 export const isPlayerCountAllowed = (
   interactionType: InteractionType | null,
   count: number,
 ): boolean => {
-  if (interactionType === null) return true;
-  const { min, max } = PLAYER_COUNT_LIMITS[interactionType];
-  return count >= min && (max === null || count <= max);
-};
+  if (interactionType === null) return true
+  const { min, max } = PLAYER_COUNT_LIMITS[interactionType]
+  return count >= min && (max === null || count <= max)
+}
 
 /**
  * How strictly the player count is enforced. `bestOrRecommended` is the default: `bestOnly`
  * empties the set surprisingly often, and `any` is the box lying to you again.
  */
-export type PlayerCountFitness = 'bestOnly' | 'bestOrRecommended' | 'any';
+export type PlayerCountFitness =
+  | "bestOnly"
+  | "bestOrRecommended"
+  | "any"
 
 /**
  * How much of the table already knows the rules — the "we want to start playing, not start
@@ -256,52 +269,52 @@ export type PlayerCountFitness = 'bestOnly' | 'bestOrRecommended' | 'any';
  * bar almost nothing clears — so both settings fall back to "someone in the household knows
  * it", mirroring how the familiarity bonus falls back to household-wide plays.
  */
-export type RulesKnown = 'any' | 'someone' | 'everyone';
+export type RulesKnown = "any" | "someone" | "everyone"
 
 /**
  * One resolved request to the picker. Both modes fill this in — mode 1 from the form, mode 2
  * from the group — and there is exactly one `pick()` behind them.
  */
 export interface PickCriteria {
-  playerCount: number;
-  fitness: PlayerCountFitness;
-  interactionType: InteractionType | null;
+  playerCount: number
+  fitness: PlayerCountFitness
+  interactionType: InteractionType | null
   /** Owner categories the game must ALL carry. Empty = no filter. */
-  categories: string[];
+  categories: string[]
   /** Complexity ceiling for this session, 1.0–5.0. */
-  maxWeight: number | null;
+  maxWeight: number | null
   /** Minutes. Filters on `minPlaytime`, not the optimistic max. */
-  maxPlaytime: number | null;
+  maxPlaytime: number | null
   /** How much of the table must already know the rules. */
-  rulesKnown: RulesKnown;
+  rulesKnown: RulesKnown
   /** Mode 2: whose shared history the familiarity bonus counts. */
-  groupId: string | null;
+  groupId: string | null
   /**
    * Ad-hoc "who's playing" — an explicit set of people, not a saved group. Their complexity
    * ceilings apply and the familiarity bonus counts plays with exactly them, same as a group. A
    * saved group is just a shortcut that fills this. When both are set, this wins.
    */
-  playerIds: string[] | null;
+  playerIds: string[] | null
   /** Reroll's session-scoped memory. */
-  excludedGameIds: string[];
+  excludedGameIds: string[]
   /** Omit for a real draw; set in tests for a deterministic one. */
-  seed?: number;
+  seed?: number
 }
 
 /** Why a game scored what it scored. Shown in the dry-run CLI. */
 export interface PickScoreBreakdown {
-  familiarity: number;
-  cooldown: number;
-  fitnessBonus: number;
-  ratingNudge: number;
-  total: number;
+  familiarity: number
+  cooldown: number
+  fitnessBonus: number
+  ratingNudge: number
+  total: number
 }
 
 export interface PickCandidate {
-  game: Game;
-  verdict: PlayerCountVerdict;
-  playCount: number;
-  score: PickScoreBreakdown;
+  game: Game
+  verdict: PlayerCountVerdict
+  playCount: number
+  score: PickScoreBreakdown
 }
 
 /**
@@ -310,26 +323,26 @@ export interface PickCandidate {
  */
 export type PickResult =
   | {
-      outcome: 'picked';
-      candidate: PickCandidate;
+      outcome: "picked"
+      candidate: PickCandidate
       /** How many others were eligible — feeds "reroll" copy. */
-      eligibleCount: number;
+      eligibleCount: number
     }
   | {
-      outcome: 'empty';
+      outcome: "empty"
       /** Which filter emptied the set. */
-      reason: EmptyReason;
+      reason: EmptyReason
       /** The single loosest relaxation worth offering. */
-      suggestion: string | null;
-    };
+      suggestion: string | null
+    }
 
 export type EmptyReason =
-  | 'noGames'
-  | 'playerCount'
-  | 'fitness'
-  | 'interactionType'
-  | 'category'
-  | 'weight'
-  | 'playtime'
-  | 'rulesKnown'
-  | 'allRerolled';
+  | "noGames"
+  | "playerCount"
+  | "fitness"
+  | "interactionType"
+  | "category"
+  | "weight"
+  | "playtime"
+  | "rulesKnown"
+  | "allRerolled"

@@ -33,42 +33,51 @@
 // A queue that already has members is left alone, always, even on a forced re-run. The seed is
 // a starting point for a screen the owner then edits; a migration that reasserted itself over
 // his edits would undo them on every restart.
-import { STORE_BACKEND } from '../../config.js';
-import { errMessage } from '../../errors.js';
-import type { QueueMember } from '../../queuePeople.js';
-import { bookOfRecord, prepareChecked } from '../db/open.js';
-import { setQueueMembers, bumpQueuePeopleVersion } from '../db/queuePeople.js';
-import { readPeopleMeta, writePeopleMeta } from '../db/people.js';
-import { ensureImported } from './yaml.js';
+import { STORE_BACKEND } from "../../config.js"
+import { errMessage } from "../../errors.js"
+import type { QueueMember } from "../../queuePeople.js"
+import { bookOfRecord, prepareChecked } from "../db/open.js"
+import {
+  readPeopleMeta,
+  writePeopleMeta,
+} from "../db/people.js"
+import {
+  bumpQueuePeopleVersion,
+  setQueueMembers,
+} from "../db/queuePeople.js"
+import { ensureImported } from "./yaml.js"
 
 /** What one run did. Reported rather than logged only, so a test can assert on it. */
 export interface QueuePeopleSeedReport {
-  seeded: boolean;
-  reason: string;
+  seeded: boolean
+  reason: string
   /** Set ids that gained members, and how many each got. */
-  seededSets: { setId: string; memberCount: number }[];
+  seededSets: { setId: string; memberCount: number }[]
   /** Set ids a group claimed that are not in the registry — reported, never written. */
-  unknownSetIds: string[];
+  unknownSetIds: string[]
   /** Queues no group claims. They are not a failure; they are the ones the owner drags. */
-  unclaimedSetIds: string[];
+  unclaimedSetIds: string[]
   /** Queues left alone because somebody had already edited them. */
-  skippedSetIds: string[];
+  skippedSetIds: string[]
 }
 
-const EMPTY: Omit<QueuePeopleSeedReport, 'seeded' | 'reason'> = {
+const EMPTY: Omit<
+  QueuePeopleSeedReport,
+  "seeded" | "reason"
+> = {
   seededSets: [],
   skippedSetIds: [],
   unclaimedSetIds: [],
   unknownSetIds: [],
-};
+}
 
 /** The marker that says this ran. Kept under the `people` store beside the mapping
  *  fingerprint, because a queue's audience is people data. */
-const SEEDED_KEY = 'queue_people_seeded_at';
+const SEEDED_KEY = "queue_people_seeded_at"
 
 interface ClaimRow {
-  group_id: string;
-  set_id: string;
+  group_id: string
+  set_id: string
 }
 
 /**
@@ -86,7 +95,7 @@ function claims(db = bookOfRecord()): ClaimRow[] {
        FROM groups g, json_each(g.data, '$.sets')
       WHERE json_type(g.data, '$.sets') = 'array'
       ORDER BY g.position, json_each.key`,
-  ).all();
+  ).all()
 }
 
 /**
@@ -95,82 +104,117 @@ function claims(db = bookOfRecord()): ClaimRow[] {
  * `force` re-runs after the marker is set — a deliberate re-seed — but never overwrites a
  * queue that already has members. There is no flag that does; see the header.
  */
-export function seedQueuePeople({ force = false } = {}): QueuePeopleSeedReport {
-  if (STORE_BACKEND === 'yaml') {
-    return { ...EMPTY, reason: 'STORE_BACKEND=yaml has no queue_people table', seeded: false };
+export function seedQueuePeople({
+  force = false,
+} = {}): QueuePeopleSeedReport {
+  if (STORE_BACKEND === "yaml") {
+    return {
+      ...EMPTY,
+      reason:
+        "STORE_BACKEND=yaml has no queue_people table",
+      seeded: false,
+    }
   }
 
-  ensureImported();
-  const db = bookOfRecord();
+  ensureImported()
+  const db = bookOfRecord()
 
   if (!force && readPeopleMeta(SEEDED_KEY, db)) {
-    return { ...EMPTY, reason: 'already seeded', seeded: false };
+    return {
+      ...EMPTY,
+      reason: "already seeded",
+      seeded: false,
+    }
   }
 
   const registrySetIds = new Set(
-    prepareChecked<{ id: string }>(db, 'SELECT id FROM sets').all().map((row) => row.id),
-  );
+    prepareChecked<{ id: string }>(
+      db,
+      "SELECT id FROM sets",
+    )
+      .all()
+      .map((row) => row.id),
+  )
   const withMembers = new Set(
-    prepareChecked<{ set_id: string }>(db, 'SELECT DISTINCT set_id FROM queue_people')
+    prepareChecked<{ set_id: string }>(
+      db,
+      "SELECT DISTINCT set_id FROM queue_people",
+    )
       .all()
       .map((row) => row.set_id),
-  );
+  )
 
-  const bySet = new Map<string, string[]>();
-  const unknownSetIds: string[] = [];
+  const bySet = new Map<string, string[]>()
+  const unknownSetIds: string[] = []
 
   for (const claim of claims(db)) {
-    const setId = String(claim.set_id ?? '').trim();
-    if (!setId) continue;
+    const setId = String(claim.set_id ?? "").trim()
+    if (!setId) continue
     if (!registrySetIds.has(setId)) {
       // A group claiming a set that no longer exists is a real state the app has always
       // tolerated — `groups.ts` resolves membership against the registry and simply does not
       // find it. Reported so somebody can look, never repaired here.
-      if (!unknownSetIds.includes(setId)) unknownSetIds.push(setId);
-      continue;
+      if (!unknownSetIds.includes(setId))
+        unknownSetIds.push(setId)
+      continue
     }
-    const groups = bySet.get(setId) ?? [];
-    if (!groups.includes(claim.group_id)) groups.push(claim.group_id);
-    bySet.set(setId, groups);
+    const groups = bySet.get(setId) ?? []
+    if (!groups.includes(claim.group_id))
+      groups.push(claim.group_id)
+    bySet.set(setId, groups)
   }
 
-  const seededSets: { setId: string; memberCount: number }[] = [];
-  const skippedSetIds: string[] = [];
+  const seededSets: {
+    setId: string
+    memberCount: number
+  }[] = []
+  const skippedSetIds: string[] = []
 
   db.withTransaction(() => {
     for (const [setId, groupIds] of bySet) {
       if (withMembers.has(setId)) {
-        skippedSetIds.push(setId);
-        continue;
+        skippedSetIds.push(setId)
+        continue
       }
       // The GROUP is the member, not its people. That is what carries "at least one of them"
       // through to the queue — flattening here would turn "either of the kids" into "both".
-      const members: QueueMember[] = groupIds.map((groupId, position) => ({
-        id: groupId,
-        kind: 'group',
-        position,
-        role: 'required',
-      }));
-      setQueueMembers(setId, members, db);
-      seededSets.push({ memberCount: members.length, setId });
+      const members: QueueMember[] = groupIds.map(
+        (groupId, position) => ({
+          id: groupId,
+          kind: "group",
+          position,
+          role: "required",
+        }),
+      )
+      setQueueMembers(setId, members, db)
+      seededSets.push({
+        memberCount: members.length,
+        setId,
+      })
     }
-    writePeopleMeta(SEEDED_KEY, new Date().toISOString(), db);
-    bumpQueuePeopleVersion(db);
-  });
+    writePeopleMeta(
+      SEEDED_KEY,
+      new Date().toISOString(),
+      db,
+    )
+    bumpQueuePeopleVersion(db)
+  })
 
-  const unclaimedSetIds = [...registrySetIds].filter((id) => !bySet.has(id)).sort();
+  const unclaimedSetIds = [...registrySetIds]
+    .filter((id) => !bySet.has(id))
+    .sort()
 
   return {
-    reason: force ? 'forced' : 'first run',
+    reason: force ? "forced" : "first run",
     seeded: true,
     seededSets,
     skippedSetIds: skippedSetIds.sort(),
     unclaimedSetIds,
     unknownSetIds: unknownSetIds.sort(),
-  };
+  }
 }
 
-let hasRun = false;
+let hasRun = false
 
 /**
  * The boot hook. Runs once per process and swallows its own failure.
@@ -180,33 +224,47 @@ let hasRun = false;
  * outcome than an app whose trays open empty.
  */
 export function ensureQueuePeopleSeeded(): QueuePeopleSeedReport {
-  if (hasRun) return { ...EMPTY, reason: 'already run in this process', seeded: false };
-  hasRun = true;
+  if (hasRun)
+    return {
+      ...EMPTY,
+      reason: "already run in this process",
+      seeded: false,
+    }
+  hasRun = true
 
   try {
-    const report = seedQueuePeople();
+    const report = seedQueuePeople()
     if (report.seeded && report.seededSets.length) {
-      const places = report.seededSets.reduce((sum, row) => sum + row.memberCount, 0);
+      const places = report.seededSets.reduce(
+        (sum, row) => sum + row.memberCount,
+        0,
+      )
       console.log(
         `[queue-people] seeded ${report.seededSets.length} queue(s) with ${places} member(s) from the group claims` +
           (report.unclaimedSetIds.length
             ? `; ${report.unclaimedSetIds.length} queue(s) are claimed by no group and open with everybody in Everyone else`
-            : ''),
-      );
+            : ""),
+      )
     }
     if (report.unknownSetIds.length) {
       console.log(
-        `[queue-people] ${report.unknownSetIds.length} claimed set id(s) are not in the registry: ${report.unknownSetIds.join(', ')}`,
-      );
+        `[queue-people] ${report.unknownSetIds.length} claimed set id(s) are not in the registry: ${report.unknownSetIds.join(", ")}`,
+      )
     }
-    return report;
+    return report
   } catch (e) {
-    console.log(`[queue-people] seed skipped: ${errMessage(e)}`);
-    return { ...EMPTY, reason: errMessage(e), seeded: false };
+    console.log(
+      `[queue-people] seed skipped: ${errMessage(e)}`,
+    )
+    return {
+      ...EMPTY,
+      reason: errMessage(e),
+      seeded: false,
+    }
   }
 }
 
 /** For tests: forget that this process already ran. */
 export function resetQueuePeopleSeedState(): void {
-  hasRun = false;
+  hasRun = false
 }

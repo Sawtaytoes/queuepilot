@@ -1,4 +1,4 @@
-import { createVitestConfig } from '@charcuterie/vitest-config';
+import { createVitestConfig } from "@charcuterie/vitest-config"
 
 /**
  * The server's first unit-test runner.
@@ -23,8 +23,8 @@ export default createVitestConfig({
     // Node, not a browser: the shared config turns browser mode on by
     // default, so this suite opts out.
     browser: { enabled: false },
-    environment: 'node',
-    include: ['src/**/*.test.ts'],
-    name: 'server',
+    environment: "node",
+    include: ["src/**/*.test.ts"],
+    name: "server",
   },
-});
+})

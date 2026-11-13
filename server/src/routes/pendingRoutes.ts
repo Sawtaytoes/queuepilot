@@ -1,11 +1,10 @@
-import { Hono } from 'hono';
-
-import * as pending from '../pending.js';
-import { liveClient } from '../engine/plex-live.js';
-import * as plex from '../plex.js';
-import { readBody } from './readBody.js';
-import { plexWebUrl } from '../webLinks.js';
-import type { PlexMetadata } from '../types.js';
+import { Hono } from "hono"
+import { liveClient } from "../engine/plex-live.js"
+import * as pending from "../pending.js"
+import * as plex from "../plex.js"
+import type { PlexMetadata } from "../types.js"
+import { plexWebUrl } from "../webLinks.js"
+import { readBody } from "./readBody.js"
 
 /**
  * PENDING — what arrived that nothing is going to play.
@@ -15,15 +14,22 @@ import type { PlexMetadata } from '../types.js';
  * current, and it is opened by hand rather than polled.
  */
 export function pendingRoutes(): Hono {
-  const app = new Hono();
+  const app = new Hono()
 
-  const listSection = async (sectionId: number, type: 1 | 2): Promise<PlexMetadata[]> => {
+  const listSection = async (
+    sectionId: number,
+    type: 1 | 2,
+  ): Promise<PlexMetadata[]> => {
     const json = await plex.plexGet(
       `/library/sections/${sectionId}/all?type=${type}&X-Plex-Container-Size=10000`,
-    );
-    const mc = (json as { MediaContainer?: { Metadata?: PlexMetadata[] } }).MediaContainer;
-    return mc?.Metadata || [];
-  };
+    )
+    const mc = (
+      json as {
+        MediaContainer?: { Metadata?: PlexMetadata[] }
+      }
+    ).MediaContainer
+    return mc?.Metadata || []
+  }
 
   /**
    * The collections in one library, for the pending pass.
@@ -37,95 +43,131 @@ export function pendingRoutes(): Hono {
    * somebody has since queued — or miss one they have just made. It is not on the page-load
    * path (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
    */
-  const listCollections = async (sectionId: number) => (
-    (await plex.collections([sectionId], '', { isFresh: true })).map((row) => ({
+  const listCollections = async (sectionId: number) =>
+    (
+      await plex.collections([sectionId], "", {
+        isFresh: true,
+      })
+    ).map((row) => ({
       childCount: row.childCount,
       ratingKey: row.ratingKey,
       sectionId: row.sectionId,
       title: row.title,
     }))
-  );
 
-  app.get('/pending', async (c) => {
+  app.get("/pending", async (c) => {
     try {
       const libs = (await plex.sections()).map((l) => ({
-        id: Number(l.id), title: String(l.title ?? ''), type: String(l.type ?? ''),
-        video: Boolean(l.video), other: Boolean(l.other),
-      }));
+        id: Number(l.id),
+        title: String(l.title ?? ""),
+        type: String(l.type ?? ""),
+        video: Boolean(l.video),
+        other: Boolean(l.other),
+      }))
       const { items, state } = await pending.pendingItems(
-        liveClient(), libs, listSection, listCollections,
-      );
+        liveClient(),
+        libs,
+        listSection,
+        listCollections,
+      )
       // Match queue tiles: the title is a direct link to the item in the configured Plex
       // web client. Resolve these in sequence so one request warms machineIdentifier's cache
       // before the rest reuse it.
-      const linkedItems = [];
+      const linkedItems = []
       for (const item of items) {
-        linkedItems.push({ ...item, webUrl: await plexWebUrl(item.ratingKey, item.type) });
+        linkedItems.push({
+          ...item,
+          webUrl: await plexWebUrl(
+            item.ratingKey,
+            item.type,
+          ),
+        })
       }
       // The filter panel is drawn from THIS response rather than from `/api/sets`, and the
       // two differ in the way that matters: `libraries` here is every video library the
       // screen COULD draw from, and `selected` is the ids it did. Sending the resolved
       // selection — not the raw `state.libraries` — is what lets the panel show the default
       // as checked boxes instead of as an empty set the owner would read as "nothing".
-      const choosable = libs.filter((l) => l.video);
+      const choosable = libs.filter((l) => l.video)
       return c.json({
         items: linkedItems,
         seen_through: state.seen_through,
         dismissed: state.dismissed.length,
         libraries: choosable,
-        selected: pending.selectedLibraries(libs, state).map((l) => l.id),
+        selected: pending
+          .selectedLibraries(libs, state)
+          .map((l) => l.id),
         // Whether the selection is a real choice or the fallback, so the panel can offer
         // "back to default" only when there is something to go back from.
         isDefault: state.libraries === null,
-      });
+      })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   /**
    * Choose the libraries. `{ libraries: null }` clears the choice and restores the default;
    * `{ libraries: [] }` is the deliberate blank page. They are different states and the
    * route keeps them apart.
    */
-  app.post('/pending/libraries', async (c) => {
-    const body = await readBody(c);
-    const value = (body as { libraries?: unknown }).libraries;
+  app.post("/pending/libraries", async (c) => {
+    const body = await readBody(c)
+    const value = (body as { libraries?: unknown })
+      .libraries
     if (value !== null && !Array.isArray(value)) {
-      return c.json({ error: 'libraries must be an array of section ids, or null' }, 400);
+      return c.json(
+        {
+          error:
+            "libraries must be an array of section ids, or null",
+        },
+        400,
+      )
     }
     try {
       const state = await pending.setLibraries(
-        value === null ? null : (value as unknown[]).map(Number),
-      );
-      return c.json({ ok: true, libraries: state.libraries });
+        value === null
+          ? null
+          : (value as unknown[]).map(Number),
+      )
+      return c.json({
+        ok: true,
+        libraries: state.libraries,
+      })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // Say no to ONE item. Per-item rather than moving the watermark, or skipping one film would
   // also hide everything added after it.
-  app.post('/pending/dismiss', async (c) => {
-    const { ratingKey } = await readBody(c);
-    if (!ratingKey) return c.json({ error: 'ratingKey required' }, 400);
+  app.post("/pending/dismiss", async (c) => {
+    const { ratingKey } = await readBody(c)
+    if (!ratingKey)
+      return c.json({ error: "ratingKey required" }, 400)
     try {
-      const state = await pending.dismiss(String(ratingKey));
-      return c.json({ ok: true, dismissed: state.dismissed.length });
+      const state = await pending.dismiss(String(ratingKey))
+      return c.json({
+        ok: true,
+        dismissed: state.dismissed.length,
+      })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // Clear the whole list in one gesture by moving the watermark.
-  app.post('/pending/seen', async (c) => {
+  app.post("/pending/seen", async (c) => {
     try {
-      const state = await pending.markSeen();
-      return c.json({ ok: true, seen_through: state.seen_through });
+      const state = await pending.markSeen()
+      return c.json({
+        ok: true,
+        seen_through: state.seen_through,
+      })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
-  return app;
+  return app
 }

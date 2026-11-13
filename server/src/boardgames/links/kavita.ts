@@ -1,8 +1,8 @@
-import { KAVITA_URL } from '../../env.js';
-import { tokenFor } from '../../providers/config.js';
+import { KAVITA_URL } from "../../env.js"
+import { tokenFor } from "../../providers/config.js"
 
 /** A stalled Kavita fails the lookup instead of holding the request. */
-const KAVITA_TIMEOUT_MS = 15_000;
+const KAVITA_TIMEOUT_MS = 15_000
 
 /**
  * A read-only client for one Kavita library.
@@ -24,28 +24,29 @@ const KAVITA_TIMEOUT_MS = 15_000;
  */
 
 export interface KavitaSeries {
-  id: number;
-  name: string;
+  id: number
+  name: string
 }
 
 /** Only the three fields of Kavita's series DTO this reads. */
 interface RawSeries {
-  id?: unknown;
-  libraryId?: unknown;
-  name?: unknown;
+  id?: unknown
+  libraryId?: unknown
+  name?: unknown
 }
 
 export interface KavitaConfig {
   /** e.g. `https://kavita.example.com` — no trailing slash. */
-  baseUrl: string;
-  apiKey: string;
-  libraryId: number;
+  baseUrl: string
+  apiKey: string
+  libraryId: number
 }
 
 /** The numeric id of the `libraries` filter field in Kavita's DTO. */
-const FILTER_FIELD_LIBRARY = 19;
+const FILTER_FIELD_LIBRARY = 19
 
-const trimSlash = (url: string): string => url.replace(/\/+$/, '');
+const trimSlash = (url: string): string =>
+  url.replace(/\/+$/, "")
 
 /**
  * Read the linker's configuration.
@@ -62,42 +63,55 @@ const trimSlash = (url: string): string => url.replace(/\/+$/, '');
 export const kavitaConfigFromEnv = (
   env: NodeJS.ProcessEnv = process.env,
 ): KavitaConfig | null => {
-  const baseUrl = KAVITA_URL;
-  const apiKey = tokenFor('kavita', 'kavita').token;
-  if (!baseUrl || !apiKey) return null;
+  const baseUrl = KAVITA_URL
+  const apiKey = tokenFor("kavita", "kavita").token
+  if (!baseUrl || !apiKey) return null
 
   return {
     apiKey,
     baseUrl: trimSlash(baseUrl),
     libraryId: Number(env.KAVITA_RULEBOOK_LIBRARY_ID ?? 1),
-  };
-};
+  }
+}
 
 /** Exchange the API key for the JWT everything else needs. */
-export const authenticate = async (config: KavitaConfig): Promise<string> => {
-  const url = new URL('/api/Plugin/authenticate', config.baseUrl);
-  url.searchParams.set('apiKey', config.apiKey);
-  url.searchParams.set('pluginName', 'board-game-picker');
+export const authenticate = async (
+  config: KavitaConfig,
+): Promise<string> => {
+  const url = new URL(
+    "/api/Plugin/authenticate",
+    config.baseUrl,
+  )
+  url.searchParams.set("apiKey", config.apiKey)
+  url.searchParams.set("pluginName", "board-game-picker")
 
-  const response = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS) });
+  const response = await fetch(url, {
+    method: "POST",
+    signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS),
+  })
   if (!response.ok)
-    throw new Error(`Kavita auth failed — ${response.status}. Check KAVITA_API_KEY.`);
+    throw new Error(
+      `Kavita auth failed — ${response.status}. Check KAVITA_API_KEY.`,
+    )
 
-  const body = (await response.json()) as { token?: unknown };
-  if (typeof body.token !== 'string') throw new Error('Kavita auth returned no token');
+  const body = (await response.json()) as {
+    token?: unknown
+  }
+  if (typeof body.token !== "string")
+    throw new Error("Kavita auth returned no token")
 
-  return body.token;
-};
+  return body.token
+}
 
 export const listSeries = async (
   config: KavitaConfig,
   token: string,
 ): Promise<KavitaSeries[]> => {
-  const url = new URL('/api/Series/all-v2', config.baseUrl);
-  url.searchParams.set('PageNumber', '1');
+  const url = new URL("/api/Series/all-v2", config.baseUrl)
+  url.searchParams.set("PageNumber", "1")
   // One page: a rulebook library is hundreds of series at the very most, and paging adds a
   // failure mode for no gain.
-  url.searchParams.set('PageSize', '1000');
+  url.searchParams.set("PageSize", "1000")
 
   const response = await fetch(url, {
     body: JSON.stringify({
@@ -113,33 +127,45 @@ export const listSeries = async (
     }),
     headers: {
       authorization: `Bearer ${token}`,
-      'content-type': 'application/json',
+      "content-type": "application/json",
     },
-    method: 'POST',
+    method: "POST",
     signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS),
-  });
+  })
 
-  if (!response.ok) throw new Error(`Kavita series listing failed — ${response.status}`);
+  if (!response.ok)
+    throw new Error(
+      `Kavita series listing failed — ${response.status}`,
+    )
 
   // `unknown` first, then narrowed: the platform `fetch` types `json()` as `any`, which
   // silently disables every type check downstream of it.
-  const body: unknown = await response.json();
-  if (!Array.isArray(body)) return [];
+  const body: unknown = await response.json()
+  if (!Array.isArray(body)) return []
 
   return (body as RawSeries[])
-    .filter((series) => series.libraryId === config.libraryId)
+    .filter(
+      (series) => series.libraryId === config.libraryId,
+    )
     .map((series) => ({
       id: Number(series.id),
       // Never coerced: a non-string `name` is a payload we do not understand, and
       // `[object Object]` matched against the collection is worse than one missing rulebook.
-      name: typeof series.name === 'string' ? series.name : '',
+      name:
+        typeof series.name === "string" ? series.name : "",
     }))
-    .filter((series) => Number.isFinite(series.id) && series.name !== '');
-};
+    .filter(
+      (series) =>
+        Number.isFinite(series.id) && series.name !== "",
+    )
+}
 
 /**
  * The page a human should land on. Kavita's series route, not a file download: the reader is
  * the good bit, and a URL with a token in it would be a credential pasted into the database.
  */
-export const seriesUrl = (config: KavitaConfig, seriesId: number): string =>
-  `${config.baseUrl}/library/${config.libraryId}/series/${seriesId}`;
+export const seriesUrl = (
+  config: KavitaConfig,
+  seriesId: number,
+): string =>
+  `${config.baseUrl}/library/${config.libraryId}/series/${seriesId}`

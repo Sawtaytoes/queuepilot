@@ -140,7 +140,6 @@ export function CountPicker({
     if (!isCountPreset(value, defaultValue, common))
       setIsCustom(true)
     // `common` is read through `commonKey`, which is what makes the dep stable.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commonKey, defaultValue, value])
 
   const commit = (raw: string) => {

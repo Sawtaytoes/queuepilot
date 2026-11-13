@@ -72,13 +72,17 @@ const result = await build({
   // If a dep ever DOES need to stay out (a native addon, or something that
   // resolves a file from `import.meta.url`), add it here AND make sure the
   // Dockerfile's production `npm ci --omit=dev` layer still installs it.
-  external: ['sharp'],
+  external: ["sharp"],
 })
 
 for (const warning of result.warnings) {
   console.warn(`[build] warning: ${warning.text}`)
 }
 
-const kilobytes = (statSync(OUTFILE).size / 1_024).toFixed(1)
+const kilobytes = (statSync(OUTFILE).size / 1_024).toFixed(
+  1,
+)
 
-console.log(`[build] server/${OUTFILE} — ${kilobytes} KB (+ .map)`)
+console.log(
+  `[build] server/${OUTFILE} — ${kilobytes} KB (+ .map)`,
+)

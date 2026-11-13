@@ -1,11 +1,11 @@
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync } from 'node:fs';
-import { writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { createHash } from "node:crypto"
+import { existsSync, mkdirSync } from "node:fs"
+import { writeFile } from "node:fs/promises"
+import { dirname, join } from "node:path"
 
-import sharp from 'sharp';
+import sharp from "sharp"
 
-import { QUEUES_PATH } from '../../config.js';
+import { QUEUES_PATH } from "../../config.js"
 
 /**
  * Box art, cached and squared locally.
@@ -29,7 +29,8 @@ import { QUEUES_PATH } from '../../config.js';
  * avoided the other way: everything durable hangs off `QUEUES_PATH`'s directory.
  */
 export const imagesDirectory = (): string =>
-  process.env.BOARD_GAME_IMAGES_PATH || join(dirname(QUEUES_PATH), 'board-game-images');
+  process.env.BOARD_GAME_IMAGES_PATH ||
+  join(dirname(QUEUES_PATH), "board-game-images")
 
 export interface StoredImage {
   /**
@@ -40,73 +41,87 @@ export interface StoredImage {
    * stored string, so the prefix is irrelevant to it — and every row already in the database
    * carries this shape. Changing it would make new rows differ from old ones for no gain.
    */
-  path: string;
-  bytes: number;
+  path: string
+  bytes: number
 }
 
-const SIZES = [600, 200] as const;
+const SIZES = [600, 200] as const
 /** A stalled image host fails this box art instead of holding the enrich pass. */
-const DOWNLOAD_TIMEOUT_MS = 30_000;
+const DOWNLOAD_TIMEOUT_MS = 30_000
 
 const hashKey = (key: string): string =>
-  createHash('sha256').update(key).digest('hex').slice(0, 16);
+  createHash("sha256")
+    .update(key)
+    .digest("hex")
+    .slice(0, 16)
 
 /** Where `storeSquareImage(url)` will put the 600px file. */
-export const storedPathForUrl = (sourceUrl: string): string =>
-  `/images/${hashKey(sourceUrl)}-${SIZES[0]}.webp`;
+export const storedPathForUrl = (
+  sourceUrl: string,
+): string =>
+  `/images/${hashKey(sourceUrl)}-${SIZES[0]}.webp`
 
 export const storeSquareImageFromBuffer = async (
   source: Buffer,
   cacheKey: string,
 ): Promise<StoredImage> => {
-  const directory = imagesDirectory();
-  mkdirSync(directory, { recursive: true });
+  const directory = imagesDirectory()
+  mkdirSync(directory, { recursive: true })
 
-  const hash = hashKey(cacheKey);
-  const primary = `${hash}-${SIZES[0]}.webp`;
+  const hash = hashKey(cacheKey)
+  const primary = `${hash}-${SIZES[0]}.webp`
 
   if (existsSync(join(directory, primary))) {
-    return { path: `/images/${primary}`, bytes: 0 };
+    return { path: `/images/${primary}`, bytes: 0 }
   }
 
-  let bytes = 0;
+  let bytes = 0
 
   for (const size of SIZES) {
     const output = await sharp(source)
       .resize(size, size, {
-        fit: 'contain',
+        fit: "contain",
         background: { r: 0, g: 0, b: 0, alpha: 0 },
       })
       .webp({ quality: 82 })
-      .toBuffer();
+      .toBuffer()
 
-    await writeFile(join(directory, `${hash}-${size}.webp`), output);
-    bytes += output.byteLength;
+    await writeFile(
+      join(directory, `${hash}-${size}.webp`),
+      output,
+    )
+    bytes += output.byteLength
   }
 
-  return { path: `/images/${primary}`, bytes };
-};
+  return { path: `/images/${primary}`, bytes }
+}
 
-export const storeSquareImage = async (sourceUrl: string): Promise<StoredImage> => {
-  const hash = hashKey(sourceUrl);
-  const directory = imagesDirectory();
-  mkdirSync(directory, { recursive: true });
-  const primary = `${hash}-${SIZES[0]}.webp`;
+export const storeSquareImage = async (
+  sourceUrl: string,
+): Promise<StoredImage> => {
+  const hash = hashKey(sourceUrl)
+  const directory = imagesDirectory()
+  mkdirSync(directory, { recursive: true })
+  const primary = `${hash}-${SIZES[0]}.webp`
 
   if (existsSync(join(directory, primary))) {
-    return { path: `/images/${primary}`, bytes: 0 };
+    return { path: `/images/${primary}`, bytes: 0 }
   }
 
   const response = await fetch(sourceUrl, {
     headers: {
-      'user-agent': 'board-game-picker/0.1 (self-hosted collection picker)',
+      "user-agent":
+        "board-game-picker/0.1 (self-hosted collection picker)",
     },
     signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-  });
+  })
 
   if (!response.ok) {
-    throw new Error(`image → HTTP ${response.status}`);
+    throw new Error(`image → HTTP ${response.status}`)
   }
 
-  return storeSquareImageFromBuffer(Buffer.from(await response.arrayBuffer()), sourceUrl);
-};
+  return storeSquareImageFromBuffer(
+    Buffer.from(await response.arrayBuffer()),
+    sourceUrl,
+  )
+}

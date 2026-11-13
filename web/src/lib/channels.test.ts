@@ -1,4 +1,10 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vitest"
 
 import {
   channelAccountLabel,
@@ -36,7 +42,7 @@ const channel = (
   }) as RegistrySet
 
 describe("a rules row says which account it plays as", () => {
-  it("names the one account the pool is bound to", () => {
+  test("names the one account the pool is bound to", () => {
     expect(
       channelAccountLabel(
         channel({
@@ -47,7 +53,7 @@ describe("a rules row says which account it plays as", () => {
     ).toBe("Younger Kids")
   })
 
-  it("names every binding a hand-edit left behind", () => {
+  test("names every binding a hand-edit left behind", () => {
     expect(
       channelAccountLabel(
         channel({
@@ -61,7 +67,7 @@ describe("a rules row says which account it plays as", () => {
     ).toBe("Younger Kids, Older Kids")
   })
 
-  it("counts past three, so the chip cannot push the row into a wrap", () => {
+  test("counts past three, so the chip cannot push the row into a wrap", () => {
     expect(
       channelAccountLabel(
         channel({
@@ -84,7 +90,7 @@ describe("a rules row says which account it plays as", () => {
    * which happens when a pool is NAMED after the account it plays as, and is true of two
    * sets in the live file.
    */
-  it("says nothing when the account is already the row's own name", () => {
+  test("says nothing when the account is already the row's own name", () => {
     expect(
       channelAccountLabel(
         channel({
@@ -102,7 +108,7 @@ describe("a rules row says which account it plays as", () => {
    * measured on `/api/sets`: `younger | Shows & Shorts | explicit: false | ["Younger Kids"]`.
    * Refusing it on the flag dropped the account from every legacy pool, which is most of them.
    */
-  it("names the account of a LEGACY flat set, whose binding is synthesized", () => {
+  test("names the account of a LEGACY flat set, whose binding is synthesized", () => {
     expect(
       channelAccountLabel(
         channel({
@@ -114,7 +120,7 @@ describe("a rules row says which account it plays as", () => {
     ).toBe("Younger Kids")
   })
 
-  it("says nothing rather than an empty chip", () => {
+  test("says nothing rather than an empty chip", () => {
     expect(
       channelAccountLabel(
         channel({
@@ -136,7 +142,7 @@ describe("a rules row says which account it plays as", () => {
 })
 
 describe("a rules profile gets its complete ratings vocabulary", () => {
-  it("does not limit an explicit profile to the queue's libraries", async () => {
+  test("does not limit an explicit profile to the queue's libraries", async () => {
     const request = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue({
@@ -163,7 +169,7 @@ describe("a rules profile gets its complete ratings vocabulary", () => {
     )
   })
 
-  it("uses the same complete profile view after a profile is picked", async () => {
+  test("uses the same complete profile view after a profile is picked", async () => {
     const request = vi
       .spyOn(globalThis, "fetch")
       .mockResolvedValue({

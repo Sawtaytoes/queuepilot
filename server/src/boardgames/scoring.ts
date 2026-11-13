@@ -22,7 +22,7 @@ export const FAMILIARITY = {
   learned: 1.5,
   /** Where "learning" stops and "learned" starts. */
   learnedAtPlays: 5,
-} as const;
+} as const
 
 /**
  * Played in the last day, so probably not again tonight — unless "keep learning" is on, which is
@@ -31,7 +31,7 @@ export const FAMILIARITY = {
 export const COOLDOWN = {
   recentPlayMultiplier: 0.25,
   recentPlayWindowHours: 24,
-} as const;
+} as const
 
 /**
  * A nudge towards player counts the community actually likes. `unknown` is penalised only
@@ -42,7 +42,7 @@ export const FITNESS_BONUS = {
   best: 1.5,
   recommended: 1,
   unknown: 0.8,
-} as const;
+} as const
 
 /**
  * Community rating, clamped hard. A tiebreak, never a gate — the whole point is to surface the
@@ -52,7 +52,7 @@ export const RATING_NUDGE = {
   divisor: 7.5,
   min: 0.8,
   max: 1.2,
-} as const;
+} as const
 
 /**
  * Mode 2 asks "games *we* have played". A play with exactly the selected people counts fully; a
@@ -62,10 +62,10 @@ export const RATING_NUDGE = {
 export const GROUP_PLAY_WEIGHT = {
   exactGroup: 1,
   supersetOfGroup: 0.6,
-} as const;
+} as const
 
 /**
  * A verdict needs this many total votes to mean anything. Below it, the count is `unknown`
  * rather than a number.
  */
-export const MIN_VOTES_FOR_VERDICT = 5;
+export const MIN_VOTES_FOR_VERDICT = 5

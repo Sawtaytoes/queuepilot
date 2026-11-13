@@ -374,7 +374,6 @@ export function SetModal() {
       })
       .catch(() => setProviders([]))
     // Only re-seed when the modal is (re-)opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [setModal])
 
   // The DAY options for the chosen month. February offers 29; a month nobody has chosen offers

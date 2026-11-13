@@ -463,7 +463,6 @@ export function MembersModal() {
     // `item`/`vocab` are read for the unit and the wording only, and both are stable for as
     // long as one entry's panel is open — the load is keyed on WHICH entry, not on a fresh
     // object identity arriving from an unrelated store refresh.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     accountUuid,
     hasSpecials,

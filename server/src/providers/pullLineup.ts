@@ -11,18 +11,24 @@
 // So: one builder, both callers. A launch rebuilds the reading list from it; a top-up appends
 // from it. Neither knows how the other spells the arguments, because there is only one
 // spelling.
-import * as queues from '../queues.js';
-import { splitEntry } from '../queues.js';
-import { isRandomOrder as setIsRandomOrder } from '../kind.js';
-import { resolveSingle } from './blocks.js';
-import type { BlockSourceCfg } from './blocks.js';
-import type { CuratedEntryRef, PlayItem, Provider, RoutingSetCfg } from '../types.js';
+
+import { isRandomOrder as setIsRandomOrder } from "../kind.js"
+import * as queues from "../queues.js"
+import { splitEntry } from "../queues.js"
+import type {
+  CuratedEntryRef,
+  PlayItem,
+  Provider,
+  RoutingSetCfg,
+} from "../types.js"
+import type { BlockSourceCfg } from "./blocks.js"
+import { resolveSingle } from "./blocks.js"
 
 /** A batch value off the YAML, or null when it is absent/unusable (never 0 — see setBatch). */
 export const toBatch = (raw: unknown): number | null => {
-  const n = parseInt(String(raw ?? ''), 10);
-  return Number.isFinite(n) && n > 0 ? n : null;
-};
+  const n = parseInt(String(raw ?? ""), 10)
+  return Number.isFinite(n) && n > 0 ? n : null
+}
 
 /**
  * A curated set's entries, reduced to `{ id, placement, batch }` for a pull provider.
@@ -39,52 +45,62 @@ export async function curatedEntries(
   only: string | null = null,
   { stampQueued = false }: { stampQueued?: boolean } = {},
 ): Promise<CuratedEntryRef[]> {
-  let rows;
+  let rows: Awaited<ReturnType<typeof queues.listSet>>
   try {
-    rows = await queues.listSet(setId);
+    rows = await queues.listSet(setId)
   } catch {
     // A missing/unparseable queues.yaml must not make a launch fail with a stack trace —
     // no entries reads as "rule-based", which is the pre-existing behaviour.
-    return [];
+    return []
   }
-  const out: CuratedEntryRef[] = [];
+  const out: CuratedEntryRef[] = []
   for (const e of rows) {
     // "Read THIS one now" — the ▶ on a single tile. A named entry is taken even when it is
     // marked done, because asking for it by key is an explicit choice; the `done` skip below
     // is for the unfiltered lineup, where re-serving finished reading is the bug.
     if (only) {
-      if (e.key !== only) continue;
-    } else if (e.done) continue;
-    const { ratingKey, extras } = splitEntry(e.value);
+      if (e.key !== only) continue
+    } else if (e.done) continue
+    const { ratingKey, extras } = splitEntry(e.value)
     // A pull provider's items are addressed by the provider's own id, which an entry stores
     // in `ratingKey`. A title-only entry (no id) cannot be resolved against Kavita at all,
     // so it is skipped rather than guessed at by name.
-    if (!ratingKey) continue;
-    const batch = Number(extras.episodes);
-    const volumes = Number(extras.volumes);
-    const start = extras.start && typeof extras.start === 'object' ? extras.start : null;
-    const placement = extras.placement === 'priority' || extras.placement === 'random'
-      ? extras.placement
-      : null;
+    if (!ratingKey) continue
+    const batch = Number(extras.episodes)
+    const volumes = Number(extras.volumes)
+    const start =
+      extras.start && typeof extras.start === "object"
+        ? extras.start
+        : null
+    const placement =
+      extras.placement === "priority" ||
+      extras.placement === "random"
+        ? extras.placement
+        : null
     // Only for a provider that ASKED for it (Provider.stampsQueuedAt) — a Plex or Kavita
     // queue must not grow a key nothing will ever read. An entry added by hand has no
     // stamp; it gets one now rather than being read as "since the beginning of time",
     // which on a lifetime play log means "already finished".
-    const stored = Number(extras.queued_at);
-    let queuedAt = Number.isFinite(stored) && stored > 0 ? stored : null;
+    const stored = Number(extras.queued_at)
+    let queuedAt =
+      Number.isFinite(stored) && stored > 0 ? stored : null
     if (stampQueued && queuedAt == null && e.key) {
-      queuedAt = await queues.stampQueuedAt(setId, e.key);
+      queuedAt = await queues.stampQueuedAt(setId, e.key)
     }
     out.push({
       id: String(ratingKey),
       placement,
-      batch: Number.isFinite(batch) && batch > 0 ? batch : null,
-      volumes: Number.isFinite(volumes) && volumes > 0 ? volumes : null,
+      batch:
+        Number.isFinite(batch) && batch > 0 ? batch : null,
+      volumes:
+        Number.isFinite(volumes) && volumes > 0
+          ? volumes
+          : null,
       queuedAt,
       start,
-    });
+    })
   }
-  return out;
+  return out
 }
 
 /**
@@ -99,7 +115,7 @@ export async function pullLineup(
   provider: Provider,
   { only = null }: { only?: string | null } = {},
 ): Promise<PlayItem[]> {
-  const block = resolveSingle({ ...cfg } as BlockSourceCfg);
+  const block = resolveSingle({ ...cfg } as BlockSourceCfg)
   const { play } = await provider.buckets({
     cfg,
     // A single named entry is not the queue's own pool, so the library fallback must not
@@ -108,7 +124,9 @@ export async function pullLineup(
     libraries: only ? [] : block.libraries,
     // What the owner actually put in this queue. Without it a curated reading queue plays
     // the library shelf instead of its own ninety-three entries.
-    entries: await curatedEntries(setId, only, { stampQueued: provider.stampsQueuedAt === true }),
+    entries: await curatedEntries(setId, only, {
+      stampQueued: provider.stampsQueuedAt === true,
+    }),
     // Same rule the engine uses for the curated shuffle: Random-pool Picks
     // (legacy kind: anime still reads as random via kind.isRandomOrder).
     isRandomOrder: setIsRandomOrder(cfg),
@@ -124,6 +142,6 @@ export async function pullLineup(
     // them off the parent's line (`queues.entryOwner`), and this is what drops the ones this
     // view does not hold. Absent on every ordinary queue, where it narrows nothing.
     filterLibraries: cfg.filter_libraries ?? [],
-  });
-  return play || [];
+  })
+  return play || []
 }

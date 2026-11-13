@@ -17,22 +17,27 @@
 // explicit transactions keep it cheap. EVERY export has an `async` signature even though the
 // bodies are synchronous — so relocating this module into a worker_thread is free if p99 ever
 // suffers.
-import { DatabaseSync, type SQLOutputValue, type StatementSync } from 'node:sqlite';
-import { CACHE_PATH } from './env.js';
-import { errMessage } from './errors.js';
-import type { CachedResolved } from './types.js';
+import {
+  DatabaseSync,
+  type SQLOutputValue,
+  type StatementSync,
+} from "node:sqlite"
+import { CACHE_PATH } from "./env.js"
+import { errMessage } from "./errors.js"
+import type { CachedResolved } from "./types.js"
 
 /** A row as `node:sqlite` hands it back. Every column read is `| undefined` under
  * `noUncheckedIndexedAccess`, which is why each one below goes through `Number()` /
  * `String()` exactly as the JS did — those coercions were always doing the narrowing. */
-type Row = Record<string, SQLOutputValue>;
+type Row = Record<string, SQLOutputValue>
 
 /** `JSON.parse(row.payload)` in typed form. `String()` on the column value is a faithful
  * translation, not a guard: `JSON.parse` already stringifies its argument, so a NULL column
  * parsed to `null` before and still does, and a missing one threw SyntaxError before and
  * still does. The result is `unknown`-by-generic — the payload shape differs per table and
  * the caller names it. */
-const payloadOf = <T,>(row: Row): T => JSON.parse(String(row.payload)) as T;
+const payloadOf = <T>(row: Row): T =>
+  JSON.parse(String(row.payload)) as T
 
 /**
  * The (updatedAt, viewedLeafCount) pair a caller already holds from a section listing, used
@@ -42,27 +47,27 @@ const payloadOf = <T,>(row: Row): T => JSON.parse(String(row.payload)) as T;
  * shape, and no other file names it yet.
  */
 export interface LeavesValidator {
-  updatedAt?: number | string | null;
-  viewedLeafCount?: number | string | null;
+  updatedAt?: number | string | null
+  viewedLeafCount?: number | string | null
 }
 
 /** The `collection_children` twin of `LeavesValidator`. */
 export interface CollectionValidator {
-  updatedAt?: number | string | null;
-  childCount?: number | string | null;
+  updatedAt?: number | string | null
+  childCount?: number | string | null
 }
 
 /** What `getSectionListing` returns: the payload plus whether it is past the soft TTL, so
  * the caller can serve it AND kick a background refresh. */
 export interface SectionListingHit<T> {
-  payload: T;
-  stale: boolean;
+  payload: T
+  stale: boolean
 }
 
 /** One history row as `addHistory` takes it. */
 export interface HistoryRow {
-  ratingKey: string | number;
-  viewedAt?: number | null;
+  ratingKey: string | number
+  viewedAt?: number | null
 }
 
 // Bump on ANY schema change below. On open, a mismatch DROPs every table and recreates them —
@@ -74,7 +79,7 @@ export interface HistoryRow {
 // apart — without the bump the first read after deploy answers from cache and every edition
 // is missing, which looks exactly like Plex not having one. 4 -> 5 adds the three
 // ITEM-RESOLUTION tables below.
-const SCHEMA_VERSION = 5;
+const SCHEMA_VERSION = 5
 
 const SCHEMA = `
 CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT);
@@ -150,93 +155,106 @@ CREATE TABLE history (
 CREATE INDEX history_by_time ON history (account, section, viewed_at);
 CREATE TABLE history_cursor (
   account TEXT, section TEXT, last_viewed_at INT, PRIMARY KEY (account, section));
-`;
+`
 
-let db: DatabaseSync | null = null;
+let db: DatabaseSync | null = null
 
 // `db` is non-null everywhere below — every export gates on `ready()` first, and `openDb()`
 // assigns before it prepares. The types can't see that invariant across the module-level
 // `let`, so it is asserted here once instead of at each of the ~20 statement sites. The
 // throw is unreachable in practice.
 function conn(): DatabaseSync {
-  if (!db) throw new Error('[cache] database is not open');
-  return db;
+  if (!db) throw new Error("[cache] database is not open")
+  return db
 }
 
 // Prepared-statement cache — DatabaseSync.prepare is cheap but not free, and these run on the
 // request path.
-const stmts = new Map<string, StatementSync>();
+const stmts = new Map<string, StatementSync>()
 function q(sql: string): StatementSync {
-  let s = stmts.get(sql);
+  let s = stmts.get(sql)
   if (!s) {
-    s = conn().prepare(sql);
-    stmts.set(sql, s);
+    s = conn().prepare(sql)
+    stmts.set(sql, s)
   }
-  return s;
+  return s
 }
 
 function openDb(): DatabaseSync {
-  if (db) return db;
-  const opened = new DatabaseSync(CACHE_PATH);
-  db = opened;
-  opened.exec('PRAGMA journal_mode=WAL');
-  opened.exec('PRAGMA synchronous=NORMAL');
+  if (db) return db
+  const opened = new DatabaseSync(CACHE_PATH)
+  db = opened
+  opened.exec("PRAGMA journal_mode=WAL")
+  opened.exec("PRAGMA synchronous=NORMAL")
 
   // Schema-version gate. A brand-new file has no meta table, so the read is guarded.
-  let version: number | null = null;
+  let version: number | null = null
   try {
-    const row = opened.prepare('SELECT v FROM meta WHERE k = ?').get('schema_version');
-    version = row ? Number(row.v) : null;
+    const row = opened
+      .prepare("SELECT v FROM meta WHERE k = ?")
+      .get("schema_version")
+    version = row ? Number(row.v) : null
   } catch {
-    version = null; // no meta table yet
+    version = null // no meta table yet
   }
   if (version !== SCHEMA_VERSION) {
     // Drop everything and recreate. A stale cache schema is never migrated.
     const tables = opened
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
-      .all();
-    for (const t of tables) opened.exec(`DROP TABLE IF EXISTS ${String(t.name)}`);
-    opened.exec(SCHEMA);
-    opened.prepare('INSERT INTO meta (k, v) VALUES (?, ?)').run('schema_version', String(SCHEMA_VERSION));
-    opened.prepare('INSERT INTO meta (k, v) VALUES (?, ?)').run('generation', '0');
-    if (version != null) console.log(`[cache] schema ${version} != ${SCHEMA_VERSION} — wiped ${CACHE_PATH}`);
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'",
+      )
+      .all()
+    for (const t of tables)
+      opened.exec(`DROP TABLE IF EXISTS ${String(t.name)}`)
+    opened.exec(SCHEMA)
+    opened
+      .prepare("INSERT INTO meta (k, v) VALUES (?, ?)")
+      .run("schema_version", String(SCHEMA_VERSION))
+    opened
+      .prepare("INSERT INTO meta (k, v) VALUES (?, ?)")
+      .run("generation", "0")
+    if (version != null)
+      console.log(
+        `[cache] schema ${version} != ${SCHEMA_VERSION} — wiped ${CACHE_PATH}`,
+      )
   }
-  return opened;
+  return opened
 }
 
 // Call once at boot. Idempotent. A failure here (e.g. /config unwritable) must NOT crash the
 // web server — the cache is an optimization, and every reader below degrades to a miss.
 export async function init(): Promise<boolean> {
   try {
-    openDb();
-    return true;
+    openDb()
+    return true
   } catch (e) {
-    console.log(`[cache] disabled: ${errMessage(e)}`);
-    db = null;
-    return false;
+    console.log(`[cache] disabled: ${errMessage(e)}`)
+    db = null
+    return false
   }
 }
 
-const now = (): number => Date.now();
-const ready = (): boolean => db != null;
+const now = (): number => Date.now()
+const ready = (): boolean => db != null
 
 // --- generation: the ETag input (B7) + the SSE cache-buster --------------------------- //
 // Bumped on every explicit invalidation, so a watch on the Shield busts the browser's cached
 // /api/queues. Read as a plain integer.
 export async function generation(): Promise<number> {
-  if (!ready()) return 0;
-  const row = q('SELECT v FROM meta WHERE k = ?').get('generation');
-  return row ? Number(row.v) : 0;
+  if (!ready()) return 0
+  const row = q("SELECT v FROM meta WHERE k = ?").get(
+    "generation",
+  )
+  return row ? Number(row.v) : 0
 }
 
 export async function bumpGeneration(): Promise<number> {
-  if (!ready()) return 0;
-  const next = (await generation()) + 1;
-  q('INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v').run(
-    'generation',
-    String(next),
-  );
-  return next;
+  if (!ready()) return 0
+  const next = (await generation()) + 1
+  q(
+    "INSERT INTO meta (k, v) VALUES (?, ?) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+  ).run("generation", String(next))
+  return next
 }
 
 // --- leaves (allLeaves per show) ------------------------------------------------------- //
@@ -244,30 +262,35 @@ export async function bumpGeneration(): Promise<number> {
 // viewedLeafCount) from a section listing passes them here; if the cached row matches, the
 // payload is provably fresh and no allLeaves call is made. Absent that validator, a 24 h TTL
 // is the fallback.
-const LEAVES_TTL_MS = 24 * 60 * 60 * 1000;
+const LEAVES_TTL_MS = 24 * 60 * 60 * 1000
 
 // `account` ('' = admin/Bob) scopes the row: the same show has a distinct watched (viewCount)
 // view per Plex Home profile, so a per-profile channel's editor reads its own account's row.
 export async function getLeaves<T = unknown>(
   showRk: string | number,
   validator: LeavesValidator | null = null,
-  account: string = '',
+  account: string = "",
 ): Promise<T | null> {
-  if (!ready()) return null;
-  const row = q('SELECT * FROM leaves WHERE show_rk = ? AND account = ?').get(String(showRk), String(account || ''));
-  if (!row) return null;
+  if (!ready()) return null
+  const row = q(
+    "SELECT * FROM leaves WHERE show_rk = ? AND account = ?",
+  ).get(String(showRk), String(account || ""))
+  if (!row) return null
   if (validator) {
     // Provably-fresh path: identity on (updatedAt, viewedLeafCount).
     if (
-      Number(row.updated_at) === Number(validator.updatedAt ?? -1) &&
-      Number(row.viewed_leaf_count) === Number(validator.viewedLeafCount ?? -1)
+      Number(row.updated_at) ===
+        Number(validator.updatedAt ?? -1) &&
+      Number(row.viewed_leaf_count) ===
+        Number(validator.viewedLeafCount ?? -1)
     ) {
-      return payloadOf<T>(row);
+      return payloadOf<T>(row)
     }
-    return null; // the show moved — caller must refetch
+    return null // the show moved — caller must refetch
   }
-  if (now() - Number(row.fetched_at) > LEAVES_TTL_MS) return null;
-  return payloadOf<T>(row);
+  if (now() - Number(row.fetched_at) > LEAVES_TTL_MS)
+    return null
+  return payloadOf<T>(row)
 }
 
 export async function putLeaves(
@@ -277,10 +300,13 @@ export async function putLeaves(
     leafCount,
     viewedLeafCount,
     payload,
-  }: LeavesValidator & { leafCount?: number | string | null; payload: unknown },
-  account: string = '',
+  }: LeavesValidator & {
+    leafCount?: number | string | null
+    payload: unknown
+  },
+  account: string = "",
 ): Promise<void> {
-  if (!ready()) return;
+  if (!ready()) return
   q(
     `INSERT INTO leaves (show_rk, account, updated_at, leaf_count, viewed_leaf_count, payload, fetched_at)
      VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -290,33 +316,41 @@ export async function putLeaves(
        fetched_at = excluded.fetched_at`,
   ).run(
     String(showRk),
-    String(account || ''),
+    String(account || ""),
     Number(updatedAt ?? 0),
     Number(leafCount ?? 0),
     Number(viewedLeafCount ?? 0),
     JSON.stringify(payload),
     now(),
-  );
+  )
 }
 
 // A precise, free invalidation: MQTT now-playing (mqttc.onNowPlaying) already tells us which
 // show is being watched — drop its leaves rows so the next read refetches exactly one show.
 // Drops EVERY account's row for the show: a watch shifts one account's viewCount, but
 // over-invalidating the others just refetches them lazily and stays correct.
-export async function dropLeaves(showRk: string | number): Promise<void> {
-  if (!ready()) return;
-  q('DELETE FROM leaves WHERE show_rk = ?').run(String(showRk));
+export async function dropLeaves(
+  showRk: string | number,
+): Promise<void> {
+  if (!ready()) return
+  q("DELETE FROM leaves WHERE show_rk = ?").run(
+    String(showRk),
+  )
 }
 
 // --- resolved (title -> item) ---------------------------------------------------------- //
-const RESOLVED_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const RESOLVED_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const rkey = (
   section: string | number,
   title: string,
   year: string | number | null | undefined,
   guid: string | null | undefined,
-): [string, string, string, string] =>
-  [String(section), String(title).toLowerCase(), year == null ? '' : String(year), (guid || '').toLowerCase()];
+): [string, string, string, string] => [
+  String(section),
+  String(title).toLowerCase(),
+  year == null ? "" : String(year),
+  (guid || "").toLowerCase(),
+]
 
 /**
  * TRI-STATE (see `CachedResolved` in types.ts): `undefined` = miss (no row, expired, or the
@@ -330,12 +364,15 @@ export async function getResolved<T = unknown>(
   year: string | number | null | undefined,
   guid: string | null | undefined,
 ): Promise<CachedResolved<T>> {
-  if (!ready()) return undefined; // undefined = cache miss; a cached NULL result is `null`
-  const [s, t, y, g] = rkey(section, title, year, guid);
-  const row = q('SELECT payload, fetched_at FROM resolved WHERE section=? AND title=? AND year=? AND guid=?').get(s, t, y, g);
-  if (!row) return undefined;
-  if (now() - Number(row.fetched_at) > RESOLVED_TTL_MS) return undefined;
-  return payloadOf<T>(row);
+  if (!ready()) return undefined // undefined = cache miss; a cached NULL result is `null`
+  const [s, t, y, g] = rkey(section, title, year, guid)
+  const row = q(
+    "SELECT payload, fetched_at FROM resolved WHERE section=? AND title=? AND year=? AND guid=?",
+  ).get(s, t, y, g)
+  if (!row) return undefined
+  if (now() - Number(row.fetched_at) > RESOLVED_TTL_MS)
+    return undefined
+  return payloadOf<T>(row)
 }
 
 export async function putResolved(
@@ -345,49 +382,65 @@ export async function putResolved(
   guid: string | null | undefined,
   payload: unknown,
 ): Promise<void> {
-  if (!ready()) return;
-  const [s, t, y, g] = rkey(section, title, year, guid);
+  if (!ready()) return
+  const [s, t, y, g] = rkey(section, title, year, guid)
   q(
     `INSERT INTO resolved (section, title, year, guid, payload, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(section, title, year, guid) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(s, t, y, g, JSON.stringify(payload), now());
+  ).run(s, t, y, g, JSON.stringify(payload), now())
 }
 
 // --- collection_children --------------------------------------------------------------- //
-const COLLECTION_TTL_MS = 24 * 60 * 60 * 1000;
+const COLLECTION_TTL_MS = 24 * 60 * 60 * 1000
 
 export async function getCollectionChildren<T = unknown>(
   rk: string | number,
   validator: CollectionValidator | null = null,
-  account: string = '',
+  account: string = "",
 ): Promise<T | null> {
-  if (!ready()) return null;
-  const row = q('SELECT * FROM collection_children WHERE rk = ? AND account = ?').get(String(rk), String(account || ''));
-  if (!row) return null;
+  if (!ready()) return null
+  const row = q(
+    "SELECT * FROM collection_children WHERE rk = ? AND account = ?",
+  ).get(String(rk), String(account || ""))
+  if (!row) return null
   if (validator) {
     if (
-      Number(row.updated_at) === Number(validator.updatedAt ?? -1) &&
-      Number(row.child_count) === Number(validator.childCount ?? -1)
+      Number(row.updated_at) ===
+        Number(validator.updatedAt ?? -1) &&
+      Number(row.child_count) ===
+        Number(validator.childCount ?? -1)
     ) {
-      return payloadOf<T>(row);
+      return payloadOf<T>(row)
     }
-    return null;
+    return null
   }
-  if (now() - Number(row.fetched_at) > COLLECTION_TTL_MS) return null;
-  return payloadOf<T>(row);
+  if (now() - Number(row.fetched_at) > COLLECTION_TTL_MS)
+    return null
+  return payloadOf<T>(row)
 }
 
 export async function putCollectionChildren(
   rk: string | number,
-  { updatedAt, childCount, payload }: CollectionValidator & { payload: unknown },
-  account: string = '',
+  {
+    updatedAt,
+    childCount,
+    payload,
+  }: CollectionValidator & { payload: unknown },
+  account: string = "",
 ): Promise<void> {
-  if (!ready()) return;
+  if (!ready()) return
   q(
     `INSERT INTO collection_children (rk, account, updated_at, child_count, payload, fetched_at) VALUES (?, ?, ?, ?, ?, ?)
      ON CONFLICT(rk, account) DO UPDATE SET updated_at = excluded.updated_at, child_count = excluded.child_count,
        payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(String(rk), String(account || ''), Number(updatedAt ?? 0), Number(childCount ?? 0), JSON.stringify(payload), now());
+  ).run(
+    String(rk),
+    String(account || ""),
+    Number(updatedAt ?? 0),
+    Number(childCount ?? 0),
+    JSON.stringify(payload),
+    now(),
+  )
 }
 
 /**
@@ -405,9 +458,13 @@ export async function putCollectionChildren(
  * EVERY account's row, because the member LIST is universal — only the progress fields on it
  * are the querying account's, and those are re-read with the list.
  */
-export async function dropCollectionChildren(rk: string | number): Promise<void> {
-  if (!ready()) return;
-  q('DELETE FROM collection_children WHERE rk = ?').run(String(rk));
+export async function dropCollectionChildren(
+  rk: string | number,
+): Promise<void> {
+  if (!ready()) return
+  q("DELETE FROM collection_children WHERE rk = ?").run(
+    String(rk),
+  )
 }
 
 // --- item resolution (read-through, revalidated by the page rather than by a clock) ----- //
@@ -423,90 +480,126 @@ export async function dropCollectionChildren(rk: string | number): Promise<void>
 
 /** The payload wrapper. A resolver that answered NOTHING is cached too — `{v: null}` — so a
  *  dead rating key costs one Plex call ever, not one per page load. */
-interface CachedValue<T> { v: T | null }
+interface CachedValue<T> {
+  v: T | null
+}
 
 export async function getItemMeta<T = unknown>(
   rk: string | number,
-  account: string = '',
+  account: string = "",
 ): Promise<CachedValue<T> | null> {
-  if (!ready()) return null;
-  const row = q('SELECT payload FROM item_meta WHERE rk = ? AND account = ?').get(String(rk), String(account || ''));
-  return row ? payloadOf<CachedValue<T>>(row) : null;
+  if (!ready()) return null
+  const row = q(
+    "SELECT payload FROM item_meta WHERE rk = ? AND account = ?",
+  ).get(String(rk), String(account || ""))
+  return row ? payloadOf<CachedValue<T>>(row) : null
 }
 
 export async function putItemMeta(
   rk: string | number,
   value: unknown,
-  account: string = '',
+  account: string = "",
 ): Promise<void> {
-  if (!ready()) return;
+  if (!ready()) return
   q(
     `INSERT INTO item_meta (rk, account, payload, fetched_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(rk, account) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(String(rk), String(account || ''), JSON.stringify({ v: value ?? null }), now());
+  ).run(
+    String(rk),
+    String(account || ""),
+    JSON.stringify({ v: value ?? null }),
+    now(),
+  )
 }
 
 /** Every account's row for one rating key — the item is the same thing to all of them. */
-export async function dropItemMeta(rk: string | number): Promise<void> {
-  if (!ready()) return;
-  q('DELETE FROM item_meta WHERE rk = ?').run(String(rk));
+export async function dropItemMeta(
+  rk: string | number,
+): Promise<void> {
+  if (!ready()) return
+  q("DELETE FROM item_meta WHERE rk = ?").run(String(rk))
 }
 
-export async function getSectionCollections<T = unknown>(section: string | number): Promise<T | null> {
-  if (!ready()) return null;
-  const row = q('SELECT payload FROM section_collections WHERE section = ?').get(String(section));
-  return row ? payloadOf<T>(row) : null;
+export async function getSectionCollections<T = unknown>(
+  section: string | number,
+): Promise<T | null> {
+  if (!ready()) return null
+  const row = q(
+    "SELECT payload FROM section_collections WHERE section = ?",
+  ).get(String(section))
+  return row ? payloadOf<T>(row) : null
 }
 
-export async function putSectionCollections(section: string | number, payload: unknown): Promise<void> {
-  if (!ready()) return;
+export async function putSectionCollections(
+  section: string | number,
+  payload: unknown,
+): Promise<void> {
+  if (!ready()) return
   q(
     `INSERT INTO section_collections (section, payload, fetched_at) VALUES (?, ?, ?)
      ON CONFLICT(section) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(String(section), JSON.stringify(payload), now());
+  ).run(String(section), JSON.stringify(payload), now())
 }
 
 export async function getKavitaItem<T = unknown>(
   kind: string,
   id: string | number,
 ): Promise<CachedValue<T> | null> {
-  if (!ready()) return null;
-  const row = q('SELECT payload FROM kavita_item WHERE kind = ? AND id = ?').get(String(kind), String(id));
-  return row ? payloadOf<CachedValue<T>>(row) : null;
+  if (!ready()) return null
+  const row = q(
+    "SELECT payload FROM kavita_item WHERE kind = ? AND id = ?",
+  ).get(String(kind), String(id))
+  return row ? payloadOf<CachedValue<T>>(row) : null
 }
 
-export async function putKavitaItem(kind: string, id: string | number, value: unknown): Promise<void> {
-  if (!ready()) return;
+export async function putKavitaItem(
+  kind: string,
+  id: string | number,
+  value: unknown,
+): Promise<void> {
+  if (!ready()) return
   q(
     `INSERT INTO kavita_item (kind, id, payload, fetched_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(kind, id) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(String(kind), String(id), JSON.stringify({ v: value ?? null }), now());
+  ).run(
+    String(kind),
+    String(id),
+    JSON.stringify({ v: value ?? null }),
+    now(),
+  )
 }
 
 /** Both kinds for one series — a reading tile makes both calls and they must not disagree. */
-export async function dropKavitaItem(id: string | number): Promise<void> {
-  if (!ready()) return;
-  q('DELETE FROM kavita_item WHERE id = ?').run(String(id));
+export async function dropKavitaItem(
+  id: string | number,
+): Promise<void> {
+  if (!ready()) return
+  q("DELETE FROM kavita_item WHERE id = ?").run(String(id))
 }
 
 // --- section_listing (soft TTL, stale-while-revalidate) -------------------------------- //
-const SECTION_SOFT_MS = 5 * 60 * 1000;
+const SECTION_SOFT_MS = 5 * 60 * 1000
 
 // Returns { payload, stale } or null. `stale` lets the caller serve it immediately AND kick a
 // background refresh (the warmer does this).
 export async function getSectionListing<T = unknown>(
   section: string | number,
   type: string,
-  account: string = '',
+  account: string = "",
 ): Promise<SectionListingHit<T> | null> {
-  if (!ready()) return null;
-  const row = q('SELECT payload, fetched_at FROM section_listing WHERE section=? AND type=? AND account=?').get(
+  if (!ready()) return null
+  const row = q(
+    "SELECT payload, fetched_at FROM section_listing WHERE section=? AND type=? AND account=?",
+  ).get(
     String(section),
     String(type),
-    String(account || ''),
-  );
-  if (!row) return null;
-  return { payload: payloadOf<T>(row), stale: now() - Number(row.fetched_at) > SECTION_SOFT_MS };
+    String(account || ""),
+  )
+  if (!row) return null
+  return {
+    payload: payloadOf<T>(row),
+    stale: now() - Number(row.fetched_at) > SECTION_SOFT_MS,
+  }
 }
 
 export async function putSectionListing(
@@ -515,11 +608,17 @@ export async function putSectionListing(
   account: string,
   payload: unknown,
 ): Promise<void> {
-  if (!ready()) return;
+  if (!ready()) return
   q(
     `INSERT INTO section_listing (section, type, account, payload, fetched_at) VALUES (?, ?, ?, ?, ?)
      ON CONFLICT(section, type, account) DO UPDATE SET payload = excluded.payload, fetched_at = excluded.fetched_at`,
-  ).run(String(section), String(type), String(account || ''), JSON.stringify(payload), now());
+  ).run(
+    String(section),
+    String(type),
+    String(account || ""),
+    JSON.stringify(payload),
+    now(),
+  )
 }
 
 // Config mutation dropped the sections a set draws from → drop their listings so the next read
@@ -527,11 +626,16 @@ export async function putSectionListing(
 export async function dropSectionListings(
   sections: string | number | readonly (string | number)[],
 ): Promise<void> {
-  if (!ready()) return;
-  const del = q('DELETE FROM section_listing WHERE section = ?');
+  if (!ready()) return
+  const del = q(
+    "DELETE FROM section_listing WHERE section = ?",
+  )
   // `[].concat(x)` in the JS: accepts a bare value or an array and flattens one level.
   // `concat` on a typed empty array won't infer that, so the same widening is spelled out.
-  for (const s of Array.isArray(sections) ? sections : [sections]) del.run(String(s));
+  for (const s of Array.isArray(sections)
+    ? sections
+    : [sections])
+    del.run(String(s))
 }
 
 // --- history (append-only, cursor-driven) ---------------------------------------------- //
@@ -540,20 +644,23 @@ export async function isWatched(
   section: string | number,
   ratingKey: string | number,
 ): Promise<boolean> {
-  if (!ready()) return false;
-  const row = q('SELECT 1 FROM history WHERE account=? AND section=? AND rating_key=?').get(
-    String(account),
-    String(section),
-    String(ratingKey),
-  );
-  return Boolean(row);
+  if (!ready()) return false
+  const row = q(
+    "SELECT 1 FROM history WHERE account=? AND section=? AND rating_key=?",
+  ).get(String(account), String(section), String(ratingKey))
+  return Boolean(row)
 }
 
 // The whole watched set for (account, section) — one indexed SELECT, replacing the paged walk.
-export async function watchedSet(account: string, section: string | number): Promise<Set<string>> {
-  if (!ready()) return new Set();
-  const rows = q('SELECT rating_key FROM history WHERE account=? AND section=?').all(String(account), String(section));
-  return new Set(rows.map((r) => String(r.rating_key)));
+export async function watchedSet(
+  account: string,
+  section: string | number,
+): Promise<Set<string>> {
+  if (!ready()) return new Set()
+  const rows = q(
+    "SELECT rating_key FROM history WHERE account=? AND section=?",
+  ).all(String(account), String(section))
+  return new Set(rows.map((r) => String(r.rating_key)))
 }
 
 // Insert history rows in ONE transaction (batched writes, per B1). Each row is
@@ -563,40 +670,53 @@ export async function addHistory(
   section: string | number,
   rows: readonly HistoryRow[],
 ): Promise<void> {
-  if (!ready() || !rows.length) return;
+  if (!ready() || !rows.length) return
   const ins = q(
     `INSERT INTO history (account, section, rating_key, viewed_at) VALUES (?, ?, ?, ?)
      ON CONFLICT(account, section, rating_key) DO UPDATE SET viewed_at = excluded.viewed_at`,
-  );
-  let maxViewed = 0;
-  conn().exec('BEGIN');
+  )
+  let maxViewed = 0
+  conn().exec("BEGIN")
   try {
     for (const r of rows) {
-      ins.run(String(account), String(section), String(r.ratingKey), Number(r.viewedAt || 0));
-      if (Number(r.viewedAt || 0) > maxViewed) maxViewed = Number(r.viewedAt || 0);
+      ins.run(
+        String(account),
+        String(section),
+        String(r.ratingKey),
+        Number(r.viewedAt || 0),
+      )
+      if (Number(r.viewedAt || 0) > maxViewed)
+        maxViewed = Number(r.viewedAt || 0)
     }
     if (maxViewed) {
-      const cur = q('SELECT last_viewed_at FROM history_cursor WHERE account=? AND section=?').get(String(account), String(section));
+      const cur = q(
+        "SELECT last_viewed_at FROM history_cursor WHERE account=? AND section=?",
+      ).get(String(account), String(section))
       if (!cur || maxViewed > Number(cur.last_viewed_at)) {
         q(
           `INSERT INTO history_cursor (account, section, last_viewed_at) VALUES (?, ?, ?)
            ON CONFLICT(account, section) DO UPDATE SET last_viewed_at = excluded.last_viewed_at`,
-        ).run(String(account), String(section), maxViewed);
+        ).run(String(account), String(section), maxViewed)
       }
     }
-    conn().exec('COMMIT');
+    conn().exec("COMMIT")
   } catch (e) {
-    conn().exec('ROLLBACK');
-    throw e;
+    conn().exec("ROLLBACK")
+    throw e
   }
 }
 
 // The incremental fetch cursor: fetch …/history/all?…&sort=viewedAt:desc and stop at this
 // timestamp. null = never fetched, do a full first-boot walk.
-export async function historyCursor(account: string, section: string | number): Promise<number | null> {
-  if (!ready()) return null;
-  const row = q('SELECT last_viewed_at FROM history_cursor WHERE account=? AND section=?').get(String(account), String(section));
-  return row ? Number(row.last_viewed_at) : null;
+export async function historyCursor(
+  account: string,
+  section: string | number,
+): Promise<number | null> {
+  if (!ready()) return null
+  const row = q(
+    "SELECT last_viewed_at FROM history_cursor WHERE account=? AND section=?",
+  ).get(String(account), String(section))
+  return row ? Number(row.last_viewed_at) : null
 }
 
 // A single watch just landed on the Shield (mqttc.onNowPlaying): record it directly, precise
@@ -607,7 +727,9 @@ export async function recordWatch(
   ratingKey: string | number,
   viewedAt?: number | null,
 ): Promise<void> {
-  if (!ready()) return;
-  await addHistory(account, section, [{ ratingKey, viewedAt: viewedAt || now() }]);
-  await bumpGeneration();
+  if (!ready()) return
+  await addHistory(account, section, [
+    { ratingKey, viewedAt: viewedAt || now() },
+  ])
+  await bumpGeneration()
 }

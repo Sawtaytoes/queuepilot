@@ -15,19 +15,24 @@
 // what the seed file's own order was stored as. Sorting by anything else — name, rowid, id —
 // silently changes which rule fires for a box that two rules match, and the symptom is a title
 // quietly merging into the wrong one.
-import { bookOfRecord, prepareChecked } from './open.js';
-import type { SqliteDatabase } from '../sqlite.js';
-import { toBggId } from './boardgames.js';
-import type { GroupingRules, OwnerGrouping, PrefixGrouping } from '../../boardgames/import/grouping.js';
+
+import type {
+  GroupingRules,
+  OwnerGrouping,
+  PrefixGrouping,
+} from "../../boardgames/import/grouping.js"
+import type { SqliteDatabase } from "../sqlite.js"
+import { toBggId } from "./boardgames.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 interface GroupingRow {
-  box_label: string | null;
-  prefix: string | null;
-  except_contains: string | null;
-  game_id: string;
-  game_name: string;
-  listing_bgg_id: string | null;
-  is_game_from_expansions: number;
+  box_label: string | null
+  prefix: string | null
+  except_contains: string | null
+  game_id: string
+  game_name: string
+  listing_bgg_id: string | null
+  is_game_from_expansions: number
 }
 
 /**
@@ -36,17 +41,19 @@ interface GroupingRow {
  * A store with no rules at all answers three empty collections, and the algorithm still groups
  * — see that file's header. So this never throws and never invents a default.
  */
-export function loadGroupingRules(db: SqliteDatabase = bookOfRecord()): GroupingRules {
+export function loadGroupingRules(
+  db: SqliteDatabase = bookOfRecord(),
+): GroupingRules {
   const rows = prepareChecked<GroupingRow>(
     db,
     `SELECT box_label, prefix, except_contains, game_id, game_name, listing_bgg_id,
             is_game_from_expansions
        FROM board_game_groupings
       ORDER BY position, rowid`,
-  ).all({});
+  ).all({})
 
-  const owner: OwnerGrouping[] = [];
-  const prefixes: PrefixGrouping[] = [];
+  const owner: OwnerGrouping[] = []
+  const prefixes: PrefixGrouping[] = []
 
   for (const row of rows) {
     if (row.box_label !== null) {
@@ -55,18 +62,19 @@ export function loadGroupingRules(db: SqliteDatabase = bookOfRecord()): Grouping
         gameId: row.game_id,
         gameName: row.game_name,
         listingBggId: toBggId(row.listing_bgg_id),
-      });
-      continue;
+      })
+      continue
     }
-    if (row.prefix === null) continue; // the CHECK forbids it; a hand-edited file does not.
+    if (row.prefix === null) continue // the CHECK forbids it; a hand-edited file does not.
     prefixes.push({
       exceptContains: row.except_contains,
       gameId: row.game_id,
       gameName: row.game_name,
-      isGameFromExpansions: row.is_game_from_expansions === 1,
+      isGameFromExpansions:
+        row.is_game_from_expansions === 1,
       listingBggId: toBggId(row.listing_bgg_id),
       prefix: row.prefix,
-    });
+    })
   }
 
   const confirmedSeparate = new Set(
@@ -76,7 +84,7 @@ export function loadGroupingRules(db: SqliteDatabase = bookOfRecord()): Grouping
     )
       .all({})
       .map((row) => row.box_label),
-  );
+  )
 
-  return { confirmedSeparate, owner, prefixes };
+  return { confirmedSeparate, owner, prefixes }
 }

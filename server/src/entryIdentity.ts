@@ -27,14 +27,18 @@
 // (`engine/resolve.resolveQueueEntry`) rather than a third title matcher. "Covered" and
 // "duplicate" then mean exactly what "is going to play" means, which is the whole premise of
 // 2026-08-17-pending-is-what-nothing-will-play.
-import { describe, resolveQueueEntry } from './engine/resolve.js';
-import { hasSection } from './entryFormat.js';
-import { mapLimit } from './routes/mapLimit.js';
-import type { ResolveCfg } from './engine/resolve.js';
-import type { PlexClient, QueueEntry } from './types.js';
+
+import type { ResolveCfg } from "./engine/resolve.js"
+import {
+  describe,
+  resolveQueueEntry,
+} from "./engine/resolve.js"
+import { hasSection } from "./entryFormat.js"
+import { mapLimit } from "./routes/mapLimit.js"
+import type { PlexClient, QueueEntry } from "./types.js"
 
 /** A Plex auth token as this layer passes it: null = the admin/default `X-Plex-Token`. */
-type Token = string | null;
+type Token = string | null
 
 /**
  * The rating key an entry names, or null when nothing in the library answers to it.
@@ -50,24 +54,29 @@ export async function itemKeyOf(
   value: unknown,
   token: Token = null,
 ): Promise<string | null> {
-  const desc = describe(value);
-  if (desc.ratingKey) return desc.ratingKey;
-  if (desc.collection || !desc.title) return null;
-  const [ratingKey] = await resolveQueueEntry(client, desc, cfg, token);
-  return ratingKey;
+  const desc = describe(value)
+  if (desc.ratingKey) return desc.ratingKey
+  if (desc.collection || !desc.title) return null
+  const [ratingKey] = await resolveQueueEntry(
+    client,
+    desc,
+    cfg,
+    token,
+  )
+  return ratingKey
 }
 
 /** The entry that already names the same item, as `findDuplicateItem` reports it. */
 export interface DuplicateHit {
   /** The EXISTING line's `entryKey` — what a remove or a reorder would address it by. */
-  key: string;
+  key: string
   /** The rating key both entries resolve to. */
-  ratingKey: string;
+  ratingKey: string
 }
 
 /** `findDuplicateItem`'s knobs. */
 export interface DuplicateOptions {
-  token?: Token;
+  token?: Token
   /**
    * Milliseconds the title pass may spend before the check gives up and reports "no duplicate".
    *
@@ -77,13 +86,16 @@ export interface DuplicateOptions {
    * open here re-creates the old behaviour (the duplicate lands) for the seconds Plex is down,
    * which is strictly better than an add that appears to have frozen.
    */
-  budgetMs?: number;
+  budgetMs?: number
 }
 
 /** How many title lookups run at once. Matches the tile fan-out in `/api/queues`. */
-const RESOLVE_CONCURRENCY = 6;
+const RESOLVE_CONCURRENCY = 6
 
-const sleep = (ms: number) => new Promise<void>((r) => { setTimeout(r, ms); });
+const sleep = (ms: number) =>
+  new Promise<void>((r) => {
+    setTimeout(r, ms)
+  })
 
 /**
  * The existing entry in `entries` that names the SAME ITEM as `value`, or null.
@@ -116,35 +128,49 @@ export async function findDuplicateItem(
   value: unknown,
   { token = null, budgetMs = 3000 }: DuplicateOptions = {},
 ): Promise<DuplicateHit | null> {
-  const desc = describe(value);
-  if (desc.collection) return null;
-  if (hasSection(value)) return null;
-  const want = desc.ratingKey;
-  const wantServer = desc.plexServer;
-  if (!want) return null;
+  const desc = describe(value)
+  if (desc.collection) return null
+  if (hasSection(value)) return null
+  const want = desc.ratingKey
+  const wantServer = desc.plexServer
+  if (!want) return null
 
   // Pass 1, free: an entry that already carries a rating key needs no resolution at all.
   // Collects the title-only lines on the way past, so the file is walked once.
-  const titled: QueueEntry[] = [];
+  const titled: QueueEntry[] = []
   for (const entry of entries) {
-    const d = describe(entry.value);
+    const d = describe(entry.value)
     if (d.ratingKey) {
-      if (d.ratingKey === want && d.plexServer === wantServer) return { key: entry.key, ratingKey: want };
-      continue;
+      if (
+        d.ratingKey === want &&
+        d.plexServer === wantServer
+      )
+        return { key: entry.key, ratingKey: want }
+      continue
     }
-    if (d.collection || !d.title) continue;
-    titled.push(entry);
+    if (d.collection || !d.title) continue
+    titled.push(entry)
   }
-  if (wantServer || !titled.length) return null;
+  if (wantServer || !titled.length) return null
 
   // Pass 2: the title lines, resolved through the engine. Short-circuits — once one matches
   // the rest of the fan-out stops starting new lookups.
-  let hit: DuplicateHit | null = null;
-  const scan = mapLimit(titled, RESOLVE_CONCURRENCY, async (entry) => {
-    if (hit) return;
-    const ratingKey = await itemKeyOf(client, cfg, entry.value, token);
-    if (ratingKey === want && !hit) hit = { key: entry.key, ratingKey };
-  });
-  await Promise.race([scan, sleep(budgetMs)]);
-  return hit;
+  let hit: DuplicateHit | null = null
+  const scan = mapLimit(
+    titled,
+    RESOLVE_CONCURRENCY,
+    async (entry) => {
+      if (hit) return
+      const ratingKey = await itemKeyOf(
+        client,
+        cfg,
+        entry.value,
+        token,
+      )
+      if (ratingKey === want && !hit)
+        hit = { key: entry.key, ratingKey }
+    },
+  )
+  await Promise.race([scan, sleep(budgetMs)])
+  return hit
 }

@@ -16,24 +16,33 @@
  * on the same day. It was 24h until 2026-09-07
  * (decision `2026-09-07-the-default-lead-window-is-16h-and-every-queue-uses-it`).
  */
-export const DEFAULT_PROMOTE_WINDOW_MS = 16 * 60 * 60 * 1000; // 16h
+export const DEFAULT_PROMOTE_WINDOW_MS = 16 * 60 * 60 * 1000 // 16h
 
 /**
  * Parse a promote_window duration (`24h`, `7d`, `30d`, `90m`, …) to milliseconds.
  * Returns null for blank / unrecognised (caller treats as "no window" / default).
  */
-export function parsePromoteWindow(raw: unknown): number | null {
-  const s = String(raw ?? '').trim().toLowerCase();
-  if (!s) return null;
-  const m = /^(\d+)\s*(ms|s|m|h|d)$/.exec(s);
-  if (!m) return null;
-  const n = Number(m[1]);
-  if (!Number.isFinite(n) || n <= 0) return null;
-  const unit = m[2]!;
-  const mult = unit === 'ms' ? 1
-    : unit === 's' ? 1000
-      : unit === 'm' ? 60_000
-        : unit === 'h' ? 3_600_000
-          : 86_400_000; // d
-  return n * mult;
+export function parsePromoteWindow(
+  raw: unknown,
+): number | null {
+  const s = String(raw ?? "")
+    .trim()
+    .toLowerCase()
+  if (!s) return null
+  const m = /^(\d+)\s*(ms|s|m|h|d)$/.exec(s)
+  if (!m) return null
+  const n = Number(m[1])
+  if (!Number.isFinite(n) || n <= 0) return null
+  const unit = m[2]!
+  const mult =
+    unit === "ms"
+      ? 1
+      : unit === "s"
+        ? 1000
+        : unit === "m"
+          ? 60_000
+          : unit === "h"
+            ? 3_600_000
+            : 86_400_000 // d
+  return n * mult
 }

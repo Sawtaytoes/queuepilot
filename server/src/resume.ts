@@ -1,4 +1,4 @@
-import { withCancellation } from './deviceScope.js';
+import { withCancellation } from "./deviceScope.js"
 // Resume-on-advance: make EVERY queued episode start at its own resume point, not just the
 // first one.
 //
@@ -42,16 +42,16 @@ import { withCancellation } from './deviceScope.js';
 // and let two decisions race over one item. The precedence is one line, and it is the rule
 // the whole feature turns on — an AUTHORED section outranks an INFERRED resume marker.
 import {
-  RESUME_MIN_MS,
   RESUME_MAX_FRACTION,
-  RESUME_START_WINDOW_MS,
+  RESUME_MIN_MS,
   RESUME_POLL_MS,
   RESUME_RETRY_MS,
-} from './env.js';
-import type { Device } from './types.js';
-import type { ClientTarget } from './playback.js';
-import * as section from './section.js';
-import { errMessage } from './errors.js';
+  RESUME_START_WINDOW_MS,
+} from "./env.js"
+import { errMessage } from "./errors.js"
+import type { ClientTarget } from "./playback.js"
+import * as section from "./section.js"
+import type { Device } from "./types.js"
 
 /**
  * What `resumePlan()` reads off one lineup item.
@@ -61,28 +61,28 @@ import { errMessage } from './errors.js';
  * is what lets a caller pass either producer's item without a cast.
  */
 export interface ResumeCandidate {
-  ratingKey?: string | number | null;
-  viewOffset?: number | null;
-  viewCount?: number | null;
-  duration?: number | null;
-  [field: string]: unknown;
+  ratingKey?: string | number | null
+  viewOffset?: number | null
+  viewCount?: number | null
+  duration?: number | null
+  [field: string]: unknown
 }
 
 /** One observed `/status/sessions` reading — `playback.currentSession()`'s shape. */
 export interface ObservedSession {
-  ratingKey?: string | number | null;
-  viewOffset?: number | null;
+  ratingKey?: string | number | null
+  viewOffset?: number | null
 }
 
 /** What `considerSession()` decided, and why. The `reason` strings are logged verbatim. */
 export interface ResumeDecision {
   /** ms to seek to, or null for "do nothing". */
-  ms: number | null;
-  reason: string;
-  rk?: string;
+  ms: number | null
+  reason: string
+  rk?: string
   /** Set when the decline is provisional and the next poll should reconsider this ratingKey. */
-  retry?: boolean;
-  position?: number;
+  retry?: boolean
+  position?: number
 }
 
 /**
@@ -100,78 +100,99 @@ export interface ResumeDecision {
  *    Tiger, 12m55s of 12m55s), left by the queue auto-advancing unattended; restarting that
  *    one is right.
  */
-export function resumePlan(items: readonly ResumeCandidate[] | null | undefined, {
-  headRatingKey = null,
-  minMs = RESUME_MIN_MS,
-  maxFraction = RESUME_MAX_FRACTION,
-}: {
-  headRatingKey?: string | number | null;
-  minMs?: number;
-  maxFraction?: number;
-} = {}): Map<string, number> {
-  const plan = new Map<string, number>();
+export function resumePlan(
+  items: readonly ResumeCandidate[] | null | undefined,
+  {
+    headRatingKey = null,
+    minMs = RESUME_MIN_MS,
+    maxFraction = RESUME_MAX_FRACTION,
+  }: {
+    headRatingKey?: string | number | null
+    minMs?: number
+    maxFraction?: number
+  } = {},
+): Map<string, number> {
+  const plan = new Map<string, number>()
   for (const it of items || []) {
-    if (!it || it.ratingKey == null) continue;
-    const rk = String(it.ratingKey);
-    if (headRatingKey != null && rk === String(headRatingKey)) continue;
-    const offset = Number(it.viewOffset || 0);
-    const viewCount = Number(it.viewCount || 0);
-    if (!Number.isFinite(offset) || offset < minMs) continue;
-    if (viewCount >= 1) continue;
-    const duration = Number(it.duration || 0);
-    if (duration > 0 && offset > duration * maxFraction) continue;
-    plan.set(rk, Math.round(offset));
+    if (!it || it.ratingKey == null) continue
+    const rk = String(it.ratingKey)
+    if (
+      headRatingKey != null &&
+      rk === String(headRatingKey)
+    )
+      continue
+    const offset = Number(it.viewOffset || 0)
+    const viewCount = Number(it.viewCount || 0)
+    if (!Number.isFinite(offset) || offset < minMs) continue
+    if (viewCount >= 1) continue
+    const duration = Number(it.duration || 0)
+    if (duration > 0 && offset > duration * maxFraction)
+      continue
+    plan.set(rk, Math.round(offset))
   }
-  return plan;
+  return plan
 }
 
 // The armed plan for the CURRENT session. A session is a fresh scan, so arming replaces it
 // wholesale — a re-scan must never inherit the previous lineup's pending seeks.
 const ARMED: {
-  plan: Map<string, number>;
-  seen: Set<string>;
-  device: Device | null;
-  setName: string | null;
-  client: ClientTarget | null;
+  plan: Map<string, number>
+  seen: Set<string>
+  device: Device | null
+  setName: string | null
+  client: ClientTarget | null
 } = {
-  plan: new Map(), seen: new Set(), device: null, setName: null, client: null,
-};
+  plan: new Map(),
+  seen: new Set(),
+  device: null,
+  setName: null,
+  client: null,
+}
 
-export function arm({ plan, device = null, setName = null, client = null }: {
-  plan?: Map<string, number> | null;
-  device?: Device | null;
-  setName?: string | null;
+export function arm({
+  plan,
+  device = null,
+  setName = null,
+  client = null,
+}: {
+  plan?: Map<string, number> | null
+  device?: Device | null
+  setName?: string | null
   /**
    * The Companion target, resolved ONCE for this session. `findClient()` used to run again
    * on every poll and again on every seek; on a player advertising no connection each of
    * those was a plex.tv WAN round trip. Null keeps the old per-call resolution.
    */
-  client?: ClientTarget | null;
+  client?: ClientTarget | null
 } = {}): number {
-  stopWatch();
-  ARMED.plan = plan instanceof Map ? plan : new Map();
-  ARMED.seen = new Set();
-  ARMED.device = device;
-  ARMED.setName = setName;
-  ARMED.client = client;
-  return ARMED.plan.size;
+  stopWatch()
+  ARMED.plan = plan instanceof Map ? plan : new Map()
+  ARMED.seen = new Set()
+  ARMED.device = device
+  ARMED.setName = setName
+  ARMED.client = client
+  return ARMED.plan.size
 }
 
 export function disarm(): void {
-  ARMED.plan = new Map();
-  ARMED.seen = new Set();
-  stopWatch();
+  ARMED.plan = new Map()
+  ARMED.seen = new Set()
+  stopWatch()
 }
 
-export const armedCount = (): number => ARMED.plan.size;
-export const pendingCount = (): number => [...ARMED.plan.keys()].filter((k) => !ARMED.seen.has(k)).length;
+export const armedCount = (): number => ARMED.plan.size
+export const pendingCount = (): number =>
+  [...ARMED.plan.keys()].filter((k) => !ARMED.seen.has(k))
+    .length
 export const target = (): {
-  device: Device | null;
-  setName: string | null;
-  client: ClientTarget | null;
-} => (
-  { device: ARMED.device, setName: ARMED.setName, client: ARMED.client }
-);
+  device: Device | null
+  setName: string | null
+  client: ClientTarget | null
+} => ({
+  device: ARMED.device,
+  setName: ARMED.setName,
+  client: ARMED.client,
+})
 
 /**
  * Decide what to do about one observed session. Returns the ms to seek to, or null.
@@ -186,17 +207,26 @@ export const target = (): {
  */
 export function considerSession(
   session: ObservedSession | null | undefined,
-  { startWindowMs = RESUME_START_WINDOW_MS }: { startWindowMs?: number } = {},
+  {
+    startWindowMs = RESUME_START_WINDOW_MS,
+  }: { startWindowMs?: number } = {},
 ): ResumeDecision {
-  if (!session || session.ratingKey == null) return { ms: null, reason: 'nothing playing' };
-  const rk = String(session.ratingKey);
-  if (ARMED.seen.has(rk)) return { ms: null, reason: 'already considered', rk };
-  const ms = ARMED.plan.get(rk);
+  if (!session || session.ratingKey == null)
+    return { ms: null, reason: "nothing playing" }
+  const rk = String(session.ratingKey)
+  if (ARMED.seen.has(rk))
+    return { ms: null, reason: "already considered", rk }
+  const ms = ARMED.plan.get(rk)
   if (ms == null) {
-    ARMED.seen.add(rk); // settled: no marker, nothing to reconsider
-    return { ms: null, reason: 'not in the plan (no usable marker at scan time)', rk };
+    ARMED.seen.add(rk) // settled: no marker, nothing to reconsider
+    return {
+      ms: null,
+      reason:
+        "not in the plan (no usable marker at scan time)",
+      rk,
+    }
   }
-  const position = Number(session.viewOffset || 0);
+  const position = Number(session.viewOffset || 0)
   if (position > startWindowMs) {
     // Do NOT mark it handled. At the moment the player advances, /status/sessions can still
     // report the PREVIOUS episode's position against the new ratingKey — observed live, where
@@ -205,12 +235,14 @@ export function considerSession(
     // position settles within a poll or two, while a viewer who genuinely scrubbed forward
     // keeps reporting a high position and keeps (correctly) being declined.
     return {
-      ms: null, rk, retry: true,
+      ms: null,
+      rk,
+      retry: true,
       reason: `${Math.round(position / 1000)}s in, past the ${Math.round(startWindowMs / 1000)}s window`,
-    };
+    }
   }
-  ARMED.seen.add(rk);
-  return { ms, reason: 'resume', rk, position };
+  ARMED.seen.add(rk)
+  return { ms, reason: "resume", rk, position }
 }
 
 // --- the watcher ------------------------------------------------------------- //
@@ -227,34 +259,42 @@ export function considerSession(
 // position", so the next one is booked for then instead of grinding through fifty-eight polls
 // that all say "not yet". A pause simply makes the booked read early, and it re-books.
 
-let GENERATION = 0;
-let TIMER: NodeJS.Timeout | null = null;
-let UNSUBSCRIBE: (() => void) | null = null;
-const LOGGED = new Set<string>(); // ratingKeys whose retryable decline has been logged once
+let GENERATION = 0
+let TIMER: NodeJS.Timeout | null = null
+let UNSUBSCRIBE: (() => void) | null = null
+const LOGGED = new Set<string>() // ratingKeys whose retryable decline has been logged once
 
 /** Which of the three reasons above caused a read. Logged verbatim. */
-export type WatchTrigger = 'push' | 'retry' | 'poll' | 'mark';
+export type WatchTrigger =
+  | "push"
+  | "retry"
+  | "poll"
+  | "mark"
 
 /** How `startWatch` is told about a now-playing event. Returns its own unsubscribe. */
 export type PushSubscriber = (
   onEvent: (ratingKey: string | null) => void,
-) => () => void;
+) => () => void
 
 export function stopWatch(): void {
-  GENERATION += 1;
+  GENERATION += 1
   if (TIMER) {
-    clearTimeout(TIMER);
-    TIMER = null;
+    clearTimeout(TIMER)
+    TIMER = null
   }
   if (UNSUBSCRIBE) {
     // A listener that outlives its watcher would hold the previous lineup's closure and wake
     // a plan that has already been replaced.
-    try { UNSUBSCRIBE(); } catch { /* a broker that already went away is not an error here */ }
-    UNSUBSCRIBE = null;
+    try {
+      UNSUBSCRIBE()
+    } catch {
+      /* a broker that already went away is not an error here */
+    }
+    UNSUBSCRIBE = null
   }
 }
 
-export const watching = (): boolean => TIMER != null;
+export const watching = (): boolean => TIMER != null
 
 /**
  * Read `fetchSession()` and seek when the player lands on a planned episode near its start.
@@ -279,8 +319,15 @@ export function startWatch({
   now = () => Date.now(),
   log = console.log,
 }: {
-  fetchSession: () => ObservedSession | null | Promise<ObservedSession | null>;
-  seek: (ms: number) => { seeked?: boolean; error?: string } | Promise<{ seeked?: boolean; error?: string }>;
+  fetchSession: () =>
+    | ObservedSession
+    | null
+    | Promise<ObservedSession | null>
+  seek: (
+    ms: number,
+  ) =>
+    | { seeked?: boolean; error?: string }
+    | Promise<{ seeked?: boolean; error?: string }>
   /**
    * Where the player is in the LIVE playQueue — `playback.readPlayQueue()`.
    *
@@ -288,7 +335,12 @@ export function startWatch({
    * the only case an index can settle and a ratingKey cannot. Omit it and a repeated file's
    * windows decline rather than guess; every other case is unaffected.
    */
-  fetchPlace?: (() => section.PlayQueuePlace | null | Promise<section.PlayQueuePlace | null>) | null;
+  fetchPlace?:
+    | (() =>
+        | section.PlayQueuePlace
+        | null
+        | Promise<section.PlayQueuePlace | null>)
+    | null
   /**
    * Stop the current item and move to the next — Companion `skipNext`, through
    * `playback.transport('next')`.
@@ -297,66 +349,83 @@ export function startWatch({
    * `topup.ts` names that as the thing to avoid, and it would be a hiccup on screen where a
    * section wants a cut.
    */
-  advance?: (() => { ok?: boolean; error?: string } | Promise<{ ok?: boolean; error?: string }>) | null;
-  subscribePush?: PushSubscriber | null;
-  intervalMs?: number;
-  retryMs?: number;
-  maxMs?: number;
-  now?: () => number;
-  log?: (line: string) => void;
+  advance?:
+    | (() =>
+        | { ok?: boolean; error?: string }
+        | Promise<{ ok?: boolean; error?: string }>)
+    | null
+  subscribePush?: PushSubscriber | null
+  intervalMs?: number
+  retryMs?: number
+  maxMs?: number
+  now?: () => number
+  log?: (line: string) => void
 }): boolean {
-  stopWatch();
-  LOGGED.clear();
-  if (!ARMED.plan.size && !section.armedCount()) return false;
-  const generation = GENERATION;
-  const isCurrent = (): boolean => generation === GENERATION;
-  const startedAt = now();
-  let isStopped = false;
-  let isReading = false;
+  stopWatch()
+  LOGGED.clear()
+  if (!ARMED.plan.size && !section.armedCount())
+    return false
+  const generation = GENERATION
+  const isCurrent = (): boolean => generation === GENERATION
+  const startedAt = now()
+  let isStopped = false
+  let isReading = false
   // A provisional decline re-reads fast rather than waiting a whole interval — that second
   // wait was the other half of the owner's "4-5 seconds". The burst is bounded to roughly one
   // interval's worth of extra reads, so a viewer who genuinely scrubbed forward (and is
   // correctly declined every time) settles back to the normal cadence instead of being
   // re-read several times a second for the rest of the lineup.
-  const retryDelayMs = Math.max(1, Math.min(retryMs, intervalMs));
-  const retryBurst = Math.max(1, Math.ceil(intervalMs / retryDelayMs));
-  let retriesLeft = retryBurst;
+  const retryDelayMs = Math.max(
+    1,
+    Math.min(retryMs, intervalMs),
+  )
+  const retryBurst = Math.max(
+    1,
+    Math.ceil(intervalMs / retryDelayMs),
+  )
+  let retriesLeft = retryBurst
 
   const finish = (): void => {
-    isStopped = true;
-    if (isCurrent()) stopWatch();
-  };
+    isStopped = true
+    if (isCurrent()) stopWatch()
+  }
 
-  const schedule = (delayMs: number, via: WatchTrigger = 'poll'): void => {
-    if (isStopped || !isCurrent()) return;
-    if (TIMER) clearTimeout(TIMER);
-    TIMER = setTimeout(() => { void read(via); }, delayMs);
+  const schedule = (
+    delayMs: number,
+    via: WatchTrigger = "poll",
+  ): void => {
+    if (isStopped || !isCurrent()) return
+    if (TIMER) clearTimeout(TIMER)
+    TIMER = setTimeout(() => {
+      void read(via)
+    }, delayMs)
     // Kept as a runtime probe, not narrowed away: `unref` exists on Node's Timeout but a test
     // harness's fake timer is a plain object without it.
-    if (typeof TIMER.unref === 'function') TIMER.unref();
-  };
+    if (typeof TIMER.unref === "function") TIMER.unref()
+  }
 
-  const totalPending = (): number => pendingCount() + section.pendingCount();
+  const totalPending = (): number =>
+    pendingCount() + section.pendingCount()
 
   const read = async (via: WatchTrigger): Promise<void> => {
-    if (isStopped || !isCurrent()) return;
+    if (isStopped || !isCurrent()) return
     if (now() - startedAt > maxMs || totalPending() === 0) {
-      finish();
-      return;
+      finish()
+      return
     }
     // A push landing while a read is in flight must not double the request: the read already
     // under way will report whatever the push was about.
-    if (isReading) return;
-    isReading = true;
-    let nextDelayMs = intervalMs;
-    let nextVia: WatchTrigger = 'poll';
+    if (isReading) return
+    isReading = true
+    let nextDelayMs = intervalMs
+    let nextVia: WatchTrigger = "poll"
     try {
-      let session: ObservedSession | null = null;
+      let session: ObservedSession | null = null
       try {
-        session = await fetchSession();
-        if (isStopped || !isCurrent()) return;
+        session = await fetchSession()
+        if (isStopped || !isCurrent()) return
       } catch {
-        return; // a transient Plex hiccup must never kill the watcher
+        return // a transient Plex hiccup must never kill the watcher
       }
 
       // ── THE SECTION PLAN FIRST ──────────────────────────────────────────────────────
@@ -366,18 +435,25 @@ export function startWatch({
       // 1:06:00" and nothing else means "from the beginning of the unit", and letting a
       // resume marker start it half an hour in would honour neither key.
       if (section.armedCount()) {
-        let place: section.PlayQueuePlace | null = null;
-        if (fetchPlace && session?.ratingKey != null
-          && section.isAmbiguous(String(session.ratingKey))) {
+        let place: section.PlayQueuePlace | null = null
+        if (
+          fetchPlace &&
+          session?.ratingKey != null &&
+          section.isAmbiguous(String(session.ratingKey))
+        ) {
           // Two windows on one file: only the live playQueue can say which occurrence this is.
-          try { place = await fetchPlace(); } catch { place = null; }
-          if (isStopped || !isCurrent()) return;
+          try {
+            place = await fetchPlace()
+          } catch {
+            place = null
+          }
+          if (isStopped || !isCurrent()) return
         }
-        let sec: section.SectionDecision;
+        let sec: section.SectionDecision
         try {
-          sec = section.consider(session, place);
+          sec = section.consider(session, place)
         } catch {
-          return;
+          return
         }
         // The section OWNS this reading in three cases, and the third is the one that makes
         // the precedence hold for a whole item rather than for a single read:
@@ -387,128 +463,174 @@ export function startWatch({
         //   * the item is windowed and its window is SPENT. Without this, the read after a
         //     start seek finds no live row, falls through, and a resume marker drags the
         //     viewer straight back out of the section that was just set up.
-        const isOwned = sec.index != null || sec.retry === true || sec.isSpent === true;
+        const isOwned =
+          sec.index != null ||
+          sec.retry === true ||
+          sec.isSpent === true
         if (isOwned) {
-          if (sec.action !== 'wait' && !sec.isSpent) {
-            log(`[section] via ${via}: rk=${sec.rk} at `
-              + `${Math.round(Number(session?.viewOffset || 0) / 1000)}s -> ${sec.reason}`);
+          if (sec.action !== "wait" && !sec.isSpent) {
+            log(
+              `[section] via ${via}: rk=${sec.rk} at ` +
+                `${Math.round(Number(session?.viewOffset || 0) / 1000)}s -> ${sec.reason}`,
+            )
           }
-          if (sec.action === 'seek' && sec.ms != null) {
+          if (sec.action === "seek" && sec.ms != null) {
             try {
-              const r = await withCancellation(() => isStopped || !isCurrent(), () => seek(sec.ms!));
-              log(r && r.seeked === false
-                ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${r.error}`
-                : `[section] rk=${sec.rk} starts at ${Math.round(sec.ms / 1000)}s`);
+              const r = await withCancellation(
+                () => isStopped || !isCurrent(),
+                () => seek(sec.ms!),
+              )
+              log(
+                r && r.seeked === false
+                  ? `[section] the start seek to ${Math.round(sec.ms / 1000)}s failed: ${r.error}`
+                  : `[section] rk=${sec.rk} starts at ${Math.round(sec.ms / 1000)}s`,
+              )
             } catch (e) {
-              log(`[section] the start seek threw: ${errMessage(e)}`);
+              log(
+                `[section] the start seek threw: ${errMessage(e)}`,
+              )
             }
-          } else if (sec.action === 'next') {
+          } else if (sec.action === "next") {
             if (!advance) {
-              log('[section] the end mark is due but no advance was wired — the item plays on');
+              log(
+                "[section] the end mark is due but no advance was wired — the item plays on",
+              )
             } else {
               try {
-                const r = await withCancellation(() => isStopped || !isCurrent(), () => advance!());
-                log(r && r.ok === false
-                  ? `[section] skipNext failed at the end mark: ${r.error}`
-                  : `[section] rk=${sec.rk} stopped at its end mark; the lineup advances`);
+                const r = await withCancellation(
+                  () => isStopped || !isCurrent(),
+                  () => advance!(),
+                )
+                log(
+                  r && r.ok === false
+                    ? `[section] skipNext failed at the end mark: ${r.error}`
+                    : `[section] rk=${sec.rk} stopped at its end mark; the lineup advances`,
+                )
               } catch (e) {
-                log(`[section] skipNext threw: ${errMessage(e)}`);
+                log(
+                  `[section] skipNext threw: ${errMessage(e)}`,
+                )
               }
             }
           }
           if (sec.retry && retriesLeft > 0) {
-            retriesLeft -= 1;
-            nextDelayMs = retryDelayMs;
+            retriesLeft -= 1
+            nextDelayMs = retryDelayMs
           } else if (!sec.retry) {
-            retriesLeft = retryBurst;
-            if (sec.action === 'wait' && sec.dueInMs != null) {
+            retriesLeft = retryBurst
+            if (
+              sec.action === "wait" &&
+              sec.dueInMs != null
+            ) {
               // Book the next read FOR the end mark rather than polling up to it. Clamped to
               // the ordinary cadence at the top, so a long section still gets its regular
               // sanity reads and a viewer who paused is noticed; clamped to `retryDelayMs` at
               // the bottom, so a mark already upon us cannot spin the loop.
-              nextDelayMs = Math.max(retryDelayMs, Math.min(intervalMs, sec.dueInMs));
-              if (sec.dueInMs <= intervalMs) nextVia = 'mark';
+              nextDelayMs = Math.max(
+                retryDelayMs,
+                Math.min(intervalMs, sec.dueInMs),
+              )
+              if (sec.dueInMs <= intervalMs)
+                nextVia = "mark"
             }
           }
-          return;
+          return
         }
       }
 
-      let decision: ResumeDecision;
+      let decision: ResumeDecision
       try {
-        decision = considerSession(session);
+        decision = considerSession(session)
       } catch {
-        return;
+        return
       }
       if (decision.retry && retriesLeft > 0) {
-        retriesLeft -= 1;
-        nextDelayMs = retryDelayMs;
+        retriesLeft -= 1
+        nextDelayMs = retryDelayMs
       } else if (!decision.retry) {
-        retriesLeft = retryBurst; // a settled read re-arms the burst for the NEXT transition
+        retriesLeft = retryBurst // a settled read re-arms the burst for the NEXT transition
       }
       // Log EVERY decision, not just the seeks: when this silently does nothing, the reason it
       // declined is the only thing worth having. One line per episode, not per read — `seen`
       // guarantees a given ratingKey is considered once.
-      const quiet = decision.reason === 'already considered' || decision.reason === 'nothing playing';
-      if (!quiet && !(decision.retry && LOGGED.has(decision.rk ?? ''))) {
-        if (decision.retry) LOGGED.add(decision.rk ?? '');
+      const quiet =
+        decision.reason === "already considered" ||
+        decision.reason === "nothing playing"
+      if (
+        !quiet &&
+        !(decision.retry && LOGGED.has(decision.rk ?? ""))
+      ) {
+        if (decision.retry) LOGGED.add(decision.rk ?? "")
         // `session!`: every non-quiet reason is produced from a non-null session (a null one
         // yields 'nothing playing', which IS quiet), so this is the original's exact reach —
         // including its throw, if that invariant ever breaks.
-        log(`[resume] via ${via}: rk=${decision.rk} at ${Math.round(Number(session!.viewOffset || 0) / 1000)}s -> ${decision.reason}`);
+        log(
+          `[resume] via ${via}: rk=${decision.rk} at ${Math.round(Number(session!.viewOffset || 0) / 1000)}s -> ${decision.reason}`,
+        )
       }
-      const ms = decision.ms;
-      if (ms == null) return;
+      const ms = decision.ms
+      if (ms == null) return
       try {
-        const r = await withCancellation(() => isStopped || !isCurrent(), () => seek(ms));
-        log(r && r.seeked === false
-          ? `[resume] seek to ${Math.round(ms / 1000)}s failed: ${r.error}`
-          : `[resume] resumed rk=${decision.rk} at ${Math.round(ms / 1000)}s via ${via} (it restarts at 0 otherwise)`);
+        const r = await withCancellation(
+          () => isStopped || !isCurrent(),
+          () => seek(ms),
+        )
+        log(
+          r && r.seeked === false
+            ? `[resume] seek to ${Math.round(ms / 1000)}s failed: ${r.error}`
+            : `[resume] resumed rk=${decision.rk} at ${Math.round(ms / 1000)}s via ${via} (it restarts at 0 otherwise)`,
+        )
       } catch (e) {
-        log(`[resume] seek threw: ${errMessage(e)}`);
+        log(`[resume] seek threw: ${errMessage(e)}`)
       }
     } finally {
-      isReading = false;
+      isReading = false
       if (isCurrent()) {
-        if (totalPending() === 0) finish();
-        else schedule(nextDelayMs, nextVia);
+        if (totalPending() === 0) finish()
+        else schedule(nextDelayMs, nextVia)
       }
     }
-  };
+  }
 
   if (subscribePush) {
     // The topic republishes on EVERY attribute change — volume, a pause, a position update —
     // so only a change of ratingKey is an advance. That test also collapses the burst Plex
     // emits while it navigates between items.
-    let lastPushedRk: string | null = null;
-    let isNullLogged = false;
+    let lastPushedRk: string | null = null
+    let isNullLogged = false
     try {
       UNSUBSCRIBE = subscribePush((ratingKey) => {
-        if (isStopped || !isCurrent()) return;
+        if (isStopped || !isCurrent()) return
         if (!ratingKey) {
           // The recorded failure mode: a playing state the feed cannot name. Unusable as a
           // trigger, and NOT guessed at — the poll below still covers this item.
           if (!isNullLogged) {
-            isNullLogged = true;
-            log('[resume] a now-playing event carried no ratingKey — the poll stays the trigger for it');
+            isNullLogged = true
+            log(
+              "[resume] a now-playing event carried no ratingKey — the poll stays the trigger for it",
+            )
           }
-          return;
+          return
         }
-        if (ratingKey === lastPushedRk) return;
-        lastPushedRk = ratingKey;
-        void read('push');
-      });
+        if (ratingKey === lastPushedRk) return
+        lastPushedRk = ratingKey
+        void read("push")
+      })
     } catch (e) {
       // No broker, no push. The poll is the whole trigger, exactly as before.
-      UNSUBSCRIBE = null;
-      log(`[resume] the now-playing wake-up is unavailable (${errMessage(e)}) — polling only`);
+      UNSUBSCRIBE = null
+      log(
+        `[resume] the now-playing wake-up is unavailable (${errMessage(e)}) — polling only`,
+      )
     }
   }
-  log(`[resume] watching: ${ARMED.plan.size} resume marker(s) + ${section.armedCount()} `
-    + `section window(s), poll every ${intervalMs}ms, retry after ${retryDelayMs}ms, `
-    + `push wake-up ${UNSUBSCRIBE ? 'on' : 'off'}`);
-  schedule(intervalMs);
-  return true;
+  log(
+    `[resume] watching: ${ARMED.plan.size} resume marker(s) + ${section.armedCount()} ` +
+      `section window(s), poll every ${intervalMs}ms, retry after ${retryDelayMs}ms, ` +
+      `push wake-up ${UNSUBSCRIBE ? "on" : "off"}`,
+  )
+  schedule(intervalMs)
+  return true
 }
 
-export const _internals = { ARMED };
+export const _internals = { ARMED }

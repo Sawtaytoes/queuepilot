@@ -1,29 +1,32 @@
-import { createStaticHandler } from '@charcuterie/server';
-import { Hono } from 'hono';
-import { errMessage } from './errors.js';
-import { launcherRoutes } from './providers/launcher.js';
-import { accountAuditRoutes } from './routes/accountAuditRoutes.js';
-import { boardGameRoutes } from './routes/boardGameRoutes.js';
-import { historyRoutes } from './routes/historyRoutes.js';
-import { nativeTvRoutes, tvLockRoutes } from './routes/nativeTvRoutes.js';
-import { playbackRoutes } from './routes/playbackRoutes.js';
-import { plexMetadataRoutes } from './routes/plexMetadataRoutes.js';
-import { groupRoutes } from './routes/groupRoutes.js';
-import { peopleRoutes } from './routes/peopleRoutes.js';
-import { pendingRoutes } from './routes/pendingRoutes.js';
-import { providersRoutes } from './routes/providersRoutes.js';
-import { queuesRoutes } from './routes/queuesRoutes.js';
-import { setsRoutes } from './routes/setsRoutes.js';
-import { tonightRoutes } from './routes/tonightRoutes.js';
-import { undoSnapshot } from './routes/undoSnapshot.js';
-import { sseRoutes } from './sse.js';
+import { createStaticHandler } from "@charcuterie/server"
+import { Hono } from "hono"
+import { errMessage } from "./errors.js"
+import { launcherRoutes } from "./providers/launcher.js"
+import { accountAuditRoutes } from "./routes/accountAuditRoutes.js"
+import { boardGameRoutes } from "./routes/boardGameRoutes.js"
+import { groupRoutes } from "./routes/groupRoutes.js"
+import { historyRoutes } from "./routes/historyRoutes.js"
+import {
+  nativeTvRoutes,
+  tvLockRoutes,
+} from "./routes/nativeTvRoutes.js"
+import { pendingRoutes } from "./routes/pendingRoutes.js"
+import { peopleRoutes } from "./routes/peopleRoutes.js"
+import { playbackRoutes } from "./routes/playbackRoutes.js"
+import { plexMetadataRoutes } from "./routes/plexMetadataRoutes.js"
+import { providersRoutes } from "./routes/providersRoutes.js"
+import { queuesRoutes } from "./routes/queuesRoutes.js"
+import { setsRoutes } from "./routes/setsRoutes.js"
+import { tonightRoutes } from "./routes/tonightRoutes.js"
+import { undoSnapshot } from "./routes/undoSnapshot.js"
+import { sseRoutes } from "./sse.js"
 
 /** Where the mutation-snapshot middleware and every JSON route are mounted. */
-const API_PREFIX = '/api';
+const API_PREFIX = "/api"
 
 interface BuildServerOptions {
   /** Absolute path to `web/dist` — the Vite build output. */
-  publicDir: string;
+  publicDir: string
 }
 
 /**
@@ -38,39 +41,43 @@ interface BuildServerOptions {
  *   2. `/go/:setId` — the launcher, at the root because it is a URL a person bookmarks.
  *   3. `*`          — the static handler, LAST, so it only ever sees what nothing above claimed.
  */
-export function buildServer({ publicDir }: BuildServerOptions): Hono {
-  const root = new Hono();
+export function buildServer({
+  publicDir,
+}: BuildServerOptions): Hono {
+  const root = new Hono()
 
   // Express had NO error handler: every route try/catches itself, and anything that escaped
   // fell through to Express's default handler, which answers an HTML 500 to a caller that
   // asked for JSON. This is the deliberate (small) behaviour change — same status, a JSON body.
   root.onError((err, c) => {
-    console.log(`[queuepilot-web] unhandled error on ${c.req.method} ${c.req.path}: ${errMessage(err)}`);
-    return c.json({ error: errMessage(err) }, 500);
-  });
+    console.log(
+      `[queuepilot-web] unhandled error on ${c.req.method} ${c.req.path}: ${errMessage(err)}`,
+    )
+    return c.json({ error: errMessage(err) }, 500)
+  })
 
-  const api = new Hono();
+  const api = new Hono()
   // Registered BEFORE the routes: Hono runs handlers in registration order, so a `use()`
   // added after them would never get to snapshot anything.
-  api.use('*', undoSnapshot(API_PREFIX));
-  api.route('/', historyRoutes());
-  api.route('/', queuesRoutes());
-  api.route('/', setsRoutes());
-  api.route('/', plexMetadataRoutes());
-  api.route('/', providersRoutes());
-  api.route('/', groupRoutes());
-  api.route('/', peopleRoutes());
-  api.route('/', pendingRoutes());
-  api.route('/', boardGameRoutes());
-  api.route('/', tonightRoutes());
-  api.route('/', playbackRoutes());
-  api.route('/', nativeTvRoutes());
-  api.route('/', tvLockRoutes());
-  api.route('/', accountAuditRoutes());
-  api.route('/', sseRoutes());
-  root.route(API_PREFIX, api);
+  api.use("*", undoSnapshot(API_PREFIX))
+  api.route("/", historyRoutes())
+  api.route("/", queuesRoutes())
+  api.route("/", setsRoutes())
+  api.route("/", plexMetadataRoutes())
+  api.route("/", providersRoutes())
+  api.route("/", groupRoutes())
+  api.route("/", peopleRoutes())
+  api.route("/", pendingRoutes())
+  api.route("/", boardGameRoutes())
+  api.route("/", tonightRoutes())
+  api.route("/", playbackRoutes())
+  api.route("/", nativeTvRoutes())
+  api.route("/", tvLockRoutes())
+  api.route("/", accountAuditRoutes())
+  api.route("/", sseRoutes())
+  root.route(API_PREFIX, api)
 
-  root.route('/', launcherRoutes());
+  root.route("/", launcherRoutes())
 
   // The whole of the old transfer/caching block — `compression`, the hand-rolled
   // `staticCompressed` that negotiated `.br`/`.gz` by mutating `req.url`, its CONTENT_TYPES
@@ -93,7 +100,13 @@ export function buildServer({ publicDir }: BuildServerOptions): Hono {
   // This is safe for the API because `root.route(API_PREFIX, api)` is mounted ABOVE, so
   // `/api/*` never reaches here; and asset 404s still 404 because the fallback only applies
   // to extensionless paths.
-  root.use('*', createStaticHandler({ rootDir: publicDir, hasSpaFallback: true }));
+  root.use(
+    "*",
+    createStaticHandler({
+      rootDir: publicDir,
+      hasSpaFallback: true,
+    }),
+  )
 
-  return root;
+  return root
 }

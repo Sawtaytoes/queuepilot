@@ -266,6 +266,7 @@ export interface Page {
   screenshot(options?: ScreenshotOptions): Promise<Buffer>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   addInitScript(fn: () => void): Promise<void>;
+  addInitScript(script: string): Promise<void>;
 
   /** Intercept matching requests. The screenshot harnesses use it to serve FIXTURE
    *  payloads for the endpoints that would otherwise need a live Plex server — the repo
@@ -358,6 +359,7 @@ export interface BrowserContext {
   close(): Promise<void>;
   addInitScript<A>(fn: (arg: A) => void, arg: A): Promise<void>;
   addInitScript(fn: () => void): Promise<void>;
+  addInitScript(script: string): Promise<void>;
   addCookies(cookies: unknown[]): Promise<void>;
   pages(): Page[];
   /** Playwright's fake clock. `setFixedTime` pins `Date` and leaves the timers real. */
@@ -467,6 +469,63 @@ function resolve(): PlaywrightModule {
 }
 
 const playwright = resolve();
+
+// ---- Overlay motion is frozen in every harness -------------------------------------------
+//
+// Since `@charcuterie/ui` 4.28.0 overlays animate: a `Modal`, `Menu` or `Picker` panel grows
+// in, and a closing one stays in the page, `inert` and `aria-hidden`, for its exit (about
+// 100-140 ms). A harness that clicks an option while its panel is still growing, or counts a
+// selector right after a close, then races the animation, and the race only loses on a busy
+// machine — which is exactly how it first showed up, in CI and not locally. The fleet rule is
+// that automated suites freeze motion.
+//
+// Charcuterie's overlay motion is CSS ANIMATIONS (`charcuterie-overlay-enter`/`-exit` and
+// friends), and its presence hook measures the exit by `animation-duration`: at zero, a leaving
+// overlay is removed in the same commit, as it was before 4.28. So this zeroes animation
+// durations and delays only — a narrower cut than Charcuterie's `FREEZE_MOTION_CSS`, which
+// zeroes transitions too. Transitions are left alone on purpose: the drag reorder moves its
+// siblings with a CSS `transition: transform` (`web/src/lib/flip.ts`, `app.css`), and the drag
+// gates must keep exercising that real path.
+//
+// An override stylesheet, not `reducedMotion: 'reduce'`: emulating the media query would test
+// a different documented rendering.
+//
+// A source STRING, not a function, for the `__name` reason given on `Page.evaluate` above.
+// At document start a page may have no root element yet, so the style waits for one.
+const FREEZE_MOTION_SCRIPT = `(() => {
+  const id = 'queuepilot-e2e-freeze-motion';
+  const install = () => {
+    const root = document.head || document.documentElement;
+    if (!root || document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = '*, *::before, *::after {'
+      + ' animation-duration: 0s !important; animation-delay: 0s !important; }';
+    root.append(style);
+  };
+  install();
+  document.addEventListener('readystatechange', install);
+})();`;
+
+const withFrozenMotion = (browser: Browser): Browser => {
+  const newContext = browser.newContext.bind(browser);
+  const newPage = browser.newPage.bind(browser);
+  browser.newContext = async (options?: NewContextOptions): Promise<BrowserContext> => {
+    const context = await newContext(options);
+    await context.addInitScript(FREEZE_MOTION_SCRIPT);
+    return context;
+  };
+  browser.newPage = async (options?: NewContextOptions): Promise<Page> => {
+    const page = await newPage(options);
+    await page.addInitScript(FREEZE_MOTION_SCRIPT);
+    return page;
+  };
+  return browser;
+};
+
+const launch = playwright.chromium.launch.bind(playwright.chromium);
+playwright.chromium.launch = async (options?: LaunchOptions): Promise<Browser> =>
+  withFrozenMotion(await launch(options));
 
 export const { chromium } = playwright;
 export default playwright;

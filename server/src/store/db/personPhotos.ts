@@ -7,28 +7,28 @@
 //
 // Why a row and not a file: `schema.sql` says it at the table, and the decision record
 // `2026-10-22-a-person-photo-is-a-row-in-the-book-of-record` says it at length.
-import type { SqliteDatabase } from '../sqlite.js';
-import { bookOfRecord, prepareChecked } from './open.js';
+import type { SqliteDatabase } from "../sqlite.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 export interface PersonPhoto {
-  personId: string;
-  mime: string;
-  bytes: Uint8Array;
-  width: number;
-  height: number;
+  personId: string
+  mime: string
+  bytes: Uint8Array
+  width: number
+  height: number
   /** The ETag value, unquoted — a hash prefix of `bytes`. */
-  version: string;
-  updatedAt: string;
+  version: string
+  updatedAt: string
 }
 
 interface PhotoRow {
-  person_id: string;
-  mime: string;
-  bytes: Uint8Array;
-  width: number;
-  height: number;
-  version: string;
-  updated_at: string;
+  person_id: string
+  mime: string
+  bytes: Uint8Array
+  width: number
+  height: number
+  version: string
+  updated_at: string
 }
 
 /** One person's photo, bytes included, or null when they have none. */
@@ -38,8 +38,8 @@ export function readPersonPhoto(
 ): PersonPhoto | null {
   const row = prepareChecked<PhotoRow>(
     db,
-    'SELECT person_id, mime, bytes, width, height, version, updated_at FROM person_photos WHERE person_id = :person_id',
-  ).get({ person_id: personId });
+    "SELECT person_id, mime, bytes, width, height, version, updated_at FROM person_photos WHERE person_id = :person_id",
+  ).get({ person_id: personId })
   return row
     ? {
         bytes: row.bytes,
@@ -50,7 +50,7 @@ export function readPersonPhoto(
         version: row.version,
         width: row.width,
       }
-    : null;
+    : null
 }
 
 /**
@@ -63,17 +63,24 @@ export function readPersonPhoto(
 export function photoVersionsByPerson(
   db: SqliteDatabase = bookOfRecord(),
 ): Map<string, string> {
-  const rows = prepareChecked<{ person_id: string; version: string }>(
+  const rows = prepareChecked<{
+    person_id: string
+    version: string
+  }>(
     db,
-    'SELECT person_id, version FROM person_photos',
-  ).all();
-  return new Map(rows.map((row) => [row.person_id, row.version]));
+    "SELECT person_id, version FROM person_photos",
+  ).all()
+  return new Map(
+    rows.map((row) => [row.person_id, row.version]),
+  )
 }
 
 /** Set or replace one person's photo. The caller has already checked the person exists — the
  *  foreign key refuses the write if they do not. */
 export function writePersonPhoto(
-  photo: Omit<PersonPhoto, 'updatedAt'> & { updatedAt?: string },
+  photo: Omit<PersonPhoto, "updatedAt"> & {
+    updatedAt?: string
+  },
   db: SqliteDatabase = bookOfRecord(),
 ): void {
   prepareChecked(
@@ -95,7 +102,7 @@ export function writePersonPhoto(
     updated_at: photo.updatedAt ?? new Date().toISOString(),
     version: photo.version,
     width: photo.width,
-  });
+  })
 }
 
 /** Remove one person's photo. True when there was one to remove. */
@@ -105,7 +112,7 @@ export function deletePersonPhoto(
 ): boolean {
   const result = prepareChecked(
     db,
-    'DELETE FROM person_photos WHERE person_id = :person_id',
-  ).run({ person_id: personId });
-  return Number(result.changes) > 0;
+    "DELETE FROM person_photos WHERE person_id = :person_id",
+  ).run({ person_id: personId })
+  return Number(result.changes) > 0
 }

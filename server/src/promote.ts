@@ -25,15 +25,20 @@
 //
 // `PROMOTE_PATH` is gone with it. The schema is `store/schema.sql`'s now, and this module
 // owns the queries and nothing else.
-import { errMessage } from './errors.js';
-import { DEFAULT_PROMOTE_WINDOW_MS } from './leadWindow.js';
-import { bookOfRecord, closeBookOfRecord, prepareChecked } from './store/db/open.js';
-import type { PreparedStatement } from './store/sqlite.js';
+import { errMessage } from "./errors.js"
+import { DEFAULT_PROMOTE_WINDOW_MS } from "./leadWindow.js"
+import {
+  bookOfRecord,
+  closeBookOfRecord,
+  prepareChecked,
+} from "./store/db/open.js"
+import type { PreparedStatement } from "./store/sqlite.js"
 
 // Prepared per call rather than cached at module level: `_closeForTests()` swaps the whole
 // handle out, and a cached statement over a closed database is a crash rather than a miss.
 // These run a handful of times per scan, not per row.
-const stmt = (sql: string): PreparedStatement => prepareChecked(bookOfRecord(), sql);
+const stmt = (sql: string): PreparedStatement =>
+  prepareChecked(bookOfRecord(), sql)
 
 /** Record that this entry successfully led (consumes a lead:once window). */
 export async function recordLead(
@@ -45,9 +50,11 @@ export async function recordLead(
     stmt(`
       INSERT INTO lead_cooldown (set_id, entry_key, led_at) VALUES (?, ?, ?)
       ON CONFLICT (set_id, entry_key) DO UPDATE SET led_at = excluded.led_at
-    `).run(setId, entryKey, Math.floor(at.getTime() / 1000));
+    `).run(setId, entryKey, Math.floor(at.getTime() / 1000))
   } catch (e) {
-    console.log(`[promote] recordLead failed: ${errMessage(e)}`);
+    console.log(
+      `[promote] recordLead failed: ${errMessage(e)}`,
+    )
   }
 }
 
@@ -58,13 +65,17 @@ export async function lastLedAt(
 ): Promise<Date | null> {
   try {
     const row = stmt(
-      'SELECT led_at FROM lead_cooldown WHERE set_id = ? AND entry_key = ?',
-    ).get(setId, entryKey) as { led_at?: unknown } | undefined;
-    if (!row || row.led_at == null) return null;
-    return new Date(Number(row.led_at) * 1000);
+      "SELECT led_at FROM lead_cooldown WHERE set_id = ? AND entry_key = ?",
+    ).get(setId, entryKey) as
+      | { led_at?: unknown }
+      | undefined
+    if (!row || row.led_at == null) return null
+    return new Date(Number(row.led_at) * 1000)
   } catch (e) {
-    console.log(`[promote] lastLedAt failed: ${errMessage(e)}`);
-    return null;
+    console.log(
+      `[promote] lastLedAt failed: ${errMessage(e)}`,
+    )
+    return null
   }
 }
 
@@ -72,7 +83,10 @@ export async function lastLedAt(
 // re-exported here so `promote.parsePromoteWindow(...)` keeps meaning what it did. The move is
 // a LAYERING one: `engine/resolve.ts` needs the window and must not import a module that
 // touches the book of record.
-export { DEFAULT_PROMOTE_WINDOW_MS, parsePromoteWindow } from './leadWindow.js';
+export {
+  DEFAULT_PROMOTE_WINDOW_MS,
+  parsePromoteWindow,
+} from "./leadWindow.js"
 
 /**
  * May this lead:once entry lead again?
@@ -86,18 +100,25 @@ export async function canLeadOnce(
   windowMs: number = DEFAULT_PROMOTE_WINDOW_MS,
   now: Date = new Date(),
 ): Promise<boolean> {
-  if (windowMs <= 0) return true;
-  const last = await lastLedAt(setId, entryKey);
-  if (!last) return true;
-  return now.getTime() - last.getTime() >= windowMs;
+  if (windowMs <= 0) return true
+  const last = await lastLedAt(setId, entryKey)
+  if (!last) return true
+  return now.getTime() - last.getTime() >= windowMs
 }
 
 /** Drop one entry's cooldown (demote / remove / tests). */
-export async function clearLead(setId: string, entryKey: string): Promise<void> {
+export async function clearLead(
+  setId: string,
+  entryKey: string,
+): Promise<void> {
   try {
-    stmt('DELETE FROM lead_cooldown WHERE set_id = ? AND entry_key = ?').run(setId, entryKey);
+    stmt(
+      "DELETE FROM lead_cooldown WHERE set_id = ? AND entry_key = ?",
+    ).run(setId, entryKey)
   } catch (e) {
-    console.log(`[promote] clearLead failed: ${errMessage(e)}`);
+    console.log(
+      `[promote] clearLead failed: ${errMessage(e)}`,
+    )
   }
 }
 
@@ -113,12 +134,16 @@ export async function clearLead(setId: string, entryKey: string): Promise<void> 
  * is one third of a number the confirm dialog shows a person, so a failure has to reach the
  * caller rather than under-report.
  */
-export async function clearSetLeads(setId: string): Promise<number> {
-  const result = stmt('DELETE FROM lead_cooldown WHERE set_id = ?').run(setId);
-  return Number(result.changes);
+export async function clearSetLeads(
+  setId: string,
+): Promise<number> {
+  const result = stmt(
+    "DELETE FROM lead_cooldown WHERE set_id = ?",
+  ).run(setId)
+  return Number(result.changes)
 }
 
 /** Test helper: close the book of record so a later open picks up a fresh path. */
 export function _closeForTests(): void {
-  closeBookOfRecord();
+  closeBookOfRecord()
 }

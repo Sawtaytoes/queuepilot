@@ -18,31 +18,44 @@
 // playback is untouched. Rebuilding would restart the Shield mid-episode, which is the whole
 // thing this exists to avoid. See the spike note on `extendPlayQueue` for the one wart: Plex
 // inserts after the CURRENT item, not at the tail, which is why TOPUP_AT is small.
-import * as playback from './playback.js';
-import { withDevice, withCancellation } from './deviceScope.js';
-import { SESSION } from './session.js';
-import { providerFor } from './providers/index.js';
-import { providerIdForSet } from './providers/blocks.js';
-import * as routing from './engine/routing.js';
-import { initialQueueSize, isTargetMet, needsTopup, playbackLength } from './engine/playbackLength.js';
-import { pullLineup } from './providers/pullLineup.js';
-import { ROTATION_LENGTH, TOPUP_AT, TOPUP_COOLDOWN_SECONDS } from './env.js';
-import { errMessage } from './errors.js';
-import { isSetAvailable } from './season.js';
-import type { BlockSourceCfg } from './providers/blocks.js';
-import type { PlexPlayItem } from './types.js';
+
+import {
+  withCancellation,
+  withDevice,
+} from "./deviceScope.js"
+import {
+  initialQueueSize,
+  isTargetMet,
+  needsTopup,
+  playbackLength,
+} from "./engine/playbackLength.js"
+import * as routing from "./engine/routing.js"
+import {
+  ROTATION_LENGTH,
+  TOPUP_AT,
+  TOPUP_COOLDOWN_SECONDS,
+} from "./env.js"
+import { errMessage } from "./errors.js"
+import * as playback from "./playback.js"
+import type { BlockSourceCfg } from "./providers/blocks.js"
+import { providerIdForSet } from "./providers/blocks.js"
+import { providerFor } from "./providers/index.js"
+import { pullLineup } from "./providers/pullLineup.js"
+import { isSetAvailable } from "./season.js"
+import { SESSION } from "./session.js"
+import type { PlexPlayItem } from "./types.js"
 
 /** What a tick did, for the `resp/topup` reply and the log. `added: 0` is a normal answer. */
 export interface TopupResult {
-  ok: boolean;
+  ok: boolean
   /** Why nothing happened, when nothing happened. Absent on a real top-up. */
-  reason?: string;
-  set?: string | null;
+  reason?: string
+  set?: string | null
   /** Items actually appended (Plex's own count of what it accepted, not what we asked for). */
-  added?: number;
+  added?: number
   /** What was left ahead of the viewer when we looked. */
-  remaining?: number;
-  error?: string;
+  remaining?: number
+  error?: string
 }
 
 // Last successful top-up PER SET, so a duplicated command or timer cannot walk the lineup up
@@ -53,10 +66,12 @@ export interface TopupResult {
 // Keyed by set since the reading sweep landed: one shared timestamp meant a Kavita list that
 // topped up put the kids' Shorts channel into cooldown too, and whichever tick arrived first
 // silently owned the next minute. Different lineups are different lineups.
-const lastTopupMs = new Map<string, number>();
+const lastTopupMs = new Map<string, number>()
 
 /** Test seam — reset the cooldown between cases. Not called in production. */
-export function _resetCooldown(): void { lastTopupMs.clear(); }
+export function _resetCooldown(): void {
+  lastTopupMs.clear()
+}
 
 /**
  * The two collaborators a test replaces. Injected rather than imported-and-stubbed because
@@ -65,16 +80,18 @@ export function _resetCooldown(): void { lastTopupMs.clear(); }
  * way). Defaulted to the real modules, so production call sites pass nothing.
  */
 export interface TopupDeps {
-  readPlayQueue: typeof playback.readPlayQueue;
-  extendPlayQueue: typeof playback.extendPlayQueue;
-  providerFor: typeof providerFor;
+  readPlayQueue: typeof playback.readPlayQueue
+  extendPlayQueue: typeof playback.extendPlayQueue
+  providerFor: typeof providerFor
 }
 
 const REAL_DEPS: TopupDeps = {
-  readPlayQueue: (...args) => playback.readPlayQueue(...args),
-  extendPlayQueue: (...args) => playback.extendPlayQueue(...args),
+  readPlayQueue: (...args) =>
+    playback.readPlayQueue(...args),
+  extendPlayQueue: (...args) =>
+    playback.extendPlayQueue(...args),
   providerFor: (...args) => providerFor(...args),
-};
+}
 
 /**
  * Run one top-up tick.
@@ -83,37 +100,51 @@ const REAL_DEPS: TopupDeps = {
  * nobody is watching, and a tick that throws would surface as an MQTT timeout in HA rather
  * than as anything actionable.
  */
-export async function topup(
-  { now = Date.now(), deps = REAL_DEPS, set = null }: {
-    now?: number;
-    deps?: TopupDeps;
-    /**
-     * Which set to top up, when it is not the one playing.
-     *
-     * A PUSH lineup is always the live session's — there is exactly one, and it is on the
-     * screen. A reading list is not: it is a persistent artifact on a tablet that nobody
-     * "starts", so the sweep below names it instead. Absent = the session, which is every
-     * pre-existing caller.
-     */
-    set?: string | null;
-  } = {},
-): Promise<TopupResult> {
-  const setName = set || SESSION.set;
-  if (!setName) return { ok: true, reason: 'no active session' };
+export async function topup({
+  now = Date.now(),
+  deps = REAL_DEPS,
+  set = null,
+}: {
+  now?: number
+  deps?: TopupDeps
+  /**
+   * Which set to top up, when it is not the one playing.
+   *
+   * A PUSH lineup is always the live session's — there is exactly one, and it is on the
+   * screen. A reading list is not: it is a persistent artifact on a tablet that nobody
+   * "starts", so the sweep below names it instead. Absent = the session, which is every
+   * pre-existing caller.
+   */
+  set?: string | null
+} = {}): Promise<TopupResult> {
+  const setName = set || SESSION.set
+  if (!setName)
+    return { ok: true, reason: "no active session" }
 
   // Cooldown BEFORE any network read: the cheapest guard, and the one that still holds when
   // Plex is slow or the playQueue read is flaky.
-  const last = lastTopupMs.get(setName) ?? 0;
-  const sinceMs = now - last;
+  const last = lastTopupMs.get(setName) ?? 0
+  const sinceMs = now - last
   if (last && sinceMs < TOPUP_COOLDOWN_SECONDS * 1000) {
-    return { ok: true, set: setName, reason: `cooling down (${Math.round(sinceMs / 1000)}s of ${TOPUP_COOLDOWN_SECONDS}s)` };
+    return {
+      ok: true,
+      set: setName,
+      reason: `cooling down (${Math.round(sinceMs / 1000)}s of ${TOPUP_COOLDOWN_SECONDS}s)`,
+    }
   }
 
-  const cfg = routing.loadSets()?.sets?.[setName];
-  if (!cfg) return { ok: true, set: setName, reason: 'set not in registry' };
+  const cfg = routing.loadSets()?.sets?.[setName]
+  if (!cfg)
+    return {
+      ok: true,
+      set: setName,
+      reason: "set not in registry",
+    }
   // Resolved BEFORE the rotation/length gates below, because those gates are about a PUSH
   // lineup and a pull one answers to none of them.
-  const provider = deps.providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+  const provider = deps.providerFor(
+    providerIdForSet(cfg as unknown as BlockSourceCfg),
+  )
 
   // PULL provider (Kavita): the artifact is a persistent reading list, not a playQueue, and
   // the provider owns both the append and the trim. There is no session to measure against —
@@ -131,13 +162,17 @@ export async function topup(
   //     and remove items"). A finite `length:` here sizes the window, it does not end it.
   //   * `isTargetMet` / `SESSION.queuedTotal` — bookkeeping for a queue this launch sent.
   //     Nobody "starts" a reading list; the read state in Kavita is the only truth.
-  if (typeof provider.topupList === 'function') {
+  if (typeof provider.topupList === "function") {
     // The SAME window the launch seeded the list with, so a top-up refills to exactly the
     // size the artifact was built at rather than to some second opinion. `ROTATION_LENGTH` is
     // the fallback the Kavita provider itself passes for a set that has never stated a
     // length — see playbackLength's `fallback` note.
-    const window = initialQueueSize(playbackLength(cfg, ROTATION_LENGTH));
-    let res: Awaited<ReturnType<NonNullable<typeof provider.topupList>>>;
+    const window = initialQueueSize(
+      playbackLength(cfg, ROTATION_LENGTH),
+    )
+    let res: Awaited<
+      ReturnType<NonNullable<typeof provider.topupList>>
+    >
     try {
       res = await provider.topupList({
         setName,
@@ -147,135 +182,263 @@ export async function topup(
         // The SHARED builder, not a hand-rolled `buckets()` call: a curated reading queue's
         // lineup is its entries, and the call that omits them serves the library shelf.
         build: () => pullLineup(setName, cfg, provider),
-      });
+      })
     } catch (e) {
-      return { ok: false, set: setName, error: `list top-up failed: ${errMessage(e)}` };
+      return {
+        ok: false,
+        set: setName,
+        error: `list top-up failed: ${errMessage(e)}`,
+      }
     }
     // The cooldown is only spent when something actually landed, so a run of "already full"
     // ticks does not lock out the tick that finally matters.
-    if (res.added) lastTopupMs.set(setName, now);
-    console.log(`[topup] ${setName}: reading list +${res.added ?? 0}, trimmed ${res.trimmed ?? 0}`
-      + `${res.reason ? ` (${res.reason})` : ''}`);
-    return { ok: res.ok, set: setName, added: res.added ?? 0, remaining: res.unread, reason: res.reason };
+    if (res.added) lastTopupMs.set(setName, now)
+    console.log(
+      `[topup] ${setName}: reading list +${res.added ?? 0}, trimmed ${res.trimmed ?? 0}` +
+        `${res.reason ? ` (${res.reason})` : ""}`,
+    )
+    return {
+      ok: res.ok,
+      set: setName,
+      added: res.added ?? 0,
+      remaining: res.unread,
+      reason: res.reason,
+    }
   }
 
   // A push tick belongs to one activated sitting. Capture its queue and account before
   // yielding, and invalidate every continuation when a replacement starts preparing.
-  if (SESSION.isPreparing) return { ok: true, set: setName, reason: 'session is preparing' };
-  const sitting = { ...SESSION };
-  const cancelled = () => SESSION.isPreparing || SESSION.sittingId !== sitting.sittingId
-    || SESSION.playQueueID !== sitting.playQueueID || SESSION.set !== setName;
-  const replaced = (): TopupResult => ({ ok: true, set: setName, reason: 'session replaced' });
-  if (cancelled()) return replaced();
-  return withDevice(sitting.device, () => withCancellation(cancelled, async () => {
-
-    if (cfg.source !== 'rotation') return { ok: true, set: setName, reason: 'not a rotation channel' };
-
-    // The opt-in. A channel that has not asked to refill is ALLOWED to end — that is what a
-    // fixed `length:` means, and topping it up anyway would silently delete that choice.
-    // DERIVED from the playback length, never a stored flag of its own (owner, 2026-08-17). A
-    // lineup needs topping up exactly when it wants more items than one window holds: every
-    // `infinite` pool, and a Custom above the window. A pool at 1 or 8 never gets here, which is
-    // what makes "plays N and stops" mean it.
-    const target = playbackLength(cfg);
-
-    if (!needsTopup(target)) {
-      return { ok: true, set: setName, reason: `plays ${target} — nothing to top up` };
+  if (SESSION.isPreparing)
+    return {
+      ok: true,
+      set: setName,
+      reason: "session is preparing",
     }
+  const sitting = { ...SESSION }
+  const cancelled = () =>
+    SESSION.isPreparing ||
+    SESSION.sittingId !== sitting.sittingId ||
+    SESSION.playQueueID !== sitting.playQueueID ||
+    SESSION.set !== setName
+  const replaced = (): TopupResult => ({
+    ok: true,
+    set: setName,
+    reason: "session replaced",
+  })
+  if (cancelled()) return replaced()
+  return withDevice(
+    sitting.device,
+    () =>
+      withCancellation(cancelled, async () => {
+        if (cfg.source !== "rotation")
+          return {
+            ok: true,
+            set: setName,
+            reason: "not a rotation channel",
+          }
 
-    // A FINITE target that has already been handed everything it asked for is done, and topping
-    // it up anyway would silently delete the owner's choice of how long the sitting is.
-    if (isTargetMet(target, sitting.queuedTotal)) {
-      return { ok: true, set: setName, reason: `target of ${target} already queued` };
-    }
+        // The opt-in. A channel that has not asked to refill is ALLOWED to end — that is what a
+        // fixed `length:` means, and topping it up anyway would silently delete that choice.
+        // DERIVED from the playback length, never a stored flag of its own (owner, 2026-08-17). A
+        // lineup needs topping up exactly when it wants more items than one window holds: every
+        // `infinite` pool, and a Custom above the window. A pool at 1 or 8 never gets here, which is
+        // what makes "plays N and stops" mean it.
+        const target = playbackLength(cfg)
 
-    // The SAME binding the scan used, resolved the same way `startSession` does — a top-up that
-    // selected as a different account would queue the wrong kid's next episodes.
-    let binding = routing.bindingFor(cfg, sitting.profile);
-    if (typeof provider.profileBinding === 'function') {
-      binding = await provider.profileBinding(binding, sitting.profile);
-    }
-    if (cancelled()) return replaced();
-    const token = (await provider.profileToken?.(binding.user_uuid)) ?? null;
-    if (cancelled()) return replaced();
-    // How far ahead to stay. Capped by what is LEFT of a finite target, so a pool at 20 tops up
-    // to exactly 20 and then stops rather than rounding up to a whole window.
-    const window = target == null
-      ? ROTATION_LENGTH
-      : Math.max(1, Math.min(ROTATION_LENGTH, target - sitting.queuedTotal));
-    const buildLineup = async () => {
-      const res = await provider.buckets({
-        setName, cfg, binding, token, kind: cfg.kind || undefined, lastMovieRk: sitting.lastMovieRk,
-      });
-      return res?.play || [];
-    };
+        if (!needsTopup(target)) {
+          return {
+            ok: true,
+            set: setName,
+            reason: `plays ${target} — nothing to top up`,
+          }
+        }
 
-    if (sitting.playQueueID == null) return { ok: true, set: setName, reason: 'no live playQueue' };
+        // A FINITE target that has already been handed everything it asked for is done, and topping
+        // it up anyway would silently delete the owner's choice of how long the sitting is.
+        if (isTargetMet(target, sitting.queuedTotal)) {
+          return {
+            ok: true,
+            set: setName,
+            reason: `target of ${target} already queued`,
+          }
+        }
 
-    const live = await deps.readPlayQueue(sitting.playQueueID, { token });
-    if (cancelled()) return replaced();
-    // Plex has forgotten the queue (restart, expiry) — nothing to extend, and building a new
-    // one here would start playback on a device nobody asked to wake.
-    if (!live) return { ok: true, set: setName, reason: 'playQueue gone' };
+        // The SAME binding the scan used, resolved the same way `startSession` does — a top-up that
+        // selected as a different account would queue the wrong kid's next episodes.
+        let binding = routing.bindingFor(
+          cfg,
+          sitting.profile,
+        )
+        if (typeof provider.profileBinding === "function") {
+          binding = await provider.profileBinding(
+            binding,
+            sitting.profile,
+          )
+        }
+        if (cancelled()) return replaced()
+        const token =
+          (await provider.profileToken?.(
+            binding.user_uuid,
+          )) ?? null
+        if (cancelled()) return replaced()
+        // How far ahead to stay. Capped by what is LEFT of a finite target, so a pool at 20 tops up
+        // to exactly 20 and then stops rather than rounding up to a whole window.
+        const window =
+          target == null
+            ? ROTATION_LENGTH
+            : Math.max(
+                1,
+                Math.min(
+                  ROTATION_LENGTH,
+                  target - sitting.queuedTotal,
+                ),
+              )
+        const buildLineup = async () => {
+          const res = await provider.buckets({
+            setName,
+            cfg,
+            binding,
+            token,
+            kind: cfg.kind || undefined,
+            lastMovieRk: sitting.lastMovieRk,
+          })
+          return res?.play || []
+        }
 
-    if (live.remaining > TOPUP_AT) {
-      return { ok: true, set: setName, remaining: live.remaining, reason: `${live.remaining} left, tops up at ${TOPUP_AT}` };
-    }
+        if (sitting.playQueueID == null)
+          return {
+            ok: true,
+            set: setName,
+            reason: "no live playQueue",
+          }
 
-    // Refill back to the WINDOW. `length` stops meaning "the evening" on a refilling channel and
-    // starts meaning "how far ahead to stay" — so the ask is the window minus what is left, not
-    // a whole fresh window on top of it.
-    const want = Math.max(0, window - live.remaining);
-    if (!want) return { ok: true, set: setName, remaining: live.remaining, reason: 'window already full' };
+        const live = await deps.readPlayQueue(
+          sitting.playQueueID,
+          { token },
+        )
+        if (cancelled()) return replaced()
+        // Plex has forgotten the queue (restart, expiry) — nothing to extend, and building a new
+        // one here would start playback on a device nobody asked to wake.
+        if (!live)
+          return {
+            ok: true,
+            set: setName,
+            reason: "playQueue gone",
+          }
 
-    // Ask for a fresh lineup and subtract what is ALREADY in the live queue — including items
-    // the viewer has already passed. Re-adding a short they watched ten minutes ago is the most
-    // visible way this feature can look broken, and the rotation builder has no idea what is
-    // currently queued: it answers "what should this channel play", not "what is queued".
-    const queueItemKey = (item: { ratingKey: string | number; plexServer?: string | null }) =>
-      `${item.plexServer || ''}:${String(item.ratingKey)}`;
-    const liveItems = live.items ?? live.ratingKeys.map((ratingKey) => ({ ratingKey }));
-    const already = new Set(liveItems.map(queueItemKey));
-    let built: PlexPlayItem[];
-    try {
-      built = (await buildLineup()) as PlexPlayItem[];
-    } catch (e) {
-      return { ok: false, set: setName, error: `lineup build failed: ${errMessage(e)}` };
-    }
-    if (cancelled()) return replaced();
-    const fresh = built.filter((item) => {
-      const ratingKey = String(item.ratingKey);
-      return ratingKey && ratingKey !== 'undefined' && !already.has(queueItemKey(item));
-    });
-    if (!fresh.length) {
-      // Genuinely out of material: every eligible item is already queued. On a channel with
-      // `on_complete: restart` this should not happen; on the default (drop) it is the honest
-      // end of the line, and the lineup is allowed to finish.
-      return { ok: true, set: setName, remaining: live.remaining, added: 0, reason: 'nothing eligible left to add' };
-    }
+        if (live.remaining > TOPUP_AT) {
+          return {
+            ok: true,
+            set: setName,
+            remaining: live.remaining,
+            reason: `${live.remaining} left, tops up at ${TOPUP_AT}`,
+          }
+        }
 
-    const slice = fresh.slice(0, want);
-    const appendItems = slice.map((item) => (
-      item.plexServer ? item : String(item.ratingKey)
-    ));
-    let sizeAfter: number | null;
-    try {
-      sizeAfter = await deps.extendPlayQueue(sitting.playQueueID, appendItems, { token });
-    } catch (e) {
-      return { ok: false, set: setName, error: `extend failed: ${errMessage(e)}` };
-    }
-    if (cancelled()) return replaced();
-    lastTopupMs.set(setName, now);
-    // Plex silently drops keys the playing token cannot see, so report what the queue GREW by,
-    // not what we handed it. A persistent 0 here is the wrong-account symptom, not a quiet
-    // success — the create path learned the same lesson.
-    const added = sizeAfter == null ? slice.length : Math.max(0, sizeAfter - live.ratingKeys.length);
-    // Against the ACCEPTED count, not what we asked for: a finite target must not be spent on
-    // keys Plex silently dropped, or a pool at 20 would stop early and blame itself.
-    SESSION.queuedTotal += added;
-    console.log(`[topup] ${setName}: ${live.remaining} left -> added ${added} (asked ${slice.length}), queue now ${sizeAfter ?? '?'}`);
-    return { ok: true, set: setName, remaining: live.remaining, added };
-  }), true);
+        // Refill back to the WINDOW. `length` stops meaning "the evening" on a refilling channel and
+        // starts meaning "how far ahead to stay" — so the ask is the window minus what is left, not
+        // a whole fresh window on top of it.
+        const want = Math.max(0, window - live.remaining)
+        if (!want)
+          return {
+            ok: true,
+            set: setName,
+            remaining: live.remaining,
+            reason: "window already full",
+          }
+
+        // Ask for a fresh lineup and subtract what is ALREADY in the live queue — including items
+        // the viewer has already passed. Re-adding a short they watched ten minutes ago is the most
+        // visible way this feature can look broken, and the rotation builder has no idea what is
+        // currently queued: it answers "what should this channel play", not "what is queued".
+        const queueItemKey = (item: {
+          ratingKey: string | number
+          plexServer?: string | null
+        }) =>
+          `${item.plexServer || ""}:${String(item.ratingKey)}`
+        const liveItems =
+          live.items ??
+          live.ratingKeys.map((ratingKey) => ({
+            ratingKey,
+          }))
+        const already = new Set(liveItems.map(queueItemKey))
+        let built: PlexPlayItem[]
+        try {
+          built = (await buildLineup()) as PlexPlayItem[]
+        } catch (e) {
+          return {
+            ok: false,
+            set: setName,
+            error: `lineup build failed: ${errMessage(e)}`,
+          }
+        }
+        if (cancelled()) return replaced()
+        const fresh = built.filter((item) => {
+          const ratingKey = String(item.ratingKey)
+          return (
+            ratingKey &&
+            ratingKey !== "undefined" &&
+            !already.has(queueItemKey(item))
+          )
+        })
+        if (!fresh.length) {
+          // Genuinely out of material: every eligible item is already queued. On a channel with
+          // `on_complete: restart` this should not happen; on the default (drop) it is the honest
+          // end of the line, and the lineup is allowed to finish.
+          return {
+            ok: true,
+            set: setName,
+            remaining: live.remaining,
+            added: 0,
+            reason: "nothing eligible left to add",
+          }
+        }
+
+        const slice = fresh.slice(0, want)
+        const appendItems = slice.map((item) =>
+          item.plexServer ? item : String(item.ratingKey),
+        )
+        let sizeAfter: number | null
+        try {
+          sizeAfter = await deps.extendPlayQueue(
+            sitting.playQueueID,
+            appendItems,
+            { token },
+          )
+        } catch (e) {
+          return {
+            ok: false,
+            set: setName,
+            error: `extend failed: ${errMessage(e)}`,
+          }
+        }
+        if (cancelled()) return replaced()
+        lastTopupMs.set(setName, now)
+        // Plex silently drops keys the playing token cannot see, so report what the queue GREW by,
+        // not what we handed it. A persistent 0 here is the wrong-account symptom, not a quiet
+        // success — the create path learned the same lesson.
+        const added =
+          sizeAfter == null
+            ? slice.length
+            : Math.max(
+                0,
+                sizeAfter - live.ratingKeys.length,
+              )
+        // Against the ACCEPTED count, not what we asked for: a finite target must not be spent on
+        // keys Plex silently dropped, or a pool at 20 would stop early and blame itself.
+        SESSION.queuedTotal += added
+        console.log(
+          `[topup] ${setName}: ${live.remaining} left -> added ${added} (asked ${slice.length}), queue now ${sizeAfter ?? "?"}`,
+        )
+        return {
+          ok: true,
+          set: setName,
+          remaining: live.remaining,
+          added,
+        }
+      }),
+    true,
+  )
 }
 
 /**
@@ -291,26 +454,32 @@ export async function topup(
  * launched for this set" and costs one enumerate; that is the whole guard against topping up
  * a queue the owner has never opened.
  */
-export async function topupPullLists(
-  { now = Date.now(), deps = REAL_DEPS }: { now?: number; deps?: TopupDeps } = {},
-): Promise<TopupResult[]> {
-  const sets = routing.loadSets()?.sets || {};
-  const out: TopupResult[] = [];
+export async function topupPullLists({
+  now = Date.now(),
+  deps = REAL_DEPS,
+}: {
+  now?: number
+  deps?: TopupDeps
+} = {}): Promise<TopupResult[]> {
+  const sets = routing.loadSets()?.sets || {}
+  const out: TopupResult[] = []
   for (const [setName, cfg] of Object.entries(sets)) {
     // `enabled` AND in season. An out-of-season reading list stops being topped up rather
     // than growing all year for a queue nobody is offered — and nothing is REMOVED from it,
     // because a season boundary clears nothing.
-    if (!isSetAvailable(cfg)) continue;
-    let provider;
+    if (!isSetAvailable(cfg)) continue
+    let provider: ReturnType<typeof deps.providerFor>
     try {
-      provider = deps.providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+      provider = deps.providerFor(
+        providerIdForSet(cfg as unknown as BlockSourceCfg),
+      )
     } catch {
       // NOT CONFIGURED — a provider block pointing at something this deployment has no
       // credentials for. Every other set still gets its tick.
-      continue;
+      continue
     }
-    if (typeof provider.topupList !== 'function') continue;
-    out.push(await topup({ now, deps, set: setName }));
+    if (typeof provider.topupList !== "function") continue
+    out.push(await topup({ now, deps, set: setName }))
   }
-  return out;
+  return out
 }

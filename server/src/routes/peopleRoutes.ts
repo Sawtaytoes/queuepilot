@@ -28,28 +28,28 @@
 // a FACE; the face is the person's own photo when they have one and a color hashed from the
 // id otherwise. The version is a hash, not the picture: the bytes are a separate,
 // cacheable `GET /api/people/:id/photo` and never ride on a list read.
-import { Hono, type Context } from 'hono';
-import { bodyLimit } from 'hono/body-limit';
+import { type Context, Hono } from "hono"
+import { bodyLimit } from "hono/body-limit"
 
-import { errMessage } from '../errors.js';
-import { slugify, storedGroups } from '../groups.js';
+import { errMessage } from "../errors.js"
+import { slugify, storedGroups } from "../groups.js"
 import {
   MAX_PHOTO_UPLOAD_BYTES,
   normalizePersonPhoto,
   PhotoRejected,
-} from '../personPhoto.js';
-import * as sets from '../sets.js';
+} from "../personPhoto.js"
 import {
-  isMemberKind,
-  isMemberRole,
-  membershipProblems,
-  groupPlayProfile,
   type GroupMembership,
   type GroupRosterMember,
+  groupPlayProfile,
+  isMemberKind,
+  isMemberRole,
   type MemberRole,
+  membershipProblems,
   type QueueMember,
-} from '../queuePeople.js';
-import { bookOfRecord } from '../store/db/open.js';
+} from "../queuePeople.js"
+import * as sets from "../sets.js"
+import { bookOfRecord } from "../store/db/open.js"
 import {
   bumpPeopleVersion,
   deletePerson,
@@ -61,22 +61,22 @@ import {
   setGroupMinPresent,
   setGroupPeople,
   upsertPerson,
-} from '../store/db/people.js';
+} from "../store/db/people.js"
 import {
   deletePersonPhoto,
   photoVersionsByPerson,
   readPersonPhoto,
   writePersonPhoto,
-} from '../store/db/personPhotos.js';
+} from "../store/db/personPhotos.js"
 import {
   bumpQueuePeopleVersion,
   membersByQueue,
   orphanQueueMembers,
   queueMembers,
   setQueueMembers,
-} from '../store/db/queuePeople.js';
-import { photoResponse } from './photoResponse.js';
-import { readBody } from './readBody.js';
+} from "../store/db/queuePeople.js"
+import { photoResponse } from "./photoResponse.js"
+import { readBody } from "./readBody.js"
 
 /**
  * The roster and every group's rule, in one call — what the Tonight checklist and the queue
@@ -93,13 +93,13 @@ import { readBody } from './readBody.js';
  * gated and may simply not have been run.
  */
 export function peopleRoutes(): Hono {
-  const app = new Hono();
+  const app = new Hono()
 
-  app.get('/people', (c) => {
+  app.get("/people", (c) => {
     try {
-      const rosters = rosterMembersByGroup();
-      const minimums = minPresentByGroup();
-      const photos = photoVersionsByPerson();
+      const rosters = rosterMembersByGroup()
+      const minimums = minPresentByGroup()
+      const photos = photoVersionsByPerson()
       return c.json({
         // A GROUP is a saved set of people, so it rides along here rather than in a second
         // call: the trays show people and groups side by side, as one pool of cards.
@@ -121,39 +121,41 @@ export function peopleRoutes(): Hono {
         // Members naming somebody who is gone. Reported, never deleted — the table carries no
         // foreign key on purpose and this is the report that stands in for it.
         orphans: orphanQueueMembers(),
-      });
+      })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 500);
+      return c.json({ error: errMessage(e) }, 500)
     }
-  });
+  })
 
   /** Every queue's trays at once, so the shelf list paints faces without one call per shelf. */
-  app.get('/queue-people', async (c) => {
+  app.get("/queue-people", async (c) => {
     try {
-      const byQueue = membersByQueue();
+      const byQueue = membersByQueue()
       // A FILTERED queue is a view of its parent, so it is for the SAME people. It has no rows
       // of its own in `queue_people` and never will — the audience is a property of the queue,
       // not of the window onto it — so the parent's are aliased onto its id here. Without this
       // a filtered queue reads as "Anybody" and drops out of the people filter on the Queues
       // page while the queue it views stays. (`filteredQueues.ts`)
       for (const s of (await sets.getRegistry()).sets) {
-        if (!s.filtered_from) continue;
-        const parent = byQueue.get(s.filtered_from);
-        if (parent) byQueue.set(s.id, parent);
+        if (!s.filtered_from) continue
+        const parent = byQueue.get(s.filtered_from)
+        if (parent) byQueue.set(s.id, parent)
       }
-      return c.json({ queues: Object.fromEntries(byQueue) });
+      return c.json({ queues: Object.fromEntries(byQueue) })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 500);
+      return c.json({ error: errMessage(e) }, 500)
     }
-  });
+  })
 
-  app.get('/sets/:id/people', (c) => {
+  app.get("/sets/:id/people", (c) => {
     try {
-      return c.json({ members: queueMembers(c.req.param('id')) });
+      return c.json({
+        members: queueMembers(c.req.param("id")),
+      })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 500);
+      return c.json({ error: errMessage(e) }, 500)
     }
-  });
+  })
 
   /**
    * Replace one queue's trays. Body: `{members: [{kind, id, role}]}`.
@@ -162,26 +164,36 @@ export function peopleRoutes(): Hono {
    * That is the only way the editor can express an empty audience, so it must not be confused
    * with a missing field — a body with no `members` key is a 400.
    */
-  app.put('/sets/:id/people', async (c) => {
-    const setId = c.req.param('id');
+  app.put("/sets/:id/people", async (c) => {
+    const setId = c.req.param("id")
     try {
-      const body = await readBody(c);
-      if (!Array.isArray(body.members)) return c.json({ error: 'members[] required' }, 400);
+      const body = await readBody(c)
+      if (!Array.isArray(body.members))
+        return c.json({ error: "members[] required" }, 400)
 
-      const members = body.members.map((raw, index) => toMember(raw, index));
-      const problems = await memberProblems(members);
-      if (problems.length) return c.json({ error: problems.join('; '), problems }, 400);
+      const members = body.members.map((raw, index) =>
+        toMember(raw, index),
+      )
+      const problems = await memberProblems(members)
+      if (problems.length)
+        return c.json(
+          { error: problems.join("; "), problems },
+          400,
+        )
 
-      const db = bookOfRecord();
+      const db = bookOfRecord()
       db.withTransaction(() => {
-        setQueueMembers(setId, members, db);
-        bumpQueuePeopleVersion(db);
-      });
-      return c.json({ members: queueMembers(setId), ok: true });
+        setQueueMembers(setId, members, db)
+        bumpQueuePeopleVersion(db)
+      })
+      return c.json({
+        members: queueMembers(setId),
+        ok: true,
+      })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   /**
    * ADD a person. Body: `{displayName}`.
@@ -201,23 +213,37 @@ export function peopleRoutes(): Hono {
    * what keeps their colour: `PersonFace` hashes the ID into a hue exactly so a rename does
    * not repaint them.
    */
-  app.post('/people', async (c) => {
+  app.post("/people", async (c) => {
     try {
-      const displayName = String((await readBody(c)).displayName ?? '').trim();
-      if (!displayName) return c.json({ error: 'a person needs a name' }, 400);
+      const displayName = String(
+        (await readBody(c)).displayName ?? "",
+      ).trim()
+      if (!displayName)
+        return c.json(
+          { error: "a person needs a name" },
+          400,
+        )
 
-      const base = slugify(displayName);
+      const base = slugify(displayName)
       if (!base)
-        return c.json({ error: `'${displayName}' has no letters or digits to make an id from` }, 400);
+        return c.json(
+          {
+            error: `'${displayName}' has no letters or digits to make an id from`,
+          },
+          400,
+        )
 
-      const roster = listPeople();
-      const taken = new Set(roster.map((person) => person.id));
+      const roster = listPeople()
+      const taken = new Set(
+        roster.map((person) => person.id),
+      )
       // Two people may legitimately share a name, so the ID de-duplicates rather than the save
       // failing — the same answer `createGroup` gives, and for the same reason.
-      let id = base;
-      for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+      let id = base
+      for (let n = 2; taken.has(id); n++)
+        id = `${base}-${n}`
 
-      const db = bookOfRecord();
+      const db = bookOfRecord()
       db.withTransaction(() => {
         upsertPerson(
           {
@@ -226,19 +252,27 @@ export function peopleRoutes(): Hono {
             // Appended, never inserted. `listPeople()` answers in `position, id` order and
             // THAT ORDER IS THE CONTRACT the trays and the checklist paint in, so a new
             // person goes on the end rather than renumbering everybody who was already there.
-            position: roster.reduce((max, person) => Math.max(max, person.position), -1) + 1,
-            source: 'app',
+            position:
+              roster.reduce(
+                (max, person) =>
+                  Math.max(max, person.position),
+                -1,
+              ) + 1,
+            source: "app",
           },
           db,
-        );
-        bumpPeopleVersion(db);
-      });
+        )
+        bumpPeopleVersion(db)
+      })
 
-      return c.json({ ok: true, person: projected(id) }, 201);
+      return c.json(
+        { ok: true, person: projected(id) },
+        201,
+      )
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   /**
    * RENAME a person. Body: `{displayName}`.
@@ -249,31 +283,45 @@ export function peopleRoutes(): Hono {
    * this surface has deliberately never shown. Those belong to the mapping file and to the
    * board-game picker, which is where they are read.
    */
-  app.patch('/people/:id', async (c) => {
-    const id = c.req.param('id');
+  app.patch("/people/:id", async (c) => {
+    const id = c.req.param("id")
     try {
-      if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+      if (!getPerson(id))
+        return c.json(
+          { error: `no such person '${id}'` },
+          404,
+        )
 
-      const body = await readBody(c);
-      if (!('displayName' in body)) return c.json({ error: 'displayName required' }, 400);
+      const body = await readBody(c)
+      if (!("displayName" in body))
+        return c.json(
+          { error: "displayName required" },
+          400,
+        )
 
-      const displayName = String(body.displayName ?? '').trim();
+      const displayName = String(
+        body.displayName ?? "",
+      ).trim()
       // Not a repair. `display_name` is NOT NULL with a `''` default, and a blank one paints a
       // nameless card with a "?" for a face — so it is refused here rather than allowed to
       // become a row nobody can identify on any screen.
-      if (!displayName) return c.json({ error: 'a person needs a name' }, 400);
+      if (!displayName)
+        return c.json(
+          { error: "a person needs a name" },
+          400,
+        )
 
-      const db = bookOfRecord();
+      const db = bookOfRecord()
       db.withTransaction(() => {
-        upsertPerson({ displayName, id }, db);
-        bumpPeopleVersion(db);
-      });
+        upsertPerson({ displayName, id }, db)
+        bumpPeopleVersion(db)
+      })
 
-      return c.json({ ok: true, person: projected(id) });
+      return c.json({ ok: true, person: projected(id) })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   /**
    * REMOVE a person, and every tray and roster that names them.
@@ -287,34 +335,46 @@ export function peopleRoutes(): Hono {
    * The un-filing is counted BEFORE the delete. Afterwards the rows are gone and the same
    * scan would answer "nothing", which is true and useless.
    */
-  app.delete('/people/:id', (c) => {
-    const id = c.req.param('id');
+  app.delete("/people/:id", (c) => {
+    const id = c.req.param("id")
     try {
-      if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+      if (!getPerson(id))
+        return c.json(
+          { error: `no such person '${id}'` },
+          404,
+        )
 
       const queues = [...membersByQueue()]
         .filter(([, members]) =>
-          members.some((member) => member.kind === 'person' && member.id === id),
+          members.some(
+            (member) =>
+              member.kind === "person" && member.id === id,
+          ),
         )
-        .map(([setId]) => setId);
+        .map(([setId]) => setId)
       const groups = [...rosterMembersByGroup()]
-        .filter(([, roster]) => roster.some((member) => member.personId === id))
-        .map(([groupId]) => groupId);
+        .filter(([, roster]) =>
+          roster.some((member) => member.personId === id),
+        )
+        .map(([groupId]) => groupId)
 
-      const db = bookOfRecord();
+      const db = bookOfRecord()
       db.withTransaction(() => {
-        deletePerson(id, db);
-        bumpPeopleVersion(db);
+        deletePerson(id, db)
+        bumpPeopleVersion(db)
         // `queue_people` rows went too, so the trays payload changed and every shelf and
         // landing card reading it has to be told.
-        bumpQueuePeopleVersion(db);
-      });
+        bumpQueuePeopleVersion(db)
+      })
 
-      return c.json({ ok: true, unfiled: { groups, queues } });
+      return c.json({
+        ok: true,
+        unfiled: { groups, queues },
+      })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   // ── A person's photo ────────────────────────────────────────────────────────────────── //
   //
@@ -332,15 +392,15 @@ export function peopleRoutes(): Hono {
    * version and therefore a new URL. Anything else (the TV, a bare curl) gets `no-cache` and
    * revalidates every time, so a replaced photo is never shown stale.
    */
-  app.get('/people/:id/photo', (c) => {
+  app.get("/people/:id/photo", (c) => {
     try {
-      const photo = readPersonPhoto(c.req.param('id'));
-      if (!photo) return c.json({ error: 'no photo' }, 404);
-      return photoResponse(c, photo);
+      const photo = readPersonPhoto(c.req.param("id"))
+      if (!photo) return c.json({ error: "no photo" }, 404)
+      return photoResponse(c, photo)
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 500);
+      return c.json({ error: errMessage(e) }, 500)
     }
-  });
+  })
 
   /**
    * Set or replace a person's photo.
@@ -354,28 +414,40 @@ export function peopleRoutes(): Hono {
    * 404 no such person · 413 too large · 415 not one of the three types · 400 unreadable.
    */
   app.put(
-    '/people/:id/photo',
+    "/people/:id/photo",
     bodyLimit({
       // Headroom over the image cap for multipart framing; `normalizePersonPhoto` enforces the
       // exact cap on the FILE. This limit is what stops a stream from being read without end.
       maxSize: MAX_PHOTO_UPLOAD_BYTES + 256 * 1024,
       onError: (c) =>
         c.json(
-          { error: `a photo may be at most ${MAX_PHOTO_UPLOAD_BYTES / 1024 / 1024} MB` },
+          {
+            error: `a photo may be at most ${MAX_PHOTO_UPLOAD_BYTES / 1024 / 1024} MB`,
+          },
           413,
         ),
     }),
     async (c) => {
-      const id = c.req.param('id');
+      const id = c.req.param("id")
       try {
-        if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
+        if (!getPerson(id))
+          return c.json(
+            { error: `no such person '${id}'` },
+            404,
+          )
 
-        const upload = await uploadedBytes(c);
+        const upload = await uploadedBytes(c)
         if (!upload)
-          return c.json({ error: 'a multipart upload needs the image in a "photo" field' }, 400);
+          return c.json(
+            {
+              error:
+                'a multipart upload needs the image in a "photo" field',
+            },
+            400,
+          )
 
-        const photo = await normalizePersonPhoto(upload);
-        const db = bookOfRecord();
+        const photo = await normalizePersonPhoto(upload)
+        const db = bookOfRecord()
         db.withTransaction(() => {
           writePersonPhoto(
             {
@@ -387,11 +459,11 @@ export function peopleRoutes(): Hono {
               width: photo.width,
             },
             db,
-          );
+          )
           // The roster's projection changed (`photoVersion`), so every screen reading it has
           // to hear about it — same counter a rename moves.
-          bumpPeopleVersion(db);
-        });
+          bumpPeopleVersion(db)
+        })
 
         return c.json({
           ok: true,
@@ -403,31 +475,36 @@ export function peopleRoutes(): Hono {
             version: photo.version,
             width: photo.width,
           },
-        });
+        })
       } catch (e) {
-        if (e instanceof PhotoRejected) return c.json({ error: e.message }, e.status);
-        return c.json({ error: errMessage(e) }, 400);
+        if (e instanceof PhotoRejected)
+          return c.json({ error: e.message }, e.status)
+        return c.json({ error: errMessage(e) }, 400)
       }
     },
-  );
+  )
 
   /** Remove a person's photo; their face goes back to initials. Idempotent — removing a photo
    *  that is not there answers `removed: false`, not an error. */
-  app.delete('/people/:id/photo', (c) => {
-    const id = c.req.param('id');
+  app.delete("/people/:id/photo", (c) => {
+    const id = c.req.param("id")
     try {
-      if (!getPerson(id)) return c.json({ error: `no such person '${id}'` }, 404);
-      const db = bookOfRecord();
-      let removed = false;
+      if (!getPerson(id))
+        return c.json(
+          { error: `no such person '${id}'` },
+          404,
+        )
+      const db = bookOfRecord()
+      let removed = false
       db.withTransaction(() => {
-        removed = deletePersonPhoto(id, db);
-        if (removed) bumpPeopleVersion(db);
-      });
-      return c.json({ ok: true, removed });
+        removed = deletePersonPhoto(id, db)
+        if (removed) bumpPeopleVersion(db)
+      })
+      return c.json({ ok: true, removed })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   /**
    * One group's membership RULE. Body: `{minPresent, roster: [{personId, role}]}`.
@@ -435,60 +512,81 @@ export function peopleRoutes(): Hono {
    * `minPresent: null` clears it back to "all of them"; omitting the key leaves it alone. The
    * two are different answers and this route keeps them different.
    */
-  app.put('/groups/:id/membership', async (c) => {
-    const groupId = c.req.param('id');
+  app.put("/groups/:id/membership", async (c) => {
+    const groupId = c.req.param("id")
     try {
-      const body = await readBody(c);
-      const known = new Set(storedGroups().map((group) => group.id));
-      if (!known.has(groupId)) return c.json({ error: `no such group '${groupId}'` }, 404);
+      const body = await readBody(c)
+      const known = new Set(
+        storedGroups().map((group) => group.id),
+      )
+      if (!known.has(groupId))
+        return c.json(
+          { error: `no such group '${groupId}'` },
+          404,
+        )
 
-      const roster: GroupRosterMember[] | null = Array.isArray(body.roster)
-        ? body.roster.map((raw, position) => ({
-            personId: String((raw as { personId?: unknown })?.personId ?? '').trim(),
-            position,
-            role: roleOf(raw),
-          }))
-        : null;
+      const roster: GroupRosterMember[] | null =
+        Array.isArray(body.roster)
+          ? body.roster.map((raw, position) => ({
+              personId: String(
+                (raw as { personId?: unknown })?.personId ??
+                  "",
+              ).trim(),
+              position,
+              role: roleOf(raw),
+            }))
+          : null
 
       const next: GroupMembership = {
         groupId,
         minPresent:
-          'minPresent' in body
+          "minPresent" in body
             ? body.minPresent == null
               ? null
               : Number(body.minPresent)
             : groupMembership(groupId).minPresent,
         roster: roster ?? groupMembership(groupId).roster,
-      };
+      }
 
-      const problems = membershipProblems(next);
-      if (problems.length) return c.json({ error: problems.join('; '), problems }, 400);
+      const problems = membershipProblems(next)
+      if (problems.length)
+        return c.json(
+          { error: problems.join("; "), problems },
+          400,
+        )
 
-      const db = bookOfRecord();
+      const db = bookOfRecord()
       db.withTransaction(() => {
-        if (roster) setGroupPeople(groupId, roster, db);
+        if (roster) setGroupPeople(groupId, roster, db)
         // Written AFTER the roster, always: `min_present` is validated against the required
         // half, so setting the number first and the people second could commit a rule that
         // needs three people over a roster of two.
-        if ('minPresent' in body) setGroupMinPresent(groupId, next.minPresent, db);
-        bumpPeopleVersion(db);
-      });
+        if ("minPresent" in body)
+          setGroupMinPresent(groupId, next.minPresent, db)
+        bumpPeopleVersion(db)
+      })
 
-      return c.json({ membership: groupMembership(groupId), ok: true });
+      return c.json({
+        membership: groupMembership(groupId),
+        ok: true,
+      })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
-  return app;
+  return app
 }
 
 /** One person in the shape `/people` projects, so a write answers with exactly what a read
  *  would have said. Widening this widens the read too; see the file header. */
-function projected(
-  id: string,
-): { displayName: string; id: string; photoVersion: string | null; position: number } | null {
-  const person = getPerson(id);
+function projected(id: string): {
+  displayName: string
+  id: string
+  photoVersion: string | null
+  position: number
+} | null {
+  const person = getPerson(id)
   return person
     ? {
         displayName: person.displayName,
@@ -496,39 +594,51 @@ function projected(
         photoVersion: readPersonPhoto(id)?.version ?? null,
         position: person.position,
       }
-    : null;
+    : null
 }
 
 /**
  * The uploaded image's bytes — the raw body, or the `photo` field of a multipart form. Null for
  * a multipart form with no file in it.
  */
-async function uploadedBytes(c: Context): Promise<Uint8Array | null> {
-  const type = (c.req.header('content-type') ?? '').toLowerCase();
-  if (type.startsWith('multipart/form-data')) {
-    const form = await c.req.parseBody({ all: true });
-    const field = form.photo;
-    const file = (Array.isArray(field) ? field[0] : field) as unknown;
-    if (!(file instanceof File)) return null;
-    return new Uint8Array(await file.arrayBuffer());
+async function uploadedBytes(
+  c: Context,
+): Promise<Uint8Array | null> {
+  const type = (
+    c.req.header("content-type") ?? ""
+  ).toLowerCase()
+  if (type.startsWith("multipart/form-data")) {
+    const form = await c.req.parseBody({ all: true })
+    const field = form.photo
+    const file = (
+      Array.isArray(field) ? field[0] : field
+    ) as unknown
+    if (!(file instanceof File)) return null
+    return new Uint8Array(await file.arrayBuffer())
   }
-  return new Uint8Array(await c.req.arrayBuffer());
+  return new Uint8Array(await c.req.arrayBuffer())
 }
 
 const roleOf = (raw: unknown): MemberRole => {
-  const role = (raw as { role?: unknown })?.role;
-  return isMemberRole(role) ? role : 'required';
-};
+  const role = (raw as { role?: unknown })?.role
+  return isMemberRole(role) ? role : "required"
+}
 
-function toMember(raw: unknown, position: number): QueueMember {
-  const value = (raw ?? {}) as { id?: unknown; kind?: unknown };
-  const kind = value.kind;
+function toMember(
+  raw: unknown,
+  position: number,
+): QueueMember {
+  const value = (raw ?? {}) as {
+    id?: unknown
+    kind?: unknown
+  }
+  const kind = value.kind
   return {
-    id: String(value.id ?? '').trim(),
-    kind: isMemberKind(kind) ? kind : 'person',
+    id: String(value.id ?? "").trim(),
+    kind: isMemberKind(kind) ? kind : "person",
     position,
     role: roleOf(raw),
-  };
+  }
 }
 
 /**
@@ -538,62 +648,85 @@ function toMember(raw: unknown, position: number): QueueMember {
  * once and an API that reports one problem per save makes fixing two mistakes two round trips.
  * Same shape `membershipProblems()` returns and `validateMapping()` returns.
  */
-async function memberProblems(members: readonly QueueMember[]): Promise<string[]> {
-  const problems: string[] = [];
-  const peopleIds = new Set(listPeople().map((person) => person.id));
-  const groups = new Map(storedGroups().map((group) => [group.id, group]));
-  const roster = new Map(listPeople().map((person) => [person.id, person]));
-  const rosters = rosterMembersByGroup();
+async function memberProblems(
+  members: readonly QueueMember[],
+): Promise<string[]> {
+  const problems: string[] = []
+  const peopleIds = new Set(
+    listPeople().map((person) => person.id),
+  )
+  const groups = new Map(
+    storedGroups().map((group) => [group.id, group]),
+  )
+  const roster = new Map(
+    listPeople().map((person) => [person.id, person]),
+  )
+  const rosters = rosterMembersByGroup()
 
   // Which provider kinds a group has to be unambiguous FOR. Only the kinds actually in play,
   // so a group with two Kavita accounts does not block a Plex queue that never asks.
-  let kinds: string[] = [];
+  let kinds: string[] = []
   try {
-    const registry = await sets.getRegistry();
-    kinds = [...new Set(registry.sets.map((set) => set.provider_kind).filter(Boolean))];
+    const registry = await sets.getRegistry()
+    kinds = [
+      ...new Set(
+        registry.sets
+          .map((set) => set.provider_kind)
+          .filter(Boolean),
+      ),
+    ]
   } catch {
     // The registry is unreadable — Plex down, a bad file. Refusing the save would make a
     // people edit depend on a provider being up, which it does not.
-    kinds = [];
+    kinds = []
   }
 
-  const seen = new Set<string>();
+  const seen = new Set<string>()
   for (const member of members) {
-    const where = `${member.kind} '${member.id}'`;
+    const where = `${member.kind} '${member.id}'`
     if (!member.id) {
-      problems.push('a member has no id');
-      continue;
+      problems.push("a member has no id")
+      continue
     }
-    const key = `${member.kind}:${member.id}`;
-    if (seen.has(key)) problems.push(`${where} is listed twice`);
-    seen.add(key);
+    const key = `${member.kind}:${member.id}`
+    if (seen.has(key))
+      problems.push(`${where} is listed twice`)
+    seen.add(key)
 
-    if (member.kind === 'person') {
-      if (!peopleIds.has(member.id)) problems.push(`${where}: no such person`);
-      continue;
+    if (member.kind === "person") {
+      if (!peopleIds.has(member.id))
+        problems.push(`${where}: no such person`)
+      continue
     }
 
-    const group = groups.get(member.id);
+    const group = groups.get(member.id)
     if (!group) {
-      problems.push(`${where}: no such group`);
-      continue;
+      problems.push(`${where}: no such group`)
+      continue
     }
 
     // THE CONSTRAINT. A group on a queue must name exactly one account per provider kind, or
     // `requires_profile` has nothing deterministic to sign in as.
     const people = (rosters.get(group.id) ?? [])
       .map((entry) => roster.get(entry.personId))
-      .filter((person): person is NonNullable<typeof person> => person != null);
+      .filter(
+        (person): person is NonNullable<typeof person> =>
+          person != null,
+      )
     for (const kind of kinds) {
-      const profile = groupPlayProfile(kind, group.accounts, people);
-      if (profile.status === 'ambiguous') {
+      const profile = groupPlayProfile(
+        kind,
+        group.accounts,
+        people,
+      )
+      if (profile.status === "ambiguous") {
         problems.push(
-          `${where}: it offers ${profile.accounts.length} ${kind} profiles (${profile.accounts.join(', ')}) — ` +
+          `${where}: it offers ${profile.accounts.length} ${kind} profiles (${profile.accounts.join(", ")}) — ` +
             `a queue signs in as exactly one, so name it on the group`,
-        );
+        )
       }
     }
   }
 
-  return problems;
+  return problems
 }
