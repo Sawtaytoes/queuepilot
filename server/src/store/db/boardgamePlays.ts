@@ -32,20 +32,23 @@
 // table, and the log should hold exactly that. Nothing here invents a participant to make the
 // row look complete, and nothing back-fills the historical plays that arrived that way —
 // `store/migrate/boardgames.test.ts` pins the empty table as the correct migration result.
-import { randomUUID } from 'node:crypto';
+import { randomUUID } from "node:crypto"
 
-import type { KnownGame, Play } from '../../boardgames/types.js';
-import { bookOfRecord, prepareChecked } from './open.js';
-import type { SqliteDatabase } from '../sqlite.js';
+import type {
+  KnownGame,
+  Play,
+} from "../../boardgames/types.js"
+import type { SqliteDatabase } from "../sqlite.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 /** One sitting, as a caller states it. `personIds` is REQUIRED — see this file's header. */
 export interface PlayWrite {
-  gameId: string;
+  gameId: string
   /** Who was at the table. `[]` is a real answer and is stored as one. */
-  personIds: readonly string[];
-  notes?: string | null;
+  personIds: readonly string[]
+  notes?: string | null
   /** ISO 8601. Omit for now. */
-  playedAt?: string;
+  playedAt?: string
 }
 
 /**
@@ -63,38 +66,53 @@ export function logBoardGamePlay(
   play: PlayWrite,
   db: SqliteDatabase = bookOfRecord(),
 ): Play {
-  const id = randomUUID();
-  const playedAt = play.playedAt ?? new Date().toISOString();
-  const notes = play.notes ?? null;
-  const personIds = [...new Set(play.personIds)];
+  const id = randomUUID()
+  const playedAt = play.playedAt ?? new Date().toISOString()
+  const notes = play.notes ?? null
+  const personIds = [...new Set(play.personIds)]
 
   db.withTransaction(() => {
     prepareChecked(
       db,
       `INSERT INTO board_game_plays (id, game_id, played_at, notes)
        VALUES (:id, :game_id, :played_at, :notes)`,
-    ).run({ game_id: play.gameId, id, notes, played_at: playedAt });
+    ).run({
+      game_id: play.gameId,
+      id,
+      notes,
+      played_at: playedAt,
+    })
 
     const attend = prepareChecked(
       db,
       `INSERT INTO board_game_play_people (play_id, person_id)
        VALUES (:play_id, :person_id)`,
-    );
+    )
 
     // `UPDATE`, never `INSERT` — the header says why, and this is the line it is about.
     const renew = prepareChecked(
       db,
       `UPDATE board_game_known_how SET confirmed_at = :played_at
         WHERE person_id = :person_id AND game_id = :game_id AND confirmed_at < :played_at`,
-    );
+    )
 
     for (const personId of personIds) {
-      attend.run({ person_id: personId, play_id: id });
-      renew.run({ game_id: play.gameId, person_id: personId, played_at: playedAt });
+      attend.run({ person_id: personId, play_id: id })
+      renew.run({
+        game_id: play.gameId,
+        person_id: personId,
+        played_at: playedAt,
+      })
     }
-  });
+  })
 
-  return { gameId: play.gameId, id, notes, playedAt, playerIds: personIds };
+  return {
+    gameId: play.gameId,
+    id,
+    notes,
+    playedAt,
+    playerIds: personIds,
+  }
 }
 
 /**
@@ -108,15 +126,23 @@ export function logBoardGamePlay(
  * same state here on purpose — a tombstone would be a third state no screen can paint.
  */
 export function setBoardGameKnownHow(
-  claim: { gameId: string; personId: string; isKnown: boolean; confirmedAt?: string },
+  claim: {
+    gameId: string
+    personId: string
+    isKnown: boolean
+    confirmedAt?: string
+  },
   db: SqliteDatabase = bookOfRecord(),
 ): void {
   if (!claim.isKnown) {
     prepareChecked(
       db,
-      'DELETE FROM board_game_known_how WHERE person_id = :person_id AND game_id = :game_id',
-    ).run({ game_id: claim.gameId, person_id: claim.personId });
-    return;
+      "DELETE FROM board_game_known_how WHERE person_id = :person_id AND game_id = :game_id",
+    ).run({
+      game_id: claim.gameId,
+      person_id: claim.personId,
+    })
+    return
   }
 
   prepareChecked(
@@ -125,10 +151,11 @@ export function setBoardGameKnownHow(
      VALUES (:person_id, :game_id, :confirmed_at)
      ON CONFLICT (person_id, game_id) DO UPDATE SET confirmed_at = excluded.confirmed_at`,
   ).run({
-    confirmed_at: claim.confirmedAt ?? new Date().toISOString(),
+    confirmed_at:
+      claim.confirmedAt ?? new Date().toISOString(),
     game_id: claim.gameId,
     person_id: claim.personId,
-  });
+  })
 }
 
 /**
@@ -142,7 +169,10 @@ export const knownHowForGame = (
   gameId: string,
   db: SqliteDatabase = bookOfRecord(),
 ): KnownGame[] =>
-  prepareChecked<{ person_id: string; confirmed_at: string }>(
+  prepareChecked<{
+    person_id: string
+    confirmed_at: string
+  }>(
     db,
     `SELECT person_id, confirmed_at FROM board_game_known_how
       WHERE game_id = :game_id ORDER BY person_id`,
@@ -152,4 +182,4 @@ export const knownHowForGame = (
       confirmedAt: row.confirmed_at,
       gameId,
       playerId: row.person_id,
-    }));
+    }))

@@ -52,22 +52,22 @@
 // puts the store back on the files. It is one env var and one restart, it keeps the HTTP
 // implementation honest by keeping it running, and it is what lets the parity gate compare
 // the two forever rather than once.
-import { readFileSync } from 'node:fs';
-import { basename, extname, join } from 'node:path';
+import { readFileSync } from "node:fs"
+import { basename, extname, join } from "node:path"
 
-import { imagesDirectory } from '../boardgames/enrich/images.js';
-import type { Game } from '../boardgames/types.js';
+import { imagesDirectory } from "../boardgames/enrich/images.js"
+import type { Game } from "../boardgames/types.js"
+import { logBoardGamePlay } from "../store/db/boardgamePlays.js"
 import {
   getBoardGame,
   listBoardGameCategories,
   listBoardGamePlays,
   listBoardGames,
   searchBoardGames,
-} from '../store/db/boardgames.js';
-import { logBoardGamePlay } from '../store/db/boardgamePlays.js';
-import { bookOfRecord } from '../store/db/open.js';
-import type { SqliteDatabase } from '../store/sqlite.js';
-import type { ProviderCover } from '../types.js';
+} from "../store/db/boardgames.js"
+import { bookOfRecord } from "../store/db/open.js"
+import type { SqliteDatabase } from "../store/sqlite.js"
+import type { ProviderCover } from "../types.js"
 
 // --- the DTOs, as loosely as the wire actually carried them ------------------- //
 //
@@ -79,49 +79,58 @@ import type { ProviderCover } from '../types.js';
 
 /** One physical box of a game. The shelf location lives here. */
 export interface BoardGamesBoxDto {
-  id?: string;
-  label?: string;
-  kind?: string;
-  locationText?: string | null;
-  [field: string]: unknown;
+  id?: string
+  label?: string
+  kind?: string
+  locationText?: string | null
+  [field: string]: unknown
 }
 
 /** A game. The same object `GET /api/games/:id` used to return. */
 export interface BoardGamesGameDto {
-  id?: string;
-  name?: string;
-  imagePath?: string | null;
-  yearPublished?: number | null;
-  publishers?: string[];
-  ownerCategories?: string[];
-  boxes?: BoardGamesBoxDto[];
-  playCount?: number;
-  [field: string]: unknown;
+  id?: string
+  name?: string
+  imagePath?: string | null
+  yearPublished?: number | null
+  publishers?: string[]
+  ownerCategories?: string[]
+  boxes?: BoardGamesBoxDto[]
+  playCount?: number
+  [field: string]: unknown
 }
 
 /** A play row. Three keys, and the two it does NOT carry are the point — see the header. */
 export interface BoardGamesPlayDto {
-  id?: string;
-  gameId?: string;
-  playedAt?: string;
-  [field: string]: unknown;
+  id?: string
+  gameId?: string
+  playedAt?: string
+  [field: string]: unknown
 }
 
 /** The `fetch` seam. Still here: `logPlay` is still a POST, and so is a remote cover URL. */
-export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
+export type FetchLike = (
+  url: string,
+  init?: RequestInit,
+) => Promise<Response>
 
 /**
  * What `board-game-picker.ts` is written against. Both transports satisfy it, and the offline
  * suites hand it a stub.
  */
 export interface BoardGamesCollectionClient {
-  _base: string;
-  games(query: string, categories?: string[]): Promise<BoardGamesGameDto[]>;
-  game(id: string): Promise<BoardGamesGameDto | null>;
-  plays(gameId: string, since?: number | null): Promise<BoardGamesPlayDto[]>;
-  categories(): Promise<string[]>;
-  logPlay(gameId: string): Promise<BoardGamesPlayDto | null>;
-  cover(gameId: string): Promise<ProviderCover>;
+  _base: string
+  games(
+    query: string,
+    categories?: string[],
+  ): Promise<BoardGamesGameDto[]>
+  game(id: string): Promise<BoardGamesGameDto | null>
+  plays(
+    gameId: string,
+    since?: number | null,
+  ): Promise<BoardGamesPlayDto[]>
+  categories(): Promise<string[]>
+  logPlay(gameId: string): Promise<BoardGamesPlayDto | null>
+  cover(gameId: string): Promise<ProviderCover>
 }
 
 /**
@@ -131,27 +140,30 @@ export interface BoardGamesCollectionClient {
  * changing IS this package's proof. It is no longer an accurate name — most of this client
  * speaks to a table.
  */
-export type BoardGamesHttpClient = BoardGamesCollectionClient;
+export type BoardGamesHttpClient =
+  BoardGamesCollectionClient
 
 export interface BoardGamesClientOptions {
-  baseUrl?: string;
+  baseUrl?: string
   /**
    * Optional. The sibling app only demands one when its own `BOARD_GAME_PICKER_API_TOKEN` is
    * set, so an unset token is the normal deployment and not the "unconfigured" failure Plex
    * and Kavita treat it as. Still sent on `logPlay`.
    */
-  token?: string | null;
-  fetchImpl?: FetchLike | null;
+  token?: string | null
+  fetchImpl?: FetchLike | null
   /** The book of record. Defaults to the process-wide handle, opened on FIRST READ. */
-  db?: SqliteDatabase | null;
+  db?: SqliteDatabase | null
 }
 
 /**
  * `http` puts every read back on the wire. See the header — this is the rollback, and it is
  * also what keeps the parity gate able to compare the two.
  */
-export const BOARD_GAME_TRANSPORT: 'repository' | 'http' =
-  process.env.BOARD_GAME_TRANSPORT === 'http' ? 'http' : 'repository';
+export const BOARD_GAME_TRANSPORT: "repository" | "http" =
+  process.env.BOARD_GAME_TRANSPORT === "http"
+    ? "http"
+    : "repository"
 
 /**
  * Where the artwork lives, beside the book of record.
@@ -161,21 +173,21 @@ export const BOARD_GAME_TRANSPORT: 'repository' | 'http' =
  * copies of one `||` expression is how a reader ends up 404ing every cover the writer just
  * made. One definition, in `boardgames/enrich/images.ts`; the name stays for its callers.
  */
-export const imagesPath = imagesDirectory;
+export const imagesPath = imagesDirectory
 
 /** Every picker call has a deadline, so a stalled host fails the read instead of the page. */
-const PICKER_TIMEOUT_MS = 15_000;
+const PICKER_TIMEOUT_MS = 15_000
 
 /** Content type off the file name. The staged art is `.webp`; the other two are what the
  * enrichment wrote before it was. */
 const CONTENT_TYPES: Record<string, string> = {
-  '.avif': 'image/avif',
-  '.gif': 'image/gif',
-  '.jpeg': 'image/jpeg',
-  '.jpg': 'image/jpeg',
-  '.png': 'image/png',
-  '.webp': 'image/webp',
-};
+  ".avif": "image/avif",
+  ".gif": "image/gif",
+  ".jpeg": "image/jpeg",
+  ".jpg": "image/jpeg",
+  ".png": "image/png",
+  ".webp": "image/webp",
+}
 
 /**
  * The play bound, as the sibling app's `parseSince()` computed it.
@@ -184,15 +196,23 @@ const CONTENT_TYPES: Record<string, string> = {
  * than a bound of zero plays — the old endpoint says why, and it is worth repeating: silently
  * returning nothing would read as "already played" and skip a game the owner queued.
  */
-const playBound = (since: number | null | undefined): number | null =>
-  since == null || !Number.isFinite(since) ? null : since * 1000;
+const playBound = (
+  since: number | null | undefined,
+): number | null =>
+  since == null || !Number.isFinite(since)
+    ? null
+    : since * 1000
 
 /** The three keys, written out. Spreading the row would ship `playerIds` and `notes`. */
-const toPlayDto = (play: { gameId: string; id: string; playedAt: string }): BoardGamesPlayDto => ({
+const toPlayDto = (play: {
+  gameId: string
+  id: string
+  playedAt: string
+}): BoardGamesPlayDto => ({
   gameId: play.gameId,
   id: play.id,
   playedAt: play.playedAt,
-});
+})
 
 // --- the HTTP transport ------------------------------------------------------- //
 
@@ -208,40 +228,72 @@ const toPlayDto = (play: { gameId: string; id: string; playedAt: string }): Boar
  * That payload carries players, groups and who was at the table, and this repo is public.
  */
 export function boardGamesHttpClient({
-  baseUrl, token = null, fetchImpl = null,
+  baseUrl,
+  token = null,
+  fetchImpl = null,
 }: BoardGamesClientOptions = {}): BoardGamesCollectionClient {
-  if (!baseUrl) throw new Error('boardGamesClient needs a baseUrl');
-  const base = String(baseUrl).replace(/\/+$/, '');
-  const doFetch: FetchLike = fetchImpl || globalThis.fetch;
-  const auth: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+  if (!baseUrl)
+    throw new Error("boardGamesClient needs a baseUrl")
+  const base = String(baseUrl).replace(/\/+$/, "")
+  const doFetch: FetchLike = fetchImpl || globalThis.fetch
+  const auth: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {}
 
-  async function req<T>(path: string, init: RequestInit = {}, fallback: T): Promise<T> {
-    const url = `${base}${path}`;
+  async function req<T>(
+    path: string,
+    init: RequestInit = {},
+    fallback: T,
+  ): Promise<T> {
+    const url = `${base}${path}`
     const res = await doFetch(url, {
       ...init,
-      headers: { Accept: 'application/json', ...auth, ...(init.headers || {}) },
-      signal: init.signal ?? AbortSignal.timeout(PICKER_TIMEOUT_MS),
-    });
+      headers: {
+        Accept: "application/json",
+        ...auth,
+        ...(init.headers || {}),
+      },
+      signal:
+        init.signal ??
+        AbortSignal.timeout(PICKER_TIMEOUT_MS),
+    })
     // 404 is an ANSWER on this API — a game that was merged away or taken off the shelf —
     // so it returns the fallback rather than throwing. Anything else is the picker being
     // wrong or unreachable, and a queue that silently renders empty is the failure mode
     // this app has been bitten by before.
-    if (res.status === 404) return fallback;
-    if (!res.ok) throw new Error(`board-game-picker ${init.method || 'GET'} ${path} -> ${res.status}`);
-    return (await res.json()) as T;
+    if (res.status === 404) return fallback
+    if (!res.ok)
+      throw new Error(
+        `board-game-picker ${init.method || "GET"} ${path} -> ${res.status}`,
+      )
+    return (await res.json()) as T
   }
 
   return {
     _base: base,
 
-    games(query: string, categories: string[] = []): Promise<BoardGamesGameDto[]> {
-      const params = new URLSearchParams({ q: String(query || '') });
-      if (categories.length) params.set('categories', categories.join(','));
-      return req<BoardGamesGameDto[]>(`/api/games?${params}`, {}, []);
+    games(
+      query: string,
+      categories: string[] = [],
+    ): Promise<BoardGamesGameDto[]> {
+      const params = new URLSearchParams({
+        q: String(query || ""),
+      })
+      if (categories.length)
+        params.set("categories", categories.join(","))
+      return req<BoardGamesGameDto[]>(
+        `/api/games?${params}`,
+        {},
+        [],
+      )
     },
 
     game(id: string): Promise<BoardGamesGameDto | null> {
-      return req<BoardGamesGameDto | null>(`/api/games/${encodeURIComponent(id)}`, {}, null);
+      return req<BoardGamesGameDto | null>(
+        `/api/games/${encodeURIComponent(id)}`,
+        {},
+        null,
+      )
     },
 
     /**
@@ -250,23 +302,38 @@ export function boardGamesHttpClient({
      * `since` is EPOCH SECONDS here because that is what the entry stamp is; the endpoint
      * accepts both that and an ISO string.
      */
-    plays(gameId: string, since: number | null = null): Promise<BoardGamesPlayDto[]> {
-      const params = new URLSearchParams({ gameId: String(gameId) });
-      if (since != null) params.set('since', String(since));
-      return req<BoardGamesPlayDto[]>(`/api/plays?${params}`, {}, []);
+    plays(
+      gameId: string,
+      since: number | null = null,
+    ): Promise<BoardGamesPlayDto[]> {
+      const params = new URLSearchParams({
+        gameId: String(gameId),
+      })
+      if (since != null) params.set("since", String(since))
+      return req<BoardGamesPlayDto[]>(
+        `/api/plays?${params}`,
+        {},
+        [],
+      )
     },
 
     categories(): Promise<string[]> {
-      return req<string[]>('/api/categories', {}, []);
+      return req<string[]>("/api/categories", {}, [])
     },
 
     /** Log a play from here, so a known game does not REQUIRE opening the picker. */
-    logPlay(gameId: string): Promise<BoardGamesPlayDto | null> {
-      return req<BoardGamesPlayDto | null>('/api/plays', {
-        body: JSON.stringify({ gameId }),
-        headers: { 'Content-Type': 'application/json' },
-        method: 'POST',
-      }, null);
+    logPlay(
+      gameId: string,
+    ): Promise<BoardGamesPlayDto | null> {
+      return req<BoardGamesPlayDto | null>(
+        "/api/plays",
+        {
+          body: JSON.stringify({ gameId }),
+          headers: { "Content-Type": "application/json" },
+          method: "POST",
+        },
+        null,
+      )
     },
 
     /**
@@ -277,20 +344,35 @@ export function boardGamesHttpClient({
      * it even though this server can.
      */
     async cover(gameId: string): Promise<ProviderCover> {
-      const game = await this.game(gameId);
-      const imagePath = typeof game?.imagePath === 'string' ? game.imagePath : '';
-      if (!imagePath) throw new Error(`board-game-picker: game '${gameId}' has no box art`);
+      const game = await this.game(gameId)
+      const imagePath =
+        typeof game?.imagePath === "string"
+          ? game.imagePath
+          : ""
+      if (!imagePath)
+        throw new Error(
+          `board-game-picker: game '${gameId}' has no box art`,
+        )
 
-      const url = imagePath.startsWith('http') ? imagePath : `${base}${imagePath}`;
-      const res = await doFetch(url, { headers: { ...auth }, signal: AbortSignal.timeout(PICKER_TIMEOUT_MS) });
-      if (!res.ok) throw new Error(`board-game-picker cover ${gameId} -> ${res.status}`);
+      const url = imagePath.startsWith("http")
+        ? imagePath
+        : `${base}${imagePath}`
+      const res = await doFetch(url, {
+        headers: { ...auth },
+        signal: AbortSignal.timeout(PICKER_TIMEOUT_MS),
+      })
+      if (!res.ok)
+        throw new Error(
+          `board-game-picker cover ${gameId} -> ${res.status}`,
+        )
 
       return {
         buffer: Buffer.from(await res.arrayBuffer()),
-        contentType: res.headers.get('content-type') || 'image/jpeg',
-      };
+        contentType:
+          res.headers.get("content-type") || "image/jpeg",
+      }
     },
-  };
+  }
 }
 
 // --- the in-process transport ------------------------------------------------- //
@@ -309,18 +391,22 @@ export function boardGamesHttpClient({
  * asked a board-game question.
  */
 export function boardGamesRepositoryClient({
-  baseUrl, fetchImpl = null, db = null,
+  baseUrl,
+  fetchImpl = null,
+  db = null,
 }: BoardGamesClientOptions = {}): BoardGamesCollectionClient {
   // Required even though NOTHING is fetched any more — WP-4d brought the last call home, so
   // this factory no longer builds an HTTP client at all. `_base` is what `materialize()` builds
   // `/play/<gameId>` out of, and that card is still a screen in the sibling app. WP-10 owns
   // retiring it and the host it runs on; this package ends at the transport.
-  if (!baseUrl) throw new Error('boardGamesClient needs a baseUrl');
-  const base = String(baseUrl).replace(/\/+$/, '');
-  const handle = (): SqliteDatabase => db ?? bookOfRecord();
+  if (!baseUrl)
+    throw new Error("boardGamesClient needs a baseUrl")
+  const base = String(baseUrl).replace(/\/+$/, "")
+  const handle = (): SqliteDatabase => db ?? bookOfRecord()
 
   /** A `Game` IS the DTO — this app's `Game` is a port of the one the endpoint serialised. */
-  const toDto = (game: Game): BoardGamesGameDto => game as unknown as BoardGamesGameDto;
+  const toDto = (game: Game): BoardGamesGameDto =>
+    game as unknown as BoardGamesGameDto
 
   return {
     _base: base,
@@ -330,17 +416,25 @@ export function boardGamesRepositoryClient({
      * rule, the category scope, the publisher and year matching and the excluded-game rule
      * are all the same code that answered over HTTP.
      */
-    games(query: string, categories: string[] = []): Promise<BoardGamesGameDto[]> {
-      const database = handle();
+    games(
+      query: string,
+      categories: string[] = [],
+    ): Promise<BoardGamesGameDto[]> {
+      const database = handle()
       return Promise.resolve(
-        searchBoardGames(listBoardGames(database), { categories, query }).map(toDto),
-      );
+        searchBoardGames(listBoardGames(database), {
+          categories,
+          query,
+        }).map(toDto),
+      )
     },
 
     /** One title, or null — which is what the endpoint's 404 already meant. */
     game(id: string): Promise<BoardGamesGameDto | null> {
-      const found = listBoardGames(handle()).find((game) => game.id === id);
-      return Promise.resolve(found ? toDto(found) : null);
+      const found = listBoardGames(handle()).find(
+        (game) => game.id === id,
+      )
+      return Promise.resolve(found ? toDto(found) : null)
     },
 
     /**
@@ -350,22 +444,29 @@ export function boardGamesRepositoryClient({
      * ordering `listBoardGamePlays()` already guarantees — the provider only counts them, but
      * an order that changes between transports is a difference waiting to matter.
      */
-    plays(gameId: string, since: number | null = null): Promise<BoardGamesPlayDto[]> {
-      const after = playBound(since);
+    plays(
+      gameId: string,
+      since: number | null = null,
+    ): Promise<BoardGamesPlayDto[]> {
+      const after = playBound(since)
       return Promise.resolve(
         listBoardGamePlays(handle())
           .filter((play) => play.gameId === gameId)
           .filter((play) => {
-            if (after === null) return true;
-            const playedAt = Date.parse(play.playedAt);
-            return !Number.isNaN(playedAt) && playedAt >= after;
+            if (after === null) return true
+            const playedAt = Date.parse(play.playedAt)
+            return (
+              !Number.isNaN(playedAt) && playedAt >= after
+            )
           })
           .map(toPlayDto),
-      );
+      )
     },
 
     categories(): Promise<string[]> {
-      return Promise.resolve(listBoardGameCategories(handle()));
+      return Promise.resolve(
+        listBoardGameCategories(handle()),
+      )
     },
 
     /**
@@ -383,14 +484,22 @@ export function boardGamesRepositoryClient({
      * Collection screen WP-8 built, and it posts to `POST /api/board-games/plays` instead.
      * Do not "improve" this by guessing the roster.
      */
-    logPlay(gameId: string): Promise<BoardGamesPlayDto | null> {
+    logPlay(
+      gameId: string,
+    ): Promise<BoardGamesPlayDto | null> {
       // A play against a title this store has never heard of is a caller error, not a row.
       // `board_game_plays.game_id` has a foreign key, so the insert would throw; answering
       // `null` is what the HTTP client did with the 404 the sibling app returned.
-      if (getBoardGame(gameId, handle()) === null) return Promise.resolve(null);
+      if (getBoardGame(gameId, handle()) === null)
+        return Promise.resolve(null)
       return Promise.resolve(
-        toPlayDto(logBoardGamePlay({ gameId, personIds: [] }, handle())),
-      );
+        toPlayDto(
+          logBoardGamePlay(
+            { gameId, personIds: [] },
+            handle(),
+          ),
+        ),
+      )
     },
 
     /**
@@ -403,38 +512,55 @@ export function boardGamesRepositoryClient({
      * HTTP client fetched it directly too.
      */
     async cover(gameId: string): Promise<ProviderCover> {
-      const game = await this.game(gameId);
-      const imagePath = typeof game?.imagePath === 'string' ? game.imagePath : '';
-      if (!imagePath) throw new Error(`board-game-picker: game '${gameId}' has no box art`);
+      const game = await this.game(gameId)
+      const imagePath =
+        typeof game?.imagePath === "string"
+          ? game.imagePath
+          : ""
+      if (!imagePath)
+        throw new Error(
+          `board-game-picker: game '${gameId}' has no box art`,
+        )
 
-      if (imagePath.startsWith('http')) {
-        const doFetch: FetchLike = fetchImpl || globalThis.fetch;
-        const res = await doFetch(imagePath, { signal: AbortSignal.timeout(PICKER_TIMEOUT_MS) });
-        if (!res.ok) throw new Error(`board-game-picker cover ${gameId} -> ${res.status}`);
+      if (imagePath.startsWith("http")) {
+        const doFetch: FetchLike =
+          fetchImpl || globalThis.fetch
+        const res = await doFetch(imagePath, {
+          signal: AbortSignal.timeout(PICKER_TIMEOUT_MS),
+        })
+        if (!res.ok)
+          throw new Error(
+            `board-game-picker cover ${gameId} -> ${res.status}`,
+          )
         return {
           buffer: Buffer.from(await res.arrayBuffer()),
-          contentType: res.headers.get('content-type') || 'image/jpeg',
-        };
+          contentType:
+            res.headers.get("content-type") || "image/jpeg",
+        }
       }
 
       // `basename` and nothing else. The stored value is `/images/<hash>-600.webp` written by
       // the sibling app's own enrichment, but it is still a TEXT COLUMN in a database this app
       // no longer owns the writers of — joining it onto a directory with `join()` alone would
       // let `../` out of that directory.
-      const file = join(imagesPath(), basename(imagePath));
-      let buffer: Buffer;
+      const file = join(imagesPath(), basename(imagePath))
+      let buffer: Buffer
       try {
-        buffer = readFileSync(file);
+        buffer = readFileSync(file)
       } catch {
-        throw new Error(`board-game-picker: box art for '${gameId}' is not staged at ${file}`);
+        throw new Error(
+          `board-game-picker: box art for '${gameId}' is not staged at ${file}`,
+        )
       }
 
       return {
         buffer,
-        contentType: CONTENT_TYPES[extname(file).toLowerCase()] || 'image/jpeg',
-      };
+        contentType:
+          CONTENT_TYPES[extname(file).toLowerCase()] ||
+          "image/jpeg",
+      }
     },
-  };
+  }
 }
 
 /**
@@ -445,7 +571,7 @@ export function boardGamesRepositoryClient({
 export function boardGamesClient(
   options: BoardGamesClientOptions = {},
 ): BoardGamesCollectionClient {
-  return BOARD_GAME_TRANSPORT === 'http'
+  return BOARD_GAME_TRANSPORT === "http"
     ? boardGamesHttpClient(options)
-    : boardGamesRepositoryClient(options);
+    : boardGamesRepositoryClient(options)
 }

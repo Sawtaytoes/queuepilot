@@ -40,9 +40,13 @@
 //
 // They live in `shared/queueTitle.ts` with the queue-title rule, because the web app and the
 // native TV catalog both print them and two copies of a display string drift.
-import { ACTIVITIES, ACTIVITY_LABELS, type Activity } from '../../shared/queueTitle.js';
+import {
+  ACTIVITIES,
+  ACTIVITY_LABELS,
+  type Activity,
+} from "../../shared/queueTitle.js"
 
-export { ACTIVITIES, ACTIVITY_LABELS, type Activity };
+export { ACTIVITIES, ACTIVITY_LABELS, type Activity }
 
 /**
  * Provider kind -> the activity it serves.
@@ -52,22 +56,33 @@ export { ACTIVITIES, ACTIVITY_LABELS, type Activity };
  * a non-Plex provider is a Plex set — but it is a fallback and not a mapping, so a new
  * provider gets a row here in the same change that adds it.
  */
-const ACTIVITY_BY_PROVIDER_KIND: Readonly<Record<string, Activity>> = {
-  'board-game-picker': 'board-games',
-  kavita: 'reading',
-  mister: 'video-games',
-  plex: 'watching',
-  steam: 'video-games',
-};
+const ACTIVITY_BY_PROVIDER_KIND: Readonly<
+  Record<string, Activity>
+> = {
+  "board-game-picker": "board-games",
+  kavita: "reading",
+  mister: "video-games",
+  plex: "watching",
+  steam: "video-games",
+}
 
 /** True when `value` is one of the four. Used to refuse an unknown activity at the API edge
  *  rather than storing it and finding out on the next read. */
-export const isActivity = (value: unknown): value is Activity =>
-  typeof value === 'string' && (ACTIVITIES as readonly string[]).includes(value);
+export const isActivity = (
+  value: unknown,
+): value is Activity =>
+  typeof value === "string" &&
+  (ACTIVITIES as readonly string[]).includes(value)
 
 /** The activity a provider serves, with no set involved. */
-export const activityForProviderKind = (kind: unknown): Activity =>
-  ACTIVITY_BY_PROVIDER_KIND[String(kind ?? '').trim().toLowerCase()] ?? 'watching';
+export const activityForProviderKind = (
+  kind: unknown,
+): Activity =>
+  ACTIVITY_BY_PROVIDER_KIND[
+    String(kind ?? "")
+      .trim()
+      .toLowerCase()
+  ] ?? "watching"
 
 /**
  * The activity a set is under: the stored override if it has one, otherwise its provider's.
@@ -86,19 +101,24 @@ export const activityForProviderKind = (kind: unknown): Activity =>
  * cannot answer, and it lands on `watching` only while its connector is down.
  */
 export function activityForSet(set: {
-  activity?: unknown;
-  provider_kind?: unknown;
-  provider_id?: unknown;
+  activity?: unknown
+  provider_kind?: unknown
+  provider_id?: unknown
 }): Activity {
-  if (isActivity(set.activity)) return set.activity;
+  if (isActivity(set.activity)) return set.activity
 
-  const kind = String(set.provider_kind ?? '').trim().toLowerCase();
-  if (kind) return activityForProviderKind(kind);
+  const kind = String(set.provider_kind ?? "")
+    .trim()
+    .toLowerCase()
+  if (kind) return activityForProviderKind(kind)
 
-  const id = String(set.provider_id ?? '').trim().toLowerCase();
-  return activityForProviderKind(id);
+  const id = String(set.provider_id ?? "")
+    .trim()
+    .toLowerCase()
+  return activityForProviderKind(id)
 }
 
 /** The label to put on a queue card. There is no name to fall back to and that is the point:
  *  every movies queue is called "Movies", and the faces beside it are what tell them apart. */
-export const activityLabel = (activity: Activity): string => ACTIVITY_LABELS[activity];
+export const activityLabel = (activity: Activity): string =>
+  ACTIVITY_LABELS[activity]

@@ -90,7 +90,6 @@ export function ChannelsView({
         : null,
     )
     // Re-derive only when the selected channel changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel?.id])
 
   if (!channel) {

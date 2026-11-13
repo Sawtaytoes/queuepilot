@@ -1,4 +1,4 @@
-import type { Context } from 'hono';
+import type { Context } from "hono"
 
 /**
  * `req.body || {}` under `express.json()`, in Hono terms.
@@ -13,8 +13,12 @@ import type { Context } from 'hono';
  * arbitrary user JSON and hand it to the `queues`/`sets` writers, which do their own
  * coercion. Adding validation at this seam would be a behaviour change, not a type fix.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function readBody(c: Context): Promise<Record<string, any>> {
-  const parsed = await c.req.json().catch(() => null);
-  return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : {};
+
+export async function readBody(
+  c: Context,
+): Promise<Record<string, any>> {
+  const parsed = await c.req.json().catch(() => null)
+  return parsed && typeof parsed === "object"
+    ? (parsed as Record<string, unknown>)
+    : {}
 }

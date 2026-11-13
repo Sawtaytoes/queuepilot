@@ -10,127 +10,173 @@
 // This IS that parser, deliberately kept to a regex, and the last test here pins the
 // limitation that buys: a `:name` inside a SQL string literal is read as a placeholder. No
 // statement in `store/db/` contains one, and this is where a future one would be caught.
-import { describe, expect, it } from 'vitest';
-
-import { migrate, prepareChecked, SCHEMA_VERSION } from './open.js';
-import { openSqlite, type SqliteDatabase } from '../sqlite.js';
+import { describe, expect, test } from "vitest"
+import {
+  openSqlite,
+  type SqliteDatabase,
+} from "../sqlite.js"
+import {
+  migrate,
+  prepareChecked,
+  SCHEMA_VERSION,
+} from "./open.js"
 
 const fresh = (): SqliteDatabase => {
-  const db = openSqlite(':memory:');
-  migrate(db);
-  return db;
-};
+  const db = openSqlite(":memory:")
+  migrate(db)
+  return db
+}
 
-describe('prepareChecked', () => {
-  it('THROWS on an omitted named parameter, where the raw driver would bind NULL', () => {
-    const db = fresh();
-    const sql = 'INSERT INTO store_meta (store, key, value) VALUES (:store, :key, :value)';
+describe("prepareChecked", () => {
+  test("THROWS on an omitted named parameter, where the raw driver would bind NULL", () => {
+    const db = fresh()
+    const sql =
+      "INSERT INTO store_meta (store, key, value) VALUES (:store, :key, :value)"
 
-    expect(() => prepareChecked(db, sql).run({ store: 'sets', key: 'a' })).toThrow(
-      /missing named parameter\(s\) :value/,
-    );
+    expect(() =>
+      prepareChecked(db, sql).run({
+        store: "sets",
+        key: "a",
+      }),
+    ).toThrow(/missing named parameter\(s\) :value/)
 
     // The characterization, so the reason this guard exists is visible in the test file: the
     // UNGUARDED statement accepts the same call and writes a NULL.
-    db.prepare(sql).run({ store: 'sets', key: 'a' } as never);
-    const row = db.prepare<{ value: string | null }>(
-      "SELECT value FROM store_meta WHERE store = 'sets' AND key = 'a'",
-    ).get();
-    expect(row?.value).toBeNull();
+    db.prepare(sql).run({
+      store: "sets",
+      key: "a",
+    } as never)
+    const row = db
+      .prepare<{ value: string | null }>(
+        "SELECT value FROM store_meta WHERE store = 'sets' AND key = 'a'",
+      )
+      .get()
+    expect(row?.value).toBeNull()
 
-    db.close();
-  });
+    db.close()
+  })
 
-  it('still lets an UNKNOWN key through to the driver, which throws on its own', () => {
-    const db = fresh();
+  test("still lets an UNKNOWN key through to the driver, which throws on its own", () => {
+    const db = fresh()
     expect(() =>
-      prepareChecked(db, 'INSERT INTO store_meta (store, key, value) VALUES (:store, :key, :value)').run({
-        store: 'sets',
-        key: 'a',
-        value: 'b',
-        typo: 'c',
+      prepareChecked(
+        db,
+        "INSERT INTO store_meta (store, key, value) VALUES (:store, :key, :value)",
+      ).run({
+        store: "sets",
+        key: "a",
+        value: "b",
+        typo: "c",
       }),
-    ).toThrow(/Unknown named parameter/);
-    db.close();
-  });
+    ).toThrow(/Unknown named parameter/)
+    db.close()
+  })
 
-  it('passes a complete object through untouched', () => {
-    const db = fresh();
-    prepareChecked(db, 'INSERT INTO store_meta (store, key, value) VALUES (:store, :key, :value)').run({
-      store: 'sets',
-      key: 'a',
-      value: 'b',
-    });
+  test("passes a complete object through untouched", () => {
+    const db = fresh()
+    prepareChecked(
+      db,
+      "INSERT INTO store_meta (store, key, value) VALUES (:store, :key, :value)",
+    ).run({
+      store: "sets",
+      key: "a",
+      value: "b",
+    })
     expect(
-      prepareChecked<{ value: string }>(db, 'SELECT value FROM store_meta WHERE key = :key').get({ key: 'a' })?.value,
-    ).toBe('b');
-    db.close();
-  });
+      prepareChecked<{ value: string }>(
+        db,
+        "SELECT value FROM store_meta WHERE key = :key",
+      ).get({ key: "a" })?.value,
+    ).toBe("b")
+    db.close()
+  })
 
-  it('does not interfere with positional parameters', () => {
-    const db = fresh();
-    db.prepare("INSERT INTO store_meta (store, key, value) VALUES ('sets', ?, ?)").run('k', 'v');
+  test("does not interfere with positional parameters", () => {
+    const db = fresh()
+    db.prepare(
+      "INSERT INTO store_meta (store, key, value) VALUES ('sets', ?, ?)",
+    ).run("k", "v")
     expect(
-      prepareChecked<{ value: string }>(db, 'SELECT value FROM store_meta WHERE key = ?').get('k')?.value,
-    ).toBe('v');
-    db.close();
-  });
+      prepareChecked<{ value: string }>(
+        db,
+        "SELECT value FROM store_meta WHERE key = ?",
+      ).get("k")?.value,
+    ).toBe("v")
+    db.close()
+  })
 
-  it('LIMITATION: a colon inside a string literal reads as a placeholder', () => {
+  test("LIMITATION: a colon inside a string literal reads as a placeholder", () => {
     // Documented rather than fixed. Closing it needs a real SQL tokenizer, which is the second
     // parser the shim's header warns about; refusing the statement is the safe failure, and no
     // statement in this directory has one. If you add one, this test is why it broke.
-    const db = fresh();
+    const db = fresh()
     expect(() =>
-      prepareChecked(db, "SELECT * FROM store_meta WHERE value = 'a:b' AND key = :key").get({ key: 'k' }),
-    ).toThrow(/missing named parameter\(s\) :b/);
-    db.close();
-  });
-});
+      prepareChecked(
+        db,
+        "SELECT * FROM store_meta WHERE value = 'a:b' AND key = :key",
+      ).get({ key: "k" }),
+    ).toThrow(/missing named parameter\(s\) :b/)
+    db.close()
+  })
+})
 
-describe('migrate', () => {
-  it('keeps schema-5 completion rows completed while adding resume columns', () => {
-    const db = openSqlite(':memory:');
+describe("migrate", () => {
+  test("keeps schema-5 completion rows completed while adding resume columns", () => {
+    const db = openSqlite(":memory:")
     db.exec(`CREATE TABLE queue_entry_history (
       set_id TEXT NOT NULL, entry_key TEXT NOT NULL, item_key TEXT NOT NULL,
       completed_at INTEGER NOT NULL,
       PRIMARY KEY (set_id, entry_key, item_key)
     ) WITHOUT ROWID;
-    INSERT INTO queue_entry_history VALUES ('q', 'rk:show', 'episode', 123);`);
+    INSERT INTO queue_entry_history VALUES ('q', 'rk:show', 'episode', 123);`)
 
-    migrate(db);
-    const row = db.prepare<{
-      is_completed: number; position_ms: number; duration_ms: number;
-    }>(`SELECT is_completed, position_ms, duration_ms FROM queue_entry_history`).get();
-    expect(row).toEqual({ is_completed: 1, position_ms: 0, duration_ms: 0 });
-    db.close();
-  });
+    migrate(db)
+    const row = db
+      .prepare<{
+        is_completed: number
+        position_ms: number
+        duration_ms: number
+      }>(
+        `SELECT is_completed, position_ms, duration_ms FROM queue_entry_history`,
+      )
+      .get()
+    expect(row).toEqual({
+      is_completed: 1,
+      position_ms: 0,
+      duration_ms: 0,
+    })
+    db.close()
+  })
 
-  it('brings an older file forward by ALTERing in the columns it is missing', () => {
+  test("brings an older file forward by ALTERing in the columns it is missing", () => {
     // The stale-scratch-database case, which is how this was found: a suite that passes on a
     // fresh CI runner throws `no such column` locally, against a file an earlier run left.
-    const db = openSqlite(':memory:');
-    db.exec('CREATE TABLE sets (id TEXT PRIMARY KEY, position INTEGER NOT NULL, data TEXT NOT NULL)');
-    migrate(db);
+    const db = openSqlite(":memory:")
+    db.exec(
+      "CREATE TABLE sets (id TEXT PRIMARY KEY, position INTEGER NOT NULL, data TEXT NOT NULL)",
+    )
+    migrate(db)
 
-    const columns = (db.pragma('table_xinfo(sets)') as { name: string }[]).map((row) => row.name);
-    expect(columns).toContain('presentation');
-    expect(columns).toContain('label');
+    const columns = (
+      db.pragma("table_xinfo(sets)") as { name: string }[]
+    ).map((row) => row.name)
+    expect(columns).toContain("presentation")
+    expect(columns).toContain("label")
 
     // …TWICE. `table_info` omits a GENERATED column, so reading the column list with it makes
     // every generated column look missing on the second open and throws `duplicate column
     // name` — a container that starts once and then will not restart.
-    expect(() => migrate(db)).not.toThrow();
-    db.close();
-  });
+    expect(() => migrate(db)).not.toThrow()
+    db.close()
+  })
 
-  it('upgrades a WP-4b file in place, keeping the roster it already had (WP-5)', () => {
+  test("upgrades a WP-4b file in place, keeping the roster it already had (WP-5)", () => {
     // The other half of the test above. That one proves IDEMPOTENCE over a fresh file; this
     // one proves UPGRADE over a populated one, which is what a real deploy does. WP-5 is the
     // first bump that adds columns to tables holding rows, and both of them fail by silence:
     // `group_people.role` defaulting wrongly changes which queues come up, and `sets.activity`
     // is a VIRTUAL generated column, which `table_info` does not list at all.
-    const db = openSqlite(':memory:');
+    const db = openSqlite(":memory:")
 
     // The pre-WP-5 shape of the two tables that gain a column, and rows in both.
     db.exec(`
@@ -140,124 +186,191 @@ describe('migrate', () => {
       INSERT INTO people (id, display_name) VALUES ('ada', 'Ada');
       INSERT INTO group_people (group_id, person_id) VALUES ('kids', 'ada');
       INSERT INTO sets (id, position, data) VALUES ('q1', 0, '{"id":"q1","label":"Q1"}');
-    `);
+    `)
 
-    migrate(db);
+    migrate(db)
     // TWICE, for the reason the test above states: this is where a re-added column throws.
-    expect(() => migrate(db)).not.toThrow();
+    expect(() => migrate(db)).not.toThrow()
 
     // The roster row is still there, and its role is the only meaning it ever had.
     expect(
-      db.prepare<{ role: string }>("SELECT role FROM group_people WHERE person_id = 'ada'").get()?.role,
-    ).toBe('required');
+      db
+        .prepare<{ role: string }>(
+          "SELECT role FROM group_people WHERE person_id = 'ada'",
+        )
+        .get()?.role,
+    ).toBe("required")
     // …and the activity is NULL, which is DERIVED and not missing. A migration that stamped a
     // value here would freeze today's provider→activity opinion into every existing row.
     expect(
-      db.prepare<{ activity: string | null }>("SELECT activity FROM sets WHERE id = 'q1'").get()?.activity,
-    ).toBeNull();
+      db
+        .prepare<{ activity: string | null }>(
+          "SELECT activity FROM sets WHERE id = 'q1'",
+        )
+        .get()?.activity,
+    ).toBeNull()
 
-    const tables = (
-      db.prepare<{ name: string }>(
+    const tables = db
+      .prepare<{ name: string }>(
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('queue_people', 'group_membership')",
-      ).all()
-    ).map((row) => row.name).sort();
-    expect(tables).toEqual(['group_membership', 'queue_people']);
-    db.close();
-  });
+      )
+      .all()
+      .map((row) => row.name)
+      .sort()
+    expect(tables).toEqual([
+      "group_membership",
+      "queue_people",
+    ])
+    db.close()
+  })
 
-  it('records the schema version and is safe to run again', () => {
-    const db = fresh();
-    migrate(db);
-    migrate(db);
-    const row = db.prepare<{ value: string }>(
-      "SELECT value FROM schema_meta WHERE key = 'schema_version'",
-    ).get();
-    expect(Number(row?.value)).toBe(SCHEMA_VERSION);
-    db.close();
-  });
+  test("records the schema version and is safe to run again", () => {
+    const db = fresh()
+    migrate(db)
+    migrate(db)
+    const row = db
+      .prepare<{ value: string }>(
+        "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+      )
+      .get()
+    expect(Number(row?.value)).toBe(SCHEMA_VERSION)
+    db.close()
+  })
 
-  it('drops a retired column from an older file, and is safe to run again', () => {
-    const db = fresh();
-    migrate(db);
-    db.exec('ALTER TABLE board_game_boxes ADD COLUMN homebox_entity_id TEXT');
-    migrate(db);
-    migrate(db);
-    const columns = (db.pragma('table_xinfo(board_game_boxes)') as { name: string }[]).map(
-      (row) => row.name,
-    );
-    expect(columns).not.toContain('homebox_entity_id');
-    expect(columns).toContain('location_text');
-    db.close();
-  });
+  test("drops a retired column from an older file, and is safe to run again", () => {
+    const db = fresh()
+    migrate(db)
+    db.exec(
+      "ALTER TABLE board_game_boxes ADD COLUMN homebox_entity_id TEXT",
+    )
+    migrate(db)
+    migrate(db)
+    const columns = (
+      db.pragma("table_xinfo(board_game_boxes)") as {
+        name: string
+      }[]
+    ).map((row) => row.name)
+    expect(columns).not.toContain("homebox_entity_id")
+    expect(columns).toContain("location_text")
+    db.close()
+  })
 
-  it('REFUSES a file written by a newer build rather than writing rows it may misread', () => {
-    const db = fresh();
-    db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(
-      String(SCHEMA_VERSION + 1),
-    );
-    expect(() => migrate(db)).toThrow(/Roll forward, or restore the file/);
-    db.close();
-  });
+  test("REFUSES a file written by a newer build rather than writing rows it may misread", () => {
+    const db = fresh()
+    db.prepare(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
+    ).run(String(SCHEMA_VERSION + 1))
+    expect(() => migrate(db)).toThrow(
+      /Roll forward, or restore the file/,
+    )
+    db.close()
+  })
 
-  it('refuses a set row whose id disagrees with its payload', () => {
+  test("refuses a set row whose id disagrees with its payload", () => {
     // The CHECK is what stops a wire id drifting away from the mapping that carries it.
-    const db = fresh();
+    const db = fresh()
     expect(() =>
-      prepareChecked(db, 'INSERT INTO sets (id, position, data) VALUES (:id, :position, :data)').run({
-        id: 'bob',
+      prepareChecked(
+        db,
+        "INSERT INTO sets (id, position, data) VALUES (:id, :position, :data)",
+      ).run({
+        id: "bob",
         position: 0,
-        data: JSON.stringify({ id: 'alice', label: 'Alice' }),
+        data: JSON.stringify({
+          id: "alice",
+          label: "Alice",
+        }),
       }),
-    ).toThrow(/CHECK constraint failed/);
-    db.close();
-  });
+    ).toThrow(/CHECK constraint failed/)
+    db.close()
+  })
 
-  it('cascades a queue delete to its entries and never the other way', () => {
-    const db = fresh();
-    prepareChecked(db, 'INSERT INTO queues (set_id, position) VALUES (:set_id, :position)').run({
-      set_id: 'bob',
-      position: 0,
-    });
+  test("cascades a queue delete to its entries and never the other way", () => {
+    const db = fresh()
     prepareChecked(
       db,
-      'INSERT INTO queue_entries (set_id, position, data) VALUES (:set_id, :position, :data)',
-    ).run({ set_id: 'bob', position: 0, data: JSON.stringify({ ratingKey: '1', title: 'A' }) });
-
-    db.exec("DELETE FROM queues WHERE set_id = 'bob'");
-    expect(db.prepare<{ n: number }>('SELECT COUNT(*) AS n FROM queue_entries').get()?.n).toBe(0);
-    db.close();
-  });
-
-  it('exposes the generated columns as real, queryable columns', () => {
-    const db = fresh();
-    prepareChecked(db, 'INSERT INTO sets (id, position, data) VALUES (:id, :position, :data)').run({
-      id: 'bob',
+      "INSERT INTO queues (set_id, position) VALUES (:set_id, :position)",
+    ).run({
+      set_id: "bob",
       position: 0,
-      data: JSON.stringify({ id: 'bob', label: 'Bob — Movies', kind: 'picks', source: 'queue' }),
-    });
-    const row = db.prepare<{ label: string; kind: string }>(
-      "SELECT label, kind FROM sets WHERE source = 'queue'",
-    ).get();
-    expect(row).toEqual({ label: 'Bob — Movies', kind: 'picks' });
-    db.close();
-  });
+    })
+    prepareChecked(
+      db,
+      "INSERT INTO queue_entries (set_id, position, data) VALUES (:set_id, :position, :data)",
+    ).run({
+      set_id: "bob",
+      position: 0,
+      data: JSON.stringify({ ratingKey: "1", title: "A" }),
+    })
 
-  it('reads a numeric ratingKey back as TEXT, so no INTEGER can reach the 2^53 cliff', () => {
+    db.exec("DELETE FROM queues WHERE set_id = 'bob'")
+    expect(
+      db
+        .prepare<{ n: number }>(
+          "SELECT COUNT(*) AS n FROM queue_entries",
+        )
+        .get()?.n,
+    ).toBe(0)
+    db.close()
+  })
+
+  test("exposes the generated columns as real, queryable columns", () => {
+    const db = fresh()
+    prepareChecked(
+      db,
+      "INSERT INTO sets (id, position, data) VALUES (:id, :position, :data)",
+    ).run({
+      id: "bob",
+      position: 0,
+      data: JSON.stringify({
+        id: "bob",
+        label: "Bob — Movies",
+        kind: "picks",
+        source: "queue",
+      }),
+    })
+    const row = db
+      .prepare<{ label: string; kind: string }>(
+        "SELECT label, kind FROM sets WHERE source = 'queue'",
+      )
+      .get()
+    expect(row).toEqual({
+      label: "Bob — Movies",
+      kind: "picks",
+    })
+    db.close()
+  })
+
+  test("reads a numeric ratingKey back as TEXT, so no INTEGER can reach the 2^53 cliff", () => {
     // WP-4a driver difference #5: node:sqlite THROWS RangeError past 2^53 where better-sqlite3
     // lost the precision quietly. A Plex ratingKey is a numeric STRING; the column's TEXT
     // affinity is what keeps a legacy numeric one from ever being read as an INTEGER.
-    const db = fresh();
-    prepareChecked(db, 'INSERT INTO queues (set_id, position) VALUES (:set_id, :position)').run({
-      set_id: 'bob',
-      position: 0,
-    });
+    const db = fresh()
     prepareChecked(
       db,
-      'INSERT INTO queue_entries (set_id, position, data) VALUES (:set_id, :position, :data)',
-    ).run({ set_id: 'bob', position: 0, data: JSON.stringify({ ratingKey: 361504, title: 'B' }) });
+      "INSERT INTO queues (set_id, position) VALUES (:set_id, :position)",
+    ).run({
+      set_id: "bob",
+      position: 0,
+    })
+    prepareChecked(
+      db,
+      "INSERT INTO queue_entries (set_id, position, data) VALUES (:set_id, :position, :data)",
+    ).run({
+      set_id: "bob",
+      position: 0,
+      data: JSON.stringify({
+        ratingKey: 361504,
+        title: "B",
+      }),
+    })
 
-    const row = db.prepare<{ rating_key: unknown }>('SELECT rating_key FROM queue_entries').get();
-    expect(row?.rating_key).toBe('361504');
-    db.close();
-  });
-});
+    const row = db
+      .prepare<{ rating_key: unknown }>(
+        "SELECT rating_key FROM queue_entries",
+      )
+      .get()
+    expect(row?.rating_key).toBe("361504")
+    db.close()
+  })
+})

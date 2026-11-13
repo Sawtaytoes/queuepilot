@@ -47,29 +47,32 @@
 // queue would therefore record its watches against itself. Kavita has no such path — the read
 // state lives in Kavita and is the same state either way — which is why the reading case is
 // complete and the watching case is a documented follow-up.
-import type { ProviderBlock, QueueFilter } from './types.js';
+import type { ProviderBlock, QueueFilter } from "./types.js"
 
 /** The on-disk key naming the parent. */
-export const FILTERED_FROM = 'filtered_from';
+export const FILTERED_FROM = "filtered_from"
 
 /** The subset of a raw `sets:` entry this module reads. Anything else rides through. */
 export interface FilterableEntry {
-  id?: unknown;
-  filtered_from?: unknown;
-  filter?: unknown;
-  providers?: unknown;
-  [field: string]: unknown;
+  id?: unknown
+  filtered_from?: unknown
+  filter?: unknown
+  providers?: unknown
+  [field: string]: unknown
 }
 
-const toIdList = (v: unknown): string[] => (
-  Array.isArray(v) ? v.map((x) => String(x).trim()).filter(Boolean) : []
-);
+const toIdList = (v: unknown): string[] =>
+  Array.isArray(v)
+    ? v.map((x) => String(x).trim()).filter(Boolean)
+    : []
 
 /** The parent queue's id, or null when this entry is an ordinary queue. */
-export function parentIdOf(ent: FilterableEntry | null | undefined): string | null {
-  const raw = ent ? ent[FILTERED_FROM] : null;
-  const id = raw == null ? '' : String(raw).trim();
-  return id || null;
+export function parentIdOf(
+  ent: FilterableEntry | null | undefined,
+): string | null {
+  const raw = ent ? ent[FILTERED_FROM] : null
+  const id = raw == null ? "" : String(raw).trim()
+  return id || null
 }
 
 /**
@@ -79,12 +82,18 @@ export function parentIdOf(ent: FilterableEntry | null | undefined): string | nu
  * yet, which is what a half-configured one looks like. Returning a filter with empty lists
  * rather than null keeps "is this a view" and "what does it exclude" two separate questions.
  */
-export function filterOf(ent: FilterableEntry | null | undefined): QueueFilter | null {
-  if (!parentIdOf(ent)) return null;
-  const raw = ent && ent.filter && typeof ent.filter === 'object' && !Array.isArray(ent.filter)
-    ? ent.filter as { libraries?: unknown }
-    : {};
-  return { libraries: toIdList(raw.libraries) };
+export function filterOf(
+  ent: FilterableEntry | null | undefined,
+): QueueFilter | null {
+  if (!parentIdOf(ent)) return null
+  const raw =
+    ent &&
+    ent.filter &&
+    typeof ent.filter === "object" &&
+    !Array.isArray(ent.filter)
+      ? (ent.filter as { libraries?: unknown })
+      : {}
+  return { libraries: toIdList(raw.libraries) }
 }
 
 /**
@@ -98,11 +107,14 @@ export function filterOf(ent: FilterableEntry | null | undefined): QueueFilter |
  */
 export function passesFilter(
   filter: QueueFilter | null,
-  { libraryId = null }: { libraryId?: string | number | null | undefined },
+  {
+    libraryId = null,
+  }: { libraryId?: string | number | null | undefined },
 ): boolean {
-  if (!filter || !filter.libraries.length) return true;
-  if (libraryId == null || String(libraryId) === '') return true;
-  return filter.libraries.includes(String(libraryId));
+  if (!filter || !filter.libraries.length) return true
+  if (libraryId == null || String(libraryId) === "")
+    return true
+  return filter.libraries.includes(String(libraryId))
 }
 
 /**
@@ -114,21 +126,37 @@ export function passesFilter(
  * `2026-08-17-no-libraries-checked-means-every-library`), so the child's filter is taken
  * whole in that case rather than intersected with nothing.
  */
-function narrowBlocks(blocks: unknown, filter: QueueFilter): unknown {
-  if (!Array.isArray(blocks) || !filter.libraries.length) return blocks;
+function narrowBlocks(
+  blocks: unknown,
+  filter: QueueFilter,
+): unknown {
+  if (!Array.isArray(blocks) || !filter.libraries.length)
+    return blocks
   return blocks.map((block) => {
-    if (!block || typeof block !== 'object' || Array.isArray(block)) return block;
-    const b = block as Partial<ProviderBlock> & Record<string, unknown>;
-    const own = toIdList(b.libraries);
+    if (
+      !block ||
+      typeof block !== "object" ||
+      Array.isArray(block)
+    )
+      return block
+    const b = block as Partial<ProviderBlock> &
+      Record<string, unknown>
+    const own = toIdList(b.libraries)
     const narrowed = own.length
       ? own.filter((id) => filter.libraries.includes(id))
-      : [...filter.libraries];
-    return { ...b, libraries: narrowed };
-  });
+      : [...filter.libraries]
+    return { ...b, libraries: narrowed }
+  })
 }
 
 /** Keys a filtered queue always owns, whatever the parent says. */
-const NEVER_INHERITED = ['id', 'label', 'enabled', FILTERED_FROM, 'filter'];
+const NEVER_INHERITED = [
+  "id",
+  "label",
+  "enabled",
+  FILTERED_FROM,
+  "filter",
+]
 
 /**
  * Merge each filtered queue's parent underneath it, in place of the sparse record on disk.
@@ -142,24 +170,31 @@ const NEVER_INHERITED = ['id', 'label', 'enabled', FILTERED_FROM, 'filter'];
  * rather than resolved, because a chain has an ordering question — whose `skipped` wins — that
  * nobody has asked for yet.
  */
-export function inheritFilteredQueues<T extends FilterableEntry>(entries: readonly T[]): T[] {
-  const byId = new Map<string, T>();
+export function inheritFilteredQueues<
+  T extends FilterableEntry,
+>(entries: readonly T[]): T[] {
+  const byId = new Map<string, T>()
   for (const ent of entries) {
-    const id = ent && ent.id != null ? String(ent.id).trim() : '';
-    if (id) byId.set(id, ent);
+    const id =
+      ent && ent.id != null ? String(ent.id).trim() : ""
+    if (id) byId.set(id, ent)
   }
   return entries.map((ent) => {
-    const parentId = parentIdOf(ent);
-    if (!parentId) return ent;
-    const parent = byId.get(parentId);
+    const parentId = parentIdOf(ent)
+    if (!parentId) return ent
+    const parent = byId.get(parentId)
     // A dangling parent is left exactly as written. The registry then reports a queue with no
     // provider and no entries, which is what a broken reference should look like — inventing a
     // default here would hide the typo behind a queue that half works.
-    if (!parent || parentIdOf(parent)) return ent;
-    const filter = filterOf(ent);
-    const merged: Record<string, unknown> = { ...parent };
-    for (const key of NEVER_INHERITED) delete merged[key];
-    if (filter) merged.providers = narrowBlocks(merged.providers, filter);
-    return { ...merged, ...ent } as T;
-  });
+    if (!parent || parentIdOf(parent)) return ent
+    const filter = filterOf(ent)
+    const merged: Record<string, unknown> = { ...parent }
+    for (const key of NEVER_INHERITED) delete merged[key]
+    if (filter)
+      merged.providers = narrowBlocks(
+        merged.providers,
+        filter,
+      )
+    return { ...merged, ...ent } as T
+  })
 }

@@ -12,7 +12,7 @@
 // The hard ceiling. A weight is slots per round, so an absurd value starves every other bucket
 // for a whole session; 20 is far past any real use and keeps a fat-fingered hand-edit (or a bad
 // PATCH body) from turning a channel into one show.
-export const MAX_WEIGHT = 20;
+export const MAX_WEIGHT = 20
 
 /**
  * Anything that MAY carry a weight. Deliberately `unknown` rather than `number`: the value
@@ -20,7 +20,7 @@ export const MAX_WEIGHT = 20;
  * every producer upstream of it is untrusted. `Bucket` (types.ts) satisfies this structurally.
  */
 export interface Weighted {
-  weight?: unknown;
+  weight?: unknown
 }
 
 /**
@@ -33,8 +33,8 @@ export interface Weighted {
  * `Math.random` (e2e/resume-in-progress-done-test.mjs injects a shuffle-only rng).
  */
 export interface Rng {
-  shuffle: (arr: unknown[]) => void;
-  random?: () => number;
+  shuffle: (arr: unknown[]) => void
+  random?: () => number
 }
 
 // Normalize a weight off the wire or the YAML to an integer in [1, MAX_WEIGHT]. Absent, blank,
@@ -43,18 +43,22 @@ export interface Rng {
 export function toWeight(value: unknown): number {
   // `parseInt` ToStrings its argument, so `String(value)` is the same coercion spelled out for
   // the type checker — `{}`, null, undefined and `-3` all still land on 1.
-  const n = parseInt(String(value), 10);
-  if (!Number.isFinite(n) || n < 1) return 1;
-  return Math.min(n, MAX_WEIGHT);
+  const n = parseInt(String(value), 10)
+  if (!Number.isFinite(n) || n < 1) return 1
+  return Math.min(n, MAX_WEIGHT)
 }
 
-export const weightOf = (bucket: Weighted | null | undefined): number => toWeight(bucket && bucket.weight);
+export const weightOf = (
+  bucket: Weighted | null | undefined,
+): number => toWeight(bucket && bucket.weight)
 
 // True when nothing in `buckets` is weighted, i.e. the weighted paths below must reduce to the
 // unweighted ones. Every caller branches on this rather than trusting the maths, because
 // "a channel with no weights plays exactly as it did yesterday" is the compatibility promise,
 // and a seeded test proves it by comparing against the old code path directly.
-export const isUnweighted = (buckets: readonly Weighted[]): boolean => buckets.every((b) => weightOf(b) === 1);
+export const isUnweighted = (
+  buckets: readonly Weighted[],
+): boolean => buckets.every((b) => weightOf(b) === 1)
 
 /**
  * SMOOTH weighted round-robin (the nginx algorithm): pick the bucket with the highest running
@@ -69,9 +73,14 @@ export const isUnweighted = (buckets: readonly Weighted[]): boolean => buckets.e
  * `itemsOf(bucket)` returns that bucket's ordered play items; the cursor is kept HERE, so the
  * caller never has to (and a bucket that runs dry simply stops being eligible).
  */
-export function weightedInterleave<TBucket extends Weighted, TItem>(
+export function weightedInterleave<
+  TBucket extends Weighted,
+  TItem,
+>(
   buckets: readonly TBucket[],
-  itemsOf: (bucket: TBucket) => readonly TItem[] | null | undefined,
+  itemsOf: (
+    bucket: TBucket,
+  ) => readonly TItem[] | null | undefined,
   length: number,
 ): TItem[] {
   const state = buckets.map((bucket) => ({
@@ -79,27 +88,30 @@ export function weightedInterleave<TBucket extends Weighted, TItem>(
     weight: weightOf(bucket),
     current: 0,
     cursor: 0,
-  }));
-  const out: TItem[] = [];
+  }))
+  const out: TItem[] = []
   while (out.length < length) {
     // Liveness is re-read every slot: a bucket empties mid-session (a show runs out of unwatched
     // episodes) and must stop taking slots without disturbing the others' credits.
-    const live = state.filter((e) => e.cursor < e.items.length);
-    if (!live.length) break; // every bucket exhausted
-    let total = 0;
-    for (const e of live) total += e.weight;
-    let best: (typeof live)[number] | null = null;
+    const live = state.filter(
+      (e) => e.cursor < e.items.length,
+    )
+    if (!live.length) break // every bucket exhausted
+    let total = 0
+    for (const e of live) total += e.weight
+    let best: (typeof live)[number] | null = null
     for (const e of live) {
-      e.current += e.weight;
-      if (best === null || e.current > best.current) best = e; // ties keep the earlier bucket
+      e.current += e.weight
+      if (best === null || e.current > best.current)
+        best = e // ties keep the earlier bucket
     }
     // `live` is non-empty here, so the loop above always elected one — the assertions keep the
     // control flow byte-identical rather than inventing a branch the JS never had.
-    best!.current -= total;
-    out.push(best!.items[best!.cursor] as TItem);
-    best!.cursor += 1;
+    best!.current -= total
+    out.push(best!.items[best!.cursor] as TItem)
+    best!.cursor += 1
   }
-  return out;
+  return out
 }
 
 /**
@@ -112,19 +124,25 @@ export function weightedInterleave<TBucket extends Weighted, TItem>(
  * Callers must skip this entirely when nothing is weighted (see isUnweighted) so an unweighted
  * shuffle stays byte-for-byte the Fisher–Yates one the caller already had.
  */
-export function weightedShuffle<T extends Weighted>(arr: T[], rng: Rng | null = null): T[] {
+export function weightedShuffle<T extends Weighted>(
+  arr: T[],
+  rng: Rng | null = null,
+): T[] {
   // Bound through a const so the `typeof` probe survives into the closure; `source.random!()`
   // keeps `this === rng`, exactly as `rng.random()` did.
-  const source = rng;
-  const random = source && typeof source.random === 'function' ? () => source.random!() : Math.random;
+  const source = rng
+  const random =
+    source && typeof source.random === "function"
+      ? () => source.random!()
+      : Math.random
   const keyed = arr.map((item, i) => {
-    const u = random();
+    const u = random()
     // u === 0 would make every key 0 and collapse the sort to input order; nudge it off zero.
-    const r = u > 0 ? u : Number.MIN_VALUE;
-    return { item, i, key: Math.pow(r, 1 / weightOf(item)) };
-  });
-  keyed.sort((a, b) => (b.key - a.key) || (a.i - b.i));
-  arr.length = 0;
-  for (const k of keyed) arr.push(k.item);
-  return arr;
+    const r = u > 0 ? u : Number.MIN_VALUE
+    return { item, i, key: r ** (1 / weightOf(item)) }
+  })
+  keyed.sort((a, b) => b.key - a.key || a.i - b.i)
+  arr.length = 0
+  for (const k of keyed) arr.push(k.item)
+  return arr
 }

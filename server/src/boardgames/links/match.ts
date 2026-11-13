@@ -20,22 +20,26 @@
 
 /** A title in the collection, and the game it resolves to. */
 export interface MatchTarget {
-  gameId: string;
+  gameId: string
   /** The game's own name or one of its boxes' labels. */
-  name: string;
+  name: string
 }
 
-export type MatchConfidence = 'exact' | 'prefix' | 'ambiguous' | 'none';
+export type MatchConfidence =
+  | "exact"
+  | "prefix"
+  | "ambiguous"
+  | "none"
 
 export interface TitleMatch {
-  confidence: MatchConfidence;
+  confidence: MatchConfidence
   /** Non-null only for `exact` and `prefix`. */
-  gameId: string | null;
+  gameId: string | null
   /**
    * What it *could* have been, when it could have been several things. The linker prints these
    * so a person can pick one by hand rather than wonder what it saw.
    */
-  alternatives: string[];
+  alternatives: string[]
 }
 
 /**
@@ -43,7 +47,7 @@ export interface TitleMatch {
  * from both sides, so the rule is symmetric and there is no "which side is canonical" question.
  */
 const NOISE =
-  /\b(?:rulebook|rulebooks|rules|rulesheet|the|a|an|second edition|2nd edition|first edition|1st edition|deluxe edition|edition)\b/g;
+  /\b(?:rulebook|rulebooks|rules|rulesheet|the|a|an|second edition|2nd edition|first edition|1st edition|deluxe edition|edition)\b/g
 
 /**
  * Title → comparison key.
@@ -61,19 +65,24 @@ const NOISE =
 export const normalizeTitle = (title: string): string =>
   title
     .toLowerCase()
-    .replaceAll('&', ' and ')
-    .replaceAll('$', 's')
+    .replaceAll("&", " and ")
+    .replaceAll("$", "s")
     // Non-greedy, so `A (b) c (d)` loses both, not the middle.
-    .replace(/\(.*?\)/g, ' ')
-    .replace(NOISE, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
+    .replace(/\(.*?\)/g, " ")
+    .replace(NOISE, " ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
 
 /** Is `longer` `shorter` plus at least one more whole word? */
-const extendsTitle = (longer: string, shorter: string): boolean =>
-  shorter !== '' && longer.startsWith(`${shorter} `);
+const extendsTitle = (
+  longer: string,
+  shorter: string,
+): boolean =>
+  shorter !== "" && longer.startsWith(`${shorter} `)
 
-const distinct = (values: string[]): string[] => [...new Set(values)];
+const distinct = (values: string[]): string[] => [
+  ...new Set(values),
+]
 
 /**
  * Resolve one library title to a game.
@@ -82,54 +91,68 @@ const distinct = (values: string[]): string[] => [...new Set(values)];
  * the box, and the box label is the only place that name exists once several boxes have been
  * collapsed into one game.
  */
-export const matchTitle = (title: string, targets: MatchTarget[]): TitleMatch => {
-  const key = normalizeTitle(title);
-  if (key === '')
+export const matchTitle = (
+  title: string,
+  targets: MatchTarget[],
+): TitleMatch => {
+  const key = normalizeTitle(title)
+  if (key === "")
     return {
       alternatives: [],
-      confidence: 'none',
+      confidence: "none",
       gameId: null,
-    };
+    }
 
   const keyed = targets.map((target) => ({
     ...target,
     key: normalizeTitle(target.name),
-  }));
+  }))
 
-  const exact = keyed.filter((target) => target.key === key);
-  const exactGameIds = distinct(exact.map((target) => target.gameId));
+  const exact = keyed.filter((target) => target.key === key)
+  const exactGameIds = distinct(
+    exact.map((target) => target.gameId),
+  )
 
   if (exactGameIds.length === 1)
     return {
       alternatives: [],
-      confidence: 'exact',
+      confidence: "exact",
       gameId: exactGameIds[0] ?? null,
-    };
+    }
 
   // Two DIFFERENT games with the same normalised name is a real possibility once editions are
   // stripped, and picking one at random would silently file the rulebook on the wrong shelf.
   if (exactGameIds.length > 1)
     return {
-      alternatives: distinct(exact.map((target) => target.name)),
-      confidence: 'ambiguous',
+      alternatives: distinct(
+        exact.map((target) => target.name),
+      ),
+      confidence: "ambiguous",
       gameId: null,
-    };
+    }
 
   const prefixed = keyed.filter(
-    (target) => extendsTitle(target.key, key) || extendsTitle(key, target.key),
-  );
-  const prefixGameIds = distinct(prefixed.map((target) => target.gameId));
+    (target) =>
+      extendsTitle(target.key, key) ||
+      extendsTitle(key, target.key),
+  )
+  const prefixGameIds = distinct(
+    prefixed.map((target) => target.gameId),
+  )
 
   if (prefixGameIds.length === 1)
     return {
       alternatives: [],
-      confidence: 'prefix',
+      confidence: "prefix",
       gameId: prefixGameIds[0] ?? null,
-    };
+    }
 
   return {
-    alternatives: distinct(prefixed.map((target) => target.name)),
-    confidence: prefixGameIds.length > 1 ? 'ambiguous' : 'none',
+    alternatives: distinct(
+      prefixed.map((target) => target.name),
+    ),
+    confidence:
+      prefixGameIds.length > 1 ? "ambiguous" : "none",
     gameId: null,
-  };
-};
+  }
+}

@@ -26,6 +26,15 @@ async function waitOptions(page: Page): Promise<void> {
   await page.waitForSelector('[role="listbox"] [role="option"]');
 }
 
+// Wait for a picked listbox to LEAVE the page. Since `@charcuterie/ui` 4.28.0 a closing
+// panel stays in the DOM, `inert` and `aria-hidden`, for its exit motion (about 100-140 ms).
+// Without this wait, a count of `[role="listbox"]` right after a pick still finds it, and the
+// next `waitOptions` can match the LEAVING panel's options instead of the new one's. Bounded
+// and tolerant, like `closeVia`: a picker that stays open must not stall a suite.
+async function waitClosed(page: Page): Promise<void> {
+  await page.waitForSelector('[role="listbox"]', { state: 'detached', timeout: 2000 }).catch(() => null);
+}
+
 // Close by RE-CLICKING the trigger, never Escape: inside a native <dialog> (the app's
 // modals) Escape closes the dialog itself, not just the portalled listbox.
 async function closeVia(page: Page, target: PickTarget): Promise<void> {
@@ -43,6 +52,7 @@ export async function pickValue(
   await clickTarget(page, target, { timeout });
   await waitOptions(page);
   await page.click(`[role="listbox"] [role="option"] [data-value="${esc(value)}"]`, { timeout });
+  await waitClosed(page);
 }
 
 /** Best-effort pick: choose `value` if that option exists, else close and move on. Replaces
@@ -69,6 +79,7 @@ export async function pickIndex(page: Page, target: PickTarget, index: number): 
   await clickTarget(page, target);
   await waitOptions(page);
   await page.locator('[role="listbox"] [role="option"]').nth(index).click();
+  await waitClosed(page);
 }
 
 /** Open `target`, read the option LABELS (the selected one's ✓ stripped), close. */

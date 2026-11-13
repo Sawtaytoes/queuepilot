@@ -38,57 +38,76 @@
 // ── Personal data ────────────────────────────────────────────────────────────────────────
 //
 // CODE here, DATA in `/config/queuepilot.sqlite`. Fixtures are Ada, Grace and Linus.
-import type { ProfileAccounts } from './groups.js';
-import { mergeAccounts, norm, type Person } from './people.js';
+import type { ProfileAccounts } from "./groups.js"
+import {
+  mergeAccounts,
+  norm,
+  type Person,
+} from "./people.js"
 
 /** Which tray a member sits in. `Everyone else` is the ABSENCE of a member, never a value. */
-export type MemberRole = 'required' | 'optional';
+export type MemberRole = "required" | "optional"
 
 /** A queue member is a person, or a whole saved group carrying its own count. */
-export type MemberKind = 'person' | 'group';
+export type MemberKind = "person" | "group"
 
-export const MEMBER_ROLES: readonly MemberRole[] = ['required', 'optional'];
+export const MEMBER_ROLES: readonly MemberRole[] = [
+  "required",
+  "optional",
+]
 
-export const isMemberRole = (value: unknown): value is MemberRole =>
-  value === 'required' || value === 'optional';
+export const isMemberRole = (
+  value: unknown,
+): value is MemberRole =>
+  value === "required" || value === "optional"
 
-export const isMemberKind = (value: unknown): value is MemberKind =>
-  value === 'person' || value === 'group';
+export const isMemberKind = (
+  value: unknown,
+): value is MemberKind =>
+  value === "person" || value === "group"
 
 /** One row of `queue_people`. */
 export interface QueueMember {
-  kind: MemberKind;
-  id: string;
-  role: MemberRole;
+  kind: MemberKind
+  id: string
+  role: MemberRole
   /** Order within its tray. Not an identity. */
-  position: number;
+  position: number
 }
 
 /** One row of `group_people`, plus the group-level number it is counted by. */
 export interface GroupRosterMember {
-  personId: string;
-  role: MemberRole;
-  position: number;
+  personId: string
+  role: MemberRole
+  position: number
 }
 
 /** A group's membership RULE — the roster and how many of it are enough. */
 export interface GroupMembership {
-  groupId: string;
+  groupId: string
   /**
    * How many of the REQUIRED roster must be there. `null` = all of them, which is what every
    * group written before WP-5 meant and is why the absence is not silently 1.
    */
-  minPresent: number | null;
-  roster: GroupRosterMember[];
+  minPresent: number | null
+  roster: GroupRosterMember[]
 }
 
 /** The required half of a roster, in roster order. */
-export const requiredRoster = (membership: GroupMembership): GroupRosterMember[] =>
-  membership.roster.filter((member) => member.role === 'required');
+export const requiredRoster = (
+  membership: GroupMembership,
+): GroupRosterMember[] =>
+  membership.roster.filter(
+    (member) => member.role === "required",
+  )
 
 /** The optional half — the "may join" people. */
-export const optionalRoster = (membership: GroupMembership): GroupRosterMember[] =>
-  membership.roster.filter((member) => member.role === 'optional');
+export const optionalRoster = (
+  membership: GroupMembership,
+): GroupRosterMember[] =>
+  membership.roster.filter(
+    (member) => member.role === "optional",
+  )
 
 /**
  * How many of the required roster actually have to be present.
@@ -97,10 +116,15 @@ export const optionalRoster = (membership: GroupMembership): GroupRosterMember[]
  * between "the owner said all" and "the owner said three" survives a round trip and can still
  * be shown back to him as two different sentences.
  */
-export function effectiveMinPresent(membership: GroupMembership): number {
-  const required = requiredRoster(membership).length;
-  if (membership.minPresent == null) return required;
-  return Math.max(0, Math.min(membership.minPresent, required));
+export function effectiveMinPresent(
+  membership: GroupMembership,
+): number {
+  const required = requiredRoster(membership).length
+  if (membership.minPresent == null) return required
+  return Math.max(
+    0,
+    Math.min(membership.minPresent, required),
+  )
 }
 
 /**
@@ -110,66 +134,97 @@ export function effectiveMinPresent(membership: GroupMembership): number {
  * whole list at once, and an API that reports one error per save makes fixing two mistakes
  * two round trips.
  */
-export function membershipProblems(membership: GroupMembership): string[] {
-  const problems: string[] = [];
-  const required = requiredRoster(membership).length;
+export function membershipProblems(
+  membership: GroupMembership,
+): string[] {
+  const problems: string[] = []
+  const required = requiredRoster(membership).length
 
   if (membership.minPresent != null) {
-    if (!Number.isInteger(membership.minPresent) || membership.minPresent < 1) {
-      problems.push('"at least N" must be a whole number of 1 or more');
+    if (
+      !Number.isInteger(membership.minPresent) ||
+      membership.minPresent < 1
+    ) {
+      problems.push(
+        '"at least N" must be a whole number of 1 or more',
+      )
     } else if (membership.minPresent > required) {
       problems.push(
         `"at least ${membership.minPresent}" needs ${membership.minPresent} people in Must be here, and there are ${required}`,
-      );
+      )
     }
   }
 
-  const seen = new Set<string>();
+  const seen = new Set<string>()
   for (const member of membership.roster) {
-    if (seen.has(member.personId)) problems.push(`${member.personId} is in this group twice`);
-    seen.add(member.personId);
+    if (seen.has(member.personId))
+      problems.push(
+        `${member.personId} is in this group twice`,
+      )
+    seen.add(member.personId)
   }
 
-  return problems;
+  return problems
 }
 
 /** Say the rule in one sentence, for the tray heading. Words rather than a formula, because
  *  the tray is what a person reads before they trust it. */
-export function describeMembership(membership: GroupMembership, nameOf: (id: string) => string): string {
-  const required = requiredRoster(membership);
-  const optional = optionalRoster(membership);
-  const minimum = effectiveMinPresent(membership);
-  const names = required.map((member) => nameOf(member.personId));
+export function describeMembership(
+  membership: GroupMembership,
+  nameOf: (id: string) => string,
+): string {
+  const required = requiredRoster(membership)
+  const optional = optionalRoster(membership)
+  const minimum = effectiveMinPresent(membership)
+  const names = required.map((member) =>
+    nameOf(member.personId),
+  )
 
-  let sentence: string;
-  if (required.length === 0) sentence = 'Anybody in this group';
+  let sentence: string
+  if (required.length === 0)
+    sentence = "Anybody in this group"
   // One person is not a quantity. "All of Ada" reads as a mistake, and it is what a group of
   // one — which is most of them — would otherwise say on every card.
-  else if (required.length === 1) sentence = String(names[0]);
-  else if (minimum >= required.length) sentence = `All of ${joinNames(names, 'and')}`;
-  else if (minimum === 1) sentence = `At least one of ${joinNames(names, 'or')}`;
-  else sentence = `At least ${minimum} of ${joinNames(names, 'or')}`;
+  else if (required.length === 1)
+    sentence = String(names[0])
+  else if (minimum >= required.length)
+    sentence = `All of ${joinNames(names, "and")}`
+  else if (minimum === 1)
+    sentence = `At least one of ${joinNames(names, "or")}`
+  else
+    sentence = `At least ${minimum} of ${joinNames(names, "or")}`
 
-  if (optional.length === 0) return sentence;
-  return `${sentence}. ${joinNames(optional.map((member) => nameOf(member.personId)), 'and')} may join.`;
+  if (optional.length === 0) return sentence
+  return `${sentence}. ${joinNames(
+    optional.map((member) => nameOf(member.personId)),
+    "and",
+  )} may join.`
 }
 
-function joinNames(names: readonly string[], conjunction: 'and' | 'or'): string {
-  if (names.length < 2) return names[0] ?? '';
-  if (names.length === 2) return `${names[0]} ${conjunction} ${names[1]}`;
-  return `${names.slice(0, -1).join(', ')}, ${conjunction} ${names[names.length - 1]}`;
+function joinNames(
+  names: readonly string[],
+  conjunction: "and" | "or",
+): string {
+  if (names.length < 2) return names[0] ?? ""
+  if (names.length === 2)
+    return `${names[0]} ${conjunction} ${names[1]}`
+  return `${names.slice(0, -1).join(", ")}, ${conjunction} ${names[names.length - 1]}`
 }
 
 // ── The one provider profile ──────────────────────────────────────────────────────────── //
 
 /** What a group plays as, for one provider kind. */
 export type GroupProfile =
-  | { status: 'one'; account: string; from: 'group' | 'roster' }
+  | {
+      status: "one"
+      account: string
+      from: "group" | "roster"
+    }
   /** Nobody named an account for this kind. Legal — the queue is simply ungated. */
-  | { status: 'none' }
+  | { status: "none" }
   /** Two or more candidates and no way to choose. A `requires_profile` queue keyed on this
    *  group would sign into whichever one sorted first, which is the bug this refuses. */
-  | { status: 'ambiguous'; accounts: string[] };
+  | { status: "ambiguous"; accounts: string[] }
 
 /**
  * Resolve the ONE provider profile a group plays as.
@@ -195,26 +250,52 @@ export function groupPlayProfile(
   groupAccounts: ProfileAccounts,
   roster: readonly Person[],
 ): GroupProfile {
-  const key = String(kind ?? '').trim().toLowerCase();
-  const own = dedupeAccounts((groupAccounts ?? {})[key] ?? []);
-  if (own.length === 1) return { account: own[0] as string, from: 'group', status: 'one' };
-  if (own.length > 1) return { accounts: own, status: 'ambiguous' };
+  const key = String(kind ?? "")
+    .trim()
+    .toLowerCase()
+  const own = dedupeAccounts(
+    (groupAccounts ?? {})[key] ?? [],
+  )
+  if (own.length === 1)
+    return {
+      account: own[0] as string,
+      from: "group",
+      status: "one",
+    }
+  if (own.length > 1)
+    return { accounts: own, status: "ambiguous" }
 
-  const union = dedupeAccounts((mergeAccounts(...roster.map((person) => person.accounts))[key] ?? []));
-  if (union.length === 1) return { account: union[0] as string, from: 'roster', status: 'one' };
-  if (union.length > 1) return { accounts: union, status: 'ambiguous' };
-  return { status: 'none' };
+  const union = dedupeAccounts(
+    mergeAccounts(
+      ...roster.map((person) => person.accounts),
+    )[key] ?? [],
+  )
+  if (union.length === 1)
+    return {
+      account: union[0] as string,
+      from: "roster",
+      status: "one",
+    }
+  if (union.length > 1)
+    return { accounts: union, status: "ambiguous" }
+  return { status: "none" }
 }
 
 /** Case-insensitively de-duplicated, first spelling wins — the same comparison `groups.ts`
  *  has always used, because these names are typed by hand into a YAML file. */
-function dedupeAccounts(names: readonly string[]): string[] {
-  const out: string[] = [];
+function dedupeAccounts(
+  names: readonly string[],
+): string[] {
+  const out: string[] = []
   for (const raw of names) {
-    const name = String(raw ?? '').trim();
-    if (name && !out.some((existing) => norm(existing) === norm(name))) out.push(name);
+    const name = String(raw ?? "").trim()
+    if (
+      name &&
+      !out.some((existing) => norm(existing) === norm(name))
+    )
+      out.push(name)
   }
-  return out;
+  return out
 }
 
 // ── The filter ────────────────────────────────────────────────────────────────────────── //
@@ -222,11 +303,11 @@ function dedupeAccounts(names: readonly string[]): string[] {
 /** What a caller has to know about one member to decide whether a queue matches. */
 export interface ResolvedMember extends QueueMember {
   /** For a group: the complete saved roster, including people marked May join. */
-  people: string[];
+  people: string[]
   /** For a group: only the required roster. For a person: just themself. */
-  requiredPeople: string[];
+  requiredPeople: string[]
   /** How many of `requiredPeople` count as this member being present. 1 for a person. */
-  minPresent: number;
+  minPresent: number
 }
 
 /**
@@ -270,21 +351,26 @@ export function queueMatchesSelection(
   members: readonly ResolvedMember[],
   selectedPersonIds: readonly string[],
 ): boolean {
-  if (members.length === 0) return true;
+  if (members.length === 0) return true
 
-  const selected = new Set(selectedPersonIds);
-  if (selected.size === 0) return true;
+  const selected = new Set(selectedPersonIds)
+  if (selected.size === 0) return true
 
-  const onQueue = new Set<string>();
-  for (const member of members) for (const personId of member.people) onQueue.add(personId);
+  const onQueue = new Set<string>()
+  for (const member of members)
+    for (const personId of member.people)
+      onQueue.add(personId)
 
-  for (const personId of selected) if (!onQueue.has(personId)) return false;
+  for (const personId of selected)
+    if (!onQueue.has(personId)) return false
 
   for (const member of members) {
-    if (member.role !== 'required') continue;
-    const present = member.requiredPeople.filter((personId) => selected.has(personId)).length;
-    if (present < member.minPresent) return false;
+    if (member.role !== "required") continue
+    const present = member.requiredPeople.filter(
+      (personId) => selected.has(personId),
+    ).length
+    if (present < member.minPresent) return false
   }
 
-  return true;
+  return true
 }

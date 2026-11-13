@@ -1,6 +1,6 @@
-import type { MiddlewareHandler } from 'hono';
-import { errMessage } from '../errors.js';
-import * as history from '../history.js';
+import type { MiddlewareHandler } from "hono"
+import { errMessage } from "../errors.js"
+import * as history from "../history.js"
 
 /**
  * Every data mutation snapshots the files first → the undo/redo stack. `/api/play` only
@@ -38,28 +38,44 @@ import * as history from '../history.js';
  * runs for undo/redo/play and — far worse — for a provider token write. `e2e/history-persist-test.mjs`
  * and `e2e/kbd-undo-test.mjs` are the behavioural gates.
  */
-export function undoSnapshot(mountPrefix: string): MiddlewareHandler {
-  const MUTATING = ['POST', 'PATCH', 'PUT', 'DELETE'];
-  const MANAGED = ['/play', '/undo', '/redo', '/board-games', '/native', '/tv-lock'];
-  const TOKEN_PATH = /^\/providers\/[^/]+\/token$/;
-  const PHOTO_PATH = /^\/people\/[^/]+\/photo$/;
+export function undoSnapshot(
+  mountPrefix: string,
+): MiddlewareHandler {
+  const MUTATING = ["POST", "PATCH", "PUT", "DELETE"]
+  const MANAGED = [
+    "/play",
+    "/undo",
+    "/redo",
+    "/board-games",
+    "/native",
+    "/tv-lock",
+  ]
+  const TOKEN_PATH = /^\/providers\/[^/]+\/token$/
+  const PHOTO_PATH = /^\/people\/[^/]+\/photo$/
 
   return async (c, next) => {
-    const full = c.req.path;
+    const full = c.req.path
     // `|| '/'` so a request to the mount point itself ("/api") reads as "/" rather than "".
-    const mounted = full.startsWith(mountPrefix) ? full.slice(mountPrefix.length) || '/' : full;
+    const mounted = full.startsWith(mountPrefix)
+      ? full.slice(mountPrefix.length) || "/"
+      : full
 
-    const isMutating = MUTATING.includes(c.req.method);
-    const isManaged = MANAGED.some((p) => mounted === p || mounted.startsWith(`${p}/`))
-      || TOKEN_PATH.test(mounted)
-      || PHOTO_PATH.test(mounted);
+    const isMutating = MUTATING.includes(c.req.method)
+    const isManaged =
+      MANAGED.some(
+        (p) => mounted === p || mounted.startsWith(`${p}/`),
+      ) ||
+      TOKEN_PATH.test(mounted) ||
+      PHOTO_PATH.test(mounted)
     if (isMutating && !isManaged) {
       try {
-        await history.snapshot();
+        await history.snapshot()
       } catch (e) {
-        console.log(`[history] snapshot failed: ${errMessage(e)}`);
+        console.log(
+          `[history] snapshot failed: ${errMessage(e)}`,
+        )
       }
     }
-    await next();
-  };
+    await next()
+  }
 }

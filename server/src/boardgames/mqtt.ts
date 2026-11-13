@@ -34,17 +34,17 @@
 // This is separate from `mqttc.ts` / `mqttd.ts` on purpose. Those are the playback service on
 // the `queuepilot/…` base; this is one app-owned job on a base it inherited. One client each is
 // cheaper to reason about than one client with two topic namespaces.
-import { createMqttService } from '@charcuterie/server/mqtt';
+import { createMqttService } from "@charcuterie/server/mqtt"
 
-import { runCollectionSync } from './jobs/collectionSync.js';
+import { runCollectionSync } from "./jobs/collectionSync.js"
 
 /** Everything the broker needs, or nothing. */
 export interface BoardGameMqttOptions {
-  host?: string | undefined;
-  base?: string | undefined;
-  port?: number | undefined;
-  username?: string | undefined;
-  password?: string | undefined;
+  host?: string | undefined
+  base?: string | undefined
+  port?: number | undefined
+  username?: string | undefined
+  password?: string | undefined
 }
 
 /**
@@ -56,25 +56,38 @@ export interface BoardGameMqttOptions {
  */
 export async function startBoardGameMqtt({
   host = process.env.MQTT_HOST,
-  base = process.env.BOARD_GAME_MQTT_BASE || 'board-game-picker',
+  base = process.env.BOARD_GAME_MQTT_BASE ||
+    "board-game-picker",
   port = Number(process.env.MQTT_PORT ?? 8883),
   username = process.env.MQTT_USER,
   password = process.env.MQTT_PASS,
-}: BoardGameMqttOptions = {}): Promise<{ close: () => void } | null> {
-  if (host === undefined || host.length === 0) return null;
+}: BoardGameMqttOptions = {}): Promise<{
+  close: () => void
+} | null> {
+  if (host === undefined || host.length === 0) return null
 
-  const mqtt = await createMqttService({ base, host, password, port, username });
+  const mqtt = await createMqttService({
+    base,
+    host,
+    password,
+    port,
+    username,
+  })
 
-  mqtt.handleCommand('sync', async () => {
-    console.log(`[boardgames] ${base}/cmd/sync — starting the collection sync`);
-    const result = await runCollectionSync((message) => console.log(`[boardgames] ${message}`));
+  mqtt.handleCommand("sync", async () => {
+    console.log(
+      `[boardgames] ${base}/cmd/sync — starting the collection sync`,
+    )
+    const result = await runCollectionSync((message) =>
+      console.log(`[boardgames] ${message}`),
+    )
     console.log(
       `[boardgames] collection sync finished — ${result.failed} step(s) failed of ${result.steps.length}`,
-    );
+    )
     // The payload shape HA already reads: it templates `isOk` to decide whether to notify.
-    return result;
-  });
+    return result
+  })
 
-  console.log(`[boardgames] listening on ${base}/cmd/sync`);
-  return mqtt;
+  console.log(`[boardgames] listening on ${base}/cmd/sync`)
+  return mqtt
 }

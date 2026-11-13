@@ -5,19 +5,32 @@
 //
 // Reuses server/src/plex.js — the same keepalive pool, retry policy, and account-token
 // mint that the web API already uses in production. No second HTTP stack.
-import { plexGet, accountToken as mintAccountToken } from '../plex.js';
-import type { PlexClient, PlexMediaContainer } from '../types.js';
+import {
+  accountToken as mintAccountToken,
+  plexGet,
+} from "../plex.js"
+import type {
+  PlexClient,
+  PlexMediaContainer,
+} from "../types.js"
 
 export function liveClient(): PlexClient {
   return {
-    async container(path: string, token: string | null = null): Promise<PlexMediaContainer> {
-      const data = (await plexGet(path, token)) as { MediaContainer?: PlexMediaContainer } | null;
-      return (data && data.MediaContainer) || {};
+    async container(
+      path: string,
+      token: string | null = null,
+    ): Promise<PlexMediaContainer> {
+      const data = (await plexGet(path, token)) as {
+        MediaContainer?: PlexMediaContainer
+      } | null
+      return (data && data.MediaContainer) || {}
     },
     // null uuid => admin token path (engine treats null as "use default X-Plex-Token").
-    async accountToken(uuid: string | null | undefined): Promise<string | null> {
-      if (!uuid) return null;
-      return (await mintAccountToken(uuid)) as string | null;
+    async accountToken(
+      uuid: string | null | undefined,
+    ): Promise<string | null> {
+      if (!uuid) return null
+      return (await mintAccountToken(uuid)) as string | null
     },
-  };
+  }
 }

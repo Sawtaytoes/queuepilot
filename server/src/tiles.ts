@@ -10,10 +10,16 @@
 // The single-flight that makes N tiles asking for the same collection cost one HTTP call lives
 // in plex.plexGet, so it covers every caller automatically; this module just has to not
 // defeat it (it doesn't — it awaits the shared plex functions directly).
-import * as plex from './plex.js';
-import type { AccountScope, CollectionNextEp, ResolvedItem, SectionIds } from './plex.js';
-import type { NextEp, Start, Tile } from './types.js';
-import { plexWebUrl } from './webLinks.js';
+
+import type {
+  AccountScope,
+  CollectionNextEp,
+  ResolvedItem,
+  SectionIds,
+} from "./plex.js"
+import * as plex from "./plex.js"
+import type { NextEp, Start, Tile } from "./types.js"
+import { plexWebUrl } from "./webLinks.js"
 
 /**
  * What `resolveTile()` actually returns: `types.ts`'s `Tile`, widened in exactly four spots
@@ -29,26 +35,32 @@ import { plexWebUrl } from './webLinks.js';
  *   * `nextEp` — `collectionNext()` returns `CollectionNextEp`, which sets `startMember` to
  *     `null` where `NextEp` declares `startMember?: string`.
  */
-export interface ResolvedTile extends Omit<Tile, 'title' | 'type' | 'year' | 'nextEp'> {
-  title: string | undefined;
-  type: string | null | undefined;
-  year: number | null | undefined;
-  nextEp: NextEp | CollectionNextEp | null;
+export interface ResolvedTile
+  extends Omit<Tile, "title" | "type" | "year" | "nextEp"> {
+  title: string | undefined
+  type: string | null | undefined
+  year: number | null | undefined
+  nextEp: NextEp | CollectionNextEp | null
 }
 
 function displayFor(value: unknown): string {
-  if (value && typeof value === 'object') {
+  if (value && typeof value === "object") {
     // `title` is asserted to be a string rather than stringified: a YAML `title: 2012` is a
     // NUMBER at runtime and this function has always returned it unchanged. Wrapping it in
     // `String()` would be a (small) wire change, so the assertion carries the existing lie.
-    const o = value as { title?: string; ratingKey?: string | number; collection?: string };
+    const o = value as {
+      title?: string
+      ratingKey?: string | number
+      collection?: string
+    }
     // A `{collection: <name>}` entry has no `title`, so without this it read
     // "ratingKey undefined" — the caption on every collection tile the moment the file
     // stopped spelling a collection as a `Collection: <name>` string.
-    if (!o.title && o.collection) return `Collection: ${o.collection}`;
-    return o.title || `ratingKey ${o.ratingKey}`;
+    if (!o.title && o.collection)
+      return `Collection: ${o.collection}`
+    return o.title || `ratingKey ${o.ratingKey}`
   }
-  return String(value);
+  return String(value)
 }
 
 // Resolve one raw value to the fields a poster tile needs. `sections` scopes a title lookup;
@@ -62,15 +74,29 @@ export async function resolveTile(
   skipped: ReadonlySet<string> = new Set<string>(),
   includedSpecials: ReadonlySet<string> = new Set<string>(),
   completed: ReadonlySet<string> | null = null,
-  queueProgress: ReadonlyMap<string, { positionMs: number }> | null = null,
+  queueProgress: ReadonlyMap<
+    string,
+    { positionMs: number }
+  > | null = null,
 ): Promise<ResolvedTile> {
-  const collectionOrder = value && typeof value === 'object'
-    && Array.isArray((value as { collection_order?: unknown }).collection_order)
-    ? (value as { collection_order: unknown[] }).collection_order.map(String)
-    : [];
-  let resolved: ResolvedItem | null = null;
+  const collectionOrder =
+    value &&
+    typeof value === "object" &&
+    Array.isArray(
+      (value as { collection_order?: unknown })
+        .collection_order,
+    )
+      ? (
+          value as { collection_order: unknown[] }
+        ).collection_order.map(String)
+      : []
+  let resolved: ResolvedItem | null = null
   try {
-    resolved = await plex.resolveValue(sections, value, opts);
+    resolved = await plex.resolveValue(
+      sections,
+      value,
+      opts,
+    )
   } catch {
     /* leave unresolved */
   }
@@ -81,12 +107,12 @@ export async function resolveTile(
   // `skipped` is the curated set's own skip list. The tile has to apply it for the same reason
   // the engine does: a caption naming the episode the next scan will refuse to play is worse
   // than no caption, because it reads as the feature not working.
-  let nextEp: NextEp | CollectionNextEp | null = null;
+  let nextEp: NextEp | CollectionNextEp | null = null
   // A null `nextEp` means two different things — "nothing left to play" and "the lookup
   // failed" — and the tile says something different for each ("All watched" vs the neutral
   // "N in order"), so the failure is recorded rather than collapsed into the same null.
-  let isNextEpFailed = false;
-  if (resolved && resolved.type === 'show') {
+  let isNextEpFailed = false
+  if (resolved && resolved.type === "show") {
     try {
       nextEp = await plex.nextEpisode(
         resolved.ratingKey,
@@ -96,11 +122,11 @@ export async function resolveTile(
         includedSpecials,
         completed,
         queueProgress,
-      );
+      )
     } catch {
-      isNextEpFailed = true;
+      isNextEpFailed = true
     }
-  } else if (resolved && resolved.type === 'collection') {
+  } else if (resolved && resolved.type === "collection") {
     try {
       nextEp = await plex.collectionNext(
         resolved.ratingKey,
@@ -111,9 +137,9 @@ export async function resolveTile(
         collectionOrder,
         completed,
         queueProgress,
-      );
+      )
     } catch {
-      isNextEpFailed = true;
+      isNextEpFailed = true
     }
   }
 
@@ -124,25 +150,31 @@ export async function resolveTile(
   // The in-progress leaf/movie's own resume point + runtime (ms), so the tile's "In Progress"
   // badge can say how far in and how long. A MOVIE reads its own; a SHOW/COLLECTION reads it
   // off the next-up leaf (nextEpisode/collectionNext), matching partiallyWatched's source.
-  let partiallyWatched = false;
-  let viewOffset = 0;
-  let duration = 0;
-  if (resolved && resolved.type === 'movie') {
-    viewOffset = Number(resolved.viewOffset) || 0;
-    duration = Number(resolved.duration) || 0;
-    partiallyWatched = viewOffset > 0 && !(Number(resolved.viewCount) > 0);
+  let partiallyWatched = false
+  let viewOffset = 0
+  let duration = 0
+  if (resolved && resolved.type === "movie") {
+    viewOffset = Number(resolved.viewOffset) || 0
+    duration = Number(resolved.duration) || 0
+    partiallyWatched =
+      viewOffset > 0 && !(Number(resolved.viewCount) > 0)
   } else if (nextEp && nextEp.partiallyWatched) {
-    partiallyWatched = true;
-    viewOffset = Number(nextEp.viewOffset) || 0;
-    duration = Number(nextEp.duration) || 0;
+    partiallyWatched = true
+    viewOffset = Number(nextEp.viewOffset) || 0
+    duration = Number(nextEp.duration) || 0
   }
 
   // How many of the set's skips are this entry's own — the entry sheet says "2 skipped" and
   // the member list is where they are cleared. Reads nothing when the set skips nothing.
-  let skippedCount = 0;
+  let skippedCount = 0
   if (resolved) {
     try {
-      skippedCount = await plex.countSkippedInside(resolved.ratingKey, resolved.type, skipped, opts);
+      skippedCount = await plex.countSkippedInside(
+        resolved.ratingKey,
+        resolved.type,
+        skipped,
+        opts,
+      )
     } catch {
       /* a count is a nicety; a failed read must not cost the tile */
     }
@@ -153,7 +185,9 @@ export async function resolveTile(
     ratingKey: resolved ? resolved.ratingKey : null,
     // The item's own Plex page. Built from the tile's OWN ratingKey, so a collection links
     // to the collection and a show to the show — not to the next-up leaf the caption names.
-    webUrl: resolved ? await plexWebUrl(resolved.ratingKey, resolved.type) : null,
+    webUrl: resolved
+      ? await plexWebUrl(resolved.ratingKey, resolved.type)
+      : null,
     type: resolved ? resolved.type : null,
     title: resolved ? resolved.title : displayFor(value),
     year: resolved ? resolved.year : null,
@@ -162,15 +196,21 @@ export async function resolveTile(
     // edition (#153) and the tile the pick WROTE went back to being one of two identical
     // captions. A COLLECTION has no edition, and the union is discriminated on `type`, so the
     // narrowing is the check rather than a cast.
-    editionTitle: resolved && resolved.type !== 'collection' ? resolved.editionTitle : null,
-    childCount: resolved && resolved.type === 'collection' ? resolved.childCount : null,
+    editionTitle:
+      resolved && resolved.type !== "collection"
+        ? resolved.editionTitle
+        : null,
+    childCount:
+      resolved && resolved.type === "collection"
+        ? resolved.childCount
+        : null,
     nextEp,
     isNextEpFailed,
     skippedCount,
     partiallyWatched,
     viewOffset,
     duration,
-  };
+  }
 }
 
 /**
@@ -182,7 +222,9 @@ export async function resolveTile(
  * grid already paints `resolved: false` with the red "unresolved" border, so the broken entry
  * reports itself with no frontend change at all.
  */
-export function unresolvedTile(value: unknown): ResolvedTile {
+export function unresolvedTile(
+  value: unknown,
+): ResolvedTile {
   return {
     resolved: false,
     ratingKey: null,
@@ -198,7 +240,7 @@ export function unresolvedTile(value: unknown): ResolvedTile {
     partiallyWatched: false,
     viewOffset: 0,
     duration: 0,
-  };
+  }
 }
 
-export { displayFor };
+export { displayFor }

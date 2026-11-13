@@ -13,10 +13,14 @@
 //           answers 502 for an id Plex has never heard of.
 //   unit  — 'chapter', so the tile's next-up line reads "Ch 113" rather than "E113" and a
 //           finished series reads "All read" rather than "All watched".
-import { errMessage } from '../errors.js';
-import type { CuratedEntryRef, MediaUnit, NextEp } from '../types.js';
-import * as blocks from './blocks.js';
-import { coverUrl, openUrl, providerFor } from './index.js';
+import { errMessage } from "../errors.js"
+import type {
+  CuratedEntryRef,
+  MediaUnit,
+  NextEp,
+} from "../types.js"
+import * as blocks from "./blocks.js"
+import { coverUrl, openUrl, providerFor } from "./index.js"
 
 /**
  * What this module needs off a set: an id for the log line, plus whatever `blocks.js` reads
@@ -25,13 +29,13 @@ import { coverUrl, openUrl, providerFor } from './index.js';
  * that makes it assignable (the same rule the `{ ...s }` spreads elsewhere work around).
  */
 export type TileSetSource = {
-  id: string;
-  providers?: unknown;
-  requires_profile?: string | null;
-  sections?: unknown;
+  id: string
+  providers?: unknown
+  requires_profile?: string | null
+  sections?: unknown
   /** The set's skip list, in the provider's own id space — see `ProviderTileOpts.skipped`. */
-  skipped?: readonly string[];
-};
+  skipped?: readonly string[]
+}
 
 /**
  * One tile as a PULL provider answers it.
@@ -43,20 +47,20 @@ export type TileSetSource = {
  * frontend's `QueueItem`, which is what lets one component render either.
  */
 export interface ProviderTile {
-  resolved: boolean;
-  ratingKey: string | null;
-  cover: string | null;
+  resolved: boolean
+  ratingKey: string | null
+  cover: string | null
   /** The item's page in the provider's own UI — see `Tile.webUrl` in ../types.ts. */
-  webUrl: string | null;
-  type: string | null;
-  title: string;
-  year: number | null;
-  childCount: number | null;
-  nextEp: NextEp | null;
-  partiallyWatched: boolean;
-  viewOffset: number;
-  duration: number;
-  unit?: MediaUnit;
+  webUrl: string | null
+  type: string | null
+  title: string
+  year: number | null
+  childCount: number | null
+  nextEp: NextEp | null
+  partiallyWatched: boolean
+  viewOffset: number
+  duration: number
+  unit?: MediaUnit
   /**
    * The provider library this item sits in, when the provider says. Carried for ONE reader: a
    * FILTERED queue narrows its parent's entries by library, and the library an entry belongs
@@ -64,7 +68,7 @@ export interface ProviderTile {
    * (`filteredQueues.ts`). Null for a provider with no library concept, and for an entry that
    * did not resolve.
    */
-  libraryId: string | null;
+  libraryId: string | null
 }
 
 /**
@@ -74,36 +78,50 @@ export interface ProviderTile {
  * game's tile is a property of the ENTRY: how many plays it owes and when it was queued
  * both live in queues.yaml, and without them a "3 plays" entry drew as "Play 1 of 1".
  */
-function entryRefOf(value: unknown, id: string): CuratedEntryRef {
-  const o = (value && typeof value === 'object' ? value : {}) as { episodes?: unknown; queued_at?: unknown };
-  const batch = Number(o.episodes);
-  const queuedAt = Number(o.queued_at);
+function entryRefOf(
+  value: unknown,
+  id: string,
+): CuratedEntryRef {
+  const o = (
+    value && typeof value === "object" ? value : {}
+  ) as { episodes?: unknown; queued_at?: unknown }
+  const batch = Number(o.episodes)
+  const queuedAt = Number(o.queued_at)
   return {
     id,
-    batch: Number.isFinite(batch) && batch > 0 ? batch : null,
-    queuedAt: Number.isFinite(queuedAt) && queuedAt > 0 ? queuedAt : null,
-  };
+    batch:
+      Number.isFinite(batch) && batch > 0 ? batch : null,
+    queuedAt:
+      Number.isFinite(queuedAt) && queuedAt > 0
+        ? queuedAt
+        : null,
+  }
 }
 
 /** The provider item id an entry names, or null for a value that carries none. */
 function idOf(value: unknown): string | null {
-  if (value && typeof value === 'object') {
-    const o = value as { ratingKey?: string | number };
-    if (o.ratingKey != null) return String(o.ratingKey);
+  if (value && typeof value === "object") {
+    const o = value as { ratingKey?: string | number }
+    if (o.ratingKey != null) return String(o.ratingKey)
   }
-  return null;
+  return null
 }
 
 function displayFor(value: unknown): string {
-  if (value && typeof value === 'object') {
+  if (value && typeof value === "object") {
     // Same assertion (and same latent lie) as `tiles.ts displayFor()`: a YAML `title: 2012`
     // is a NUMBER at runtime and has always been returned unchanged.
-    const o = value as { title?: string; ratingKey?: string | number; collection?: string };
+    const o = value as {
+      title?: string
+      ratingKey?: string | number
+      collection?: string
+    }
     // Same as tiles.ts displayFor: a `{collection: <name>}` entry carries no title.
-    if (!o.title && o.collection) return `Collection: ${o.collection}`;
-    return o.title || `item ${o.ratingKey}`;
+    if (!o.title && o.collection)
+      return `Collection: ${o.collection}`
+    return o.title || `item ${o.ratingKey}`
   }
-  return String(value);
+  return String(value)
 }
 
 /** The tile a value gets when nothing could resolve it — its stored title, and no art. */
@@ -122,7 +140,7 @@ function unresolvedTile(value: unknown): ProviderTile {
     viewOffset: 0,
     duration: 0,
     libraryId: null,
-  };
+  }
 }
 
 /**
@@ -139,44 +157,64 @@ export async function resolveTiles(
   values: readonly unknown[],
   { isFresh = false }: { isFresh?: boolean } = {},
 ): Promise<ProviderTile[]> {
-  if (!values.length) return [];
+  if (!values.length) return []
 
-  let block;
-  let provider;
+  let block: ReturnType<typeof blocks.resolveSingle>
+  let provider: ReturnType<typeof providerFor>
   try {
-    block = blocks.resolveSingle(set);
-    provider = providerFor(block.provider);
+    block = blocks.resolveSingle(set)
+    provider = providerFor(block.provider)
   } catch (e) {
-    console.log(`[providers] tiles for set '${set.id}': ${errMessage(e)}`);
-    return values.map(unresolvedTile);
+    console.log(
+      `[providers] tiles for set '${set.id}': ${errMessage(e)}`,
+    )
+    return values.map(unresolvedTile)
   }
-  if (typeof provider.tiles !== 'function') return values.map(unresolvedTile);
+  if (typeof provider.tiles !== "function")
+    return values.map(unresolvedTile)
 
-  const ids = values.map(idOf);
-  const wanted = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  const ids = values.map(idOf)
+  const wanted = [
+    ...new Set(
+      ids.filter((id): id is string => Boolean(id)),
+    ),
+  ]
   // Index-aligned with `wanted`: the FIRST entry naming each id wins, which matches the
   // de-duplication above (a queue cannot hold the same item twice).
-  const refs = wanted.map((id) => entryRefOf(values[ids.indexOf(id)], id));
-  let rows = [];
+  const refs = wanted.map((id) =>
+    entryRefOf(values[ids.indexOf(id)], id),
+  )
+  let rows = []
   try {
     // The skip list rides on the SET, so it is passed once rather than per item. A provider
     // that ignores the third argument simply does not support skipping yet, and the tile menu
     // never offers it there (no leaf id reaches `nextEp.ratingKey`).
-    rows = await provider.tiles(wanted, refs, { isFresh, skipped: set.skipped || [] });
+    rows = await provider.tiles(wanted, refs, {
+      isFresh,
+      skipped: set.skipped || [],
+    })
   } catch (e) {
-    console.log(`[providers] tiles for set '${set.id}': ${errMessage(e)}`);
-    return values.map(unresolvedTile);
+    console.log(
+      `[providers] tiles for set '${set.id}': ${errMessage(e)}`,
+    )
+    return values.map(unresolvedTile)
   }
-  const byId = new Map<string, NonNullable<(typeof rows)[number]>>();
-  wanted.forEach((id, i) => { const r = rows[i]; if (r) byId.set(id, r); });
+  const byId = new Map<
+    string,
+    NonNullable<(typeof rows)[number]>
+  >()
+  wanted.forEach((id, i) => {
+    const r = rows[i]
+    if (r) byId.set(id, r)
+  })
 
   return values.map((value, i) => {
     // Hoisted out of upstream's `ids[i] == null ? null : byId.get(ids[i])` only because
     // `noUncheckedIndexedAccess` cannot see that the second read is the same element.
-    const id = ids[i];
-    const row = id == null ? null : byId.get(id);
-    if (!row) return unresolvedTile(value);
-    const next = row.next || null;
+    const id = ids[i]
+    const row = id == null ? null : byId.get(id)
+    if (!row) return unresolvedTile(value)
+    const next = row.next || null
     return {
       resolved: true,
       ratingKey: String(row.id),
@@ -184,51 +222,62 @@ export async function resolveTiles(
       // A link to THIS server, which redirects — see `openUrl`. Offered only when the
       // provider can resolve a page at all; one that cannot leaves the title as plain text
       // rather than pointing at a 404.
-      webUrl: typeof provider.webUrl === 'function' ? openUrl(block.provider, row.id) : null,
+      webUrl:
+        typeof provider.webUrl === "function"
+          ? openUrl(block.provider, row.id)
+          : null,
       // 'show' is the tile shape a series wants — a title line plus a "what's next" line —
       // and the frontend already renders it. A reading-only entry type would need a second
       // render path for no behavioural difference; `unit` carries the wording instead.
-      type: 'show',
+      type: "show",
       // The ITEM's unit wins over the provider's. A Kavita library holds volume-based manga
       // beside chapter-based webtoons, so "chapter" is the provider's default and a whole
       // volume corrects it to "Vol 1" — the provider-level value alone would print "Ch 1"
       // for something that is not a chapter.
-      unit: next?.unit || provider.unit || 'episode',
+      unit: next?.unit || provider.unit || "episode",
       title: row.title || displayFor(value),
       year: null,
       childCount: null,
       nextEp: next
         ? {
-          // The LEAF's own id, which is what "Skip this one" writes. Only Kavita spells one
-          // today (`chapterId`); a board game play, a Steam title and a MiSTer ROM each have
-          // their own identity and no shared leaf key, so those tiles carry none and the
-          // menu row is not offered. Narrowed with `in` rather than cast: the union is four
-          // provider shapes and only one of them answers this.
-          ratingKey: 'chapterId' in next && next.chapterId != null
-            ? String(next.chapterId)
-            : null,
-          title: next.title ?? null,
-          // Chapters have no season, and `multiSeason: false` is what drops the "S1" that a
-          // chapter must never wear.
-          episode: Number(next.number) || null,
-          // "Play 2 of 3". Only a finite per-entry batch has a total to count towards, so
-          // this is absent for every episode and every chapter.
-          of: 'of' in next ? next.of ?? null : null,
-          season: null,
-          multiSeason: false,
-        }
+            // The LEAF's own id, which is what "Skip this one" writes. Only Kavita spells one
+            // today (`chapterId`); a board game play, a Steam title and a MiSTer ROM each have
+            // their own identity and no shared leaf key, so those tiles carry none and the
+            // menu row is not offered. Narrowed with `in` rather than cast: the union is four
+            // provider shapes and only one of them answers this.
+            ratingKey:
+              "chapterId" in next && next.chapterId != null
+                ? String(next.chapterId)
+                : null,
+            title: next.title ?? null,
+            // Chapters have no season, and `multiSeason: false` is what drops the "S1" that a
+            // chapter must never wear.
+            episode: Number(next.number) || null,
+            // "Play 2 of 3". Only a finite per-entry batch has a total to count towards, so
+            // this is absent for every episode and every chapter.
+            of: "of" in next ? (next.of ?? null) : null,
+            season: null,
+            multiSeason: false,
+          }
         : null,
       // A part-read chapter is the reading analogue of a Plex viewOffset, and the badge it
       // drives says so. `viewOffset`/`duration` stay 0: they are MILLISECONDS, and pages are
       // not a runtime — the badge's tooltip correctly says nothing rather than "0:00 of 0:00".
       // Pages read is Kavita's alone: a play is atomic — it happened or it did not — so a
       // board game is never "partially" anything.
-      partiallyWatched: Boolean(next && 'pagesRead' in next && (next.pagesRead ?? 0) > 0),
+      partiallyWatched: Boolean(
+        next &&
+          "pagesRead" in next &&
+          (next.pagesRead ?? 0) > 0,
+      ),
       viewOffset: 0,
       duration: 0,
       // Only Kavita answers this today; a provider that has no libraries reports null and a
       // filtered queue over it therefore narrows nothing. See `ProviderTile.libraryId`.
-      libraryId: 'libraryId' in row && row.libraryId != null ? String(row.libraryId) : null,
-    };
-  });
+      libraryId:
+        "libraryId" in row && row.libraryId != null
+          ? String(row.libraryId)
+          : null,
+    }
+  })
 }

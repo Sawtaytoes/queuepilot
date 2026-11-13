@@ -3,17 +3,28 @@
 // bridges). It consumes the retained device registry + state that mqttd publishes and sends
 // session-start commands ("Play on <device>") back to it. Rotation previews are NOT here:
 // they are computed in-process by the engine (server.js /api/generic/:id/preview).
-import { connect, type MqttClient } from 'mqtt';
+import { connect, type MqttClient } from "mqtt"
 // These come from env.js rather than process.env: this module used to re-declare the same
 // four knobs with its own copies of the defaults, which is the exact drift env.js exists to
 // prevent — during the queuepilot rename those copies would have kept this half of the
 // process on `plex-channels/…` while mqttd moved, and the web UI's device list and state
 // feed would have gone quiet with nothing logged.
 import {
-  MQTT_HOST as HOST, MQTT_PORT as PORT, MQTT_USER as USER, MQTT_PASS as PASS,
-  T_CMD_ACTIVITY_OFF, T_CMD_START, T_DEVICES_BASE, T_STATE, T_NOW_PLAYING,
-} from './env.js';
-import type { Device, NowPlaying, PublishedSessionState } from './types.js';
+  MQTT_HOST as HOST,
+  MQTT_PASS as PASS,
+  MQTT_PORT as PORT,
+  T_CMD_ACTIVITY_OFF,
+  T_CMD_START,
+  T_DEVICES_BASE,
+  T_NOW_PLAYING,
+  T_STATE,
+  MQTT_USER as USER,
+} from "./env.js"
+import type {
+  Device,
+  NowPlaying,
+  PublishedSessionState,
+} from "./types.js"
 
 /**
  * What `play()` puts on the wire. Local (not in types.ts) because it is the OUTBOUND twin of
@@ -22,17 +33,17 @@ import type { Device, NowPlaying, PublishedSessionState } from './types.js';
  * announced entry (see the latent-bug note on `SessionStartPayload`).
  */
 interface StartCommand {
-  set: string;
-  kind: string;
-  target?: string;
-  profile?: string;
+  set: string
+  kind: string
+  target?: string
+  profile?: string
   /** An entry key — play THAT member of a curated set. Web-only; a card never sends it. */
-  only?: string;
+  only?: string
   /**
    * Auto-routing hint for `set: auto`: `rewatch` picks the Movies Rules channel.
    * Product kind is picks|rules and cannot carry that distinction alone.
    */
-  behavior?: string;
+  behavior?: string
 }
 
 /**
@@ -40,24 +51,28 @@ interface StartCommand {
  * timer, an empty-room rule) is distinguishable from the button without a second topic.
  */
 interface EndActivityCommand {
-  reason: 'manual'
+  reason: "manual"
   set?: string
   target?: string
 }
 
 /** A device announcement as it comes back off the retained registry: unvalidated JSON, so
  * every field is optional even though `devices.js` always writes a full `Device`. */
-type AnnouncedDevice = Partial<Device> & Record<string, unknown>;
+type AnnouncedDevice = Partial<Device> &
+  Record<string, unknown>
 
-type StateListener = (state: PublishedSessionState | null) => void;
-type NowPlayingListener = (now: NowPlaying | null) => void;
+type StateListener = (
+  state: PublishedSessionState | null,
+) => void
+type NowPlayingListener = (now: NowPlaying | null) => void
 
-export const connected = (): boolean => Boolean(client && client.connected);
+export const connected = (): boolean =>
+  Boolean(client && client.connected)
 
-const DEVICES = new Map<string, AnnouncedDevice>(); // id -> announcement payload (retained registry)
-let LAST_STATE: PublishedSessionState | null = null; // last retained queuepilot/state payload
-let LAST_NOW: NowPlaying | null = null;
-const deviceNow = new Map<string, NowPlaying | null>(); // last retained queuepilot/now-playing payload
+const DEVICES = new Map<string, AnnouncedDevice>() // id -> announcement payload (retained registry)
+let LAST_STATE: PublishedSessionState | null = null // last retained queuepilot/state payload
+let LAST_NOW: NowPlaying | null = null
+const deviceNow = new Map<string, NowPlaying | null>() // last retained queuepilot/now-playing payload
 
 /**
  * Off-the-wire JSON as a plain object, or null for "not an object".
@@ -66,12 +81,16 @@ const deviceNow = new Map<string, NowPlaying | null>(); // last retained queuepi
  * that makes every field below a lie. Everything this module retains arrives unvalidated, so
  * it is checked for object-ness once, here, and the interfaces stay honest about the rest.
  */
-function asRecord(text: string): Record<string, unknown> | null {
-  const parsed: unknown = JSON.parse(text);
-  return parsed !== null && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+function asRecord(
+  text: string,
+): Record<string, unknown> | null {
+  const parsed: unknown = JSON.parse(text)
+  return parsed !== null && typeof parsed === "object"
+    ? (parsed as Record<string, unknown>)
+    : null
 }
 
-let client: MqttClient | null = null;
+let client: MqttClient | null = null
 if (HOST) {
   // Bound to a const so the callbacks below keep the narrowing: `client` is a mutable
   // module-level `let`, so TS discards `!== null` inside a closure. Same object, same
@@ -80,14 +99,14 @@ if (HOST) {
   const c = connect({
     host: HOST,
     port: PORT,
-    protocol: PORT === 8883 ? 'mqtts' : 'mqtt', // LE-certed broker; system CAs verify
+    protocol: PORT === 8883 ? "mqtts" : "mqtt", // LE-certed broker; system CAs verify
     username: USER,
     password: PASS,
     reconnectPeriod: 5000,
-  });
-  client = c;
-  c.on('connect', () => {
-    console.log(`[mqtt] web connected to ${HOST}:${PORT}`);
+  })
+  client = c
+  c.on("connect", () => {
+    console.log(`[mqtt] web connected to ${HOST}:${PORT}`)
     // T_NOW_PLAYING is LIVE playback, bridged onto MQTT by the HA automation "Queuepilot Now
     // Playing" from the Plex integration's media_player (already push-fed by the PMS
     // websocket, so nothing here polls). T_STATE only says what a session STARTED with; this
@@ -96,59 +115,82 @@ if (HOST) {
       `${T_DEVICES_BASE}/#`,
       T_STATE,
       T_NOW_PLAYING,
-    ]);
-  });
-  c.on('error', (e) => console.log(`[mqtt] ${e.message}`));
-  c.on('message', (topic, buf) => {
-    const text = buf.toString();
+    ])
+  })
+  c.on("error", (e) => console.log(`[mqtt] ${e.message}`))
+  c.on("message", (topic, buf) => {
+    const text = buf.toString()
     if (topic.startsWith(`${T_DEVICES_BASE}/`)) {
-      const id = topic.slice(T_DEVICES_BASE.length + 1);
-      if (!text) DEVICES.delete(id); // cleared retained topic = de-registered
+      const id = topic.slice(T_DEVICES_BASE.length + 1)
+      if (!text)
+        DEVICES.delete(id) // cleared retained topic = de-registered
       else {
         // A non-object payload (a bare number/string) is now DROPPED rather than stored as a
         // "device" — the one behaviour delta in this file's conversion, and unreachable from
         // the only publisher (devices.js announceDevices, which always sends an object).
         try {
-          const row = asRecord(text);
-          if (row) DEVICES.set(id, row as AnnouncedDevice);
-        } catch { /* ignore junk */ }
+          const row = asRecord(text)
+          if (row) DEVICES.set(id, row as AnnouncedDevice)
+        } catch {
+          /* ignore junk */
+        }
       }
-      return;
+      return
     }
     if (topic === T_STATE) {
       // Unlike now-playing this topic is published by mqttd in THIS process, so the shape is
       // the one publishState() writes — object-ness is still the only thing checked.
       try {
-        const row = asRecord(text);
+        const row = asRecord(text)
         if (row) {
-          const next = row as unknown as PublishedSessionState;
-          if ((next.deviceId || 'shield') !== (LAST_STATE?.deviceId || 'shield')) deviceNow.delete(next.deviceId || 'shield');
-          LAST_STATE = next;
+          const next =
+            row as unknown as PublishedSessionState
+          if (
+            (next.deviceId || "shield") !==
+            (LAST_STATE?.deviceId || "shield")
+          )
+            deviceNow.delete(next.deviceId || "shield")
+          LAST_STATE = next
         }
-      } catch { /* ignore */ }
-      LAST_NOW = deviceNow.get(LAST_STATE?.deviceId || 'shield') ?? null;
-      stateListeners.forEach((fn) => fn(LAST_STATE));
+      } catch {
+        /* ignore */
+      }
+      LAST_NOW =
+        deviceNow.get(LAST_STATE?.deviceId || "shield") ??
+        null
+      stateListeners.forEach((fn) => {
+        fn(LAST_STATE)
+      })
       // A cached snapshot is UI state, never a new playback/history observation.
-      return;
+      return
     }
     if (topic === T_NOW_PLAYING) {
-      if (!text) recordDeviceNowPlaying('shield', null);
+      if (!text) recordDeviceNowPlaying("shield", null)
       else {
         try {
-          const row = asRecord(text);
-          if (row === null) return;
-          recordDeviceNowPlaying('shield', row as NowPlaying);
-        } catch { return; }
+          const row = asRecord(text)
+          if (row === null) return
+          recordDeviceNowPlaying(
+            "shield",
+            row as NowPlaying,
+          )
+        } catch {
+          return
+        }
       }
     }
-  });
+  })
 }
 
-const stateListeners = new Set<StateListener>();
-export const onState = (fn: StateListener): Set<StateListener> => stateListeners.add(fn);
+const stateListeners = new Set<StateListener>()
+export const onState = (
+  fn: StateListener,
+): Set<StateListener> => stateListeners.add(fn)
 
-const nowListeners = new Set<NowPlayingListener>();
-export const onNowPlaying = (fn: NowPlayingListener): Set<NowPlayingListener> => nowListeners.add(fn);
+const nowListeners = new Set<NowPlayingListener>()
+export const onNowPlaying = (
+  fn: NowPlayingListener,
+): Set<NowPlayingListener> => nowListeners.add(fn)
 /**
  * Drop a now-playing listener.
  *
@@ -158,17 +200,24 @@ export const onNowPlaying = (fn: NowPlayingListener): Set<NowPlayingListener> =>
  * and wake a plan that has already been replaced. Additive on purpose — `onNowPlaying` keeps
  * returning the Set, so neither existing caller changes.
  */
-export const offNowPlaying = (fn: NowPlayingListener): boolean => nowListeners.delete(fn);
+export const offNowPlaying = (
+  fn: NowPlayingListener,
+): boolean => nowListeners.delete(fn)
 
 export function devices(): AnnouncedDevice[] {
   // Default first, then by name — the dropdown's order.
   return [...DEVICES.values()].sort(
-    (a, b) => Number(Boolean(b.default)) - Number(Boolean(a.default)) || String(a.name).localeCompare(String(b.name)),
-  );
+    (a, b) =>
+      Number(Boolean(b.default)) -
+        Number(Boolean(a.default)) ||
+      String(a.name).localeCompare(String(b.name)),
+  )
 }
 
-export const lastState = (): PublishedSessionState | null => LAST_STATE;
-export const lastNowPlaying = (): NowPlaying | null => LAST_NOW;
+export const lastState = (): PublishedSessionState | null =>
+  LAST_STATE
+export const lastNowPlaying = (): NowPlaying | null =>
+  LAST_NOW
 
 // Publish a session start ("Play on <device>"). target omitted -> the default Shield.
 // `profile` (PR 4) names the binding to play under on a profiles[] function channel —
@@ -183,17 +232,22 @@ export function play(
   only?: string | null,
   behavior?: string | null,
 ): StartCommand {
-  if (!connected()) throw new Error('MQTT not connected');
+  if (!connected()) throw new Error("MQTT not connected")
   // Default kind is picks (hand-picked) — the historical default create path. Callers that
   // know the set should pass wireKindForSet(); auto passes 'rules'.
-  const payload: StartCommand = { set: setId, kind: kind || 'picks' };
-  if (target) payload.target = target;
-  if (profile) payload.profile = profile;
-  if (only) payload.only = only;
-  if (behavior) payload.behavior = behavior;
+  const payload: StartCommand = {
+    set: setId,
+    kind: kind || "picks",
+  }
+  if (target) payload.target = target
+  if (profile) payload.profile = profile
+  if (only) payload.only = only
+  if (behavior) payload.behavior = behavior
   // `connected()` just proved client is non-null; it is a module-level `let`, so say so.
-  client!.publish(T_CMD_START, JSON.stringify(payload), { qos: 1 });
-  return payload;
+  client!.publish(T_CMD_START, JSON.stringify(payload), {
+    qos: 1,
+  })
+  return payload
 }
 
 /**
@@ -203,23 +257,36 @@ export function play(
  * other end has the set and the device without having to read the retained state that this
  * press is about to invalidate. `set` is null when nothing was attributed to a queue.
  */
-export function endActivity(
-  { set = null, target = null }: { set?: string | null; target?: string | null } = {},
-): EndActivityCommand {
-  if (!connected()) throw new Error('MQTT not connected');
-  const payload: EndActivityCommand = { reason: 'manual' };
-  if (set) payload.set = set;
-  if (target) payload.target = target;
-  client!.publish(T_CMD_ACTIVITY_OFF, JSON.stringify(payload), { qos: 1 });
-  return payload;
+export function endActivity({
+  set = null,
+  target = null,
+}: {
+  set?: string | null
+  target?: string | null
+} = {}): EndActivityCommand {
+  if (!connected()) throw new Error("MQTT not connected")
+  const payload: EndActivityCommand = { reason: "manual" }
+  if (set) payload.set = set
+  if (target) payload.target = target
+  client!.publish(
+    T_CMD_ACTIVITY_OFF,
+    JSON.stringify(payload),
+    { qos: 1 },
+  )
+  return payload
 }
 
-
 /** Accept telemetry only for its own device; a default-room push cannot control another sitting. */
-export function recordDeviceNowPlaying(deviceId: string, now: NowPlaying | null): void {
-  const tagged = now ? { ...now, deviceId } : null;
-  deviceNow.set(deviceId, tagged);
-  if (deviceId !== (LAST_STATE?.deviceId || 'shield')) return;
-  LAST_NOW = tagged;
-  nowListeners.forEach((fn) => fn(tagged));
+export function recordDeviceNowPlaying(
+  deviceId: string,
+  now: NowPlaying | null,
+): void {
+  const tagged = now ? { ...now, deviceId } : null
+  deviceNow.set(deviceId, tagged)
+  if (deviceId !== (LAST_STATE?.deviceId || "shield"))
+    return
+  LAST_NOW = tagged
+  nowListeners.forEach((fn) => {
+    fn(tagged)
+  })
 }

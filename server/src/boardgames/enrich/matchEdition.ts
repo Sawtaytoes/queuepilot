@@ -7,29 +7,35 @@
  */
 
 export interface EditionHint {
-  nickname: string | null;
-  year: number | null;
-  languages: string[];
+  nickname: string | null
+  year: number | null
+  languages: string[]
 }
 
 export interface CatalogEdition {
-  id: number;
-  name: string;
-  year?: number | null;
-  languages?: readonly string[];
+  id: number
+  name: string
+  year?: number | null
+  languages?: readonly string[]
 }
 
-export const normalizeEditionName = (value: string): string =>
-  value.trim().toLowerCase().replace(/\s+/g, ' ');
+export const normalizeEditionName = (
+  value: string,
+): string => value.trim().toLowerCase().replace(/\s+/g, " ")
 
 const sharesLanguage = (
   left: readonly string[] | undefined,
   right: readonly string[],
 ): boolean => {
-  if (!left || left.length === 0 || right.length === 0) return false;
-  const wanted = new Set(right.map((language) => normalizeEditionName(language)));
-  return left.some((language) => wanted.has(normalizeEditionName(language)));
-};
+  if (!left || left.length === 0 || right.length === 0)
+    return false
+  const wanted = new Set(
+    right.map((language) => normalizeEditionName(language)),
+  )
+  return left.some((language) =>
+    wanted.has(normalizeEditionName(language)),
+  )
+}
 
 /**
  * `null` means "use the title default" — not "pick the first English one and hope". Two
@@ -40,53 +46,61 @@ export const matchEdition = (
   hint: EditionHint,
   catalog: readonly CatalogEdition[],
 ): CatalogEdition | null => {
-  const nickname = hint.nickname ? normalizeEditionName(hint.nickname) : '';
+  const nickname = hint.nickname
+    ? normalizeEditionName(hint.nickname)
+    : ""
 
-  if (nickname !== '') {
+  if (nickname !== "") {
     const exact = catalog.filter(
-      (edition) => normalizeEditionName(edition.name) === nickname,
-    );
-    const picked = breakTies(exact, hint);
-    if (picked || exact.length > 0) return picked;
+      (edition) =>
+        normalizeEditionName(edition.name) === nickname,
+    )
+    const picked = breakTies(exact, hint)
+    if (picked || exact.length > 0) return picked
     // A nickname that matches nothing is a miss, not a prompt to invent an English printing
     // from the year alone.
-    return null;
+    return null
   }
 
   if (hint.year !== null && hint.languages.length > 0) {
     const byYearAndLanguage = catalog.filter(
       (edition) =>
-        edition.year === hint.year && sharesLanguage(edition.languages, hint.languages),
-    );
-    if (byYearAndLanguage.length === 1) return byYearAndLanguage[0] ?? null;
+        edition.year === hint.year &&
+        sharesLanguage(edition.languages, hint.languages),
+    )
+    if (byYearAndLanguage.length === 1)
+      return byYearAndLanguage[0] ?? null
   }
 
-  return null;
-};
+  return null
+}
 
 const breakTies = (
   candidates: CatalogEdition[],
   hint: EditionHint,
 ): CatalogEdition | null => {
-  if (candidates.length === 1) return candidates[0] ?? null;
-  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0] ?? null
+  if (candidates.length === 0) return null
 
   if (hint.year !== null) {
-    const byYear = candidates.filter((edition) => edition.year === hint.year);
-    if (byYear.length === 1) return byYear[0] ?? null;
+    const byYear = candidates.filter(
+      (edition) => edition.year === hint.year,
+    )
+    if (byYear.length === 1) return byYear[0] ?? null
     if (byYear.length > 1) {
       const byLanguage = byYear.filter((edition) =>
         sharesLanguage(edition.languages, hint.languages),
-      );
-      if (byLanguage.length === 1) return byLanguage[0] ?? null;
-      return null;
+      )
+      if (byLanguage.length === 1)
+        return byLanguage[0] ?? null
+      return null
     }
   }
 
   const byLanguage = candidates.filter((edition) =>
     sharesLanguage(edition.languages, hint.languages),
-  );
-  if (byLanguage.length === 1) return byLanguage[0] ?? null;
+  )
+  if (byLanguage.length === 1) return byLanguage[0] ?? null
 
-  return null;
-};
+  return null
+}

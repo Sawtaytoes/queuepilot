@@ -314,7 +314,6 @@ export function StartModal() {
       isStale = true
     }
     // `entry` identity changes exactly once per open.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entry])
 
   if (!entry || !item) {

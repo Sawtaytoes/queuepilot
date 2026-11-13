@@ -127,6 +127,14 @@ jobs:
           echo "$pnpm_global_bin" >> "$GITHUB_PATH"
           $PNPM install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
 
+      # Lint, from the workspace root, over web/, server/ and shared/: Biome (format +
+      # lint, `biome.json`) and then ESLint (the type-aware house rules, `eslint.config.mjs`),
+      # both adopted whole from Charcuterie. Check mode only, never `--write`/`--fix`: CI
+      # reports a problem, it does not repair one. It runs first so a formatting or lint
+      # failure reads as one, rather than as a build problem.
+      - name: Lint (Biome + ESLint)
+        run: $PNPM run lint
+
       # ---- Playwright's browser, ONCE, cached ----
       #
       # This ran TWICE per job (the narrow-view gate and the browser-e2e gate each did their
@@ -212,11 +220,6 @@ jobs:
       # `web/` is React 19 + TypeScript + Vite + Tailwind v4 on @charcuterie/tokens.
       # These three are the frontend's gates and they must run BEFORE the browser
       # suites, which drive the server — and that serves web/dist.
-      # Biome is formatter + linter for web/. Runs before typecheck so a
-      # formatting/lint failure reads as one, rather than as a build problem.
-      - name: Web lint (Biome)
-        run: $PNPM --filter queuepilot-web run lint:biome
-
       - name: Web typecheck
         run: $PNPM --filter queuepilot-web run typecheck
 

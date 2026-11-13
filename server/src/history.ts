@@ -15,11 +15,11 @@
 // The Python prune's writes aren't
 // snapshotted: undoing "watched entries pruned" would only re-prune next scan, so nothing
 // breaks — user-facing edits are what the buttons are for.
-import { promises as fs } from 'node:fs';
-import { HISTORY_PATH } from './config.js';
-import { errMessage } from './errors.js';
-import { store } from './store/index.js';
-import { migrateText } from './tools/entryObjects.js';
+import { promises as fs } from "node:fs"
+import { HISTORY_PATH } from "./config.js"
+import { errMessage } from "./errors.js"
+import { store } from "./store/index.js"
+import { migrateText } from "./tools/entryObjects.js"
 
 /**
  * One undo/redo entry: the raw text of both data files at a point in time, or null per file
@@ -27,13 +27,13 @@ import { migrateText } from './tools/entryObjects.js';
  * skips rather than restoring an empty file.
  */
 interface Snapshot {
-  q: string | null;
-  s: string | null;
+  q: string | null
+  s: string | null
 }
 
-const MAX = 50;
-let undoStack: Snapshot[] = [];
-let redoStack: Snapshot[] = [];
+const MAX = 50
+let undoStack: Snapshot[] = []
+let redoStack: Snapshot[] = []
 
 /**
  * The ONLY validation the persisted stack has ever had: each entry must be a non-null object.
@@ -43,37 +43,52 @@ let redoStack: Snapshot[] = [];
  * pretending the file was schema-validated.
  */
 function isSnapshot(s: unknown): s is Snapshot {
-  return Boolean(s && typeof s === 'object');
+  return Boolean(s && typeof s === "object")
 }
 
 // Top-level await, deliberately: the undo stack must be hydrated before the first request can
 // snapshot onto it, and this module is imported at boot.
 try {
-  const saved: unknown = JSON.parse(await fs.readFile(HISTORY_PATH, 'utf8'));
-  const stack = (a: unknown): Snapshot[] => (Array.isArray(a) ? a.filter(isSnapshot).slice(-MAX) : []);
+  const saved: unknown = JSON.parse(
+    await fs.readFile(HISTORY_PATH, "utf8"),
+  )
+  const stack = (a: unknown): Snapshot[] =>
+    Array.isArray(a) ? a.filter(isSnapshot).slice(-MAX) : []
   // Not optional-chained: a persisted `null` must throw here exactly as it did before, so the
   // catch below is what starts the stacks empty.
-  const persisted = saved as { undo?: unknown; redo?: unknown };
-  undoStack = stack(persisted.undo);
-  redoStack = stack(persisted.redo);
+  const persisted = saved as {
+    undo?: unknown
+    redo?: unknown
+  }
+  undoStack = stack(persisted.undo)
+  redoStack = stack(persisted.redo)
 } catch {
   /* absent or unparsable = start empty */
 }
 
 async function persist() {
-  const tmp = HISTORY_PATH + '.tmp';
+  const tmp = HISTORY_PATH + ".tmp"
   try {
-    await fs.writeFile(tmp, JSON.stringify({ undo: undoStack, redo: redoStack }), 'utf8');
-    await fs.rename(tmp, HISTORY_PATH);
+    await fs.writeFile(
+      tmp,
+      JSON.stringify({ undo: undoStack, redo: redoStack }),
+      "utf8",
+    )
+    await fs.rename(tmp, HISTORY_PATH)
   } catch (e) {
-    console.log(`[history] persist failed: ${errMessage(e)}`);
-    await fs.rm(tmp, { force: true }).catch(() => {});
+    console.log(
+      `[history] persist failed: ${errMessage(e)}`,
+    )
+    await fs.rm(tmp, { force: true }).catch(() => {})
   }
 }
 
 async function readBoth(): Promise<Snapshot> {
   // null = nothing stored yet, which `writeBoth` then skips rather than restoring an empty file.
-  return { q: await store.queues.readRawSnapshot(), s: await store.sets.readRawSnapshot() };
+  return {
+    q: await store.queues.readRawSnapshot(),
+    s: await store.sets.readRawSnapshot(),
+  }
 }
 
 /**
@@ -102,58 +117,71 @@ async function readBoth(): Promise<Snapshot> {
  * not need to touch. Byte-for-byte restore is this module's whole contract, so a snapshot with
  * nothing to repair is written back EXACTLY as it was taken.
  */
-async function reshapeQueues(text: string): Promise<string> {
+async function reshapeQueues(
+  text: string,
+): Promise<string> {
   try {
     const result = await migrateText(text, (setName) => ({
       label: setName,
       resolve: null,
-      why: 'an undo restore never talks to a provider',
-    }));
-    const rewritten = result.changes.filter((c) => c.rewritten);
-    if (rewritten.length === 0) return text;
+      why: "an undo restore never talks to a provider",
+    }))
+    const rewritten = result.changes.filter(
+      (c) => c.rewritten,
+    )
+    if (rewritten.length === 0) return text
     console.log(
-      `[history] restored a pre-2026-08-21 snapshot — reshaped ${rewritten.length} scalar `
-      + `entr${rewritten.length === 1 ? 'y' : 'ies'} to the object form so the queue plays`,
-    );
-    return result.text;
+      `[history] restored a pre-2026-08-21 snapshot — reshaped ${rewritten.length} scalar ` +
+        `entr${rewritten.length === 1 ? "y" : "ies"} to the object form so the queue plays`,
+    )
+    return result.text
   } catch (e) {
     // A snapshot this cannot parse is a snapshot the old code would have written anyway.
     // Restoring the raw text is no worse than before and keeps undo working.
-    console.log(`[history] could not reshape a restored snapshot: ${errMessage(e)}`);
-    return text;
+    console.log(
+      `[history] could not reshape a restored snapshot: ${errMessage(e)}`,
+    )
+    return text
   }
 }
 
 async function writeBoth(snap: Snapshot) {
   // `sets.yaml` holds no entries, so only the queues half is reshaped.
-  if (snap.q != null) await store.queues.writeRawSnapshot(await reshapeQueues(snap.q));
-  if (snap.s != null) await store.sets.writeRawSnapshot(snap.s);
+  if (snap.q != null)
+    await store.queues.writeRawSnapshot(
+      await reshapeQueues(snap.q),
+    )
+  if (snap.s != null)
+    await store.sets.writeRawSnapshot(snap.s)
 }
 
 // Call BEFORE a mutation. Clears the redo stack (a new edit forks history).
 export async function snapshot() {
-  undoStack.push(await readBoth());
-  if (undoStack.length > MAX) undoStack.shift();
-  redoStack.length = 0;
-  await persist();
+  undoStack.push(await readBoth())
+  if (undoStack.length > MAX) undoStack.shift()
+  redoStack.length = 0
+  await persist()
 }
 
 export async function undo() {
-  const snap = undoStack.pop();
-  if (!snap) return { ok: false, error: 'nothing to undo' };
-  redoStack.push(await readBoth());
-  await writeBoth(snap);
-  await persist();
-  return { ok: true };
+  const snap = undoStack.pop()
+  if (!snap) return { ok: false, error: "nothing to undo" }
+  redoStack.push(await readBoth())
+  await writeBoth(snap)
+  await persist()
+  return { ok: true }
 }
 
 export async function redo() {
-  const snap = redoStack.pop();
-  if (!snap) return { ok: false, error: 'nothing to redo' };
-  undoStack.push(await readBoth());
-  await writeBoth(snap);
-  await persist();
-  return { ok: true };
+  const snap = redoStack.pop()
+  if (!snap) return { ok: false, error: "nothing to redo" }
+  undoStack.push(await readBoth())
+  await writeBoth(snap)
+  await persist()
+  return { ok: true }
 }
 
-export const counts = () => ({ undo: undoStack.length, redo: redoStack.length });
+export const counts = () => ({
+  undo: undoStack.length,
+  redo: redoStack.length,
+})

@@ -96,7 +96,6 @@ export function ChannelFilters({
     return () => {
       isStale = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel, profileKey])
 
   const ratingOptions = [

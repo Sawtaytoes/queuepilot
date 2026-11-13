@@ -12,6 +12,30 @@
 // PRIVATE implementation detail of this provider rather than the engine's interface. That is
 // the whole point of the widening — the engine above this line no longer knows what a
 // MediaContainer is.
+
+import * as driver from "../driver.js"
+import {
+  initialQueueSize,
+  playbackLength,
+} from "../engine/playbackLength.js"
+import { liveClient } from "../engine/plex-live.js"
+import * as resolve from "../engine/resolve.js"
+import * as rotation from "../engine/rotation.js"
+import * as routing from "../engine/routing.js"
+import * as select from "../engine/select.js"
+import { toWeight } from "../engine/weight.js"
+import * as playback from "../playback.js"
+import {
+  sections as plexSections,
+  profileUser,
+  showEpisodes,
+} from "../plex.js"
+import {
+  plexServerAccessForProfile,
+  plexServerClient,
+} from "../plexSources.js"
+import * as promote from "../promote.js"
+import * as queueEntryHistory from "../store/db/queueEntryHistory.js"
 import type {
   BucketsResult,
   EngineBinding,
@@ -25,22 +49,8 @@ import type {
   PushResult,
   RoutingSetCfg,
   UnitList,
-} from '../types.js';
-
-import * as resolve from '../engine/resolve.js';
-import * as promote from '../promote.js';
-import * as rotation from '../engine/rotation.js';
-import { initialQueueSize, playbackLength } from '../engine/playbackLength.js';
-import * as select from '../engine/select.js';
-import * as queueEntryHistory from '../store/db/queueEntryHistory.js';
-import * as routing from '../engine/routing.js';
-import { liveClient } from '../engine/plex-live.js';
-import { profileUser, sections as plexSections, showEpisodes } from '../plex.js';
-import { toWeight } from '../engine/weight.js';
-import * as playback from '../playback.js';
-import * as driver from '../driver.js';
-import { plexServerAccessForProfile, plexServerClient } from '../plexSources.js';
-import { queueMetadataClient } from './queueMetadata.js';
+} from "../types.js"
+import { queueMetadataClient } from "./queueMetadata.js"
 
 /**
  * What `buckets()` actually needs, which is NARROWER than `BucketsContext`.
@@ -55,27 +65,29 @@ import { queueMetadataClient } from './queueMetadata.js';
 interface PlexBucketsContext {
   /** REQUIRED here, optional on `BucketsContext`: the curated-queue branch loads the entry
    *  file by this name, so a scan without one has nothing to resolve. */
-  setName: string;
-  cfg: RoutingSetCfg;
-  binding: EngineBinding;
-  token?: string | null;
-  kind?: string;
-  lastMovieRk?: string | null;
+  setName: string
+  cfg: RoutingSetCfg
+  binding: EngineBinding
+  token?: string | null
+  kind?: string
+  lastMovieRk?: string | null
   /** The one-entry override — see `BucketsContext.only`. Curated-queue branch only. */
-  only?: string | null;
+  only?: string | null
 }
 
 /** The rng seam. A seeded test injects its own object with both members. */
 interface Rng {
-  shuffle: (arr: unknown[]) => void;
-  random: () => number;
+  shuffle: (arr: unknown[]) => void
+  random: () => number
 }
 
 export interface PlexProviderOptions {
-  def?: ProviderDefinition | null;
-  client?: PlexClient | null;
-  resolveProfileUser?: typeof profileUser;
-  clientForServer?: (serverId:string)=>Promise<PlexClient|null>;
+  def?: ProviderDefinition | null
+  client?: PlexClient | null
+  resolveProfileUser?: typeof profileUser
+  clientForServer?: (
+    serverId: string,
+  ) => Promise<PlexClient | null>
 }
 
 // The 1/n² rewatch pick, moved verbatim from session.js. Memberless channels weight by
@@ -86,66 +98,88 @@ function pickRewatch(
   excludes: Set<string>,
   excludeRk: string | null,
   weights: Record<string, number> = {},
-): { ratingKey: string | number; title: string | null } | null {
-  const candidates: [string | number, number][] = [];
+): {
+  ratingKey: string | number
+  title: string | null
+} | null {
+  const candidates: [string | number, number][] = []
   for (const [rk, n] of counts) {
-    if (excludes.has(String(rk))) continue;
-    if (excludeRk && String(rk) === String(excludeRk)) continue;
-    if (n < 1) continue;
-    candidates.push([rk, n]);
+    if (excludes.has(String(rk))) continue
+    if (excludeRk && String(rk) === String(excludeRk))
+      continue
+    if (n < 1) continue
+    candidates.push([rk, n])
   }
-  if (!candidates.length) return null;
+  if (!candidates.length) return null
   // The channel's `weights:` map MULTIPLIES the 1/n² least-watched bias rather than replacing
   // it: a 3x film is three times as likely as it would otherwise have been, but a film seen
   // once still beats the same film seen three times. There is no round to take slots in here —
   // the card plays exactly one movie — so this is the one place a weight is odds, not slots.
-  const odds = candidates.map(([rk, n]) => toWeight(weights[String(rk)]) / (n * n));
-  let total = 0;
-  for (const w of odds) total += w;
-  let r = Math.random() * total;
+  const odds = candidates.map(
+    ([rk, n]) => toWeight(weights[String(rk)]) / (n * n),
+  )
+  let total = 0
+  for (const w of odds) total += w
+  let r = Math.random() * total
   for (let i = 0; i < candidates.length; i += 1) {
     // Both index reads are in-bounds by the loop bound; `odds` is built one-for-one off
     // `candidates`. The assertions are what `noUncheckedIndexedAccess` costs, not a change.
-    r -= odds[i] as number;
+    r -= odds[i] as number
     if (r <= 0) {
-      const rk = (candidates[i] as [string | number, number])[0];
-      return { ratingKey: rk, title: titles.get(rk) || null };
+      const rk = (
+        candidates[i] as [string | number, number]
+      )[0]
+      return {
+        ratingKey: rk,
+        title: titles.get(rk) || null,
+      }
     }
   }
-  const [rk] = candidates[candidates.length - 1] as [string | number, number];
-  return { ratingKey: rk, title: titles.get(rk) || null };
+  const [rk] = candidates[candidates.length - 1] as [
+    string | number,
+    number,
+  ]
+  return { ratingKey: rk, title: titles.get(rk) || null }
 }
 
 function defaultShuffle(arr: unknown[]): void {
   for (let i = arr.length - 1; i > 0; i -= 1) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const a = arr[i];
-    arr[i] = arr[j];
-    arr[j] = a;
+    const j = Math.floor(Math.random() * (i + 1))
+    const a = arr[i]
+    arr[i] = arr[j]
+    arr[j] = a
   }
 }
 
 // The production rng. `random` is what the WEIGHTED member shuffle draws from (engine/weight.js);
 // a seeded test injects its own object with both members.
-const defaultRng: Rng = { shuffle: defaultShuffle, random: () => Math.random() };
+const defaultRng: Rng = {
+  shuffle: defaultShuffle,
+  random: () => Math.random(),
+}
 
 /**
  * `client` is injectable so the parity gates can substitute plex-replay.js exactly as they
  * do today — the replay client is what proves this seam is real rather than decorative.
  */
-export function plexProvider({ def = null, client = null, clientForServer, resolveProfileUser = profileUser }: PlexProviderOptions = {}): Provider {
-  const c: PlexClient = client || liveClient();
+export function plexProvider({
+  def = null,
+  client = null,
+  clientForServer,
+  resolveProfileUser = profileUser,
+}: PlexProviderOptions = {}): Provider {
+  const c: PlexClient = client || liveClient()
 
   return {
-    id: def?.id || 'plex',
-    kind: 'plex',
-    label: def?.label || 'Plex',
+    id: def?.id || "plex",
+    kind: "plex",
+    label: def?.label || "Plex",
 
     /** Push, not pull: a card starts the show on a screen that is already on. */
-    delivery: 'push',
+    delivery: "push",
 
     /** Episodes — see kavita.js's `unit`. */
-    unit: 'episode',
+    unit: "episode",
 
     /**
      * THE ONLY provider that can play a SECTION of an item.
@@ -171,22 +205,28 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
      * belongs to Plex's wire format, not to the block schema.
      */
     async libraries(): Promise<ProviderLibrary[]> {
-      const secs = await plexSections();
-      return secs
-        .filter((l) => l.video)
-        // `title as string`: a Plex section's title is optional on the wire shape, while
-        // ProviderLibrary declares `title: string`. Asserted rather than defaulted to '' —
-        // a blank-titled library in the editor's picker is worse than the untyped status quo,
-        // and this maps a LIVE `/library/sections` row, which always carries one.
-        .map((l) => ({ id: String(l.id), title: l.title as string }))
-        .sort((a, b) => a.title.localeCompare(b.title));
+      const secs = await plexSections()
+      return (
+        secs
+          .filter((l) => l.video)
+          // `title as string`: a Plex section's title is optional on the wire shape, while
+          // ProviderLibrary declares `title: string`. Asserted rather than defaulted to '' —
+          // a blank-titled library in the editor's picker is worse than the untyped status quo,
+          // and this maps a LIVE `/library/sections` row, which always carries one.
+          .map((l) => ({
+            id: String(l.id),
+            title: l.title as string,
+          }))
+          .sort((a, b) => a.title.localeCompare(b.title))
+      )
     },
 
     /**
      * Plex's per-profile identity is a managed-user token minted against plex.tv. The engine
      * above this line never sees it — it asks for a profile and gets items back.
      */
-    profileToken: (userUuid: string | null) => c.accountToken(userUuid),
+    profileToken: (userUuid: string | null) =>
+      c.accountToken(userUuid),
 
     /**
      * A CURATED QUEUE has no `profiles[]` and no binding fields — only `requires_profile`,
@@ -205,21 +245,30 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
      * A binding that already names an account is returned UNTOUCHED: a rotation channel's
      * profiles[] is explicit and authoritative, and this must never second-guess it.
      */
-    async profileBinding(binding: EngineBinding, profileTitle: string | null): Promise<EngineBinding> {
-      if (binding.user_uuid || binding.account_id || binding.watch_count_accounts) return binding;
-      const user = await resolveProfileUser(profileTitle);
+    async profileBinding(
+      binding: EngineBinding,
+      profileTitle: string | null,
+    ): Promise<EngineBinding> {
+      if (
+        binding.user_uuid ||
+        binding.account_id ||
+        binding.watch_count_accounts
+      )
+        return binding
+      const user = await resolveProfileUser(profileTitle)
       // No row (ungated, hand-typed, or plex.tv unreachable) => unchanged, i.e. the admin
       // fallback this has always had. A gate that names a profile Plex does not know is
       // already a scan that hangs at the picker, so it is not this function's failure to fix.
-      if (!user) return binding;
+      if (!user) return binding
       return {
         ...binding,
         plex_user: user.name,
         account_id: user.id,
         user_uuid: user.uuid,
         // `[id]` and never a union: watched state is PER-PROFILE (decision 2026-07-16).
-        watch_count_accounts: user.id != null ? [user.id] : null,
-      };
+        watch_count_accounts:
+          user.id != null ? [user.id] : null,
+      }
     },
 
     /**
@@ -231,22 +280,38 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
       {
         uuid = null,
         includeSpecialChoices = false,
-      }: { uuid?: string | null; includeSpecialChoices?: boolean } = {},
+      }: {
+        uuid?: string | null
+        includeSpecialChoices?: boolean
+      } = {},
     ): Promise<UnitList | null> {
-      let scope = {};
+      let scope = {}
       if (uuid) {
-        try { scope = { token: await c.accountToken(uuid), account: uuid }; } catch { scope = {}; }
+        try {
+          scope = {
+            token: await c.accountToken(uuid),
+            account: uuid,
+          }
+        } catch {
+          scope = {}
+        }
       }
-      return showEpisodes(itemId, scope, includeSpecialChoices);
+      return showEpisodes(
+        itemId,
+        scope,
+        includeSpecialChoices,
+      )
     },
 
     /**
      * Watched state for a set+profile. Only the curated-queue path consumes this directly;
      * the rotation path folds it into buckets().
      */
-    progressState: ({ cfg, binding }: PlexBucketsContext): Promise<Set<string>> => (
-      select.watchedForSet(c, cfg, binding)
-    ),
+    progressState: ({
+      cfg,
+      binding,
+    }: PlexBucketsContext): Promise<Set<string>> =>
+      select.watchedForSet(c, cfg, binding),
 
     /**
      * The ordered lineup for one set under one profile.
@@ -258,24 +323,42 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
      * this seam is what lets Kavita reuse it verbatim.
      */
     async buckets({
-      setName, cfg, binding, token, kind, lastMovieRk = null, only = null,
+      setName,
+      cfg,
+      binding,
+      token,
+      kind,
+      lastMovieRk = null,
+      only = null,
     }: PlexBucketsContext): Promise<BucketsResult> {
-      if (cfg.source === 'queue') {
-        let entries = resolve.loadEntries(setName);
-        let queueClient = c;
-        const sharedClients = new Map<string, Promise<PlexClient | null>>();
-        const clientForEntry: resolve.EntryClientResolver = async (entry) => {
-          if (!entry.plexServer) return queueClient;
-          if(clientForServer)return clientForServer(entry.plexServer);
-          let pending = sharedClients.get(entry.plexServer);
-          if (!pending) {
-            pending = plexServerAccessForProfile(binding.user_uuid, entry.plexServer)
-              .then((access) => (access ? plexServerClient(access) : null))
-              .catch(() => null);
-            sharedClients.set(entry.plexServer, pending);
+      if (cfg.source === "queue") {
+        let entries = resolve.loadEntries(setName)
+        let queueClient = c
+        const sharedClients = new Map<
+          string,
+          Promise<PlexClient | null>
+        >()
+        const clientForEntry: resolve.EntryClientResolver =
+          async (entry) => {
+            if (!entry.plexServer) return queueClient
+            if (clientForServer)
+              return clientForServer(entry.plexServer)
+            let pending = sharedClients.get(
+              entry.plexServer,
+            )
+            if (!pending) {
+              pending = plexServerAccessForProfile(
+                binding.user_uuid,
+                entry.plexServer,
+              )
+                .then((access) =>
+                  access ? plexServerClient(access) : null,
+                )
+                .catch(() => null)
+              sharedClients.set(entry.plexServer, pending)
+            }
+            return pending
           }
-          return pending;
-        };
         // "Play THIS one" (the grid's per-tile ▶). Narrowing the ENTRY LIST — rather than
         // adding a branch inside nextQueue — is what keeps this honest: the one entry still
         // goes through the same resolve/watched/batch machinery, so it gets the same next
@@ -283,12 +366,30 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
         // would have got when the queue reached it on its own. A one-entry queue IS the
         // normal path with a shorter list.
         if (only) {
-          entries = entries.filter((e) => e.key === only);
-          if (!entries.length) return { play: [], unknownEntry: only };
+          entries = entries.filter((e) => e.key === only)
+          if (!entries.length)
+            return { play: [], unknownEntry: only }
         }
-        if (cfg.reel) return resolve.buildReel(c, setName, cfg, entries, token, 60, clientForEntry);
-        const watched = await select.watchedForSet(c, cfg, binding);
-        queueClient = await queueMetadataClient(c, entries, token);
+        if (cfg.reel)
+          return resolve.buildReel(
+            c,
+            setName,
+            cfg,
+            entries,
+            token,
+            60,
+            clientForEntry,
+          )
+        const watched = await select.watchedForSet(
+          c,
+          cfg,
+          binding,
+        )
+        queueClient = await queueMetadataClient(
+          c,
+          entries,
+          token,
+        )
         // The rng is REQUIRED, not optional: a channel (kind: anime) plays its members in a
         // shuffled order, and nextQueue only shuffles when handed one. Python defaulted it to
         // the `random` module; this call site did not, so every channel quietly played in
@@ -297,43 +398,68 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
         // reads the book of record, and `engine/resolve.ts` holds no database handle
         // (see `resolve.LeadGate`).
         return resolve.nextQueue(
-          queueClient, setName, cfg, entries, watched, token, defaultRng,
-          (entryKey, windowMs) => promote.canLeadOnce(setName, entryKey, windowMs),
-          (entryKey) => queueEntryHistory.progressFor(setName, entryKey),
+          queueClient,
+          setName,
+          cfg,
+          entries,
+          watched,
+          token,
+          defaultRng,
+          (entryKey, windowMs) =>
+            promote.canLeadOnce(
+              setName,
+              entryKey,
+              windowMs,
+            ),
+          (entryKey) =>
+            queueEntryHistory.progressFor(
+              setName,
+              entryKey,
+            ),
           clientForEntry,
-        );
+        )
       }
 
       // Rotation channel. `behavior` is the newer knob and wins; `mode` is the legacy one.
-      let mode: string;
-      if (cfg.behavior === 'rewatch') mode = 'rewatch';
-      else if (cfg.behavior === 'progress') mode = 'episodic';
+      let mode: string
+      if (cfg.behavior === "rewatch") mode = "rewatch"
+      else if (cfg.behavior === "progress")
+        mode = "episodic"
       else {
         // Legacy: a start payload's wire kind `movie` meant rewatch. Product kind is
         // picks|rules and cannot carry that; prefer cfg.mode, else treat legacy `movie`
         // (and only that) as rewatch for one release.
-        mode = cfg.mode || (kind === 'movie' ? 'rewatch' : 'episodic');
+        mode =
+          cfg.mode ||
+          (kind === "movie" ? "rewatch" : "episodic")
       }
 
-      if (mode === 'rewatch') {
-        const { counts, titles } = await select.rewatchCounts(
-          c, routing.rewatchSections(cfg), binding.movie_ratings,
-          // `?? null`, not `|| null`: `token` is optional on the context and select.js's
-          // signature is `string | null`. An absent token and a null token already meant the
-          // same thing to every reader (the admin/default X-Plex-Token), so this normalizes
-          // the ABSENCE without touching the empty-string case.
-          binding.watch_count_accounts, token ?? null,
-        );
-        const excludes = new Set((binding.movie_excludes || []).map(String));
-        const rewatchWeights = await rotation.mergeManualMoviesIntoRewatch(
-          c,
-          cfg,
-          binding,
-          counts,
-          titles,
-          excludes,
-          cfg.weights || {},
-        );
+      if (mode === "rewatch") {
+        const { counts, titles } =
+          await select.rewatchCounts(
+            c,
+            routing.rewatchSections(cfg),
+            binding.movie_ratings,
+            // `?? null`, not `|| null`: `token` is optional on the context and select.js's
+            // signature is `string | null`. An absent token and a null token already meant the
+            // same thing to every reader (the admin/default X-Plex-Token), so this normalizes
+            // the ABSENCE without touching the empty-string case.
+            binding.watch_count_accounts,
+            token ?? null,
+          )
+        const excludes = new Set(
+          (binding.movie_excludes || []).map(String),
+        )
+        const rewatchWeights =
+          await rotation.mergeManualMoviesIntoRewatch(
+            c,
+            cfg,
+            binding,
+            counts,
+            titles,
+            excludes,
+            cfg.weights || {},
+          )
         // A rewatch pool used to `return { play: [item] }` — exactly one film, forever, and the
         // one kind of set whose length was not merely un-configurable but hardcoded. It now
         // draws its playback length like everything else (owner, 2026-08-17: "Movies are gonna
@@ -343,28 +469,37 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
         // weighted RANDOM draw, so a second call could return the film already drawn. Each pick
         // joins the exclusion set so the sitting never repeats itself — a COPY of it, because
         // the binding's own `movie_excludes` is the owner's config and not scratch space.
-        const drawn = new Set(excludes);
-        const want = initialQueueSize(playbackLength(cfg));
-        const play: PlexPlayItem[] = [];
+        const drawn = new Set(excludes)
+        const want = initialQueueSize(playbackLength(cfg))
+        const play: PlexPlayItem[] = []
 
         for (let i = 0; i < want; i += 1) {
           // The exclusion of the previously-played film is SESSION state, threaded in by the
           // caller — a provider is stateless across starts and must not hold it.
-          const pick = pickRewatch(counts, titles, drawn, lastMovieRk, rewatchWeights);
+          const pick = pickRewatch(
+            counts,
+            titles,
+            drawn,
+            lastMovieRk,
+            rewatchWeights,
+          )
 
           // The pool ran out of films it has not already drawn. A real terminator, not an
           // error: a sitting can come up shorter than its length asked for.
-          if (!pick) break;
+          if (!pick) break
 
-          drawn.add(String(pick.ratingKey));
+          drawn.add(String(pick.ratingKey))
           // `PlexPlayItem.title` is `string | undefined`, but this branch has ALWAYS emitted an
           // explicit `title: null` for a pick whose title did not resolve, and that null crosses
           // to MQTT. Asserted rather than switched to `undefined`, which JSON.stringify would
           // drop from the payload — a wire change, not a typing one. (Reported.)
-          play.push({ ratingKey: pick.ratingKey, title: pick.title } as PlexPlayItem);
+          play.push({
+            ratingKey: pick.ratingKey,
+            title: pick.title,
+          } as PlexPlayItem)
         }
 
-        return { play, rewatch: true };
+        return { play, rewatch: true }
       }
 
       // What goes in the queue UP FRONT — one window at most. An infinite lineup cannot be
@@ -372,9 +507,13 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
       // because every item is a Plex round trip on a card someone just tapped. Top-up carries
       // the rest, and derives itself from this same number.
       const queue = await rotation.buildRotation(
-        c, cfg, binding, initialQueueSize(playbackLength(cfg)), defaultRng,
-      );
-      return { play: queue };
+        c,
+        cfg,
+        binding,
+        initialQueueSize(playbackLength(cfg)),
+        defaultRng,
+      )
+      return { play: queue }
     },
 
     /**
@@ -390,13 +529,19 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
      */
     materialize(
       items: PlexPlayItem[],
-      { offset = 0, setName = null, binding = null }: {
-        offset?: number; setName?: string | null; binding?: EngineBinding | null;
+      {
+        offset = 0,
+        setName = null,
+        binding = null,
+      }: {
+        offset?: number
+        setName?: string | null
+        binding?: EngineBinding | null
       } = {},
     ): PlexArtifact {
       return {
         provider: this.id,
-        kind: 'plex',
+        kind: "plex",
         items,
         ratingKeys: items.map((it) => String(it.ratingKey)),
         offset,
@@ -406,13 +551,20 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
         // re-derive it from the set (which only knows the default binding).
         userUuid: (binding && binding.user_uuid) || null,
         accountId: (binding && binding.account_id) ?? null,
-      };
+      }
     },
 
     /** Push the playQueue at the Shield. Returns the playback result session.js publishes. */
-    async handoff(artifact: PlexArtifact, {
-      useFsm = false, requiredProfile = null, device = null, cancel = null, setLabel = null,
-    }: HandoffOptions = {}): Promise<PushResult> {
+    async handoff(
+      artifact: PlexArtifact,
+      {
+        useFsm = false,
+        requiredProfile = null,
+        device = null,
+        cancel = null,
+        setLabel = null,
+      }: HandoffOptions = {},
+    ): Promise<PushResult> {
       if (useFsm) {
         return driver.driveToPlaying({
           items: artifact.items,
@@ -425,14 +577,14 @@ export function plexProvider({ def = null, client = null, clientForServer, resol
           setLabel,
           userUuid: artifact.userUuid,
           accountId: artifact.accountId,
-        });
+        })
       }
       return playback.playRatingKeys(artifact.items, {
         setName: artifact.setName,
         device,
         offset: artifact.offset,
         userUuid: artifact.userUuid,
-      });
+      })
     },
-  };
+  }
 }

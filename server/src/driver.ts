@@ -1,4 +1,8 @@
-import { withDevice, deviceOperationCancelled } from './deviceScope.js';
+import {
+  deviceOperationCancelled,
+  withDevice,
+} from "./deviceScope.js"
+
 // Playback state machine: sample the Shield's real state, then drive it to `playing`.
 //
 // Ported from the retired Python driver (PLAYBACK_FSM). Replaces the fire-and-forget tail
@@ -17,26 +21,35 @@ import { withDevice, deviceOperationCancelled } from './deviceScope.js';
 // — it does not re-derive picker or profile logic. See docs/playback-state-machine-design.md.
 //
 
+import * as adb from "./adb.js"
 import {
   ADB_ENABLED,
-  PLAYBACK_MODE,
-  SHIELD_CLIENT_URI,
-  SHIELD_IP,
   COMPANION_PORT,
   PLAYBACK_FSM_PLAY_ATTEMPTS,
-  PLAYBACK_FSM_SWITCH_ATTEMPTS,
   PLAYBACK_FSM_RETRY_BACKOFF,
+  PLAYBACK_FSM_SWITCH_ATTEMPTS,
+  PLAYBACK_MODE,
   PLAYBACK_SESSION_RETRIES,
   PROFILE_OBSERVATION_TTL_SECONDS,
-} from './env.js';
-import * as adb from './adb.js';
-import { PLEX_SETUP_REQUIRED } from './plexControlModern.js';
-import * as playback from './playback.js';
-import type { PlaybackResult } from './playback.js';
-import * as profiles from './profiles.js';
-import * as gatedPush from './store/db/gatedPush.js';
-import type { CancelFlag, Device, PlexPlayItem, PublishedStateExtra, PushResult } from './types.js';
-import { errMessage, isCancelled as flagIsCancelled } from './errors.js';
+  SHIELD_CLIENT_URI,
+  SHIELD_IP,
+} from "./env.js"
+import {
+  errMessage,
+  isCancelled as flagIsCancelled,
+} from "./errors.js"
+import type { PlaybackResult } from "./playback.js"
+import * as playback from "./playback.js"
+import { PLEX_SETUP_REQUIRED } from "./plexControlModern.js"
+import * as profiles from "./profiles.js"
+import * as gatedPush from "./store/db/gatedPush.js"
+import type {
+  CancelFlag,
+  Device,
+  PlexPlayItem,
+  PublishedStateExtra,
+  PushResult,
+} from "./types.js"
 
 /**
  * What `setPublishState()` accepts: mqttd's `publishState(extra)`, handed down through
@@ -44,94 +57,115 @@ import { errMessage, isCancelled as flagIsCancelled } from './errors.js';
  * than a local re-declaration — the local copy this file used to carry took a leading mqtt
  * `client` argument the real publisher never had, and nothing typechecked the gap.
  */
-type PublishStateFn = (extra: PublishedStateExtra) => void;
+type PublishStateFn = (extra: PublishedStateExtra) => void
 
 // Read aloud verbatim by automation.plex_channels_status_announcements, so these stay
 // sentences a person would say — no timeout figures, no switcher jargon (the diagnostic
 // detail goes to the log). See docs/decisions/2026-07-26-spoken-status-is-a-sentence-not-a-diagnostic.md.
-const SWITCH_ERROR = (
-  "'{label}' needs the '{profile}' Plex profile, and the Shield did not "
-  + 'switch to it. Pick it on the TV.'
-);
-const PLAY_ERROR = "Plex wasn't ready to play on the Shield. Try the card again.";
+const SWITCH_ERROR =
+  "'{label}' needs the '{profile}' Plex profile, and the Shield did not " +
+  "switch to it. Pick it on the TV."
+const PLAY_ERROR =
+  "Plex wasn't ready to play on the Shield. Try the card again."
 // Read aloud like the two above, so it stays a sentence a person would say. This one is the
 // audit failing: playback DID start, and it started as the wrong person.
-const ACCOUNT_ERROR = (
-  "'{label}' is for the '{profile}' profile, but the Shield played it as '{actual}'. "
-  + 'I stopped it. Pick the right profile on the TV and try again.'
-);
+const ACCOUNT_ERROR =
+  "'{label}' is for the '{profile}' profile, but the Shield played it as '{actual}'. " +
+  "I stopped it. Pick the right profile on the TV and try again."
 
-const sleep = (s: number): Promise<void> => new Promise((r) => {
-  setTimeout(r, Math.max(0, Number(s) || 0) * 1000);
-});
+const sleep = (s: number): Promise<void> =>
+  new Promise((r) => {
+    setTimeout(r, Math.max(0, Number(s) || 0) * 1000)
+  })
 
 // Explicit cancellation and sitting replacement both end an in-flight transition.
-const isCancelled = (flag: CancelFlag | null | undefined): boolean =>
-  flagIsCancelled(flag) || deviceOperationCancelled();
+const isCancelled = (
+  flag: CancelFlag | null | undefined,
+): boolean =>
+  flagIsCancelled(flag) || deviceOperationCancelled()
 
 // Surface a mid-flight transition on queuepilot/state (what HA's status sensor shows).
 // Lazy / soft: mqttd or the session may not have injected a publisher yet, in which case this
 // is a no-op and the driver stays testable without MQTT.
-let _publishState: PublishStateFn | null = null;
-export function setPublishState(fn: PublishStateFn | null): void {
-  _publishState = fn;
+let _publishState: PublishStateFn | null = null
+export function setPublishState(
+  fn: PublishStateFn | null,
+): void {
+  _publishState = fn
 }
 
 function publishAwait(awaiting: string): void {
-  if (!_publishState) return;
-  try { _publishState({ awaiting }); } catch { /* ignore */ }
+  if (!_publishState) return
+  try {
+    _publishState({ awaiting })
+  } catch {
+    /* ignore */
+  }
 }
 
 // Is the Shield's Plex app the foreground activity right now? (ADB read, ~50ms.)
 // PLEX_PKG is not re-exported from adb.js (only TITLE_ID is); hardcode the package.
-const PLEX_PKG = 'com.plexapp.android';
+const PLEX_PKG = "com.plexapp.android"
 async function plexForeground(): Promise<boolean> {
-  const act = await Promise.resolve(adb.foregroundActivity());
-  return Boolean(act && String(act).includes(PLEX_PKG));
+  const act = await Promise.resolve(
+    adb.foregroundActivity(),
+  )
+  return Boolean(act && String(act).includes(PLEX_PKG))
 }
 
 // device_on + plex_foreground, retried. Non-fatal: ensurePlexOpen never force-stops, and
 // a play still tries even if ADB can't confirm Plex came up (HA may have launched it).
 async function ensurePlex(attempts = 2): Promise<boolean> {
-  const n = Math.max(1, attempts);
+  const n = Math.max(1, attempts)
   for (let i = 0; i < n; i++) {
-    const ok = await Promise.resolve(adb.ensurePlexOpen());
-    if (ok) return true;
-    await sleep(PLAYBACK_FSM_RETRY_BACKOFF);
+    const ok = await Promise.resolve(adb.ensurePlexOpen())
+    if (ok) return true
+    await sleep(PLAYBACK_FSM_RETRY_BACKOFF)
   }
-  return false;
+  return false
 }
 
 // (host, port) of the target's Companion endpoint, for the readiness probe.
 // A start command's `target` device carries its own Companion uri; otherwise the
 // env-default Shield's SHIELD_CLIENT_URI, else SHIELD_IP:COMPANION_PORT.
-export function companionAddr(device: Device | null | undefined): [string, number] {
-  const uri = (device && device.uri) || SHIELD_CLIENT_URI;
+export function companionAddr(
+  device: Device | null | undefined,
+): [string, number] {
+  const uri = (device && device.uri) || SHIELD_CLIENT_URI
   if (uri) {
     try {
-      const withScheme = String(uri).includes('://') ? String(uri) : `http://${uri}`;
-      const sp = new URL(withScheme);
+      const withScheme = String(uri).includes("://")
+        ? String(uri)
+        : `http://${uri}`
+      const sp = new URL(withScheme)
       if (sp.hostname) {
-        return [sp.hostname, sp.port ? Number(sp.port) : COMPANION_PORT];
+        return [
+          sp.hostname,
+          sp.port ? Number(sp.port) : COMPANION_PORT,
+        ]
       }
     } catch {
       /* fall through */
     }
   }
-  return [SHIELD_IP, COMPANION_PORT];
+  return [SHIELD_IP, COMPANION_PORT]
 }
 
 // Did play fail because the Companion port refused the connection (Errno 111 / ECONNREFUSED)?
 // playRatingKeys returns the error as a string rather than raising, so match on the text.
 // Only this failure mode warrants a re-open-and-retry; an HTTP error means Plex answered.
-export function isConnRefused(result: { error?: string } | null | undefined): boolean {
-  const err = String((result && result.error) || '').toLowerCase();
+export function isConnRefused(
+  result: { error?: string } | null | undefined,
+): boolean {
+  const err = String(
+    (result && result.error) || "",
+  ).toLowerCase()
   return (
-    err.includes('connection refused')
-    || err.includes('econnrefused')
-    || err.includes('errno 111')
-    || err.includes('urlopen error')
-  );
+    err.includes("connection refused") ||
+    err.includes("econnrefused") ||
+    err.includes("errno 111") ||
+    err.includes("urlopen error")
+  )
 }
 
 // Is the Shield already signed into `required`, per an OBSERVED LAST_SEEN? Alias-aware.
@@ -153,18 +187,22 @@ export function isConnRefused(result: { error?: string } | null | undefined): bo
 // `older_kids_shorts_shows` both played under the owner's account on 2026-09-12 — the morning
 // block had left a correct, matching, two-hour-old observation behind.
 // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
-async function onRequired(required: string): Promise<boolean> {
-  const seen = profiles.LAST_SEEN.title;
-  if (!seen || !profiles.LAST_SEEN.isObserved) return false;
+async function onRequired(
+  required: string,
+): Promise<boolean> {
+  const seen = profiles.LAST_SEEN.title
+  if (!seen || !profiles.LAST_SEEN.isObserved) return false
   if (!profiles.isObservationFresh()) {
     console.log(
-      `[driver] the observation of '${seen}' is `
-      + `${profiles.observationAgeSeconds()}s old (ttl ${PROFILE_OBSERVATION_TTL_SECONDS}s); `
-      + 'too old to clear a profile gate',
-    );
-    return false;
+      `[driver] the observation of '${seen}' is ` +
+        `${profiles.observationAgeSeconds()}s old (ttl ${PROFILE_OBSERVATION_TTL_SECONDS}s); ` +
+        "too old to clear a profile gate",
+    )
+    return false
   }
-  return Boolean(await Promise.resolve(adb.sameProfile(seen, required)));
+  return Boolean(
+    await Promise.resolve(adb.sameProfile(seen, required)),
+  )
 }
 
 // signed_in(required). Returns null on success, or a terminal result (cancelled / error).
@@ -184,35 +222,41 @@ async function driveProfile(
   // session with the account that owns it, so ask once before touching the UI. This is an
   // OBSERVATION, unlike the ADB keypress below. A one-second ceiling keeps an unhealthy PMS
   // from making the fast path slower than the picker it is trying to avoid.
-  let hasActiveMismatch = false;
+  let hasActiveMismatch = false
   if (accountId != null) {
-    const active = await playback.currentAccount({ device, timeoutMs: 1_000 });
-    if (isCancelled(cancel)) return { cancelled: true };
+    const active = await playback.currentAccount({
+      device,
+      timeoutMs: 1_000,
+    })
+    if (isCancelled(cancel)) return { cancelled: true }
     if (active.accountId != null) {
       if (active.accountId === Number(accountId)) {
-        profiles.recordObservedProfile(active.title || required);
+        profiles.recordObservedProfile(
+          active.title || required,
+        )
         console.log(
-          `[driver] active Plex session confirms '${profiles.LAST_SEEN.title}' `
-          + `(account ${active.accountId} == ${accountId}); no picker walk`,
-        );
-        return null;
+          `[driver] active Plex session confirms '${profiles.LAST_SEEN.title}' ` +
+            `(account ${active.accountId} == ${accountId}); no picker walk`,
+        )
+        return null
       }
 
       // A positive mismatch invalidates any older matching observation. Keep the real title
       // when Plex supplied it because the picker opens on that account and can use it as a
       // navigation hint. Without a title, keep the old hint but remove its authority.
-      hasActiveMismatch = true;
-      if (active.title) profiles.recordObservedProfile(active.title);
-      else profiles.invalidateObservedProfile();
+      hasActiveMismatch = true
+      if (active.title)
+        profiles.recordObservedProfile(active.title)
+      else profiles.invalidateObservedProfile()
       console.log(
-        `[driver] active Plex session is '${active.title || 'unknown'}' `
-        + `(account ${active.accountId}), not '${required}' (account ${accountId}); picker walk required`,
-      );
+        `[driver] active Plex session is '${active.title || "unknown"}' ` +
+          `(account ${active.accountId}), not '${required}' (account ${accountId}); picker walk required`,
+      )
     } else {
       console.log(
-        `[driver] active Plex session did not identify a profile before '${required}': `
-        + `${active.reason || 'no account observation'}; checking the last verified profile`,
-      );
+        `[driver] active Plex session did not identify a profile before '${required}': ` +
+          `${active.reason || "no account observation"}; checking the last verified profile`,
+      )
     }
   }
 
@@ -224,91 +268,121 @@ async function driveProfile(
   // (docs/decisions/2026-09-23-the-screen-outranks-the-observation-and-a-session-proves-the-play.md)
   // Modern Plex needs a costly accessibility dump for both questions. Inspect once
   // so the skip decision sees onboarding and the picker from the same screen.
-  const screen = ADB_ENABLED ? adb.profileScreen() : { onboarding: false, picker: false };
-  if (screen.onboarding) return { error: PLEX_SETUP_REQUIRED, _profile: required };
-  const hasPickerUp = !hasActiveMismatch && screen.picker;
+  const screen = ADB_ENABLED
+    ? adb.profileScreen()
+    : { onboarding: false, picker: false }
+  if (screen.onboarding)
+    return {
+      error: PLEX_SETUP_REQUIRED,
+      _profile: required,
+    }
+  const hasPickerUp = !hasActiveMismatch && screen.picker
   if (hasPickerUp) {
     console.log(
-      `[driver] the profile picker is on screen; walking it to '${required}' `
-      + 'whatever the last observation says',
-    );
+      `[driver] the profile picker is on screen; walking it to '${required}' ` +
+        "whatever the last observation says",
+    )
   }
 
   // An account-id mismatch is newer and stronger than any alias-resolved title. Never let a
   // stale or misconfigured alias turn that positive mismatch back into a skip.
-  if (!hasActiveMismatch && !hasPickerUp && await onRequired(required)) {
+  if (
+    !hasActiveMismatch &&
+    !hasPickerUp &&
+    (await onRequired(required))
+  ) {
     console.log(
-      `[driver] already signed in as '${profiles.LAST_SEEN.title}' `
-      + `(== '${required}'); no picker walk`,
-    );
-    return null;
+      `[driver] already signed in as '${profiles.LAST_SEEN.title}' ` +
+        `(== '${required}'); no picker walk`,
+    )
+    return null
   }
 
   if (!hasActiveMismatch && !hasPickerUp) {
-    console.log(`[driver] no verified profile observation matches '${required}'; picker walk required`);
+    console.log(
+      `[driver] no verified profile observation matches '${required}'; picker walk required`,
+    )
   }
 
-  publishAwait(`profile:${required}`);
+  publishAwait(`profile:${required}`)
 
   if (!ADB_ENABLED) {
     // Can't drive the picker — wait for a human/HA to sign in, satisfied by the PMS log.
-    const title = await profiles.waitForProfile({ cancel, match: required });
-    if (isCancelled(cancel)) return { cancelled: true };
-    if (title == null) return { error: SWITCH_ERROR, _profile: required };
-    return null;
+    const title = await profiles.waitForProfile({
+      cancel,
+      match: required,
+    })
+    if (isCancelled(cancel)) return { cancelled: true }
+    if (title == null)
+      return { error: SWITCH_ERROR, _profile: required }
+    return null
   }
 
-  const attempts = Math.max(1, PLAYBACK_FSM_SWITCH_ATTEMPTS);
+  const attempts = Math.max(1, PLAYBACK_FSM_SWITCH_ATTEMPTS)
   for (let i = 0; i < attempts; i++) {
-    if (isCancelled(cancel)) return { cancelled: true };
+    if (isCancelled(cancel)) return { cancelled: true }
     // adb.js: switchTo(target, cancel = null, knownCurrent = null) → [ok, detail].
     // Deliberately typed `unknown`: the tuple is what the real module returns, but this
     // module is also run against e2e/stubs/adb.stub.mjs, and the object/scalar branches
     // below are the port's defensive handling of a stub that answers differently. Narrowing
     // `out` to the tuple would delete them.
-    let out: unknown;
+    let out: unknown
     try {
-      out = await adb.switchTo(required, cancel, profiles.LAST_SEEN.title);
+      out = await adb.switchTo(
+        required,
+        cancel,
+        profiles.LAST_SEEN.title,
+      )
     } catch (e) {
-      out = [false, errMessage(e)];
+      out = [false, errMessage(e)]
     }
-    if (isCancelled(cancel)) return { cancelled: true };
-    let ok: boolean;
-    let detail: unknown;
+    if (isCancelled(cancel)) return { cancelled: true }
+    let ok: boolean
+    let detail: unknown
     if (Array.isArray(out)) {
-      [ok, detail] = out as [boolean, unknown];
-    } else if (out && typeof out === 'object' && 'ok' in out) {
-      ok = Boolean((out as { ok?: unknown }).ok);
-      detail = (out as { detail?: unknown }).detail;
+      ;[ok, detail] = out as [boolean, unknown]
+    } else if (
+      out &&
+      typeof out === "object" &&
+      "ok" in out
+    ) {
+      ok = Boolean((out as { ok?: unknown }).ok)
+      detail = (out as { detail?: unknown }).detail
     } else {
-      ok = Boolean(out);
-      detail = out;
+      ok = Boolean(out)
+      detail = out
     }
     if (ok) {
-      console.log(`[driver] switched to '${required}': ${detail}`);
+      console.log(
+        `[driver] switched to '${required}': ${detail}`,
+      )
       // A CLAIM, not an observation: adb.switchTo confirms the right tile was highlighted
       // when CENTER was pressed, never that Plex signed in. Recorded as the picker HINT for
       // the next walk (it saves a ~1.9s dump) and deliberately NOT marked observed, so it
       // cannot satisfy onRequired() and skip the walk on a later play.
-      profiles.recordProfileClaim(required);
-      return null;
+      profiles.recordProfileClaim(required)
+      return null
     }
     // Onboarding is an owner decision, not a retryable navigation failure. Do not let a
     // remembered account bypass this screen or push playback over its questions.
-    if (detail === PLEX_SETUP_REQUIRED) return { error: PLEX_SETUP_REQUIRED, _profile: required };
+    if (detail === PLEX_SETUP_REQUIRED)
+      return {
+        error: PLEX_SETUP_REQUIRED,
+        _profile: required,
+      }
     // A human or HA may have signed in meanwhile — a fresh LAST_SEEN also clears the gate.
     if (await onRequired(required)) {
       console.log(
         `[driver] gate cleared out-of-band: signed in as '${profiles.LAST_SEEN.title}'`,
-      );
-      return null;
+      )
+      return null
     }
     console.log(
       `[driver] switch attempt ${i + 1}/${attempts} to '${required}' failed: ${detail}`,
-    );
-    await sleep(PLAYBACK_FSM_RETRY_BACKOFF);
+    )
+    await sleep(PLAYBACK_FSM_RETRY_BACKOFF)
   }
-  return { error: SWITCH_ERROR, _profile: required };
+  return { error: SWITCH_ERROR, _profile: required }
 }
 
 // playing(target). Play is the LAST action and it is VERIFIED.
@@ -319,58 +393,72 @@ async function driveProfile(
 // retries, a bounded few times. Success (or any non-connection failure) returns immediately.
 // Cast mode doesn't use Companion :32500 — play once and return its result.
 async function drivePlay(
-  items: (string | number | PlexPlayItem)[] | null | undefined,
+  items:
+    | (string | number | PlexPlayItem)[]
+    | null
+    | undefined,
   setName: string | null,
   device: Device | null,
   offset: number,
   cancel: CancelFlag | null,
   userUuid: string | null = null,
 ): Promise<PlaybackResult | PushResult> {
-  const mode = (device && device.mode) || PLAYBACK_MODE;
-  if (mode !== 'client') {
+  const mode = (device && device.mode) || PLAYBACK_MODE
+  if (mode !== "client") {
     return playback.playRatingKeys(items, {
-      setName, device, offset, userUuid,
-    });
+      setName,
+      device,
+      offset,
+      userUuid,
+    })
   }
 
-  const [host, port] = companionAddr(device);
-  const attempts = Math.max(1, PLAYBACK_FSM_PLAY_ATTEMPTS);
-  let result: PlaybackResult | null = null;
+  const [host, port] = companionAddr(device)
+  const attempts = Math.max(1, PLAYBACK_FSM_PLAY_ATTEMPTS)
+  let result: PlaybackResult | null = null
   for (let i = 0; i < attempts; i++) {
-    if (isCancelled(cancel)) return { cancelled: true };
+    if (isCancelled(cancel)) return { cancelled: true }
     // Verify plex_foreground + Companion readiness immediately BEFORE firing play.
     if (ADB_ENABLED && !(await plexForeground())) {
-      console.log('[driver] Plex not foreground before play; re-opening');
-      await ensurePlex();
+      console.log(
+        "[driver] Plex not foreground before play; re-opening",
+      )
+      await ensurePlex()
     }
-    if (!adb.usesModernPlayback(device) && !(await playback.companionReady(host, port))) {
+    if (
+      !adb.usesModernPlayback(device) &&
+      !(await playback.companionReady(host, port))
+    ) {
       console.log(
         `[driver] Companion ${host}:${port} not accepting a connection; re-opening Plex`,
-      );
-      if (ADB_ENABLED) await ensurePlex();
-      await sleep(PLAYBACK_FSM_RETRY_BACKOFF);
+      )
+      if (ADB_ENABLED) await ensurePlex()
+      await sleep(PLAYBACK_FSM_RETRY_BACKOFF)
     }
     result = await playback.playRatingKeys(items, {
-      setName, device, offset, userUuid,
-    });
-    if (result && result.played) return result;
+      setName,
+      device,
+      offset,
+      userUuid,
+    })
+    if (result && result.played) return result
     if (isConnRefused(result)) {
       console.log(
-        `[driver] play attempt ${i + 1}/${attempts} refused: ${result && result.error}; `
-        + 're-opening Plex and retrying',
-      );
-      if (ADB_ENABLED) await ensurePlex();
-      await sleep(PLAYBACK_FSM_RETRY_BACKOFF);
-      continue;
+        `[driver] play attempt ${i + 1}/${attempts} refused: ${result && result.error}; ` +
+          "re-opening Plex and retrying",
+      )
+      if (ADB_ENABLED) await ensurePlex()
+      await sleep(PLAYBACK_FSM_RETRY_BACKOFF)
+      continue
     }
     // A non-connection failure (HTTP, no client advertising): Plex answered — surface it
     // as-is so state/last-played publish exactly as the legacy path did.
-    return result;
+    return result
   }
   console.log(
     `[driver] play still refused after ${attempts} attempts: ${result && result.error}`,
-  );
-  return { error: PLAY_ERROR, _diag: result };
+  )
+  return { error: PLAY_ERROR, _diag: result }
 }
 
 // Drive the target device from wherever it is to `playing(target)`.
@@ -400,45 +488,59 @@ async function driveToPlayingOnDevice({
   userUuid = null,
   accountId = null,
 }: {
-  items?: PlexPlayItem[];
-  ratingKeys?: (string | number)[];
-  requiredProfile?: string | null;
-  offset?: number;
-  device?: Device | null;
-  setName?: string | null;
-  cancel?: CancelFlag | null;
-  setLabel?: string | null;
-  userUuid?: string | null;
+  items?: PlexPlayItem[]
+  ratingKeys?: (string | number)[]
+  requiredProfile?: string | null
+  offset?: number
+  device?: Device | null
+  setName?: string | null
+  cancel?: CancelFlag | null
+  setLabel?: string | null
+  userUuid?: string | null
   /** The bound account (`binding.account_id`) the audit below holds playback to. */
-  accountId?: number | null;
+  accountId?: number | null
 } = {}): Promise<PlaybackResult | PushResult> {
-  if (isCancelled(cancel)) return { cancelled: true };
+  if (isCancelled(cancel)) return { cancelled: true }
 
   // unreachable -> device_on -> plex_foreground. Best-effort head start (the play step
   // re-verifies foreground itself); ADB off/unreachable falls back to whatever HA launched.
-  if (ADB_ENABLED) await ensurePlex();
-  if (isCancelled(cancel)) return { cancelled: true };
+  if (ADB_ENABLED) await ensurePlex()
+  if (isCancelled(cancel)) return { cancelled: true }
 
   // plex_foreground -> signed_in(required). Only when the set/card demands a profile.
   if (requiredProfile) {
-    const r = await driveProfile(requiredProfile, cancel, accountId, device);
+    const r = await driveProfile(
+      requiredProfile,
+      cancel,
+      accountId,
+      device,
+    )
     if (r != null) {
       if (r.error === SWITCH_ERROR) {
-        const profile = r._profile != null ? r._profile : requiredProfile;
-        delete r._profile;
-        r.error = SWITCH_ERROR
-          .replace('{label}', setLabel || setName || '')
-          .replace('{profile}', profile);
+        const profile =
+          r._profile != null ? r._profile : requiredProfile
+        delete r._profile
+        r.error = SWITCH_ERROR.replace(
+          "{label}",
+          setLabel || setName || "",
+        ).replace("{profile}", profile)
       }
-      return r;
+      return r
     }
   }
 
-  if (isCancelled(cancel)) return { cancelled: true };
+  if (isCancelled(cancel)) return { cancelled: true }
 
   // signed_in(required) -> playing(target). Play is the last action, verified + retried.
-  const lineup = items ?? ratingKeys;
-  let result = await drivePlay(lineup, setName, device, offset, cancel, userUuid);
+  const lineup = items ?? ratingKeys
+  let result = await drivePlay(
+    lineup,
+    setName,
+    device,
+    offset,
+    cancel,
+    userUuid,
+  )
 
   // playing(target) -> playing(target) FOR REAL, and AS THE RIGHT ACCOUNT.
   //
@@ -457,66 +559,109 @@ async function driveToPlayingOnDevice({
   // Only a POSITIVE mismatch is terminal. The account comparison abstains when it cannot
   // tell (a session with no user stamp, Plex unreachable), because failing a play that is
   // probably fine is worse than an audit that occasionally has no opinion.
-  const mode = (device && device.mode) || PLAYBACK_MODE;
-  if (result && (result as PlaybackResult).played && mode === 'client') {
-    if (isCancelled(cancel)) return { cancelled: true };
-    const first = lineup?.[0];
-    const sourceServer = first && typeof first === 'object' ? first.plexServer ?? null : null;
-    let verdict = await playback.verifyAccount(accountId, { device, sourceServer, userUuid });
-    if (isCancelled(cancel)) return { cancelled: true };
-    for (let retry = 1; !verdict.hasSession && retry <= Math.max(0, PLAYBACK_SESSION_RETRIES); retry++) {
-      if (isCancelled(cancel)) return { cancelled: true };
+  const mode = (device && device.mode) || PLAYBACK_MODE
+  if (
+    result &&
+    (result as PlaybackResult).played &&
+    mode === "client"
+  ) {
+    if (isCancelled(cancel)) return { cancelled: true }
+    const first = lineup?.[0]
+    const sourceServer =
+      first && typeof first === "object"
+        ? (first.plexServer ?? null)
+        : null
+    let verdict = await playback.verifyAccount(accountId, {
+      device,
+      sourceServer,
+      userUuid,
+    })
+    if (isCancelled(cancel)) return { cancelled: true }
+    for (
+      let retry = 1;
+      !verdict.hasSession &&
+      retry <= Math.max(0, PLAYBACK_SESSION_RETRIES);
+      retry++
+    ) {
+      if (isCancelled(cancel)) return { cancelled: true }
       console.log(
-        `[driver] play was accepted but no session appeared on the target player `
-        + `(${verdict.reason || 'no session'}); re-opening Plex and playing again `
-        + `(${retry}/${PLAYBACK_SESSION_RETRIES})`,
-      );
-      if (ADB_ENABLED) await ensurePlex();
-      result = await drivePlay(lineup, setName, device, offset, cancel, userUuid);
-      if (!result || !(result as PlaybackResult).played) return result;
-      if (isCancelled(cancel)) return { cancelled: true };
-      verdict = await playback.verifyAccount(accountId, { device, sourceServer, userUuid });
-      if (isCancelled(cancel)) return { cancelled: true };
+        `[driver] play was accepted but no session appeared on the target player ` +
+          `(${verdict.reason || "no session"}); re-opening Plex and playing again ` +
+          `(${retry}/${PLAYBACK_SESSION_RETRIES})`,
+      )
+      if (ADB_ENABLED) await ensurePlex()
+      result = await drivePlay(
+        lineup,
+        setName,
+        device,
+        offset,
+        cancel,
+        userUuid,
+      )
+      if (!result || !(result as PlaybackResult).played)
+        return result
+      if (isCancelled(cancel)) return { cancelled: true }
+      verdict = await playback.verifyAccount(accountId, {
+        device,
+        sourceServer,
+        userUuid,
+      })
+      if (isCancelled(cancel)) return { cancelled: true }
     }
     if (!verdict.hasSession) {
       console.log(
-        `[driver] still no session on the target player after `
-        + `${PLAYBACK_SESSION_RETRIES} extra push(es); reporting the last push as-is`,
-      );
+        `[driver] still no session on the target player after ` +
+          `${PLAYBACK_SESSION_RETRIES} extra push(es); reporting the last push as-is`,
+      )
     }
     if (sourceServer) {
       if (verdict.hasSession) {
-        console.log(`[driver] shared Plex server confirmed playback on the target player`);
+        console.log(
+          `[driver] shared Plex server confirmed playback on the target player`,
+        )
       }
-      return result;
+      return result
     }
-    if (accountId == null) return result;
+    if (accountId == null) return result
     if (verdict.accountId != null && !sourceServer) {
-      const observedTitle = verdict.title || (!verdict.isMismatch ? requiredProfile : null);
-      if (observedTitle) profiles.recordObservedProfile(observedTitle);
-      else profiles.invalidateObservedProfile();
+      const observedTitle =
+        verdict.title ||
+        (!verdict.isMismatch ? requiredProfile : null)
+      if (observedTitle)
+        profiles.recordObservedProfile(observedTitle)
+      else profiles.invalidateObservedProfile()
     }
     if (verdict.isMismatch) {
       console.log(
-        `[driver] WRONG ACCOUNT: '${setLabel || setName}' is bound to account ${accountId} `
-        + `but the Shield is playing as ${verdict.accountId} ('${verdict.title}'); stopping`,
-      );
-      await playback.stopPlayback(device);
+        `[driver] WRONG ACCOUNT: '${setLabel || setName}' is bound to account ${accountId} ` +
+          `but the Shield is playing as ${verdict.accountId} ('${verdict.title}'); stopping`,
+      )
+      await playback.stopPlayback(device)
       return {
-        error: ACCOUNT_ERROR
-          .replace('{label}', setLabel || setName || '')
-          .replace('{profile}', requiredProfile || String(accountId))
-          .replace('{actual}', verdict.title || String(verdict.accountId)),
+        error: ACCOUNT_ERROR.replace(
+          "{label}",
+          setLabel || setName || "",
+        )
+          .replace(
+            "{profile}",
+            requiredProfile || String(accountId),
+          )
+          .replace(
+            "{actual}",
+            verdict.title || String(verdict.accountId),
+          ),
         _diag: result,
-      };
+      }
     }
     if (verdict.accountId == null) {
-      console.log(`[driver] account audit had no opinion: ${verdict.reason}`);
+      console.log(
+        `[driver] account audit had no opinion: ${verdict.reason}`,
+      )
     } else {
       console.log(
-        `[driver] account audit OK: playing as ${verdict.accountId} ('${verdict.title}'); `
-        + 'profile observation remembered',
-      );
+        `[driver] account audit OK: playing as ${verdict.accountId} ('${verdict.title}'); ` +
+          "profile observation remembered",
+      )
     }
 
     // Log the push for the ATTRIBUTION AUDIT, whatever the verdict above was.
@@ -534,10 +679,12 @@ async function driveToPlayingOnDevice({
       lineup,
       // Plex has returned the playQueue id as both a number and a string; the column is an
       // INTEGER, so normalise rather than letting SQLite coerce a string silently.
-      playQueueId: Number((result as PlaybackResult).playQueueID) || null,
-    });
+      playQueueId:
+        Number((result as PlaybackResult).playQueueID) ||
+        null,
+    })
   }
-  return result;
+  return result
 }
 
 /**
@@ -554,16 +701,19 @@ function recordGatedPush({
   lineup,
   playQueueId,
 }: {
-  setName: string | null;
-  requiredProfile: string | null;
-  accountId: number;
-  lineup: PlexPlayItem[] | (string | number)[] | undefined;
-  playQueueId: number | null;
+  setName: string | null
+  requiredProfile: string | null
+  accountId: number
+  lineup: PlexPlayItem[] | (string | number)[] | undefined
+  playQueueId: number | null
 }): void {
-  if (!setName) return;
+  if (!setName) return
   try {
     const ratingKeys = (lineup ?? []).map((item) =>
-      item && typeof item === 'object' ? String(item.ratingKey) : String(item));
+      item && typeof item === "object"
+        ? String(item.ratingKey)
+        : String(item),
+    )
     gatedPush.recordPush({
       setId: setName,
       profile: requiredProfile,
@@ -571,9 +721,11 @@ function recordGatedPush({
       pushedAt: Math.floor(Date.now() / 1000),
       ratingKeys,
       playQueueId,
-    });
+    })
   } catch (e) {
-    console.log(`[driver] could not log the gated push for '${setName}': ${errMessage(e)}`);
+    console.log(
+      `[driver] could not log the gated push for '${setName}': ${errMessage(e)}`,
+    )
   }
 }
 
@@ -589,8 +741,12 @@ export const _internals = {
   drivePlay,
   isCancelled,
   publishAwait,
-};
+}
 
-export function driveToPlaying(...args: Parameters<typeof driveToPlayingOnDevice>): ReturnType<typeof driveToPlayingOnDevice> {
-  return withDevice(args[0]?.device ?? null, () => driveToPlayingOnDevice(...args));
+export function driveToPlaying(
+  ...args: Parameters<typeof driveToPlayingOnDevice>
+): ReturnType<typeof driveToPlayingOnDevice> {
+  return withDevice(args[0]?.device ?? null, () =>
+    driveToPlayingOnDevice(...args),
+  )
 }

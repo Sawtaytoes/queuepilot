@@ -12,22 +12,23 @@
 // HISTORY_PATH, which `config.js` already owns and the server has always read from there.
 // This module is the knobs that had NO Node reader before the port.
 
-import { hostval } from './hostConfig.js';
+import { hostval } from "./hostConfig.js"
 
-const str = (name: string, fallback: string): string => process.env[name] ?? fallback;
+const str = (name: string, fallback: string): string =>
+  process.env[name] ?? fallback
 const int = (name: string, fallback: number): number => {
-  const n = parseInt(process.env[name] ?? '', 10);
-  return Number.isFinite(n) ? n : fallback;
-};
+  const n = parseInt(process.env[name] ?? "", 10)
+  return Number.isFinite(n) ? n : fallback
+}
 const float = (name: string, fallback: number): number => {
-  const n = parseFloat(process.env[name] ?? '');
-  return Number.isFinite(n) ? n : fallback;
-};
+  const n = parseFloat(process.env[name] ?? "")
+  return Number.isFinite(n) ? n : fallback
+}
 const bool = (name: string, fallback: boolean): boolean => {
-  const v = process.env[name];
-  if (v == null || v === '') return fallback;
-  return ['1', 'true', 'yes'].includes(v.toLowerCase());
-};
+  const v = process.env[name]
+  if (v == null || v === "") return fallback
+  return ["1", "true", "yes"].includes(v.toLowerCase())
+}
 // A JSON-valued env var, with the Python default reproduced as a literal. A malformed value
 // falls back rather than crashing boot — config.py would raise here, but this process also
 // serves the web UI, and losing the editor because ADB_PROFILE_ORDER has a stray comma is a
@@ -38,57 +39,70 @@ const bool = (name: string, fallback: boolean): boolean => {
 // validating it would mean rejecting a malformed override at boot, which is exactly the
 // crash this function exists to avoid. The consumers of the two JSON knobs
 // (PROFILE_SET_MAP, ADB_PROFILE_ORDER) already tolerate junk values.
-const json = <T,>(name: string, fallback: T): T => {
-  const v = process.env[name];
-  if (v == null || v.trim() === '') return fallback;
+const json = <T>(name: string, fallback: T): T => {
+  const v = process.env[name]
+  if (v == null || v.trim() === "") return fallback
   try {
-    return JSON.parse(v) as T;
+    return JSON.parse(v) as T
   } catch {
-    console.log(`[env] ${name} is not valid JSON — using the default`);
-    return fallback;
+    console.log(
+      `[env] ${name} is not valid JSON — using the default`,
+    )
+    return fallback
   }
-};
+}
 
 // --- library section ids (verified live) ------------------------------------- //
 // SEC_SHORTS/SEC_SHOWS/SEC_ANIME are NOT env-configurable on the Python side either; they
 // are constants there and stay constants here. SEC_ANIME is deliberately excluded from the
 // kid channels (decision 2026-07-08) — kept for reference, do not add it to a set's pool
 // without a new decision.
-export const SEC_MOVIES = int('PLEX_SEC_MOVIES', 1);
+export const SEC_MOVIES = int("PLEX_SEC_MOVIES", 1)
 // Documentaries are their own Plex section but count as "Movies" for the curated queues.
-export const SEC_DOCS = int('PLEX_SEC_DOCS', 14);
-export const SEC_SHORTS = 15;
-export const SEC_SHOWS = 5;
-export const SEC_ANIME = 11;
+export const SEC_DOCS = int("PLEX_SEC_DOCS", 14)
+export const SEC_SHORTS = 15
+export const SEC_SHOWS = 5
+export const SEC_ANIME = 11
 
 // ONLY a default for a set that doesn't name its own `watch_count_accounts`. Every set
 // currently does, so nothing uses it: each card reflects its OWN profile's history. Unioning
 // across profiles was tried and reverted (2026-07-16) — it let Bob's viewing drive the kids'
 // cards. Don't route a new set through this without a reason.
-export const WATCH_COUNT_ACCOUNTS = String(str('WATCH_COUNT_ACCOUNTS', '1,11111111,22222222'))
-  .split(',')
+export const WATCH_COUNT_ACCOUNTS = String(
+  str("WATCH_COUNT_ACCOUNTS", "1,11111111,22222222"),
+)
+  .split(",")
   .map((a) => parseInt(a.trim(), 10))
-  .filter((n) => Number.isFinite(n));
+  .filter((n) => Number.isFinite(n))
 
 // --- curated queues ---------------------------------------------------------- //
 // Episodes queued for a series entry per play, TV-style (it resumes next scan). DEFAULT is 1
 // (one episode, like a TV channel); a queue entry may override per-show with `episodes:`.
 // QUEUE_SERIES_LENGTH is the hard safety cap so a bad override can't queue a whole series.
-export const QUEUE_SERIES_DEFAULT = int('QUEUE_SERIES_DEFAULT', 1);
-export const QUEUE_SERIES_LENGTH = int('QUEUE_SERIES_LENGTH', 40);
+export const QUEUE_SERIES_DEFAULT = int(
+  "QUEUE_SERIES_DEFAULT",
+  1,
+)
+export const QUEUE_SERIES_LENGTH = int(
+  "QUEUE_SERIES_LENGTH",
+  40,
+)
 // WHERE a multi-episode batch may stop — the count cap above says how many, this says where it
 // may end. "none" (default) fills across anything; "member" forbids spanning two collection
 // members; "season" also forbids spanning a season boundary, including inside one show (so
 // `episodes: 2` at a finale queues the finale alone, not finale + next premiere). Set per-set
 // in sets.yaml, overridable per entry in queues.yaml. Mirrors config.BATCH_STOPS_AT.
-export const BATCH_STOPS_AT = str('BATCH_STOPS_AT', 'none');
+export const BATCH_STOPS_AT = str("BATCH_STOPS_AT", "none")
 
 // Rotation queue length (episodes queued per cartoons session) — the DEFAULT only. A set
 // overrides it with `length:`, because 12 is four hours of Shows and half an hour of Shorts.
-export const ROTATION_LENGTH = int('ROTATION_LENGTH', 12);
+export const ROTATION_LENGTH = int("ROTATION_LENGTH", 12)
 // The hard safety cap on a set's `length:`, so a typo can't schedule a thousand Plex round
 // trips at scan time. Same role QUEUE_SERIES_LENGTH plays for a per-entry `episodes:`.
-export const ROTATION_LENGTH_MAX = int('ROTATION_LENGTH_MAX', 200);
+export const ROTATION_LENGTH_MAX = int(
+  "ROTATION_LENGTH_MAX",
+  200,
+)
 
 // --- top-up (a `refill: true` channel) ---------------------------------------- //
 // How few items may remain AFTER the playing one before a top-up tick actually extends the
@@ -98,11 +112,14 @@ export const ROTATION_LENGTH_MAX = int('ROTATION_LENGTH_MAX', 200);
 // 3 and not 1: the extend is a Plex round trip plus a lineup build, so waking with one item
 // left races the viewer finishing it. It is also why top-up's "Play Next" insert position is
 // harmless in practice — at 3 remaining there is almost no tail left to jump.
-export const TOPUP_AT = int('TOPUP_AT', 3);
+export const TOPUP_AT = int("TOPUP_AT", 3)
 // How long after a top-up before another may run, so a duplicated command or timer cannot
 // walk the lineup up to ROTATION_LENGTH_MAX one tick at a time. Belt for
 // the TOPUP_AT braces: that guard is a READ of live state and this one needs no read at all.
-export const TOPUP_COOLDOWN_SECONDS = int('TOPUP_COOLDOWN_SECONDS', 60);
+export const TOPUP_COOLDOWN_SECONDS = int(
+  "TOPUP_COOLDOWN_SECONDS",
+  60,
+)
 
 // --- playback target (the Family Room theater Shield) ------------------------- //
 // PLAYBACK_MODE:
@@ -114,30 +131,59 @@ export const TOPUP_COOLDOWN_SECONDS = int('TOPUP_COOLDOWN_SECONDS', 60);
 //               records under whatever user that app is signed into.
 // Note the port keeps cast in the Python sidecar precisely because "client" mode loses
 // per-profile attribution and is therefore not an acceptable substitute.
-export const PLAYBACK_MODE = str('PLAYBACK_MODE', 'cast');
-export const SHIELD_CAST_NAME = hostval('SHIELD_CAST_NAME', 'shield_cast_name', 'Family Room SHIELD');
+export const PLAYBACK_MODE = str("PLAYBACK_MODE", "cast")
+export const SHIELD_CAST_NAME = hostval(
+  "SHIELD_CAST_NAME",
+  "shield_cast_name",
+  "Family Room SHIELD",
+)
 // Used by "client" mode only.
-export const SHIELD_CLIENT_MACHINE_ID = hostval('SHIELD_CLIENT_MACHINE_ID', 'shield_client_machine_id', '');
-export const SHIELD_CLIENT_NAME = hostval('SHIELD_CLIENT_NAME', 'shield_client_name', 'Family Room SHIELD');
+export const SHIELD_CLIENT_MACHINE_ID = hostval(
+  "SHIELD_CLIENT_MACHINE_ID",
+  "shield_client_machine_id",
+  "",
+)
+export const SHIELD_CLIENT_NAME = hostval(
+  "SHIELD_CLIENT_NAME",
+  "shield_client_name",
+  "Family Room SHIELD",
+)
 // Direct Plex Companion endpoint of the Shield (http://<ip>:32500). Blank = resolve it from
 // plex.tv's device list at runtime, which is the normal path.
-export const SHIELD_CLIENT_URI = hostval('SHIELD_CLIENT_URI', 'shield_client_uri', '');
+export const SHIELD_CLIENT_URI = hostval(
+  "SHIELD_CLIENT_URI",
+  "shield_client_uri",
+  "",
+)
 // LAN address of the Plex server, handed to the client in playMedia so it knows where to
 // stream from. Must be reachable FROM the Shield, not from this container.
-export const PLEX_LOCAL_URL = String(hostval('PLEX_LOCAL_URL', 'plex_local_url', 'http://192.0.2.10:32400')).replace(/\/+$/, '');
+export const PLEX_LOCAL_URL = String(
+  hostval(
+    "PLEX_LOCAL_URL",
+    "plex_local_url",
+    "http://192.0.2.10:32400",
+  ),
+).replace(/\/+$/, "")
 
 // --- resume-on-advance (resume.js) -------------------------------------------- //
 // A Plex playQueue has no per-item resume point and playMedia's `offset` only applies to the
 // item it starts on, so episodes 2..N restart at 0:00. resume.js seeks them to their own
 // marker after the player advances. RESUME_ON_ADVANCE=0 turns the whole thing off.
-export const RESUME_ON_ADVANCE = bool('RESUME_ON_ADVANCE', true);
+export const RESUME_ON_ADVANCE = bool(
+  "RESUME_ON_ADVANCE",
+  true,
+)
 // Below this, a marker means "never really started" — don't seek (default 30s).
-export const RESUME_MIN_MS = int('RESUME_MIN_MS', 30_000);
+export const RESUME_MIN_MS = int("RESUME_MIN_MS", 30_000)
 // Past this fraction of the runtime the episode is effectively over; restarting is right.
-export const RESUME_MAX_FRACTION = Number(str('RESUME_MAX_FRACTION', '0.95')) || 0.95;
+export const RESUME_MAX_FRACTION =
+  Number(str("RESUME_MAX_FRACTION", "0.95")) || 0.95
 // Only seek an episode still near its start; past this we missed the transition (or the viewer
 // scrubbed there deliberately) and yanking them backwards is worse than doing nothing.
-export const RESUME_START_WINDOW_MS = int('RESUME_START_WINDOW_MS', 120_000);
+export const RESUME_START_WINDOW_MS = int(
+  "RESUME_START_WINDOW_MS",
+  120_000,
+)
 // How often to ask the SERVER what is playing, when the push feed has not already said so.
 //
 // This was 5 000 ms, and that one number WAS the owner's "4-5 seconds": the seek cannot go
@@ -146,30 +192,46 @@ export const RESUME_START_WINDOW_MS = int('RESUME_START_WINDOW_MS', 120_000);
 // lineup has unfired seeks — `startWatch` stops itself the moment the plan drains, and after
 // `maxMs` regardless. That is the whole price. It is the FALLBACK cadence now; the push feed
 // below is the primary trigger.
-export const RESUME_POLL_MS = int('RESUME_POLL_MS', 1_500);
+export const RESUME_POLL_MS = int("RESUME_POLL_MS", 1_500)
 // The poll path's own request timeout. `plexReq`'s default is 60 s with no retry, which on a
 // short cadence lets ONE hung socket stall the watcher for dozens of ticks — the watcher
 // swallows the throw, so a skipped tick is strictly better than a stalled one.
-export const RESUME_POLL_TIMEOUT_MS = int('RESUME_POLL_TIMEOUT_MS', 2_500);
+export const RESUME_POLL_TIMEOUT_MS = int(
+  "RESUME_POLL_TIMEOUT_MS",
+  2_500,
+)
 // How soon to re-read after a RETRYABLE decline. At the moment of an advance /status/sessions
 // can still report the previous item's position against the new ratingKey (observed live —
 // see resume.ts), and waiting a whole interval to find out doubled the delay. The burst is
 // bounded to one interval's worth of fast re-reads; see `startWatch`.
-export const RESUME_RETRY_MS = int('RESUME_RETRY_MS', 400);
+export const RESUME_RETRY_MS = int("RESUME_RETRY_MS", 400)
 // Use the retained now-playing topic as the PRIMARY advance trigger, with the poll above as
 // the fallback. Switchable because that topic was rejected for this job once before: it
 // reported a playing state it could not name (`ratingKey: null`) on this setup. An event
 // without a usable ratingKey is ignored rather than guessed at, so the poll still covers it —
 // but RESUME_PUSH_TRIGGER=0 turns the whole path off without a redeploy.
-export const RESUME_PUSH_TRIGGER = bool('RESUME_PUSH_TRIGGER', true);
+export const RESUME_PUSH_TRIGGER = bool(
+  "RESUME_PUSH_TRIGGER",
+  true,
+)
 
 // --- profile-driven set selection (set="auto") -------------------------------- //
 // The signed-in Plex Home profile on the Shield decides the tier; cards carry only the KIND
 // (cartoons/movie). Detection tails the PMS DEBUG log (profiles.py → profiles.js), so the log
 // volume must be mounted read-only at PMS_LOG_PATH's parent.
-export const PMS_LOG_PATH = str('PMS_LOG_PATH', '/pms-logs/Plex Media Server.log');
-export const SHIELD_IP = hostval('SHIELD_IP', 'shield_ip', '192.0.2.30');
-export const PROFILE_WAIT_SECONDS = int('PROFILE_WAIT_SECONDS', 120);
+export const PMS_LOG_PATH = str(
+  "PMS_LOG_PATH",
+  "/pms-logs/Plex Media Server.log",
+)
+export const SHIELD_IP = hostval(
+  "SHIELD_IP",
+  "shield_ip",
+  "192.0.2.30",
+)
+export const PROFILE_WAIT_SECONDS = int(
+  "PROFILE_WAIT_SECONDS",
+  120,
+)
 // How long a profile OBSERVATION may clear a gate before the picker is walked again.
 //
 // The remembered observation exists to spare the picker walk between back-to-back queues,
@@ -181,81 +243,135 @@ export const PROFILE_WAIT_SECONDS = int('PROFILE_WAIT_SECONDS', 120);
 // queue-to-queue case and spends ~16 s of picker walk after a long gap. 0 disables the fast
 // path altogether.
 // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
-export const PROFILE_OBSERVATION_TTL_SECONDS = float('PROFILE_OBSERVATION_TTL_SECONDS', 600);
+export const PROFILE_OBSERVATION_TTL_SECONDS = float(
+  "PROFILE_OBSERVATION_TTL_SECONDS",
+  600,
+)
 // Plex Home profile title -> set name. Titles must match plex.tv exactly.
-export const PROFILE_SET_MAP = json<Record<string, string>>('PROFILE_SET_MAP', {
-  'Younger Kids': 'younger',
-  'Older Kids': 'older',
-});
+export const PROFILE_SET_MAP = json<Record<string, string>>(
+  "PROFILE_SET_MAP",
+  {
+    "Younger Kids": "younger",
+    "Older Kids": "older",
+  },
+)
 
 // --- ADB profile switching (adb.py → adb.js) ---------------------------------- //
 // Closes the loop on a profile gate: instead of only waiting for a human to pick the profile
 // on screen, drive the Shield's picker with D-pad events. OFF by default — it injects key
 // events into whatever is on the family TV, so it must be opted into explicitly.
-export const ADB_ENABLED = bool('ADB_ENABLED', false);
-export const ADB_BIN = str('ADB_BIN', 'adb');
-export const ADB_TARGET = str('ADB_TARGET', `${SHIELD_IP}:5555`);
+export const ADB_ENABLED = bool("ADB_ENABLED", false)
+export const ADB_BIN = str("ADB_BIN", "adb")
+export const ADB_TARGET = str(
+  "ADB_TARGET",
+  `${SHIELD_IP}:5555`,
+)
 // The Shield only trusts adb keys it has been shown once, via an on-TV prompt. A fresh
 // container generates a NEW key and would sit unauthorized with no way to accept it, so this
 // points at the already-authorized private key (mounted, NOT baked into the image).
-export const ADB_KEY_PATH = str('ADB_KEY_PATH', '/config/.android/adbkey');
+export const ADB_KEY_PATH = str(
+  "ADB_KEY_PATH",
+  "/config/.android/adbkey",
+)
 // Picker order. DERIVED from plex.tv /api/v2/home/users, whose order matches the on-screen
 // picker (confirmed 2026-07-26) — not hand-maintained, so adding or removing a Home user
 // can't silently leave it stale. Cached to disk so a plex.tv outage doesn't cost the ability
 // to switch. Set the env var only as a manual override; empty = derive.
-export const ADB_PROFILE_ORDER = json<string[]>('ADB_PROFILE_ORDER', []);
-export const ADB_PROFILE_ORDER_CACHE = str('ADB_PROFILE_ORDER_CACHE', '/config/profile-order.json');
-export const ADB_PROFILE_ORDER_TTL = int('ADB_PROFILE_ORDER_TTL', 3600);
+export const ADB_PROFILE_ORDER = json<string[]>(
+  "ADB_PROFILE_ORDER",
+  [],
+)
+export const ADB_PROFILE_ORDER_CACHE = str(
+  "ADB_PROFILE_ORDER_CACHE",
+  "/config/profile-order.json",
+)
+export const ADB_PROFILE_ORDER_TTL = int(
+  "ADB_PROFILE_ORDER_TTL",
+  3600,
+)
 // Hard bound on D-pad presses before giving up — never spin on a UI that changed.
-export const ADB_MAX_PRESSES = int('ADB_MAX_PRESSES', 12);
+export const ADB_MAX_PRESSES = int("ADB_MAX_PRESSES", 12)
 // How long to keep looking for the picker to appear (the HA script foregrounds Plex AFTER
 // publishing the start command, so the picker lags the scan by a few seconds).
-export const ADB_PICKER_WAIT_SECONDS = int('ADB_PICKER_WAIT_SECONDS', 45);
+export const ADB_PICKER_WAIT_SECONDS = int(
+  "ADB_PICKER_WAIT_SECONDS",
+  45,
+)
 // Once Plex is signed in there is NO picker to drive — foregrounding the app lands on
 // HomeActivityTV (verified 2026-07-26), so a wrong-profile card could never self-switch. A
 // force-stop + relaunch cold-starts the app straight back to the picker. Only ever done when
 // a switch is actually needed and the grace period found no picker; it does kill whatever
 // Plex was playing, which is why it is a knob.
-export const ADB_RESTART_TO_PICKER = bool('ADB_RESTART_TO_PICKER', true);
-export const ADB_TIMEOUT = int('ADB_TIMEOUT', 15);
+export const ADB_RESTART_TO_PICKER = bool(
+  "ADB_RESTART_TO_PICKER",
+  true,
+)
+export const ADB_TIMEOUT = int("ADB_TIMEOUT", 15)
 // How long to wait for Plex to reach the foreground after we launch it over ADB. Companion
 // playback (:32500) and the picker both need Plex running, so a scan blocks on this.
-export const ADB_PLEX_LAUNCH_WAIT_SECONDS = int('ADB_PLEX_LAUNCH_WAIT_SECONDS', 20);
+export const ADB_PLEX_LAUNCH_WAIT_SECONDS = int(
+  "ADB_PLEX_LAUNCH_WAIT_SECONDS",
+  20,
+)
 
 // --- playback FSM (driver.js; mirrors queue_builder/config.py) ---------------- //
 // When on, session start hands launch + profile gate + play to driver.driveToPlaying,
 // which SAMPLES real state and drives VERIFIED, RETRIED, NON-DESTRUCTIVE transitions
 // (unreachable -> device_on -> plex_foreground -> signed_in(required) -> playing).
 // Flip with PLAYBACK_FSM=true once verified on-Shield. See docs/playback-state-machine-design.md.
-export const PLAYBACK_FSM = bool('PLAYBACK_FSM', false);
+export const PLAYBACK_FSM = bool("PLAYBACK_FSM", false)
 // The Plex Companion TCP port on the client (playMedia lands here). The FSM probes this
 // immediately before firing play so a closed / mid-nav Plex surfaces as "not ready, re-open
 // + retry" instead of an Errno 111 that kills the scan.
-export const COMPANION_PORT = int('COMPANION_PORT', 32500);
+export const COMPANION_PORT = int("COMPANION_PORT", 32500)
 // How long a companionTarget() MISS is remembered. A HIT was already memoised forever; a miss
 // was not, so a player that is not advertising a connection cost a plex.tv WAN round trip on
 // every poll, every seek and every transport verb — and "not advertising" is exactly the state
 // the system is in while Plex is mid-navigation, which is when a seek is about to be due.
 // Short on purpose: long enough to collapse a burst, short enough that a client coming online
 // is noticed within a few seconds.
-export const COMPANION_MISS_TTL_MS = int('COMPANION_MISS_TTL_MS', 10_000);
+export const COMPANION_MISS_TTL_MS = int(
+  "COMPANION_MISS_TTL_MS",
+  10_000,
+)
 // Request timeout for plex.tv (`/api/v2/devices`). It is a WAN call on the seek path and had
 // no timeout at all, so a black-holed socket could hang a poll tick indefinitely.
-export const PLEXTV_TIMEOUT_MS = int('PLEXTV_TIMEOUT_MS', 8_000);
+export const PLEXTV_TIMEOUT_MS = int(
+  "PLEXTV_TIMEOUT_MS",
+  8_000,
+)
 // Bounded retries for the FSM's two fragile transitions. `play` re-opens Plex between
 // connection-refused attempts; `switch` re-summons the picker between failed switches.
-export const PLAYBACK_FSM_PLAY_ATTEMPTS = int('PLAYBACK_FSM_PLAY_ATTEMPTS', 3);
-export const PLAYBACK_FSM_SWITCH_ATTEMPTS = int('PLAYBACK_FSM_SWITCH_ATTEMPTS', 2);
+export const PLAYBACK_FSM_PLAY_ATTEMPTS = int(
+  "PLAYBACK_FSM_PLAY_ATTEMPTS",
+  3,
+)
+export const PLAYBACK_FSM_SWITCH_ATTEMPTS = int(
+  "PLAYBACK_FSM_SWITCH_ATTEMPTS",
+  2,
+)
 // Seconds to wait on the Companion TCP connect probe, and the short pause between retries.
-export const PLAYBACK_FSM_COMPANION_TIMEOUT = float('PLAYBACK_FSM_COMPANION_TIMEOUT', 1.5);
-export const PLAYBACK_FSM_RETRY_BACKOFF = float('PLAYBACK_FSM_RETRY_BACKOFF', 1.0);
+export const PLAYBACK_FSM_COMPANION_TIMEOUT = float(
+  "PLAYBACK_FSM_COMPANION_TIMEOUT",
+  1.5,
+)
+export const PLAYBACK_FSM_RETRY_BACKOFF = float(
+  "PLAYBACK_FSM_RETRY_BACKOFF",
+  1.0,
+)
 // A play is PROVEN by a session on the target player, not by Companion's 200. How long to
 // wait for that session after each push, and how many extra pushes to spend when none
 // appears. The Shield posts its first `playing` timeline about 15 s after the push even on a
 // good start, so the wait must clear that comfortably; the 12 s the account audit used to
 // wait abstained on nearly every play, including the one where nothing was playing.
-export const PLAYBACK_SESSION_WAIT_SECONDS = float('PLAYBACK_SESSION_WAIT_SECONDS', 25);
-export const PLAYBACK_SESSION_RETRIES = int('PLAYBACK_SESSION_RETRIES', 1);
+export const PLAYBACK_SESSION_WAIT_SECONDS = float(
+  "PLAYBACK_SESSION_WAIT_SECONDS",
+  25,
+)
+export const PLAYBACK_SESSION_RETRIES = int(
+  "PLAYBACK_SESSION_RETRIES",
+  1,
+)
 
 // --- the attribution audit (accountAudit.ts) ----------------------------------- //
 // The net under the post-play audit's abstentions: it compares the `gated_push` log against
@@ -268,18 +384,22 @@ export const PLAYBACK_SESSION_RETRIES = int('PLAYBACK_SESSION_RETRIES', 1);
 // played again next week from being read as this push's fault.
 // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
 export const ACCOUNT_AUDIT_LOOKBACK_SECONDS = float(
-  'ACCOUNT_AUDIT_LOOKBACK_SECONDS', 7 * 24 * 60 * 60);
+  "ACCOUNT_AUDIT_LOOKBACK_SECONDS",
+  7 * 24 * 60 * 60,
+)
 export const ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS = float(
-  'ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS', 6 * 60 * 60);
+  "ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS",
+  6 * 60 * 60,
+)
 
 // --- MQTT (Mosquitto HA add-on) ----------------------------------------------- //
 // MQTT survives the port: HA's automations, the retained device registry and the discovery
 // sensor are real external consumers. What goes away is the INTERNAL round trip between the
 // two halves of this container.
-export const MQTT_HOST = str('MQTT_HOST', '');
-export const MQTT_PORT = int('MQTT_PORT', 1883);
-export const MQTT_USER = process.env.MQTT_USER || undefined;
-export const MQTT_PASS = process.env.MQTT_PASS || undefined;
+export const MQTT_HOST = str("MQTT_HOST", "")
+export const MQTT_PORT = int("MQTT_PORT", 1883)
+export const MQTT_USER = process.env.MQTT_USER || undefined
+export const MQTT_PASS = process.env.MQTT_PASS || undefined
 
 // --- the rename cutover (2026-08-12 → 2026-08-15, complete) ------------------- //
 // `plex-channels` became `queuepilot`, so every topic below moved prefix. The old prefix was
@@ -292,19 +412,34 @@ export const MQTT_PASS = process.env.MQTT_PASS || undefined;
 // the T_* defaults below are LITERALS under `queuepilot/` rather than composed from it, so
 // overriding this alone moves nothing. It stays as the declared name of the prefix the topics
 // sit under, which is what the doc and the app env both refer to.
-export const MQTT_PREFIX = str('MQTT_PREFIX', 'queuepilot');
+export const MQTT_PREFIX = str("MQTT_PREFIX", "queuepilot")
 
-export const T_CMD_START = str('T_CMD_START', 'queuepilot/cmd/session/start');
-export const T_CMD_ADVANCE = str('T_CMD_ADVANCE', 'queuepilot/cmd/session/advance');
-export const T_CMD_SOUNDTRACK = str('T_CMD_SOUNDTRACK', 'queuepilot/cmd/soundtrack/resolve');
+export const T_CMD_START = str(
+  "T_CMD_START",
+  "queuepilot/cmd/session/start",
+)
+export const T_CMD_ADVANCE = str(
+  "T_CMD_ADVANCE",
+  "queuepilot/cmd/session/advance",
+)
+export const T_CMD_SOUNDTRACK = str(
+  "T_CMD_SOUNDTRACK",
+  "queuepilot/cmd/soundtrack/resolve",
+)
 // Manual top-up tick for a `refill: true` channel. QueuePilot owns the normal application
 // cadence; this command remains for an operator or another service to request the same guarded
 // pass. The tick carries NO arguments: a payload saying "add 12" would move that judgement to
 // the caller, where it cannot see the queue.
-export const T_CMD_TOPUP = str('T_CMD_TOPUP', 'queuepilot/cmd/session/topup');
+export const T_CMD_TOPUP = str(
+  "T_CMD_TOPUP",
+  "queuepilot/cmd/session/topup",
+)
 // What the tick did, so the automation (and a human reading the broker) can see a no-op as a
 // no-op rather than as silence. Not retained: it describes one tick, not a current state.
-export const T_RESP_TOPUP = str('T_RESP_TOPUP', 'queuepilot/resp/topup');
+export const T_RESP_TOPUP = str(
+  "T_RESP_TOPUP",
+  "queuepilot/resp/topup",
+)
 // A SITTING finished — the playback length was reached, or the lineup genuinely ran out.
 // Carries `power_off`, which is the set asking the house to shut the room down.
 //
@@ -313,7 +448,10 @@ export const T_RESP_TOPUP = str('T_RESP_TOPUP', 'queuepilot/resp/topup');
 // over MQTT, HA owns the physical world). A `power_off: true` here is a request an automation
 // may honour, ignore, or gate on who is in the room — none of which this app should decide.
 // Not retained: it describes one moment, not a current state.
-export const T_RESP_FINISHED = str('T_RESP_FINISHED', 'queuepilot/resp/finished');
+export const T_RESP_FINISHED = str(
+  "T_RESP_FINISHED",
+  "queuepilot/resp/finished",
+)
 // END THE ACTIVITY — the owner pressed ⏻ in the Now-playing bar and wants the room off NOW.
 //
 // A command, not the `resp/finished` announcement above, and the difference is the whole
@@ -325,7 +463,10 @@ export const T_RESP_FINISHED = str('T_RESP_FINISHED', 'queuepilot/resp/finished'
 //
 // Still an ANNOUNCEMENT of intent rather than an action: HA owns the things with power cables
 // (workspace rule). Not retained — it describes one press, not a current state.
-export const T_CMD_ACTIVITY_OFF = str('T_CMD_ACTIVITY_OFF', 'queuepilot/cmd/activity/off');
+export const T_CMD_ACTIVITY_OFF = str(
+  "T_CMD_ACTIVITY_OFF",
+  "queuepilot/cmd/activity/off",
+)
 // CLEAR ONE QUEUE'S WATCHED STATE — `{"set": "<id>"}`, the same wire id an NFC card carries.
 //
 // The third of the reset's three doors (decision
@@ -340,59 +481,104 @@ export const T_CMD_ACTIVITY_OFF = str('T_CMD_ACTIVITY_OFF', 'queuepilot/cmd/acti
 // workspace's "HA owns the schedule" rule is about cross-service bridges; a queue clearing its
 // own rows is one app maintaining its own state, and this repo is public, so a feature that
 // only works with a Home Assistant install is a feature most people who clone it cannot use.
-export const T_CMD_RESET_WATCHED = str('T_CMD_RESET_WATCHED', 'queuepilot/cmd/queue/reset-watched');
+export const T_CMD_RESET_WATCHED = str(
+  "T_CMD_RESET_WATCHED",
+  "queuepilot/cmd/queue/reset-watched",
+)
 // What the reset cleared, so a caller (and a human reading the broker) sees the three counts
 // rather than silence. Not retained: it describes one reset, not a current state — the same
 // rule `resp/topup` and `resp/finished` follow.
-export const T_RESP_RESET_WATCHED = str('T_RESP_RESET_WATCHED', 'queuepilot/resp/reset-watched');
+export const T_RESP_RESET_WATCHED = str(
+  "T_RESP_RESET_WATCHED",
+  "queuepilot/resp/reset-watched",
+)
 // The attribution audit's MQTT door, alongside the HTTP route. Same posture as the reset
 // above: a SEAM, with nothing in this repo publishing on it and no Home Assistant dependency.
 // The payload may carry `{"lookbackSeconds": <n>}`; anything else uses the configured default.
 // (docs/decisions/2026-10-12-a-profile-observation-expires-and-a-gated-push-is-audited.md)
-export const T_CMD_ACCOUNT_AUDIT = str('T_CMD_ACCOUNT_AUDIT', 'queuepilot/cmd/queue/account-audit');
+export const T_CMD_ACCOUNT_AUDIT = str(
+  "T_CMD_ACCOUNT_AUDIT",
+  "queuepilot/cmd/queue/account-audit",
+)
 // The report. Not retained, for `resp/reset-watched`'s reason: it describes one run.
-export const T_RESP_ACCOUNT_AUDIT = str('T_RESP_ACCOUNT_AUDIT', 'queuepilot/resp/account-audit');
+export const T_RESP_ACCOUNT_AUDIT = str(
+  "T_RESP_ACCOUNT_AUDIT",
+  "queuepilot/resp/account-audit",
+)
 // Cast sidecar command topic (decision 2026-08-03). The sidecar has always read this from
 // env (cast_sidecar/service.py:18); the publisher used to hardcode it in playback.js, so the
 // two halves could be re-pointed independently and silently diverge — the sidecar sitting on
 // a topic nobody publishes to. Both halves now read the SAME env name with the SAME default.
-export const T_CMD_CAST_PLAY = str('T_CMD_CAST_PLAY', 'queuepilot/cmd/cast/play');
+export const T_CMD_CAST_PLAY = str(
+  "T_CMD_CAST_PLAY",
+  "queuepilot/cmd/cast/play",
+)
 // Rotation-channel preview: the request carries a `reply` topic under T_RESP_PREVIEW_BASE and
 // the computed pool is published there (request/response). Deleted at D6 — the preview
 // endpoint calls the engine in-process — but the topic names stay until then.
-export const T_CMD_PREVIEW = str('T_CMD_PREVIEW', 'queuepilot/cmd/generic/preview');
-export const T_RESP_PREVIEW_BASE = str('T_RESP_PREVIEW_BASE', 'queuepilot/resp/preview');
-export const T_RESP_LAST_PLAYED = str('T_RESP_LAST_PLAYED', 'queuepilot/resp/last-played');
-export const T_RESP_SOUNDTRACK = str('T_RESP_SOUNDTRACK', 'queuepilot/resp/soundtrack');
-export const T_STATE = str('T_STATE', 'queuepilot/state');
+export const T_CMD_PREVIEW = str(
+  "T_CMD_PREVIEW",
+  "queuepilot/cmd/generic/preview",
+)
+export const T_RESP_PREVIEW_BASE = str(
+  "T_RESP_PREVIEW_BASE",
+  "queuepilot/resp/preview",
+)
+export const T_RESP_LAST_PLAYED = str(
+  "T_RESP_LAST_PLAYED",
+  "queuepilot/resp/last-played",
+)
+export const T_RESP_SOUNDTRACK = str(
+  "T_RESP_SOUNDTRACK",
+  "queuepilot/resp/soundtrack",
+)
+export const T_STATE = str("T_STATE", "queuepilot/state")
 // LIVE playback, bridged onto MQTT by the HA automation "Plex Channels Now Playing" from the
 // Plex integration's media_player (already push-fed by the PMS websocket, so nothing polls).
 // T_STATE only says what a session STARTED with; this says what is on screen NOW.
-export const T_NOW_PLAYING = str('T_NOW_PLAYING', 'queuepilot/now-playing');
+export const T_NOW_PLAYING = str(
+  "T_NOW_PLAYING",
+  "queuepilot/now-playing",
+)
 // MQTT discovery: HA creates sensor.queuepilot_status from T_STATE on its own. This object_id
 // IS the entity_id, so changing it creates a NEW entity rather than renaming the old one —
 // which is why the rename left `sensor.plex_channels_status` alive alongside it, off its own
 // retained discovery config. That entity was retired on 2026-08-15 by clearing that config
 // (docs/queuepilot-mqtt-cutover.md), so there is only one sensor now.
-export const T_DISCOVERY_BASE = str('T_DISCOVERY_BASE', 'homeassistant');
-export const DISCOVERY_OBJECT_ID = str('DISCOVERY_OBJECT_ID', 'queuepilot_status');
+export const T_DISCOVERY_BASE = str(
+  "T_DISCOVERY_BASE",
+  "homeassistant",
+)
+export const DISCOVERY_OBJECT_ID = str(
+  "DISCOVERY_OBJECT_ID",
+  "queuepilot_status",
+)
 
 // --- device registry (the web UI's "Play on <device>" dropdown) --------------- //
 // Castable targets are announced as RETAINED queuepilot/devices/<id> messages: the
 // env-default Shield plus every plex.tv device advertising as a player. A start command may
 // then carry {"target": "<id>"} to override the default Shield.
-export const T_DEVICES_BASE = str('T_DEVICES_BASE', 'queuepilot/devices');
-export const DEVICE_ANNOUNCE_SECONDS = int('DEVICE_ANNOUNCE_SECONDS', 300);
+export const T_DEVICES_BASE = str(
+  "T_DEVICES_BASE",
+  "queuepilot/devices",
+)
+export const DEVICE_ANNOUNCE_SECONDS = int(
+  "DEVICE_ANNOUNCE_SECONDS",
+  300,
+)
 
 // --- soundtrack resolver (Living-Room-reader easter egg) ---------------------- //
-export const MA_URL = str('MA_URL', '');
-export const MA_TOKEN = str('MA_TOKEN', '');
-export const OLLAMA_URL = str('OLLAMA_URL', '');
-export const OLLAMA_MODEL = str('OLLAMA_MODEL', 'gemma3:4b');
+export const MA_URL = str("MA_URL", "")
+export const MA_TOKEN = str("MA_TOKEN", "")
+export const OLLAMA_URL = str("OLLAMA_URL", "")
+export const OLLAMA_MODEL = str("OLLAMA_MODEL", "gemma3:4b")
 
 // --- the derived Plex cache (decision 2026-08-03-sqlite-is-a-derived-plex-cache) //
 // Deletable, gitignored, never backed up. `rm` it and the app rebuilds it.
-export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
+export const CACHE_PATH = str(
+  "CACHE_PATH",
+  "/config/cache.sqlite",
+)
 
 // --- Priority-queue lead cooldowns --- //
 // `PROMOTE_PATH` is GONE. The `lead_cooldown` table folded into the book of record
@@ -408,34 +594,58 @@ export const CACHE_PATH = str('CACHE_PATH', '/config/cache.sqlite');
 // 2026-08-12-provider-tokens-live-in-a-separate-config-file). Read providers/config.js
 // before touching either path.
 /** Where the Pending watermark + dismissals live. A DECISION store, not the derived cache. */
-export const PENDING_PATH = str('PENDING_PATH', '/config/pending.yaml');
-export const PROVIDERS_PATH = str('PROVIDERS_PATH', '/config/providers.yaml');
-export const PROVIDERS_SECRETS_PATH = str('PROVIDERS_SECRETS_PATH', '/config/providers.secrets.yaml');
+export const PENDING_PATH = str(
+  "PENDING_PATH",
+  "/config/pending.yaml",
+)
+export const PROVIDERS_PATH = str(
+  "PROVIDERS_PATH",
+  "/config/providers.yaml",
+)
+export const PROVIDERS_SECRETS_PATH = str(
+  "PROVIDERS_SECRETS_PATH",
+  "/config/providers.secrets.yaml",
+)
 
 // QueuePilot GROUPS — who is watching, and which provider accounts each of them IS.
 // Plaintext and hand-editable like providers.yaml, and for the same reason: it holds names,
 // never credentials. `groups.ts`, deliberately NOT `profiles.ts` — that one is Plex's, and
 // the whole reason this concept is called a group is that PROFILE was already taken.
-export const GROUPS_PATH = str('GROUPS_PATH', '/config/groups.yaml');
+export const GROUPS_PATH = str(
+  "GROUPS_PATH",
+  "/config/groups.yaml",
+)
 
 // Kavita's deploy-time base URL. Named to match the root .env the rest of the fleet already
 // uses (KAVITA_API_SERVER_URL / KAVITA_API_KEY) so one variable feeds every consumer. The
 // KEY is deliberately absent from this module — secrets resolve through providers/config.js,
 // which is the only place allowed to read a token.
-export const KAVITA_URL = str('KAVITA_API_SERVER_URL', '').replace(/\/+$/, '');
+export const KAVITA_URL = str(
+  "KAVITA_API_SERVER_URL",
+  "",
+).replace(/\/+$/, "")
 // How long a Plugin/authenticate JWT is reused before re-minting. Kavita's tokens are
 // long-lived; this is a refresh floor, not the token's real lifetime.
-export const KAVITA_JWT_TTL_SECONDS = int('KAVITA_JWT_TTL_SECONDS', 3600);
+export const KAVITA_JWT_TTL_SECONDS = int(
+  "KAVITA_JWT_TTL_SECONDS",
+  3600,
+)
 // Chapters queued per series per rotation round on the reading side — the "read at least X
 // chapters before switching series" knob from the feasibility record's opening ask.
-export const KAVITA_BATCH_DEFAULT = int('KAVITA_BATCH_DEFAULT', 1);
+export const KAVITA_BATCH_DEFAULT = int(
+  "KAVITA_BATCH_DEFAULT",
+  1,
+)
 
 // Board Game Picker's base URL. Named for the product, matching the live host
 // (board-game-picker.example.com) rather than the repo folder. Its API token is OPTIONAL —
 // the picker only demands one when BOARD_GAME_PICKER_API_TOKEN is set on ITS side — so
 // unlike Kavita, having this URL is what "configured" means. The token, if any, still
 // resolves through providers/config.js like every other secret.
-export const BOARD_GAME_PICKER_URL = str('BOARD_GAME_PICKER_URL', '').replace(/\/+$/, '');
+export const BOARD_GAME_PICKER_URL = str(
+  "BOARD_GAME_PICKER_URL",
+  "",
+).replace(/\/+$/, "")
 
 // The Steam account whose owned library is queued — a 64-bit id, not a vanity name. Having
 // this is what makes Steam appear as a provider at all, the same way KAVITA_API_SERVER_URL
@@ -448,7 +658,7 @@ export const BOARD_GAME_PICKER_URL = str('BOARD_GAME_PICKER_URL', '').replace(/\
 //
 // The KEY is absent from this module by the same rule Kavita's is: secrets resolve through
 // providers/config.ts, which is the only place allowed to read a token.
-export const STEAM_ID = str('STEAM_ID', '').trim();
+export const STEAM_ID = str("STEAM_ID", "").trim()
 
 // The MiSTer's mrext "remote" API. Named to match the root .env the rest of the fleet
 // already uses (MISTER_API_SERVER_URL). Accepted with or without a trailing `/api` — the
@@ -456,4 +666,7 @@ export const STEAM_ID = str('STEAM_ID', '').trim();
 //
 // No token: mrext runs on the MiSTer, on the LAN, and issues no credential. Having this URL
 // is what "configured" means for this kind.
-export const MISTER_URL = str('MISTER_API_SERVER_URL', '').replace(/\/+$/, '');
+export const MISTER_URL = str(
+  "MISTER_API_SERVER_URL",
+  "",
+).replace(/\/+$/, "")

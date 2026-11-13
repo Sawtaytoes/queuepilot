@@ -1,35 +1,44 @@
-import { Hono } from 'hono';
-import * as cache from '../cache.js';
-import { ROTATION_LENGTH, ROTATION_LENGTH_MAX, TOPUP_AT } from '../env.js';
-import { toWeight } from '../engine/weight.js';
-import { errMessage } from '../errors.js';
-import * as finished from '../finished.js';
-import { fileSetIntoGroup } from '../groups.js';
-import * as plex from '../plex.js';
-import { plexServerAccessForProfile, plexServerGet } from '../plexSources.js';
-import * as providerTiles from '../providers/tiles.js';
-import * as queues from '../queues.js';
-import * as sets from '../sets.js';
-import * as tiles from '../tiles.js';
-import { normalizeAddAs } from '../kind.js';
-import { mapLimit } from './mapLimit.js';
-import { deleteQueueMembers } from '../store/db/queuePeople.js';
-import { readBody } from './readBody.js';
-import { plexWebUrl } from '../webLinks.js';
+import { Hono } from "hono"
+import * as cache from "../cache.js"
+import { toWeight } from "../engine/weight.js"
+import {
+  ROTATION_LENGTH,
+  ROTATION_LENGTH_MAX,
+  TOPUP_AT,
+} from "../env.js"
+import { errMessage } from "../errors.js"
+import * as finished from "../finished.js"
+import { fileSetIntoGroup } from "../groups.js"
+import { normalizeAddAs } from "../kind.js"
+import * as plex from "../plex.js"
+import {
+  plexServerAccessForProfile,
+  plexServerGet,
+} from "../plexSources.js"
+import * as providerTiles from "../providers/tiles.js"
+import * as queues from "../queues.js"
+import * as sets from "../sets.js"
+import { deleteQueueMembers } from "../store/db/queuePeople.js"
+import * as tiles from "../tiles.js"
+import { plexWebUrl } from "../webLinks.js"
+import { mapLimit } from "./mapLimit.js"
+import { readBody } from "./readBody.js"
 
 /** The set REGISTRY surface: create/edit/delete/reorder a set, and a channel's members. */
 export function setsRoutes(): Hono {
-  const app = new Hono();
+  const app = new Hono()
 
   // The registry + the Plex library list (all video libraries) — one call feeds the
   // queue-editor modal and the Channels filter editor. Membership is opt-in per set; there
   // is no global hide list, so every video library is offered.
-  app.get('/sets', async (c) => {
+  app.get("/sets", async (c) => {
     try {
-      const reg = await sets.getRegistry();
-      let libraries: Awaited<ReturnType<typeof plex.sections>> = [];
+      const reg = await sets.getRegistry()
+      let libraries: Awaited<
+        ReturnType<typeof plex.sections>
+      > = []
       try {
-        libraries = await plex.sections();
+        libraries = await plex.sections()
       } catch {
         /* Plex down: registry still serves */
       }
@@ -38,12 +47,16 @@ export function setsRoutes(): Hono {
       // are env, not constants — hardcoding 12/200/3 in the web bundle would let a deployment
       // that moves ROTATION_LENGTH silently disagree with its own editor, which is the same
       // class of split-brain the entry-count Default chip exists to close.
-      const lineup = { length: ROTATION_LENGTH, max: ROTATION_LENGTH_MAX, topup_at: TOPUP_AT };
-      return c.json({ ...reg, libraries, lineup });
+      const lineup = {
+        length: ROTATION_LENGTH,
+        max: ROTATION_LENGTH_MAX,
+        topup_at: TOPUP_AT,
+      }
+      return c.json({ ...reg, libraries, lineup })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   /**
    * Create a curated queue. Body: {label, kind, sections, group?}. Returns its generated id
@@ -64,94 +77,115 @@ export function setsRoutes(): Hono {
    * A failed filing is therefore a 200 carrying `groupError`, never a 400. The queue exists
    * by then, and answering "create failed" would invite a retry that makes a second one.
    */
-  app.post('/sets', async (c) => {
-    let body: Record<string, unknown>;
-    let created: { id: string };
+  app.post("/sets", async (c) => {
+    let body: Record<string, unknown>
+    let created: { id: string }
     try {
-      body = await readBody(c);
-      created = await sets.createSet(body);
+      body = await readBody(c)
+      created = await sets.createSet(body)
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
 
     try {
-      const group = await fileSetIntoGroup(body.group == null ? '' : String(body.group), created.id);
-      return c.json({ ...created, group });
+      const group = await fileSetIntoGroup(
+        body.group == null ? "" : String(body.group),
+        created.id,
+      )
+      return c.json({ ...created, group })
     } catch (e) {
-      return c.json({ ...created, group: null, groupError: errMessage(e) });
+      return c.json({
+        ...created,
+        group: null,
+        groupError: errMessage(e),
+      })
     }
-  });
+  })
 
   // Shelf order. Body: {ids} — the new full order.
-  app.patch('/sets-order', async (c) => {
-    const { ids } = await readBody(c);
-    if (!Array.isArray(ids)) return c.json({ error: 'ids[] required' }, 400);
+  app.patch("/sets-order", async (c) => {
+    const { ids } = await readBody(c)
+    if (!Array.isArray(ids))
+      return c.json({ error: "ids[] required" }, 400)
     try {
-      return c.json(await sets.reorderSets(ids.map(String)));
+      return c.json(await sets.reorderSets(ids.map(String)))
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // Edit one set: label/kind/sections (+ rotation filter knobs). Ids never change.
-  app.patch('/sets/:id', async (c) => {
+  app.patch("/sets/:id", async (c) => {
     try {
-      const body = await readBody(c);
-      const id = c.req.param('id');
-      const current = await sets.getSet(id);
-      if (!current) throw new Error(`unknown set ${id}`);
-      if (current.source === 'queue' && 'add_as' in body) {
-        const oldDefault = normalizeAddAs(current.add_as, current);
+      const body = await readBody(c)
+      const id = c.req.param("id")
+      const current = await sets.getSet(id)
+      if (!current) throw new Error(`unknown set ${id}`)
+      if (current.source === "queue" && "add_as" in body) {
+        const oldDefault = normalizeAddAs(
+          current.add_as,
+          current,
+        )
         const newDefault = normalizeAddAs(body.add_as, {
           kind: body.kind ?? current.kind,
           source: current.source,
-        });
+        })
         if (oldDefault !== newDefault) {
           // The default describes NEW additions. Materialise the old fallback first so a
           // settings edit cannot silently move every existing sparse entry to another lane.
-          await queues.preserveInheritedPlacements(id, oldDefault);
+          await queues.preserveInheritedPlacements(
+            id,
+            oldDefault,
+          )
         }
       }
-      const out = await sets.updateSet(id, body);
-      if ('watch_history' in body) {
-        const updated = await sets.getSet(id);
-        await finished.reconcileQueue(id, updated?.requires_profile || null);
+      const out = await sets.updateSet(id, body)
+      if ("watch_history" in body) {
+        const updated = await sets.getSet(id)
+        await finished.reconcileQueue(
+          id,
+          updated?.requires_profile || null,
+        )
       }
       // Config mutation → cache invalidation (B3.3), cheapest useful thing: bump the generation
       // so open browsers' /api/queues ETags bust, and if the libraries a set draws from changed,
       // drop those section listings so the next read reflects the new pool.
-      await cache.bumpGeneration();
-      if ('sections' in body || 'item_sections' in body) {
+      await cache.bumpGeneration()
+      if ("sections" in body || "item_sections" in body) {
         const secs = [
-          ...(Array.isArray(body.sections) ? body.sections : []),
-          ...(Array.isArray(body.item_sections) ? body.item_sections : []),
-        ];
-        await cache.dropSectionListings(secs.map(String));
+          ...(Array.isArray(body.sections)
+            ? body.sections
+            : []),
+          ...(Array.isArray(body.item_sections)
+            ? body.item_sections
+            : []),
+        ]
+        await cache.dropSectionListings(secs.map(String))
       }
-      return c.json(out);
+      return c.json(out)
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   // Delete a curated queue — registry entry AND its queues.yaml list.
-  app.delete('/sets/:id', async (c) => {
+  app.delete("/sets/:id", async (c) => {
     try {
-      const id = c.req.param('id');
-      const out = await sets.deleteSet(id);
+      const id = c.req.param("id")
+      const out = await sets.deleteSet(id)
       if (out.deleted) {
-        await queues.deleteSetKey(id);
+        await queues.deleteSetKey(id)
         // WP-5: and its audience. `queue_people` carries no foreign key on `set_id` — the
         // registry and its neighbours have always been allowed to disagree, and a cascade
         // there would delete a queue's people as a side effect of an unrelated set edit — so
         // the delete path names it, the way it already names `deleteSetKey`.
-        deleteQueueMembers(id);
+        deleteQueueMembers(id)
       }
-      return c.json(out);
+      return c.json(out)
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 400);
+      return c.json({ error: errMessage(e) }, 400)
     }
-  });
+  })
 
   // A rotation channel's explicit members, resolved for DISPLAY (poster, type, next-episode)
   // through the same resolvers the queue grid uses — so the member grid shows exactly what
@@ -167,90 +201,146 @@ export function setsRoutes(): Hono {
    *
    * Order is the file's, so a row does not move under the pointer between two skips.
    */
-  app.get('/sets/:id/skipped', async (c) => {
+  app.get("/sets/:id/skipped", async (c) => {
     try {
-      const s = await sets.getSet(c.req.param('id'));
-      if (!s) return c.json({ error: 'unknown set' }, 404);
-      const keys = s.skipped || [];
+      const s = await sets.getSet(c.req.param("id"))
+      if (!s) return c.json({ error: "unknown set" }, 404)
+      const keys = s.skipped || []
       // A PULL set's keys are its own provider's (a Kavita chapter id), NOT Plex ratingKeys —
       // and the two id spaces overlap, so a Plex lookup here would not merely fail, it would
       // sometimes SUCCEED and name a completely unrelated film. The row degrades to the bare
       // key instead, which still lists the skip and still clears it. Naming a chapter would
       // mean walking every series in the queue (Kavita can look up a series, not a loose
       // chapter id), which is a read per entry to label a handful of rows.
-      if (s.delivery === 'pull') {
+      if (s.delivery === "pull") {
         return c.json({
           items: keys.map((ratingKey) => ({
-            ratingKey, type: null, title: `#${ratingKey}`, year: null, editionTitle: null,
-            show: null, season: null, episode: null, posterRatingKey: null,
-            sourceTitle: null, webUrl: null,
+            ratingKey,
+            type: null,
+            title: `#${ratingKey}`,
+            year: null,
+            editionTitle: null,
+            show: null,
+            season: null,
+            episode: null,
+            posterRatingKey: null,
+            sourceTitle: null,
+            webUrl: null,
           })),
-        });
+        })
       }
       // Bounded like every other Plex fan-out here. A dead key still yields a row (see
       // `plex.itemLabel`), so a deleted library item can be cleared from the panel.
       const items = await mapLimit(keys, 6, async (rk) => {
-        const shared = /^server:([a-zA-Z0-9-]+):rk:(\d+)$/.exec(rk);
+        const shared =
+          /^server:([a-zA-Z0-9-]+):rk:(\d+)$/.exec(rk)
         if (shared) {
-          const bareKey = shared[2]!;
+          const bareKey = shared[2]!
           try {
-            const scope = await plex.profileScope(s.requires_profile || null);
-            const access = await plexServerAccessForProfile(scope.account ?? null, shared[1]!);
+            const scope = await plex.profileScope(
+              s.requires_profile || null,
+            )
+            const access = await plexServerAccessForProfile(
+              scope.account ?? null,
+              shared[1]!,
+            )
             if (access) {
-              const md = (await plexServerGet(access, `/library/metadata/${bareKey}`))
-                .MediaContainer?.Metadata?.[0];
-              if (md) return {
-                ratingKey: rk,
-                type: md.type || null,
-                title: md.title || `#${bareKey}`,
-                year: md.year ?? null,
-                editionTitle: md.editionTitle || null,
-                show: md.grandparentTitle || null,
-                season: md.parentIndex ?? null,
-                episode: md.index ?? null,
-                posterRatingKey: null,
-                cover: md.thumb
-                  ? `/api/shared-plex-thumb/${encodeURIComponent(s.id)}`
-                    + `/${encodeURIComponent(access.id)}/${bareKey}` : null,
-                sourceTitle: access.name,
-                webUrl: null,
-              };
+              const md = (
+                await plexServerGet(
+                  access,
+                  `/library/metadata/${bareKey}`,
+                )
+              ).MediaContainer?.Metadata?.[0]
+              if (md)
+                return {
+                  ratingKey: rk,
+                  type: md.type || null,
+                  title: md.title || `#${bareKey}`,
+                  year: md.year ?? null,
+                  editionTitle: md.editionTitle || null,
+                  show: md.grandparentTitle || null,
+                  season: md.parentIndex ?? null,
+                  episode: md.index ?? null,
+                  posterRatingKey: null,
+                  cover: md.thumb
+                    ? `/api/shared-plex-thumb/${encodeURIComponent(s.id)}` +
+                      `/${encodeURIComponent(access.id)}/${bareKey}`
+                    : null,
+                  sourceTitle: access.name,
+                  webUrl: null,
+                }
             }
-          } catch { /* A removed grant still leaves a restorable skipped key. */ }
+          } catch {
+            /* A removed grant still leaves a restorable skipped key. */
+          }
           return {
-            ratingKey: rk, type: null, title: `#${bareKey}`, year: null,
-            editionTitle: null, show: null, season: null, episode: null,
-            posterRatingKey: null, cover: null, sourceTitle: null, webUrl: null,
-          };
+            ratingKey: rk,
+            type: null,
+            title: `#${bareKey}`,
+            year: null,
+            editionTitle: null,
+            show: null,
+            season: null,
+            episode: null,
+            posterRatingKey: null,
+            cover: null,
+            sourceTitle: null,
+            webUrl: null,
+          }
         }
-        const item = await plex.itemLabel(rk);
-        return { ...item, webUrl: await plexWebUrl(item.ratingKey, item.type) };
-      });
-      return c.json({ items });
+        const item = await plex.itemLabel(rk)
+        return {
+          ...item,
+          webUrl: await plexWebUrl(
+            item.ratingKey,
+            item.type,
+          ),
+        }
+      })
+      return c.json({ items })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
-  app.get('/sets/:id/members', async (c) => {
+  app.get("/sets/:id/members", async (c) => {
     try {
-      const s = await sets.getSet(c.req.param('id'));
-      if (!s || s.source !== 'rotation') return c.json({ error: 'not a rotation channel' }, 400);
-      const sections = [...new Set([...(s.sections || []), ...(s.item_sections || [])])];
+      const s = await sets.getSet(c.req.param("id"))
+      if (!s || s.source !== "rotation")
+        return c.json(
+          { error: "not a rotation channel" },
+          400,
+        )
+      const sections = [
+        ...new Set([
+          ...(s.sections || []),
+          ...(s.item_sections || []),
+        ]),
+      ]
       // A per-profile channel passes the active binding's user_uuid so each member tile's next-up
       // reflects THAT profile's watched state, not the admin's — matching the per-account pool
       // below it. Absent (legacy/admin) => admin view, unchanged; a mint failure degrades to admin.
-      const uuidQ = (c.req.query('uuid') ?? '').trim();
-      let scope = {};
+      const uuidQ = (c.req.query("uuid") ?? "").trim()
+      let scope = {}
       if (uuidQ) {
-        try { scope = { token: await plex.accountToken(uuidQ), account: uuidQ }; } catch { scope = {}; }
+        try {
+          scope = {
+            token: await plex.accountToken(uuidQ),
+            account: uuidQ,
+          }
+        } catch {
+          scope = {}
+        }
       }
       // A READING channel's members are its provider's, resolved in one bounded round-trip —
       // the same seam the queue grid uses, and for the same reason: Plex cannot resolve them.
       // (A pull channel has no Plex Home profile to scope by, so `scope` does not apply.)
-      if (s.delivery === 'pull') {
-        const values = s.members || [];
-        const cores = await providerTiles.resolveTiles(s, values);
+      if (s.delivery === "pull") {
+        const values = s.members || []
+        const cores = await providerTiles.resolveTiles(
+          s,
+          values,
+        )
         return c.json({
           members: values.map((value, index) => ({
             index,
@@ -258,37 +348,78 @@ export function setsRoutes(): Hono {
             // `cores` is index-aligned with `values` by contract, which is what the `!` says —
             // `noUncheckedIndexedAccess` is the only reason it is written.
             ...cores[index]!,
-            start: value && typeof value === 'object' && value.start ? value.start : null,
-            episodes: value && typeof value === 'object' && value.episodes ? value.episodes : 1,
-            weight: toWeight(value && typeof value === 'object' ? value.weight : null),
+            start:
+              value &&
+              typeof value === "object" &&
+              value.start
+                ? value.start
+                : null,
+            episodes:
+              value &&
+              typeof value === "object" &&
+              value.episodes
+                ? value.episodes
+                : 1,
+            weight: toWeight(
+              value && typeof value === "object"
+                ? value.weight
+                : null,
+            ),
           })),
-        });
+        })
       }
-      const members = await mapLimit(s.members || [], 6, async (value, index) => {
-        // A hand-written {collection: <name>} mapping resolves like its string spelling.
-        const v = value && typeof value === 'object' && value.collection && value.ratingKey == null
-          ? `Collection: ${value.collection}`
-          : value;
-        const start = value && typeof value === 'object' && value.start ? value.start : null;
-        // The SAME resolver the queue grid uses, so a member tile and a queue tile of the same
-        // collection read identically (member poster + title, collection as the badge).
-        const core = await tiles.resolveTile(sections, v, start, scope);
-        return {
-          index,
-          raw: value, // the ORIGINAL value (not the collection-mapped `v`) round-trips for PATCH
-          ...core,
-          start,
-          // Per-member episodes/weight, read off the stored mapping (a bare ratingKey or a
-          // "Collection: x" string carries neither, hence the defaults).
-          episodes: value && typeof value === 'object' && value.episodes ? value.episodes : 1,
-          weight: toWeight(value && typeof value === 'object' ? value.weight : null),
-        };
-      });
-      return c.json({ members });
+      const members = await mapLimit(
+        s.members || [],
+        6,
+        async (value, index) => {
+          // A hand-written {collection: <name>} mapping resolves like its string spelling.
+          const v =
+            value &&
+            typeof value === "object" &&
+            value.collection &&
+            value.ratingKey == null
+              ? `Collection: ${value.collection}`
+              : value
+          const start =
+            value &&
+            typeof value === "object" &&
+            value.start
+              ? value.start
+              : null
+          // The SAME resolver the queue grid uses, so a member tile and a queue tile of the same
+          // collection read identically (member poster + title, collection as the badge).
+          const core = await tiles.resolveTile(
+            sections,
+            v,
+            start,
+            scope,
+          )
+          return {
+            index,
+            raw: value, // the ORIGINAL value (not the collection-mapped `v`) round-trips for PATCH
+            ...core,
+            start,
+            // Per-member episodes/weight, read off the stored mapping (a bare ratingKey or a
+            // "Collection: x" string carries neither, hence the defaults).
+            episodes:
+              value &&
+              typeof value === "object" &&
+              value.episodes
+                ? value.episodes
+                : 1,
+            weight: toWeight(
+              value && typeof value === "object"
+                ? value.weight
+                : null,
+            ),
+          }
+        },
+      )
+      return c.json({ members })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
-  return app;
+  return app
 }

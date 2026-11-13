@@ -21,6 +21,8 @@
 // PROGRESS IS COUNTED FROM `queued_at`, NEVER FROM `playCount`. The picker's log goes back
 // years: Wingspan at twenty lifetime plays with a batch of three would be finished the
 // instant it was queued. See `EntryExtras.queued_at` and `Provider.stampsQueuedAt`.
+
+import { errMessage } from "../errors.js"
 import type {
   BoardGamesArtifact,
   BoardGamesPlayItem,
@@ -34,62 +36,84 @@ import type {
   ProviderLibrary,
   ProviderSearchHit,
   ProviderTileRow,
-} from '../types.js';
-
-import { errMessage } from '../errors.js';
-import { boardGamesClient, type BoardGamesHttpClient } from './board-game-picker-client.js';
+} from "../types.js"
+import {
+  type BoardGamesHttpClient,
+  boardGamesClient,
+} from "./board-game-picker-client.js"
 
 /** How many entries are probed at once. The picker is a LAN app; this is politeness. */
-const PROBE_CONCURRENCY = 8;
+const PROBE_CONCURRENCY = 8
 
 /** The implicit "everything on the shelf" library, so a queue need not name a category. */
-export const COLLECTION_LIBRARY = 'collection';
+export const COLLECTION_LIBRARY = "collection"
 
 /** One play per Open. A game night is one game — see this file's header. */
-const PLAYS_PER_OPEN_DEFAULT = 1;
+const PLAYS_PER_OPEN_DEFAULT = 1
 
 /** How many plays one entry owes when neither it nor the queue says. */
-const PLAYS_PER_GAME_DEFAULT = 1;
+const PLAYS_PER_GAME_DEFAULT = 1
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (;;) {
-      const i = next;
-      next += 1;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i] as T, i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, i: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let next = 0
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      for (;;) {
+        const i = next
+        next += 1
+        if (i >= items.length) return
+        out[i] = await fn(items[i] as T, i)
+      }
+    },
+  )
+  await Promise.all(workers)
+  return out
 }
 
-const toCount = (raw: unknown, fallback: number): number => {
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback;
-};
+const toCount = (
+  raw: unknown,
+  fallback: number,
+): number => {
+  const n = Number(raw)
+  return Number.isFinite(n) && n > 0
+    ? Math.floor(n)
+    : fallback
+}
 
 /** One entry, resolved against the picker: how many plays it owes and how many are spent. */
 export interface BoardGamesEntryState {
-  gameId: string;
-  title: string;
-  owed: number;
-  played: number;
-  remaining: number;
+  gameId: string
+  title: string
+  owed: number
+  played: number
+  remaining: number
 }
 
 export interface BoardGamesProviderOptions {
-  def: ProviderDefinition;
-  token?: string | null;
-  client?: BoardGamesHttpClient | null;
+  def: ProviderDefinition
+  token?: string | null
+  client?: BoardGamesHttpClient | null
 }
 
-export function boardGamesProvider({ def, token = null, client = null }: BoardGamesProviderOptions): Provider {
-  const c = client || boardGamesClient({ baseUrl: def.base_url, token });
+export function boardGamesProvider({
+  def,
+  token = null,
+  client = null,
+}: BoardGamesProviderOptions): Provider {
+  const c =
+    client ||
+    boardGamesClient({ baseUrl: def.base_url, token })
 
-  const playItem = (state: BoardGamesEntryState, slot: number): BoardGamesPlayItem => ({
+  const playItem = (
+    state: BoardGamesEntryState,
+    slot: number,
+  ): BoardGamesPlayItem => ({
     bucket: state.gameId,
     gameId: state.gameId,
     // `number` is what the tile layer reads for its next-up line, so a game's next-up says
@@ -98,8 +122,8 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
     of: state.owed,
     slot,
     title: state.title,
-    unit: 'play',
-  });
+    unit: "play",
+  })
 
   /**
    * Resolve one curated entry: the game, what it owes, and what it has already been played
@@ -110,15 +134,22 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
    * queue un-launchable.
    */
   async function entryState(
-    entry: { id: string; batch?: number | null; queuedAt?: number | null },
+    entry: {
+      id: string
+      batch?: number | null
+      queuedAt?: number | null
+    },
     owedDefault: number,
   ): Promise<BoardGamesEntryState | null> {
-    const game = await c.game(entry.id);
-    if (!game) return null;
+    const game = await c.game(entry.id)
+    if (!game) return null
 
-    const owed = toCount(entry.batch, owedDefault);
-    const plays = await c.plays(entry.id, entry.queuedAt ?? null);
-    const played = plays.length;
+    const owed = toCount(entry.batch, owedDefault)
+    const plays = await c.plays(
+      entry.id,
+      entry.queuedAt ?? null,
+    )
+    const played = plays.length
 
     return {
       gameId: String(game.id ?? entry.id),
@@ -126,15 +157,15 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
       played,
       remaining: Math.max(0, owed - played),
       title: String(game.name ?? entry.id),
-    };
+    }
   }
 
   return {
     id: def.id,
     kind: def.kind,
     label: def.label,
-    delivery: 'pull',
-    unit: 'play',
+    delivery: "pull",
+    unit: "play",
     // The picker's play log is lifetime; a queue entry's progress is not. See the header.
     stampsQueuedAt: true,
 
@@ -153,8 +184,11 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      * filters on.
      */
     async libraries(): Promise<ProviderLibrary[]> {
-      const names = await c.categories();
-      return names.map((name) => ({ id: name, title: name }));
+      const names = await c.categories()
+      return names.map((name) => ({
+        id: name,
+        title: name,
+      }))
     },
 
     /**
@@ -165,23 +199,26 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      * shelf, so it widens the scope back to everything rather than narrowing to a category
      * the picker has never heard of.
      */
-    async search(q: string, { libraries = [] }: { libraries?: string[] } = {}): Promise<ProviderSearchHit[]> {
-      const query = String(q || '').trim();
-      if (!query) return [];
+    async search(
+      q: string,
+      { libraries = [] }: { libraries?: string[] } = {},
+    ): Promise<ProviderSearchHit[]> {
+      const query = String(q || "").trim()
+      if (!query) return []
 
-      const named = libraries.map(String).filter(Boolean);
+      const named = libraries.map(String).filter(Boolean)
       const categories = named.includes(COLLECTION_LIBRARY)
         ? []
-        : named;
-      const games = await c.games(query, categories);
+        : named
+      const games = await c.games(query, categories)
 
       return games.map((g) => ({
         id: String(g.id),
-        title: String(g.name ?? ''),
+        title: String(g.name ?? ""),
         libraryId: COLLECTION_LIBRARY,
-        libraryTitle: 'Collection',
-        type: 'game',
-      }));
+        libraryTitle: "Collection",
+        type: "game",
+      }))
     },
 
     /**
@@ -195,15 +232,17 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      * attached: whoever tapped this is not filling in a form, and attributing a play to
      * people is the picker's job, on its own screens.
      */
-    async logProgress(gameId: string): Promise<{ ok: boolean; remaining?: number }> {
-      const play = await c.logPlay(gameId);
-      if (!play) return { ok: false };
-      return { ok: true };
+    async logProgress(
+      gameId: string,
+    ): Promise<{ ok: boolean; remaining?: number }> {
+      const play = await c.logPlay(gameId)
+      if (!play) return { ok: false }
+      return { ok: true }
     },
 
     /** Box art, re-served from this origin — the picker is a LAN host. */
     cover(gameId: string): Promise<ProviderCover> {
-      return c.cover(gameId);
+      return c.cover(gameId)
     },
 
     /**
@@ -213,28 +252,45 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      *
      * Index-aligned with `ids`, `null` for a game that has vanished.
      */
-    async tiles(ids: Iterable<string>, entries: CuratedEntryRef[] = []): Promise<(ProviderTileRow | null)[]> {
-      const wanted = [...ids].map(String);
-      const byId = new Map(entries.map((e) => [String(e.id), e]));
-      return mapLimit(wanted, PROBE_CONCURRENCY, async (id): Promise<ProviderTileRow | null> => {
-        try {
-          // The ENTRY's own context, not just the game's: how many plays it owes and when it
-          // was queued are both properties of the queue entry. Without them a "3 plays" game
-          // draws as "Play 1 of 1" and reads finished after one night.
-          const state = await entryState(byId.get(id) ?? { id }, PLAYS_PER_GAME_DEFAULT);
-          if (!state) return null;
-          return {
-            id: state.gameId,
-            title: state.title,
-            libraryId: COLLECTION_LIBRARY,
-            unreadCount: state.remaining,
-            next: state.remaining > 0 ? playItem(state, state.played + 1) : null,
-          };
-        } catch (e) {
-          console.log(`[board-game-picker] tile ${id}: ${errMessage(e)}`);
-          return null;
-        }
-      });
+    async tiles(
+      ids: Iterable<string>,
+      entries: CuratedEntryRef[] = [],
+    ): Promise<(ProviderTileRow | null)[]> {
+      const wanted = [...ids].map(String)
+      const byId = new Map(
+        entries.map((e) => [String(e.id), e]),
+      )
+      return mapLimit(
+        wanted,
+        PROBE_CONCURRENCY,
+        async (id): Promise<ProviderTileRow | null> => {
+          try {
+            // The ENTRY's own context, not just the game's: how many plays it owes and when it
+            // was queued are both properties of the queue entry. Without them a "3 plays" game
+            // draws as "Play 1 of 1" and reads finished after one night.
+            const state = await entryState(
+              byId.get(id) ?? { id },
+              PLAYS_PER_GAME_DEFAULT,
+            )
+            if (!state) return null
+            return {
+              id: state.gameId,
+              title: state.title,
+              libraryId: COLLECTION_LIBRARY,
+              unreadCount: state.remaining,
+              next:
+                state.remaining > 0
+                  ? playItem(state, state.played + 1)
+                  : null,
+            }
+          } catch (e) {
+            console.log(
+              `[board-game-picker] tile ${id}: ${errMessage(e)}`,
+            )
+            return null
+          }
+        },
+      )
     },
 
     /**
@@ -249,27 +305,41 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      * The head is played until its plays run out. It does NOT spill into the next game
      * mid-night: "three plays of this one" means three game nights, not a triple bill.
      */
-    async buckets(ctx: BucketsContext): Promise<BucketsResult> {
-      const entries = (ctx.entries || []).filter((e) => e && e.id);
-      if (!entries.length) return { play: [], buckets: [] };
+    async buckets(
+      ctx: BucketsContext,
+    ): Promise<BucketsResult> {
+      const entries = (ctx.entries || []).filter(
+        (e) => e && e.id,
+      )
+      if (!entries.length) return { play: [], buckets: [] }
 
-      const cfg = (ctx.cfg || {}) as { episodes?: unknown; max_items?: unknown };
+      const cfg = (ctx.cfg || {}) as {
+        episodes?: unknown
+        max_items?: unknown
+      }
       // The QUEUE's own count is plays-per-Open; an ENTRY's count is plays-per-game. Two
       // different questions that share one YAML key, which is exactly why this is spelled
       // out rather than passed through.
-      const playsPerOpen = toCount(ctx.batch ?? cfg.episodes, PLAYS_PER_OPEN_DEFAULT);
+      const playsPerOpen = toCount(
+        ctx.batch ?? cfg.episodes,
+        PLAYS_PER_OPEN_DEFAULT,
+      )
 
-      const states = (await mapLimit(
-        entries,
-        PROBE_CONCURRENCY,
-        (e) => entryState(e, PLAYS_PER_GAME_DEFAULT).catch((err: unknown) => {
-          console.log(`[board-game-picker] entry ${e.id}: ${errMessage(err)}`);
-          return null;
-        }),
-      )).filter((s): s is BoardGamesEntryState => s != null);
+      const states = (
+        await mapLimit(entries, PROBE_CONCURRENCY, (e) =>
+          entryState(e, PLAYS_PER_GAME_DEFAULT).catch(
+            (err: unknown) => {
+              console.log(
+                `[board-game-picker] entry ${e.id}: ${errMessage(err)}`,
+              )
+              return null
+            },
+          ),
+        )
+      ).filter((s): s is BoardGamesEntryState => s != null)
 
-      const playable = states.filter((s) => s.remaining > 0);
-      const head = playable[0];
+      const playable = states.filter((s) => s.remaining > 0)
+      const head = playable[0]
       if (!head) {
         return {
           play: [],
@@ -278,20 +348,22 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
           // caller's own bookkeeping (TTL sweep, "remove all completed") still works — this
           // provider never writes queues.yaml itself.
           newlyDone: states.map((s) => s.gameId),
-        };
+        }
       }
 
-      const take = Math.min(head.remaining, playsPerOpen);
+      const take = Math.min(head.remaining, playsPerOpen)
       const play: PlayItem[] = Array.from(
         { length: take },
         (_, i) => playItem(head, head.played + i + 1),
-      );
+      )
 
       return {
         play,
         buckets: states,
-        newlyDone: states.filter((s) => s.remaining === 0).map((s) => s.gameId),
-      };
+        newlyDone: states
+          .filter((s) => s.remaining === 0)
+          .map((s) => s.gameId),
+      }
     },
 
     /**
@@ -301,19 +373,31 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      * game ids with no plays left. There is no artifact to poll: progress on this provider
      * IS the play log, exactly as Kavita's progress is pages read.
      */
-    async progressState(ctx: BucketsContext): Promise<Set<string>> {
-      const entries = (ctx.entries || []).filter((e) => e && e.id);
-      if (!entries.length) return new Set();
+    async progressState(
+      ctx: BucketsContext,
+    ): Promise<Set<string>> {
+      const entries = (ctx.entries || []).filter(
+        (e) => e && e.id,
+      )
+      if (!entries.length) return new Set()
 
       const states = await mapLimit(
         entries,
         PROBE_CONCURRENCY,
-        (e) => entryState(e, PLAYS_PER_GAME_DEFAULT).catch(() => null),
-      );
+        (e) =>
+          entryState(e, PLAYS_PER_GAME_DEFAULT).catch(
+            () => null,
+          ),
+      )
 
       return new Set(
-        states.filter((s): s is BoardGamesEntryState => s != null && s.remaining === 0).map((s) => s.gameId),
-      );
+        states
+          .filter(
+            (s): s is BoardGamesEntryState =>
+              s != null && s.remaining === 0,
+          )
+          .map((s) => s.gameId),
+      )
     },
 
     /**
@@ -323,28 +407,45 @@ export function boardGamesProvider({ def, token = null, client = null }: BoardGa
      * object. The picker does not, and building a "tonight's list" inside it would grow a
      * second queue in the app whose entire job is to not be one.
      */
-    materialize(items: PlayItem[], opts: { setName?: string | null } = {}): BoardGamesArtifact {
-      const head = (items[0] as BoardGamesPlayItem | undefined) || null;
-      const gameId = head ? String(head.gameId) : '';
+    materialize(
+      items: PlayItem[],
+      opts: { setName?: string | null } = {},
+    ): BoardGamesArtifact {
+      const head =
+        (items[0] as BoardGamesPlayItem | undefined) || null
+      const gameId = head ? String(head.gameId) : ""
 
       return {
         provider: def.id,
-        kind: 'board-game-picker',
+        kind: "board-game-picker",
         count: items.length,
         gameId,
         head,
-        remaining: head?.of != null && head.slot != null ? Math.max(0, head.of - head.slot + 1) : items.length,
-        setName: String(opts.setName ?? ''),
-        url: gameId ? `${c._base}/play/${encodeURIComponent(gameId)}` : '',
-      };
+        remaining:
+          head?.of != null && head.slot != null
+            ? Math.max(0, head.of - head.slot + 1)
+            : items.length,
+        setName: String(opts.setName ?? ""),
+        url: gameId
+          ? `${c._base}/play/${encodeURIComponent(gameId)}`
+          : "",
+      }
     },
 
     /** Open tonight's game on the picker. The queue already chose; this is the card. */
     handoff(artifact: BoardGamesArtifact) {
       if (!artifact?.gameId || !artifact.url) {
-        return { mode: 'pull' as const, url: null, error: 'nothing left to play in this queue' };
+        return {
+          mode: "pull" as const,
+          url: null,
+          error: "nothing left to play in this queue",
+        }
       }
-      return { mode: 'pull' as const, url: artifact.url, awaiting: null };
+      return {
+        mode: "pull" as const,
+        url: artifact.url,
+        awaiting: null,
+      }
     },
-  };
+  }
 }

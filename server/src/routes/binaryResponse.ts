@@ -14,12 +14,21 @@ export function binaryResponse({
   cacheControl,
   contentType,
 }: {
-  buffer: Buffer;
-  cacheControl: string;
-  contentType: string;
+  buffer: Buffer
+  cacheControl: string
+  contentType: string
 }): Response {
   return new Response(
-    new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength),
-    { headers: { 'Cache-Control': cacheControl, 'Content-Type': contentType } },
-  );
+    new Uint8Array(
+      buffer.buffer,
+      buffer.byteOffset,
+      buffer.byteLength,
+    ),
+    {
+      headers: {
+        "Cache-Control": cacheControl,
+        "Content-Type": contentType,
+      },
+    },
+  )
 }

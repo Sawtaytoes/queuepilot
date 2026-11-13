@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, test } from "vitest"
 
 import {
   byTray,
@@ -43,13 +43,13 @@ const kids: GroupWithRoster = {
 }
 
 describe("a face is how you find somebody on a card", () => {
-  it("takes two initials from two words and one from one", () => {
+  test("takes two initials from two words and one from one", () => {
     expect(initials("Grace Hopper")).toBe("GH")
     expect(initials("Ada")).toBe("A")
     expect(initials("  ")).toBe("?")
   })
 
-  it("builds a photo URL only for somebody who has a photo", () => {
+  test("builds a photo URL only for somebody who has a photo", () => {
     expect(personPhotoUrl("ada", null)).toBeUndefined()
     expect(personPhotoUrl("ada", undefined)).toBeUndefined()
     // The version is in the URL, so a replaced photo is a new URL and the old one can be
@@ -64,7 +64,7 @@ describe("a face is how you find somebody on a card", () => {
 })
 
 describe("the whole house is one pool of cards", () => {
-  it("offers every person and every group side by side", () => {
+  test("offers every person and every group side by side", () => {
     const all = candidates(people, [kids])
     expect(all.map((c) => c.id)).toEqual([
       "ada",
@@ -78,7 +78,7 @@ describe("the whole house is one pool of cards", () => {
     })
   })
 
-  it("labels a group with its own rule, in words", () => {
+  test("labels a group with its own rule, in words", () => {
     const nameOf = (id: string) =>
       people.find((p) => p.id === id)?.displayName ?? id
     expect(describeRule(kids, nameOf)).toBe(
@@ -89,7 +89,7 @@ describe("the whole house is one pool of cards", () => {
     ).toBe("All of Ada and Grace Hopper. Linus may join.")
   })
 
-  it('does not say "All of Ada" about a group of one', () => {
+  test('does not say "All of Ada" about a group of one', () => {
     // One person is not a quantity, and a group of one is most of them. It was on every card
     // in the roster tray before this.
     expect(
@@ -128,7 +128,7 @@ describe("three trays, and Everyone else is the absence of a row", () => {
     },
   ]
 
-  it("puts anybody with no member row in Everyone else", () => {
+  test("puts anybody with no member row in Everyone else", () => {
     const all = candidates(people, [kids])
     expect(trayOf(all[0] as never, members)).toBe(
       "required",
@@ -140,7 +140,7 @@ describe("three trays, and Everyone else is the absence of a row", () => {
     expect(trayOf(all[3] as never, members)).toBe("roster")
   })
 
-  it("splits the pool into the three lanes", () => {
+  test("splits the pool into the three lanes", () => {
     const lanes = byTray(
       candidates(people, [kids]),
       members,
@@ -155,7 +155,7 @@ describe("three trays, and Everyone else is the absence of a row", () => {
     ])
   })
 
-  it("tells a person and a group with the same id apart", () => {
+  test("tells a person and a group with the same id apart", () => {
     const twin: QueueMember[] = [
       {
         id: "kids",
@@ -183,7 +183,7 @@ describe("moving a person is one action, and it is the whole list that is writte
     },
   ]
 
-  it("adds somebody to a tray", () => {
+  test("adds somebody to a tray", () => {
     expect(
       moveToTray(
         members,
@@ -206,7 +206,7 @@ describe("moving a person is one action, and it is the whole list that is writte
     ])
   })
 
-  it("DROPS the row when somebody goes back to Everyone else", () => {
+  test("DROPS the row when somebody goes back to Everyone else", () => {
     // There is no third role — a person with no row is in Everyone else, which is what makes
     // "everybody out" expressible as an empty list.
     expect(
@@ -218,7 +218,7 @@ describe("moving a person is one action, and it is the whole list that is writte
     ).toEqual([])
   })
 
-  it("moves between the two trays without leaving a duplicate", () => {
+  test("moves between the two trays without leaving a duplicate", () => {
     const moved = moveToTray(
       members,
       { id: "ada", kind: "person" },
@@ -234,7 +234,7 @@ describe("moving a person is one action, and it is the whole list that is writte
     ])
   })
 
-  it("honours the drop index inside a tray, and renumbers per tray", () => {
+  test("honours the drop index inside a tray, and renumbers per tray", () => {
     const three: QueueMember[] = [
       {
         id: "ada",
@@ -270,7 +270,7 @@ describe("moving a person is one action, and it is the whole list that is writte
     ])
   })
 
-  it("keeps a group as a group when it moves", () => {
+  test("keeps a group as a group when it moves", () => {
     const moved = moveToTray(
       [],
       { id: "kids", kind: "group" },
@@ -288,7 +288,7 @@ describe("moving a person is one action, and it is the whole list that is writte
 })
 
 describe("a queue's name is optional, and the activity fills in", () => {
-  it("calls a NAMELESS watching queue Movies & Shows", () => {
+  test("calls a NAMELESS watching queue Movies & Shows", () => {
     expect(queueTitle({ activity: "watching" }, null)).toBe(
       "Movies & Shows",
     )
@@ -297,7 +297,7 @@ describe("a queue's name is optional, and the activity fills in", () => {
     )
   })
 
-  it("keeps a name somebody typed, verbatim", () => {
+  test("keeps a name somebody typed, verbatim", () => {
     // The case that made this a rule: the shelf printed "Reading" over the one Kavita queue
     // the owner had deliberately named.
     expect(
@@ -312,7 +312,7 @@ describe("a queue's name is optional, and the activity fills in", () => {
     ).toBe("Manga & Webtoons")
   })
 
-  it("ignores `label` when no name was typed — it is the ID then", () => {
+  test("ignores `label` when no name was typed — it is the ID then", () => {
     // The server makes `label` printable by falling back to the id, so trusting it here
     // would put `movies_shows` on the card.
     expect(
@@ -323,7 +323,7 @@ describe("a queue's name is optional, and the activity fills in", () => {
     ).toBe("Movies & Shows")
   })
 
-  it("never numbers a name somebody typed", () => {
+  test("never numbers a name somebody typed", () => {
     // Two queues called "Movies" are the owner's own doing and he can tell them apart. Two
     // called "Movies & Shows" are the app's, and numbering them is the app's job.
     expect(
@@ -338,7 +338,7 @@ describe("a queue's name is optional, and the activity fills in", () => {
     ).toBe("Movies")
   })
 
-  it("numbers the second of two identical cards and not the first", () => {
+  test("numbers the second of two identical cards and not the first", () => {
     const numbers = queueNumbers(
       [
         {
@@ -395,7 +395,7 @@ describe("a queue's name is optional, and the activity fills in", () => {
     ).toBe("Movies & Shows 2")
   })
 
-  it("does not let a filtered POOL eat a curated queue's number", () => {
+  test("does not let a filtered POOL eat a curated queue's number", () => {
     // They are two different things on two different pages and never sit beside each other.
     // Before this, the landing fixture's first three curated Movies queues came out 3, 4, 5.
     const numbers = queueNumbers(
@@ -417,7 +417,7 @@ describe("a queue's name is optional, and the activity fills in", () => {
     expect(numbers.get("a")).toBeNull()
   })
 
-  it("does not collide two queues with different people", () => {
+  test("does not collide two queues with different people", () => {
     const numbers = queueNumbers(
       [
         {
@@ -465,7 +465,7 @@ describe("a dropdown row says who the queue is for, in words", () => {
     role,
   })
 
-  it("names the required members, a group by its own label", () => {
+  test("names the required members, a group by its own label", () => {
     expect(
       queuePeopleLabel(
         [member("ada"), member("kids")],
@@ -475,7 +475,7 @@ describe("a dropdown row says who the queue is for, in words", () => {
     ).toBe("Ada, Kids")
   })
 
-  it("drops the nice-to-have tray — a line of text cannot say dashed", () => {
+  test("drops the nice-to-have tray — a line of text cannot say dashed", () => {
     expect(
       queuePeopleLabel(
         [member("ada"), member("linus", "optional")],
@@ -485,7 +485,7 @@ describe("a dropdown row says who the queue is for, in words", () => {
     ).toBe("Ada")
   })
 
-  it("says Anybody rather than nothing, so a blank never reads as a failed load", () => {
+  test("says Anybody rather than nothing, so a blank never reads as a failed load", () => {
     expect(queuePeopleLabel([], people, [kids])).toBe(
       "Anybody",
     )
@@ -499,7 +499,7 @@ describe("a dropdown row says who the queue is for, in words", () => {
     ).toBe("Anybody")
   })
 
-  it("counts past three, so the chip cannot push the row into a wrap", () => {
+  test("counts past three, so the chip cannot push the row into a wrap", () => {
     expect(
       queuePeopleLabel(
         [
@@ -515,7 +515,7 @@ describe("a dropdown row says who the queue is for, in words", () => {
     ).toBe("Ada, Grace Hopper, Linus +2")
   })
 
-  it("falls back to the id when the roster has not loaded yet", () => {
+  test("falls back to the id when the roster has not loaded yet", () => {
     expect(queuePeopleLabel([member("ada")], [], [])).toBe(
       "ada",
     )

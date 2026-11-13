@@ -17,121 +17,152 @@
 // than becoming child tables. WP-3 replaces this model outright — a group becomes a saved set
 // of people — so `group_sets` and `group_accounts` built tonight would be tables WP-3 has to
 // drop. The relational split waits for the shape that will survive it.
-import type { Document } from 'yaml';
+import type { Document } from "yaml"
 
-import { STORE_YAML_MIRROR } from '../../config.js';
-import { errMessage } from '../../errors.js';
-import * as yamlGroups from '../groups.js';
-import type { GroupsStore } from '../index.js';
+import { STORE_YAML_MIRROR } from "../../config.js"
+import { errMessage } from "../../errors.js"
+import * as yamlGroups from "../groups.js"
+import type { GroupsStore } from "../index.js"
+import {
+  ensureImported,
+  noteMirrorWrite,
+} from "../migrate/yaml.js"
 import {
   applyComments,
   bumpVersion,
   nodeAt,
   readJsonMeta,
   writeMeta,
-} from './common.js';
-import { bookOfRecord, prepareChecked } from './open.js';
+} from "./common.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 import {
   applyPresentation,
   assemble,
+  type DocumentLeftovers,
   documentFrom,
   shredListDocument,
-  type DocumentLeftovers,
-} from './shred.js';
-import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
+} from "./shred.js"
 
-export const path = yamlGroups.path;
+export const path = yamlGroups.path
 
 const EMPTY_LEFTOVERS: DocumentLeftovers = {
-  order: ['groups'],
+  order: ["groups"],
   values: {},
   keyPresentation: {},
   commentBefore: null,
   comment: null,
-};
+}
 
 interface GroupRow {
-  id: string;
-  position: number;
-  data: string;
-  comment_before: string | null;
-  comment: string | null;
-  presentation: string | null;
+  id: string
+  position: number
+  data: string
+  comment_before: string | null
+  comment: string | null
+  presentation: string | null
 }
 
 const rows = (): GroupRow[] =>
   prepareChecked<GroupRow>(
     bookOfRecord(),
-    'SELECT id, position, data, comment_before, comment, presentation FROM groups ORDER BY position',
-  ).all();
+    "SELECT id, position, data, comment_before, comment, presentation FROM groups ORDER BY position",
+  ).all()
 
 const leftovers = (): DocumentLeftovers =>
-  readJsonMeta(bookOfRecord(), 'groups', 'leftovers', EMPTY_LEFTOVERS);
+  readJsonMeta(
+    bookOfRecord(),
+    "groups",
+    "leftovers",
+    EMPTY_LEFTOVERS,
+  )
 
 const count = (): number =>
   Number(
-    (prepareChecked<{ n: number }>(bookOfRecord(), 'SELECT COUNT(*) AS n FROM groups').get()?.n) ?? 0,
-  );
+    prepareChecked<{ n: number }>(
+      bookOfRecord(),
+      "SELECT COUNT(*) AS n FROM groups",
+    ).get()?.n ?? 0,
+  )
 
 export function readSync(): Record<string, unknown> {
   try {
-    ensureImported();
-    return assemble(leftovers(), { groups: rows().map((row) => JSON.parse(row.data) as unknown) });
+    ensureImported()
+    return assemble(leftovers(), {
+      groups: rows().map(
+        (row) => JSON.parse(row.data) as unknown,
+      ),
+    })
   } catch (e) {
-    console.log(`[groups] could not read the store: ${errMessage(e)}`);
-    return {};
+    console.log(
+      `[groups] could not read the store: ${errMessage(e)}`,
+    )
+    return {}
   }
 }
 
 export async function exists(): Promise<boolean> {
-  ensureImported();
-  return count() > 0;
+  ensureImported()
+  return count() > 0
 }
 
 /** Write the starter groups. Returns false when somebody already got there — which here means
  * the table is not empty, the same "losing the race is not an error" the file's `wx` had. */
-export async function seed(groups: readonly unknown[]): Promise<boolean> {
-  ensureImported();
-  if (count() > 0) return false;
-  const doc = documentFrom({ groups: [...groups] }, EMPTY_LEFTOVERS);
-  await writeDoc(doc);
-  console.log(`[groups] seeded the store with ${groups.length} group(s) from the registry`);
+export async function seed(
+  groups: readonly unknown[],
+): Promise<boolean> {
+  ensureImported()
+  if (count() > 0) return false
+  const doc = documentFrom(
+    { groups: [...groups] },
+    EMPTY_LEFTOVERS,
+  )
+  await writeDoc(doc)
+  console.log(
+    `[groups] seeded the store with ${groups.length} group(s) from the registry`,
+  )
   // The mirror is what keeps `groups.yaml` present for the rollback release; the seed header
   // is the YAML store's and only reaches the file through its own seeder.
-  if (STORE_YAML_MIRROR) await yamlGroups.seed(groups);
-  return true;
+  if (STORE_YAML_MIRROR) await yamlGroups.seed(groups)
+  return true
 }
 
 export async function readDoc(): Promise<Document> {
-  ensureImported();
-  const groupRows = rows();
-  const meta = leftovers();
+  ensureImported()
+  const groupRows = rows()
+  const meta = leftovers()
   const doc = documentFrom(
-    assemble(meta, { groups: groupRows.map((row) => JSON.parse(row.data) as unknown) }),
+    assemble(meta, {
+      groups: groupRows.map(
+        (row) => JSON.parse(row.data) as unknown,
+      ),
+    }),
     meta,
-  );
+  )
   groupRows.forEach((row, index) => {
-    const node = nodeAt(doc, ['groups', index]);
-    applyComments(node, row);
-    applyPresentation(node, row.presentation);
-  });
-  return doc;
+    const node = nodeAt(doc, ["groups", index])
+    applyComments(node, row)
+    applyPresentation(node, row.presentation)
+  })
+  return doc
 }
 
-export async function writeDoc(doc: Document): Promise<void> {
-  const db = bookOfRecord();
-  const { rows: shredded, leftovers: meta } = shredListDocument(doc, 'groups');
+export async function writeDoc(
+  doc: Document,
+): Promise<void> {
+  const db = bookOfRecord()
+  const { rows: shredded, leftovers: meta } =
+    shredListDocument(doc, "groups")
 
   db.withTransaction(() => {
-    prepareChecked(db, 'DELETE FROM groups').run();
+    prepareChecked(db, "DELETE FROM groups").run()
     const insert = prepareChecked(
       db,
-      'INSERT INTO groups (id, position, data, comment_before, comment, presentation) ' +
-        'VALUES (:id, :position, :data, :comment_before, :comment, :presentation)',
-    );
+      "INSERT INTO groups (id, position, data, comment_before, comment, presentation) " +
+        "VALUES (:id, :position, :data, :comment_before, :comment, :presentation)",
+    )
     for (const row of shredded) {
-      const id = (row.value as { id?: unknown } | null)?.id;
-      if (id == null || String(id) === '') continue;
+      const id = (row.value as { id?: unknown } | null)?.id
+      if (id == null || String(id) === "") continue
       insert.run({
         id: String(id),
         position: row.position,
@@ -139,17 +170,22 @@ export async function writeDoc(doc: Document): Promise<void> {
         comment_before: row.comment_before,
         comment: row.comment,
         presentation: row.presentation,
-      });
+      })
     }
-    writeMeta(db, 'groups', 'leftovers', JSON.stringify(meta));
-    bumpVersion(db, 'groups');
-  });
+    writeMeta(
+      db,
+      "groups",
+      "leftovers",
+      JSON.stringify(meta),
+    )
+    bumpVersion(db, "groups")
+  })
 
   if (STORE_YAML_MIRROR) {
-    await yamlGroups.writeDoc(doc);
+    await yamlGroups.writeDoc(doc)
     // The files now hold what the rows hold. Recording that here is what stops the next
     // read treating our own mirror write as somebody else's hand-edit.
-    noteMirrorWrite();
+    noteMirrorWrite()
   }
 }
 
@@ -160,4 +196,4 @@ export const store: GroupsStore = {
   seed,
   readDoc,
   writeDoc,
-};
+}

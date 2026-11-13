@@ -13,8 +13,8 @@
 //   * The Plex URL is a HASH url (`/web/index.html#!/server/…`). That is Plex's shape, not
 //     ours — the "no `#/` routing" rule binds the apps we own, and this string is an
 //     external address we are quoting.
-import { PLEX_URL } from './config.js';
-import { machineIdentifier } from './playback.js';
+import { PLEX_URL } from "./config.js"
+import { machineIdentifier } from "./playback.js"
 
 /**
  * The item's page in the household's Plex web client (`PLEX_API_SERVER_URL`).
@@ -32,15 +32,18 @@ export async function plexWebUrl(
   ratingKey: string | null | undefined,
   type?: string | null,
 ): Promise<string | null> {
-  if (!ratingKey) return null;
+  if (!ratingKey) return null
 
-  const machineId = await machineIdentifier();
-  if (!machineId) return null;
+  const machineId = await machineIdentifier()
+  if (!machineId) return null
 
   // Plex collection preplay pages use a different route from ordinary metadata items.
   // Plex Web used to recover when a collection ratingKey arrived through /metadata, but
   // 4.160 loops on its loading view instead. Use the route Plex writes for the collection.
-  const resource = type === 'collection' ? 'collections' : 'metadata';
-  const key = encodeURIComponent(`/library/${resource}/${ratingKey}`);
-  return `${PLEX_URL}/web/index.html#!/server/${machineId}/details?key=${key}`;
+  const resource =
+    type === "collection" ? "collections" : "metadata"
+  const key = encodeURIComponent(
+    `/library/${resource}/${ratingKey}`,
+  )
+  return `${PLEX_URL}/web/index.html#!/server/${machineId}/details?key=${key}`
 }

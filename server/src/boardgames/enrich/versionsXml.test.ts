@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, test } from "vitest"
 
-import { parseThingVersions } from './versionsXml.js';
+import { parseThingVersions } from "./versionsXml.js"
 
 const xml = `<?xml version="1.0"?>
 <items>
@@ -23,37 +23,37 @@ const xml = `<?xml version="1.0"?>
       </item>
     </versions>
   </item>
-</items>`;
+</items>`
 
-describe('parseThingVersions', () => {
-  it('reads nested version items without swallowing the parent', () => {
+describe("parseThingVersions", () => {
+  test("reads nested version items without swallowing the parent", () => {
     expect(parseThingVersions(xml)).toEqual([
       {
         id: 11,
-        imageUrl: 'https://cf.geekdo-images.com/v1.jpg',
-        languages: ['English'],
-        name: 'English edition, first printing',
-        publishers: ['Harbour Press'],
-        thumbnailUrl: 'https://cf.geekdo-images.com/t1.jpg',
+        imageUrl: "https://cf.geekdo-images.com/v1.jpg",
+        languages: ["English"],
+        name: "English edition, first printing",
+        publishers: ["Harbour Press"],
+        thumbnailUrl: "https://cf.geekdo-images.com/t1.jpg",
         year: 2016,
       },
       {
         id: 12,
         imageUrl: null,
-        languages: ['German'],
-        name: 'German edition 2017',
+        languages: ["German"],
+        name: "German edition 2017",
         publishers: [],
         thumbnailUrl: null,
         year: 2017,
       },
-    ]);
-  });
+    ])
+  })
 
-  it('returns nothing when the thing has no versions', () => {
+  test("returns nothing when the thing has no versions", () => {
     expect(
       parseThingVersions(
         `<items><item type="boardgame" id="1"><name value="X"/></item></items>`,
       ),
-    ).toEqual([]);
-  });
-});
+    ).toEqual([])
+  })
+})

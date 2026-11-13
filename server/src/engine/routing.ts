@@ -8,17 +8,26 @@
 // onto it. `e2e/binding-parity.mjs` diffs every function against the Python oracle
 // (`python -m queue_builder.cli route` + `… sections`) over `e2e/fixtures/routing.sets.yaml`,
 // and CI runs that gate — so a drift from Python is a red build, not a wrong play on the TV.
-import { SEC_MOVIES } from '../env.js';
-import { store } from '../store/index.js';
-import { setForProfile } from '../profiles.js';
-import { errMessage, isNodeError } from '../errors.js';
-import { normalizeWatchHistory } from '../watchHistory.js';
-import { filterOf, inheritFilteredQueues, parentIdOf } from '../filteredQueues.js';
-import type { FilterableEntry } from '../filteredQueues.js';
+import { SEC_MOVIES } from "../env.js"
+import { errMessage, isNodeError } from "../errors.js"
+import type { FilterableEntry } from "../filteredQueues.js"
+import {
+  filterOf,
+  inheritFilteredQueues,
+  parentIdOf,
+} from "../filteredQueues.js"
+import { setForProfile } from "../profiles.js"
+import { store } from "../store/index.js"
 import type {
-  EngineBinding, MemberValue, RoutingQueueCfg, RoutingRegistry, RoutingRotationCfg, RoutingSetCfg,
+  EngineBinding,
+  MemberValue,
+  RoutingQueueCfg,
+  RoutingRegistry,
+  RoutingRotationCfg,
+  RoutingSetCfg,
   Start,
-} from '../types.js';
+} from "../types.js"
+import { normalizeWatchHistory } from "../watchHistory.js"
 
 /**
  * An UNTRUSTED binding source: a `profiles[]` item, a legacy set entry's top level, or (via
@@ -27,70 +36,82 @@ import type {
  * A type alias, not an interface, so a `RoutingSetCfg` can be passed without a double cast.
  */
 type BindingSource = {
-  plex_user?: unknown;
-  account_id?: unknown;
-  user_uuid?: unknown;
-  allowed_ratings?: unknown;
-  movie_ratings?: unknown;
-  watch_count_accounts?: unknown;
-  movie_excludes?: unknown;
-};
+  plex_user?: unknown
+  account_id?: unknown
+  user_uuid?: unknown
+  allowed_ratings?: unknown
+  movie_ratings?: unknown
+  watch_count_accounts?: unknown
+  movie_excludes?: unknown
+}
 
 /**
  * One raw `sets:` entry off the YAML. Every field is `unknown` for the same reason — this
  * loader's whole job is to turn it into a `RoutingSetCfg`.
  */
 type RawSetEntry = BindingSource & {
-  id?: unknown;
-  label?: unknown;
-  kind?: unknown;
-  enabled?: unknown;
-  mode?: unknown;
-  behavior?: unknown;
-  source?: unknown;
-  sections?: unknown;
-  item_sections?: unknown;
-  profiles?: unknown;
-  starts?: unknown;
-  weights?: unknown;
-  on_complete_by_show?: unknown;
-  blocklist?: unknown;
-  skipped?: unknown;
-  included_specials?: unknown;
-  members?: unknown;
-  collection_members?: unknown;
-  superseded_by?: unknown;
-  reel?: unknown;
-  keep_completed?: unknown;
-  restart_when_exhausted?: unknown;
-  requires_profile?: unknown;
-  remove_completed_after?: unknown;
-  reset_watched_on?: unknown;
-  promote_window?: unknown;
-  add_as?: unknown;
-  season_start?: unknown;
-  season_end?: unknown;
-  include_specials?: unknown;
-  batch_stops_at?: unknown;
-  episodes?: unknown;
-  volumes?: unknown;
-  length?: unknown;
-  refill?: unknown;
-  on_complete?: unknown;
-  audio_language?: unknown;
-  max_items?: unknown;
-  providers?: unknown;
-  watch_history?: unknown;
-};
+  id?: unknown
+  label?: unknown
+  kind?: unknown
+  enabled?: unknown
+  mode?: unknown
+  behavior?: unknown
+  source?: unknown
+  sections?: unknown
+  item_sections?: unknown
+  profiles?: unknown
+  starts?: unknown
+  weights?: unknown
+  on_complete_by_show?: unknown
+  blocklist?: unknown
+  skipped?: unknown
+  included_specials?: unknown
+  members?: unknown
+  collection_members?: unknown
+  superseded_by?: unknown
+  reel?: unknown
+  keep_completed?: unknown
+  restart_when_exhausted?: unknown
+  requires_profile?: unknown
+  remove_completed_after?: unknown
+  reset_watched_on?: unknown
+  promote_window?: unknown
+  add_as?: unknown
+  season_start?: unknown
+  season_end?: unknown
+  include_specials?: unknown
+  batch_stops_at?: unknown
+  episodes?: unknown
+  volumes?: unknown
+  length?: unknown
+  refill?: unknown
+  on_complete?: unknown
+  audio_language?: unknown
+  max_items?: unknown
+  providers?: unknown
+  watch_history?: unknown
+}
 
 /**
  * The cfg while it is still being built: the branch-specific literal is assembled first and the
  * six fields every set shares are stamped on afterwards, exactly as the JS did — so those six
  * are optional here and required on `RoutingSetCfg`.
  */
-type LateCommon = 'label' | 'kind' | 'enabled' | 'mode' | 'behavior' | 'max_items';
-type Draft<T extends Record<LateCommon, unknown>> = Omit<T, LateCommon> & Partial<Pick<T, LateCommon>>;
-type SetCfgDraft = Draft<RoutingQueueCfg> | Draft<RoutingRotationCfg>;
+type LateCommon =
+  | "label"
+  | "kind"
+  | "enabled"
+  | "mode"
+  | "behavior"
+  | "max_items"
+type Draft<T extends Record<LateCommon, unknown>> = Omit<
+  T,
+  LateCommon
+> &
+  Partial<Pick<T, LateCommon>>
+type SetCfgDraft =
+  | Draft<RoutingQueueCfg>
+  | Draft<RoutingRotationCfg>
 
 // Python does `int(s)` on section ids; a non-int would raise there. yaml already gives us
 // numbers, so this is a no-op for well-formed data and just coerces numeric strings.
@@ -100,21 +121,30 @@ type SetCfgDraft = Draft<RoutingQueueCfg> | Draft<RoutingRotationCfg>;
 // (section ids, watch-count accounts) treats it as one; the declaration is the same assumption
 // the untyped original made silently, and the cast is where it is now written down.
 const toInt = (v: unknown): number => {
-  const n = parseInt(String(v), 10);
-  return Number.isFinite(n) ? n : (v as number);
-};
+  const n = parseInt(String(v), 10)
+  return Number.isFinite(n) ? n : (v as number)
+}
 
 // Port of config._binding_from: normalize one profile binding out of a dict (a legacy
 // top-level set entry OR a profiles[] item), with the SAME coercions the Python reader uses
 // so a synthesized legacy binding is equivalent to what a single-binding set produced.
-function bindingFrom(src: BindingSource = {}): EngineBinding {
+function bindingFrom(
+  src: BindingSource = {},
+): EngineBinding {
   // `v as unknown[]` and not `Array.isArray(v)`: a scalar where the YAML wanted a list still
   // throws on `.map`, as it always did. A guard here would silently read it as "no cap".
   const ratingSet = (v: unknown): Set<string> | null => {
-    const list = v as unknown[] | null | undefined;
-    return list && list.length ? new Set(list.map(String)) : null;
-  };
-  const wca = ((src.watch_count_accounts as unknown[] | null | undefined) || []).map((a) => toInt(a));
+    const list = v as unknown[] | null | undefined
+    return list && list.length
+      ? new Set(list.map(String))
+      : null
+  }
+  const wca = (
+    (src.watch_count_accounts as
+      | unknown[]
+      | null
+      | undefined) || []
+  ).map((a) => toInt(a))
   return {
     plex_user: (src.plex_user ?? null) as string | null,
     account_id: (src.account_id ?? null) as number | null,
@@ -122,24 +152,36 @@ function bindingFrom(src: BindingSource = {}): EngineBinding {
     allowed_ratings: ratingSet(src.allowed_ratings),
     movie_ratings: ratingSet(src.movie_ratings),
     watch_count_accounts: wca.length ? wca : null,
-    movie_excludes: ((src.movie_excludes as unknown[] | null | undefined) || []).map(String),
-  };
+    movie_excludes: (
+      (src.movie_excludes as
+        | unknown[]
+        | null
+        | undefined) || []
+    ).map(String),
+  }
 }
 
 // Port of the routing-relevant slice of config._load_sets_yaml: parse sets.yaml into
 // { sets: {id: cfg}, order: [id…] }, or null to keep defaults (file absent / unreadable /
 // empty) — matching the Python "keep current sets" behavior. Only the fields the four
 // functions read are carried; the write side stays in sets.js.
-export function loadSets(path: string = store.sets.path): RoutingRegistry | null {
-  let data: { sets?: unknown };
+export function loadSets(
+  path: string = store.sets.path,
+): RoutingRegistry | null {
+  let data: { sets?: unknown }
   try {
     // The store reads the file and THROWS; the "keep current sets" policy below is this
     // module's, and stays here.
-    data = (store.sets.readSync(path) as { sets?: unknown } | null) || {};
+    data =
+      (store.sets.readSync(path) as {
+        sets?: unknown
+      } | null) || {}
   } catch (e) {
-    if (isNodeError(e) && e.code === 'ENOENT') return null; // FileNotFoundError → defaults
-    console.log(`[routing] ${path} unreadable (${errMessage(e)}); keeping current sets`);
-    return null;
+    if (isNodeError(e) && e.code === "ENOENT") return null // FileNotFoundError → defaults
+    console.log(
+      `[routing] ${path} unreadable (${errMessage(e)}); keeping current sets`,
+    )
+    return null
   }
   // A FILTERED queue's record on disk is only its id, name, parent and filter, so its parent
   // is merged underneath it before anything below reads a field. The SAME call `sets.ts` makes
@@ -147,67 +189,105 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
   // (`filteredQueues.ts`).
   const entries: unknown[] = inheritFilteredQueues(
     (Array.isArray(data.sets) ? data.sets : []).filter(
-      (e): e is FilterableEntry => Boolean(e) && typeof e === 'object' && !Array.isArray(e),
+      (e): e is FilterableEntry =>
+        Boolean(e) &&
+        typeof e === "object" &&
+        !Array.isArray(e),
     ),
-  );
-  const sets: Record<string, RoutingSetCfg> = {};
-  const order: string[] = [];
+  )
+  const sets: Record<string, RoutingSetCfg> = {}
+  const order: string[] = []
   for (const rawEnt of entries) {
-    if (!rawEnt || typeof rawEnt !== 'object' || Array.isArray(rawEnt)) continue;
-    const ent = rawEnt as RawSetEntry;
-    const sid = String(ent.id ?? '').trim();
-    if (!sid) continue;
-    const sections = ((ent.sections as unknown[] | null | undefined) || []).map(toInt);
-    let cfg: SetCfgDraft;
-    if (ent.source === 'rotation') {
+    if (
+      !rawEnt ||
+      typeof rawEnt !== "object" ||
+      Array.isArray(rawEnt)
+    )
+      continue
+    const ent = rawEnt as RawSetEntry
+    const sid = String(ent.id ?? "").trim()
+    if (!sid) continue
+    const sections = (
+      (ent.sections as unknown[] | null | undefined) || []
+    ).map(toInt)
+    let cfg: SetCfgDraft
+    if (ent.source === "rotation") {
       // A channel carries a `profiles` list of per-profile bindings. Absent (every legacy
       // set) → synthesize ONE binding from the top-level fields. A "real" profiles[] array
       // (≥1 dict) is what has_explicit_profiles gates channel_for on.
-      const raw = ent.profiles;
-      const isBinding = (p: unknown): boolean => Boolean(p) && typeof p === 'object' && !Array.isArray(p);
-      const hasExplicitProfiles = Array.isArray(raw) && raw.some(isBinding);
+      const raw = ent.profiles
+      const isBinding = (p: unknown): boolean =>
+        Boolean(p) &&
+        typeof p === "object" &&
+        !Array.isArray(p)
+      const hasExplicitProfiles =
+        Array.isArray(raw) && raw.some(isBinding)
       const profiles = hasExplicitProfiles
-        ? (raw as unknown[]).filter(isBinding).map((p) => bindingFrom(p as BindingSource))
-        : [bindingFrom(ent)];
+        ? (raw as unknown[])
+            .filter(isBinding)
+            .map((p) => bindingFrom(p as BindingSource))
+        : [bindingFrom(ent)]
       // Non-null: `hasExplicitProfiles` is true only when at least one item passed isBinding,
       // and the else-branch synthesizes exactly one. Never empty.
-      const def = profiles[0]!;
+      const def = profiles[0]!
       cfg = {
-        source: 'rotation',
+        source: "rotation",
         episodic_sections: sections,
-        item_sections: ((ent.item_sections as unknown[] | null | undefined) || []).map(toInt),
+        item_sections: (
+          (ent.item_sections as
+            | unknown[]
+            | null
+            | undefined) || []
+        ).map(toInt),
         // Carried for the D3 selection engine (unused by the D2 routing fns): per-show manual
         // start floors { ratingKey: {season, episode} } and the blocklist (ratingKeys or
         // "Collection: <name>" strings).
-        starts: (ent.starts && typeof ent.starts === 'object' ? ent.starts : {}) as Record<string, Start>,
+        starts: (ent.starts &&
+        typeof ent.starts === "object"
+          ? ent.starts
+          : {}) as Record<string, Start>,
         // Per-show WEIGHT for the dynamic rule pool: { ratingKey: n } (and `section-<id>` for a
         // whole item bucket). The mirror of a curated entry's embedded `weight`, but for a
         // rule-derived show that has no stored entry to hang one on — same shape as `starts`.
         // rotation.js turns it into slots per round; absent/1 = the plain round-robin.
-        weights: (ent.weights && typeof ent.weights === 'object' ? ent.weights : {}) as Record<string, number>,
+        weights: (ent.weights &&
+        typeof ent.weights === "object"
+          ? ent.weights
+          : {}) as Record<string, number>,
         // Per-show `on_complete` overrides, same shape and same keying as `starts` / `weights`.
         // A passthrough the loader forgets does not throw — it reads `undefined` at the
         // consumer and silently disables the feature, which is what e2e/set-passthrough-parity
         // exists to catch.
-        on_complete_by_show: (ent.on_complete_by_show && typeof ent.on_complete_by_show === 'object'
+        on_complete_by_show: (ent.on_complete_by_show &&
+        typeof ent.on_complete_by_show === "object"
           ? ent.on_complete_by_show
           : {}) as Record<string, string>,
-        blocklist: ((ent.blocklist as unknown[] | null | undefined) || []).map(String),
+        blocklist: (
+          (ent.blocklist as unknown[] | null | undefined) ||
+          []
+        ).map(String),
         // Explicit curated members (v3 PR 3): raw queues.yaml-style entries (a bare ratingKey, a
         // "Collection: <name>" string, or a {ratingKey,title,episodes} mapping — describe() parses
         // them). Non-empty => the channel's pool is these members PLUS the dynamic rule (additive);
         // [] / absent => the pure rule pool. Consumed by engine/rotation.js channelBuckets.
-        members: (Array.isArray(ent.members) ? ent.members : []) as MemberValue[],
+        members: (Array.isArray(ent.members)
+          ? ent.members
+          : []) as MemberValue[],
         // Whether a `Collection:` member plays as ONE ordered thing (`whole`, the default and
         // what absence means) or is split back into its individual shows (`split`). Carried
         // RAW — engine/rotation.js's isSplittingCollections() normalizes, so a typo falls back
         // to the default there rather than being frozen into the cfg here.
-        collection_members: ent.collection_members == null
-          ? null
-          : String(ent.collection_members).trim().toLowerCase(),
+        collection_members:
+          ent.collection_members == null
+            ? null
+            : String(ent.collection_members)
+                .trim()
+                .toLowerCase(),
         profiles,
         has_explicit_profiles: hasExplicitProfiles,
-        superseded_by: ent.superseded_by ? String(ent.superseded_by) : null,
+        superseded_by: ent.superseded_by
+          ? String(ent.superseded_by)
+          : null,
         // Top-level mirror of the default binding (back-compat; binding_for falls back to it).
         allowed_ratings: def.allowed_ratings,
         movie_ratings: def.movie_ratings,
@@ -215,14 +295,14 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         plex_user: def.plex_user,
         account_id: def.account_id,
         user_uuid: def.user_uuid,
-      };
+      }
     } else {
       // Port of _queue_set (routing-relevant fields): a curated queue draws from its own
       // sections; set_sections covers them and rewatch_sections falls to SEC_MOVIES. The
       // curated resolver (engine/resolve.js) reads these + the queue_sections mirror.
-      const secs = sections.length ? sections : [SEC_MOVIES];
+      const secs = sections.length ? sections : [SEC_MOVIES]
       cfg = {
-        source: 'queue',
+        source: "queue",
         episodic_sections: secs,
         item_sections: [],
         // Python _queue_set mirrors the sections onto queue_sections/queue_section (entries are
@@ -234,8 +314,12 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         // Hardcoding the admin there made the provider mistake a synthetic default for an
         // explicit binding and refuse to replace it. An UNGATED queue keeps the admin identity
         // it has always used rather than falling through to the legacy env account union.
-        watch_count_accounts: ent.requires_profile ? null : [1],
-        plex_user: ent.requires_profile ? null : 'Bob (admin)',
+        watch_count_accounts: ent.requires_profile
+          ? null
+          : [1],
+        plex_user: ent.requires_profile
+          ? null
+          : "Bob (admin)",
         account_id: ent.requires_profile ? null : 1,
         user_uuid: null,
         allowed_ratings: null,
@@ -246,11 +330,16 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         // loader forgets does not throw: it reads `undefined` at the consumer and silently
         // disables the feature (see the `on_complete_by_show` note above), which for this one
         // would mean every skip in the file quietly playing again.
-        skipped: ((ent.skipped as unknown[] | null | undefined) || []).map(String),
+        skipped: (
+          (ent.skipped as unknown[] | null | undefined) ||
+          []
+        ).map(String),
         // A REEL replays in full every scan (build_reel); keep_completed marks a non-consuming
         // queue. reel implies keep_completed. Both gate next_queue's D4 mark-done persistence.
         reel: Boolean(ent.reel),
-        keep_completed: Boolean(ent.keep_completed || ent.reel),
+        keep_completed: Boolean(
+          ent.keep_completed || ent.reel,
+        ),
         // The THIRD completion axis: mark done as usual, then clear the queue's watched
         // state once the last entry finishes. Carried EFFECTIVE, the same way
         // `keep_completed` above is: a set that never marks anything done can never exhaust,
@@ -258,16 +347,20 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
         // `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`). Read by
         // `finished.applyQueueWriteSide` — a loader that forgot it would read `undefined`
         // there and silently leave the queue dry, which is this file's own standing warning.
-        restart_when_exhausted: Boolean(ent.restart_when_exhausted)
-          && !ent.keep_completed && !ent.reel,
-        watch_history: normalizeWatchHistory(ent.watch_history) ?? 'provider',
-      };
+        restart_when_exhausted:
+          Boolean(ent.restart_when_exhausted) &&
+          !ent.keep_completed &&
+          !ent.reel,
+        watch_history:
+          normalizeWatchHistory(ent.watch_history) ??
+          "provider",
+      }
     }
-    cfg.label = (ent.label || sid) as string;
-    cfg.kind = (ent.kind ?? null) as string | null;
-    cfg.enabled = (ent.enabled ?? true) as boolean; // Python: ent.get("enabled", True)
-    cfg.mode = (ent.mode ?? null) as string | null;
-    cfg.behavior = (ent.behavior ?? null) as string | null;
+    cfg.label = (ent.label || sid) as string
+    cfg.kind = (ent.kind ?? null) as string | null
+    cfg.enabled = (ent.enabled ?? true) as boolean // Python: ent.get("enabled", True)
+    cfg.mode = (ent.mode ?? null) as string | null
+    cfg.behavior = (ent.behavior ?? null) as string | null
     // --- config.py passthroughs. These are READ by session.js / resolve.js / playback.js,
     // so a field the builder forgets is not a missing feature, it is a SILENTLY DISABLED
     // one — `cfg.requires_profile` simply read undefined and every gated set played
@@ -276,10 +369,13 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     // A set whose libraries only SOME Plex Home profiles can see. The driver blocks until
     // the Shield is signed into this profile, so a scan on the wrong one waits for the
     // switch instead of firing playMedia at a Plex that is sitting on the user picker.
-    if (ent.requires_profile) cfg.requires_profile = String(ent.requires_profile);
+    if (ent.requires_profile)
+      cfg.requires_profile = String(ent.requires_profile)
     // §B.3 TTL auto-removal of completed entries; queues.sweepCompleted interprets it.
     if (ent.remove_completed_after != null) {
-      cfg.remove_completed_after = String(ent.remove_completed_after).trim();
+      cfg.remove_completed_after = String(
+        ent.remove_completed_after,
+      ).trim()
     }
     // The seasonal reset date, `MM-DD`. READ ON THE PLAY PATH by `session.ts`
     // (`watchedReset.applySeasonalReset`), so it is exactly the class of field the block below
@@ -288,7 +384,9 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     // owns the reading, so a hand-typed `13-01` falls back to "off" at the consumer rather
     // than being frozen into the cfg here.
     if (ent.reset_watched_on != null) {
-      cfg.reset_watched_on = String(ent.reset_watched_on).trim();
+      cfg.reset_watched_on = String(
+        ent.reset_watched_on,
+      ).trim()
     }
     // The two PICKS LANE knobs. Both are read by engine/resolve.js on the curated scan path,
     // and both were missing here until 2026-09-07 — the exact failure mode the block above
@@ -308,9 +406,12 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     // here. The case fold matches what the write side already stores
     // (`routes/queuesRoutes.ts`), so a hand-typed `20H` and a UI-written `20h` are one value.
     if (ent.promote_window != null) {
-      cfg.promote_window = String(ent.promote_window).trim().toLowerCase();
+      cfg.promote_window = String(ent.promote_window)
+        .trim()
+        .toLowerCase()
     }
-    if (ent.add_as != null) cfg.add_as = String(ent.add_as).trim().toLowerCase();
+    if (ent.add_as != null)
+      cfg.add_as = String(ent.add_as).trim().toLowerCase()
     // THE SEASON WINDOW. Read by `season.isSetAvailable`, which is what the five engine-side
     // consumers of `enabled` ask now — session start, the launcher, top-up, Pending and
     // reconcile. Same failure mode as the two above and the same reason it is listed in
@@ -321,61 +422,83 @@ export function loadSets(path: string = store.sets.path): RoutingRegistry | null
     // Carried RAW and trimmed, not interpreted: `season.parseSeasonDay` owns the reading, so
     // a hand-typed `october` falls back to "no window" at the consumer instead of being
     // frozen into a broken cfg here.
-    if (ent.season_start != null) cfg.season_start = String(ent.season_start).trim();
-    if (ent.season_end != null) cfg.season_end = String(ent.season_end).trim();
-    if (ent.include_specials) cfg.include_specials = true;
+    if (ent.season_start != null)
+      cfg.season_start = String(ent.season_start).trim()
+    if (ent.season_end != null)
+      cfg.season_end = String(ent.season_end).trim()
+    if (ent.include_specials) cfg.include_specials = true
     const includedSpecials = (
-      (ent.included_specials as unknown[] | null | undefined) || []
-    ).map(String);
-    if (includedSpecials.length) cfg.included_specials = includedSpecials;
+      (ent.included_specials as
+        | unknown[]
+        | null
+        | undefined) || []
+    ).map(String)
+    if (includedSpecials.length)
+      cfg.included_specials = includedSpecials
     // Where a multi-episode batch may stop: "none" | "member" | "season". resolve.js's batchStop
     // interprets it (entry override > set > env BATCH_STOPS_AT).
     if (ent.batch_stops_at != null) {
-      cfg.batch_stops_at = String(ent.batch_stops_at).trim().toLowerCase();
+      cfg.batch_stops_at = String(ent.batch_stops_at)
+        .trim()
+        .toLowerCase()
     }
     // How many items one entry contributes per visit, when the entry says nothing. The COUNT
     // to `batch_stops_at`'s WHERE, and the same entry > set > env precedence: resolve.js's
     // setBatch() interprets it for Plex, providers/launcher.js for a pull provider.
-    if (ent.episodes != null) cfg.episodes = String(ent.episodes).trim();
+    if (ent.episodes != null)
+      cfg.episodes = String(ent.episodes).trim()
     // Volumes are not chapters. A volume-based series reads this count, never `episodes`.
-    if (ent.volumes != null) cfg.volumes = String(ent.volumes).trim();
+    if (ent.volumes != null)
+      cfg.volumes = String(ent.volumes).trim()
     // How many items the whole LINEUP holds — the SIZE to `episodes`'s per-entry share.
     // providers/plex.ts's rotationLength() interprets it (set > env ROTATION_LENGTH); an
     // absent/invalid value falls back rather than throwing, exactly like max_items.
-    if (ent.length != null) cfg.length = String(ent.length).trim();
+    if (ent.length != null)
+      cfg.length = String(ent.length).trim()
     // Keep the lineup topped up rather than letting it end. `true` is the ONLY enabling form,
     // matching `include_specials` above — a stray `refill: "no"` must not read as truthy.
-    if (ent.refill === true) cfg.refill = true;
+    if (ent.refill === true) cfg.refill = true
     // What a FINISHED series does on a refilling channel: restart at ep1, or drop out.
-    if (ent.on_complete != null) cfg.on_complete = String(ent.on_complete).trim().toLowerCase();
+    if (ent.on_complete != null)
+      cfg.on_complete = String(ent.on_complete)
+        .trim()
+        .toLowerCase()
     // Playback selects this audio stream on queued items (e.g. "jpn" for anime).
-    if (ent.audio_language) cfg.audio_language = String(ent.audio_language).trim();
+    if (ent.audio_language)
+      cfg.audio_language = String(ent.audio_language).trim()
     // Per-scan session cap; absent/<=0/non-numeric => no cap. Python coerces via int().
     // `String(...)` only spells out the ToString `parseInt` already performs on its argument.
-    const maxItems = parseInt(String(ent.max_items), 10);
-    cfg.max_items = Number.isFinite(maxItems) && maxItems > 0 ? maxItems : null;
+    const maxItems = parseInt(String(ent.max_items), 10)
+    cfg.max_items =
+      Number.isFinite(maxItems) && maxItems > 0
+        ? maxItems
+        : null
     // Provider blocks — the repeating {provider, profile, libraries} unit. Carried through
     // VERBATIM and left uninterpreted here: providers/blocks.js owns normalization, and this
     // loader must not acquire an opinion about a second backend. Absent is the normal case
     // and is NOT defaulted to a Plex block here — blocksForSet() interprets absence, so a
     // legacy set is never rewritten on disk just because it was read.
-    if (Array.isArray(ent.providers) && ent.providers.length) cfg.providers = ent.providers;
+    if (
+      Array.isArray(ent.providers) &&
+      ent.providers.length
+    )
+      cfg.providers = ent.providers
     // A FILTERED queue: whose entries it reads, and what it narrows them to. Every other field
     // above is already the parent's. `filter_libraries` is the flat list the lineup builder
     // wants — `providers/pullLineup.ts` hands it to `buckets()`, which drops a curated entry
     // that is not in one of those libraries. Absent on an ordinary queue, which is what makes
     // the narrowing unreachable there.
-    const parentId = parentIdOf(ent);
+    const parentId = parentIdOf(ent)
     if (parentId) {
-      cfg.filtered_from = parentId;
-      cfg.filter_libraries = filterOf(ent)?.libraries ?? [];
+      cfg.filtered_from = parentId
+      cfg.filter_libraries = filterOf(ent)?.libraries ?? []
     }
     // The six LateCommon fields are all assigned above, so the draft is complete here.
-    sets[sid] = cfg as RoutingSetCfg;
-    order.push(sid);
+    sets[sid] = cfg as RoutingSetCfg
+    order.push(sid)
   }
-  if (!order.length) return null;
-  return { sets, order };
+  if (!order.length) return null
+  return { sets, order }
 }
 
 // Port of config.binding_for: the active profile binding for a set — the one whose plex_user
@@ -387,12 +510,15 @@ export function bindingFor(
 ): EngineBinding {
   // Read through a cast: `profiles` exists only on the rotation branch (and not at all on the
   // built-in/ultra-legacy shapes this deliberately still accepts).
-  const profiles = cfg && (cfg as { profiles?: EngineBinding[] }).profiles;
-  if (!profiles || !profiles.length) return bindingFrom(cfg || {});
+  const profiles =
+    cfg && (cfg as { profiles?: EngineBinding[] }).profiles
+  if (!profiles || !profiles.length)
+    return bindingFrom(cfg || {})
   if (profileTitle) {
-    for (const b of profiles) if (b.plex_user === profileTitle) return b;
+    for (const b of profiles)
+      if (b.plex_user === profileTitle) return b
   }
-  return profiles[0]!; // non-empty per the guard above
+  return profiles[0]! // non-empty per the guard above
 }
 
 // Port of config.channel_for: route a set:"auto" scan to a function-channel id, or null to
@@ -409,20 +535,25 @@ export function channelFor(
   reg: RoutingRegistry,
   wantRewatch?: boolean,
 ): string | null {
-  const isMovieKind = wantRewatch !== undefined
-    ? wantRewatch
-    : kind === 'movie'; // legacy wire kind, one-release fallback
+  const isMovieKind =
+    wantRewatch !== undefined
+      ? wantRewatch
+      : kind === "movie" // legacy wire kind, one-release fallback
   for (const sid of reg.order) {
     // `!cfg` replaces the original `|| {}`: an id in `order` with no entry in `sets` failed the
     // `source !== 'rotation'` test there and is skipped here — same walk, same result.
-    const cfg = reg.sets[sid];
-    if (!cfg || cfg.source !== 'rotation' || !cfg.enabled) continue;
-    if (!cfg.has_explicit_profiles || cfg.superseded_by) continue;
-    const isRewatch = (cfg.behavior || cfg.mode) === 'rewatch';
-    if (isRewatch !== isMovieKind) continue;
-    for (const b of cfg.profiles || []) if (b.plex_user === profileTitle) return sid;
+    const cfg = reg.sets[sid]
+    if (!cfg || cfg.source !== "rotation" || !cfg.enabled)
+      continue
+    if (!cfg.has_explicit_profiles || cfg.superseded_by)
+      continue
+    const isRewatch =
+      (cfg.behavior || cfg.mode) === "rewatch"
+    if (isRewatch !== isMovieKind) continue
+    for (const b of cfg.profiles || [])
+      if (b.plex_user === profileTitle) return sid
   }
-  return null;
+  return null
 }
 
 /**
@@ -430,38 +561,48 @@ export function channelFor(
  * also handed the built-in/ultra-legacy shapes, and both fields are read defensively.
  */
 type SectionSource = {
-  episodic_sections?: readonly number[] | null;
-  item_sections?: readonly number[] | null;
-};
+  episodic_sections?: readonly number[] | null
+  item_sections?: readonly number[] | null
+}
 
 // Port of config.set_sections: all library sections a set draws from (episodic + item).
 export function setSections(cfg: SectionSource): number[] {
-  return [...(cfg.episodic_sections || []), ...(cfg.item_sections || [])];
+  return [
+    ...(cfg.episodic_sections || []),
+    ...(cfg.item_sections || []),
+  ]
 }
 
 // Port of config.rewatch_sections: a behavior:rewatch channel pools from ITS OWN libraries
 // (movie libs in item_sections, show libs in episodic_sections), deduped, item-first; empty
 // → [SEC_MOVIES]. A non-rewatch set → [SEC_MOVIES] (its movie card stays on the Movies lib).
 export function rewatchSections(
-  cfg: SectionSource & { behavior?: string | null; mode?: string | null },
+  cfg: SectionSource & {
+    behavior?: string | null
+    mode?: string | null
+  },
 ): number[] {
-  if ((cfg.behavior || cfg.mode) !== 'rewatch') return [SEC_MOVIES];
+  if ((cfg.behavior || cfg.mode) !== "rewatch")
+    return [SEC_MOVIES]
   const secs = [
     ...new Set([
       ...(cfg.item_sections || []).map(toInt),
       ...(cfg.episodic_sections || []).map(toInt),
     ]),
-  ];
-  return secs.length ? secs : [SEC_MOVIES];
+  ]
+  return secs.length ? secs : [SEC_MOVIES]
 }
 
 /** What `forSet()` hands the preview endpoint. Local: it is this function's own payload shape. */
 export interface ForSetResult {
-  via: 'engine-node';
-  sid: string;
-  binding: { plex_user: string | null; account_id: number | null };
-  set_sections: number[];
-  rewatch_sections: number[];
+  via: "engine-node"
+  sid: string
+  binding: {
+    plex_user: string | null
+    account_id: number | null
+  }
+  set_sections: number[]
+  rewatch_sections: number[]
 }
 
 /**
@@ -469,11 +610,11 @@ export interface ForSetResult {
  * are ABSENT (not null) on the three early-return paths, exactly as the JS returned them.
  */
 export interface RouteResult {
-  sid: string | null;
-  via: string | null;
-  binding: EngineBinding | null;
-  set_sections?: number[];
-  rewatch_sections?: number[];
+  sid: string | null
+  via: string | null
+  binding: EngineBinding | null
+  set_sections?: number[]
+  rewatch_sections?: number[]
 }
 
 // The preview-endpoint consumer (D2 seam): the binding + section pools a KNOWN set resolves to
@@ -481,19 +622,22 @@ export interface RouteResult {
 // resolves an unknown set:"auto" scan. Returns null for an unknown / non-rotation id.
 export function forSet(
   sid: string,
-  profileTitle: string | null = '',
+  profileTitle: string | null = "",
   reg: RoutingRegistry | null = loadSets(),
 ): ForSetResult | null {
-  const cfg = reg && reg.sets[sid];
-  if (!cfg || cfg.source !== 'rotation') return null;
-  const b = bindingFor(cfg, profileTitle || null);
+  const cfg = reg && reg.sets[sid]
+  if (!cfg || cfg.source !== "rotation") return null
+  const b = bindingFor(cfg, profileTitle || null)
   return {
-    via: 'engine-node',
+    via: "engine-node",
     sid,
-    binding: { plex_user: b.plex_user ?? null, account_id: b.account_id ?? null },
+    binding: {
+      plex_user: b.plex_user ?? null,
+      account_id: b.account_id ?? null,
+    },
     set_sections: setSections(cfg),
     rewatch_sections: rewatchSections(cfg),
-  };
+  }
 }
 
 // Port of cli._route's decision: (card kind + profile title) → { sid, via, binding, sections }.
@@ -504,23 +648,24 @@ export function route(
   profileTitle: string | null | undefined,
   reg: RoutingRegistry | null = loadSets(),
 ): RouteResult {
-  if (!reg) return { sid: null, via: null, binding: null };
-  let sid = channelFor(kind, profileTitle, reg);
-  let via = 'channel_for';
+  if (!reg) return { sid: null, via: null, binding: null }
+  let sid = channelFor(kind, profileTitle, reg)
+  let via = "channel_for"
   if (sid == null) {
     // Cast, not a guard: `setForProfile` is a plain map lookup, and a null/absent title has
     // always simply missed it (returning null) rather than being special-cased here.
-    sid = setForProfile(profileTitle as string);
-    via = 'PROFILE_SET_MAP';
+    sid = setForProfile(profileTitle as string)
+    via = "PROFILE_SET_MAP"
   }
-  if (sid == null) return { sid: null, via: null, binding: null };
-  const cfg = reg.sets[sid];
-  if (!cfg) return { sid, via, binding: null }; // PROFILE_SET_MAP named a set not in the registry
+  if (sid == null)
+    return { sid: null, via: null, binding: null }
+  const cfg = reg.sets[sid]
+  if (!cfg) return { sid, via, binding: null } // PROFILE_SET_MAP named a set not in the registry
   return {
     sid,
     via,
     binding: bindingFor(cfg, profileTitle),
     set_sections: setSections(cfg),
     rewatch_sections: rewatchSections(cfg),
-  };
+  }
 }

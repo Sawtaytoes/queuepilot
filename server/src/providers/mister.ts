@@ -29,6 +29,8 @@
 //     key nothing ever reads.
 //
 // A GAME IS ITS PATH. See mister-client.ts's header — there is no id to store.
+
+import { errMessage } from "../errors.js"
 import type {
   BucketsContext,
   BucketsResult,
@@ -37,35 +39,44 @@ import type {
   MisterPlayItem,
   PlayItem,
   Provider,
-  ProviderDefinition,
   ProviderCover,
+  ProviderDefinition,
   ProviderLibrary,
   ProviderSearchHit,
   ProviderTileRow,
-} from '../types.js';
-
-import { errMessage } from '../errors.js';
-import { misterClient, toSearchHit, type MisterHttpClient } from './mister-client.js';
+} from "../types.js"
+import {
+  type MisterHttpClient,
+  misterClient,
+  toSearchHit,
+} from "./mister-client.js"
 
 /** mrext's own "every system" sentinel for a scoped search. */
-const ALL_SYSTEMS = 'all';
+const ALL_SYSTEMS = "all"
 
 /** How many scoped searches run at once when a queue names several systems. */
-const SEARCH_CONCURRENCY = 4;
+const SEARCH_CONCURRENCY = 4
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (;;) {
-      const i = next;
-      next += 1;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i] as T, i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, i: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let next = 0
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      for (;;) {
+        const i = next
+        next += 1
+        if (i >= items.length) return
+        out[i] = await fn(items[i] as T, i)
+      }
+    },
+  )
+  await Promise.all(workers)
+  return out
 }
 
 /**
@@ -77,54 +88,78 @@ async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, 
  * circular, and would put a network call behind every tile.
  */
 export function titleFromPath(path: string): string {
-  const leaf = String(path || '').split('/').filter(Boolean).pop() || '';
-  return leaf.replace(/\.[a-z0-9]{1,5}$/i, '') || String(path || '');
+  const leaf =
+    String(path || "")
+      .split("/")
+      .filter(Boolean)
+      .pop() || ""
+  return (
+    leaf.replace(/\.[a-z0-9]{1,5}$/i, "") ||
+    String(path || "")
+  )
 }
 
 /** The system id a ROM path sits under, or '' — `/media/fat/games/<SYSTEM>/…`. */
 export function systemFromPath(path: string): string {
-  const parts = String(path || '').split('/').filter(Boolean);
-  const at = parts.indexOf('games');
-  return at >= 0 && parts[at + 1] ? String(parts[at + 1]) : '';
+  const parts = String(path || "")
+    .split("/")
+    .filter(Boolean)
+  const at = parts.indexOf("games")
+  return at >= 0 && parts[at + 1]
+    ? String(parts[at + 1])
+    : ""
 }
 
 export interface MisterProviderOptions {
-  def: ProviderDefinition;
-  client?: MisterHttpClient | null;
+  def: ProviderDefinition
+  client?: MisterHttpClient | null
 }
 
-export function misterProvider({ def, client = null }: MisterProviderOptions): Provider {
-  const c = client || misterClient({ baseUrl: def.base_url });
+export function misterProvider({
+  def,
+  client = null,
+}: MisterProviderOptions): Provider {
+  const c =
+    client || misterClient({ baseUrl: def.base_url })
 
-  const playItem = (path: string, title: string): MisterPlayItem => ({
+  const playItem = (
+    path: string,
+    title: string,
+  ): MisterPlayItem => ({
     bucket: path,
     number: 1,
     of: 1,
     path,
     slot: 1,
     title,
-    unit: 'play',
-  });
+    unit: "play",
+  })
 
-  const entryTitle = (entry: { id: string; title?: string | null }) => (
-    String(entry.title || '').trim() || titleFromPath(entry.id)
-  );
+  const entryTitle = (entry: {
+    id: string
+    title?: string | null
+  }) =>
+    String(entry.title || "").trim() ||
+    titleFromPath(entry.id)
 
   return {
     id: def.id,
     kind: def.kind,
     label: def.label,
-    delivery: 'pull',
-    unit: 'play',
+    delivery: "pull",
+    unit: "play",
     // Nothing to count from. See this file's header.
     stampsQueuedAt: false,
 
     /** The installed systems — SNES, NES, Arcade. A queue scopes its searches to these. */
     async libraries(): Promise<ProviderLibrary[]> {
-      const systems = await c.systems();
+      const systems = await c.systems()
       return systems
         .filter((s) => s.id)
-        .map((s) => ({ id: String(s.id), title: String(s.name || s.id) }));
+        .map((s) => ({
+          id: String(s.id),
+          title: String(s.name || s.id),
+        }))
     },
 
     /**
@@ -135,32 +170,43 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
      * unscoped block already means
      * (decision `2026-08-17-no-libraries-checked-means-every-library`).
      */
-    async search(q: string, { libraries = [] }: { libraries?: string[] } = {}): Promise<ProviderSearchHit[]> {
-      const query = String(q || '').trim();
-      if (!query) return [];
+    async search(
+      q: string,
+      { libraries = [] }: { libraries?: string[] } = {},
+    ): Promise<ProviderSearchHit[]> {
+      const query = String(q || "").trim()
+      if (!query) return []
 
-      const named = libraries.map(String).filter(Boolean);
-      if (!named.length) return (await c.search(query, ALL_SYSTEMS)).map(toSearchHit);
+      const named = libraries.map(String).filter(Boolean)
+      if (!named.length)
+        return (await c.search(query, ALL_SYSTEMS)).map(
+          toSearchHit,
+        )
 
-      const perSystem = await mapLimit(named, SEARCH_CONCURRENCY, (system) => (
-        c.search(query, system).catch((e: unknown) => {
-          // One dead system must not empty the whole result. A core can be installed with
-          // no index yet, which answers 404 and reads as "nothing here" rather than an error.
-          console.log(`[mister] search ${system}: ${errMessage(e)}`);
-          return [];
-        })
-      ));
+      const perSystem = await mapLimit(
+        named,
+        SEARCH_CONCURRENCY,
+        (system) =>
+          c.search(query, system).catch((e: unknown) => {
+            // One dead system must not empty the whole result. A core can be installed with
+            // no index yet, which answers 404 and reads as "nothing here" rather than an error.
+            console.log(
+              `[mister] search ${system}: ${errMessage(e)}`,
+            )
+            return []
+          }),
+      )
 
       // Merge, keeping the first hit per path: a game reachable from two named systems is
       // still one game.
-      const seen = new Set<string>();
-      const out: ProviderSearchHit[] = [];
+      const seen = new Set<string>()
+      const out: ProviderSearchHit[] = []
       for (const hit of perSystem.flat().map(toSearchHit)) {
-        if (!hit.id || seen.has(hit.id)) continue;
-        seen.add(hit.id);
-        out.push(hit);
+        if (!hit.id || seen.has(hit.id)) continue
+        seen.add(hit.id)
+        out.push(hit)
       }
-      return out;
+      return out
     },
 
     /**
@@ -176,7 +222,10 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
      * while the MiSTer is powered down.
      */
     cover(path: string): Promise<ProviderCover> {
-      return c.cover(systemFromPath(path), titleFromPath(path));
+      return c.cover(
+        systemFromPath(path),
+        titleFromPath(path),
+      )
     },
 
     /**
@@ -186,21 +235,33 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
      * the MiSTer and a powered-down MiSTer still renders its queue. The art is fetched
      * separately, by the cover route, from a host that is not the MiSTer.
      */
-    async tiles(ids: Iterable<string>, entries: CuratedEntryRef[] = []): Promise<(ProviderTileRow | null)[]> {
-      const byId = new Map(entries.map((e) => [String(e.id), e]));
-      return [...ids].map(String).map((id): ProviderTileRow => {
-        const entry = byId.get(id);
-        const title = entryTitle({ id, title: (entry as { title?: string } | undefined)?.title ?? null });
-        return {
-          id,
-          title,
-          libraryId: systemFromPath(id),
-          // One play, always waiting: nothing here can tell us it has been played, so a
-          // tile shows what it owes and the `done` flag is what removes it.
-          unreadCount: 1,
-          next: playItem(id, title),
-        };
-      });
+    async tiles(
+      ids: Iterable<string>,
+      entries: CuratedEntryRef[] = [],
+    ): Promise<(ProviderTileRow | null)[]> {
+      const byId = new Map(
+        entries.map((e) => [String(e.id), e]),
+      )
+      return [...ids]
+        .map(String)
+        .map((id): ProviderTileRow => {
+          const entry = byId.get(id)
+          const title = entryTitle({
+            id,
+            title:
+              (entry as { title?: string } | undefined)
+                ?.title ?? null,
+          })
+          return {
+            id,
+            title,
+            libraryId: systemFromPath(id),
+            // One play, always waiting: nothing here can tell us it has been played, so a
+            // tile shows what it owes and the `done` flag is what removes it.
+            unreadCount: 1,
+            next: playItem(id, title),
+          }
+        })
     },
 
     /**
@@ -211,18 +272,29 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
      * this provider has no rule-based mode: "a random ROM off the share" is not something
      * anyone asked to be handed.
      */
-    async buckets(ctx: BucketsContext): Promise<BucketsResult> {
-      const entries = (ctx.entries || []).filter((e) => e && e.id);
-      if (!entries.length) return { play: [], buckets: [] };
+    async buckets(
+      ctx: BucketsContext,
+    ): Promise<BucketsResult> {
+      const entries = (ctx.entries || []).filter(
+        (e) => e && e.id,
+      )
+      if (!entries.length) return { play: [], buckets: [] }
 
-      const head = entries[0] as { id: string; title?: string | null };
-      const title = entryTitle(head);
+      const head = entries[0] as {
+        id: string
+        title?: string | null
+      }
+      const title = entryTitle(head)
 
       return {
-        play: [playItem(String(head.id), title)] as PlayItem[],
+        play: [
+          playItem(String(head.id), title),
+        ] as PlayItem[],
         buckets: entries.map((e) => ({
           path: String(e.id),
-          title: entryTitle(e as { id: string; title?: string | null }),
+          title: entryTitle(
+            e as { id: string; title?: string | null },
+          ),
           owed: 1,
           played: 0,
           remaining: 1,
@@ -230,7 +302,7 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
         // Never inferred. Only Home Assistant knows a game closed, and it says so by marking
         // the entry — see this file's header.
         newlyDone: [],
-      };
+      }
     },
 
     /**
@@ -240,23 +312,27 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
      * this backend has no record of anything having been played.
      */
     async progressState(): Promise<Set<string>> {
-      return new Set();
+      return new Set()
     },
 
     /** A DESCRIPTOR — there is no lineup object on the MiSTer's side to build. */
-    materialize(items: PlayItem[], opts: { setName?: string | null } = {}): MisterArtifact {
-      const head = (items[0] as MisterPlayItem | undefined) || null;
-      const path = head ? String(head.path) : '';
+    materialize(
+      items: PlayItem[],
+      opts: { setName?: string | null } = {},
+    ): MisterArtifact {
+      const head =
+        (items[0] as MisterPlayItem | undefined) || null
+      const path = head ? String(head.path) : ""
 
       return {
         provider: def.id,
-        kind: 'mister',
+        kind: "mister",
         count: items.length,
         head,
         path,
-        setName: String(opts.setName ?? ''),
+        setName: String(opts.setName ?? ""),
         system: systemFromPath(path),
-      };
+      }
     },
 
     /**
@@ -274,16 +350,20 @@ export function misterProvider({ def, client = null }: MisterProviderOptions): P
      */
     handoff(artifact: MisterArtifact) {
       if (!artifact?.path) {
-        return { mode: 'pull' as const, url: null, error: 'nothing left to play in this queue' };
+        return {
+          mode: "pull" as const,
+          url: null,
+          error: "nothing left to play in this queue",
+        }
       }
       return {
-        mode: 'pull' as const,
+        mode: "pull" as const,
         url: null,
         error:
-          `“${artifact.head?.title || titleFromPath(artifact.path)}” is next. A MiSTer game is `
-          + 'started by its card or the remote, which is what enables the controller adapter '
-          + 'and switches the activity — this queue chooses what plays, not when.',
-      };
+          `“${artifact.head?.title || titleFromPath(artifact.path)}” is next. A MiSTer game is ` +
+          "started by its card or the remote, which is what enables the controller adapter " +
+          "and switches the activity — this queue chooses what plays, not when.",
+      }
     },
-  };
+  }
 }

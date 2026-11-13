@@ -1,4 +1,7 @@
-import { withDevice, deviceOperationCancelled } from './deviceScope.js';
+import {
+  deviceOperationCancelled,
+  withDevice,
+} from "./deviceScope.js"
 // Playback: build a Plex playQueue and tell the Family Room Shield to play it.
 //
 // CLIENT mode is the live path
@@ -17,37 +20,50 @@ import { withDevice, deviceOperationCancelled } from './deviceScope.js';
 //
 // Companion returns body "Failure: 200 OK" on success — only the HTTP status matters.
 
-import net from 'node:net';
-import * as adb from './adb.js';
-import { Agent, request } from 'undici';
-import { PLEX_URL, PLEX_TOKEN, PLEX_CLIENT_IDENTIFIER } from './config.js';
+import net from "node:net"
+import { Agent, request } from "undici"
+import * as adb from "./adb.js"
 import {
+  PLEX_CLIENT_IDENTIFIER,
+  PLEX_TOKEN,
+  PLEX_URL,
+} from "./config.js"
+import {
+  COMPANION_MISS_TTL_MS,
+  COMPANION_PORT,
+  MQTT_HOST,
+  MQTT_PASS,
+  MQTT_PORT,
+  MQTT_USER,
+  PLAYBACK_FSM_COMPANION_TIMEOUT,
   PLAYBACK_MODE,
+  PLAYBACK_SESSION_WAIT_SECONDS,
+  PLEX_LOCAL_URL,
+  RESUME_POLL_TIMEOUT_MS,
   SHIELD_CAST_NAME,
   SHIELD_CLIENT_MACHINE_ID,
   SHIELD_CLIENT_NAME,
   SHIELD_CLIENT_URI,
   SHIELD_IP,
-  COMPANION_PORT,
-  COMPANION_MISS_TTL_MS,
-  RESUME_POLL_TIMEOUT_MS,
-  PLAYBACK_FSM_COMPANION_TIMEOUT,
-  PLAYBACK_SESSION_WAIT_SECONDS,
-  PLEX_LOCAL_URL,
-  MQTT_HOST,
-  MQTT_PORT,
-  MQTT_USER,
-  MQTT_PASS,
   T_CMD_CAST_PLAY,
-} from './env.js';
-import { accountToken, plexGet } from './plex.js';
-import { plexServerAccessForProfile } from './plexSources.js';
-import { getSet } from './sets.js';
-import { plextv } from './plexTv.js';
-import type { Device, PlexPlayItem, PushResult } from './types.js';
-import { PlexError, errMessage, isNodeError, isPlexError } from './errors.js';
+} from "./env.js"
+import {
+  errMessage,
+  isNodeError,
+  isPlexError,
+  PlexError,
+} from "./errors.js"
+import { accountToken, plexGet } from "./plex.js"
+import { plexServerAccessForProfile } from "./plexSources.js"
+import { plextv } from "./plexTv.js"
+import { getSet } from "./sets.js"
+import type {
+  Device,
+  PlexPlayItem,
+  PushResult,
+} from "./types.js"
 
-const CLIENT_ID = PLEX_CLIENT_IDENTIFIER;
+const CLIENT_ID = PLEX_CLIENT_IDENTIFIER
 
 // --- local shapes ------------------------------------------------------------- //
 //
@@ -65,28 +81,28 @@ const CLIENT_ID = PLEX_CLIENT_IDENTIFIER;
  */
 export type PlaybackResult = PushResult & {
   /** Cast only: the play was handed to cast_sidecar, which owns played/scrobble from here. */
-  delegated?: boolean;
+  delegated?: boolean
   /** Cast only: the MQTT topic the handoff went out on. */
-  topic?: string;
+  topic?: string
   /** Client only: the playQueue we built, even when the Companion push then failed. */
-  playQueueID?: number | string | null;
-};
+  playQueueID?: number | string | null
+}
 
 /** `seekTo()`'s result. Deliberately not a `PushResult` — nothing published reads it. */
 export interface SeekResult {
-  seeked: boolean;
-  error?: string;
-  offset?: number;
+  seeked: boolean
+  error?: string
+  offset?: number
 }
 
 /** What `currentSession()` reports — resume.js's trigger shape. */
 export interface CurrentSession {
-  state?: string;
-  title?: string;
-  show?: string;
-  duration?: number;
-  ratingKey: string;
-  viewOffset: number;
+  state?: string
+  title?: string
+  show?: string
+  duration?: number
+  ratingKey: string
+  viewOffset: number
 }
 
 /**
@@ -101,27 +117,27 @@ export interface CurrentSession {
  *     a play that is probably fine is worse than the audit occasionally abstaining.
  */
 export interface AccountVerdict {
-  isMismatch: boolean;
-  accountId: number | null;
-  title: string | null;
+  isMismatch: boolean
+  accountId: number | null
+  title: string | null
   /**
    * Whether the target player had a session at all when the wait ended. This is the proof
    * that a play TOOK — `accountId` can be null on a session Plex did not stamp with a user,
    * and that is still a session. False means the push was accepted and nothing followed.
    */
-  hasSession: boolean;
+  hasSession: boolean
   /** Why we could not tell, when `accountId` is null. Log-only. */
-  reason?: string;
+  reason?: string
 }
 
 /** A one-shot observation of the account on the target player's active Plex session. */
 export interface AccountObservation {
-  accountId: number | null;
-  title: string | null;
+  accountId: number | null
+  title: string | null
   /** True when the target player has a session, whatever it says about the account. */
-  hasSession: boolean;
+  hasSession: boolean
   /** Why Plex could not identify an account, when `accountId` is null. Log-only. */
-  reason?: string;
+  reason?: string
 }
 
 /**
@@ -132,168 +148,242 @@ export interface AccountObservation {
  * `name`/`machineIdentifier` as plain strings — see the note in devices.ts.
  */
 export interface PlayerDevice {
-  name: string | null;
-  machineIdentifier: string | null;
-  uri: string | null;
+  name: string | null
+  machineIdentifier: string | null
+  uri: string | null
 }
 
 /** The resolved Companion target a command is sent to (`findClient()`). */
 export interface ClientTarget {
-  name: string | null;
-  machineIdentifier: string | null;
+  name: string | null
+  machineIdentifier: string | null
   /** The player's DIRECT Companion endpoint, or null to relay via the Plex server. */
-  uri: string | null;
+  uri: string | null
 }
 
 /** One plex.tv device row, before `playerDevices()` flattens it. */
 interface PlexTvDeviceRow {
-  name?: string | null;
-  clientIdentifier?: string | null;
-  provides?: string | null;
-  connections?: { uri?: string | null }[] | null;
+  name?: string | null
+  clientIdentifier?: string | null
+  provides?: string | null
+  connections?: { uri?: string | null }[] | null
 }
 
 /** One audio/video stream on a Part. `streamType` is 2 for audio, and Plex has shipped it
  * both as a number and as a string, which is why the runtime check tests for both. */
 interface PlexStream {
-  id?: number | string;
-  streamType?: number | string;
-  language?: string;
-  languageCode?: string;
+  id?: number | string
+  streamType?: number | string
+  language?: string
+  languageCode?: string
 }
 
 interface PlexPart {
-  id?: number | string | null;
-  Stream?: PlexStream[];
+  id?: number | string | null
+  Stream?: PlexStream[]
 }
 
 /** The Metadata fields the playback + resume paths read. A superset of no shared type:
  * `PlexMetadata` in types.ts is the ENGINE's view and carries neither `Player` nor `Media`. */
 interface PlaybackMetadata {
-  title?: string;
-  grandparentTitle?: string;
-  duration?: number;
-  ratingKey?: string | number;
+  title?: string
+  grandparentTitle?: string
+  duration?: number
+  ratingKey?: string | number
   /** Present when an item in the play queue comes from a different Plex server. */
-  source?: string;
-  viewOffset?: number;
-  Player?: { machineIdentifier?: string; title?: string; state?: string };
-  User?: { id?: unknown; title?: unknown };
-  Media?: { Part?: PlexPart[] }[];
+  source?: string
+  viewOffset?: number
+  Player?: {
+    machineIdentifier?: string
+    title?: string
+    state?: string
+  }
+  User?: { id?: unknown; title?: unknown }
+  Media?: { Part?: PlexPart[] }[]
 }
 
 /** The `MediaContainer` fields this file reads, across all four of its endpoints. */
 interface PlaybackContainer {
-  size?: number;
-  playQueueID?: number | string;
+  size?: number
+  playQueueID?: number | string
   /** Where the viewer is IN the queue — the index of the selected item. Top-up measures
    *  what is left from here, never from the queue's length alone. */
-  playQueueSelectedItemOffset?: number;
-  Metadata?: PlaybackMetadata[];
+  playQueueSelectedItemOffset?: number
+  Metadata?: PlaybackMetadata[]
   /** `/clients` answers with one or the other depending on server version. */
-  Server?: { name?: string; machineIdentifier?: string }[];
-  Device?: { name?: string; machineIdentifier?: string }[];
+  Server?: { name?: string; machineIdentifier?: string }[]
+  Device?: { name?: string; machineIdentifier?: string }[]
 }
 
 /** `plexReq()`'s return: parsed JSON, or `{_raw}` when the body was not JSON. */
 interface PlexReqJson {
-  MediaContainer?: PlaybackContainer;
-  _raw?: string;
+  MediaContainer?: PlaybackContainer
+  _raw?: string
 }
 
 /** A stored lineup item, or the legacy bare rating key accepted by public helpers. */
-export type PlexQueueItemInput = string | number | {
-  ratingKey: PlexPlayItem['ratingKey'];
-  plexServer?: string | null;
-};
+export type PlexQueueItemInput =
+  | string
+  | number
+  | {
+      ratingKey: PlexPlayItem["ratingKey"]
+      plexServer?: string | null
+    }
 
 interface PlexQueueItemRef {
-  ratingKey: string;
-  plexServer: string | null;
+  ratingKey: string
+  plexServer: string | null
 }
 
 interface PlayQueueHost {
-  machineIdentifier: string;
-  apiBaseUrl: string;
-  streamBaseUrl: string;
-  token: string;
-  hasSharedItems?: boolean;
+  machineIdentifier: string
+  apiBaseUrl: string
+  streamBaseUrl: string
+  token: string
+  hasSharedItems?: boolean
 }
 
-const playQueueHosts = new Map<string, PlayQueueHost>();
+const playQueueHosts = new Map<string, PlayQueueHost>()
 // The Now-playing seek route supplies a device/offset, while the resume watcher also
 // supplies its queue. Keep the last accepted modern queue per resolved player so both
 // paths can use the same guarded seek without borrowing another device's queue.
-const modernPlayerQueues = new Map<string, { id: number | string; userUuid: string | null }>();
-function playerQueueKey(client: ClientTarget | null): string | null {
-  return client?.machineIdentifier ? `id:${client.machineIdentifier}` : client?.uri ? `uri:${client.uri}` : null;
+const modernPlayerQueues = new Map<
+  string,
+  { id: number | string; userUuid: string | null }
+>()
+function playerQueueKey(
+  client: ClientTarget | null,
+): string | null {
+  return client?.machineIdentifier
+    ? `id:${client.machineIdentifier}`
+    : client?.uri
+      ? `uri:${client.uri}`
+      : null
 }
-const sharedSessionAccess = new Map<string, {
-  until: number;
-  access: Awaited<ReturnType<typeof plexServerAccessForProfile>>;
-}>();
+const sharedSessionAccess = new Map<
+  string,
+  {
+    until: number
+    access: Awaited<
+      ReturnType<typeof plexServerAccessForProfile>
+    >
+  }
+>()
 
-async function sharedAccess(userUuid: string | null, serverId: string) {
-  const key = `${userUuid || ''}:${serverId}`;
-  const cached = sharedSessionAccess.get(key);
-  if (cached && cached.until > Date.now()) return cached.access;
-  const access = await plexServerAccessForProfile(userUuid, serverId).catch(() => null);
-  if (access) sharedSessionAccess.set(key, { access, until: Date.now() + 30_000 });
-  return access;
+async function sharedAccess(
+  userUuid: string | null,
+  serverId: string,
+) {
+  const key = `${userUuid || ""}:${serverId}`
+  const cached = sharedSessionAccess.get(key)
+  if (cached && cached.until > Date.now())
+    return cached.access
+  const access = await plexServerAccessForProfile(
+    userUuid,
+    serverId,
+  ).catch(() => null)
+  if (access)
+    sharedSessionAccess.set(key, {
+      access,
+      until: Date.now() + 30_000,
+    })
+  return access
 }
 
 async function selectedSource(
   playQueueID: number | string | null | undefined,
   userUuid: string | null,
-): Promise<{ host: string; token: string; machineIdentifier: string } | null> {
-  if (playQueueID == null || !playQueueHosts.get(String(playQueueID))?.hasSharedItems) return null;
-  const queue = await readPlayQueue(playQueueID);
-  if (!queue) throw new Error('The mixed Plex queue is unavailable');
-  const item = queue?.items[queue.selectedOffset];
-  if (!item) throw new Error('The selected Plex item is unavailable');
-  if (!item?.plexServer) return null;
-  const access = await sharedAccess(userUuid, item.plexServer);
-  if (!access) throw new Error('The selected shared Plex server is unavailable');
-  return { host: access.baseUrl, token: access.token, machineIdentifier: access.id };
+): Promise<{
+  host: string
+  token: string
+  machineIdentifier: string
+} | null> {
+  if (
+    playQueueID == null ||
+    !playQueueHosts.get(String(playQueueID))?.hasSharedItems
+  )
+    return null
+  const queue = await readPlayQueue(playQueueID)
+  if (!queue)
+    throw new Error("The mixed Plex queue is unavailable")
+  const item = queue?.items[queue.selectedOffset]
+  if (!item)
+    throw new Error("The selected Plex item is unavailable")
+  if (!item?.plexServer) return null
+  const access = await sharedAccess(
+    userUuid,
+    item.plexServer,
+  )
+  if (!access)
+    throw new Error(
+      "The selected shared Plex server is unavailable",
+    )
+  return {
+    host: access.baseUrl,
+    token: access.token,
+    machineIdentifier: access.id,
+  }
 }
 
-function queueItemRef(item: PlexQueueItemInput): PlexQueueItemRef {
-  if (item != null && typeof item === 'object') {
+function queueItemRef(
+  item: PlexQueueItemInput,
+): PlexQueueItemRef {
+  if (item != null && typeof item === "object") {
     return {
       ratingKey: String(item.ratingKey),
-      plexServer: item.plexServer ? String(item.plexServer) : null,
-    };
+      plexServer: item.plexServer
+        ? String(item.plexServer)
+        : null,
+    }
   }
-  return { ratingKey: String(item), plexServer: null };
+  return { ratingKey: String(item), plexServer: null }
 }
 
 function queueItemRefs(
   items: readonly PlexQueueItemInput[] | null | undefined,
 ): PlexQueueItemRef[] {
-  return (items || []).map(queueItemRef).filter((item) => item.ratingKey && item.ratingKey !== 'undefined');
+  return (items || [])
+    .map(queueItemRef)
+    .filter(
+      (item) =>
+        item.ratingKey && item.ratingKey !== "undefined",
+    )
 }
 
-function queueSourceUri(machineId: string, ratingKeys: readonly string[]): string {
-  return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKeys.join(',')}`;
+function queueSourceUri(
+  machineId: string,
+  ratingKeys: readonly string[],
+): string {
+  return `server://${machineId}/com.plexapp.plugins.library/library/metadata/${ratingKeys.join(",")}`
 }
 
-function sourceId(source: string | null | undefined): string | null {
-  const match = /^server:\/\/([^/]+)\//.exec(String(source || ''));
-  return match?.[1] ?? null;
+function sourceId(
+  source: string | null | undefined,
+): string | null {
+  const match = /^server:\/\/([^/]+)\//.exec(
+    String(source || ""),
+  )
+  return match?.[1] ?? null
 }
 
-function queueGroups(items: readonly PlexQueueItemRef[], fallbackServer: string): {
-  server: string;
-  ratingKeys: string[];
+function queueGroups(
+  items: readonly PlexQueueItemRef[],
+  fallbackServer: string,
+): {
+  server: string
+  ratingKeys: string[]
 }[] {
-  const groups: { server: string; ratingKeys: string[] }[] = [];
+  const groups: { server: string; ratingKeys: string[] }[] =
+    []
   for (const item of items) {
-    const server = item.plexServer || fallbackServer;
-    const tail = groups[groups.length - 1];
-    if (tail?.server === server) tail.ratingKeys.push(item.ratingKey);
-    else groups.push({ server, ratingKeys: [item.ratingKey] });
+    const server = item.plexServer || fallbackServer
+    const tail = groups[groups.length - 1]
+    if (tail?.server === server)
+      tail.ratingKeys.push(item.ratingKey)
+    else
+      groups.push({ server, ratingKeys: [item.ratingKey] })
   }
-  return groups;
+  return groups
 }
 
 async function playQueueHost(
@@ -301,23 +391,29 @@ async function playQueueHost(
   userUuid: string | null,
   localToken: string,
 ): Promise<PlayQueueHost> {
-  const localId = await machineIdentifier();
+  const localId = await machineIdentifier()
   if (!first.plexServer || first.plexServer === localId) {
     return {
       machineIdentifier: localId,
       apiBaseUrl: PLEX_URL,
       streamBaseUrl: PLEX_LOCAL_URL,
       token: localToken,
-    };
+    }
   }
-  const access = await plexServerAccessForProfile(userUuid, first.plexServer);
-  if (!access) throw new Error('The selected Plex profile cannot reach the first item\'s server');
+  const access = await plexServerAccessForProfile(
+    userUuid,
+    first.plexServer,
+  )
+  if (!access)
+    throw new Error(
+      "The selected Plex profile cannot reach the first item's server",
+    )
   return {
     machineIdentifier: access.id,
     apiBaseUrl: access.baseUrl,
     streamBaseUrl: access.baseUrl,
     token: access.token,
-  };
+  }
 }
 
 /**
@@ -325,11 +421,11 @@ async function playQueueHost(
  * exactly — including for a thrown non-Error object that happens to carry a `name`.
  */
 function errName(e: unknown): string {
-  if (e != null && typeof e === 'object') {
-    const n = (e as { name?: unknown }).name;
-    if (n) return String(n);
+  if (e != null && typeof e === "object") {
+    const n = (e as { name?: unknown }).name
+    if (n) return String(n)
   }
-  return 'Error';
+  return "Error"
 }
 
 // Dedicated undici agent for Companion + playQueue POSTs, which go only to LAN hosts.
@@ -340,9 +436,12 @@ const agent = new Agent({
   keepAliveTimeout: 30_000,
   connections: 8,
   connect: { rejectUnauthorized: false },
-});
+})
 
-const sleep = (ms: number): Promise<void> => new Promise((r) => { setTimeout(r, ms); });
+const sleep = (ms: number): Promise<void> =>
+  new Promise((r) => {
+    setTimeout(r, ms)
+  })
 
 // --- Companion readiness ----------------------------------------------------- //
 
@@ -357,29 +456,39 @@ export async function companionReady(
   port: number | string | null = null,
   timeout: number | null = null,
 ): Promise<boolean> {
-  const h = host || SHIELD_IP;
-  const p = Number(port || COMPANION_PORT);
-  const t = timeout == null ? PLAYBACK_FSM_COMPANION_TIMEOUT : timeout;
-  const timeoutMs = Math.max(50, Math.floor(Number(t) * 1000));
+  const h = host || SHIELD_IP
+  const p = Number(port || COMPANION_PORT)
+  const t =
+    timeout == null
+      ? PLAYBACK_FSM_COMPANION_TIMEOUT
+      : timeout
+  const timeoutMs = Math.max(
+    50,
+    Math.floor(Number(t) * 1000),
+  )
   return new Promise<boolean>((resolve) => {
-    const sock = new net.Socket();
-    let settled = false;
+    const sock = new net.Socket()
+    let settled = false
     const done = (ok: boolean): void => {
-      if (settled) return;
-      settled = true;
-      try { sock.destroy(); } catch { /* ignore */ }
-      resolve(ok);
-    };
-    sock.setTimeout(timeoutMs);
-    sock.once('connect', () => done(true));
-    sock.once('timeout', () => done(false));
-    sock.once('error', () => done(false));
-    try {
-      sock.connect(p, h);
-    } catch {
-      done(false);
+      if (settled) return
+      settled = true
+      try {
+        sock.destroy()
+      } catch {
+        /* ignore */
+      }
+      resolve(ok)
     }
-  });
+    sock.setTimeout(timeoutMs)
+    sock.once("connect", () => done(true))
+    sock.once("timeout", () => done(false))
+    sock.once("error", () => done(false))
+    try {
+      sock.connect(p, h)
+    } catch {
+      done(false)
+    }
+  })
 }
 
 // --- the Companion command id ------------------------------------------------- //
@@ -401,46 +510,52 @@ export async function companionReady(
  * Per PROCESS, not per session: the id is scoped to our client identifier, which is a
  * constant for the whole process, so a per-session counter would restart and go backwards.
  */
-let _commandId = 0;
+let _commandId = 0
 function nextCommandId(): string {
-  _commandId += 1;
-  return String(_commandId);
+  _commandId += 1
+  return String(_commandId)
 }
 
 /** Test seam: restart the counter (unit tests assert the sequence, not the absolute value). */
 export function _resetCommandId(): void {
-  _commandId = 0;
+  _commandId = 0
 }
 
 // --- machine identifier + companion target (helpers that lived on plex.py) --- //
 
-let _machineId: string | null = null;
+let _machineId: string | null = null
 
 // The server's machineIdentifier (needed to build playQueue URIs + playMedia params).
 export async function machineIdentifier(): Promise<string> {
-  if (_machineId) return _machineId;
+  if (_machineId) return _machineId
   try {
-    const data = await plexGet('/') as { MediaContainer?: { machineIdentifier?: string } } | null;
-    _machineId = (data && data.MediaContainer && data.MediaContainer.machineIdentifier) || '';
+    const data = (await plexGet("/")) as {
+      MediaContainer?: { machineIdentifier?: string }
+    } | null
+    _machineId =
+      (data &&
+        data.MediaContainer &&
+        data.MediaContainer.machineIdentifier) ||
+      ""
   } catch {
-    _machineId = '';
+    _machineId = ""
   }
   // `?? ''` is for the compiler only: both branches above assign a string, but an `await`
   // discards the narrowing on a module-scoped `let`.
-  return _machineId ?? '';
+  return _machineId ?? ""
 }
 
 // Test seam: clear the cached machine id (unit tests / after a PMS rebuild).
 export function _resetMachineIdentifier(): void {
-  _machineId = null;
+  _machineId = null
 }
 
 // name|machineId -> the plex.tv row that answered for it.
-const _companionTarget = new Map<string, PlayerDevice>();
+const _companionTarget = new Map<string, PlayerDevice>()
 // name|machineId -> the epoch ms at which a MISS stops being believed. See
 // COMPANION_MISS_TTL_MS: only the hit was ever memoised, so a player advertising no
 // connection re-asked plex.tv on every single call that needed a target.
-const _companionMiss = new Map<string, number>();
+const _companionMiss = new Map<string, number>()
 
 // Every plex.tv device advertising as a player, as [{name, machineIdentifier, uri}].
 // Port of the retired queue_builder/plex.py `player_devices()` (deleted with the Python
@@ -456,19 +571,27 @@ const _companionMiss = new Map<string, number>();
 // is still announceable and still castable by name, so it is NOT filtered out here; the
 // caller decides whether it needs a direct endpoint. Throws on a plex.tv failure so callers
 // can tell "no players" from "could not ask".
-export async function playerDevices(): Promise<PlayerDevice[]> {
-  const devices = await plextv<PlexTvDeviceRow[] | { devices?: PlexTvDeviceRow[] }>(
-    '/api/v2/devices',
-    PLEX_TOKEN,
-  );
-  const rows: PlexTvDeviceRow[] = Array.isArray(devices) ? devices : devices.devices || [];
+export async function playerDevices(): Promise<
+  PlayerDevice[]
+> {
+  const devices = await plextv<
+    PlexTvDeviceRow[] | { devices?: PlexTvDeviceRow[] }
+  >("/api/v2/devices", PLEX_TOKEN)
+  const rows: PlexTvDeviceRow[] = Array.isArray(devices)
+    ? devices
+    : devices.devices || []
   return rows
-    .filter((d) => String(d.provides || '').includes('player'))
+    .filter((d) =>
+      String(d.provides || "").includes("player"),
+    )
     .map((d) => ({
       name: d.name || null,
       machineIdentifier: d.clientIdentifier || null,
-      uri: (d.connections || []).map((c) => c.uri).find(Boolean) || null,
-    }));
+      uri:
+        (d.connections || [])
+          .map((c) => c.uri)
+          .find(Boolean) || null,
+    }))
 }
 
 // Resolve a player's DIRECT Plex Companion endpoint (http://<ip>:32500) via plex.tv.
@@ -476,46 +599,51 @@ export async function playerDevices(): Promise<PlayerDevice[]> {
 // Shield here — so ask plex.tv and talk to the player directly. Cached per key.
 export async function companionTarget(
   name: string | null,
-  machineId = '',
-  { now = Date.now, missTtlMs = COMPANION_MISS_TTL_MS }: {
-    now?: () => number;
-    missTtlMs?: number;
+  machineId = "",
+  {
+    now = Date.now,
+    missTtlMs = COMPANION_MISS_TTL_MS,
+  }: {
+    now?: () => number
+    missTtlMs?: number
   } = {},
 ): Promise<PlayerDevice | null> {
-  const key = machineId || name || '';
-  if (!key) return null;
-  if (_companionTarget.has(key)) return _companionTarget.get(key) ?? null;
+  const key = machineId || name || ""
+  if (!key) return null
+  if (_companionTarget.has(key))
+    return _companionTarget.get(key) ?? null
   // A MISS is cached too, briefly. Without this, a player that is not advertising a
   // connection — the state Plex is in while it navigates, which is precisely when the next
   // seek is about to be due — costs a plex.tv WAN round trip on every poll, every seek and
   // every transport verb. The TTL is short so the client coming back online is still noticed
   // quickly; the cost of being wrong for a few seconds is one extra fallback, not a failure.
-  const missUntil = _companionMiss.get(key);
-  if (missUntil != null && missUntil > now()) return null;
-  let rows: PlayerDevice[];
+  const missUntil = _companionMiss.get(key)
+  if (missUntil != null && missUntil > now()) return null
+  let rows: PlayerDevice[]
   try {
-    rows = await playerDevices();
+    rows = await playerDevices()
   } catch {
     // A network/plex.tv hiccup is NOT cached as a miss: "could not ask" and "asked, and it is
     // not there" are different answers, and remembering the first would extend an outage.
-    return null; // caller falls back
+    return null // caller falls back
   }
   for (const d of rows) {
-    if (machineId && d.machineIdentifier !== machineId) continue;
-    if (!machineId && d.name !== name) continue;
+    if (machineId && d.machineIdentifier !== machineId)
+      continue
+    if (!machineId && d.name !== name) continue
     // This caller DOES need a direct endpoint — playMedia is sent to `uri`.
-    if (!d.uri) continue;
-    _companionMiss.delete(key);
-    _companionTarget.set(key, d);
-    return d;
+    if (!d.uri) continue
+    _companionMiss.delete(key)
+    _companionTarget.set(key, d)
+    return d
   }
-  _companionMiss.set(key, now() + Math.max(0, missTtlMs));
-  return null;
+  _companionMiss.set(key, now() + Math.max(0, missTtlMs))
+  return null
 }
 
 export function _resetCompanionTarget(): void {
-  _companionTarget.clear();
-  _companionMiss.clear();
+  _companionTarget.clear()
+  _companionMiss.clear()
 }
 
 // --- HTTP helpers ------------------------------------------------------------ //
@@ -536,31 +664,31 @@ async function playToken(
   // Shield sat there. Only the binding token is correct here.
   if (userUuid) {
     try {
-      const tok = await accountToken(userUuid);
-      if (tok) return tok;
+      const tok = await accountToken(userUuid)
+      if (tok) return tok
     } catch {
       /* fall through to the set default, then admin */
     }
   }
   if (setName) {
     try {
-      const cfg = await getSet(setName);
+      const cfg = await getSet(setName)
       if (cfg && cfg.user_uuid) {
-        const tok = await accountToken(cfg.user_uuid);
-        if (tok) return tok;
+        const tok = await accountToken(cfg.user_uuid)
+        if (tok) return tok
       }
     } catch {
       /* fall through to admin */
     }
   }
-  return PLEX_TOKEN;
+  return PLEX_TOKEN
 }
 
 // Low-level request against Plex server or a Companion host. Returns parsed JSON or {_raw}.
 // Companion answers 200 with body "Failure: 200 OK" even when playback DOES start — only
 // status is a usable success signal. Throws on non-2xx with .plexStatus / .code.
 async function plexReq(
-  method: 'GET' | 'POST' | 'PUT',
+  method: "GET" | "POST" | "PUT",
   path: string,
   {
     token = null,
@@ -568,39 +696,40 @@ async function plexReq(
     extraHeaders = null,
     timeoutMs = 60_000,
   }: {
-    token?: string | null;
-    host?: string | null;
-    extraHeaders?: Record<string, string> | null;
-    timeoutMs?: number;
+    token?: string | null
+    host?: string | null
+    extraHeaders?: Record<string, string> | null
+    timeoutMs?: number
   } = {},
 ): Promise<PlexReqJson> {
-  const base = (host || PLEX_URL).replace(/\/+$/, '');
-  const url = base + path;
+  const base = (host || PLEX_URL).replace(/\/+$/, "")
+  const url = base + path
   const headers: Record<string, string> = {
-    'X-Plex-Token': token || PLEX_TOKEN,
-    'X-Plex-Client-Identifier': CLIENT_ID,
-    Accept: 'application/json',
+    "X-Plex-Token": token || PLEX_TOKEN,
+    "X-Plex-Client-Identifier": CLIENT_ID,
+    Accept: "application/json",
     ...(extraHeaders || {}),
-  };
-  if (deviceOperationCancelled()) throw new Error('playback operation was replaced');
+  }
+  if (deviceOperationCancelled())
+    throw new Error("playback operation was replaced")
   const res = await request(url, {
     dispatcher: agent,
     method,
     headers,
     signal: AbortSignal.timeout(timeoutMs),
-  });
-  const text = await res.body.text();
+  })
+  const text = await res.body.text()
   if (res.statusCode >= 400) {
     // PlexError carries BOTH `plexStatus` and the numeric `code` mirror the original set by
     // hand — see errors.ts for why the numeric `code` must not be merged with Node's string
     // errno `code` that driver.js's connection-refused matching walks.
-    throw new PlexError(res.statusCode, path);
+    throw new PlexError(res.statusCode, path)
   }
-  if (!text) return {};
+  if (!text) return {}
   try {
-    return JSON.parse(text) as PlexReqJson;
+    return JSON.parse(text) as PlexReqJson
   } catch {
-    return { _raw: text };
+    return { _raw: text }
   }
 }
 
@@ -610,48 +739,63 @@ async function plexReq(
 // `device` (from the MQTT device registry, via a start command's `target`) overrides the
 // env-default Shield. `uri` is the player's DIRECT Companion endpoint; commands go
 // straight to it rather than being relayed by the server.
-export async function findClient(device: Device | null = null): Promise<ClientTarget | null> {
+export async function findClient(
+  device: Device | null = null,
+): Promise<ClientTarget | null> {
   if (device) {
     if (device.uri) {
       return {
         name: device.name,
         machineIdentifier: device.machineIdentifier,
-        uri: String(device.uri).replace(/\/+$/, ''),
-      };
+        uri: String(device.uri).replace(/\/+$/, ""),
+      }
     }
-    return companionTarget(device.name || '', device.machineIdentifier || '');
+    return companionTarget(
+      device.name || "",
+      device.machineIdentifier || "",
+    )
   }
   if (SHIELD_CLIENT_URI) {
     return {
       name: SHIELD_CLIENT_NAME,
       machineIdentifier: SHIELD_CLIENT_MACHINE_ID,
-      uri: SHIELD_CLIENT_URI.replace(/\/+$/, ''),
-    };
+      uri: SHIELD_CLIENT_URI.replace(/\/+$/, ""),
+    }
   }
-  const target = await companionTarget(SHIELD_CLIENT_NAME, SHIELD_CLIENT_MACHINE_ID);
-  if (target) return target;
+  const target = await companionTarget(
+    SHIELD_CLIENT_NAME,
+    SHIELD_CLIENT_MACHINE_ID,
+  )
+  if (target) return target
   // Last-resort: local /clients (usually empty for the Shield — kept for parity).
   try {
-    const mc: PlaybackContainer = (await plexReq('GET', '/clients')).MediaContainer || {};
-    const clients = mc.Server || mc.Device || [];
-    const wantId = SHIELD_CLIENT_MACHINE_ID;
-    const wantName = (SHIELD_CLIENT_NAME || '').toLowerCase();
+    const mc: PlaybackContainer =
+      (await plexReq("GET", "/clients")).MediaContainer ||
+      {}
+    const clients = mc.Server || mc.Device || []
+    const wantId = SHIELD_CLIENT_MACHINE_ID
+    const wantName = (
+      SHIELD_CLIENT_NAME || ""
+    ).toLowerCase()
     for (const c of clients) {
       if (
-        (wantId && c.machineIdentifier === wantId)
-        || (wantName && String(c.name || '').toLowerCase().includes(wantName))
+        (wantId && c.machineIdentifier === wantId) ||
+        (wantName &&
+          String(c.name || "")
+            .toLowerCase()
+            .includes(wantName))
       ) {
         return {
           name: c.name ?? null,
           machineIdentifier: c.machineIdentifier ?? null,
           uri: null,
-        };
+        }
       }
     }
   } catch {
     /* ignore */
   }
-  return null;
+  return null
 }
 
 // Create a video playQueue from an ordered list of ratingKeys; return its id.
@@ -665,25 +809,29 @@ export async function createPlayQueue(
     machineIdentifier: queueHostId = null,
     streamBaseUrl = null,
   }: {
-    token?: string | null;
-    host?: string | null;
-    machineIdentifier?: string | null;
-    streamBaseUrl?: string | null;
+    token?: string | null
+    host?: string | null
+    machineIdentifier?: string | null
+    streamBaseUrl?: string | null
   } = {},
 ): Promise<number | string | null> {
-  const refs = queueItemRefs(items);
-  if (!refs.length) return null;
-  const mid = queueHostId || await machineIdentifier();
-  const groups = queueGroups(refs, mid);
-  const first = groups[0]!;
+  const refs = queueItemRefs(items)
+  if (!refs.length) return null
+  const mid = queueHostId || (await machineIdentifier())
+  const groups = queueGroups(refs, mid)
+  const first = groups[0]!
   const q = new URLSearchParams({
-    type: 'video',
+    type: "video",
     uri: queueSourceUri(first.server, first.ratingKeys),
-    continuous: '0',
-    'X-Plex-Client-Identifier': CLIENT_ID,
-  });
-  const data = await plexReq('POST', `/playQueues?${q}`, { token, host });
-  const mc: PlaybackContainer = (data && data.MediaContainer) || {};
+    continuous: "0",
+    "X-Plex-Client-Identifier": CLIENT_ID,
+  })
+  const data = await plexReq("POST", `/playQueues?${q}`, {
+    token,
+    host,
+  })
+  const mc: PlaybackContainer =
+    (data && data.MediaContainer) || {}
   // An EMPTY queue is a hard failure, not a playable one. Plex answers 200 for a playQueue
   // built from ratingKeys this token cannot see (a managed account whose library filter hides
   // them), and drops them silently — size 0. Pushing that at the Shield "succeeds": Companion
@@ -691,27 +839,33 @@ export async function createPlayQueue(
   // is how the wrong-token bug above stayed invisible. Throw so playRatingKeys reports it.
   if (!mc.size) {
     throw new Error(
-      `Plex built an EMPTY playQueue for ${refs.length} item(s) — this profile's account `
-      + 'cannot see them',
-    );
+      `Plex built an EMPTY playQueue for ${refs.length} item(s) — this profile's account ` +
+        "cannot see them",
+    )
   }
-  const playQueueID = mc.playQueueID ?? null;
-  if (playQueueID == null) return null;
+  const playQueueID = mc.playQueueID ?? null
+  if (playQueueID == null) return null
   for (const group of groups.slice(1)) {
     const append = new URLSearchParams({
       uri: queueSourceUri(group.server, group.ratingKeys),
-      'X-Plex-Client-Identifier': CLIENT_ID,
-    });
-    await plexReq('PUT', `/playQueues/${playQueueID}?${append}`, { token, host });
+      "X-Plex-Client-Identifier": CLIENT_ID,
+    })
+    await plexReq(
+      "PUT",
+      `/playQueues/${playQueueID}?${append}`,
+      { token, host },
+    )
   }
   playQueueHosts.set(String(playQueueID), {
     machineIdentifier: mid,
     apiBaseUrl: host || PLEX_URL,
     streamBaseUrl: streamBaseUrl || host || PLEX_LOCAL_URL,
     token: token || PLEX_TOKEN,
-    hasSharedItems: refs.some((item) => Boolean(item.plexServer)),
-  });
-  return playQueueID;
+    hasSharedItems: refs.some((item) =>
+      Boolean(item.plexServer),
+    ),
+  })
+  return playQueueID
 }
 
 /**
@@ -723,45 +877,59 @@ export async function createPlayQueue(
  */
 export async function readPlayQueue(
   pqId: number | string,
-  { token = null, host = null }: { token?: string | null; host?: string | null } = {},
+  {
+    token = null,
+    host = null,
+  }: { token?: string | null; host?: string | null } = {},
 ): Promise<{
-  ratingKeys: string[];
-  items: PlexQueueItemRef[];
-  selectedOffset: number;
-  remaining: number;
+  ratingKeys: string[]
+  items: PlexQueueItemRef[]
+  selectedOffset: number
+  remaining: number
 } | null> {
-  const remembered = playQueueHosts.get(String(pqId));
-  const requestToken = remembered?.token ?? token;
-  const requestHost = remembered?.apiBaseUrl ?? host;
-  const q = new URLSearchParams({ 'X-Plex-Client-Identifier': CLIENT_ID });
-  let data: PlexReqJson;
+  const remembered = playQueueHosts.get(String(pqId))
+  const requestToken = remembered?.token ?? token
+  const requestHost = remembered?.apiBaseUrl ?? host
+  const q = new URLSearchParams({
+    "X-Plex-Client-Identifier": CLIENT_ID,
+  })
+  let data: PlexReqJson
   try {
-    data = await plexReq('GET', `/playQueues/${pqId}?${q}`, { token: requestToken, host: requestHost });
+    data = await plexReq(
+      "GET",
+      `/playQueues/${pqId}?${q}`,
+      { token: requestToken, host: requestHost },
+    )
   } catch {
     // A playQueue Plex has forgotten (server restart, expiry) is not an error worth throwing
     // at a background tick — it means "there is nothing to top up", which is the caller's
     // normal no-op path.
-    return null;
+    return null
   }
-  const mc: PlaybackContainer = (data && data.MediaContainer) || {};
-  const rows = mc.Metadata || [];
-  const ratingKeys = rows.map((r) => String(r.ratingKey));
-  const localId = await machineIdentifier();
-  const hostId = remembered?.machineIdentifier ?? localId;
+  const mc: PlaybackContainer =
+    (data && data.MediaContainer) || {}
+  const rows = mc.Metadata || []
+  const ratingKeys = rows.map((r) => String(r.ratingKey))
+  const localId = await machineIdentifier()
+  const hostId = remembered?.machineIdentifier ?? localId
   const items = rows.map((row) => {
-    const server = sourceId(row.source) || hostId;
+    const server = sourceId(row.source) || hostId
     return {
       ratingKey: String(row.ratingKey),
       plexServer: server === localId ? null : server,
-    };
-  });
-  const selectedOffset = Number(mc.playQueueSelectedItemOffset ?? 0) || 0;
+    }
+  })
+  const selectedOffset =
+    Number(mc.playQueueSelectedItemOffset ?? 0) || 0
   return {
     ratingKeys,
     items,
     selectedOffset,
-    remaining: Math.max(0, ratingKeys.length - selectedOffset - 1),
-  };
+    remaining: Math.max(
+      0,
+      ratingKeys.length - selectedOffset - 1,
+    ),
+  }
 }
 
 /**
@@ -781,34 +949,47 @@ export async function readPlayQueue(
 export async function extendPlayQueue(
   pqId: number | string,
   items: PlexQueueItemInput[] | null | undefined,
-  { token = null, host = null }: { token?: string | null; host?: string | null } = {},
+  {
+    token = null,
+    host = null,
+  }: { token?: string | null; host?: string | null } = {},
 ): Promise<number | null> {
-  const refs = queueItemRefs(items);
-  if (!refs.length) return 0;
-  const remembered = playQueueHosts.get(String(pqId));
-  if (remembered && refs.some((item) => Boolean(item.plexServer))) {
-    remembered.hasSharedItems = true;
+  const refs = queueItemRefs(items)
+  if (!refs.length) return 0
+  const remembered = playQueueHosts.get(String(pqId))
+  if (
+    remembered &&
+    refs.some((item) => Boolean(item.plexServer))
+  ) {
+    remembered.hasSharedItems = true
   }
-  const mid = remembered?.machineIdentifier ?? await machineIdentifier();
-  const requestToken = remembered?.token ?? token;
-  const requestHost = remembered?.apiBaseUrl ?? host;
-  let size: number | null = null;
+  const mid =
+    remembered?.machineIdentifier ??
+    (await machineIdentifier())
+  const requestToken = remembered?.token ?? token
+  const requestHost = remembered?.apiBaseUrl ?? host
+  let size: number | null = null
   for (const group of queueGroups(refs, mid)) {
     const q = new URLSearchParams({
       uri: queueSourceUri(group.server, group.ratingKeys),
-      'X-Plex-Client-Identifier': CLIENT_ID,
-    });
-    const data = await plexReq('PUT', `/playQueues/${pqId}?${q}`, {
-      token: requestToken,
-      host: requestHost,
-    });
-    const mc: PlaybackContainer = (data && data.MediaContainer) || {};
-    size = mc.size ?? size;
+      "X-Plex-Client-Identifier": CLIENT_ID,
+    })
+    const data = await plexReq(
+      "PUT",
+      `/playQueues/${pqId}?${q}`,
+      {
+        token: requestToken,
+        host: requestHost,
+      },
+    )
+    const mc: PlaybackContainer =
+      (data && data.MediaContainer) || {}
+    size = mc.size ?? size
   }
   // Plex answers 200 with the queue's new size. Reported so the caller can log what actually
   // landed rather than what it asked for — the create path already learned that Plex silently
   // drops keys a token cannot see.
-  return size;
+  return size
 }
 
 // --- audio language (best-effort, both paths) -------------------------------- //
@@ -823,29 +1004,47 @@ async function applyAudioLanguage(
   lang: string | null | undefined,
   host: string | null = null,
 ): Promise<void> {
-  if (!lang || !ratingKeys || !ratingKeys.length) return;
-  const want = String(lang).trim().toLowerCase();
+  if (!lang || !ratingKeys || !ratingKeys.length) return
+  const want = String(lang).trim().toLowerCase()
   for (const rk of ratingKeys) {
     try {
-      const data = await plexReq('GET', `/library/metadata/${rk}?includeBandwidths=1`, { token, host });
-      const item = ((data.MediaContainer || {}).Metadata || [])[0];
-      if (!item) continue;
+      const data = await plexReq(
+        "GET",
+        `/library/metadata/${rk}?includeBandwidths=1`,
+        { token, host },
+      )
+      const item = ((data.MediaContainer || {}).Metadata ||
+        [])[0]
+      if (!item) continue
       for (const media of item.Media || []) {
         for (const part of media.Part || []) {
-          const streams = (part.Stream || []).filter((s) => s.streamType === 2 || s.streamType === '2');
+          const streams = (part.Stream || []).filter(
+            (s) =>
+              s.streamType === 2 || s.streamType === "2",
+          )
           const match = streams.find((s) => {
-            const code = String(s.languageCode || '').toLowerCase();
-            const name = String(s.language || '').toLowerCase();
-            return want === code || want === name || code.startsWith(want) || name.startsWith(want)
-              || code.includes(want) || name.includes(want);
-          });
+            const code = String(
+              s.languageCode || "",
+            ).toLowerCase()
+            const name = String(
+              s.language || "",
+            ).toLowerCase()
+            return (
+              want === code ||
+              want === name ||
+              code.startsWith(want) ||
+              name.startsWith(want) ||
+              code.includes(want) ||
+              name.includes(want)
+            )
+          })
           if (match && part.id != null) {
             // Standard Plex put for selected audio stream on a part.
             await plexReq(
-              'PUT',
+              "PUT",
               `/library/parts/${part.id}?audioStreamID=${match.id}&allParts=1`,
               { token, host },
-            );
+            )
           }
         }
       }
@@ -868,12 +1067,12 @@ export async function castPlay(
   const result: PlaybackResult = {
     queued: (ratingKeys || []).length,
     played: false,
-    mode: 'cast',
+    mode: "cast",
     client: castName || SHIELD_CAST_NAME || null,
-  };
+  }
   if (!ratingKeys || !ratingKeys.length) {
-    result.error = 'nothing to play';
-    return result;
+    result.error = "nothing to play"
+    return result
   }
 
   const payload = {
@@ -881,63 +1080,81 @@ export async function castPlay(
     set: setName || null,
     cast_name: castName || SHIELD_CAST_NAME || null,
     offset: intOffset(offset),
-  };
+  }
 
   if (!MQTT_HOST) {
-    result.error = (
-      'cast mode is handled by cast_sidecar — set MQTT_HOST so we can publish to '
-      + `${T_CMD_CAST_PLAY}, or use PLAYBACK_MODE=client`
-    );
-    return result;
+    result.error =
+      "cast mode is handled by cast_sidecar — set MQTT_HOST so we can publish to " +
+      `${T_CMD_CAST_PLAY}, or use PLAYBACK_MODE=client`
+    return result
   }
 
   try {
     // Lazy import so unit tests that never touch cast don't need a live broker.
-    const mqtt = await import('mqtt');
+    const mqtt = await import("mqtt")
     await new Promise<void>((resolve, reject) => {
       const c = mqtt.connect({
         host: MQTT_HOST,
         port: MQTT_PORT,
-        protocol: MQTT_PORT === 8883 ? 'mqtts' : 'mqtt',
+        protocol: MQTT_PORT === 8883 ? "mqtts" : "mqtt",
         username: MQTT_USER,
         password: MQTT_PASS,
         reconnectPeriod: 0,
         connectTimeout: 5000,
-      });
+      })
       const fail = (e: unknown): void => {
-        try { c.end(true); } catch { /* ignore */ }
-        reject(e instanceof Error ? e : new Error(errMessage(e)));
-      };
-      const timer = setTimeout(() => fail(new Error('MQTT connect timed out')), 6000);
-      c.on('error', fail);
-      c.on('connect', () => {
-        c.publish(T_CMD_CAST_PLAY, JSON.stringify(payload), { qos: 1 }, (err) => {
-          clearTimeout(timer);
-          try { c.end(true); } catch { /* ignore */ }
-          if (err) reject(err);
-          else resolve();
-        });
-      });
-    });
+        try {
+          c.end(true)
+        } catch {
+          /* ignore */
+        }
+        reject(
+          e instanceof Error ? e : new Error(errMessage(e)),
+        )
+      }
+      const timer = setTimeout(
+        () => fail(new Error("MQTT connect timed out")),
+        6000,
+      )
+      c.on("error", fail)
+      c.on("connect", () => {
+        c.publish(
+          T_CMD_CAST_PLAY,
+          JSON.stringify(payload),
+          { qos: 1 },
+          (err) => {
+            clearTimeout(timer)
+            try {
+              c.end(true)
+            } catch {
+              /* ignore */
+            }
+            if (err) reject(err)
+            else resolve()
+          },
+        )
+      })
+    })
     // Delegated — the sidecar owns played/scrobble. Surface as played=true so callers
     // that only check that bit don't treat a successful handoff as failure; diag fields
     // make the handoff explicit for logs/state.
-    result.played = true;
-    result.delegated = true;
-    result.topic = T_CMD_CAST_PLAY;
-    return result;
+    result.played = true
+    result.delegated = true
+    result.topic = T_CMD_CAST_PLAY
+    return result
   } catch (e) {
-    result.error = (
-      `cast_sidecar MQTT publish failed (${errMessage(e)}). `
-      + `Ensure cast_sidecar is subscribed to ${T_CMD_CAST_PLAY}, or use PLAYBACK_MODE=client.`
-    );
-    return result;
+    result.error =
+      `cast_sidecar MQTT publish failed (${errMessage(e)}). ` +
+      `Ensure cast_sidecar is subscribed to ${T_CMD_CAST_PLAY}, or use PLAYBACK_MODE=client.`
+    return result
   }
 }
 
-function intOffset(offset: number | string | null | undefined): number {
-  const n = Number(offset || 0);
-  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
+function intOffset(
+  offset: number | string | null | undefined,
+): number {
+  const n = Number(offset || 0)
+  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
 }
 
 // --- playRatingKeys (client is the live path) -------------------------------- //
@@ -958,28 +1175,34 @@ function intOffset(offset: number | string | null | undefined): number {
 // it cannot name — and it carries no position we would trust to decide whether an item is
 // still near its start. /status/sessions names the episode and gives its position, so it
 // stays the authority and the fallback trigger both.
-export async function currentSession(
-  {
-    device = null, client = null, timeoutMs = RESUME_POLL_TIMEOUT_MS,
-    playQueueID = null, userUuid = null, includeTelemetry = false, throwOnError = false,
-  }: {
-    device?: Device | null;
-    /**
-     * The target resolved ONCE at arm time. Without it this re-ran `findClient()` on every
-     * tick, which on a player advertising no connection was a plex.tv WAN round trip per
-     * poll. Null falls back to resolving it here, so every other caller is unchanged.
-     */
-    client?: ClientTarget | null;
-    timeoutMs?: number;
-    playQueueID?: number | string | null;
-    userUuid?: string | null;
-    includeTelemetry?: boolean;
-    throwOnError?: boolean;
-  } = {},
-): Promise<CurrentSession | null> {
-  let data: PlexReqJson;
+export async function currentSession({
+  device = null,
+  client = null,
+  timeoutMs = RESUME_POLL_TIMEOUT_MS,
+  playQueueID = null,
+  userUuid = null,
+  includeTelemetry = false,
+  throwOnError = false,
+}: {
+  device?: Device | null
+  /**
+   * The target resolved ONCE at arm time. Without it this re-ran `findClient()` on every
+   * tick, which on a player advertising no connection was a plex.tv WAN round trip per
+   * poll. Null falls back to resolving it here, so every other caller is unchanged.
+   */
+  client?: ClientTarget | null
+  timeoutMs?: number
+  playQueueID?: number | string | null
+  userUuid?: string | null
+  includeTelemetry?: boolean
+  throwOnError?: boolean
+} = {}): Promise<CurrentSession | null> {
+  let data: PlexReqJson
   try {
-    const source = await selectedSource(playQueueID, userUuid);
+    const source = await selectedSource(
+      playQueueID,
+      userUuid,
+    )
     // ADMIN token, deliberately — NOT the set's account token. /status/sessions returns an
     // EMPTY container for a managed user, so querying as the set's profile makes every session
     // invisible and the resume watcher silently does nothing. Measured on the live deploy while
@@ -990,33 +1213,51 @@ export async function currentSession(
     // `timeoutMs` is the poll path's own, far shorter than plexReq's 60 s default. The
     // watcher swallows a throw and skips the tick, so a request that will not answer within
     // one poll interval is worth abandoning — the next tick is seconds away.
-    data = await plexReq('GET', '/status/sessions', {
-      token: source?.token ?? await playToken(null),
+    data = await plexReq("GET", "/status/sessions", {
+      token: source?.token ?? (await playToken(null)),
       host: source?.host ?? null,
       timeoutMs,
-    });
+    })
   } catch (error) {
-    if (throwOnError) throw error;
-    return null;
+    if (throwOnError) throw error
+    return null
   }
-  const md = (data && data.MediaContainer && data.MediaContainer.Metadata) || [];
-  if (!md.length) return null;
+  const md =
+    (data &&
+      data.MediaContainer &&
+      data.MediaContainer.Metadata) ||
+    []
+  if (!md.length) return null
   // Prefer the session on OUR player — the house has other clients, and seeking off the back of
   // someone else's playback would be a genuinely bad bug.
-  let wanted: ClientTarget | null = client;
+  let wanted: ClientTarget | null = client
   if (!wanted) {
-    try { wanted = await findClient(device); } catch { wanted = null; }
+    try {
+      wanted = await findClient(device)
+    } catch {
+      wanted = null
+    }
   }
-  if (device && !wanted) return null;
+  if (device && !wanted) return null
   const mine = md.find((m) => {
-    if (!wanted) return true;
-    return sessionBelongsTo(m, wanted);
-  });
-  const m = mine || (wanted ? null : md[0]);
-  if (!m) return null;
-  if (!includeTelemetry) return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0) };
-  return { ratingKey: String(m.ratingKey), viewOffset: Number(m.viewOffset || 0),
-    state: m.Player?.state || 'playing', title: m.title || '', show: m.grandparentTitle || '', duration: Number(m.duration || 0) };
+    if (!wanted) return true
+    return sessionBelongsTo(m, wanted)
+  })
+  const m = mine || (wanted ? null : md[0])
+  if (!m) return null
+  if (!includeTelemetry)
+    return {
+      ratingKey: String(m.ratingKey),
+      viewOffset: Number(m.viewOffset || 0),
+    }
+  return {
+    ratingKey: String(m.ratingKey),
+    viewOffset: Number(m.viewOffset || 0),
+    state: m.Player?.state || "playing",
+    title: m.title || "",
+    show: m.grandparentTitle || "",
+    duration: Number(m.duration || 0),
+  }
 }
 
 // --- the active-session account observation + post-play audit --------------------------- //
@@ -1037,25 +1278,49 @@ export async function currentSession(
 // still exposes no account, so that case needs a prior trusted observation or the picker.
 // (docs/decisions/2026-08-21-the-profile-gate-verifies-the-account-plex-is-playing-as.md)
 
-function configuredSessionTarget(device: Device | null): ClientTarget | null {
-  const machineIdentifier = device ? device.machineIdentifier || null : SHIELD_CLIENT_MACHINE_ID || null;
-  const name = device ? device.name || null : SHIELD_CLIENT_NAME || null;
-  if (!machineIdentifier && !name) return null;
-  return { machineIdentifier, name, uri: device ? device.uri : SHIELD_CLIENT_URI || null };
+function configuredSessionTarget(
+  device: Device | null,
+): ClientTarget | null {
+  const machineIdentifier = device
+    ? device.machineIdentifier || null
+    : SHIELD_CLIENT_MACHINE_ID || null
+  const name = device
+    ? device.name || null
+    : SHIELD_CLIENT_NAME || null
+  if (!machineIdentifier && !name) return null
+  return {
+    machineIdentifier,
+    name,
+    uri: device ? device.uri : SHIELD_CLIENT_URI || null,
+  }
 }
 
-async function sessionTarget(device: Device | null): Promise<ClientTarget | null> {
+async function sessionTarget(
+  device: Device | null,
+): Promise<ClientTarget | null> {
   // Matching a PMS session needs only the configured identity. Do not make a plex.tv device
   // lookup part of the fast path when the target's machine id or name is already known.
-  const configured = configuredSessionTarget(device);
-  if (configured) return configured;
-  try { return await findClient(device); } catch { return null; }
+  const configured = configuredSessionTarget(device)
+  if (configured) return configured
+  try {
+    return await findClient(device)
+  } catch {
+    return null
+  }
 }
 
-function sessionBelongsTo(m: PlaybackMetadata, wanted: ClientTarget): boolean {
-  const player = m.Player || {};
-  if (wanted.machineIdentifier) return player.machineIdentifier === wanted.machineIdentifier;
-  return Boolean(wanted.name && player.title === wanted.name);
+function sessionBelongsTo(
+  m: PlaybackMetadata,
+  wanted: ClientTarget,
+): boolean {
+  const player = m.Player || {}
+  if (wanted.machineIdentifier)
+    return (
+      player.machineIdentifier === wanted.machineIdentifier
+    )
+  return Boolean(
+    wanted.name && player.title === wanted.name,
+  )
 }
 
 async function readAccountForTarget(
@@ -1063,47 +1328,52 @@ async function readAccountForTarget(
   timeoutMs: number,
   source: { host: string; token: string } | null = null,
 ): Promise<AccountObservation> {
-  let data: PlexReqJson;
+  let data: PlexReqJson
   try {
     // ADMIN token. A managed-user token receives an EMPTY /status/sessions container and
     // therefore cannot reveal that the player is actually using another account.
-    data = await plexReq('GET', '/status/sessions', {
+    data = await plexReq("GET", "/status/sessions", {
       token: source?.token ?? PLEX_TOKEN,
       host: source?.host ?? null,
       timeoutMs,
-    });
+    })
   } catch (e) {
     return {
       accountId: null,
       title: null,
       hasSession: false,
       reason: `/status/sessions unreadable: ${errMessage(e)}`,
-    };
+    }
   }
 
-  const sessions = data.MediaContainer?.Metadata || [];
-  const mine = sessions.find((m) => sessionBelongsTo(m, wanted));
+  const sessions = data.MediaContainer?.Metadata || []
+  const mine = sessions.find((m) =>
+    sessionBelongsTo(m, wanted),
+  )
   if (!mine) {
     return {
       accountId: null,
       title: null,
       hasSession: false,
-      reason: 'no active session on the target player',
-    };
+      reason: "no active session on the target player",
+    }
   }
 
-  const parsed = parseInt(String(mine.User?.id), 10);
-  const accountId = Number.isFinite(parsed) ? parsed : null;
-  const title = mine.User?.title != null ? String(mine.User.title) : null;
+  const parsed = parseInt(String(mine.User?.id), 10)
+  const accountId = Number.isFinite(parsed) ? parsed : null
+  const title =
+    mine.User?.title != null
+      ? String(mine.User.title)
+      : null
   if (accountId == null) {
     return {
       accountId: null,
       title,
       hasSession: true,
-      reason: 'target session carries no User id',
-    };
+      reason: "target session carries no User id",
+    }
   }
-  return { accountId, title, hasSession: true };
+  return { accountId, title, hasSession: true }
 }
 
 /**
@@ -1111,22 +1381,26 @@ async function readAccountForTarget(
  * session. This is the cheap pre-switch fast path. A null account means "no proof", never
  * "the player is signed out".
  */
-export async function currentAccount(
-  {
-    device = null,
-    timeoutMs = 1_000,
-  }: { device?: Device | null; timeoutMs?: number } = {},
-): Promise<AccountObservation> {
-  const wanted = await sessionTarget(device);
+export async function currentAccount({
+  device = null,
+  timeoutMs = 1_000,
+}: {
+  device?: Device | null
+  timeoutMs?: number
+} = {}): Promise<AccountObservation> {
+  const wanted = await sessionTarget(device)
   if (!wanted) {
     return {
       accountId: null,
       title: null,
       hasSession: false,
-      reason: 'target player identity is unavailable',
-    };
+      reason: "target player identity is unavailable",
+    }
   }
-  return readAccountForTarget(wanted, Math.max(1, timeoutMs));
+  return readAccountForTarget(
+    wanted,
+    Math.max(1, timeoutMs),
+  )
 }
 
 /**
@@ -1150,46 +1424,62 @@ export async function verifyAccount(
     sourceServer = null,
     userUuid = null,
   }: {
-    device?: Device | null;
-    timeoutMs?: number;
-    pollMs?: number;
-    sourceServer?: string | null;
-    userUuid?: string | null;
+    device?: Device | null
+    timeoutMs?: number
+    pollMs?: number
+    sourceServer?: string | null
+    userUuid?: string | null
   } = {},
 ): Promise<AccountVerdict> {
-  const wanted = await sessionTarget(device);
+  const wanted = await sessionTarget(device)
   if (!wanted) {
     return {
       isMismatch: false,
       accountId: null,
       title: null,
       hasSession: false,
-      reason: 'target player identity is unavailable',
-    };
+      reason: "target player identity is unavailable",
+    }
   }
 
-  const deadline = Date.now() + Math.max(0, timeoutMs);
-  let lastReason = 'no session appeared on the target client';
-  const sourceAccess = sourceServer ? await sharedAccess(userUuid, sourceServer) : null;
+  const deadline = Date.now() + Math.max(0, timeoutMs)
+  let lastReason =
+    "no session appeared on the target client"
+  const sourceAccess = sourceServer
+    ? await sharedAccess(userUuid, sourceServer)
+    : null
   if (sourceServer && !sourceAccess) {
     return {
-      isMismatch: false, accountId: null, title: null, hasSession: false,
-      reason: 'the shared Plex server is unavailable to this profile',
-    };
+      isMismatch: false,
+      accountId: null,
+      title: null,
+      hasSession: false,
+      reason:
+        "the shared Plex server is unavailable to this profile",
+    }
   }
   const source = sourceAccess
-    ? { host: sourceAccess.baseUrl, token: sourceAccess.token }
-    : null;
+    ? {
+        host: sourceAccess.baseUrl,
+        token: sourceAccess.token,
+      }
+    : null
   for (;;) {
-    const observation = await readAccountForTarget(wanted, RESUME_POLL_TIMEOUT_MS, source);
+    const observation = await readAccountForTarget(
+      wanted,
+      RESUME_POLL_TIMEOUT_MS,
+      source,
+    )
     if (observation.accountId != null) {
       return {
-        isMismatch: !sourceServer && expectAccountId != null
-          && observation.accountId !== Number(expectAccountId),
+        isMismatch:
+          !sourceServer &&
+          expectAccountId != null &&
+          observation.accountId !== Number(expectAccountId),
         accountId: observation.accountId,
         title: observation.title,
         hasSession: true,
-      };
+      }
     }
     if (observation.hasSession) {
       // A session with no User id: the play took, the account is unknown. Abstain on the
@@ -1200,13 +1490,19 @@ export async function verifyAccount(
         title: observation.title,
         hasSession: true,
         reason: observation.reason,
-      };
+      }
     }
-    lastReason = observation.reason || lastReason;
-    if (Date.now() >= deadline) break;
-    await sleep(Math.max(0.05, pollMs / 1000));
+    lastReason = observation.reason || lastReason
+    if (Date.now() >= deadline) break
+    await sleep(Math.max(0.05, pollMs / 1000))
   }
-  return { isMismatch: false, accountId: null, title: null, hasSession: false, reason: lastReason };
+  return {
+    isMismatch: false,
+    accountId: null,
+    title: null,
+    hasSession: false,
+    reason: lastReason,
+  }
 }
 
 /**
@@ -1227,34 +1523,45 @@ export async function verifyAccount(
  * user's player — which is the whole point when a kids' queue is on screen.
  */
 async function playerCommandOnDevice(
-  verb: 'stop' | 'pause' | 'play' | 'skipNext',
+  verb: "stop" | "pause" | "play" | "skipNext",
   device: Device | null = null,
 ): Promise<{ ok: boolean; error?: string }> {
-  if (adb.usesModernPlayback(device)) return adb.modernPlayerCommand(verb);
-  const client = await findClient(device);
-  if (!client) return { ok: false, error: 'target client not found' };
+  if (adb.usesModernPlayback(device))
+    return adb.modernPlayerCommand(verb)
+  const client = await findClient(device)
+  if (!client)
+    return { ok: false, error: "target client not found" }
   const params = new URLSearchParams({
-    type: 'video',
-    'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
-    'X-Plex-Client-Identifier': CLIENT_ID,
+    type: "video",
+    "X-Plex-Target-Client-Identifier":
+      client.machineIdentifier || "",
+    "X-Plex-Client-Identifier": CLIENT_ID,
     commandID: nextCommandId(),
-  });
+  })
   try {
     // Companion answers 200 with a "Failure: 200 OK" body even on success — status only,
     // exactly as seekTo() notes.
-    await plexReq('GET', `/player/playback/${verb}?${params}`, {
-      token: PLEX_TOKEN, host: client.uri || null,
-    });
-    return { ok: true };
+    await plexReq(
+      "GET",
+      `/player/playback/${verb}?${params}`,
+      {
+        token: PLEX_TOKEN,
+        host: client.uri || null,
+      },
+    )
+    return { ok: true }
   } catch (e) {
-    return { ok: false, error: errMessage(e) };
+    return { ok: false, error: errMessage(e) }
   }
 }
 
-export async function stopPlayback(device: Device | null = null): Promise<boolean> {
-  const r = await playerCommand('stop', device);
-  if (!r.ok && r.error) console.log(`[playback] stop failed: ${r.error}`);
-  return r.ok;
+export async function stopPlayback(
+  device: Device | null = null,
+): Promise<boolean> {
+  const r = await playerCommand("stop", device)
+  if (!r.ok && r.error)
+    console.log(`[playback] stop failed: ${r.error}`)
+  return r.ok
 }
 
 /**
@@ -1270,15 +1577,21 @@ export async function stopPlayback(device: Device | null = null): Promise<boolea
  * Companion is up; a refusal here is real news, not a state to grind through.
  */
 export async function transport(
-  action: 'stop' | 'pause' | 'resume' | 'next',
+  action: "stop" | "pause" | "resume" | "next",
   device: Device | null = null,
 ): Promise<{ ok: boolean; error?: string }> {
   // `resume` is Companion's `play`. The app's vocabulary is pause/resume because the bar
   // shows one toggle; Plex's is pause/play. Translate here, once.
-  const verb = action === 'resume' ? 'play' : action === 'next' ? 'skipNext' : action;
-  const r = await playerCommand(verb, device);
-  if (!r.ok) console.log(`[playback] ${action} failed: ${r.error}`);
-  return r;
+  const verb =
+    action === "resume"
+      ? "play"
+      : action === "next"
+        ? "skipNext"
+        : action
+  const r = await playerCommand(verb, device)
+  if (!r.ok)
+    console.log(`[playback] ${action} failed: ${r.error}`)
+  return r
 }
 
 // Seek the target player to `offsetMs` via Companion. Same transport as playMedia.
@@ -1296,182 +1609,276 @@ async function seekToOnDevice(
     userUuid = null,
     playQueueID = null,
   }: {
-    device?: Device | null;
+    device?: Device | null
     /** The target resolved once at arm time — see `currentSession()`. */
-    client?: ClientTarget | null;
-    setName?: string | null;
-    userUuid?: string | null;
-    playQueueID?: number | string | null;
+    client?: ClientTarget | null
+    setName?: string | null
+    userUuid?: string | null
+    playQueueID?: number | string | null
   } = {},
 ): Promise<SeekResult> {
-  const ms = intOffset(offsetMs);
-  if (deviceOperationCancelled()) return { seeked: false, error: 'playback operation was replaced' };
-  if (!(ms > 0)) return { seeked: false, error: 'nothing to seek to' };
-  const target = client ?? await findClient(device);
-  if (!target) return { seeked: false, error: 'target client not found' };
-  if (adb.usesModernPlayback(device)) {
-    const rememberedPlayer = modernPlayerQueues.get(playerQueueKey(target) || '');
-    playQueueID ??= rememberedPlayer?.id ?? null;
-    userUuid ??= rememberedPlayer?.userUuid ?? null;
-    const remembered = playQueueID == null ? null : playQueueHosts.get(String(playQueueID));
-    if (!remembered || playQueueID == null) return { seeked: false, error: 'Plex queue context is unavailable for seeking' };
-    const queue = await readPlayQueue(playQueueID);
-    const session = await currentSession({ device, client: target, playQueueID, userUuid });
-    const selected = queue?.items[queue.selectedOffset];
-    if (!selected || !session || session.ratingKey !== selected.ratingKey) {
-      return { seeked: false, error: 'The active Plex item does not match the queue selection' };
+  const ms = intOffset(offsetMs)
+  if (deviceOperationCancelled())
+    return {
+      seeked: false,
+      error: "playback operation was replaced",
     }
-    if (selected.plexServer) return { seeked: false, error: 'Seeking shared-server items is unavailable in the new Plex app' };
+  if (!(ms > 0))
+    return { seeked: false, error: "nothing to seek to" }
+  const target = client ?? (await findClient(device))
+  if (!target)
+    return {
+      seeked: false,
+      error: "target client not found",
+    }
+  if (adb.usesModernPlayback(device)) {
+    const rememberedPlayer = modernPlayerQueues.get(
+      playerQueueKey(target) || "",
+    )
+    playQueueID ??= rememberedPlayer?.id ?? null
+    userUuid ??= rememberedPlayer?.userUuid ?? null
+    const remembered =
+      playQueueID == null
+        ? null
+        : playQueueHosts.get(String(playQueueID))
+    if (!remembered || playQueueID == null)
+      return {
+        seeked: false,
+        error:
+          "Plex queue context is unavailable for seeking",
+      }
+    const queue = await readPlayQueue(playQueueID)
+    const session = await currentSession({
+      device,
+      client: target,
+      playQueueID,
+      userUuid,
+    })
+    const selected = queue?.items[queue.selectedOffset]
+    if (
+      !selected ||
+      !session ||
+      session.ratingKey !== selected.ratingKey
+    ) {
+      return {
+        seeked: false,
+        error:
+          "The active Plex item does not match the queue selection",
+      }
+    }
+    if (selected.plexServer)
+      return {
+        seeked: false,
+        error:
+          "Seeking shared-server items is unavailable in the new Plex app",
+      }
     // The new route only applies its offset when opening a player. Leave the current
     // player, then adopt the SAME queue at its server-confirmed current item.
-    if (deviceOperationCancelled()) return { seeked: false, error: 'playback operation was replaced' };
-    const stopped = adb.modernPlayerCommand('stop');
-    if (!stopped.ok) return { seeked: false, error: stopped.error };
-    const sent = await adb.playModernQueue(remembered.machineIdentifier, playQueueID, ms, session.ratingKey);
-    return sent.ok ? { seeked: true, offset: Math.floor(ms / 1000) * 1000 } : { seeked: false, error: sent.error };
+    if (deviceOperationCancelled())
+      return {
+        seeked: false,
+        error: "playback operation was replaced",
+      }
+    const stopped = adb.modernPlayerCommand("stop")
+    if (!stopped.ok)
+      return { seeked: false, error: stopped.error }
+    const sent = await adb.playModernQueue(
+      remembered.machineIdentifier,
+      playQueueID,
+      ms,
+      session.ratingKey,
+    )
+    return sent.ok
+      ? {
+          seeked: true,
+          offset: Math.floor(ms / 1000) * 1000,
+        }
+      : { seeked: false, error: sent.error }
   }
-  let source: Awaited<ReturnType<typeof selectedSource>>;
+  let source: Awaited<ReturnType<typeof selectedSource>>
   try {
-    source = await selectedSource(playQueueID, userUuid);
+    source = await selectedSource(playQueueID, userUuid)
   } catch (e) {
-    return { seeked: false, error: errMessage(e) };
+    return { seeked: false, error: errMessage(e) }
   }
-  const token = source?.token ?? await playToken(setName, userUuid);
+  const token =
+    source?.token ?? (await playToken(setName, userUuid))
   const send = async (to: ClientTarget): Promise<void> => {
     const params = new URLSearchParams({
       offset: String(ms),
-      type: 'video',
-      machineIdentifier: source?.machineIdentifier ?? await machineIdentifier(),
-      'X-Plex-Target-Client-Identifier': to.machineIdentifier || '',
-      'X-Plex-Client-Identifier': CLIENT_ID,
+      type: "video",
+      machineIdentifier:
+        source?.machineIdentifier ??
+        (await machineIdentifier()),
+      "X-Plex-Target-Client-Identifier":
+        to.machineIdentifier || "",
+      "X-Plex-Client-Identifier": CLIENT_ID,
       commandID: nextCommandId(),
-    });
+    })
     // Companion answers 200 with a "Failure: 200 OK" body even on success — status only.
-    await plexReq('GET', `/player/playback/seekTo?${params}`, { token, host: to.uri || null });
-  };
+    await plexReq(
+      "GET",
+      `/player/playback/seekTo?${params}`,
+      { token, host: to.uri || null },
+    )
+  }
   try {
-    await send(target);
-    return { seeked: true, offset: ms };
+    await send(target)
+    return { seeked: true, offset: ms }
   } catch (e) {
     // A target handed in at arm time can go stale mid-session: the player takes a new address
     // off DHCP, or plex.tv starts advertising a different connection. So a failure against a
     // CACHED target is not final — drop what is memoised, resolve again, and send once more.
     // A target we resolved ourselves in this call is already fresh, so there is nothing to
     // retry and the failure stands.
-    if (!client) return { seeked: false, error: errMessage(e) };
-    _resetCompanionTarget();
-    let fresh: ClientTarget | null = null;
-    try { fresh = await findClient(device); } catch { fresh = null; }
-    if (!fresh) return { seeked: false, error: errMessage(e) };
+    if (!client)
+      return { seeked: false, error: errMessage(e) }
+    _resetCompanionTarget()
+    let fresh: ClientTarget | null = null
     try {
-      await send(fresh);
-      return { seeked: true, offset: ms };
+      fresh = await findClient(device)
+    } catch {
+      fresh = null
+    }
+    if (!fresh)
+      return { seeked: false, error: errMessage(e) }
+    try {
+      await send(fresh)
+      return { seeked: true, offset: ms }
     } catch (again) {
-      return { seeked: false, error: errMessage(again) };
+      return { seeked: false, error: errMessage(again) }
     }
   }
 }
 
-async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undefined, {
-  setName = null,
-  device = null,
-  offset = 0,
-  userUuid = null,
-}: {
-  setName?: string | null;
-  device?: Device | null;
-  offset?: number | string | null;
-  userUuid?: string | null;
-} = {}): Promise<PlaybackResult> {
-  const refs = queueItemRefs(items);
-  const ratingKeys = refs.map((item) => item.ratingKey);
+async function playRatingKeysOnDevice(
+  items: PlexQueueItemInput[] | null | undefined,
+  {
+    setName = null,
+    device = null,
+    offset = 0,
+    userUuid = null,
+  }: {
+    setName?: string | null
+    device?: Device | null
+    offset?: number | string | null
+    userUuid?: string | null
+  } = {},
+): Promise<PlaybackResult> {
+  const refs = queueItemRefs(items)
+  const ratingKeys = refs.map((item) => item.ratingKey)
   // Only the audio preference this path reads off the set. `getSet()` is still JS, so the wider
   // `SetRegistryEntry` it really returns is not visible here yet.
-  let cfg: { audio_language?: string | null } = {};
+  let cfg: { audio_language?: string | null } = {}
   if (setName) {
-    try { cfg = (await getSet(setName)) || {}; } catch { cfg = {}; }
+    try {
+      cfg = (await getSet(setName)) || {}
+    } catch {
+      cfg = {}
+    }
   }
 
-  const lang = cfg.audio_language;
+  const lang = cfg.audio_language
   if (lang) {
     try {
-      const byServer = new Map<string | null, string[]>();
+      const byServer = new Map<string | null, string[]>()
       for (const item of refs) {
-        const source = item.plexServer || null;
-        const keys = byServer.get(source) || [];
-        keys.push(item.ratingKey);
-        byServer.set(source, keys);
+        const source = item.plexServer || null
+        const keys = byServer.get(source) || []
+        keys.push(item.ratingKey)
+        byServer.set(source, keys)
       }
       for (const [server, keys] of byServer) {
         if (!server) {
-          await applyAudioLanguage(keys, await playToken(setName, userUuid), lang);
+          await applyAudioLanguage(
+            keys,
+            await playToken(setName, userUuid),
+            lang,
+          )
         } else {
-          const access = await sharedAccess(userUuid, server);
-          if (access) await applyAudioLanguage(keys, access.token, lang, access.baseUrl);
+          const access = await sharedAccess(
+            userUuid,
+            server,
+          )
+          if (access)
+            await applyAudioLanguage(
+              keys,
+              access.token,
+              lang,
+              access.baseUrl,
+            )
         }
       }
     } catch (e) {
       // Never let audio prefs block playback.
-      console.log(`[audio] language '${lang}' not applied: ${errMessage(e)}`);
+      console.log(
+        `[audio] language '${lang}' not applied: ${errMessage(e)}`,
+      )
     }
   }
 
-  const mode = (device && device.mode) || PLAYBACK_MODE;
-  if (mode === 'cast') {
+  const mode = (device && device.mode) || PLAYBACK_MODE
+  if (mode === "cast") {
     if (refs.some((item) => item.plexServer)) {
       return {
         queued: refs.length,
         played: false,
-        mode: 'cast',
+        mode: "cast",
         client: device?.name || SHIELD_CAST_NAME || null,
-        error: 'shared Plex server items require client playback',
-      };
+        error:
+          "shared Plex server items require client playback",
+      }
     }
-    return castPlay(ratingKeys, setName, device && device.name, offset);
+    return castPlay(
+      ratingKeys,
+      setName,
+      device && device.name,
+      offset,
+    )
   }
 
   const result: PlaybackResult = {
     queued: (ratingKeys || []).length,
     played: false,
-    mode: 'client',
+    mode: "client",
     client: null,
-  };
+  }
   if (!ratingKeys || !ratingKeys.length) {
-    result.error = 'nothing to play';
-    return result;
+    result.error = "nothing to play"
+    return result
   }
 
-  const tok = await playToken(setName, userUuid);
-  const modernPlayback = adb.usesModernPlayback(device);
-  const client = await findClient(device);
+  const tok = await playToken(setName, userUuid)
+  const modernPlayback = adb.usesModernPlayback(device)
+  const client = await findClient(device)
   // Even an infinite sitting refills through QueuePilot, never Plex series expansion.
-  let pqId: number | string | null = null;
-  let queueHost: PlayQueueHost;
+  let pqId: number | string | null = null
+  let queueHost: PlayQueueHost
   try {
-    queueHost = await playQueueHost(refs[0]!, userUuid, tok);
+    queueHost = await playQueueHost(refs[0]!, userUuid, tok)
   } catch (e) {
-    result.error = `${errName(e)}: ${errMessage(e)}`;
-    return result;
+    result.error = `${errName(e)}: ${errMessage(e)}`
+    return result
   }
   // What we are ASKING Plex for, before we ask. The head is the whole point of an ordered
   // queue, so it is named rather than left to be inferred from a count
   // (decision `2026-08-26-a-scan-logs-the-lineup-it-built`).
   console.log(
-    `[play] ${setName ?? '(no set)'}: ${ratingKeys.length} key(s), head rk=${ratingKeys[0]}, `
-    + `offset=${Math.round(intOffset(offset) / 1000)}s, continuous=false`,
-  );
+    `[play] ${setName ?? "(no set)"}: ${ratingKeys.length} key(s), head rk=${ratingKeys[0]}, ` +
+      `offset=${Math.round(intOffset(offset) / 1000)}s, continuous=false`,
+  )
   try {
     pqId = await createPlayQueue(refs, {
       token: queueHost.token,
       host: queueHost.apiBaseUrl,
       machineIdentifier: queueHost.machineIdentifier,
       streamBaseUrl: queueHost.streamBaseUrl,
-    });
+    })
   } catch (e) {
-    result.error = `${errName(e)}: ${errMessage(e)}`;
-    return result;
+    result.error = `${errName(e)}: ${errMessage(e)}`
+    return result
   }
-  result.playQueueID = pqId;
+  result.playQueueID = pqId
 
   // And what Plex BUILT. These two agreeing has always been an assumption: `createPlayQueue`
   // posts a multi-key `library/metadata/K1,K2,…` uri and reads back only the id, so a queue
@@ -1481,66 +1888,92 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
   // separate that from a lineup we built wrong. Now it is one WARN.
   if (pqId != null) {
     try {
-      const built = await readPlayQueue(pqId, { token: tok });
-      const builtHead = built?.ratingKeys[0];
-      const askedHead = refs[0]!;
-      const builtHeadItem = built?.items[0];
-      const sourceChanged = Boolean(builtHeadItem)
-        && (builtHeadItem!.plexServer || null) !== (askedHead.plexServer || null);
+      const built = await readPlayQueue(pqId, {
+        token: tok,
+      })
+      const builtHead = built?.ratingKeys[0]
+      const askedHead = refs[0]!
+      const builtHeadItem = built?.items[0]
+      const sourceChanged =
+        Boolean(builtHeadItem) &&
+        (builtHeadItem!.plexServer || null) !==
+          (askedHead.plexServer || null)
       if (refs.some((item) => item.plexServer)) {
-        const matches = built?.items.length === refs.length
-          && refs.every((item, index) => {
-            const actual = built.items[index];
-            return actual?.ratingKey === item.ratingKey
-              && actual.plexServer === item.plexServer;
-          });
+        const matches =
+          built?.items.length === refs.length &&
+          refs.every((item, index) => {
+            const actual = built.items[index]
+            return (
+              actual?.ratingKey === item.ratingKey &&
+              actual.plexServer === item.plexServer
+            )
+          })
         if (!matches) {
-          result.error = 'Plex did not retain the full mixed-server queue in order';
-          return result;
+          result.error =
+            "Plex did not retain the full mixed-server queue in order"
+          return result
         }
       }
-      if (built && (builtHead !== askedHead.ratingKey || sourceChanged)) {
+      if (
+        built &&
+        (builtHead !== askedHead.ratingKey || sourceChanged)
+      ) {
         console.log(
-          `[play] ⚠ Plex reordered the playQueue: asked for head rk=${askedHead.ratingKey}, `
-          + `playQueue ${pqId} leads with rk=${builtHead} (${built.ratingKeys.length} item(s))`,
-        );
-      } else if (built && built.ratingKeys.length !== ratingKeys.length) {
+          `[play] ⚠ Plex reordered the playQueue: asked for head rk=${askedHead.ratingKey}, ` +
+            `playQueue ${pqId} leads with rk=${builtHead} (${built.ratingKeys.length} item(s))`,
+        )
+      } else if (
+        built &&
+        built.ratingKeys.length !== ratingKeys.length
+      ) {
         console.log(
-          `[play] ⚠ Plex kept ${built.ratingKeys.length} of ${ratingKeys.length} item(s) in `
-          + `playQueue ${pqId} — the returned queue size differs`,
-        );
+          `[play] ⚠ Plex kept ${built.ratingKeys.length} of ${ratingKeys.length} item(s) in ` +
+            `playQueue ${pqId} — the returned queue size differs`,
+        )
       } else if (built) {
-        console.log(`[play] playQueue ${pqId}: ${built.ratingKeys.length} item(s), head rk=${builtHead}`);
+        console.log(
+          `[play] playQueue ${pqId}: ${built.ratingKeys.length} item(s), head rk=${builtHead}`,
+        )
       }
     } catch (e) {
       // A readback failure is never worth failing a start over — it is a log line.
-      console.log(`[play] playQueue ${pqId} readback failed: ${errMessage(e)}`);
+      console.log(
+        `[play] playQueue ${pqId} readback failed: ${errMessage(e)}`,
+      )
     }
   }
 
   if (modernPlayback) {
-    result.client = device?.name || SHIELD_CLIENT_NAME || null;
-    const sent = await adb.playModernQueue(queueHost.machineIdentifier, pqId!, intOffset(offset), refs[0]!.ratingKey);
-    result.played = sent.ok;
-    result.error = sent.error;
-    const key = playerQueueKey(client);
-    if (sent.ok && key && pqId != null) modernPlayerQueues.set(key, { id: pqId, userUuid });
-    return result;
+    result.client =
+      device?.name || SHIELD_CLIENT_NAME || null
+    const sent = await adb.playModernQueue(
+      queueHost.machineIdentifier,
+      pqId!,
+      intOffset(offset),
+      refs[0]!.ratingKey,
+    )
+    result.played = sent.ok
+    result.error = sent.error
+    const key = playerQueueKey(client)
+    if (sent.ok && key && pqId != null)
+      modernPlayerQueues.set(key, { id: pqId, userUuid })
+    return result
   }
   if (!client) {
-    result.error = "target Shield not listed as a player (is its Plex app installed/signed in?)";
-    return result;
+    result.error =
+      "target Shield not listed as a player (is its Plex app installed/signed in?)"
+    return result
   }
-  result.client = client.name || null;
+  result.client = client.name || null
 
-  let srv: URL;
+  let srv: URL
   try {
-    srv = new URL(queueHost.streamBaseUrl);
+    srv = new URL(queueHost.streamBaseUrl)
   } catch {
-    result.error = `invalid Plex source URL: ${queueHost.streamBaseUrl}`;
-    return result;
+    result.error = `invalid Plex source URL: ${queueHost.streamBaseUrl}`
+    return result
   }
-  const first = refs[0]!.ratingKey;
+  const first = refs[0]!.ratingKey
   const params = new URLSearchParams({
     key: `/library/metadata/${first}`,
     // Resume point (ms) for the first item — 0 plays from the top.
@@ -1549,50 +1982,58 @@ async function playRatingKeysOnDevice(items: PlexQueueItemInput[] | null | undef
     // Where the Shield should stream FROM — it can't infer this when we bypass the
     // server's relay, so hand it the LAN address explicitly.
     address: srv.hostname,
-    port: String(srv.port || (srv.protocol === 'https:' ? 443 : 32400)),
-    protocol: srv.protocol.replace(/:$/, ''),
+    port: String(
+      srv.port || (srv.protocol === "https:" ? 443 : 32400),
+    ),
+    protocol: srv.protocol.replace(/:$/, ""),
     containerKey: `/playQueues/${pqId}`,
     token: queueHost.token,
-    'X-Plex-Target-Client-Identifier': client.machineIdentifier || '',
-    'X-Plex-Client-Identifier': CLIENT_ID,
+    "X-Plex-Target-Client-Identifier":
+      client.machineIdentifier || "",
+    "X-Plex-Client-Identifier": CLIENT_ID,
     commandID: nextCommandId(),
-  });
+  })
 
   // Companion host: prefer the direct uri; fall back to Plex server relay if missing
   // (rare — Shield never appears on /clients, so uri is the real path).
-  const host = client.uri || null;
+  const host = client.uri || null
   try {
     // Companion answers 200 with body "Failure: 200 OK" even when playback DOES start —
     // the body is not a usable success signal; only the HTTP status is.
-    await plexReq('GET', `/player/playback/playMedia?${params}`, {
-      token: queueHost.token,
-      host,
-      extraHeaders: {
-        'X-Plex-Device-Name': 'queuepilot',
-        'X-Plex-Product': 'queuepilot',
-        'X-Plex-Version': '1.0',
+    await plexReq(
+      "GET",
+      `/player/playback/playMedia?${params}`,
+      {
+        token: queueHost.token,
+        host,
+        extraHeaders: {
+          "X-Plex-Device-Name": "queuepilot",
+          "X-Plex-Product": "queuepilot",
+          "X-Plex-Version": "1.0",
+        },
+        timeoutMs: 30_000,
       },
-      timeoutMs: 30_000,
-    });
-    result.played = true;
+    )
+    result.played = true
   } catch (e) {
     if (isPlexError(e) && e.plexStatus) {
-      result.error = `playMedia HTTP ${e.plexStatus}`;
+      result.error = `playMedia HTTP ${e.plexStatus}`
     } else {
       // Preserve ECONNREFUSED / "connection refused" wording so driver._isConnRefused matches.
       // NOTE the two different `code`s in play here: this one is Node's STRING errno off a
       // socket failure, not the numeric HTTP mirror PlexError carries. See errors.ts.
-      const msg = errMessage(e);
+      const msg = errMessage(e)
       const code = isNodeError(e)
-        ? (e.code || (e.cause as { code?: string } | undefined)?.code)
-        : undefined;
-      const name = errName(e);
+        ? e.code ||
+          (e.cause as { code?: string } | undefined)?.code
+        : undefined
+      const name = errName(e)
       result.error = code
         ? `${name}: ${msg} (${code})`
-        : `${name}: ${msg}`;
+        : `${name}: ${msg}`
     }
   }
-  return result;
+  return result
 }
 
 // Convenience re-export shape for tests that want the Python-ish names as an object.
@@ -1605,16 +2046,28 @@ export const _internals = {
   queueItemRefs,
   plexReq,
   sleep,
-};
-
-export function playRatingKeys(...args: Parameters<typeof playRatingKeysOnDevice>): ReturnType<typeof playRatingKeysOnDevice> {
-  return withDevice(args[1]?.device ?? null, () => playRatingKeysOnDevice(...args));
 }
 
-export function seekTo(...args: Parameters<typeof seekToOnDevice>): ReturnType<typeof seekToOnDevice> {
-  return withDevice(args[1]?.device ?? null, () => seekToOnDevice(...args));
+export function playRatingKeys(
+  ...args: Parameters<typeof playRatingKeysOnDevice>
+): ReturnType<typeof playRatingKeysOnDevice> {
+  return withDevice(args[1]?.device ?? null, () =>
+    playRatingKeysOnDevice(...args),
+  )
 }
 
-function playerCommand(...args: Parameters<typeof playerCommandOnDevice>): ReturnType<typeof playerCommandOnDevice> {
-  return withDevice(args[1] ?? null, () => playerCommandOnDevice(...args));
+export function seekTo(
+  ...args: Parameters<typeof seekToOnDevice>
+): ReturnType<typeof seekToOnDevice> {
+  return withDevice(args[1]?.device ?? null, () =>
+    seekToOnDevice(...args),
+  )
+}
+
+function playerCommand(
+  ...args: Parameters<typeof playerCommandOnDevice>
+): ReturnType<typeof playerCommandOnDevice> {
+  return withDevice(args[1] ?? null, () =>
+    playerCommandOnDevice(...args),
+  )
 }

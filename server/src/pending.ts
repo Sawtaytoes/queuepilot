@@ -18,53 +18,66 @@
 // It is NOT the derived cache: a dismissal is a decision, it is not recomputable from Plex,
 // and it belongs in a file the owner can read and edit like every other decision this app
 // stores (2026-08-03-sqlite-is-a-derived-plex-cache-not-the-store).
-import { store } from './store/index.js';
-import type { PendingState } from './store/pending.js';
-import * as queues from './queues.js';
-import * as routing from './engine/routing.js';
-import { describe, resolveQueueEntry, resolveSections } from './engine/resolve.js';
-import { collectionChildren, findCollection } from './engine/select.js';
-import { mapLimit } from './routes/mapLimit.js';
-import { isSetAvailable } from './season.js';
-import type { EntryDescriptor } from './engine/resolve.js';
-import type { PlexClient, PlexMetadata, RoutingRotationCfg, RoutingSetCfg } from './types.js';
+
+import type { EntryDescriptor } from "./engine/resolve.js"
+import {
+  describe,
+  resolveQueueEntry,
+  resolveSections,
+} from "./engine/resolve.js"
+import * as routing from "./engine/routing.js"
+import {
+  collectionChildren,
+  findCollection,
+} from "./engine/select.js"
+import * as queues from "./queues.js"
+import { mapLimit } from "./routes/mapLimit.js"
+import { isSetAvailable } from "./season.js"
+import { store } from "./store/index.js"
+import type { PendingState } from "./store/pending.js"
+import type {
+  PlexClient,
+  PlexMetadata,
+  RoutingRotationCfg,
+  RoutingSetCfg,
+} from "./types.js"
 
 export interface PendingItem {
-  ratingKey: string;
+  ratingKey: string
   /** The item's own page in Plex. Added by the HTTP route, not the pending resolver. */
-  webUrl?: string | null;
-  title: string;
-  year: number | null;
+  webUrl?: string | null
+  title: string
+  year: number | null
   /**
    * A COLLECTION is a pending row of its own, beside the films inside it — never instead of
    * them (decision `2026-08-22-pending-lists-collections-as-well-as-their-members`).
    */
-  type: 'movie' | 'show' | 'collection';
-  sectionId: number;
-  librarySectionTitle: string;
-  contentRating: string | null;
-  editionTitle: string | null;
-  addedAt: number;
+  type: "movie" | "show" | "collection"
+  sectionId: number
+  librarySectionTitle: string
+  contentRating: string | null
+  editionTitle: string | null
+  addedAt: number
   /** Collections only: how many items are in it. Null on everything else. */
-  childCount?: number | null;
+  childCount?: number | null
 }
 
 /** One collection as the pending pass needs it — `plex.collections()`' row, narrowed. */
 export interface PendingCollectionRow {
-  ratingKey: string;
-  title: string | undefined;
-  sectionId: number;
-  childCount: number | null;
+  ratingKey: string
+  title: string | undefined
+  sectionId: number
+  childCount: number | null
 }
 
 // `pending.yaml` itself — the state shape, the file header, the read and the write — lives in
 // `store/pending.ts`. Re-exported under the names every caller already uses, because what is
 // durable here is two decisions and a watermark, and what is interesting here is the
 // subtraction below that consumes them.
-export type { PendingState } from './store/pending.js';
+export type { PendingState } from "./store/pending.js"
 
-export const readState = store.pending.read;
-export const writeState = store.pending.write;
+export const readState = store.pending.read
+export const writeState = store.pending.write
 
 /**
  * Choose which libraries the screen draws from.
@@ -76,27 +89,36 @@ export const writeState = store.pending.write;
  * Ids are de-duplicated and sorted so the file does not churn on a re-save that changed
  * nothing, and so a hand-edited file and a UI-written one look the same.
  */
-export async function setLibraries(ids: number[] | null): Promise<PendingState> {
-  const state = await readState();
+export async function setLibraries(
+  ids: number[] | null,
+): Promise<PendingState> {
+  const state = await readState()
   const next: PendingState = {
     ...state,
     libraries:
       ids === null
         ? null
-        : [...new Set(ids.map(Number).filter((id) => Number.isFinite(id)))].sort(
-            (a, b) => a - b,
-          ),
-  };
-  await writeState(next);
-  return next;
+        : [
+            ...new Set(
+              ids
+                .map(Number)
+                .filter((id) => Number.isFinite(id)),
+            ),
+          ].sort((a, b) => a - b),
+  }
+  await writeState(next)
+  return next
 }
 
 /** Dismiss one item. Idempotent — dismissing twice is not an error, it is a double-click. */
-export async function dismiss(ratingKey: string): Promise<PendingState> {
-  const state = await readState();
-  if (!state.dismissed.includes(ratingKey)) state.dismissed.push(ratingKey);
-  await writeState(state);
-  return state;
+export async function dismiss(
+  ratingKey: string,
+): Promise<PendingState> {
+  const state = await readState()
+  if (!state.dismissed.includes(ratingKey))
+    state.dismissed.push(ratingKey)
+  await writeState(state)
+  return state
 }
 
 /**
@@ -106,16 +128,18 @@ export async function dismiss(ratingKey: string): Promise<PendingState> {
  * watermark already covers. Anything added AFTER the watermark stays dismissed, because that
  * decision is still doing work.
  */
-export async function markSeen(at?: number): Promise<PendingState> {
-  const now = at ?? Math.floor(Date.now() / 1000);
-  const state = await readState();
+export async function markSeen(
+  at?: number,
+): Promise<PendingState> {
+  const now = at ?? Math.floor(Date.now() / 1000)
+  const state = await readState()
   const next: PendingState = {
     seen_through: now,
     dismissed: state.dismissed,
     libraries: state.libraries,
-  };
-  await writeState(next);
-  return next;
+  }
+  await writeState(next)
+  return next
 }
 
 // --- coverage ------------------------------------------------------------------ //
@@ -135,21 +159,30 @@ export async function markSeen(at?: number): Promise<PendingState> {
  * above zero here too, and survives. The cost of a false positive is one Plex query that comes
  * back not matching; the cost of a false negative would be an item wrongly reported as new.
  */
-function couldName(desc: EntryDescriptor, item: PendingItem): boolean {
-  if (desc.guid) return true;
-  const wanted = (desc.title || '').toLowerCase();
-  if (!wanted) return false;
-  const candidate = item.title.toLowerCase();
-  let score = 0;
-  if (desc.year != null && item.year === desc.year) score += 10;
-  else if (desc.year != null && item.year != null && item.year !== desc.year) score -= 5;
-  if (candidate === wanted) score += 5;
-  else if (candidate.startsWith(wanted)) score += 1;
-  return score > 0;
+function couldName(
+  desc: EntryDescriptor,
+  item: PendingItem,
+): boolean {
+  if (desc.guid) return true
+  const wanted = (desc.title || "").toLowerCase()
+  if (!wanted) return false
+  const candidate = item.title.toLowerCase()
+  let score = 0
+  if (desc.year != null && item.year === desc.year)
+    score += 10
+  else if (
+    desc.year != null &&
+    item.year != null &&
+    item.year !== desc.year
+  )
+    score -= 5
+  if (candidate === wanted) score += 5
+  else if (candidate.startsWith(wanted)) score += 1
+  return score > 0
 }
 
 /** How many title lookups run at once. Matches the tile fan-out in `/api/queues`. */
-const RESOLVE_CONCURRENCY = 6;
+const RESOLVE_CONCURRENCY = 6
 
 /**
  * Every ratingKey a CURATED set already names — queue entries and pool members alike.
@@ -177,32 +210,49 @@ async function curatedKeys(
   client: PlexClient,
   sets: Record<string, RoutingSetCfg>,
   fresh: readonly PendingItem[],
-): Promise<{ named: Set<string>; namedCollections: Set<string> }> {
-  const named = new Set<string>();
+): Promise<{
+  named: Set<string>
+  namedCollections: Set<string>
+}> {
+  const named = new Set<string>()
   // The collections a queue or pool ALREADY names, by ratingKey. Collected here because this
   // is the one place that resolves a `{collection: <name>}` entry to a collection id, and the
   // collections pass needs exactly that answer to not offer what is already covered.
-  const namedCollections = new Set<string>();
-  const collections: { name: string; cfg: RoutingSetCfg }[] = [];
-  const titled: { desc: EntryDescriptor; cfg: RoutingSetCfg }[] = [];
+  const namedCollections = new Set<string>()
+  const collections: {
+    name: string
+    cfg: RoutingSetCfg
+  }[] = []
+  const titled: {
+    desc: EntryDescriptor
+    cfg: RoutingSetCfg
+  }[] = []
 
-  const noteValue = (value: unknown, cfg: RoutingSetCfg): void => {
-    if (value == null) return;
+  const noteValue = (
+    value: unknown,
+    cfg: RoutingSetCfg,
+  ): void => {
+    if (value == null) return
     // `describe()` is the engine's own entry parser. Using it instead of the hand-rolled
     // reader that stood here also repairs a shape that reader could not see: a
     // `{collection: <name>}` MAPPING never matched its `^collection:` regex (the prefix is in
     // the KEY, not the value), so that collection's children were all reported as pending.
-    const desc = describe(value);
-    if (desc.ratingKey) named.add(desc.ratingKey);
-    if (desc.collection) collections.push({ name: desc.collection, cfg });
-    else if (!desc.ratingKey && desc.title) titled.push({ desc, cfg });
-  };
+    const desc = describe(value)
+    if (desc.ratingKey) named.add(desc.ratingKey)
+    if (desc.collection)
+      collections.push({ name: desc.collection, cfg })
+    else if (!desc.ratingKey && desc.title)
+      titled.push({ desc, cfg })
+  }
 
   for (const [id, cfg] of Object.entries(sets)) {
-    for (const m of (cfg as RoutingRotationCfg).members || []) noteValue(m, cfg);
+    for (const m of (cfg as RoutingRotationCfg).members ||
+      [])
+      noteValue(m, cfg)
     // A curated queue's entries live in queues.yaml, not in the set.
     try {
-      for (const entry of await queues.listSet(id)) noteValue(entry.value, cfg);
+      for (const entry of await queues.listSet(id))
+        noteValue(entry.value, cfg)
     } catch {
       /* a set with no queue file simply names nothing */
     }
@@ -213,11 +263,21 @@ async function curatedKeys(
   // reported as pending.
   for (const { name, cfg } of collections) {
     for (const sec of routing.setSections(cfg) || []) {
-      const crk = await findCollection(client, sec, name, null);
-      if (!crk) continue;
-      namedCollections.add(String(crk));
-      for (const ch of await collectionChildren(client, crk, null)) named.add(String(ch.ratingKey));
-      break;
+      const crk = await findCollection(
+        client,
+        sec,
+        name,
+        null,
+      )
+      if (!crk) continue
+      namedCollections.add(String(crk))
+      for (const ch of await collectionChildren(
+        client,
+        crk,
+        null,
+      ))
+        named.add(String(ch.ratingKey))
+      break
     }
   }
 
@@ -225,22 +285,36 @@ async function curatedKeys(
   // from the engine's own `resolveSections` rather than `routing.setSections`, because that is
   // the list `resolveQueueEntry` will search — filtering against a different one would skip a
   // resolution the engine goes on to make.
-  const freshBySection = new Map<number, PendingItem[]>();
+  const freshBySection = new Map<number, PendingItem[]>()
   for (const item of fresh) {
-    const list = freshBySection.get(item.sectionId);
-    if (list) list.push(item);
-    else freshBySection.set(item.sectionId, [item]);
+    const list = freshBySection.get(item.sectionId)
+    if (list) list.push(item)
+    else freshBySection.set(item.sectionId, [item])
   }
   const worthResolving = titled.filter(({ desc, cfg }) =>
     resolveSections(cfg)
-      .flatMap((sec) => (sec == null ? [] : freshBySection.get(Number(sec)) || []))
-      .some((item) => couldName(desc, item)));
-  await mapLimit(worthResolving, RESOLVE_CONCURRENCY, async ({ desc, cfg }) => {
-    const [ratingKey] = await resolveQueueEntry(client, desc, cfg, null);
-    if (ratingKey) named.add(ratingKey);
-  });
+      .flatMap((sec) =>
+        sec == null
+          ? []
+          : freshBySection.get(Number(sec)) || [],
+      )
+      .some((item) => couldName(desc, item)),
+  )
+  await mapLimit(
+    worthResolving,
+    RESOLVE_CONCURRENCY,
+    async ({ desc, cfg }) => {
+      const [ratingKey] = await resolveQueueEntry(
+        client,
+        desc,
+        cfg,
+        null,
+      )
+      if (ratingKey) named.add(ratingKey)
+    },
+  )
 
-  return { named, namedCollections };
+  return { named, namedCollections }
 }
 
 /**
@@ -257,24 +331,36 @@ function isInAnyRule(
   blockedBySet: Map<string, Set<string>>,
 ): boolean {
   for (const [id, cfg] of Object.entries(sets)) {
-    if (cfg.source !== 'rotation') continue;
+    if (cfg.source !== "rotation") continue
     // A superseded tier is not a live pool; counting it would hide items nothing plays.
-    if ((cfg as RoutingRotationCfg).superseded_by) continue;
+    if ((cfg as RoutingRotationCfg).superseded_by) continue
     // `enabled` AND in season. "Covered" means a live pool would already play it, and an
     // out-of-season pool would not — counting it hides the item behind a queue nobody can
     // reach until October.
-    if (!isSetAvailable(cfg)) continue;
-    if (!(routing.setSections(cfg) || []).map(Number).includes(item.sectionId)) continue;
-    if (blockedBySet.get(id)?.has(item.ratingKey)) continue;
+    if (!isSetAvailable(cfg)) continue
+    if (
+      !(routing.setSections(cfg) || [])
+        .map(Number)
+        .includes(item.sectionId)
+    )
+      continue
+    if (blockedBySet.get(id)?.has(item.ratingKey)) continue
 
     // ANY binding that would accept it is enough — the pool plays for all of them.
-    const bindings = (cfg as RoutingRotationCfg).profiles || [];
+    const bindings =
+      (cfg as RoutingRotationCfg).profiles || []
     const accepts = bindings.length
-      ? bindings.some((b) => !b.allowed_ratings || b.allowed_ratings.has(String(item.contentRating)))
-      : true;
-    if (accepts) return true;
+      ? bindings.some(
+          (b) =>
+            !b.allowed_ratings ||
+            b.allowed_ratings.has(
+              String(item.contentRating),
+            ),
+        )
+      : true
+    if (accepts) return true
   }
-  return false;
+  return false
 }
 
 /**
@@ -308,20 +394,26 @@ function isInAnyRule(
  */
 function isWatched(md: PlexMetadata, kind: 1 | 2): boolean {
   if (kind === 2) {
-    const leaves = Number(md.leafCount) || 0;
-    return leaves > 0 && (Number(md.viewedLeafCount) || 0) >= leaves;
+    const leaves = Number(md.leafCount) || 0
+    return (
+      leaves > 0 &&
+      (Number(md.viewedLeafCount) || 0) >= leaves
+    )
   }
-  return (Number(md.viewCount) || 0) > 0 || (Number(md.viewOffset) || 0) > 0;
+  return (
+    (Number(md.viewCount) || 0) > 0 ||
+    (Number(md.viewOffset) || 0) > 0
+  )
 }
 
 /** One library as `pendingItems` needs it — the slice of `plex.sections()` it reads. */
 export interface PendingLibrary {
-  id: number;
-  title: string;
-  video: boolean;
-  type: string;
+  id: number
+  title: string
+  video: boolean
+  type: string
   /** Plex "Other Videos" — a Personal Media library with no metadata agent. */
-  other?: boolean;
+  other?: boolean
 }
 
 /**
@@ -347,7 +439,7 @@ export interface PendingLibrary {
 export function defaultLibraries(
   libraries: readonly PendingLibrary[],
 ): PendingLibrary[] {
-  return libraries.filter((l) => l.video && !l.other);
+  return libraries.filter((l) => l.video && !l.other)
 }
 
 /**
@@ -359,11 +451,14 @@ export function defaultLibraries(
  */
 export function selectedLibraries(
   libraries: readonly PendingLibrary[],
-  state: Pick<PendingState, 'libraries'>,
+  state: Pick<PendingState, "libraries">,
 ): PendingLibrary[] {
-  if (state.libraries === null) return defaultLibraries(libraries);
-  const wanted = new Set(state.libraries);
-  return libraries.filter((l) => l.video && wanted.has(l.id));
+  if (state.libraries === null)
+    return defaultLibraries(libraries)
+  const wanted = new Set(state.libraries)
+  return libraries.filter(
+    (l) => l.video && wanted.has(l.id),
+  )
 }
 
 /**
@@ -403,122 +498,167 @@ export async function pendingCollections(
   freshItems: readonly PendingItem[],
   covered: ReadonlySet<string>,
   dismissed: ReadonlySet<string>,
-  listCollections: (sectionId: number) => Promise<PendingCollectionRow[]>,
+  listCollections: (
+    sectionId: number,
+  ) => Promise<PendingCollectionRow[]>,
 ): Promise<PendingItem[]> {
-  const addedByKey = new Map<string, number>();
-  const sectionsWithNews = new Set<number>();
+  const addedByKey = new Map<string, number>()
+  const sectionsWithNews = new Set<number>()
   for (const it of freshItems) {
-    addedByKey.set(it.ratingKey, it.addedAt);
-    sectionsWithNews.add(it.sectionId);
+    addedByKey.set(it.ratingKey, it.addedAt)
+    sectionsWithNews.add(it.sectionId)
   }
-  if (!addedByKey.size) return [];
+  if (!addedByKey.size) return []
 
-  const rows: { row: PendingCollectionRow; lib: PendingLibrary }[] = [];
+  const rows: {
+    row: PendingCollectionRow
+    lib: PendingLibrary
+  }[] = []
   for (const lib of libraries) {
-    if (!sectionsWithNews.has(lib.id)) continue;
-    let found: PendingCollectionRow[] = [];
+    if (!sectionsWithNews.has(lib.id)) continue
+    let found: PendingCollectionRow[] = []
     try {
-      found = await listCollections(lib.id);
+      found = await listCollections(lib.id)
     } catch {
       // A library whose collections cannot be read simply contributes none. The items in it
       // are already on the page; failing the whole request over the extra question would
       // trade the feature for the screen.
-      continue;
+      continue
     }
     for (const row of found) {
-      const rk = String(row.ratingKey);
-      if (dismissed.has(rk) || covered.has(rk)) continue;
-      rows.push({ lib, row });
+      const rk = String(row.ratingKey)
+      if (dismissed.has(rk) || covered.has(rk)) continue
+      rows.push({ lib, row })
     }
   }
-  if (!rows.length) return [];
+  if (!rows.length) return []
 
-  const out = await mapLimit(rows, RESOLVE_CONCURRENCY, async ({ lib, row }): Promise<PendingItem | null> => {
-    let children: { ratingKey?: string | number }[] = [];
-    try {
-      children = await collectionChildren(client, String(row.ratingKey), null);
-    } catch {
-      return null;
-    }
-    let newest = 0;
-    for (const ch of children) {
-      const at = addedByKey.get(String(ch.ratingKey));
-      if (at != null && at > newest) newest = at;
-    }
-    // Nothing pending inside it, so it is not news. A collection whose films are all already
-    // in a queue is exactly the case this must not offer.
-    if (!newest) return null;
+  const out = await mapLimit(
+    rows,
+    RESOLVE_CONCURRENCY,
+    async ({ lib, row }): Promise<PendingItem | null> => {
+      let children: { ratingKey?: string | number }[] = []
+      try {
+        children = await collectionChildren(
+          client,
+          String(row.ratingKey),
+          null,
+        )
+      } catch {
+        return null
+      }
+      let newest = 0
+      for (const ch of children) {
+        const at = addedByKey.get(String(ch.ratingKey))
+        if (at != null && at > newest) newest = at
+      }
+      // Nothing pending inside it, so it is not news. A collection whose films are all already
+      // in a queue is exactly the case this must not offer.
+      if (!newest) return null
 
-    return {
-      ratingKey: String(row.ratingKey),
-      title: String(row.title ?? ''),
-      year: null,
-      type: 'collection' as const,
-      sectionId: lib.id,
-      librarySectionTitle: String(lib.title ?? ''),
-      contentRating: null,
-      editionTitle: null,
-      addedAt: newest,
-      childCount: row.childCount ?? children.length,
-    };
-  });
+      return {
+        ratingKey: String(row.ratingKey),
+        title: String(row.title ?? ""),
+        year: null,
+        type: "collection" as const,
+        sectionId: lib.id,
+        librarySectionTitle: String(lib.title ?? ""),
+        contentRating: null,
+        editionTitle: null,
+        addedAt: newest,
+        childCount: row.childCount ?? children.length,
+      }
+    },
+  )
 
-  return out.filter((row) => row != null);
+  return out.filter((row) => row != null)
 }
 
 export async function pendingItems(
   client: PlexClient,
   libraries: readonly PendingLibrary[],
-  listSection: (sectionId: number, type: 1 | 2) => Promise<PlexMetadata[]>,
-  listCollections?: (sectionId: number) => Promise<PendingCollectionRow[]>,
+  listSection: (
+    sectionId: number,
+    type: 1 | 2,
+  ) => Promise<PlexMetadata[]>,
+  listCollections?: (
+    sectionId: number,
+  ) => Promise<PendingCollectionRow[]>,
 ): Promise<{ items: PendingItem[]; state: PendingState }> {
-  const state = await readState();
-  const reg = routing.loadSets();
-  const sets = reg?.sets || {};
-  const dismissed = new Set(state.dismissed);
+  const state = await readState()
+  const reg = routing.loadSets()
+  const sets = reg?.sets || {}
+  const dismissed = new Set(state.dismissed)
 
-  const videoLibs = selectedLibraries(libraries, state);
+  const videoLibs = selectedLibraries(libraries, state)
 
-  const fresh: PendingItem[] = [];
+  const fresh: PendingItem[] = []
   for (const lib of videoLibs) {
-    const kind: 1 | 2 = lib.type === 'show' ? 2 : 1;
+    const kind: 1 | 2 = lib.type === "show" ? 2 : 1
     for (const md of await listSection(lib.id, kind)) {
-      const addedAt = Number(md.addedAt) || 0;
-      const ratingKey = String(md.ratingKey);
-      if (addedAt <= state.seen_through) continue;
-      if (dismissed.has(ratingKey)) continue;
-      if (isWatched(md, kind)) continue;
+      const addedAt = Number(md.addedAt) || 0
+      const ratingKey = String(md.ratingKey)
+      if (addedAt <= state.seen_through) continue
+      if (dismissed.has(ratingKey)) continue
+      if (isWatched(md, kind)) continue
       fresh.push({
         ratingKey,
-        title: String(md.title ?? ''),
+        title: String(md.title ?? ""),
         year: md.year != null ? Number(md.year) : null,
-        type: kind === 2 ? 'show' : 'movie',
+        type: kind === 2 ? "show" : "movie",
         sectionId: lib.id,
-        librarySectionTitle: String(lib.title ?? ''),
-        contentRating: md.contentRating != null ? String(md.contentRating) : null,
-        editionTitle: md.editionTitle ? String(md.editionTitle) : null,
+        librarySectionTitle: String(lib.title ?? ""),
+        contentRating:
+          md.contentRating != null
+            ? String(md.contentRating)
+            : null,
+        editionTitle: md.editionTitle
+          ? String(md.editionTitle)
+          : null,
         addedAt,
-      });
+      })
     }
   }
 
-  if (!fresh.length) return { items: [], state };
+  if (!fresh.length) return { items: [], state }
 
-  const { named, namedCollections } = await curatedKeys(client, sets, fresh);
-  const blockedBySet = new Map<string, Set<string>>();
+  const { named, namedCollections } = await curatedKeys(
+    client,
+    sets,
+    fresh,
+  )
+  const blockedBySet = new Map<string, Set<string>>()
   for (const [id, cfg] of Object.entries(sets)) {
-    blockedBySet.set(id, new Set(((cfg as RoutingRotationCfg).blocklist || []).map(String)));
+    blockedBySet.set(
+      id,
+      new Set(
+        ((cfg as RoutingRotationCfg).blocklist || []).map(
+          String,
+        ),
+      ),
+    )
   }
 
   const items = fresh
-    .filter((it) => !named.has(it.ratingKey) && !isInAnyRule(it, sets, blockedBySet))
-    .sort((a, b) => b.addedAt - a.addedAt);
+    .filter(
+      (it) =>
+        !named.has(it.ratingKey) &&
+        !isInAnyRule(it, sets, blockedBySet),
+    )
+    .sort((a, b) => b.addedAt - a.addedAt)
 
   // The collections those items sit in, as rows of their own. Skipped entirely when the
   // caller passes no lister, which is what keeps every existing test calling three arguments.
   const collections = listCollections
-    ? await pendingCollections(client, videoLibs, items, namedCollections, dismissed, listCollections)
-    : [];
+    ? await pendingCollections(
+        client,
+        videoLibs,
+        items,
+        namedCollections,
+        dismissed,
+        listCollections,
+      )
+    : []
 
   // One list, one order. A collection is not a separate KIND of news — it is news about the
   // same arrivals, so it sorts among them by the same clock.
@@ -529,11 +669,13 @@ export async function pendingItems(
   // film that put it there rather than below it — the broader choice reads first, which is
   // the choice the owner said he usually wants.
   const all = collections.length
-    ? [...items, ...collections].sort((a, b) => (
-      b.addedAt - a.addedAt
-      || (a.type === 'collection' ? -1 : 0) - (b.type === 'collection' ? -1 : 0)
-    ))
-    : items;
+    ? [...items, ...collections].sort(
+        (a, b) =>
+          b.addedAt - a.addedAt ||
+          (a.type === "collection" ? -1 : 0) -
+            (b.type === "collection" ? -1 : 0),
+      )
+    : items
 
-  return { items: all, state };
+  return { items: all, state }
 }

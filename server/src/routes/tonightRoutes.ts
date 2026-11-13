@@ -1,24 +1,31 @@
-import { Hono } from 'hono';
-
-import { errMessage } from '../errors.js';
-import { providerFor } from '../providers/index.js';
-import { pullLineup } from '../providers/pullLineup.js';
-import * as queues from '../queues.js';
-import { groupMembership } from '../store/db/people.js';
-import { membersByQueue } from '../store/db/queuePeople.js';
-import * as sets from '../sets.js';
-import * as engineRouting from '../engine/routing.js';
-import { isRandomOrder } from '../kind.js';
-import { displayFor } from '../tiles.js';
-import type { CandidateSet, TonightCandidate, TonightPick } from '../tonight/pick.js';
+import { Hono } from "hono"
+import * as engineRouting from "../engine/routing.js"
+import { errMessage } from "../errors.js"
+import { isRandomOrder } from "../kind.js"
+import { providerFor } from "../providers/index.js"
+import { pullLineup } from "../providers/pullLineup.js"
+import * as queues from "../queues.js"
+import * as sets from "../sets.js"
+import { groupMembership } from "../store/db/people.js"
+import { membersByQueue } from "../store/db/queuePeople.js"
+import { displayFor } from "../tiles.js"
+import type {
+  CandidateSet,
+  TonightCandidate,
+  TonightPick,
+} from "../tonight/pick.js"
 import {
   candidatesFor,
   drawQueues,
   firstUnfinishedEntry,
   playItemLabel,
-} from '../tonight/pick.js';
-import { isTonightTile, routeForTile, WHY_QUEUE_FIRST } from '../tonight/routing.js';
-import { readBody } from './readBody.js';
+} from "../tonight/pick.js"
+import {
+  isTonightTile,
+  routeForTile,
+  WHY_QUEUE_FIRST,
+} from "../tonight/routing.js"
+import { readBody } from "./readBody.js"
 
 /**
  * TONIGHT — the activity → provider routing, and the pick behind it (WP-7).
@@ -57,58 +64,75 @@ import { readBody } from './readBody.js';
  * same reason `GET` is.
  */
 export function tonightRoutes(): Hono {
-  const app = new Hono();
+  const app = new Hono()
 
-  app.post('/tonight/pick', async (c) => {
+  app.post("/tonight/pick", async (c) => {
     try {
-      const body = await readBody(c);
-      const tile = body.activity;
+      const body = await readBody(c)
+      const tile = body.activity
 
       if (!isTonightTile(tile)) {
-        return c.json({ error: `unknown activity '${String(tile)}'` }, 400);
-      }
-
-      const route = routeForTile(tile);
-
-      if (route.engine === 'board-games') {
         return c.json(
-          { error: 'board games are drawn from the shelf — POST /api/board-games/pick' },
+          { error: `unknown activity '${String(tile)}'` },
           400,
-        );
+        )
       }
 
-      if (route.engine === 'narrow-first') {
+      const route = routeForTile(tile)
+
+      if (route.engine === "board-games") {
         return c.json(
           {
             error:
-              'Surprise Me narrows down first. Choose Media, Games or Reading on its '
-              + 'second screen.',
+              "board games are drawn from the shelf — POST /api/board-games/pick",
           },
           400,
-        );
+        )
       }
 
-      const personIds = Array.isArray(body.personIds) ? body.personIds.map(String) : [];
-      const excludedSetIds = Array.isArray(body.excludedSetIds)
-        ? body.excludedSetIds.map(String)
-        : [];
-      const boundBackend = typeof body.boundBackend === 'string' && body.boundBackend
-        ? body.boundBackend
-        : null;
+      if (route.engine === "narrow-first") {
+        return c.json(
+          {
+            error:
+              "Surprise Me narrows down first. Choose Media, Games or Reading on its " +
+              "second screen.",
+          },
+          400,
+        )
+      }
 
-      const registry = await sets.getRegistry();
+      const personIds = Array.isArray(body.personIds)
+        ? body.personIds.map(String)
+        : []
+      const excludedSetIds = Array.isArray(
+        body.excludedSetIds,
+      )
+        ? body.excludedSetIds.map(String)
+        : []
+      const boundBackend =
+        typeof body.boundBackend === "string" &&
+        body.boundBackend
+          ? body.boundBackend
+          : null
+
+      const registry = await sets.getRegistry()
       const candidates = candidatesFor({
         boundBackend,
         excludedSetIds,
-        membershipFor: (groupId) => groupMembership(groupId),
+        membershipFor: (groupId) =>
+          groupMembership(groupId),
         membersByQueue: membersByQueue(),
         personIds,
-        providerIdFor: (setId) => providerIdOf(registry.sets, setId),
+        providerIdFor: (setId) =>
+          providerIdOf(registry.sets, setId),
         sets: registry.sets as unknown as CandidateSet[],
         tile,
-      });
+      })
 
-      const { backend, ordered } = drawQueues(candidates, Math.random);
+      const { backend, ordered } = drawQueues(
+        candidates,
+        Math.random,
+      )
 
       if (!backend || ordered.length === 0) {
         return c.json({
@@ -119,10 +143,10 @@ export function tonightRoutes(): Hono {
           // empty are completely different problems: there is no queue for that evening at
           // all, or there is one and everybody has already turned it down.
           reason: excludedSetIds.length
-            ? 'Nothing else for that tonight — every queue that matches has been turned down.'
-            : 'No queue matches that activity and the people you ticked.',
+            ? "Nothing else for that tonight — every queue that matches has been turned down."
+            : "No queue matches that activity and the people you ticked.",
           shortlist: [],
-        });
+        })
       }
 
       // Resolved LAZILY, in offer order, and only until three are in hand. Resolving every
@@ -132,13 +156,16 @@ export function tonightRoutes(): Hono {
       // names a queue and then says "nothing left in it" is an answer nobody asked for, and
       // its Start would 409. A queue we could not REACH is different and is still offered:
       // a provider being down is not a queue being over.
-      const shortlist: TonightPick[] = [];
+      const shortlist: TonightPick[] = []
       for (const candidate of ordered) {
-        if (shortlist.length >= 3) break;
-        const orderCfg = registry.sets.find((set) => set.id === candidate.setId);
-        const { isExhausted, ...resolved } = await withUpNext(candidate, orderCfg);
-        if (isExhausted) continue;
-        shortlist.push(resolved);
+        if (shortlist.length >= 3) break
+        const orderCfg = registry.sets.find(
+          (set) => set.id === candidate.setId,
+        )
+        const { isExhausted, ...resolved } =
+          await withUpNext(candidate, orderCfg)
+        if (isExhausted) continue
+        shortlist.push(resolved)
       }
 
       if (shortlist.length === 0) {
@@ -146,9 +173,10 @@ export function tonightRoutes(): Hono {
           backend,
           notes: notesFor(tile),
           pick: null,
-          reason: 'Every queue that matches is finished — there is nothing left in any of them.',
+          reason:
+            "Every queue that matches is finished — there is nothing left in any of them.",
           shortlist: [],
-        });
+        })
       }
 
       return c.json({
@@ -156,13 +184,13 @@ export function tonightRoutes(): Hono {
         notes: notesFor(tile),
         pick: shortlist[0] ?? null,
         shortlist,
-      });
+      })
     } catch (e) {
-      return c.json({ error: errMessage(e) }, 500);
+      return c.json({ error: errMessage(e) }, 500)
     }
-  });
+  })
 
-  return app;
+  return app
 }
 
 /**
@@ -173,20 +201,31 @@ export function tonightRoutes(): Hono {
  * providers is a mixed queue and answers `null`, which drops it from the candidates.
  */
 function providerIdOf(
-  registrySets: readonly { id: string; providers?: readonly { provider: string }[] }[],
+  registrySets: readonly {
+    id: string
+    providers?: readonly { provider: string }[]
+  }[],
   setId: string,
 ): string | null {
-  const set = registrySets.find((one) => one.id === setId);
-  const ids = [...new Set((set?.providers ?? []).map((block) => block.provider).filter(Boolean))];
-  return ids.length === 1 ? (ids[0] ?? null) : null;
+  const set = registrySets.find((one) => one.id === setId)
+  const ids = [
+    ...new Set(
+      (set?.providers ?? [])
+        .map((block) => block.provider)
+        .filter(Boolean),
+    ),
+  ]
+  return ids.length === 1 ? (ids[0] ?? null) : null
 }
 
 /** The filters this tile collects that no backend can act on yet, said out loud. Empty for a
  *  tile whose form asks nothing the engine cannot answer. */
-const notesFor = (tile: Parameters<typeof routeForTile>[0]): string[] => {
-  const note = WHY_QUEUE_FIRST[tile];
-  return note ? [note] : [];
-};
+const notesFor = (
+  tile: Parameters<typeof routeForTile>[0],
+): string[] => {
+  const note = WHY_QUEUE_FIRST[tile]
+  return note ? [note] : []
+}
 
 /**
  * What this queue would come up with next.
@@ -210,27 +249,36 @@ const notesFor = (tile: Parameters<typeof routeForTile>[0]): string[] => {
  */
 async function withUpNext(
   candidate: TonightCandidate,
-  orderCfg: { add_as?: unknown; kind?: unknown; source?: unknown } | undefined,
+  orderCfg:
+    | { add_as?: unknown; kind?: unknown; source?: unknown }
+    | undefined,
 ): Promise<TonightPick & { isExhausted: boolean }> {
-  const launchUrl = candidate.delivery === 'pull'
-    ? `/go/${encodeURIComponent(candidate.setId)}`
-    : null;
+  const launchUrl =
+    candidate.delivery === "pull"
+      ? `/go/${encodeURIComponent(candidate.setId)}`
+      : null
 
-  if (candidate.delivery === 'pull') {
+  if (candidate.delivery === "pull") {
     try {
-      const cfg = engineRouting.loadSets()?.sets?.[candidate.setId];
+      const cfg =
+        engineRouting.loadSets()?.sets?.[candidate.setId]
       if (!cfg) {
         return {
           ...candidate,
           isExhausted: false,
           launchUrl,
           upNext: null,
-          upNextReason: 'This queue is not in the engine registry.',
-        };
+          upNextReason:
+            "This queue is not in the engine registry.",
+        }
       }
-      const provider = providerFor(candidate.providerId);
-      const play = await pullLineup(candidate.setId, cfg, provider);
-      const head = play[0];
+      const provider = providerFor(candidate.providerId)
+      const play = await pullLineup(
+        candidate.setId,
+        cfg,
+        provider,
+      )
+      const head = play[0]
       if (!head) {
         return {
           ...candidate,
@@ -238,7 +286,7 @@ async function withUpNext(
           launchUrl,
           upNext: null,
           upNextReason: `Nothing left in this queue — ${provider.label} says it is finished.`,
-        };
+        }
       }
       return {
         ...candidate,
@@ -246,7 +294,7 @@ async function withUpNext(
         launchUrl,
         upNext: playItemLabel(head),
         upNextReason: null,
-      };
+      }
     } catch (e) {
       // Named, and named as a REACH rather than as a crash. A provider that is down or NOT
       // CONFIGURED still leaves a queue you can try to start; a bare `fetch failed` on a card
@@ -259,11 +307,11 @@ async function withUpNext(
         launchUrl,
         upNext: null,
         upNextReason: `Could not ask ${candidate.providerLabel || candidate.providerId} what is next: ${errMessage(e)}`,
-      };
+      }
     }
   }
 
-  if (candidate.source === 'rotation') {
+  if (candidate.source === "rotation") {
     return {
       ...candidate,
       // A rules pool has no lineup until it is drawn, so it can never be reported finished
@@ -271,8 +319,9 @@ async function withUpNext(
       isExhausted: false,
       launchUrl,
       upNext: null,
-      upNextReason: 'This queue draws from the library when it starts, so there is no lineup yet.',
-    };
+      upNextReason:
+        "This queue draws from the library when it starts, so there is no lineup yet.",
+    }
   }
 
   try {
@@ -289,22 +338,26 @@ async function withUpNext(
         launchUrl,
         upNext: null,
         upNextReason:
-          'This queue draws from its Random pool when it starts, so it has no fixed next item yet.',
-      };
+          "This queue draws from its Random pool when it starts, so it has no fixed next item yet.",
+      }
     }
 
-    const entries = await queues.listSet(candidate.setId);
+    const entries = await queues.listSet(candidate.setId)
     const display = firstUnfinishedEntry(
-      entries.map((entry) => ({ display: displayFor(entry.value), done: Boolean(entry.done) })),
-    );
+      entries.map((entry) => ({
+        display: displayFor(entry.value),
+        done: Boolean(entry.done),
+      })),
+    )
     if (!display) {
       return {
         ...candidate,
         isExhausted: true,
         launchUrl,
         upNext: null,
-        upNextReason: 'Every entry in this queue is finished.',
-      };
+        upNextReason:
+          "Every entry in this queue is finished.",
+      }
     }
     // "First in the queue", not an episode number: this is the ENTRY, and the queue's own
     // resolver decides which episode of it plays.
@@ -312,9 +365,12 @@ async function withUpNext(
       ...candidate,
       isExhausted: false,
       launchUrl,
-      upNext: { detail: 'First in the queue', title: display },
+      upNext: {
+        detail: "First in the queue",
+        title: display,
+      },
       upNextReason: null,
-    };
+    }
   } catch (e) {
     return {
       ...candidate,
@@ -322,6 +378,6 @@ async function withUpNext(
       launchUrl,
       upNext: null,
       upNextReason: `Could not read this queue: ${errMessage(e)}`,
-    };
+    }
   }
 }

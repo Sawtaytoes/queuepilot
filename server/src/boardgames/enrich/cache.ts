@@ -1,7 +1,7 @@
-import { mkdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { mkdirSync } from "node:fs"
+import { dirname, join } from "node:path"
 
-import { QUEUES_PATH } from '../../config.js';
+import { QUEUES_PATH } from "../../config.js"
 
 /**
  * On-disk caches for other people's servers.
@@ -21,13 +21,15 @@ import { QUEUES_PATH } from '../../config.js';
  * every other durable path in this app is resolved against.
  */
 export const boardGameCacheDirectory = (): string =>
-  process.env.BOARD_GAME_CACHE_PATH || join(dirname(QUEUES_PATH), 'board-game-cache');
+  process.env.BOARD_GAME_CACHE_PATH ||
+  join(dirname(QUEUES_PATH), "board-game-cache")
 
 /** The geekdo *item* cache. Does not create the directory — `cacheDirectory` is what does. */
-export const geekdoCacheDirectory = (): string => join(boardGameCacheDirectory(), 'geekdo');
+export const geekdoCacheDirectory = (): string =>
+  join(boardGameCacheDirectory(), "geekdo")
 
 export const cacheDirectory = (name: string): string => {
-  const directory = join(boardGameCacheDirectory(), name);
-  mkdirSync(directory, { recursive: true });
-  return directory;
-};
+  const directory = join(boardGameCacheDirectory(), name)
+  mkdirSync(directory, { recursive: true })
+  return directory
+}

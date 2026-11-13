@@ -8,50 +8,63 @@
 // The `Document` API is not an implementation detail this store is free to change. `sets.yaml`
 // is hand-edited over SMB, so a round-trip that drops a comment or reorders a key punishes the
 // person who typed it, and `e2e/yaml-roundtrip-test.ts` gates exactly that.
-import { promises as fs, readFileSync, statSync } from 'node:fs';
-import { isSeq, parse, parseDocument } from 'yaml';
-import type { Document } from 'yaml';
-import { isNodeError } from '../errors.js';
+import {
+  promises as fs,
+  readFileSync,
+  statSync,
+} from "node:fs"
+import type { Document } from "yaml"
+import { isSeq, parse, parseDocument } from "yaml"
+import { isNodeError } from "../errors.js"
 
 // Read straight off `process.env` rather than through env.ts, deliberately unchanged: the e2e
 // harnesses set `process.env.path` and then import the server modules, and this is the
 // one place that resolves it. (env.ts has no path equivalent today.)
-export const path = process.env.SETS_PATH || '/config/sets.yaml';
+export const path =
+  process.env.SETS_PATH || "/config/sets.yaml"
 
-const LOCK_DIR = path + '.lock';
-const LOCK_STALE_MS = 15000;
-const LOCK_WAIT_MS = 10000;
-const sleep = (ms: number) => new Promise<void>((r) => { setTimeout(r, ms); });
+const LOCK_DIR = path + ".lock"
+const LOCK_STALE_MS = 15000
+const LOCK_WAIT_MS = 10000
+const sleep = (ms: number) =>
+  new Promise<void>((r) => {
+    setTimeout(r, ms)
+  })
 
 async function acquireLock(): Promise<void> {
-  const deadline = Date.now() + LOCK_WAIT_MS;
+  const deadline = Date.now() + LOCK_WAIT_MS
   for (;;) {
     try {
-      await fs.mkdir(LOCK_DIR);
-      return;
+      await fs.mkdir(LOCK_DIR)
+      return
     } catch (e) {
-      if (!isNodeError(e) || e.code !== 'EEXIST') throw e;
+      if (!isNodeError(e) || e.code !== "EEXIST") throw e
       try {
-        const st = await fs.stat(LOCK_DIR);
+        const st = await fs.stat(LOCK_DIR)
         if (Date.now() - st.mtimeMs > LOCK_STALE_MS) {
-          await fs.rmdir(LOCK_DIR).catch(() => {});
-          continue;
+          await fs.rmdir(LOCK_DIR).catch(() => {})
+          continue
         }
       } catch {
         /* lock vanished — retry */
       }
-      if (Date.now() > deadline) throw new Error('timed out acquiring sets.yaml lock');
-      await sleep(50);
+      if (Date.now() > deadline)
+        throw new Error(
+          "timed out acquiring sets.yaml lock",
+        )
+      await sleep(50)
     }
   }
 }
 
-export async function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  await acquireLock();
+export async function withLock<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  await acquireLock()
   try {
-    return await fn();
+    return await fn()
   } finally {
-    await fs.rmdir(LOCK_DIR).catch(() => {});
+    await fs.rmdir(LOCK_DIR).catch(() => {})
   }
 }
 
@@ -203,45 +216,51 @@ sets:
         allowed_ratings: [TV-PG, PG]
         movie_ratings: [TV-PG, PG]
         watch_count_accounts: [22222222]
-`;
+`
 
 export async function ensureFile(): Promise<void> {
   // Seed via an EXCLUSIVE create (wx), not the mkdir lock: readDoc runs inside
   // withLock() from every mutation, and the lock is not reentrant — taking it here
   // deadlocked the first mutation whenever the file didn't exist yet.
   try {
-    await fs.access(path);
+    await fs.access(path)
   } catch {
     try {
-      await fs.writeFile(path, DEFAULT_YAML, { flag: 'wx' });
-      console.log(`[sets] seeded ${path} from built-in defaults`);
+      await fs.writeFile(path, DEFAULT_YAML, { flag: "wx" })
+      console.log(
+        `[sets] seeded ${path} from built-in defaults`,
+      )
     } catch (e) {
-      if (!isNodeError(e) || e.code !== 'EEXIST') throw e; // a concurrent seeder won the race — fine
+      if (!isNodeError(e) || e.code !== "EEXIST") throw e // a concurrent seeder won the race — fine
     }
   }
 }
 
 export async function readDoc(): Promise<Document> {
-  await ensureFile();
-  const doc: Document = parseDocument(await fs.readFile(path, 'utf8'));
-  if (!isSeq(doc.get('sets'))) throw new Error('sets.yaml has no sets list');
-  return doc;
+  await ensureFile()
+  const doc: Document = parseDocument(
+    await fs.readFile(path, "utf8"),
+  )
+  if (!isSeq(doc.get("sets")))
+    throw new Error("sets.yaml has no sets list")
+  return doc
 }
 
-const YAML_OUT = { indentSeq: false, lineWidth: 0 };
+const YAML_OUT = { indentSeq: false, lineWidth: 0 }
 
-export async function writeDoc(doc: Document): Promise<void> {
-  const text = doc.toString(YAML_OUT);
-  const tmp = path + '.tmp';
-  await fs.writeFile(tmp, text, 'utf8');
+export async function writeDoc(
+  doc: Document,
+): Promise<void> {
+  const text = doc.toString(YAML_OUT)
+  const tmp = path + ".tmp"
+  await fs.writeFile(tmp, text, "utf8")
   try {
-    await fs.rename(tmp, path);
+    await fs.rename(tmp, path)
   } catch {
-    await fs.writeFile(path, text, 'utf8');
-    await fs.rm(tmp, { force: true }).catch(() => {});
+    await fs.writeFile(path, text, "utf8")
+    await fs.rm(tmp, { force: true }).catch(() => {})
   }
 }
-
 
 /**
  * The file's `(mtimeMs, size)`, or null when it is not there yet.
@@ -250,22 +269,25 @@ export async function writeDoc(doc: Document): Promise<void> {
  * every writer — this process, an SMB hand-edit, the Python prune — moves at least one of the
  * two, so a stale hit is not reachable through a normal write.
  */
-export async function stat(): Promise<{ mtimeMs: number; size: number } | null> {
+export async function stat(): Promise<{
+  mtimeMs: number
+  size: number
+} | null> {
   try {
-    const st = await fs.stat(path);
-    return { mtimeMs: st.mtimeMs, size: st.size };
+    const st = await fs.stat(path)
+    return { mtimeMs: st.mtimeMs, size: st.size }
   } catch {
-    return null;
+    return null
   }
 }
 
 /** The same pair as a string, for the `/api/queues` ETag. A stat, not a read. */
 export function revision(): string {
   try {
-    const st = statSync(path);
-    return `${Math.round(st.mtimeMs)}-${st.size}`;
+    const st = statSync(path)
+    return `${Math.round(st.mtimeMs)}-${st.size}`
   } catch {
-    return '0-0';
+    return "0-0"
   }
 }
 
@@ -285,19 +307,23 @@ export function revision(): string {
  * the capability NAMED here is the point — WP-2 has to answer it deliberately rather than
  * discover it when undo silently stops restoring formatting.
  */
-export async function readRawSnapshot(): Promise<string | null> {
-  return fs.readFile(path, 'utf8').catch(() => null);
+export async function readRawSnapshot(): Promise<
+  string | null
+> {
+  return fs.readFile(path, "utf8").catch(() => null)
 }
 
 /** Put a snapshot back, byte for byte. Same atomic tmp+rename as `writeDoc`, same fallback. */
-export async function writeRawSnapshot(text: string): Promise<void> {
-  const tmp = path + '.tmp';
-  await fs.writeFile(tmp, text, 'utf8');
+export async function writeRawSnapshot(
+  text: string,
+): Promise<void> {
+  const tmp = path + ".tmp"
+  await fs.writeFile(tmp, text, "utf8")
   try {
-    await fs.rename(tmp, path);
+    await fs.rename(tmp, path)
   } catch {
-    await fs.writeFile(path, text, 'utf8');
-    await fs.rm(tmp, { force: true }).catch(() => {});
+    await fs.writeFile(path, text, "utf8")
+    await fs.rm(tmp, { force: true }).catch(() => {})
   }
 }
 
@@ -310,5 +336,5 @@ export async function writeRawSnapshot(text: string): Promise<void> {
  * e2e harness drives `loadSets()` through.
  */
 export function readSync(file: string = path): unknown {
-  return parse(readFileSync(file, 'utf8'));
+  return parse(readFileSync(file, "utf8"))
 }

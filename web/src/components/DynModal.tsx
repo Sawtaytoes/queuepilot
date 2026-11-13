@@ -331,7 +331,6 @@ export function DynModal() {
       isStale = true
     }
     // Re-seed only when the modal is (re-)opened.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dynModal])
 
   /** Load ONE card's ratings from its profile's complete restricted view, preserving

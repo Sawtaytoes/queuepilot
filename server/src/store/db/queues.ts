@@ -15,12 +15,16 @@
 //      rule exactly; six nullable columns would turn "the key is absent" and "the column is
 //      NULL" into the same thing, and `storedCount(undefined) === null` is a real distinction
 //      this app tests for.
-import type { Document } from 'yaml';
-import { parseDocument } from 'yaml';
+import type { Document } from "yaml"
+import { parseDocument } from "yaml"
 
-import { STORE_YAML_MIRROR } from '../../config.js';
-import * as yamlQueues from '../queues.js';
-import type { QueuesStore, StoreStat } from '../index.js';
+import { STORE_YAML_MIRROR } from "../../config.js"
+import type { QueuesStore, StoreStat } from "../index.js"
+import {
+  ensureImported,
+  noteMirrorWrite,
+} from "../migrate/yaml.js"
+import * as yamlQueues from "../queues.js"
 import {
   applyComments,
   bumpVersion,
@@ -30,19 +34,18 @@ import {
   withStoreLock,
   writeMeta,
   YAML_OUT,
-} from './common.js';
-import { bookOfRecord, prepareChecked } from './open.js';
+} from "./common.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 import {
   applyPresentation,
   applyQueuePresentation,
   assemble,
+  type DocumentLeftovers,
   documentFrom,
   shredMapOfListsDocument,
-  type DocumentLeftovers,
-} from './shred.js';
-import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
+} from "./shred.js"
 
-export const path = yamlQueues.path;
+export const path = yamlQueues.path
 
 const EMPTY_LEFTOVERS: DocumentLeftovers = {
   order: [],
@@ -50,124 +53,149 @@ const EMPTY_LEFTOVERS: DocumentLeftovers = {
   keyPresentation: {},
   commentBefore: null,
   comment: null,
-};
+}
 
 interface QueueRow {
-  set_id: string;
-  position: number;
-  comment_before: string | null;
-  comment: string | null;
-  list_comment_before: string | null;
-  list_comment: string | null;
-  presentation: string | null;
+  set_id: string
+  position: number
+  comment_before: string | null
+  comment: string | null
+  list_comment_before: string | null
+  list_comment: string | null
+  presentation: string | null
 }
 
 interface EntryRow {
-  set_id: string;
-  position: number;
-  data: string;
-  comment_before: string | null;
-  comment: string | null;
-  presentation: string | null;
+  set_id: string
+  position: number
+  data: string
+  comment_before: string | null
+  comment: string | null
+  presentation: string | null
 }
 
 const queueRows = (): QueueRow[] =>
   prepareChecked<QueueRow>(
     bookOfRecord(),
-    'SELECT set_id, position, comment_before, comment, list_comment_before, list_comment, presentation ' +
-      'FROM queues ORDER BY position',
-  ).all();
+    "SELECT set_id, position, comment_before, comment, list_comment_before, list_comment, presentation " +
+      "FROM queues ORDER BY position",
+  ).all()
 
 const entryRows = (): EntryRow[] =>
   prepareChecked<EntryRow>(
     bookOfRecord(),
-    'SELECT set_id, position, data, comment_before, comment, presentation FROM queue_entries ' +
-      'ORDER BY set_id, position',
-  ).all();
+    "SELECT set_id, position, data, comment_before, comment, presentation FROM queue_entries " +
+      "ORDER BY set_id, position",
+  ).all()
 
 const leftovers = (): DocumentLeftovers =>
-  readJsonMeta(bookOfRecord(), 'queues', 'leftovers', EMPTY_LEFTOVERS);
+  readJsonMeta(
+    bookOfRecord(),
+    "queues",
+    "leftovers",
+    EMPTY_LEFTOVERS,
+  )
 
 /** Entries grouped by queue, each list already in play order. */
 function entriesBySet(): Map<string, EntryRow[]> {
-  const grouped = new Map<string, EntryRow[]>();
+  const grouped = new Map<string, EntryRow[]>()
   for (const row of entryRows()) {
-    const list = grouped.get(row.set_id);
-    if (list) list.push(row);
-    else grouped.set(row.set_id, [row]);
+    const list = grouped.get(row.set_id)
+    if (list) list.push(row)
+    else grouped.set(row.set_id, [row])
   }
-  return grouped;
+  return grouped
 }
 
 /** `{ <setId>: [entry, …] }` — what the file would have parsed to. */
 function plain(): Record<string, unknown> {
-  const grouped = entriesBySet();
-  const byQueue: Record<string, unknown> = {};
+  const grouped = entriesBySet()
+  const byQueue: Record<string, unknown> = {}
   for (const queue of queueRows()) {
-    byQueue[queue.set_id] = (grouped.get(queue.set_id) ?? []).map(
-      (row) => JSON.parse(row.data) as unknown,
-    );
+    byQueue[queue.set_id] = (
+      grouped.get(queue.set_id) ?? []
+    ).map((row) => JSON.parse(row.data) as unknown)
   }
-  return assemble(leftovers(), byQueue);
+  return assemble(leftovers(), byQueue)
 }
 
 export async function readDoc(): Promise<Document> {
-  ensureImported();
-  const grouped = entriesBySet();
-  const queues = queueRows();
-  const meta = leftovers();
-  const byQueue: Record<string, unknown> = {};
+  ensureImported()
+  const grouped = entriesBySet()
+  const queues = queueRows()
+  const meta = leftovers()
+  const byQueue: Record<string, unknown> = {}
   for (const queue of queues) {
-    byQueue[queue.set_id] = (grouped.get(queue.set_id) ?? []).map(
-      (row) => JSON.parse(row.data) as unknown,
-    );
+    byQueue[queue.set_id] = (
+      grouped.get(queue.set_id) ?? []
+    ).map((row) => JSON.parse(row.data) as unknown)
   }
-  const doc = documentFrom(assemble(meta, byQueue), meta);
+  const doc = documentFrom(assemble(meta, byQueue), meta)
 
   for (const queue of queues) {
     // The queue's own comments hang off its KEY node, which is where they were read from.
-    const pair = doc.contents && 'items' in doc.contents
-      ? (doc.contents.items as { key?: unknown; value?: unknown }[]).find(
-          (item) => String((item.key as { toJSON?: () => unknown })?.toJSON?.() ?? item.key) === queue.set_id,
-        )
-      : undefined;
+    const pair =
+      doc.contents && "items" in doc.contents
+        ? (
+            doc.contents.items as {
+              key?: unknown
+              value?: unknown
+            }[]
+          ).find(
+            (item) =>
+              String(
+                (
+                  item.key as { toJSON?: () => unknown }
+                )?.toJSON?.() ?? item.key,
+              ) === queue.set_id,
+          )
+        : undefined
     if (pair) {
-      applyComments(pair.key, queue);
+      applyComments(pair.key, queue)
       applyComments(pair.value, {
         comment_before: queue.list_comment_before,
         comment: queue.list_comment,
-      });
-      applyQueuePresentation(pair.key, pair.value, queue.presentation);
+      })
+      applyQueuePresentation(
+        pair.key,
+        pair.value,
+        queue.presentation,
+      )
     }
 
-    (grouped.get(queue.set_id) ?? []).forEach((row, index) => {
-      const node = nodeAt(doc, [queue.set_id, index]);
-      applyComments(node, row);
-      applyPresentation(node, row.presentation);
-    });
+    ;(grouped.get(queue.set_id) ?? []).forEach(
+      (row, index) => {
+        const node = nodeAt(doc, [queue.set_id, index])
+        applyComments(node, row)
+        applyPresentation(node, row.presentation)
+      },
+    )
   }
 
-  return doc;
+  return doc
 }
 
-export async function writeDoc(doc: Document): Promise<void> {
-  const db = bookOfRecord();
-  const { groups, leftovers: meta } = shredMapOfListsDocument(doc);
+export async function writeDoc(
+  doc: Document,
+): Promise<void> {
+  const db = bookOfRecord()
+  const { groups, leftovers: meta } =
+    shredMapOfListsDocument(doc)
 
   db.withTransaction(() => {
     // The cascade on `queue_entries.set_id` clears the entries with their queue, so this is
     // one DELETE and not two.
-    prepareChecked(db, 'DELETE FROM queues').run();
+    prepareChecked(db, "DELETE FROM queues").run()
     const insertQueue = prepareChecked(
       db,
-      'INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment, presentation) ' +
-        'VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment, :presentation)',
-    );
+      "INSERT INTO queues (set_id, position, comment_before, comment, list_comment_before, list_comment, presentation) " +
+        "VALUES (:set_id, :position, :comment_before, :comment, :list_comment_before, :list_comment, :presentation)",
+    )
     const insertEntry = prepareChecked(
       db,
-      'INSERT INTO queue_entries (set_id, position, data, comment_before, comment, presentation) ' +
-        'VALUES (:set_id, :position, :data, :comment_before, :comment, :presentation)',
-    );
+      "INSERT INTO queue_entries (set_id, position, data, comment_before, comment, presentation) " +
+        "VALUES (:set_id, :position, :data, :comment_before, :comment, :presentation)",
+    )
 
     for (const group of groups) {
       insertQueue.run({
@@ -175,10 +203,11 @@ export async function writeDoc(doc: Document): Promise<void> {
         position: group.position,
         comment_before: group.comments.comment_before,
         comment: group.comments.comment,
-        list_comment_before: group.listComments.comment_before,
+        list_comment_before:
+          group.listComments.comment_before,
         list_comment: group.listComments.comment,
         presentation: group.presentation,
-      });
+      })
       for (const row of group.rows) {
         insertEntry.run({
           set_id: group.name,
@@ -187,50 +216,61 @@ export async function writeDoc(doc: Document): Promise<void> {
           comment_before: row.comment_before,
           comment: row.comment,
           presentation: row.presentation,
-        });
+        })
       }
     }
 
-    writeMeta(db, 'queues', 'leftovers', JSON.stringify(meta));
-    bumpVersion(db, 'queues');
-  });
+    writeMeta(
+      db,
+      "queues",
+      "leftovers",
+      JSON.stringify(meta),
+    )
+    bumpVersion(db, "queues")
+  })
 
   if (STORE_YAML_MIRROR) {
-    await yamlQueues.writeDoc(doc);
+    await yamlQueues.writeDoc(doc)
     // The files now hold what the rows hold. Recording that here is what stops the next
     // read treating our own mirror write as somebody else's hand-edit.
-    noteMirrorWrite();
+    noteMirrorWrite()
   }
 }
 
 export async function stat(): Promise<StoreStat | null> {
-  ensureImported();
-  return versionOf(bookOfRecord(), 'queues');
+  ensureImported()
+  return versionOf(bookOfRecord(), "queues")
 }
 
 export function revision(): string {
-  ensureImported();
-  const version = versionOf(bookOfRecord(), 'queues');
-  return `${Math.round(version.mtimeMs)}-${version.size}`;
+  ensureImported()
+  const version = versionOf(bookOfRecord(), "queues")
+  return `${Math.round(version.mtimeMs)}-${version.size}`
 }
 
 /** See the long note on `store/db/sets.ts readRawSnapshot` — same answer, same trade. */
-export async function readRawSnapshot(): Promise<string | null> {
-  ensureImported();
-  return (await readDoc()).toString(YAML_OUT);
+export async function readRawSnapshot(): Promise<
+  string | null
+> {
+  ensureImported()
+  return (await readDoc()).toString(YAML_OUT)
 }
 
-export async function writeRawSnapshot(text: string): Promise<void> {
-  await writeDoc(parseDocument(text));
+export async function writeRawSnapshot(
+  text: string,
+): Promise<void> {
+  await writeDoc(parseDocument(text))
 }
 
 export function readSync(): unknown {
-  ensureImported();
-  return plain();
+  ensureImported()
+  return plain()
 }
 
-export function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  return withStoreLock('queues', fn);
+export function withLock<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withStoreLock("queues", fn)
 }
 
 export const store: QueuesStore = {
@@ -243,4 +283,4 @@ export const store: QueuesStore = {
   writeRawSnapshot,
   readSync,
   withLock,
-};
+}

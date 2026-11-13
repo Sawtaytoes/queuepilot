@@ -25,26 +25,34 @@
 // be worse than the bug this fixes.
 //
 // IDEMPOTENT: a second pass reports no changes and rewrites no node.
-import { parseDocument, YAMLSeq, isNode, isPair, isScalar, isCollection } from 'yaml';
-import type { Document, Node } from 'yaml';
 
-import { COLLECTION_PREFIX_RE } from '../entryFormat.js';
-import type { EntryObject } from '../types.js';
+import type { Document, Node } from "yaml"
+import {
+  isCollection,
+  isNode,
+  isPair,
+  isScalar,
+  parseDocument,
+  YAMLSeq,
+} from "yaml"
+
+import { COLLECTION_PREFIX_RE } from "../entryFormat.js"
+import type { EntryObject } from "../types.js"
 
 /** What happened to one entry. */
 export type Verdict =
-  | 'keep' // already the target shape — not rewritten, so its formatting is untouched
-  | 'backfilled' // a title gained its rating key
-  | 'reshaped' // a scalar became a mapping, with nothing to look up
-  | 'collection' // a collection became `{collection: …}`
-  | 'unresolved'; // a title nothing answers to — still an object, and reported
+  | "keep" // already the target shape — not rewritten, so its formatting is untouched
+  | "backfilled" // a title gained its rating key
+  | "reshaped" // a scalar became a mapping, with nothing to look up
+  | "collection" // a collection became `{collection: …}`
+  | "unresolved" // a title nothing answers to — still an object, and reported
 
 export interface Change {
-  set: string;
-  index: number;
-  verdict: Verdict;
-  before: unknown;
-  after: EntryObject;
+  set: string
+  index: number
+  verdict: Verdict
+  before: unknown
+  after: EntryObject
   /**
    * Was the NODE actually replaced?
    *
@@ -52,16 +60,16 @@ export interface Change {
    * whose title nothing answers to. It is named on every run — it is still broken — but there
    * is nothing to rewrite about it, which is why a file that holds one is still idempotent.
    */
-  rewritten: boolean;
+  rewritten: boolean
   /** Why an entry could not be resolved, in one line. */
-  why?: string;
+  why?: string
 }
 
 export interface MigrateResult {
-  changes: Change[];
-  kept: Change[];
+  changes: Change[]
+  kept: Change[]
   /** Per set, in file order: the label the report prints beside the set's name. */
-  labels: Map<string, string>;
+  labels: Map<string, string>
 }
 
 /**
@@ -72,38 +80,61 @@ export interface MigrateResult {
  * ids), or a run told not to talk to anything. `why` then explains it in the report.
  */
 export interface SetPolicy {
-  label: string;
-  resolve: ((value: unknown) => Promise<string | null>) | null;
-  why?: string;
+  label: string
+  resolve:
+    | ((value: unknown) => Promise<string | null>)
+    | null
+  why?: string
 }
 
 /** How the caller decides a set's policy. Called once per top-level key, in file order. */
-export type PolicyFor = (setName: string) => SetPolicy;
+export type PolicyFor = (setName: string) => SetPolicy
 
 /** The identity fields of an entry, split from everything else it carries. */
-function splitValue(value: unknown): { identity: EntryObject; extras: Record<string, unknown> } {
-  if (value != null && typeof value === 'object' && !Array.isArray(value)) {
-    const { ratingKey, title, collection, ...extras } = value as Record<string, unknown>;
-    const identity: EntryObject = {};
-    if (ratingKey != null) identity.ratingKey = ratingKey as string | number;
-    if (collection != null) identity.collection = String(collection);
+function splitValue(value: unknown): {
+  identity: EntryObject
+  extras: Record<string, unknown>
+} {
+  if (
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  ) {
+    const { ratingKey, title, collection, ...extras } =
+      value as Record<string, unknown>
+    const identity: EntryObject = {}
+    if (ratingKey != null)
+      identity.ratingKey = ratingKey as string | number
+    if (collection != null)
+      identity.collection = String(collection)
     // `{title: "Collection: <name>"}` is the older mapping spelling of a collection — the
     // prefix lives in the title's TEXT. `describe()` has always read it as a collection, so
     // this is a spelling change and not a semantic one, and `entryKey()` returns the same
     // `title:Collection: <name>` either way. Only when the line names no rating key: a mapping
     // that carries one is an item whose title merely starts with the word.
     else if (ratingKey == null && title != null) {
-      const named = COLLECTION_PREFIX_RE.exec(String(title))?.[1];
-      if (named !== undefined) return { identity: { collection: named.trim() }, extras };
+      const named = COLLECTION_PREFIX_RE.exec(
+        String(title),
+      )?.[1]
+      if (named !== undefined)
+        return {
+          identity: { collection: named.trim() },
+          extras,
+        }
     }
-    if (title != null) identity.title = title as string;
-    return { identity, extras };
+    if (title != null) identity.title = title as string
+    return { identity, extras }
   }
-  const s = String(value).trim();
-  if (/^\d+$/.test(s)) return { identity: { ratingKey: s }, extras: {} };
-  const coll = COLLECTION_PREFIX_RE.exec(s)?.[1];
-  if (coll !== undefined) return { identity: { collection: coll.trim() }, extras: {} };
-  return { identity: { title: String(value) }, extras: {} };
+  const s = String(value).trim()
+  if (/^\d+$/.test(s))
+    return { identity: { ratingKey: s }, extras: {} }
+  const coll = COLLECTION_PREFIX_RE.exec(s)?.[1]
+  if (coll !== undefined)
+    return {
+      identity: { collection: coll.trim() },
+      extras: {},
+    }
+  return { identity: { title: String(value) }, extras: {} }
 }
 
 /**
@@ -112,17 +143,24 @@ function splitValue(value: unknown): { identity: EntryObject; extras: Record<str
  * Identity first, then everything the line already carried, in ITS order — which is the order
  * the entries that were already objects use, so a migrated line reads like the ones beside it.
  */
-function compose(identity: EntryObject, extras: Record<string, unknown>): EntryObject {
-  const out: EntryObject = {};
-  if (identity.collection != null) out.collection = identity.collection;
-  if (identity.ratingKey != null) out.ratingKey = identity.ratingKey;
-  if (identity.title != null) out.title = identity.title;
-  for (const [k, v] of Object.entries(extras)) out[k] = v;
-  return out;
+function compose(
+  identity: EntryObject,
+  extras: Record<string, unknown>,
+): EntryObject {
+  const out: EntryObject = {}
+  if (identity.collection != null)
+    out.collection = identity.collection
+  if (identity.ratingKey != null)
+    out.ratingKey = identity.ratingKey
+  if (identity.title != null) out.title = identity.title
+  for (const [k, v] of Object.entries(extras)) out[k] = v
+  return out
 }
 
 const isMapping = (value: unknown): boolean =>
-  value != null && typeof value === 'object' && !Array.isArray(value);
+  value != null &&
+  typeof value === "object" &&
+  !Array.isArray(value)
 
 /**
  * The replacement node, carrying the old node's comments.
@@ -131,19 +169,26 @@ const isMapping = (value: unknown): boolean =>
  * groups entries) are all things a human typed, and replacing a node drops every one of them
  * unless they are copied across.
  */
-function rebuild(doc: Document, old: unknown, value: EntryObject): Node {
-  const node = doc.createNode(value) as Node;
+function rebuild(
+  doc: Document,
+  old: unknown,
+  value: EntryObject,
+): Node {
+  const node = doc.createNode(value) as Node
   if (isNode(old)) {
-    if (old.commentBefore != null) node.commentBefore = old.commentBefore;
+    if (old.commentBefore != null)
+      node.commentBefore = old.commentBefore
     if (old.comment != null) {
       // A scalar's TRAILING comment has nowhere to sit on a block mapping — which of its lines
       // would it end? — so it moves to the line ABOVE, where it still reads as belonging to
       // this entry. Appended to any existing head comment rather than replacing it.
-      node.commentBefore = node.commentBefore ? `${node.commentBefore}\n${old.comment}` : old.comment;
+      node.commentBefore = node.commentBefore
+        ? `${node.commentBefore}\n${old.comment}`
+        : old.comment
     }
-    if (old.spaceBefore) node.spaceBefore = true;
+    if (old.spaceBefore) node.spaceBefore = true
   }
-  return node;
+  return node
 }
 
 /**
@@ -153,80 +198,111 @@ function rebuild(doc: Document, old: unknown, value: EntryObject): Node {
  * `doc.toString()` byte-identical — which is what makes a second run a no-op rather than a
  * reformat.
  */
-export async function migrateDocument(doc: Document, policyFor: PolicyFor): Promise<MigrateResult> {
-  const changes: Change[] = [];
-  const kept: Change[] = [];
-  const labels = new Map<string, string>();
+export async function migrateDocument(
+  doc: Document,
+  policyFor: PolicyFor,
+): Promise<MigrateResult> {
+  const changes: Change[] = []
+  const kept: Change[] = []
+  const labels = new Map<string, string>()
 
-  const root: unknown[] = isCollection(doc.contents) ? doc.contents.items : [];
+  const root: unknown[] = isCollection(doc.contents)
+    ? doc.contents.items
+    : []
   for (const pair of root) {
-    if (!isPair(pair)) continue;
-    const name = isScalar(pair.key) && pair.key.value != null ? String(pair.key.value) : null;
-    if (name == null) continue;
-    const seq = pair.value;
-    if (!(seq instanceof YAMLSeq)) continue;
+    if (!isPair(pair)) continue
+    const name =
+      isScalar(pair.key) && pair.key.value != null
+        ? String(pair.key.value)
+        : null
+    if (name == null) continue
+    const seq = pair.value
+    if (!(seq instanceof YAMLSeq)) continue
 
-    const policy = policyFor(name);
-    labels.set(name, policy.label);
+    const policy = policyFor(name)
+    labels.set(name, policy.label)
 
     for (let i = 0; i < seq.items.length; i += 1) {
-      const node = seq.items[i];
-      const before: unknown = isNode(node) ? node.toJSON() : node;
-      if (before == null) continue;
-      const { identity, extras } = splitValue(before);
+      const node = seq.items[i]
+      const before: unknown = isNode(node)
+        ? node.toJSON()
+        : node
+      if (before == null) continue
+      const { identity, extras } = splitValue(before)
 
-      let verdict: Verdict;
-      let why: string | undefined = policy.resolve ? undefined : policy.why;
+      let verdict: Verdict
+      let why: string | undefined = policy.resolve
+        ? undefined
+        : policy.why
 
       if (identity.collection != null) {
         // A collection resolves by NAME, per section. There is no per-item rating key to
         // backfill, so the only question is whether it is already spelled `{collection: …}`.
-        verdict = isMapping(before) && (before as EntryObject).collection != null ? 'keep' : 'collection';
-        why = undefined;
+        verdict =
+          isMapping(before) &&
+          (before as EntryObject).collection != null
+            ? "keep"
+            : "collection"
+        why = undefined
       } else if (identity.ratingKey != null) {
         // A bare `- 12345` carries no human label. Ask for one — it is the only field this
         // migration ever invents, and it is a caption, not an identity.
         if (identity.title == null && policy.resolve) {
-          const resolvedTitle = await policy.resolve(before);
-          if (resolvedTitle) identity.title = resolvedTitle;
+          const resolvedTitle = await policy.resolve(before)
+          if (resolvedTitle) identity.title = resolvedTitle
         }
-        verdict = isMapping(before) ? 'keep' : 'reshaped';
-        why = undefined;
+        verdict = isMapping(before) ? "keep" : "reshaped"
+        why = undefined
       } else if (identity.title != null) {
         if (!policy.resolve) {
           // Reshaped if it was a scalar, otherwise left exactly as it is — but REPORTED either
           // way, because a title with no rating key is what this migration exists to remove.
-          verdict = isMapping(before) ? 'unresolved' : 'reshaped';
+          verdict = isMapping(before)
+            ? "unresolved"
+            : "reshaped"
         } else {
-          const ratingKey = await policy.resolve(before);
+          const ratingKey = await policy.resolve(before)
           if (ratingKey) {
-            identity.ratingKey = ratingKey;
-            verdict = 'backfilled';
+            identity.ratingKey = ratingKey
+            verdict = "backfilled"
           } else {
-            verdict = 'unresolved';
-            why = policy.why ?? 'nothing in this queue’s libraries answers to this title';
+            verdict = "unresolved"
+            why =
+              policy.why ??
+              "nothing in this queue’s libraries answers to this title"
           }
         }
       } else {
         // No identity at all. `entryKey()` returns null for this and every reader already drops
         // it, so it is left exactly as it is rather than invented into a shape.
-        continue;
+        continue
       }
 
       // An `unresolved` MAPPING is reported without being rewritten — there is nothing to
       // change about it, and rewriting it would move its comments for no reason.
-      const rewritten = verdict !== 'keep' && !(verdict === 'unresolved' && isMapping(before));
-      const after = compose(identity, extras);
-      const change: Change = { set: name, index: i, verdict, before, after, rewritten, ...(why ? { why } : {}) };
-      if (verdict === 'keep') {
-        kept.push(change);
-        continue;
+      const rewritten =
+        verdict !== "keep" &&
+        !(verdict === "unresolved" && isMapping(before))
+      const after = compose(identity, extras)
+      const change: Change = {
+        set: name,
+        index: i,
+        verdict,
+        before,
+        after,
+        rewritten,
+        ...(why ? { why } : {}),
       }
-      changes.push(change);
-      if (rewritten) seq.items[i] = rebuild(doc, node, after);
+      if (verdict === "keep") {
+        kept.push(change)
+        continue
+      }
+      changes.push(change)
+      if (rewritten)
+        seq.items[i] = rebuild(doc, node, after)
     }
   }
-  return { changes, kept, labels };
+  return { changes, kept, labels }
 }
 
 /**
@@ -241,7 +317,10 @@ export async function migrateText(
   text: string,
   policyFor: PolicyFor,
 ): Promise<MigrateResult & { text: string }> {
-  const doc = parseDocument(text);
-  const result = await migrateDocument(doc, policyFor);
-  return { ...result, text: doc.toString({ indentSeq: false, lineWidth: 0 }) };
+  const doc = parseDocument(text)
+  const result = await migrateDocument(doc, policyFor)
+  return {
+    ...result,
+    text: doc.toString({ indentSeq: false, lineWidth: 0 }),
+  }
 }

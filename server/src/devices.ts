@@ -15,19 +15,20 @@
 //
 // Kept out of mqttd.js so it can be tested with no broker: `announceDevices` takes the
 // publish function as an argument.
-import { configuredPlaybackTargets } from './playbackTargets.js';
-import type { PlayerDevice } from './playback.js';
-import type { Device } from './types.js';
-import { errMessage } from './errors.js';
-import {
-  T_DEVICES_BASE,
-  PLAYBACK_MODE,
-  SHIELD_CLIENT_NAME,
-  SHIELD_CLIENT_MACHINE_ID,
-  SHIELD_CLIENT_URI,
-} from './env.js';
 
-export const DEFAULT_ID = 'shield';
+import {
+  PLAYBACK_MODE,
+  SHIELD_CLIENT_MACHINE_ID,
+  SHIELD_CLIENT_NAME,
+  SHIELD_CLIENT_URI,
+  T_DEVICES_BASE,
+} from "./env.js"
+import { errMessage } from "./errors.js"
+import type { PlayerDevice } from "./playback.js"
+import { configuredPlaybackTargets } from "./playbackTargets.js"
+import type { Device } from "./types.js"
+
+export const DEFAULT_ID = "shield"
 
 /**
  * What actually goes on the wire, which is `Device` with the two identity fields widened.
@@ -39,32 +40,43 @@ export const DEFAULT_ID = 'shield';
  * with neither is skipped.) So the announced shape is the wider one, and narrowing it to
  * `Device` here would be a claim the sweep cannot make. Reported, not fixed.
  */
-type AnnouncedDevice = Omit<Device, 'name' | 'machineIdentifier'> & {
-  name: string | null;
-  machineIdentifier: string | null;
-};
+type AnnouncedDevice = Omit<
+  Device,
+  "name" | "machineIdentifier"
+> & {
+  name: string | null
+  machineIdentifier: string | null
+}
 
 /** An announced device once the round's `seen` stamp is on it — the retained payload. */
-type RetainedDevice = AnnouncedDevice & { seen: number };
+type RetainedDevice = AnnouncedDevice & { seen: number }
 
 /** mqttd's publisher. It mirrors onto the legacy prefix, which is why devices.ts publishes
  * THROUGH it rather than touching the client itself. */
-type Publish = (topic: string, payload: unknown, opts?: { retain?: boolean }) => void;
+type Publish = (
+  topic: string,
+  payload: unknown,
+  opts?: { retain?: boolean },
+) => void
 
 // id -> the payload currently RETAINED on the broker for that id. Mirrors broker state, so
 // the diff against the next sweep says exactly which topics have to be cleared.
-const REGISTRY = new Map<string, RetainedDevice>();
+const REGISTRY = new Map<string, RetainedDevice>()
 
 /**
  * Resolve a start command's `target` id to its announced device entry, or null.
  * An explicit unknown id is refused by the command boundary; it never selects the default.
  */
-export const known = (id: string | null | undefined): AnnouncedDevice | null => (
-  REGISTRY.get(String(id ?? '')) || (id === DEFAULT_ID ? shieldEntry() : null) || configuredPlaybackTargets().find((d) => d.id === id) || null
-);
+export const known = (
+  id: string | null | undefined,
+): AnnouncedDevice | null =>
+  REGISTRY.get(String(id ?? "")) ||
+  (id === DEFAULT_ID ? shieldEntry() : null) ||
+  configuredPlaybackTargets().find((d) => d.id === id) ||
+  null
 
 /** Test seam: forget what we believe is retained on the broker. */
-export const _reset = (): void => REGISTRY.clear();
+export const _reset = (): void => REGISTRY.clear()
 
 // The env-default Shield. Always announced, always `default: true`, never de-registered —
 // it is the target every card scan uses when no `target` is given.
@@ -75,20 +87,35 @@ function shieldEntry(): AnnouncedDevice {
     // env.js (not process.env directly) so the /config host-config layer is honoured —
     // reading process.env here meant a deploy that set these in config.yaml announced a
     // Shield with no machine id.
-    machineIdentifier: SHIELD_CLIENT_MACHINE_ID || '',
+    machineIdentifier: SHIELD_CLIENT_MACHINE_ID || "",
     uri: SHIELD_CLIENT_URI || null,
-    mode: PLAYBACK_MODE || 'client',
+    mode: PLAYBACK_MODE || "client",
     default: true,
-  };
+  }
 }
 
 // Fold a plex.tv row into the Shield entry when it IS the Shield, rather than listing the
 // same player twice (once as the default, once not) — and let it fill in the machine id / uri
 // the env didn't provide.
-function isShield(row: PlayerDevice, shield: AnnouncedDevice): boolean {
-  if (SHIELD_CLIENT_MACHINE_ID && row.machineIdentifier === SHIELD_CLIENT_MACHINE_ID) return true;
-  const rowName = String(row.name || '').trim().toLowerCase();
-  return Boolean(rowName) && rowName === String(shield.name || '').trim().toLowerCase();
+function isShield(
+  row: PlayerDevice,
+  shield: AnnouncedDevice,
+): boolean {
+  if (
+    SHIELD_CLIENT_MACHINE_ID &&
+    row.machineIdentifier === SHIELD_CLIENT_MACHINE_ID
+  )
+    return true
+  const rowName = String(row.name || "")
+    .trim()
+    .toLowerCase()
+  return (
+    Boolean(rowName) &&
+    rowName ===
+      String(shield.name || "")
+        .trim()
+        .toLowerCase()
+  )
 }
 
 /**
@@ -101,30 +128,46 @@ function isShield(row: PlayerDevice, shield: AnnouncedDevice): boolean {
  * Never throws and never rejects: this runs on an interval, and an unhandled rejection there
  * would take the announcer (and the process's exit code) with it.
  */
-export async function announceDevices(pub: Publish): Promise<void> {
+export async function announceDevices(
+  pub: Publish,
+): Promise<void> {
   try {
     // One timestamp for the whole round, so every entry announced together reads as one sweep.
-    const seen = Math.floor(Date.now() / 1000);
-    const shield = shieldEntry();
-    const configured = configuredPlaybackTargets();
-    const next = new Map<string, AnnouncedDevice>([shield, ...configured].map((d) => [d.id, d]));
+    const seen = Math.floor(Date.now() / 1000)
+    const shield = shieldEntry()
+    const configured = configuredPlaybackTargets()
+    const next = new Map<string, AnnouncedDevice>(
+      [shield, ...configured].map((d) => [d.id, d]),
+    )
 
-    let swept = false;
+    let swept = false
     try {
       // Resolving an already-known target must not initialize the playback stack.
-      const { playerDevices } = await import('./playback.js');
+      const { playerDevices } = await import(
+        "./playback.js"
+      )
       for (const row of await playerDevices()) {
-        const id = row.machineIdentifier || row.name;
-        if (!id) continue;
-        const pinned = configured.find((d) => (d.machineIdentifier && d.machineIdentifier === row.machineIdentifier) || d.name.toLowerCase() === String(row.name || '').toLowerCase());
-        if (pinned) continue;
+        const id = row.machineIdentifier || row.name
+        if (!id) continue
+        const pinned = configured.find(
+          (d) =>
+            (d.machineIdentifier &&
+              d.machineIdentifier ===
+                row.machineIdentifier) ||
+            d.name.toLowerCase() ===
+              String(row.name || "").toLowerCase(),
+        )
+        if (pinned) continue
         if (isShield(row, shield)) {
-          shield.machineIdentifier = shield.machineIdentifier || row.machineIdentifier || '';
-          shield.uri = shield.uri || row.uri || null;
-          continue;
+          shield.machineIdentifier =
+            shield.machineIdentifier ||
+            row.machineIdentifier ||
+            ""
+          shield.uri = shield.uri || row.uri || null
+          continue
         }
         // Configured wire IDs cannot be shadowed by a discovered client.
-        if (next.has(id)) continue;
+        if (next.has(id)) continue
         next.set(id, {
           id,
           name: row.name,
@@ -132,15 +175,17 @@ export async function announceDevices(pub: Publish): Promise<void> {
           uri: row.uri,
           // plex.tv players are driven over Companion playMedia; cast is the Shield's own
           // sidecar path and is not something we can infer for a foreign device.
-          mode: 'client',
+          mode: "client",
           default: false,
-        });
+        })
       }
-      swept = true;
+      swept = true
     } catch (e) {
       // A plex.tv hiccup degrades to "the Shield only" for THIS round — the Shield is
       // env-configured and needs no network to announce, so card scans keep working.
-      console.log(`[devices] plex.tv enumeration failed: ${errMessage(e)}`);
+      console.log(
+        `[devices] plex.tv enumeration failed: ${errMessage(e)}`,
+      )
     }
 
     // De-registration: mqttc.js treats an EMPTY retained payload as "this device is gone"
@@ -155,9 +200,11 @@ export async function announceDevices(pub: Publish): Promise<void> {
     // original, which cleared the topics on a failed enumeration and flapped the dropdown).
     if (swept) {
       for (const gone of REGISTRY.keys()) {
-        if (next.has(gone)) continue;
-        pub(`${T_DEVICES_BASE}/${gone}`, '', { retain: true });
-        REGISTRY.delete(gone);
+        if (next.has(gone)) continue
+        pub(`${T_DEVICES_BASE}/${gone}`, "", {
+          retain: true,
+        })
+        REGISTRY.delete(gone)
       }
     }
 
@@ -167,11 +214,15 @@ export async function announceDevices(pub: Publish): Promise<void> {
     // Shield carries it too — a registry where one entry has no freshness stamp is one every
     // consumer has to special-case.
     for (const [id, device] of next) {
-      const payload: RetainedDevice = { ...device, seen };
-      pub(`${T_DEVICES_BASE}/${id}`, payload, { retain: true });
-      REGISTRY.set(id, payload);
+      const payload: RetainedDevice = { ...device, seen }
+      pub(`${T_DEVICES_BASE}/${id}`, payload, {
+        retain: true,
+      })
+      REGISTRY.set(id, payload)
     }
   } catch (e) {
-    console.log(`[devices] announce failed: ${e instanceof Error && e.stack ? e.stack : String(e)}`);
+    console.log(
+      `[devices] announce failed: ${e instanceof Error && e.stack ? e.stack : String(e)}`,
+    )
   }
 }

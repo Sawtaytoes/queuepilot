@@ -18,20 +18,25 @@
 // so the cover is set in the app's own Baloo 2 / Outfit no matter what the far side has
 // installed — and it brings flex layout, which is what wraps a long set label without this
 // file measuring text by hand.
-import satori from 'satori';
-import { BALOO_2_BOLD_TTF_BASE64, OUTFIT_REGULAR_TTF_BASE64, OUTFIT_SEMIBOLD_TTF_BASE64 } from './kavita-cover-fonts.js';
+import satori from "satori"
+import {
+  BALOO_2_BOLD_TTF_BASE64,
+  OUTFIT_REGULAR_TTF_BASE64,
+  OUTFIT_SEMIBOLD_TTF_BASE64,
+} from "./kavita-cover-fonts.js"
 
 /** Kavita stores list covers at 213x320. Rendering at 3x keeps the type crisp after it downsizes. */
-const WIDTH = 640;
-const HEIGHT = 960;
+const WIDTH = 640
+const HEIGHT = 960
 
 /** Kavita's own green, and the ink it puts on it — the same pair `web/src/styles/app.css`
  *  uses for a `[data-provider="kavita"]` queue, so the cover and the card that launches it
  *  are the same colour. */
-const GREEN = '#4AC694';
-const INK = '#111111';
+const GREEN = "#4AC694"
+const INK = "#111111"
 
-const decode = (base64: string) => Buffer.from(base64, 'base64');
+const decode = (base64: string) =>
+  Buffer.from(base64, "base64")
 
 /**
  * The app icon (`icon.svg`), in the provider's colour rather than QueuePilot's amber.
@@ -41,16 +46,17 @@ const decode = (base64: string) => Buffer.from(base64, 'base64');
  * kept in step by hand.
  */
 function markDataUri(size: number): string {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">`
-    + `<rect width="24" height="24" rx="5" fill="${GREEN}"/>`
-    + `<g transform="translate(12 12) scale(0.86) translate(-12 -12)" fill="none" stroke="${INK}"`
-    + ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    + '<path d="M4 6.6 10.6 12 4 17.4Z"/>'
-    + '<line x1="13.6" y1="7.2" x2="20.6" y2="7.2"/>'
-    + '<line x1="13.6" y1="12" x2="20.6" y2="12"/>'
-    + '<line x1="13.6" y1="16.8" x2="20.6" y2="16.8"/>'
-    + '</g></svg>';
-  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}">` +
+    `<rect width="24" height="24" rx="5" fill="${GREEN}"/>` +
+    `<g transform="translate(12 12) scale(0.86) translate(-12 -12)" fill="none" stroke="${INK}"` +
+    ' stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M4 6.6 10.6 12 4 17.4Z"/>' +
+    '<line x1="13.6" y1="7.2" x2="20.6" y2="7.2"/>' +
+    '<line x1="13.6" y1="12" x2="20.6" y2="12"/>' +
+    '<line x1="13.6" y1="16.8" x2="20.6" y2="16.8"/>' +
+    "</g></svg>"
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`
 }
 
 /**
@@ -60,9 +66,9 @@ function markDataUri(size: number): string {
  * ("Older Kids — Shorts & Shows" is the worst case at 27).
  */
 function titleFontSize(label: string): number {
-  if (label.length > 30) return 52;
-  if (label.length > 18) return 64;
-  return 76;
+  if (label.length > 30) return 52
+  if (label.length > 18) return 64
+  return 76
 }
 
 /**
@@ -71,51 +77,63 @@ function titleFontSize(label: string): number {
  * `label` is the set's human label ("Manga & Webtoons"), never its id — the id is a slug and
  * the list title already carries it.
  */
-export async function readingListCoverSvg(label: string): Promise<string> {
-  const title = label.trim() || 'Reading queue';
+export async function readingListCoverSvg(
+  label: string,
+): Promise<string> {
+  const title = label.trim() || "Reading queue"
   const element = {
     key: null,
-    type: 'div',
+    type: "div",
     props: {
       style: {
         // Satori 0.43+ lays out like a browser, and a browser's default is `content-box`:
         // without this the padding lands OUTSIDE the 640x960 frame and the whole cover is
         // drawn 768x1104 and cropped. Satori 0.29's Yoga was border-box by default.
-        boxSizing: 'border-box',
+        boxSizing: "border-box",
         width: WIDTH,
         height: HEIGHT,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '72px 64px',
-        backgroundColor: '#0F141C',
-        backgroundImage:
-          `radial-gradient(78% 46% at 50% 26%, rgba(74,198,148,0.30) 0%, rgba(74,198,148,0) 70%)`,
-        color: '#ffffff',
-        fontFamily: 'Outfit',
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "72px 64px",
+        backgroundColor: "#0F141C",
+        backgroundImage: `radial-gradient(78% 46% at 50% 26%, rgba(74,198,148,0.30) 0%, rgba(74,198,148,0) 70%)`,
+        color: "#ffffff",
+        fontFamily: "Outfit",
       },
       children: [
-        { type: 'img', props: { src: markDataUri(216), width: 216, height: 216 } },
         {
-          type: 'div',
+          type: "img",
           props: {
-            style: {
-              marginTop: 54, fontSize: 25, fontWeight: 600, letterSpacing: 8.5, color: GREEN,
-            },
-            children: 'QUEUEPILOT',
+            src: markDataUri(216),
+            width: 216,
+            height: 216,
           },
         },
         {
-          type: 'div',
+          type: "div",
+          props: {
+            style: {
+              marginTop: 54,
+              fontSize: 25,
+              fontWeight: 600,
+              letterSpacing: 8.5,
+              color: GREEN,
+            },
+            children: "QUEUEPILOT",
+          },
+        },
+        {
+          type: "div",
           props: {
             style: {
               marginTop: 22,
-              display: 'flex',
-              flexWrap: 'wrap',
-              justifyContent: 'center',
-              textAlign: 'center',
-              fontFamily: 'Baloo 2',
+              display: "flex",
+              flexWrap: "wrap",
+              justifyContent: "center",
+              textAlign: "center",
+              fontFamily: "Baloo 2",
               fontWeight: 700,
               fontSize: titleFontSize(title),
               lineHeight: 1.02,
@@ -124,31 +142,53 @@ export async function readingListCoverSvg(label: string): Promise<string> {
           },
         },
         {
-          type: 'div',
+          type: "div",
           props: {
             style: {
-              width: 92, height: 4, borderRadius: 2, backgroundColor: GREEN,
-              marginTop: 40, marginBottom: 26,
+              width: 92,
+              height: 4,
+              borderRadius: 2,
+              backgroundColor: GREEN,
+              marginTop: 40,
+              marginBottom: 26,
             },
           },
         },
         {
-          type: 'div',
-          props: { style: { fontSize: 25, color: '#8DA2AE' }, children: 'Reading queue' },
+          type: "div",
+          props: {
+            style: { fontSize: 25, color: "#8DA2AE" },
+            children: "Reading queue",
+          },
         },
       ],
     },
-  };
+  }
 
   return satori(element, {
     width: WIDTH,
     height: HEIGHT,
     fonts: [
-      { name: 'Baloo 2', data: decode(BALOO_2_BOLD_TTF_BASE64), weight: 700, style: 'normal' },
-      { name: 'Outfit', data: decode(OUTFIT_SEMIBOLD_TTF_BASE64), weight: 600, style: 'normal' },
-      { name: 'Outfit', data: decode(OUTFIT_REGULAR_TTF_BASE64), weight: 400, style: 'normal' },
+      {
+        name: "Baloo 2",
+        data: decode(BALOO_2_BOLD_TTF_BASE64),
+        weight: 700,
+        style: "normal",
+      },
+      {
+        name: "Outfit",
+        data: decode(OUTFIT_SEMIBOLD_TTF_BASE64),
+        weight: 600,
+        style: "normal",
+      },
+      {
+        name: "Outfit",
+        data: decode(OUTFIT_REGULAR_TTF_BASE64),
+        weight: 400,
+        style: "normal",
+      },
     ],
-  });
+  })
 }
 
 /**
@@ -159,6 +199,10 @@ export async function readingListCoverSvg(label: string): Promise<string> {
  * some upload endpoints, which is exactly why this is worth a function and a comment rather
  * than an inline `toString('base64')` at the call site.
  */
-export async function readingListCoverBase64(label: string): Promise<string> {
-  return Buffer.from(await readingListCoverSvg(label)).toString('base64');
+export async function readingListCoverBase64(
+  label: string,
+): Promise<string> {
+  return Buffer.from(
+    await readingListCoverSvg(label),
+  ).toString("base64")
 }

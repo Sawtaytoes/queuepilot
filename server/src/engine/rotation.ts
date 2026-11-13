@@ -8,30 +8,46 @@
 // deterministic part — the combined bucket pool (channel_buckets) — is parity-gated; build_rotation
 // shuffles+round-robins via an injected rng (like next_queue's anime branch), so its interleave
 // stays a per-language seeded test, not a cross-language byte-compare.
+
 import {
-  collectionChildren, findCollection, iterHistory, unwatchedBuckets,
-} from './select.js';
-import { setSections } from './routing.js';
-import { describe, resolveMember, resolveQueueEntry } from './resolve.js';
-import type { EntryDescriptor } from './resolve.js';
-import { toWeight, weightedInterleave } from './weight.js';
-import type { Rng } from './weight.js';
-import { WATCH_COUNT_ACCOUNTS, ROTATION_LENGTH, ROTATION_LENGTH_MAX } from '../env.js';
+  ROTATION_LENGTH,
+  ROTATION_LENGTH_MAX,
+  WATCH_COUNT_ACCOUNTS,
+} from "../env.js"
 import type {
-  Bucket, EngineBinding, MemberValue, PlexClient, PlexMetadata, PoolItem,
-} from '../types.js';
+  Bucket,
+  EngineBinding,
+  MemberValue,
+  PlexClient,
+  PlexMetadata,
+  PoolItem,
+} from "../types.js"
+import type { EntryDescriptor } from "./resolve.js"
+import {
+  describe,
+  resolveMember,
+  resolveQueueEntry,
+} from "./resolve.js"
+import { setSections } from "./routing.js"
+import {
+  collectionChildren,
+  findCollection,
+  iterHistory,
+  unwatchedBuckets,
+} from "./select.js"
+import type { Rng } from "./weight.js"
+import { toWeight, weightedInterleave } from "./weight.js"
 
 /**
  * The cfg slice the rotation wiring reads. `unwatchedBuckets` and `resolveMember` each declare
  * their own (wider) slice; this one only adds `members:`, so a `RoutingRotationCfg` fits all three.
  */
-type RotationCfg = Parameters<typeof unwatchedBuckets>[1]
-  & Parameters<typeof resolveMember>[2]
-  & {
-    members?: readonly MemberValue[] | null;
+type RotationCfg = Parameters<typeof unwatchedBuckets>[1] &
+  Parameters<typeof resolveMember>[2] & {
+    members?: readonly MemberValue[] | null
     /** `'whole'` (default) | `'split'` — see `isSplittingCollections`. */
-    collection_members?: unknown;
-  };
+    collection_members?: unknown
+  }
 
 /**
  * Does this pool want a collection member SPLIT back into its individual shows?
@@ -44,7 +60,11 @@ type RotationCfg = Parameters<typeof unwatchedBuckets>[1]
  * typo: fall back to the intended default rather than to the other behaviour.
  */
 function isSplittingCollections(cfg: RotationCfg): boolean {
-  return String(cfg.collection_members ?? '').trim().toLowerCase() === 'split';
+  return (
+    String(cfg.collection_members ?? "")
+      .trim()
+      .toLowerCase() === "split"
+  )
 }
 
 /**
@@ -65,14 +85,19 @@ async function collectionCover(
   cfg: RotationCfg,
   token: string | null | undefined,
 ): Promise<Set<string>> {
-  const covered = new Set<string>();
+  const covered = new Set<string>()
   for (const desc of memberDescs(cfg)) {
-    if (!desc.collection) continue;
-    for (const ch of await collectionChildrenOf(client, cfg, desc.collection, token)) {
-      covered.add(String(ch.ratingKey));
+    if (!desc.collection) continue
+    for (const ch of await collectionChildrenOf(
+      client,
+      cfg,
+      desc.collection,
+      token,
+    )) {
+      covered.add(String(ch.ratingKey))
     }
   }
-  return covered;
+  return covered
 }
 
 /**
@@ -88,11 +113,16 @@ async function collectionChildrenOf(
   token: string | null | undefined,
 ): Promise<PlexMetadata[]> {
   for (const sec of setSections(cfg) || []) {
-    const crk = await findCollection(client, sec, name, token);
+    const crk = await findCollection(
+      client,
+      sec,
+      name,
+      token,
+    )
     // A collection lives in ONE section, so the first hit is the answer.
-    if (crk) return collectionChildren(client, crk, token);
+    if (crk) return collectionChildren(client, crk, token)
   }
-  return [];
+  return []
 }
 
 // Watched ratingKeys across the binding's WHOLE history (no section filter) — members resolve by
@@ -102,30 +132,35 @@ export async function watchedAll(
   client: PlexClient,
   binding: EngineBinding | null | undefined,
 ): Promise<Set<string>> {
-  const accts = (binding && binding.watch_count_accounts) || WATCH_COUNT_ACCOUNTS;
-  const watched = new Set<string>();
+  const accts =
+    (binding && binding.watch_count_accounts) ||
+    WATCH_COUNT_ACCOUNTS
+  const watched = new Set<string>()
   for (const acct of accts) {
     for await (const row of iterHistory(client, acct)) {
-      if (row.ratingKey != null) watched.add(String(row.ratingKey));
+      if (row.ratingKey != null)
+        watched.add(String(row.ratingKey))
     }
   }
-  return watched;
+  return watched
 }
 
 // A rotation channel's `members:` list as resolution descriptors. Port of member_descs.
-export function memberDescs(cfg: { members?: readonly MemberValue[] | null }): EntryDescriptor[] {
-  const out: EntryDescriptor[] = [];
+export function memberDescs(cfg: {
+  members?: readonly MemberValue[] | null
+}): EntryDescriptor[] {
+  const out: EntryDescriptor[] = []
   for (const m of cfg.members || []) {
-    const desc = describe(m);
-    if (desc.key != null) out.push(desc);
+    const desc = describe(m)
+    if (desc.key != null) out.push(desc)
   }
-  return out;
+  return out
 }
 
 export interface ManualMovieMember {
-  ratingKey: string;
-  title: string;
-  weight: number;
+  ratingKey: string
+  title: string
+  weight: number
 }
 
 /**
@@ -145,29 +180,25 @@ export async function manualMovieMembers(
   cfg: RotationCfg,
   binding: EngineBinding,
 ): Promise<ManualMovieMember[]> {
-  const token = await client.accountToken(binding.user_uuid);
-  const out: ManualMovieMember[] = [];
+  const token = await client.accountToken(binding.user_uuid)
+  const out: ManualMovieMember[] = []
 
   for (const desc of memberDescs(cfg)) {
-    if (desc.collection) continue;
+    if (desc.collection) continue
 
-    const [ratingKey, type, title] = await resolveQueueEntry(
-      client,
-      desc,
-      cfg,
-      token,
-    );
+    const [ratingKey, type, title] =
+      await resolveQueueEntry(client, desc, cfg, token)
 
-    if (type !== 'movie' || !ratingKey) continue;
+    if (type !== "movie" || !ratingKey) continue
 
     out.push({
       ratingKey: String(ratingKey),
       title: String(title || desc.title || ratingKey),
       weight: toWeight(desc.weight),
-    });
+    })
   }
 
-  return out;
+  return out
 }
 
 /**
@@ -187,16 +218,22 @@ export async function mergeManualMoviesIntoRewatch(
   excludes: Set<string>,
   weights: Record<string, number>,
 ): Promise<Record<string, number>> {
-  const nextWeights = { ...weights };
+  const nextWeights = { ...weights }
 
-  for (const member of await manualMovieMembers(client, cfg, binding)) {
-    if (!counts.has(member.ratingKey)) counts.set(member.ratingKey, 1);
-    if (!titles.has(member.ratingKey)) titles.set(member.ratingKey, member.title);
-    excludes.delete(member.ratingKey);
-    nextWeights[member.ratingKey] = member.weight;
+  for (const member of await manualMovieMembers(
+    client,
+    cfg,
+    binding,
+  )) {
+    if (!counts.has(member.ratingKey))
+      counts.set(member.ratingKey, 1)
+    if (!titles.has(member.ratingKey))
+      titles.set(member.ratingKey, member.title)
+    excludes.delete(member.ratingKey)
+    nextWeights[member.ratingKey] = member.weight
   }
 
-  return nextWeights;
+  return nextWeights
 }
 
 // Buckets for a channel's explicit `members:` list, shaped like unwatchedBuckets. Each member
@@ -208,36 +245,53 @@ export async function memberBuckets(
   cfg: RotationCfg,
   binding: EngineBinding,
 ): Promise<Bucket[]> {
-  const tok = await client.accountToken(binding.user_uuid);
-  const watched = await watchedAll(client, binding);
-  const isSplitting = isSplittingCollections(cfg);
-  const buckets: Bucket[] = [];
+  const tok = await client.accountToken(binding.user_uuid)
+  const watched = await watchedAll(client, binding)
+  const isSplitting = isSplittingCollections(cfg)
+  const buckets: Bucket[] = []
   for (const desc of memberDescs(cfg)) {
     // SPLIT: the collection stops being a member and its children become members instead —
     // one bucket each, resolved exactly as a hand-added show member would be, so each one
     // rotates on its own. `weight` rides down to every child: it was the collection's share
     // of a round, and after the split each child asks for that share.
     if (desc.collection && isSplitting) {
-      for (const child of await collectionChildrenOf(client, cfg, desc.collection, tok)) {
+      for (const child of await collectionChildrenOf(
+        client,
+        cfg,
+        desc.collection,
+        tok,
+      )) {
         const childDesc = describe({
           ratingKey: String(child.ratingKey),
           title: child.title,
           weight: desc.weight,
-        });
-        const res = await resolveMember(client, childDesc, cfg, watched, tok);
-        if (!res || !res.items.length) continue;
+        })
+        const res = await resolveMember(
+          client,
+          childDesc,
+          cfg,
+          watched,
+          tok,
+        )
+        if (!res || !res.items.length) continue
         buckets.push({
           show: res.title,
           ratingKey: res.ratingKey || res.title,
           episodes: res.items as PoolItem[],
           multi_season: res.multi_season || false,
           weight: res.weight,
-        });
+        })
       }
-      continue;
+      continue
     }
-    const res = await resolveMember(client, desc, cfg, watched, tok);
-    if (!res || !res.items.length) continue;
+    const res = await resolveMember(
+      client,
+      desc,
+      cfg,
+      watched,
+      tok,
+    )
+    if (!res || !res.items.length) continue
     buckets.push({
       show: res.title,
       ratingKey: res.ratingKey || res.title,
@@ -248,9 +302,9 @@ export async function memberBuckets(
       // The member's own `weight:` — how many slots per round it takes in buildRotation. A
       // rule-pool show gets the same thing from the channel's `weights:` map (select.js).
       weight: res.weight,
-    });
+    })
   }
-  return buckets;
+  return buckets
 }
 
 // A rotation channel's pool: the dynamic rule PLUS its explicit `members:` (additive includes —
@@ -262,10 +316,17 @@ export async function channelBuckets(
   binding: EngineBinding,
   rng: Rng | null = null,
 ): Promise<Bucket[]> {
-  const rule = await unwatchedBuckets(client, cfg, binding, rng);
-  if (!cfg.members || !cfg.members.length) return rule;
-  const members = await memberBuckets(client, cfg, binding);
-  const seen = new Set(members.map((b) => String(b.ratingKey)));
+  const rule = await unwatchedBuckets(
+    client,
+    cfg,
+    binding,
+    rng,
+  )
+  if (!cfg.members || !cfg.members.length) return rule
+  const members = await memberBuckets(client, cfg, binding)
+  const seen = new Set(
+    members.map((b) => String(b.ratingKey)),
+  )
   // A COLLECTION MEMBER COVERS ITS CHILDREN, in both modes.
   //
   // The dedupe above compares BUCKET ratingKeys, and a collection's bucket key is the
@@ -280,9 +341,12 @@ export async function channelBuckets(
   // already a member bucket keyed by its own ratingKey, so `seen` caught it. Applying the
   // cover in both modes anyway keeps ONE rule to state and to test ("a collection member
   // covers its children") instead of a rule with a mode-shaped exception.
-  const tok = await client.accountToken(binding.user_uuid);
-  for (const rk of await collectionCover(client, cfg, tok)) seen.add(rk);
-  return members.concat(rule.filter((b) => !seen.has(String(b.ratingKey))));
+  const tok = await client.accountToken(binding.user_uuid)
+  for (const rk of await collectionCover(client, cfg, tok))
+    seen.add(rk)
+  return members.concat(
+    rule.filter((b) => !seen.has(String(b.ratingKey))),
+  )
 }
 
 /**
@@ -300,13 +364,15 @@ export async function channelBuckets(
  * anything, since a fixed playQueue cannot be infinite. Until both exist, a number is the
  * only accepted form and anything else quietly means "the default".
  */
-export function rotationLength(cfg: { length?: string } | null | undefined): number {
-  const n = parseInt(String(cfg?.length ?? ''), 10);
-  if (!Number.isFinite(n) || n <= 0) return ROTATION_LENGTH;
+export function rotationLength(
+  cfg: { length?: string } | null | undefined,
+): number {
+  const n = parseInt(String(cfg?.length ?? ""), 10)
+  if (!Number.isFinite(n) || n <= 0) return ROTATION_LENGTH
   // Clamped HERE as well as in sets.ts's writer, not only there: these files are hand-edited
   // over SMB as often as they are saved through the UI, so the engine cannot assume the
   // writer's ceiling was ever applied.
-  return Math.min(n, ROTATION_LENGTH_MAX);
+  return Math.min(n, ROTATION_LENGTH_MAX)
 }
 
 // Interleave next-unwatched episodes ACROSS shows (round-robin), TV-style: show A ep1, show B ep1,
@@ -324,13 +390,22 @@ export async function buildRotation(
   // never handed one, so curated channels played in file order) — this only fixes the type.
   rng: Rng | null = null,
 ): Promise<PoolItem[]> {
-  const shows = await channelBuckets(client, cfg, binding, rng);
-  if (!shows.length) return [];
-  const order = shows.slice();
-  if (rng) rng.shuffle(order);
+  const shows = await channelBuckets(
+    client,
+    cfg,
+    binding,
+    rng,
+  )
+  if (!shows.length) return []
+  const order = shows.slice()
+  if (rng) rng.shuffle(order)
   // WEIGHTS ride on top of the shuffle, not instead of it: the shuffle still decides who leads
   // tonight, then the interleave decides how many slots each one takes. weightedInterleave is
   // the plain round-robin above when every weight is 1 — same walk of `order`, same output —
   // so an unweighted channel is bit-for-bit unchanged. See engine/weight.js.
-  return weightedInterleave(order, (s) => s.episodes, length);
+  return weightedInterleave(
+    order,
+    (s) => s.episodes,
+    length,
+  )
 }

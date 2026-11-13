@@ -7,13 +7,18 @@
 // THE WIRE IDS LIVE HERE. `sets.id` is the text an NFC card carries and the text Home
 // Assistant puts in `{"set": "<id>"}`. Nothing in this file generates, normalizes or
 // renumbers one; `INSERT … (:id …)` takes what the document held.
-import type { Document } from 'yaml';
-import { parse, parseDocument } from 'yaml';
-import { readFileSync } from 'node:fs';
 
-import { STORE_YAML_MIRROR } from '../../config.js';
-import * as yamlSets from '../sets.js';
-import type { SetsStore, StoreStat } from '../index.js';
+import { readFileSync } from "node:fs"
+import type { Document } from "yaml"
+import { parse, parseDocument } from "yaml"
+
+import { STORE_YAML_MIRROR } from "../../config.js"
+import type { SetsStore, StoreStat } from "../index.js"
+import {
+  ensureImported,
+  noteMirrorWrite,
+} from "../migrate/yaml.js"
+import * as yamlSets from "../sets.js"
 import {
   applyComments,
   bumpVersion,
@@ -23,72 +28,82 @@ import {
   withStoreLock,
   writeMeta,
   YAML_OUT,
-} from './common.js';
-import { bookOfRecord, prepareChecked } from './open.js';
+} from "./common.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 import {
   applyPresentation,
   assemble,
+  type DocumentLeftovers,
   documentFrom,
   shredListDocument,
-  type DocumentLeftovers,
-} from './shred.js';
-import { ensureImported, noteMirrorWrite } from '../migrate/yaml.js';
+} from "./shred.js"
 
 /** The YAML file's path. Still the store's `path`: `sse.ts` watches its directory, log lines
  * name it, and `engine/routing.ts` passes it back into `readSync` as the "no fixture" default.
  * It is where the mirror is written, not where the truth is. */
-export const path = yamlSets.path;
+export const path = yamlSets.path
 
 const EMPTY_LEFTOVERS: DocumentLeftovers = {
-  order: ['sets'],
+  order: ["sets"],
   values: {},
   keyPresentation: {},
   commentBefore: null,
   comment: null,
-};
+}
 
 interface SetRow {
-  id: string;
-  position: number;
-  data: string;
-  comment_before: string | null;
-  comment: string | null;
-  presentation: string | null;
+  id: string
+  position: number
+  data: string
+  comment_before: string | null
+  comment: string | null
+  presentation: string | null
 }
 
 const rows = (): SetRow[] =>
   prepareChecked<SetRow>(
     bookOfRecord(),
-    'SELECT id, position, data, comment_before, comment, presentation FROM sets ORDER BY position',
-  ).all();
+    "SELECT id, position, data, comment_before, comment, presentation FROM sets ORDER BY position",
+  ).all()
 
 const leftovers = (): DocumentLeftovers =>
-  readJsonMeta(bookOfRecord(), 'sets', 'leftovers', EMPTY_LEFTOVERS);
+  readJsonMeta(
+    bookOfRecord(),
+    "sets",
+    "leftovers",
+    EMPTY_LEFTOVERS,
+  )
 
 /** The parsed registry as the file would have parsed: `{ global: …, sets: [ … ] }`. */
 function plain(): Record<string, unknown> {
-  const list = rows().map((row) => JSON.parse(row.data) as unknown);
-  return assemble(leftovers(), { sets: list });
+  const list = rows().map(
+    (row) => JSON.parse(row.data) as unknown,
+  )
+  return assemble(leftovers(), { sets: list })
 }
 
 export async function ensureFile(): Promise<void> {
-  ensureImported();
+  ensureImported()
 }
 
 export async function readDoc(): Promise<Document> {
-  ensureImported();
-  const setRows = rows();
-  const meta = leftovers();
+  ensureImported()
+  const setRows = rows()
+  const meta = leftovers()
   const doc = documentFrom(
-    assemble(meta, { sets: setRows.map((row) => JSON.parse(row.data) as unknown) }),
+    assemble(meta, {
+      sets: setRows.map(
+        (row) => JSON.parse(row.data) as unknown,
+      ),
+    }),
     meta,
-  );
+  )
   setRows.forEach((row, index) => {
-    const node = nodeAt(doc, ['sets', index]);
-    applyComments(node, row);
-    applyPresentation(node, row.presentation);
-  });
-  return doc;
+    const node = nodeAt(doc, ["sets", index])
+    applyComments(node, row)
+    applyPresentation(node, row.presentation)
+  })
+  return doc
 }
 
 /** Shred the document back into rows, then mirror it to YAML while the rollback path is open.
@@ -96,23 +111,26 @@ export async function readDoc(): Promise<Document> {
  * DELETE-then-INSERT rather than a diff: the document IS the new state, the table is tens of
  * rows, and the whole thing is one transaction. A diff would have to decide what a moved row
  * is, and getting that wrong loses an entry rather than reordering one. */
-export async function writeDoc(doc: Document): Promise<void> {
-  const db = bookOfRecord();
-  const { rows: shredded, leftovers: meta } = shredListDocument(doc, 'sets');
+export async function writeDoc(
+  doc: Document,
+): Promise<void> {
+  const db = bookOfRecord()
+  const { rows: shredded, leftovers: meta } =
+    shredListDocument(doc, "sets")
 
   db.withTransaction(() => {
-    prepareChecked(db, 'DELETE FROM sets').run();
+    prepareChecked(db, "DELETE FROM sets").run()
     const insert = prepareChecked(
       db,
-      'INSERT INTO sets (id, position, data, comment_before, comment, presentation) ' +
-        'VALUES (:id, :position, :data, :comment_before, :comment, :presentation)',
-    );
+      "INSERT INTO sets (id, position, data, comment_before, comment, presentation) " +
+        "VALUES (:id, :position, :data, :comment_before, :comment, :presentation)",
+    )
     for (const row of shredded) {
-      const id = (row.value as { id?: unknown } | null)?.id;
+      const id = (row.value as { id?: unknown } | null)?.id
       // A set with no id has nothing to be addressed by — no card, no MQTT payload, no shelf
       // tile. The YAML reader skipped it silently; skipping it here keeps that behaviour and
       // keeps the CHECK on the table honest.
-      if (id == null || String(id) === '') continue;
+      if (id == null || String(id) === "") continue
       insert.run({
         id: String(id),
         position: row.position,
@@ -120,29 +138,29 @@ export async function writeDoc(doc: Document): Promise<void> {
         comment_before: row.comment_before,
         comment: row.comment,
         presentation: row.presentation,
-      });
+      })
     }
-    writeMeta(db, 'sets', 'leftovers', JSON.stringify(meta));
-    bumpVersion(db, 'sets');
-  });
+    writeMeta(db, "sets", "leftovers", JSON.stringify(meta))
+    bumpVersion(db, "sets")
+  })
 
   if (STORE_YAML_MIRROR) {
-    await yamlSets.writeDoc(doc);
+    await yamlSets.writeDoc(doc)
     // The files now hold what the rows hold. Recording that here is what stops the next
     // read treating our own mirror write as somebody else's hand-edit.
-    noteMirrorWrite();
+    noteMirrorWrite()
   }
 }
 
 export async function stat(): Promise<StoreStat | null> {
-  ensureImported();
-  return versionOf(bookOfRecord(), 'sets');
+  ensureImported()
+  return versionOf(bookOfRecord(), "sets")
 }
 
 export function revision(): string {
-  ensureImported();
-  const version = versionOf(bookOfRecord(), 'sets');
-  return `${Math.round(version.mtimeMs)}-${version.size}`;
+  ensureImported()
+  const version = versionOf(bookOfRecord(), "sets")
+  return `${Math.round(version.mtimeMs)}-${version.size}`
 }
 
 /**
@@ -163,13 +181,17 @@ export function revision(): string {
  * cutover reformats nothing on the household's files. The existing 1.6 MB of `.history.json` is
  * undo depth rather than user data and starts empty after the cutover anyway.
  */
-export async function readRawSnapshot(): Promise<string | null> {
-  ensureImported();
-  return (await readDoc()).toString(YAML_OUT);
+export async function readRawSnapshot(): Promise<
+  string | null
+> {
+  ensureImported()
+  return (await readDoc()).toString(YAML_OUT)
 }
 
-export async function writeRawSnapshot(text: string): Promise<void> {
-  await writeDoc(parseDocument(text));
+export async function writeRawSnapshot(
+  text: string,
+): Promise<void> {
+  await writeDoc(parseDocument(text))
 }
 
 /**
@@ -180,13 +202,16 @@ export async function writeRawSnapshot(text: string): Promise<void> {
  * disk exactly as before; the store's own path means "read the rows".
  */
 export function readSync(file: string = path): unknown {
-  if (file !== path) return parse(readFileSync(file, 'utf8'));
-  ensureImported();
-  return plain();
+  if (file !== path)
+    return parse(readFileSync(file, "utf8"))
+  ensureImported()
+  return plain()
 }
 
-export function withLock<T>(fn: () => Promise<T>): Promise<T> {
-  return withStoreLock('sets', fn);
+export function withLock<T>(
+  fn: () => Promise<T>,
+): Promise<T> {
+  return withStoreLock("sets", fn)
 }
 
 export const store: SetsStore = {
@@ -200,4 +225,4 @@ export const store: SetsStore = {
   writeRawSnapshot,
   readSync,
   withLock,
-};
+}

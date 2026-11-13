@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, test } from "vitest"
 
 import {
   entryTitle,
@@ -28,7 +28,7 @@ const LABELS = {
 }
 
 describe("groupHits", () => {
-  it("puts the pool's own libraries first and everything else after", () => {
+  test("puts the pool's own libraries first and everything else after", () => {
     const out = groupHits(
       [
         hit("a", 99),
@@ -47,7 +47,7 @@ describe("groupHits", () => {
     ])
   })
 
-  it("keeps collections leading INSIDE each group, not just overall", () => {
+  test("keeps collections leading INSIDE each group, not just overall", () => {
     // A collection out of pool must not jump ahead of an in-pool item: the group is the
     // outer sort, collections-first only breaks ties within one.
     const out = groupHits(
@@ -66,7 +66,7 @@ describe("groupHits", () => {
     ])
   })
 
-  it("is stable, so Plex's own relevance order survives within a group", () => {
+  test("is stable, so Plex's own relevance order survives within a group", () => {
     const out = groupHits(
       [hit("first", 5), hit("second", 5), hit("third", 5)],
       new Set([5]),
@@ -79,7 +79,7 @@ describe("groupHits", () => {
     ])
   })
 
-  it("marks only the first row of each group", () => {
+  test("marks only the first row of each group", () => {
     const out = groupHits(
       [
         hit("a", 5),
@@ -98,7 +98,7 @@ describe("groupHits", () => {
     ])
   })
 
-  it("labels nothing when every hit is in the pool — there is no second group", () => {
+  test("labels nothing when every hit is in the pool — there is no second group", () => {
     const out = groupHits(
       [hit("a", 5), hit("b", 5)],
       new Set([5]),
@@ -110,7 +110,7 @@ describe("groupHits", () => {
     ])
   })
 
-  it("still labels the rest when NOTHING is in the pool, so the reason is on screen", () => {
+  test("still labels the rest when NOTHING is in the pool, so the reason is on screen", () => {
     const out = groupHits(
       [hit("a", 99), hit("b", 99)],
       new Set([5]),
@@ -124,13 +124,13 @@ describe("groupHits", () => {
 })
 
 describe("poolSections", () => {
-  it("is the union of show and item libraries", () => {
+  test("is the union of show and item libraries", () => {
     expect(
       poolSections({ sections: [5], item_sections: [15] }),
     ).toEqual(new Set([5, 15]))
   })
 
-  it("survives a set that carries neither", () => {
+  test("survives a set that carries neither", () => {
     expect(
       poolSections({
         sections: [],
@@ -141,7 +141,7 @@ describe("poolSections", () => {
 })
 
 describe("hitLabel", () => {
-  it("names the edition, which is the only thing telling two editions apart", () => {
+  test("names the edition, which is the only thing telling two editions apart", () => {
     expect(
       hitLabel({
         ...hit("1", 15),
@@ -152,7 +152,7 @@ describe("hitLabel", () => {
     ).toBe("Big Buck Bunny (2008) — 3D")
   })
 
-  it("leaves the plain edition plain — Plex tags only one of the pair", () => {
+  test("leaves the plain edition plain — Plex tags only one of the pair", () => {
     expect(
       hitLabel({
         ...hit("2", 15),
@@ -162,7 +162,7 @@ describe("hitLabel", () => {
     ).toBe("Big Buck Bunny (2008)")
   })
 
-  it("omits a missing year rather than printing an empty bracket", () => {
+  test("omits a missing year rather than printing an empty bracket", () => {
     expect(
       hitLabel({ ...hit("3", 15), title: "Untitled" }),
     ).toBe("Untitled")
@@ -172,7 +172,7 @@ describe("hitLabel", () => {
 describe("entryTitle", () => {
   // The 2026-08-21 defect: the queue add box built this string itself, without the edition,
   // so two editions of one film went into `queues.yaml` under the same title.
-  it("tells two editions of one film apart", () => {
+  test("tells two editions of one film apart", () => {
     const tagged = entryTitle({
       ...hit("267280", 15),
       title: "Big Buck Bunny",
@@ -190,7 +190,7 @@ describe("entryTitle", () => {
     expect(tagged).not.toBe(plain)
   })
 
-  it("leaves the plain edition plain — Plex tags only one of the pair", () => {
+  test("leaves the plain edition plain — Plex tags only one of the pair", () => {
     expect(
       entryTitle({
         ...hit("2", 15),
@@ -200,7 +200,7 @@ describe("entryTitle", () => {
     ).toBe("Big Buck Bunny (2008)")
   })
 
-  it("stores a COLLECTION by its bare name, with no year and no edition", () => {
+  test("stores a COLLECTION by its bare name, with no year and no edition", () => {
     // A collection entry is written as the literal `Collection: <name>` the resolver expands
     // by NAME, so anything appended to the title stops it resolving.
     expect(
@@ -212,7 +212,7 @@ describe("entryTitle", () => {
     ).toBe("Blender Open Movies")
   })
 
-  it("names a SHOW the same way an item is named", () => {
+  test("names a SHOW the same way an item is named", () => {
     expect(
       entryTitle({
         ...hit("9", 5, "show"),
@@ -224,7 +224,7 @@ describe("entryTitle", () => {
 })
 
 describe("queueItemAddBody", () => {
-  it("writes a collection as an explicitly typed name", () => {
+  test("writes a collection as an explicitly typed name", () => {
     expect(
       queueItemAddBody({
         ...hit("77", 15, "collection"),
@@ -238,7 +238,7 @@ describe("queueItemAddBody", () => {
     })
   })
 
-  it("writes an item by rating key with its full printable title", () => {
+  test("writes an item by rating key with its full printable title", () => {
     expect(
       queueItemAddBody({
         ...hit("42", 15),
@@ -255,7 +255,7 @@ describe("queueItemAddBody", () => {
     })
   })
 
-  it("keeps the Plex server scope on a shared item", () => {
+  test("keeps the Plex server scope on a shared item", () => {
     expect(
       queueItemAddBody({
         ...hit("42", 15),

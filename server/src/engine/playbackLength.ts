@@ -32,11 +32,14 @@
 // every infinite lineup, and a finite one longer than the window. Deriving it removes the
 // combination that could only ever be wrong: `infinite` with top-up off, which silently stops
 // at 12.
-import { ROTATION_LENGTH, ROTATION_LENGTH_MAX } from '../env.js';
-import { isRandomOrder } from '../kind.js';
+import {
+  ROTATION_LENGTH,
+  ROTATION_LENGTH_MAX,
+} from "../env.js"
+import { isRandomOrder } from "../kind.js"
 
 /** The named infinite form, on the wire and on disk. */
-export const INFINITE = 'infinite';
+export const INFINITE = "infinite"
 
 /**
  * How many items to play, or `null` for infinite.
@@ -45,24 +48,33 @@ export const INFINITE = 'infinite';
  * and `JSON.stringify(Infinity)` is `null` anyway — so making the absence explicit here stops
  * a round trip from quietly inventing the difference.
  */
-export type PlaybackTarget = number | null;
+export type PlaybackTarget = number | null
 
 /** What a set plays when it has never said. Each is the behaviour that kind already had. */
-export function defaultFor(cfg: {
-  source?: unknown;
-  kind?: unknown;
-  add_as?: unknown;
-  behavior?: unknown;
-  mode?: unknown;
-} | null | undefined): PlaybackTarget {
-  const source = String(cfg?.source ?? '').toLowerCase();
-  const isRewatch = String(cfg?.behavior ?? cfg?.mode ?? '').toLowerCase() === 'rewatch';
+export function defaultFor(
+  cfg:
+    | {
+        source?: unknown
+        kind?: unknown
+        add_as?: unknown
+        behavior?: unknown
+        mode?: unknown
+      }
+    | null
+    | undefined,
+): PlaybackTarget {
+  const source = String(cfg?.source ?? "").toLowerCase()
+  const isRewatch =
+    String(
+      cfg?.behavior ?? cfg?.mode ?? "",
+    ).toLowerCase() === "rewatch"
 
   // A rewatch pool has always returned exactly one film per scan.
-  if (source === 'rotation' && isRewatch) return 1;
+  if (source === "rotation" && isRewatch) return 1
   // A filtered pool on progress, and a Random-pool Picks queue (legacy kind: anime),
   // have always filled a window. isRandomOrder tolerates the pre-migration spelling.
-  if (source === 'rotation' || isRandomOrder(cfg)) return ROTATION_LENGTH;
+  if (source === "rotation" || isRandomOrder(cfg))
+    return ROTATION_LENGTH
 
   // An ORDERED queue has always played its head entry and nothing else, so its default is 1 —
   // and on that ONE path the unit is ENTRIES, not items.
@@ -73,7 +85,7 @@ export function defaultFor(cfg: {
   // pool there are no entries to count and the unit is items, which is what `length: 12`
   // has always meant there. For the owner's own Movies queues the two agree anyway: one
   // entry is one film.
-  return 1;
+  return 1
 }
 
 /**
@@ -89,14 +101,17 @@ export function defaultFor(cfg: {
  * ever applied.
  */
 export function playbackLength(
-  cfg: {
-    length?: unknown;
-    refill?: unknown;
-    source?: unknown;
-    kind?: unknown;
-    behavior?: unknown;
-    mode?: unknown;
-  } | null | undefined,
+  cfg:
+    | {
+        length?: unknown
+        refill?: unknown
+        source?: unknown
+        kind?: unknown
+        behavior?: unknown
+        mode?: unknown
+      }
+    | null
+    | undefined,
   /**
    * What "never said" means for THIS caller, when `defaultFor` is the wrong question.
    *
@@ -108,22 +123,27 @@ export function playbackLength(
    */
   fallback?: PlaybackTarget,
 ): PlaybackTarget {
-  const raw = String(cfg?.length ?? '').trim().toLowerCase();
+  const raw = String(cfg?.length ?? "")
+    .trim()
+    .toLowerCase()
 
-  if (raw === INFINITE) return null;
+  if (raw === INFINITE) return null
 
   // LEGACY: `refill: true` was the 2026-08-17 spelling of infinite, when `length` meant the
   // window rather than the sitting. Read as infinite so the live Younger Kids — Shorts card
   // keeps behaving the way it does today without its file being touched; the editor writes
   // `length: infinite` and drops `refill` the next time it is saved.
   // (decision `2026-08-17-a-lineup-refills-instead-of-ending`, superseded by this one)
-  if (cfg?.refill === true) return null;
+  if (cfg?.refill === true) return null
 
-  const n = parseInt(raw, 10);
+  const n = parseInt(raw, 10)
 
-  if (!Number.isFinite(n) || n <= 0) return fallback === undefined ? defaultFor(cfg) : fallback;
+  if (!Number.isFinite(n) || n <= 0)
+    return fallback === undefined
+      ? defaultFor(cfg)
+      : fallback
 
-  return Math.min(n, ROTATION_LENGTH_MAX);
+  return Math.min(n, ROTATION_LENGTH_MAX)
 }
 
 /**
@@ -134,8 +154,12 @@ export function playbackLength(
  * trip on a card someone just tapped — 442 items on the live Shorts pool. Top-up carries the
  * rest.
  */
-export function initialQueueSize(target: PlaybackTarget): number {
-  return target == null ? ROTATION_LENGTH : Math.min(target, ROTATION_LENGTH);
+export function initialQueueSize(
+  target: PlaybackTarget,
+): number {
+  return target == null
+    ? ROTATION_LENGTH
+    : Math.min(target, ROTATION_LENGTH)
 }
 
 /**
@@ -144,11 +168,16 @@ export function initialQueueSize(target: PlaybackTarget): number {
  * True exactly when it wants to play more than one window holds. A pool at 1 or 8 never tops
  * up; `infinite`, and a Custom above the window, always do.
  */
-export function needsTopup(target: PlaybackTarget): boolean {
-  return target == null || target > ROTATION_LENGTH;
+export function needsTopup(
+  target: PlaybackTarget,
+): boolean {
+  return target == null || target > ROTATION_LENGTH
 }
 
 /** Has a session that wants `target` items already been handed them all? */
-export function isTargetMet(target: PlaybackTarget, queuedTotal: number): boolean {
-  return target != null && queuedTotal >= target;
+export function isTargetMet(
+  target: PlaybackTarget,
+  queuedTotal: number,
+): boolean {
+  return target != null && queuedTotal >= target
 }

@@ -66,99 +66,131 @@ import {
   renameSync,
   rmSync,
   statSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+} from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
 /** The sibling app's fifteen tables, so a count is reported for every one of them and not only
  * for the twelve the absorb copies. `players` / `groups` / `group_players` merge into this
  * app's people tables through the gated people import, and a reader needs to see they were
  * there. */
 const SOURCE_TABLES = [
-  'games',
-  'boxes',
-  'game_overrides',
-  'game_links',
-  'game_modules',
-  'categories',
-  'game_categories',
-  'owner_groupings',
-  'grouping_reviews',
-  'plays',
-  'play_players',
-  'player_known_games',
-  'players',
-  'groups',
-  'group_players',
-] as const;
+  "games",
+  "boxes",
+  "game_overrides",
+  "game_links",
+  "game_modules",
+  "categories",
+  "game_categories",
+  "owner_groupings",
+  "grouping_reviews",
+  "plays",
+  "play_players",
+  "player_known_games",
+  "players",
+  "groups",
+  "group_players",
+] as const
 
 /** The file name the absorb looks for. `store/migrate/boardgames.ts sourcePath()` is the other
  * half of this constant; the two must not drift. */
-const STAGED_NAME = 'board-game-picker-import.sqlite';
+const STAGED_NAME = "board-game-picker-import.sqlite"
 
 /** The two trees, and the option that turns each one off. `switch` is the Options key, so a
  * new directory cannot be added without saying how it is skipped. */
-const DIRECTORIES: readonly { from: string; switch: 'cache' | 'images'; to: string }[] = [
-  { from: 'images', switch: 'images', to: 'board-game-images' },
-  { from: 'cache', switch: 'cache', to: 'board-game-cache' },
-];
+const DIRECTORIES: readonly {
+  from: string
+  switch: "cache" | "images"
+  to: string
+}[] = [
+  {
+    from: "images",
+    switch: "images",
+    to: "board-game-images",
+  },
+  {
+    from: "cache",
+    switch: "cache",
+    to: "board-game-cache",
+  },
+]
 
 interface Options {
-  apply: boolean;
-  cache: boolean;
-  from: string;
-  images: boolean;
-  to: string;
+  apply: boolean
+  cache: boolean
+  from: string
+  images: boolean
+  to: string
 }
 
-function argFor(argv: readonly string[], name: string): string | null {
-  const i = argv.indexOf(name);
-  return i >= 0 && argv[i + 1] != null ? String(argv[i + 1]) : null;
+function argFor(
+  argv: readonly string[],
+  name: string,
+): string | null {
+  const i = argv.indexOf(name)
+  return i >= 0 && argv[i + 1] != null
+    ? String(argv[i + 1])
+    : null
 }
 
 function parseArgs(argv: readonly string[]): Options {
-  const queues = process.env.QUEUES_PATH || '/config/queues.yaml';
+  const queues =
+    process.env.QUEUES_PATH || "/config/queues.yaml"
   return {
-    apply: argv.includes('--apply'),
-    cache: !argv.includes('--no-cache'),
+    apply: argv.includes("--apply"),
+    cache: !argv.includes("--no-cache"),
     from:
-      argFor(argv, '--from') ||
+      argFor(argv, "--from") ||
       process.env.BOARD_GAME_PICKER_CONFIG ||
-      '/config/board-game-picker',
-    images: !argv.includes('--no-images'),
-    to: argFor(argv, '--to') || path.dirname(queues),
-  };
+      "/config/board-game-picker",
+    images: !argv.includes("--no-images"),
+    to: argFor(argv, "--to") || path.dirname(queues),
+  }
 }
 
-type Counts = Record<string, number>;
+type Counts = Record<string, number>
 
 /** Every table's row count, or `-1` for a table the file does not have. A missing table is a
  * finding rather than a crash: it is what a source that has moved on looks like. */
 function countRows(db: DatabaseSync): Counts {
   const present = new Set(
     db
-      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table'",
+      )
       .all()
       .map((row) => String((row as { name: string }).name)),
-  );
-  const counts: Counts = {};
+  )
+  const counts: Counts = {}
   for (const table of SOURCE_TABLES) {
     counts[table] = present.has(table)
-      ? Number((db.prepare(`SELECT COUNT(*) AS c FROM "${table}"`).get() as { c: number }).c)
-      : -1;
+      ? Number(
+          (
+            db
+              .prepare(
+                `SELECT COUNT(*) AS c FROM "${table}"`,
+              )
+              .get() as { c: number }
+          ).c,
+        )
+      : -1
   }
-  return counts;
+  return counts
 }
 
 /** The database, the WAL and the shared-memory file, into a scratch directory in one pass.
  * Returns the path of the copied database. */
-function copyDatabaseSet(source: string, into: string): string {
-  const copied = path.join(into, path.basename(source));
-  for (const suffix of ['', '-wal', '-shm']) {
-    if (existsSync(source + suffix)) copyFileSync(source + suffix, copied + suffix);
+function copyDatabaseSet(
+  source: string,
+  into: string,
+): string {
+  const copied = path.join(into, path.basename(source))
+  for (const suffix of ["", "-wal", "-shm"]) {
+    if (existsSync(source + suffix))
+      copyFileSync(source + suffix, copied + suffix)
   }
-  return copied;
+  return copied
 }
 
 /**
@@ -170,16 +202,24 @@ function copyDatabaseSet(source: string, into: string): string {
  * of "the staged file" is the same silent half-copy this whole tool exists to prevent.
  * `journal_mode = DELETE` after the checkpoint makes the snapshot exactly one file.
  */
-function checkpoint(file: string): { checkpointed: number; log: number } {
-  const db = new DatabaseSync(file);
-  const result = db.prepare('PRAGMA wal_checkpoint(TRUNCATE)').get() as {
-    busy: number;
-    checkpointed: number;
-    log: number;
-  };
-  db.prepare('PRAGMA journal_mode = DELETE').get();
-  db.close();
-  return { checkpointed: Number(result.checkpointed), log: Number(result.log) };
+function checkpoint(file: string): {
+  checkpointed: number
+  log: number
+} {
+  const db = new DatabaseSync(file)
+  const result = db
+    .prepare("PRAGMA wal_checkpoint(TRUNCATE)")
+    .get() as {
+    busy: number
+    checkpointed: number
+    log: number
+  }
+  db.prepare("PRAGMA journal_mode = DELETE").get()
+  db.close()
+  return {
+    checkpointed: Number(result.checkpointed),
+    log: Number(result.log),
+  }
 }
 
 /**
@@ -196,131 +236,160 @@ function checkpoint(file: string): { checkpointed: number; log: number } {
  */
 function adoptGroup(file: string, directory: string): void {
   try {
-    const target = statSync(directory);
-    chownSync(file, statSync(file).uid, target.gid);
-    chmodSync(file, 0o660);
+    const target = statSync(directory)
+    chownSync(file, statSync(file).uid, target.gid)
+    chmodSync(file, 0o660)
   } catch (e) {
-    console.log(`could not give ${path.basename(file)} the group of ${directory}: ${String(e)}`);
+    console.log(
+      `could not give ${path.basename(file)} the group of ${directory}: ${String(e)}`,
+    )
   }
 }
 
 /** Copy a tree, additively. Returns how many files were written and how many were already
  * there. Never deletes: nothing in this app owns these directories yet. */
-function copyTree(from: string, to: string, apply: boolean): { kept: number; written: number } {
-  let kept = 0;
-  let written = 0;
+function copyTree(
+  from: string,
+  to: string,
+  apply: boolean,
+): { kept: number; written: number } {
+  let kept = 0
+  let written = 0
 
-  const walk = (source: string, destination: string): void => {
-    if (apply) mkdirSync(destination, { recursive: true });
-    for (const entry of readdirSync(source, { withFileTypes: true })) {
-      const child = path.join(source, entry.name);
-      const target = path.join(destination, entry.name);
+  const walk = (
+    source: string,
+    destination: string,
+  ): void => {
+    if (apply) mkdirSync(destination, { recursive: true })
+    for (const entry of readdirSync(source, {
+      withFileTypes: true,
+    })) {
+      const child = path.join(source, entry.name)
+      const target = path.join(destination, entry.name)
       if (entry.isDirectory()) {
-        walk(child, target);
+        walk(child, target)
       } else if (entry.isFile()) {
-        if (existsSync(target) && statSync(target).size === statSync(child).size) {
-          kept += 1;
+        if (
+          existsSync(target) &&
+          statSync(target).size === statSync(child).size
+        ) {
+          kept += 1
         } else {
-          written += 1;
-          if (apply) copyFileSync(child, target);
+          written += 1
+          if (apply) copyFileSync(child, target)
         }
       }
     }
-  };
+  }
 
-  walk(from, to);
-  return { kept, written };
+  walk(from, to)
+  return { kept, written }
 }
 
 function main(): number {
-  const options = parseArgs(process.argv.slice(2));
-  const live = path.join(options.from, 'board-game-picker.sqlite');
+  const options = parseArgs(process.argv.slice(2))
+  const live = path.join(
+    options.from,
+    "board-game-picker.sqlite",
+  )
 
   if (!existsSync(live)) {
-    console.log(`no collection at ${live} — nothing to stage`);
-    return 1;
+    console.log(
+      `no collection at ${live} — nothing to stage`,
+    )
+    return 1
   }
   if (!existsSync(options.to)) {
-    console.log(`no destination directory at ${options.to}`);
-    return 1;
+    console.log(`no destination directory at ${options.to}`)
+    return 1
   }
 
-  const scratch = mkdtempSync(path.join(tmpdir(), 'stage-collection-'));
-  let failures = 0;
+  const scratch = mkdtempSync(
+    path.join(tmpdir(), "stage-collection-"),
+  )
+  let failures = 0
 
   try {
     // The copy first, so the three files come from as close to one instant as a filesystem
     // gives us — then the live read, which is the number the copy is judged against.
-    const copy = copyDatabaseSet(live, scratch);
-    const folded = checkpoint(copy);
+    const copy = copyDatabaseSet(live, scratch)
+    const folded = checkpoint(copy)
     console.log(
       `wal_checkpoint(TRUNCATE) on the copy — folded ${folded.checkpointed} page(s), ` +
         `${folded.log} left in the log`,
-    );
+    )
 
-    const liveDb = new DatabaseSync(live, { readOnly: true });
-    const liveCounts = countRows(liveDb);
-    liveDb.close();
+    const liveDb = new DatabaseSync(live, {
+      readOnly: true,
+    })
+    const liveCounts = countRows(liveDb)
+    liveDb.close()
 
-    const copyDb = new DatabaseSync(copy, { readOnly: true });
-    const copyCounts = countRows(copyDb);
-    copyDb.close();
+    const copyDb = new DatabaseSync(copy, {
+      readOnly: true,
+    })
+    const copyCounts = countRows(copyDb)
+    copyDb.close()
 
-    console.log('');
-    console.log('table                  live   staged');
+    console.log("")
+    console.log("table                  live   staged")
     for (const table of SOURCE_TABLES) {
-      const agree = liveCounts[table] === copyCounts[table];
-      if (!agree) failures += 1;
+      const agree = liveCounts[table] === copyCounts[table]
+      if (!agree) failures += 1
       console.log(
         `${table.padEnd(20)} ${String(liveCounts[table]).padStart(6)} ` +
-          `${String(copyCounts[table]).padStart(8)}  ${agree ? '' : '  ← DISAGREE'}`,
-      );
+          `${String(copyCounts[table]).padStart(8)}  ${agree ? "" : "  ← DISAGREE"}`,
+      )
     }
 
     if (failures > 0) {
       // The one failure mode this tool exists to catch. A disagreement means the copy was taken
       // while the sibling app was mid-write, and the answer is to run it again — never to stage
       // the file anyway and let the absorb assert against a source that has already moved.
-      console.log('');
+      console.log("")
       console.log(
         `${failures} table(s) disagree — the copy was torn. Nothing was staged; run it again.`,
-      );
-      return 1;
+      )
+      return 1
     }
 
-    const staged = path.join(options.to, STAGED_NAME);
+    const staged = path.join(options.to, STAGED_NAME)
     if (options.apply) {
-      const pending = `${staged}.staging`;
-      copyFileSync(copy, pending);
-      adoptGroup(pending, options.to);
-      renameSync(pending, staged);
-      console.log('');
-      console.log(`staged ${staged}`);
+      const pending = `${staged}.staging`
+      copyFileSync(copy, pending)
+      adoptGroup(pending, options.to)
+      renameSync(pending, staged)
+      console.log("")
+      console.log(`staged ${staged}`)
     } else {
-      console.log('');
-      console.log(`DRY RUN — ${staged} would be replaced. Re-run with --apply to write.`);
+      console.log("")
+      console.log(
+        `DRY RUN — ${staged} would be replaced. Re-run with --apply to write.`,
+      )
     }
 
     for (const directory of DIRECTORIES) {
-      if (!options[directory.switch]) continue;
-      const source = path.join(options.from, directory.from);
+      if (!options[directory.switch]) continue
+      const source = path.join(options.from, directory.from)
       if (!existsSync(source)) {
-        console.log(`${directory.from}/ — not present, skipped`);
-        continue;
+        console.log(
+          `${directory.from}/ — not present, skipped`,
+        )
+        continue
       }
-      const target = path.join(options.to, directory.to);
-      const result = copyTree(source, target, options.apply);
+      const target = path.join(options.to, directory.to)
+      const result = copyTree(source, target, options.apply)
       console.log(
         `${directory.from}/ → ${directory.to}/ — ` +
-          `${result.written} file(s) ${options.apply ? 'copied' : 'would be copied'}, ` +
+          `${result.written} file(s) ${options.apply ? "copied" : "would be copied"}, ` +
           `${result.kept} already there`,
-      );
+      )
     }
   } finally {
-    rmSync(scratch, { force: true, recursive: true });
+    rmSync(scratch, { force: true, recursive: true })
   }
 
-  return 0;
+  return 0
 }
 
-process.exit(main());
+process.exit(main())

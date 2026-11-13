@@ -6,9 +6,17 @@
   "scripts": {
     "build": "pnpm --filter queuepilot-web run build && pnpm --filter queuepilot-server run build",
     "install-playwright-browser": "pnpm --filter queuepilot-e2e run playwright install chromium --with-deps",
-    "lint": "pnpm --filter queuepilot-web run lint",
+    "lint": "biome check && eslint . --max-warnings 2198",
+    "lint:fix": "biome check --write && eslint . --fix",
     "test": "pnpm --filter queuepilot-web run test && pnpm --filter queuepilot-server run test",
     "test:smoke": "pnpm --filter queuepilot-e2e run test:smoke",
     "typecheck": "pnpm --filter queuepilot-web run typecheck && pnpm --filter queuepilot-server run typecheck && pnpm --filter queuepilot-e2e run typecheck"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.7",
+    "@charcuterie/biome-config": "^1.3.0",
+    "@charcuterie/eslint-config": "^1.7.1",
+    "eslint": "^10.14.0",
+    "typescript": "^6.0.3"
   }
 }

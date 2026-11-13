@@ -1,59 +1,89 @@
-import { Hono } from 'hono';
-import * as cache from '../cache.js';
-import * as plex from '../plex.js';
+import { Hono } from "hono"
+import * as cache from "../cache.js"
+import * as plex from "../plex.js"
 import {
   plexServerAccessForProfile,
   plexServerEpisodes,
   plexServerSearch,
   plexServerThumb,
   plexSourcesForProfile,
-} from '../plexSources.js';
-import * as providerBlocks from '../providers/blocks.js';
-import { coverUrl, providerFor } from '../providers/index.js';
-import * as sets from '../sets.js';
-import { parseSearchQuery, rankByYear } from '../searchQuery.js';
-import { binaryResponse } from './binaryResponse.js';
+} from "../plexSources.js"
+import * as providerBlocks from "../providers/blocks.js"
+import {
+  coverUrl,
+  providerFor,
+} from "../providers/index.js"
+import {
+  parseSearchQuery,
+  rankByYear,
+} from "../searchQuery.js"
+import * as sets from "../sets.js"
+import { binaryResponse } from "./binaryResponse.js"
 
 /** The member ORDER as one comparable string — the only field a Plex re-order moves. */
-const memberOrder = (children: readonly plex.CollectionChild[] | null): string =>
-  (children || []).map((ch) => ch.ratingKey).join(',');
+const memberOrder = (
+  children: readonly plex.CollectionChild[] | null,
+): string =>
+  (children || []).map((ch) => ch.ratingKey).join(",")
 
 /**
  * The read-only Plex-facing lookups: search, the profile/rating facets, the "Start from…"
  * pickers, and the two binary proxies that keep the Plex token server-side.
  */
 export function plexMetadataRoutes(): Hono {
-  const app = new Hono();
+  const app = new Hono()
 
-  const profileUser = async (profile: string | null | undefined) => {
-    const users = await plex.homeUsers();
-    if (!users.length) return null;
-    const wanted = String(profile || '').trim();
+  const profileUser = async (
+    profile: string | null | undefined,
+  ) => {
+    const users = await plex.homeUsers()
+    if (!users.length) return null
+    const wanted = String(profile || "").trim()
     return wanted
-      ? users.find((u) => (u.admin ? u.username : u.name) === wanted) || null
-      : users.find((u) => u.admin) || null;
-  };
+      ? users.find(
+          (u) => (u.admin ? u.username : u.name) === wanted,
+        ) || null
+      : users.find((u) => u.admin) || null
+  }
 
   // Server grants belong to the selected Plex account. Resolve a profile against the
   // Home roster before switching so a caller cannot supply an arbitrary user UUID.
-  app.get('/plex-sources', async (c) => {
-    const profile = (c.req.query('profile') || '').trim();
+  app.get("/plex-sources", async (c) => {
+    const profile = (c.req.query("profile") || "").trim()
     try {
-      const user = await profileUser(profile);
-      if (!user) return c.json({ error: 'Unknown Plex profile' }, 400);
+      const user = await profileUser(profile)
+      if (!user)
+        return c.json(
+          { error: "Unknown Plex profile" },
+          400,
+        )
       const [sources, localServerId] = await Promise.all([
         plexSourcesForProfile(user.uuid),
         plex.machineIdentifier(),
-      ]);
-      if (!localServerId) return c.json({ error: 'Plex server identity is unavailable' }, 503);
+      ])
+      if (!localServerId)
+        return c.json(
+          { error: "Plex server identity is unavailable" },
+          503,
+        )
       return c.json({
-        profile: user.admin ? (user.username || user.name) : user.name,
-        sources: sources.map((source) => ({ ...source, local: source.id === localServerId })),
-      });
+        profile: user.admin
+          ? user.username || user.name
+          : user.name,
+        sources: sources.map((source) => ({
+          ...source,
+          local: source.id === localServerId,
+        })),
+      })
     } catch (e) {
-      return c.json({ error: e instanceof Error ? e.message : String(e) }, 503);
+      return c.json(
+        {
+          error: e instanceof Error ? e.message : String(e),
+        },
+        503,
+      )
     }
-  });
+  })
 
   // --- search ------------------------------------------------------------------ //
   // With ?set= : scoped to that set's sections (the in-queue add box).
@@ -70,35 +100,47 @@ export function plexMetadataRoutes(): Hono {
   // A trailing `(YYYY)` is split off before matching and used to RANK the hits, never to
   // filter them — see searchQuery.ts. `Title (Year)` is this app's own entry format, so the
   // box has to accept the string the tiles print.
-  app.get('/search', async (c) => {
-    const setId = c.req.query('set') ?? '';
-    const raw = (c.req.query('q') ?? '').trim();
-    const { text: q, year } = parseSearchQuery(raw);
-    const withCollections = c.req.query('collections') === '1' || c.req.query('collections') === 'true';
-    const allLibraries = c.req.query('scope') === 'all';
-    const plexServer = (c.req.query('plex_server') || '').trim();
-    const remoteSection = (c.req.query('section') || '').trim();
-    let scopedSet: Awaited<ReturnType<typeof sets.getSet>> = null;
-    if (!q) return c.json({ results: [] });
+  app.get("/search", async (c) => {
+    const setId = c.req.query("set") ?? ""
+    const raw = (c.req.query("q") ?? "").trim()
+    const { text: q, year } = parseSearchQuery(raw)
+    const withCollections =
+      c.req.query("collections") === "1" ||
+      c.req.query("collections") === "true"
+    const allLibraries = c.req.query("scope") === "all"
+    const plexServer = (
+      c.req.query("plex_server") || ""
+    ).trim()
+    const remoteSection = (
+      c.req.query("section") || ""
+    ).trim()
+    let scopedSet: Awaited<ReturnType<typeof sets.getSet>> =
+      null
+    if (!q) return c.json({ results: [] })
     try {
       // A PULL set searches ITS provider, not Plex. Routed here rather than at the four call
       // sites so every existing caller (queue add, channel members, channel filters) gets
       // provider-correct results without knowing providers exist — searching Plex for a Kavita
       // queue is what made "dungeon port" return nothing while the series sat in Webtoons.
       if (setId) {
-        const s = await sets.getSet(setId);
-        if (!s) return c.json({ error: 'unknown set' }, 400);
-        scopedSet = s;
-        if (s.delivery === 'pull') {
+        const s = await sets.getSet(setId)
+        if (!s) return c.json({ error: "unknown set" }, 400)
+        scopedSet = s
+        if (s.delivery === "pull") {
           // Spread, not `s`: see the note in providers/launcher.ts — `BlockSourceCfg`'s index
           // signature is satisfied by an anonymous object type but never by an interface.
-          const block = providerBlocks.resolveSingle({ ...s });
-          const p = providerFor(block.provider);
-          if (typeof p.search !== 'function') return c.json({ results: [] });
+          const block = providerBlocks.resolveSingle({
+            ...s,
+          })
+          const p = providerFor(block.provider)
+          if (typeof p.search !== "function")
+            return c.json({ results: [] })
           // Scoped to the queue's own libraries unless the caller explicitly asked to see
           // everything (the members picker's `scope=all`).
-          const libraries = allLibraries ? [] : block.libraries;
-          const found = await p.search(q, { libraries });
+          const libraries = allLibraries
+            ? []
+            : block.libraries
+          const found = await p.search(q, { libraries })
           return c.json({
             results: found.map((r) => ({
               // `ratingKey` is the shape every caller already stores and renders; here it
@@ -106,7 +148,7 @@ export function plexMetadataRoutes(): Hono {
               // from exactly one provider.
               ratingKey: r.id,
               title: r.title,
-              type: 'show',
+              type: "show",
               librarySectionTitle: r.libraryTitle,
               librarySectionID: r.libraryId,
               // The dropdown's artwork. It must be sent, not derived: the frontend's only other
@@ -114,110 +156,206 @@ export function plexMetadataRoutes(): Hono {
               // seriesId — the broken-image row the owner hit on 2026-08-15.
               cover: coverUrl(block.provider, r.id),
             })),
-          });
+          })
         }
         if (plexServer) {
-          const user = await profileUser(s.requires_profile);
-          if (!user) return c.json({ error: 'The queue profile is unavailable' }, 503);
-          const access = await plexServerAccessForProfile(user.uuid, plexServer);
-          if (!access) return c.json({ error: 'This profile cannot reach that Plex server' }, 403);
-          if (remoteSection && !access.libraries.some((library) => library.id === remoteSection)) {
-            return c.json({ error: 'That Plex library is not available to this profile' }, 403);
+          const user = await profileUser(s.requires_profile)
+          if (!user)
+            return c.json(
+              { error: "The queue profile is unavailable" },
+              503,
+            )
+          const access = await plexServerAccessForProfile(
+            user.uuid,
+            plexServer,
+          )
+          if (!access)
+            return c.json(
+              {
+                error:
+                  "This profile cannot reach that Plex server",
+              },
+              403,
+            )
+          if (
+            remoteSection &&
+            !access.libraries.some(
+              (library) => library.id === remoteSection,
+            )
+          ) {
+            return c.json(
+              {
+                error:
+                  "That Plex library is not available to this profile",
+              },
+              403,
+            )
           }
-          const selected = allLibraries ? [] : (s.shared_libraries?.[plexServer] ?? []);
-          if (remoteSection && selected.length && !selected.includes(remoteSection)) {
-            return c.json({ error: 'That Plex library is not selected for this queue' }, 403);
+          const selected = allLibraries
+            ? []
+            : (s.shared_libraries?.[plexServer] ?? [])
+          if (
+            remoteSection &&
+            selected.length &&
+            !selected.includes(remoteSection)
+          ) {
+            return c.json(
+              {
+                error:
+                  "That Plex library is not selected for this queue",
+              },
+              403,
+            )
           }
-          const allowed = selected.filter((id) => access.libraries.some((library) => library.id === id));
-          if (!remoteSection && selected.length && !allowed.length) return c.json({ results: [] });
+          const allowed = selected.filter((id) =>
+            access.libraries.some(
+              (library) => library.id === id,
+            ),
+          )
+          if (
+            !remoteSection &&
+            selected.length &&
+            !allowed.length
+          )
+            return c.json({ results: [] })
           const found = rankByYear(
-            await plexServerSearch(access, remoteSection ? [remoteSection] : allowed, q),
+            await plexServerSearch(
+              access,
+              remoteSection ? [remoteSection] : allowed,
+              q,
+            ),
             year,
-          );
+          )
           return c.json({
             results: found.map((hit) => ({
               ...hit,
               cover: hit.hasThumb
-                ? `/api/shared-plex-thumb/${encodeURIComponent(setId)}`
-                  + `/${encodeURIComponent(access.id)}/${encodeURIComponent(hit.ratingKey)}`
+                ? `/api/shared-plex-thumb/${encodeURIComponent(setId)}` +
+                  `/${encodeURIComponent(access.id)}/${encodeURIComponent(hit.ratingKey)}`
                 : null,
             })),
-          });
+          })
         }
       }
 
       // Every video library (movie + show). The `scope=all` answer, and also what an
       // UNSCOPED set falls back to below — no boxes checked means all of them
       // (decision `2026-08-17-no-libraries-checked-means-every-library`).
-      const everyVideoSection = async (): Promise<number[]> => {
-        let libs: Awaited<ReturnType<typeof plex.sections>> = [];
-        try { libs = await plex.sections(); } catch { /* Plex down: empty search */ }
-        return libs.filter((l) => l.video).map((l) => l.id);
-      };
+      const everyVideoSection = async (): Promise<
+        number[]
+      > => {
+        let libs: Awaited<
+          ReturnType<typeof plex.sections>
+        > = []
+        try {
+          libs = await plex.sections()
+        } catch {
+          /* Plex down: empty search */
+        }
+        return libs.filter((l) => l.video).map((l) => l.id)
+      }
 
-      let sections;
-      let collectionSections;
+      let sections: number[]
+      let collectionSections: number[]
       if (allLibraries) {
         // Regardless of any set's configured sections — so a manual include can come from a
         // library no channel's rule pool draws from.
-        sections = await everyVideoSection();
-        collectionSections = sections;
+        sections = await everyVideoSection()
+        collectionSections = sections
       } else if (setId) {
-        const s = await sets.getSet(setId);
-        if (!s) return c.json({ error: 'unknown set' }, 400);
+        const s = await sets.getSet(setId)
+        if (!s) return c.json({ error: "unknown set" }, 400)
         // Every section the set draws from: a rotation channel's members can be shorts/movies
         // out of its item_sections, not just shows (queue sets have item_sections: [] — no change).
         // A set that names NONE searches every video library rather than nothing, which is
         // what its empty checkbox group told the owner it would do.
-        const named = [...new Set([...s.sections, ...s.item_sections])];
-        sections = named.length ? named : await everyVideoSection();
+        const named = [
+          ...new Set([...s.sections, ...s.item_sections]),
+        ]
+        sections = named.length
+          ? named
+          : await everyVideoSection()
         // Collections can live in either the show sections OR the item (shorts/movie) sections.
-        collectionSections = sections;
+        collectionSections = sections
       } else {
-        const reg = await sets.getRegistry();
-        const named = [...new Set(reg.sets.flatMap((s) => [...s.sections, ...s.item_sections]))];
-        sections = named.length ? named : await everyVideoSection();
-        collectionSections = sections;
+        const reg = await sets.getRegistry()
+        const named = [
+          ...new Set(
+            reg.sets.flatMap((s) => [
+              ...s.sections,
+              ...s.item_sections,
+            ]),
+          ),
+        ]
+        sections = named.length
+          ? named
+          : await everyVideoSection()
+        collectionSections = sections
       }
       // An unchanged queue searches only the home server. Checked shared libraries join
       // its default Add search; choosing a Server above still searches that server alone.
       const sharedSearch = async () => {
-        if (!scopedSet || allLibraries) return [];
-        const scopes = Object.entries(scopedSet.shared_libraries || {});
-        if (!scopes.length) return [];
-        let user;
-        try { user = await profileUser(scopedSet.requires_profile); }
-        catch { return []; }
-        if (!user) return [];
-        return Promise.all(scopes.map(async ([serverId, chosen]) => {
-          try {
-            const access = await plexServerAccessForProfile(user.uuid, serverId);
-            if (!access) return [];
-            const allowed = chosen.filter((id) => access.libraries.some((library) => library.id === id));
-            if (!allowed.length) return [];
-            return rankByYear(await plexServerSearch(access, allowed, q), year).map((hit) => ({
-              ...hit,
-              cover: hit.hasThumb
-                ? `/api/shared-plex-thumb/${encodeURIComponent(setId)}`
-                  + `/${encodeURIComponent(access.id)}/${encodeURIComponent(hit.ratingKey)}`
-                : null,
-            }));
-          } catch {
-            // An unavailable shared server must not hide home-server results.
-            return [];
-          }
-        }));
-      };
+        if (!scopedSet || allLibraries) return []
+        const scopes = Object.entries(
+          scopedSet.shared_libraries || {},
+        )
+        if (!scopes.length) return []
+        let user: Awaited<ReturnType<typeof profileUser>>
+        try {
+          user = await profileUser(
+            scopedSet.requires_profile,
+          )
+        } catch {
+          return []
+        }
+        if (!user) return []
+        return Promise.all(
+          scopes.map(async ([serverId, chosen]) => {
+            try {
+              const access =
+                await plexServerAccessForProfile(
+                  user.uuid,
+                  serverId,
+                )
+              if (!access) return []
+              const allowed = chosen.filter((id) =>
+                access.libraries.some(
+                  (library) => library.id === id,
+                ),
+              )
+              if (!allowed.length) return []
+              return rankByYear(
+                await plexServerSearch(access, allowed, q),
+                year,
+              ).map((hit) => ({
+                ...hit,
+                cover: hit.hasThumb
+                  ? `/api/shared-plex-thumb/${encodeURIComponent(setId)}` +
+                    `/${encodeURIComponent(access.id)}/${encodeURIComponent(hit.ratingKey)}`
+                  : null,
+              }))
+            } catch {
+              // An unavailable shared server must not hide home-server results.
+              return []
+            }
+          }),
+        )
+      }
       const [localHits, sharedGroups] = await Promise.all([
-        plex.search(sections, q), sharedSearch(),
-      ]);
-      const localResults = rankByYear(localHits, year);
+        plex.search(sections, q),
+        sharedSearch(),
+      ])
+      const localResults = rankByYear(localHits, year)
       // All three hit shapes keep their distinct item identities on the wire.
       const results: (
-        Awaited<ReturnType<typeof plex.search>>[number]
-        | Awaited<ReturnType<typeof plex.collections>>[number]
-        | (Awaited<ReturnType<typeof plexServerSearch>>[number] & { cover: string | null })
-      )[] = [];
+        | Awaited<ReturnType<typeof plex.search>>[number]
+        | Awaited<
+            ReturnType<typeof plex.collections>
+          >[number]
+        | (Awaited<
+            ReturnType<typeof plexServerSearch>
+          >[number] & { cover: string | null })
+      )[] = []
       if (withCollections) {
         try {
           // Collections lead the list: typing a franchise name ("Mobile Suit Gundam") turns up
@@ -229,39 +367,48 @@ export function plexMetadataRoutes(): Hono {
           // and "it is not there" is indistinguishable from "it does not exist". A search is
           // one call and is not on the page-load path
           // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
-          results.push(...(await plex.collections(collectionSections, q, { isFresh: true })));
+          results.push(
+            ...(await plex.collections(
+              collectionSections,
+              q,
+              { isFresh: true },
+            )),
+          )
         } catch {
           /* collections are additive — a Plex hiccup there never fails item search */
         }
       }
       // The dropdown shows only 30 rows. Alternate the source groups so local matches
       // cannot fill that window before a checked shared library gets a row.
-      const groups = [localResults, ...sharedGroups];
-      const longest = Math.max(0, ...groups.map((group) => group.length));
+      const groups = [localResults, ...sharedGroups]
+      const longest = Math.max(
+        0,
+        ...groups.map((group) => group.length),
+      )
       for (let i = 0; i < longest; i++) {
         for (const group of groups) {
-          const hit = group[i];
-          if (hit) results.push(hit);
+          const hit = group[i]
+          if (hit) results.push(hit)
         }
       }
-      return c.json({ results });
+      return c.json({ results })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // --- Plex Home users (the channel form's profile dropdown) -------------------- //
   // Lists the account's Plex Home users so the dynamic-channel form offers a dropdown that
   // fills plex_user/account_id/user_uuid, instead of three hand-typed fields (workstream #1,
   // Bob: "Gimme a dropdown"). Best-effort: an empty list means the form falls back to the
   // manual advanced inputs (so a plex.tv hiccup never blocks channel authoring).
-  app.get('/profiles', async (c) => {
+  app.get("/profiles", async (c) => {
     try {
-      return c.json({ profiles: await plex.homeUsers() });
+      return c.json({ profiles: await plex.homeUsers() })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // --- content ratings (per-account facet) ------------------------------------- //
   // The contentRating values actually available to a set's ACCOUNT across all video
@@ -269,52 +416,63 @@ export function plexMetadataRoutes(): Hono {
   // sections query can narrow the lookup, but the default is the account-wide vocabulary.
   // Feeds the rating checkboxes so each channel offers only the ratings its account can pick.
   // Falls back to a small static list when Plex/plex.tv is unreachable.
-  app.get('/ratings', async (c) => {
-    const setId = c.req.query('set') ?? '';
-    const uuidQ = (c.req.query('uuid') ?? '').trim();
-    const sectionsQ = (c.req.query('sections') ?? '').trim();
+  app.get("/ratings", async (c) => {
+    const setId = c.req.query("set") ?? ""
+    const uuidQ = (c.req.query("uuid") ?? "").trim()
+    const sectionsQ = (c.req.query("sections") ?? "").trim()
     try {
-      let sections: number[] = [];
-      let token = null;
+      let sections: number[] = []
+      let token = null
       if (setId) {
-        const s = await sets.getSet(setId);
-        if (!s) return c.json({ error: 'unknown set' }, 400);
+        const s = await sets.getSet(setId)
+        if (!s) return c.json({ error: "unknown set" }, 400)
         if (s.user_uuid) {
           try {
-            token = await plex.accountToken(s.user_uuid);
+            token = await plex.accountToken(s.user_uuid)
           } catch {
-            token = null; // managed-token mint failed → admin token / static fallback
+            token = null // managed-token mint failed → admin token / static fallback
           }
         }
       } else if (uuidQ) {
         try {
-          token = await plex.accountToken(uuidQ);
+          token = await plex.accountToken(uuidQ)
         } catch {
-          token = null;
+          token = null
         }
       }
       if (sectionsQ) {
-        sections = [...new Set(sectionsQ.split(',').map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)))];
+        sections = [
+          ...new Set(
+            sectionsQ
+              .split(",")
+              .map((n) => parseInt(n, 10))
+              .filter((n) => !Number.isNaN(n)),
+          ),
+        ]
       }
       // No sections means every video library. This is also the default for a rules queue:
       // its library checkboxes control the queue contents, not the profile's rating list.
       if (!sections.length) {
         try {
-          sections = (await plex.sections()).filter((l) => l.video).map((l) => l.id);
-        } catch { /* Plex down: the static fallback below still answers */ }
+          sections = (await plex.sections())
+            .filter((l) => l.video)
+            .map((l) => l.id)
+        } catch {
+          /* Plex down: the static fallback below still answers */
+        }
       }
-      let ratings: string[] = [];
+      let ratings: string[] = []
       try {
-        ratings = await plex.contentRatings(sections, token);
+        ratings = await plex.contentRatings(sections, token)
       } catch {
-        ratings = [];
+        ratings = []
       }
-      if (!ratings.length) ratings = STATIC_RATINGS;
-      return c.json({ ratings });
+      if (!ratings.length) ratings = STATIC_RATINGS
+      return c.json({ ratings })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // --- the "Start from…" editor's pickers -------------------------------------- //
   // A series' playable episodes grouped by season, and a collection's members in play order.
@@ -334,73 +492,122 @@ export function plexMetadataRoutes(): Hono {
    * Empty for an ungated set, for the owner, and for a mint failure — all three mean "read as
    * admin", which is what these routes have always done.
    */
-  async function pickerScope(c: { req: { query(k: string): string | undefined } }): Promise<{
-    scope: plex.AccountScope; uuid: string | null;
+  async function pickerScope(c: {
+    req: { query(k: string): string | undefined }
+  }): Promise<{
+    scope: plex.AccountScope
+    uuid: string | null
   }> {
-    const uuidQ = (c.req.query('uuid') ?? '').trim();
+    const uuidQ = (c.req.query("uuid") ?? "").trim()
     if (uuidQ) {
       try {
-        return { scope: { token: await plex.accountToken(uuidQ), account: uuidQ }, uuid: uuidQ };
+        return {
+          scope: {
+            token: await plex.accountToken(uuidQ),
+            account: uuidQ,
+          },
+          uuid: uuidQ,
+        }
       } catch {
-        return { scope: {}, uuid: null }; // a mint failure degrades to admin, never a 500
+        return { scope: {}, uuid: null } // a mint failure degrades to admin, never a 500
       }
     }
-    const setId = (c.req.query('set') ?? '').trim();
-    if (!setId) return { scope: {}, uuid: null };
-    const s = await sets.getSet(setId);
-    const scope = await plex.profileScope(s?.requires_profile ?? null);
-    return { scope, uuid: scope.account ?? null };
+    const setId = (c.req.query("set") ?? "").trim()
+    if (!setId) return { scope: {}, uuid: null }
+    const s = await sets.getSet(setId)
+    const scope = await plex.profileScope(
+      s?.requires_profile ?? null,
+    )
+    return { scope, uuid: scope.account ?? null }
   }
 
-  app.get('/show/:ratingKey/episodes', async (c) => {
+  app.get("/show/:ratingKey/episodes", async (c) => {
     try {
-      const setId = (c.req.query('set') ?? '').trim();
-      const remoteServer = (c.req.query('plex_server') ?? '').trim();
+      const setId = (c.req.query("set") ?? "").trim()
+      const remoteServer = (
+        c.req.query("plex_server") ?? ""
+      ).trim()
       if (remoteServer) {
-        if (!setId) return c.json({ error: 'A queue is required for shared Plex items' }, 400);
-        const set = await sets.getSet(setId);
-        if (!set || set.delivery !== 'push') return c.json({ error: 'unknown Plex queue' }, 400);
-        const user = await profileUser(set.requires_profile);
-        if (!user) return c.json({ error: 'The queue profile is unavailable' }, 503);
-        const access = await plexServerAccessForProfile(user.uuid, remoteServer);
-        if (!access) return c.json({ error: 'This profile cannot reach that Plex server' }, 403);
+        if (!setId)
+          return c.json(
+            {
+              error:
+                "A queue is required for shared Plex items",
+            },
+            400,
+          )
+        const set = await sets.getSet(setId)
+        if (!set || set.delivery !== "push")
+          return c.json(
+            { error: "unknown Plex queue" },
+            400,
+          )
+        const user = await profileUser(set.requires_profile)
+        if (!user)
+          return c.json(
+            { error: "The queue profile is unavailable" },
+            503,
+          )
+        const access = await plexServerAccessForProfile(
+          user.uuid,
+          remoteServer,
+        )
+        if (!access)
+          return c.json(
+            {
+              error:
+                "This profile cannot reach that Plex server",
+            },
+            403,
+          )
         const out = await plexServerEpisodes(
-          access, c.req.param('ratingKey'), c.req.query('specials') === 'choices',
-        );
-        return out ? c.json(out) : c.json({ error: 'no episodes' }, 404);
+          access,
+          c.req.param("ratingKey"),
+          c.req.query("specials") === "choices",
+        )
+        return out
+          ? c.json(out)
+          : c.json({ error: "no episodes" }, 404)
       }
       // Resolved BEFORE the provider branch, so a Kavita/Plex set alike hands its provider the
       // profile the queue plays as rather than only an explicitly-passed one.
-      const { scope, uuid } = await pickerScope(c);
+      const { scope, uuid } = await pickerScope(c)
       // A named set goes through ITS provider. Without this a Kavita series id is handed
       // to plex.showEpisodes, which cannot see it, and the picker says it could not
       // read the series from Plex — the live bug on Multi-mind Mayhem.
       if (setId) {
-        const s = await sets.getSet(setId);
+        const s = await sets.getSet(setId)
         if (s) {
-          const block = providerBlocks.resolveSingle({ ...s });
-          const p = providerFor(block.provider);
-          if (typeof p.listUnits === 'function') {
-            const out = await p.listUnits(c.req.param('ratingKey'), {
-              uuid,
-              includeSpecialChoices: c.req.query('specials') === 'choices',
-            });
-            if (!out) return c.json({ error: 'no episodes' }, 404);
-            return c.json(out);
+          const block = providerBlocks.resolveSingle({
+            ...s,
+          })
+          const p = providerFor(block.provider)
+          if (typeof p.listUnits === "function") {
+            const out = await p.listUnits(
+              c.req.param("ratingKey"),
+              {
+                uuid,
+                includeSpecialChoices:
+                  c.req.query("specials") === "choices",
+              },
+            )
+            if (!out)
+              return c.json({ error: "no episodes" }, 404)
+            return c.json(out)
           }
         }
       }
       const out = await plex.showEpisodes(
-        c.req.param('ratingKey'),
+        c.req.param("ratingKey"),
         scope,
-        c.req.query('specials') === 'choices',
-      );
-      if (!out) return c.json({ error: 'no episodes' }, 404);
-      return c.json(out);
+        c.req.query("specials") === "choices",
+      )
+      if (!out) return c.json({ error: "no episodes" }, 404)
+      return c.json(out)
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   /**
    * A collection's members, in the collection's own order.
@@ -419,77 +626,109 @@ export function plexMetadataRoutes(): Hono {
    * too. Its tile names the next member by position — that is the field a re-order moves, and
    * leaving it stale is the bug reported on 2026-08-26 in a different place.
    */
-  app.get('/collection/:ratingKey/children', async (c) => {
+  app.get("/collection/:ratingKey/children", async (c) => {
     try {
       // Every progress field on a member row is the querying account's: a movie's `watched`,
       // and the "154/155 watched" a show member prints in the series picker.
-      const { scope } = await pickerScope(c);
-      const rk = c.req.param('ratingKey');
-      const isFresh = ['1', 'true', 'yes'].includes((c.req.query('fresh') ?? '').toLowerCase());
+      const { scope } = await pickerScope(c)
+      const rk = c.req.param("ratingKey")
+      const isFresh = ["1", "true", "yes"].includes(
+        (c.req.query("fresh") ?? "").toLowerCase(),
+      )
       // Read BEFORE the drop, so the comparison below is against what the grid is painting.
       const stale = isFresh
-        ? await cache.getCollectionChildren<plex.CollectionChild[]>(rk, null, scope.account ?? '')
-        : null;
-      if (isFresh) await cache.dropCollectionChildren(rk);
-      const children = await plex.collectionChildren(rk, scope);
-      if (!children) return c.json({ error: 'no collection' }, 404);
-      const isChanged = Boolean(stale) && memberOrder(stale) !== memberOrder(children);
-      if (isChanged) await cache.bumpGeneration();
-      return c.json({ children, isChanged });
+        ? await cache.getCollectionChildren<
+            plex.CollectionChild[]
+          >(rk, null, scope.account ?? "")
+        : null
+      if (isFresh) await cache.dropCollectionChildren(rk)
+      const children = await plex.collectionChildren(
+        rk,
+        scope,
+      )
+      if (!children)
+        return c.json({ error: "no collection" }, 404)
+      const isChanged =
+        Boolean(stale) &&
+        memberOrder(stale) !== memberOrder(children)
+      if (isChanged) await cache.bumpGeneration()
+      return c.json({ children, isChanged })
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // Minimal metadata for one ratingKey — the blocklist chips need display titles.
-  app.get('/item/:ratingKey', async (c) => {
+  app.get("/item/:ratingKey", async (c) => {
     try {
-      const md = await plex.resolveValue([], { ratingKey: c.req.param('ratingKey') });
-      if (!md) return c.json({ error: 'not found' }, 404);
-      return c.json(md);
+      const md = await plex.resolveValue([], {
+        ratingKey: c.req.param("ratingKey"),
+      })
+      if (!md) return c.json({ error: "not found" }, 404)
+      return c.json(md)
     } catch (e) {
-      return c.json({ error: String(e) }, 500);
+      return c.json({ error: String(e) }, 500)
     }
-  });
+  })
 
   // Poster proxy — the Plex token stays server-side, never handed to the browser.
-  app.get('/thumb/:ratingKey', async (c) => {
+  app.get("/thumb/:ratingKey", async (c) => {
     try {
-      const t = await plex.thumb(c.req.param('ratingKey'));
-      if (!t) return c.body(null, 404);
+      const t = await plex.thumb(c.req.param("ratingKey"))
+      if (!t) return c.body(null, 404)
       return binaryResponse({
         buffer: t.buffer,
-        cacheControl: 'public, max-age=86400',
+        cacheControl: "public, max-age=86400",
         contentType: t.contentType,
-      });
+      })
     } catch {
-      return c.body(null, 502);
+      return c.body(null, 502)
     }
-  });
+  })
 
-  app.get('/shared-plex-thumb/:setId/:serverId/:ratingKey', async (c) => {
-    try {
-      const set = await sets.getSet(c.req.param('setId'));
-      if (!set) return c.body(null, 404);
-      const user = await profileUser(set.requires_profile);
-      if (!user) return c.body(null, 403);
-      const access = await plexServerAccessForProfile(user.uuid, c.req.param('serverId'));
-      if (!access) return c.body(null, 403);
-      const thumb = await plexServerThumb(access, c.req.param('ratingKey'));
-      if (!thumb) return c.body(null, 404);
-      return binaryResponse({
-        buffer: thumb.buffer,
-        cacheControl: 'private, max-age=86400',
-        contentType: thumb.contentType,
-      });
-    } catch {
-      return c.body(null, 502);
-    }
-  });
+  app.get(
+    "/shared-plex-thumb/:setId/:serverId/:ratingKey",
+    async (c) => {
+      try {
+        const set = await sets.getSet(c.req.param("setId"))
+        if (!set) return c.body(null, 404)
+        const user = await profileUser(set.requires_profile)
+        if (!user) return c.body(null, 403)
+        const access = await plexServerAccessForProfile(
+          user.uuid,
+          c.req.param("serverId"),
+        )
+        if (!access) return c.body(null, 403)
+        const thumb = await plexServerThumb(
+          access,
+          c.req.param("ratingKey"),
+        )
+        if (!thumb) return c.body(null, 404)
+        return binaryResponse({
+          buffer: thumb.buffer,
+          cacheControl: "private, max-age=86400",
+          contentType: thumb.contentType,
+        })
+      } catch {
+        return c.body(null, 502)
+      }
+    },
+  )
 
-  return app;
+  return app
 }
 
 const STATIC_RATINGS = [
-  'TV-Y', 'TV-Y7', 'TV-Y7-FV', 'TV-G', 'G', 'TV-PG', 'PG', 'PG-13', 'TV-14', 'R', 'TV-MA', 'NC-17',
-];
+  "TV-Y",
+  "TV-Y7",
+  "TV-Y7-FV",
+  "TV-G",
+  "G",
+  "TV-PG",
+  "PG",
+  "PG-13",
+  "TV-14",
+  "R",
+  "TV-MA",
+  "NC-17",
+]

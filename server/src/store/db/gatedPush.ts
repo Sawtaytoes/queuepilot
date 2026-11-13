@@ -8,29 +8,30 @@
 //
 // Durable by definition: the whole point is to answer a question about last week, so it lives
 // in `queuepilot.sqlite` beside `lead_cooldown` rather than in the deletable Plex cache.
-import { bookOfRecord, prepareChecked } from './open.js';
-import type { SqliteDatabase } from '../sqlite.js';
+
+import type { SqliteDatabase } from "../sqlite.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 export interface GatedPush {
-  id: number;
-  setId: string;
-  profile: string | null;
-  accountId: number;
+  id: number
+  setId: string
+  profile: string | null
+  accountId: number
   /** Unix epoch SECONDS. */
-  pushedAt: number;
+  pushedAt: number
   /** The pushed ratingKeys, as strings, in pushed order. */
-  ratingKeys: string[];
-  playQueueId: number | null;
+  ratingKeys: string[]
+  playQueueId: number | null
 }
 
 export interface GatedPushInput {
-  setId: string;
-  profile?: string | null;
-  accountId: number;
+  setId: string
+  profile?: string | null
+  accountId: number
   /** Unix epoch SECONDS. Passed in so a caller's `now` and the row cannot disagree. */
-  pushedAt: number;
-  ratingKeys: (string | number)[];
-  playQueueId?: number | null;
+  pushedAt: number
+  ratingKeys: (string | number)[]
+  playQueueId?: number | null
 }
 
 /**
@@ -39,23 +40,23 @@ export interface GatedPushInput {
  * able to take the audit — or the route that calls it — down.
  */
 function jsonArray(raw: unknown): unknown[] {
-  if (typeof raw !== 'string') return [];
+  if (typeof raw !== "string") return []
   try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const parsed: unknown = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return [];
+    return []
   }
 }
 
 function rowToPush(row: {
-  id: number;
-  set_id: string;
-  profile: string | null;
-  account_id: number;
-  pushed_at: number;
-  rating_keys: string;
-  play_queue_id: number | null;
+  id: number
+  set_id: string
+  profile: string | null
+  account_id: number
+  pushed_at: number
+  rating_keys: string
+  play_queue_id: number | null
 }): GatedPush {
   return {
     id: Number(row.id),
@@ -63,9 +64,14 @@ function rowToPush(row: {
     profile: row.profile ?? null,
     accountId: Number(row.account_id),
     pushedAt: Number(row.pushed_at),
-    ratingKeys: jsonArray(row.rating_keys).map((key) => String(key)),
-    playQueueId: row.play_queue_id == null ? null : Number(row.play_queue_id),
-  };
+    ratingKeys: jsonArray(row.rating_keys).map((key) =>
+      String(key),
+    ),
+    playQueueId:
+      row.play_queue_id == null
+        ? null
+        : Number(row.play_queue_id),
+  }
 }
 
 /**
@@ -89,10 +95,12 @@ export function recordPush(
     profile: input.profile ?? null,
     account_id: Math.trunc(input.accountId),
     pushed_at: Math.floor(input.pushedAt),
-    rating_keys: JSON.stringify(input.ratingKeys.map((key) => String(key))),
+    rating_keys: JSON.stringify(
+      input.ratingKeys.map((key) => String(key)),
+    ),
     play_queue_id: input.playQueueId ?? null,
-  });
-  return Number(result.lastInsertRowid ?? 0);
+  })
+  return Number(result.lastInsertRowid ?? 0)
 }
 
 /** Every gated push at or after `sinceSec` (epoch SECONDS), oldest first. */
@@ -102,13 +110,13 @@ export function pushesSince(
   db: SqliteDatabase = bookOfRecord(),
 ): GatedPush[] {
   const rows = prepareChecked<{
-    id: number;
-    set_id: string;
-    profile: string | null;
-    account_id: number;
-    pushed_at: number;
-    rating_keys: string;
-    play_queue_id: number | null;
+    id: number
+    set_id: string
+    profile: string | null
+    account_id: number
+    pushed_at: number
+    rating_keys: string
+    play_queue_id: number | null
   }>(
     db,
     `SELECT id, set_id, profile, account_id, pushed_at, rating_keys, play_queue_id
@@ -116,8 +124,11 @@ export function pushesSince(
       WHERE pushed_at >= :since
       ORDER BY pushed_at ASC, id ASC
       LIMIT :limit`,
-  ).all({ since: Math.floor(sinceSec), limit: Math.max(1, Math.trunc(limit)) });
-  return rows.map(rowToPush);
+  ).all({
+    since: Math.floor(sinceSec),
+    limit: Math.max(1, Math.trunc(limit)),
+  })
+  return rows.map(rowToPush)
 }
 
 /**
@@ -130,7 +141,7 @@ export function prunePushesBefore(
 ): number {
   const result = prepareChecked(
     db,
-    'DELETE FROM gated_push WHERE pushed_at < :before',
-  ).run({ before: Math.floor(beforeSec) });
-  return Number(result.changes ?? 0);
+    "DELETE FROM gated_push WHERE pushed_at < :before",
+  ).run({ before: Math.floor(beforeSec) })
+  return Number(result.changes ?? 0)
 }

@@ -51,10 +51,15 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-const serverRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
+const serverRoot = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  "..",
+)
 
 const checkout = resolve(
-  process.argv[2] ?? process.env.BOARD_GAME_PICKER_CHECKOUT ?? "",
+  process.argv[2] ??
+    process.env.BOARD_GAME_PICKER_CHECKOUT ??
+    "",
 )
 
 if (checkout === resolve("")) {
@@ -67,7 +72,9 @@ if (checkout === resolve("")) {
 }
 
 const source = join(checkout, "packages")
-const scratch = mkdtempSync(join(tmpdir(), "queuepilot-bgp-port-"))
+const scratch = mkdtempSync(
+  join(tmpdir(), "queuepilot-bgp-port-"),
+)
 
 /** Copy one file across and hand back its text, so a transform can be asserted on it. */
 const bring = (from, to) => {
@@ -91,7 +98,10 @@ const rewrite = (file, needle, replacement, expected) => {
     )
   }
 
-  writeFileSync(path, before.replaceAll(needle, replacement))
+  writeFileSync(
+    path,
+    before.replaceAll(needle, replacement),
+  )
 }
 
 try {
@@ -121,14 +131,30 @@ try {
     "db/merge.ts": 1,
     "import/collection.ts": 1,
   })) {
-    rewrite(file, '"@board-game-picker/contracts"', '"../contracts.ts"', count)
+    rewrite(
+      file,
+      '"@board-game-picker/contracts"',
+      '"../contracts.ts"',
+      count,
+    )
   }
 
   // ---- transform 1: the 11 transaction sites --------------------------------------------
-  const transactionSites = { "db/repository.ts": 5, "db/merge.ts": 5, "import/collection.ts": 1 }
+  const transactionSites = {
+    "db/repository.ts": 5,
+    "db/merge.ts": 5,
+    "import/collection.ts": 1,
+  }
 
-  for (const [file, count] of Object.entries(transactionSites)) {
-    rewrite(file, "db.transaction(", "db.withTransaction(", count)
+  for (const [file, count] of Object.entries(
+    transactionSites,
+  )) {
+    rewrite(
+      file,
+      "db.transaction(",
+      "db.withTransaction(",
+      count,
+    )
     // Each body ends `  })()` at the top level of its function. `withTransaction` RUNS the
     // body; it does not hand back a function that runs it.
     rewrite(file, "\n  })()", "\n  })", count)
@@ -226,18 +252,27 @@ const addMissingColumns = (db: Db): void => {
   writeFileSync(
     join(scratch, "vitest.config.ts"),
     'import { defineConfig } from "vitest/config"\n\n' +
-      "export default defineConfig({ test: { globals: true, include: [\"db/**/*.test.ts\"] } })\n",
+      'export default defineConfig({ test: { globals: true, include: ["db/**/*.test.ts"] } })\n',
   )
   // vitest, and everything it resolves, comes from THIS workspace's install. The scratch tree
   // declares no dependencies of its own and installs nothing — one symlink, not a copy.
-  symlinkSync(join(serverRoot, "node_modules"), join(scratch, "node_modules"), "dir")
+  symlinkSync(
+    join(serverRoot, "node_modules"),
+    join(scratch, "node_modules"),
+    "dir",
+  )
 
   console.log(`proof tree: ${scratch}\n`)
 
-  execFileSync(join(serverRoot, "node_modules/.bin/vitest"), ["run", "--root", scratch], {
-    stdio: "inherit",
-    cwd: scratch,
-  })
+  execFileSync(
+    join(serverRoot, "node_modules/.bin/vitest"),
+    ["run", "--root", scratch],
+    {
+      stdio: "inherit",
+      cwd: scratch,
+    },
+  )
 } finally {
-  if (!process.env.KEEP_PROOF_TREE) rmSync(scratch, { force: true, recursive: true })
+  if (!process.env.KEEP_PROOF_TREE)
+    rmSync(scratch, { force: true, recursive: true })
 }
