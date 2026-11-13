@@ -470,21 +470,25 @@ function resolve(): PlaywrightModule {
 
 const playwright = resolve();
 
-// ---- Motion is frozen in every harness ---------------------------------------------------
+// ---- Overlay motion is frozen in every harness -------------------------------------------
 //
 // Since `@charcuterie/ui` 4.28.0 overlays animate: a `Modal`, `Menu` or `Picker` panel grows
 // in, and a closing one stays in the page, `inert` and `aria-hidden`, for its exit (about
 // 100-140 ms). A harness that clicks an option while its panel is still growing, or counts a
 // selector right after a close, then races the animation, and the race only loses on a busy
 // machine — which is exactly how it first showed up, in CI and not locally. The fleet rule is
-// that automated suites freeze motion, and Charcuterie's own answer is this stylesheet: the
-// same rules as `FREEZE_MOTION_CSS` in `@charcuterie/storybook-config/testing`, which this
-// workspace does not install. With every duration at zero, Charcuterie removes a leaving
-// overlay in the same commit, as it did before 4.28.
+// that automated suites freeze motion.
+//
+// Charcuterie's overlay motion is CSS ANIMATIONS (`charcuterie-overlay-enter`/`-exit` and
+// friends), and its presence hook measures the exit by `animation-duration`: at zero, a leaving
+// overlay is removed in the same commit, as it was before 4.28. So this zeroes animation
+// durations and delays only — a narrower cut than Charcuterie's `FREEZE_MOTION_CSS`, which
+// zeroes transitions too. Transitions are left alone on purpose: the drag reorder moves its
+// siblings with a CSS `transition: transform` (`web/src/lib/flip.ts`, `app.css`), and the drag
+// gates must keep exercising that real path.
 //
 // An override stylesheet, not `reducedMotion: 'reduce'`: emulating the media query would test
-// a different documented rendering. Web Animations (`web/src/lib/flip.ts`) are unaffected, so
-// the drag gates still see their real FLIP path.
+// a different documented rendering.
 //
 // A source STRING, not a function, for the `__name` reason given on `Page.evaluate` above.
 // At document start a page may have no root element yet, so the style waits for one.
@@ -496,9 +500,7 @@ const FREEZE_MOTION_SCRIPT = `(() => {
     const style = document.createElement('style');
     style.id = id;
     style.textContent = '*, *::before, *::after {'
-      + ' animation-duration: 0s !important; animation-delay: 0s !important;'
-      + ' transition-duration: 0s !important; transition-delay: 0s !important;'
-      + ' caret-color: transparent !important; scroll-behavior: auto !important; }';
+      + ' animation-duration: 0s !important; animation-delay: 0s !important; }';
     root.append(style);
   };
   install();
