@@ -2,11 +2,12 @@
 // and poster proxying. Deliberately mirrors queue_builder/plex.py's resolver so the UI
 // shows exactly what the Python service will resolve at scan time.
 //
-// TLS: Plex presents a self-signed cert. The container sets NODE_TLS_REJECT_UNAUTHORIZED=0
-// for this process (see entrypoint), the Node equivalent of the Python client's CERT_NONE.
+// TLS: a LAN Plex server may present a self-signed cert, so every call to PLEX_URL goes through
+// the scoped `agent` below, which skips the certificate check for that pool only. Nothing sets
+// a process-wide bypass: plex.tv and every other host keep full certificate checks.
 import { Agent, request } from 'undici';
 import * as cache from './cache.js';
-import { PLEX_URL, PLEX_TOKEN, PLEX_CLIENT_IDENTIFIER } from './config.js';
+import { PLEX_URL, PLEX_TOKEN } from './config.js';
 import {
   episodeSeason,
   episodesAtOrAfterStart,
@@ -14,6 +15,7 @@ import {
   orderedPlayableEpisodes,
 } from './episodeOrder.js';
 import { PlexError, isPlexError } from './errors.js';
+import { plextv } from './plexTv.js';
 import type {
   NextEp,
   PlayingContext,
@@ -283,10 +285,10 @@ export interface PosterImage {
 // pooling, so ~60 calls on one `/api/queues` each paid a fresh TCP+TLS handshake, and a hung
 // socket hung forever with nothing to reuse. This pins one pool of 16 reusable connections.
 //
-// `connect.rejectUnauthorized: false` is NOT optional: undici does NOT reliably honour the
-// process-wide NODE_TLS_REJECT_UNAUTHORIZED the entrypoint sets, and Plex's cert is
-// self-signed, so without it every request 500s on cert validation. Scoped to this pool,
-// which only ever talks to the LAN Plex server.
+// `connect.rejectUnauthorized: false` is the ONE certificate exception in this module: a LAN
+// Plex server's cert is often self-signed, and without it every request would fail cert
+// validation. It is scoped to this pool, which only ever talks to PLEX_URL. Never reuse this
+// agent for plex.tv or any other host.
 const agent = new Agent({
   keepAliveTimeout: 60_000,
   connections: 16,
@@ -414,20 +416,6 @@ export function countEpisodes(eps: EpisodeLike[] | null | undefined): EpisodeCou
 // restricted library. Cached per uuid. Best-effort — any failure returns null (caller uses
 // the admin token / static fallback), so the API degrades cleanly with plex.tv unreachable.
 const _accountTokens = new Map<string, string | null>(); // user_uuid -> server-scoped access token (or null)
-
-async function plextv<T = unknown>(path: string, token: string, method = 'GET'): Promise<T> {
-  const res = await fetch('https://plex.tv' + path, {
-    method,
-    headers: {
-      'X-Plex-Token': token,
-      'X-Plex-Client-Identifier': PLEX_CLIENT_IDENTIFIER,
-      Accept: 'application/json',
-    },
-  });
-  if (!res.ok) throw new Error(`plex.tv ${res.status} for ${path}`);
-  const text = await res.text();
-  return (text ? JSON.parse(text) : {}) as T;
-}
 
 export async function machineIdentifier(): Promise<string> {
   return container(await plexGet('/')).machineIdentifier || '';
@@ -1438,10 +1426,9 @@ export async function playingContext(ratingKey: string | number): Promise<Playin
 // sharp through 150% zoom / 2-3x DPR screens — 300px visibly pixelated there — while
 // still ~10x smaller than the originals. Falls back to the raw thumb.
 const _thumbPath = new Map<string, string>(); // ratingKey -> thumb path
+const POSTER_TIMEOUT_MS = 8000; // the same per-attempt budget as plexGet
+const POSTER_MAX_REDIRECTS = 3;
 export async function thumb(ratingKey: string): Promise<PosterImage | null> {
-  // NOTE this is the ONE place that does not go through undici: it needs the raw body
-  // bytes, and `fetch`'s Response is a different (incompatible) type from undici's — kept
-  // as-is rather than unified, which would be a refactor.
   let tp: string | null | undefined = _thumbPath.get(ratingKey);
   if (!tp) {
     const md = (container(await plexGet(`/library/metadata/${ratingKey}`)).Metadata || [])[0];
@@ -1453,12 +1440,52 @@ export async function thumb(ratingKey: string): Promise<PosterImage | null> {
   const transcode =
     `${PLEX_URL}/photo/:/transcode?width=480&height=720&minSize=1&upscale=0` +
     `&url=${encodeURIComponent(tp)}&X-Plex-Token=${tok}`;
-  let res = await fetch(transcode);
-  if (!res.ok) {
-    const sep = tp.includes('?') ? '&' : '?';
-    res = await fetch(`${PLEX_URL}${tp}${sep}X-Plex-Token=${tok}`); // fall back to raw art
-    if (!res.ok) return null;
+  const sep = tp.includes('?') ? '&' : '?';
+  const raw = `${PLEX_URL}${tp}${sep}X-Plex-Token=${tok}`; // fall back to raw art
+  for (const url of [transcode, raw]) {
+    const poster = await posterBytes(url);
+    if (poster) return poster;
   }
+  return null;
+}
+
+// One poster read from PLEX_URL. It goes through the scoped LAN `agent`, like every other
+// PLEX_URL call, so a self-signed local server still serves posters without a process-wide
+// TLS bypass. The timeout covers the body too: a stalled poster must not hold a page tile.
+//
+// `undici.request` does not follow redirects, and the global `fetch` this replaced did. So a
+// redirect is followed here, a bounded number of times. A hop that stays on PLEX_URL's origin
+// keeps the scoped agent; a hop to any other origin goes through the global `fetch`, which
+// checks certificates, so the LAN exception never reaches another host.
+async function posterBytes(url: string, hops = 0): Promise<PosterImage | null> {
+  const res = await request(url, {
+    dispatcher: agent,
+    signal: AbortSignal.timeout(POSTER_TIMEOUT_MS),
+  });
+  const location = res.headers.location;
+  const next = Array.isArray(location) ? location[0] : location;
+  if (res.statusCode >= 300 && res.statusCode < 400 && next && hops < POSTER_MAX_REDIRECTS) {
+    await res.body.dump(); // release the pooled socket
+    const target = new URL(next, url);
+    if (target.origin === new URL(PLEX_URL).origin) return posterBytes(target.href, hops + 1);
+    return verifiedPosterBytes(target.href);
+  }
+  if (res.statusCode < 200 || res.statusCode >= 300) {
+    await res.body.dump(); // release the pooled socket
+    return null;
+  }
+  const type = res.headers['content-type'];
+  return {
+    contentType: (Array.isArray(type) ? type[0] : type) || 'image/jpeg',
+    buffer: Buffer.from(await res.body.arrayBuffer()),
+  };
+}
+
+// A poster redirect that leaves PLEX_URL's origin: full certificate checks, and `fetch`
+// follows any further redirects itself.
+async function verifiedPosterBytes(url: string): Promise<PosterImage | null> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(POSTER_TIMEOUT_MS) });
+  if (!res.ok) return null;
   return {
     contentType: res.headers.get('content-type') || 'image/jpeg',
     buffer: Buffer.from(await res.arrayBuffer()),

@@ -102,7 +102,8 @@ only when the owner asks.
   "Still open" in [todos/lineup-length-and-top-up.md](todos/lineup-length-and-top-up.md).
 
 ## Deploy state
-App image currently `docker-registry.example.com/plex-channels:latest` (locally built, = merged
-§A code). ghcr rebuilt from the #6 merge (`ghcr.io/sawtaytoes/plex-channels:latest`, Docker
-Deploy run success). **TODO: repoint the app image back to ghcr + redeploy** to end the
-registry drift (per `decisions/2026-08-02-ci-and-deploy-on-github-actions-to-ghcr.md`).
+Done: the app image is `ghcr.io/sawtaytoes/queuepilot:latest` with `pull_policy: always`,
+built by `docker-deploy.yml` on every merge to `main`
+(per `decisions/2026-08-02-ci-and-deploy-on-github-actions-to-ghcr.md`). The locally built
+registry image is retired, so there is no registry drift left. A deploy is still a pull
+followed by a redeploy; a pushed `:latest` does not land on its own. Checked 2026-11-13.

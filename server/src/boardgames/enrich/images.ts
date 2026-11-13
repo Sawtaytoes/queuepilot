@@ -45,6 +45,8 @@ export interface StoredImage {
 }
 
 const SIZES = [600, 200] as const;
+/** A stalled image host fails this box art instead of holding the enrich pass. */
+const DOWNLOAD_TIMEOUT_MS = 30_000;
 
 const hashKey = (key: string): string =>
   createHash('sha256').update(key).digest('hex').slice(0, 16);
@@ -99,6 +101,7 @@ export const storeSquareImage = async (sourceUrl: string): Promise<StoredImage> 
     headers: {
       'user-agent': 'board-game-picker/0.1 (self-hosted collection picker)',
     },
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
   });
 
   if (!response.ok) {
