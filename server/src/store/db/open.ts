@@ -20,13 +20,18 @@
 // runs at prepare time rather than in a query planner, and it fails closed. `store/db/open.test.ts`
 // pins the limitation it does have — a `:name` inside a string literal would be read as a
 // placeholder, and none of our statements contain one.
-import { mkdirSync, readFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { mkdirSync, readFileSync } from "node:fs"
+import { dirname } from "node:path"
 
-import { STORE_PATH } from '../../config.js';
-import { errMessage } from '../../errors.js';
-import { SCHEMA_SQL } from '../schema.generated.js';
-import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase } from '../sqlite.js';
+import { STORE_PATH } from "../../config.js"
+import { errMessage } from "../../errors.js"
+import { SCHEMA_SQL } from "../schema.generated.js"
+import {
+  type BindValue,
+  openSqlite,
+  type PreparedStatement,
+  type SqliteDatabase,
+} from "../sqlite.js"
 
 /**
  * Bumped when `schema.sql` changes in a way an existing file cannot absorb by itself.
@@ -73,14 +78,18 @@ import { openSqlite, type BindValue, type PreparedStatement, type SqliteDatabase
 // is removed — is enforced by SQLite's foreign key, not by app code an older image lacks. A
 // rollback therefore keeps working and simply shows initials; bumping would refuse the file for
 // no protection at all.
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 9
 
 /** A `:name` in the SQL, matched over our own statements only — see the header. */
-const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g;
+const NAMED_PARAMETER = /[:@$]([A-Za-z_][A-Za-z0-9_]*)/g
 
 const namedParametersIn = (sql: string): string[] => [
-  ...new Set([...sql.matchAll(NAMED_PARAMETER)].map(([, name]) => name as string)),
-];
+  ...new Set(
+    [...sql.matchAll(NAMED_PARAMETER)].map(
+      ([, name]) => name as string,
+    ),
+  ),
+]
 
 /**
  * `db.prepare(sql)`, plus the check node:sqlite does not do: every `:placeholder` in the SQL
@@ -93,45 +102,55 @@ export function prepareChecked<Result = unknown>(
   db: SqliteDatabase,
   sql: string,
 ): PreparedStatement<Result> {
-  const expected = namedParametersIn(sql);
-  const statement = db.prepare<Result>(sql);
+  const expected = namedParametersIn(sql)
+  const statement = db.prepare<Result>(sql)
 
-  if (expected.length === 0) return statement;
+  if (expected.length === 0) return statement
 
   const assertComplete = (
-    params: readonly (BindValue | Record<string, BindValue>)[],
+    params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[],
   ): void => {
-    const [first] = params;
-    if (typeof first !== 'object' || first === null || ArrayBuffer.isView(first)) return;
+    const [first] = params
+    if (
+      typeof first !== "object" ||
+      first === null ||
+      ArrayBuffer.isView(first)
+    )
+      return
 
-    const missing = expected.filter((name) => !(name in first));
+    const missing = expected.filter(
+      (name) => !(name in first),
+    )
     if (missing.length > 0) {
       throw new Error(
-        `sqlite: missing named parameter(s) ${missing.map((n) => `:${n}`).join(', ')} — ` +
-          `node:sqlite would have bound NULL. SQL: ${sql.trim().split('\n')[0]}…`,
-      );
+        `sqlite: missing named parameter(s) ${missing.map((n) => `:${n}`).join(", ")} — ` +
+          `node:sqlite would have bound NULL. SQL: ${sql.trim().split("\n")[0]}…`,
+      )
     }
-  };
+  }
 
   return {
     sql: statement.sql,
     get: (...params) => {
-      assertComplete(params);
-      return statement.get(...params);
+      assertComplete(params)
+      return statement.get(...params)
     },
     all: (...params) => {
-      assertComplete(params);
-      return statement.all(...params);
+      assertComplete(params)
+      return statement.all(...params)
     },
     iterate: (...params) => {
-      assertComplete(params);
-      return statement.iterate(...params);
+      assertComplete(params)
+      return statement.iterate(...params)
     },
     run: (...params) => {
-      assertComplete(params);
-      return statement.run(...params);
+      assertComplete(params)
+      return statement.run(...params)
     },
-  };
+  }
 }
 
 /**
@@ -142,28 +161,40 @@ export function prepareChecked<Result = unknown>(
  * column per line, table-level constraints on their own lines, comment lines starting with
  * `--`. It is not a SQL parser and must not become one.
  */
-function declaredColumns(): Map<string, { name: string; definition: string }[]> {
-  const tables = new Map<string, { name: string; definition: string }[]>();
+function declaredColumns(): Map<
+  string,
+  { name: string; definition: string }[]
+> {
+  const tables = new Map<
+    string,
+    { name: string; definition: string }[]
+  >()
 
   for (const match of SCHEMA_SQL.matchAll(
     /CREATE TABLE IF NOT EXISTS (\w+) \(\n([\s\S]*?)\n\)/g,
   )) {
-    const [, table, body] = match;
-    const columns: { name: string; definition: string }[] = [];
+    const [, table, body] = match
+    const columns: { name: string; definition: string }[] =
+      []
 
-    for (const raw of (body ?? '').split('\n')) {
-      const line = raw.trim().replace(/,$/, '');
-      if (line === '' || line.startsWith('--')) continue;
+    for (const raw of (body ?? "").split("\n")) {
+      const line = raw.trim().replace(/,$/, "")
+      if (line === "" || line.startsWith("--")) continue
       // Table-level constraints, not columns.
-      if (/^(PRIMARY KEY|CHECK|FOREIGN KEY|UNIQUE)\b/i.test(line)) continue;
-      const name = /^(\w+)/.exec(line)?.[1];
-      if (name) columns.push({ name, definition: line });
+      if (
+        /^(PRIMARY KEY|CHECK|FOREIGN KEY|UNIQUE)\b/i.test(
+          line,
+        )
+      )
+        continue
+      const name = /^(\w+)/.exec(line)?.[1]
+      if (name) columns.push({ name, definition: line })
     }
 
-    tables.set(table as string, columns);
+    tables.set(table as string, columns)
   }
 
-  return tables;
+  return tables
 }
 
 /**
@@ -194,14 +225,20 @@ function declaredColumns(): Map<string, { name: string; definition: string }[]> 
 function addMissingColumns(db: SqliteDatabase): void {
   for (const [table, columns] of declaredColumns()) {
     const present = new Set(
-      (db.pragma(`table_xinfo(${table})`) as { name: string }[]).map((row) => row.name),
-    );
-    if (present.size === 0) continue; // the table is not there at all — the CREATE owns that
+      (
+        db.pragma(`table_xinfo(${table})`) as {
+          name: string
+        }[]
+      ).map((row) => row.name),
+    )
+    if (present.size === 0) continue // the table is not there at all — the CREATE owns that
 
     for (const column of columns) {
-      if (present.has(column.name)) continue;
-      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column.definition}`);
-      console.log(`[store] added ${table}.${column.name}`);
+      if (present.has(column.name)) continue
+      db.exec(
+        `ALTER TABLE ${table} ADD COLUMN ${column.definition}`,
+      )
+      console.log(`[store] added ${table}.${column.name}`)
     }
   }
 }
@@ -214,19 +251,27 @@ function addMissingColumns(db: SqliteDatabase): void {
  * running this on a new or already-migrated file does nothing. A column in an index or a
  * constraint cannot be dropped this way; none of these is.
  */
-const RETIRED_COLUMNS: readonly { table: string; column: string }[] = [
+const RETIRED_COLUMNS: readonly {
+  table: string
+  column: string
+}[] = [
   // Pointed at the Homebox inventory app, retired 2026-09-28. Never populated.
-  { column: 'homebox_entity_id', table: 'board_game_boxes' },
-];
+  {
+    column: "homebox_entity_id",
+    table: "board_game_boxes",
+  },
+]
 
 function dropRetiredColumns(db: SqliteDatabase): void {
   for (const { table, column } of RETIRED_COLUMNS) {
-    const present = (db.pragma(`table_xinfo(${table})`) as { name: string }[]).some(
-      (row) => row.name === column,
-    );
-    if (!present) continue;
-    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
-    console.log(`[store] dropped ${table}.${column}`);
+    const present = (
+      db.pragma(`table_xinfo(${table})`) as {
+        name: string
+      }[]
+    ).some((row) => row.name === column)
+    if (!present) continue
+    db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`)
+    console.log(`[store] dropped ${table}.${column}`)
   }
 }
 
@@ -241,55 +286,62 @@ export function migrate(db: SqliteDatabase): void {
   // index over a column an older file does not have yet fails the whole `exec`. So an existing
   // table is brought up to date before the schema runs; on a fresh file this finds no tables
   // and does nothing.
-  addMissingColumns(db);
-  dropRetiredColumns(db);
+  addMissingColumns(db)
+  dropRetiredColumns(db)
   // The whole schema is idempotent, so it runs on every open rather than only on a version
   // bump — that is what makes "add a table" a one-file change with no migration step.
-  db.exec(SCHEMA_SQL);
+  db.exec(SCHEMA_SQL)
 
   const row = db
-    .prepare<{ value: string }>("SELECT value FROM schema_meta WHERE key = 'schema_version'")
-    .get();
-  const found = row ? Number(row.value) : null;
+    .prepare<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'schema_version'",
+    )
+    .get()
+  const found = row ? Number(row.value) : null
 
   if (found !== null && found > SCHEMA_VERSION) {
     // Downgrading is a real scenario — a rollback to the previous image — and it must not
     // silently write rows a newer schema will then misread.
     throw new Error(
       `queuepilot.sqlite is schema ${found}, this build understands ${SCHEMA_VERSION}. ` +
-        'Roll forward, or restore the file from a backup taken before the upgrade.',
-    );
+        "Roll forward, or restore the file from a backup taken before the upgrade.",
+    )
   }
 
   if (found !== SCHEMA_VERSION) {
-    db.prepare("INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)").run(
-      String(SCHEMA_VERSION),
-    );
-    if (found !== null) console.log(`[store] migrated queuepilot.sqlite ${found} → ${SCHEMA_VERSION}`);
+    db.prepare(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('schema_version', ?)",
+    ).run(String(SCHEMA_VERSION))
+    if (found !== null)
+      console.log(
+        `[store] migrated queuepilot.sqlite ${found} → ${SCHEMA_VERSION}`,
+      )
   }
 }
 
 /** Open a database at `path`, set the pragmas, and put the schema on it. */
-export function openBookOfRecord(path: string): SqliteDatabase {
+export function openBookOfRecord(
+  path: string,
+): SqliteDatabase {
   // `/config` exists in production, but a harness's scratch directory may not exist yet and
   // node:sqlite's error for a missing parent is a bare "unable to open database file".
-  mkdirSync(dirname(path), { recursive: true });
-  const db = openSqlite(path);
+  mkdirSync(dirname(path), { recursive: true })
+  const db = openSqlite(path)
 
   // WAL for the same reason `promote.ts` and `cache.ts` use it: a reader is never blocked by
   // the writer, and this process both serves HTTP and runs the scan loop.
-  db.exec('PRAGMA journal_mode = WAL');
+  db.exec("PRAGMA journal_mode = WAL")
   // NORMAL, not FULL. A power cut can lose the last transaction; it cannot corrupt the file.
   // The alternative is an fsync per queue reorder on a NAS.
-  db.exec('PRAGMA synchronous = NORMAL');
+  db.exec("PRAGMA synchronous = NORMAL")
   // Not the default, and the cascade in `queue_entries` depends on it.
-  db.exec('PRAGMA foreign_keys = ON');
-  migrate(db);
+  db.exec("PRAGMA foreign_keys = ON")
+  migrate(db)
 
-  return db;
+  return db
 }
 
-let handle: SqliteDatabase | null = null;
+let handle: SqliteDatabase | null = null
 
 /**
  * The process-wide handle, opened on first use.
@@ -300,29 +352,29 @@ let handle: SqliteDatabase | null = null;
  */
 export function bookOfRecord(): SqliteDatabase {
   if (!handle) {
-    handle = openBookOfRecord(STORE_PATH);
-    console.log(`[store] book of record: ${STORE_PATH}`);
+    handle = openBookOfRecord(STORE_PATH)
+    console.log(`[store] book of record: ${STORE_PATH}`)
   }
-  return handle;
+  return handle
 }
 
 /** Close it. For tests and for a clean shutdown; the next call to `bookOfRecord()` reopens. */
 export function closeBookOfRecord(): void {
-  if (!handle) return;
+  if (!handle) return
   try {
-    handle.close();
+    handle.close()
   } catch (e) {
-    console.log(`[store] close failed: ${errMessage(e)}`);
+    console.log(`[store] close failed: ${errMessage(e)}`)
   }
-  handle = null;
+  handle = null
 }
 
 /** True when the file exists and has a non-zero size — the "is there anything to read" test the
  * importer asks before it decides to copy the YAML aside. */
 export const fileHasBytes = (path: string): boolean => {
   try {
-    return readFileSync(path).byteLength > 0;
+    return readFileSync(path).byteLength > 0
   } catch {
-    return false;
+    return false
   }
-};
+}

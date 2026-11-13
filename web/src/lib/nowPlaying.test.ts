@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, test } from "vitest"
 import { isPlayingItem } from "./nowPlaying"
 import type { QueueItem } from "./types"
 
@@ -13,7 +13,7 @@ describe("mixed-server now-playing attribution", () => {
     type: "movie",
   } as QueueItem
 
-  it("does not confuse matching rating keys on different servers", () => {
+  test("does not confuse matching rating keys on different servers", () => {
     const now = {
       now: {
         state: "playing",
@@ -26,7 +26,7 @@ describe("mixed-server now-playing attribution", () => {
     expect(isPlayingItem(now, shared)).toBe(true)
   })
 
-  it("highlights neither entry when the source is ambiguous", () => {
+  test("highlights neither entry when the source is ambiguous", () => {
     const now = {
       now: {
         state: "playing",

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, test } from "vitest"
 
 import { SURPRISE_SCOPES } from "./tonight"
 import { drawSurprise, drawTonight } from "./tonightDraw"
@@ -84,7 +84,7 @@ const queuePick = (setId: string): TonightPickWire =>
   }) as TonightPickWire
 
 describe("drawTonight", () => {
-  it("draws board games off the SHELF and returns a board-game session", async () => {
+  test("draws board games off the SHELF and returns a board-game session", async () => {
     const stub = call()
     stub.reply({
       result: null,
@@ -112,7 +112,7 @@ describe("drawTonight", () => {
     })
   })
 
-  it("carries the filters into the criteria rather than dropping them", async () => {
+  test("carries the filters into the criteria rather than dropping them", async () => {
     const stub = call()
     stub.reply({
       result: null,
@@ -146,7 +146,7 @@ describe("drawTonight", () => {
 
   // A shelf pick is chosen BY table size, so an unstated table is refused rather than
   // defaulted. This is the same rule a preset card's parser holds, one layer down.
-  it("refuses a board-game draw for a table nobody stated", async () => {
+  test("refuses a board-game draw for a table nobody stated", async () => {
     const stub = call()
 
     const outcome = await drawTonight(
@@ -158,7 +158,7 @@ describe("drawTonight", () => {
     expect(stub.calls).toHaveLength(0)
   })
 
-  it("draws every other tile from the QUEUES and returns a queue session", async () => {
+  test("draws every other tile from the QUEUES and returns a queue session", async () => {
     const stub = call()
     stub.reply({
       backend: "plex",
@@ -186,7 +186,7 @@ describe("drawTonight", () => {
     })
   })
 
-  it("passes an empty draw's own REASON through rather than inventing one", async () => {
+  test("passes an empty draw's own REASON through rather than inventing one", async () => {
     const stub = call()
     stub.reply({
       backend: null,
@@ -207,7 +207,7 @@ describe("drawTonight", () => {
 
   // A preset card still cannot answer the second-screen question for somebody standing in
   // front of it. The interactive screen calls `drawSurprise` after the person chooses.
-  it("refuses bare Surprise Me without asking any backend", async () => {
+  test("refuses bare Surprise Me without asking any backend", async () => {
     const stub = call()
 
     const outcome = await drawTonight(
@@ -224,7 +224,7 @@ describe("drawTonight", () => {
     expect(stub.calls).toHaveLength(0)
   })
 
-  it("chooses an activity inside Media, then uses that activity's existing engine", async () => {
+  test("chooses an activity inside Media, then uses that activity's existing engine", async () => {
     const stub = call()
     stub.reply({
       backend: "plex",
@@ -257,7 +257,7 @@ describe("drawTonight", () => {
     })
   })
 
-  it("tries the other Games activity when the first one has no answer", async () => {
+  test("tries the other Games activity when the first one has no answer", async () => {
     const calls: { body: unknown; url: string }[] = []
     const games = SURPRISE_SCOPES.find(
       (scope) => scope.id === "games",

@@ -39,31 +39,44 @@
  * an absent `enabled:` line has always meant on disk.
  */
 export interface SeasonGated {
-  enabled?: boolean | null;
-  season_start?: string | null;
-  season_end?: string | null;
+  enabled?: boolean | null
+  season_start?: string | null
+  season_end?: string | null
 }
 
 /** A parsed season day. No YEAR: the window repeats, so a year would be a lie the first time
  *  it rolled over. */
 export interface SeasonDay {
-  month: number;
-  day: number;
+  month: number
+  day: number
 }
 
 /** A parsed window. Both ends or neither — see `seasonWindowOf`. */
 export interface SeasonWindow {
-  start: SeasonDay;
-  end: SeasonDay;
+  start: SeasonDay
+  end: SeasonDay
 }
 
 const MONTH_NAMES = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-] as const;
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const
 
 /** The longest a month can be. February is 29 and not 28 on purpose: the window repeats every
  *  year, so a 29 Feb boundary is legal and simply does not occur in three years out of four. */
-const MONTH_LENGTHS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
+const MONTH_LENGTHS = [
+  31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31,
+] as const
 
 /**
  * Read one `MM-DD` off the file. Anything else is `null`, and `null` means NO WINDOW rather
@@ -74,25 +87,29 @@ const MONTH_LENGTHS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31] as const;
  * failures are different: the first is somebody typing, the second is a date that does not
  * exist.
  */
-export function parseSeasonDay(value: unknown): SeasonDay | null {
-  if (value == null) return null;
-  const text = String(value).trim();
-  if (!text) return null;
-  const match = /^(\d{1,2})[-/](\d{1,2})$/.exec(text);
-  if (!match) return null;
-  const month = Number(match[1]);
-  const day = Number(match[2]);
-  const longest = MONTH_LENGTHS[month - 1];
-  if (longest === undefined) return null;
-  if (!Number.isInteger(month) || month < 1 || month > 12) return null;
-  if (!Number.isInteger(day) || day < 1 || day > longest) return null;
+export function parseSeasonDay(
+  value: unknown,
+): SeasonDay | null {
+  if (value == null) return null
+  const text = String(value).trim()
+  if (!text) return null
+  const match = /^(\d{1,2})[-/](\d{1,2})$/.exec(text)
+  if (!match) return null
+  const month = Number(match[1])
+  const day = Number(match[2])
+  const longest = MONTH_LENGTHS[month - 1]
+  if (longest === undefined) return null
+  if (!Number.isInteger(month) || month < 1 || month > 12)
+    return null
+  if (!Number.isInteger(day) || day < 1 || day > longest)
+    return null
 
-  return { day, month };
+  return { day, month }
 }
 
 /** `MM-DD`, zero-padded — the one spelling anything writes to disk. */
 export function formatSeasonDay(value: SeasonDay): string {
-  return `${String(value.month).padStart(2, '0')}-${String(value.day).padStart(2, '0')}`;
+  return `${String(value.month).padStart(2, "0")}-${String(value.day).padStart(2, "0")}`
 }
 
 /**
@@ -104,22 +121,26 @@ export function formatSeasonDay(value: SeasonDay): string {
  * (`sets.ts normalizeSeasonForWrite`) refuses the half by name, so the only way to reach this
  * branch is a hand edit.
  */
-export function seasonWindowOf(cfg: SeasonGated | null | undefined): SeasonWindow | null {
-  if (!cfg) return null;
-  const start = parseSeasonDay(cfg.season_start);
-  const end = parseSeasonDay(cfg.season_end);
-  if (!start || !end) return null;
+export function seasonWindowOf(
+  cfg: SeasonGated | null | undefined,
+): SeasonWindow | null {
+  if (!cfg) return null
+  const start = parseSeasonDay(cfg.season_start)
+  const end = parseSeasonDay(cfg.season_end)
+  if (!start || !end) return null
 
-  return { end, start };
+  return { end, start }
 }
 
 /** `MM-DD` as one comparable integer: 1001 for 1 October. Month-major, so the ordinal sorts
  *  the calendar without needing a year to hang the dates on. */
-const ordinalOf = (value: SeasonDay): number => value.month * 100 + value.day;
+const ordinalOf = (value: SeasonDay): number =>
+  value.month * 100 + value.day
 
 /** Today, in the SERVER's local time. A season is a household calendar fact — "the Halloween
  *  queue opens on 1 October" is about the wall in the hallway, not about UTC. */
-const ordinalOfDate = (now: Date): number => (now.getMonth() + 1) * 100 + now.getDate();
+const ordinalOfDate = (now: Date): number =>
+  (now.getMonth() + 1) * 100 + now.getDate()
 
 /**
  * Is `now` inside the window?
@@ -128,16 +149,19 @@ const ordinalOfDate = (now: Date): number => (now.getMonth() + 1) * 100 + now.ge
  * the new year, and it is the case a naive `start <= today && today <= end` gets wrong by
  * being false every single day of its own season. A set with no window is always in season.
  */
-export function isInSeason(cfg: SeasonGated | null | undefined, now: Date = new Date()): boolean {
-  const window = seasonWindowOf(cfg);
-  if (!window) return true;
-  const start = ordinalOf(window.start);
-  const end = ordinalOf(window.end);
-  const today = ordinalOfDate(now);
+export function isInSeason(
+  cfg: SeasonGated | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  const window = seasonWindowOf(cfg)
+  if (!window) return true
+  const start = ordinalOf(window.start)
+  const end = ordinalOf(window.end)
+  const today = ordinalOfDate(now)
 
   return start <= end
     ? today >= start && today <= end
-    : today >= start || today <= end;
+    : today >= start || today <= end
 }
 
 /**
@@ -153,9 +177,9 @@ export function isSetAvailable(
   cfg: SeasonGated | null | undefined,
   now: Date = new Date(),
 ): boolean {
-  if (!cfg) return false;
+  if (!cfg) return false
 
-  return cfg.enabled !== false && isInSeason(cfg, now);
+  return cfg.enabled !== false && isInSeason(cfg, now)
 }
 
 /**
@@ -169,8 +193,8 @@ export function seasonReturnLabel(
   cfg: SeasonGated | null | undefined,
   now: Date = new Date(),
 ): string | null {
-  const window = seasonWindowOf(cfg);
-  if (!window || isInSeason(cfg, now)) return null;
+  const window = seasonWindowOf(cfg)
+  if (!window || isInSeason(cfg, now)) return null
 
-  return `${window.start.day} ${MONTH_NAMES[window.start.month - 1] ?? ''}`.trim();
+  return `${window.start.day} ${MONTH_NAMES[window.start.month - 1] ?? ""}`.trim()
 }

@@ -11,53 +11,73 @@
  */
 
 export interface ThingVersion {
-  id: number;
-  name: string;
-  year: number | null;
-  languages: string[];
-  publishers: string[];
-  imageUrl: string | null;
-  thumbnailUrl: string | null;
+  id: number
+  name: string
+  year: number | null
+  languages: string[]
+  publishers: string[]
+  imageUrl: string | null
+  thumbnailUrl: string | null
 }
 
 const decodeEntities = (text: string): string =>
   text
-    .replaceAll('&amp;', '&')
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&quot;', '"')
-    .replaceAll('&#039;', "'")
-    .replaceAll('&apos;', "'")
-    .replace(/&#(\d+);/g, (_, code: string) => String.fromCodePoint(Number(code)));
+    .replaceAll("&amp;", "&")
+    .replaceAll("&lt;", "<")
+    .replaceAll("&gt;", ">")
+    .replaceAll("&quot;", '"')
+    .replaceAll("&#039;", "'")
+    .replaceAll("&apos;", "'")
+    .replace(/&#(\d+);/g, (_, code: string) =>
+      String.fromCodePoint(Number(code)),
+    )
 
-const numberOrNull = (value: string | undefined): number | null => {
-  if (!value) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-};
+const numberOrNull = (
+  value: string | undefined,
+): number | null => {
+  if (!value) return null
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0
+    ? parsed
+    : null
+}
 
-export const parseThingVersions = (xml: string): ThingVersion[] => {
-  const versions: ThingVersion[] = [];
+export const parseThingVersions = (
+  xml: string,
+): ThingVersion[] => {
+  const versions: ThingVersion[] = []
 
   for (const match of xml.matchAll(
     /<item type="boardgameversion" id="(\d+)">([\s\S]*?)<\/item>/g,
   )) {
-    const id = Number(match[1]);
-    const body = match[2] ?? '';
-    if (!Number.isInteger(id) || id <= 0) continue;
+    const id = Number(match[1])
+    const body = match[2] ?? ""
+    if (!Number.isInteger(id) || id <= 0) continue
 
-    const name = /<name\b[^>]*value="([^"]+)"/.exec(body)?.[1] ?? '';
-    if (name === '') continue;
+    const name =
+      /<name\b[^>]*value="([^"]+)"/.exec(body)?.[1] ?? ""
+    if (name === "") continue
 
-    const image = /<image>([^<]+)<\/image>/.exec(body)?.[1] ?? null;
-    const thumbnail = /<thumbnail>([^<]+)<\/thumbnail>/.exec(body)?.[1] ?? null;
-    const year = numberOrNull(/<yearpublished\b[^>]*value="([^"]*)"/.exec(body)?.[1]);
+    const image =
+      /<image>([^<]+)<\/image>/.exec(body)?.[1] ?? null
+    const thumbnail =
+      /<thumbnail>([^<]+)<\/thumbnail>/.exec(body)?.[1] ??
+      null
+    const year = numberOrNull(
+      /<yearpublished\b[^>]*value="([^"]*)"/.exec(
+        body,
+      )?.[1],
+    )
     const languages = [
-      ...body.matchAll(/<link\b[^>]*type="language"[^>]*value="([^"]+)"/g),
-    ].map((link) => decodeEntities(link[1] ?? ''));
+      ...body.matchAll(
+        /<link\b[^>]*type="language"[^>]*value="([^"]+)"/g,
+      ),
+    ].map((link) => decodeEntities(link[1] ?? ""))
     const publishers = [
-      ...body.matchAll(/<link\b[^>]*type="boardgamepublisher"[^>]*value="([^"]+)"/g),
-    ].map((link) => decodeEntities(link[1] ?? ''));
+      ...body.matchAll(
+        /<link\b[^>]*type="boardgamepublisher"[^>]*value="([^"]+)"/g,
+      ),
+    ].map((link) => decodeEntities(link[1] ?? ""))
 
     versions.push({
       id,
@@ -67,8 +87,8 @@ export const parseThingVersions = (xml: string): ThingVersion[] => {
       name: decodeEntities(name),
       publishers,
       year,
-    });
+    })
   }
 
-  return versions;
-};
+  return versions
+}

@@ -14,12 +14,12 @@
  * for their consumer and neither may be "unified" without a behaviour change, so both
  * are declared here with a comment saying who reads which.
  */
-import type { Activity } from './activity.js';
+import type { Activity } from "./activity.js"
 
 // --- small vocabularies ------------------------------------------------------ //
 
 /** `source:` on a set. Anything that is not `rotation` normalizes to `queue` (sets.js). */
-export type SetSource = 'queue' | 'rotation';
+export type SetSource = "queue" | "rotation"
 
 /**
  * What a FILTERED queue narrows its parent to — normalized, so every list is present and an
@@ -30,7 +30,7 @@ export type SetSource = 'queue' | 'rotation';
  * See `filteredQueues.ts`.
  */
 export interface QueueFilter {
-  libraries: string[];
+  libraries: string[]
 }
 
 /**
@@ -38,23 +38,23 @@ export interface QueueFilter {
  * providers/plex.js buckets(): progress -> advance through unwatched, rewatch -> weighted
  * least-watched replay.
  */
-export type SetBehavior = 'progress' | 'rewatch';
+export type SetBehavior = "progress" | "rewatch"
 
 /** The legacy `mode:` knob. `sets.js` MODES; rotation sets default to `both`. */
-export type SetMode = 'rewatch' | 'episodic' | 'both';
+export type SetMode = "rewatch" | "episodic" | "both"
 
 /**
  * Where a multi-episode batch may stop. null at the set level = no boundary; null on an
  * ENTRY = "follow the set". Curated sets only — a channel alternates shows every item.
  */
-export type BatchStop = 'member' | 'season' | null;
+export type BatchStop = "member" | "season" | null
 
 /**
  * How a queue STARTS, derived from its provider blocks. `push` = a lineup is sent at a
  * device (Plex -> the Shield); `pull` = there is no cast target and the provider hands
  * back a URL to open (Kavita).
  */
-export type Delivery = 'push' | 'pull';
+export type Delivery = "push" | "pull"
 
 /**
  * What a provider's lineup is COUNTED in — the provider's own fact, declared on the
@@ -67,7 +67,11 @@ export type Delivery = 'push' | 'pull';
  * and an individual item corrects it. Without it a whole volume renders as "Ch -100000" —
  * Kavita's no-chapter-subdivision sentinel, printed verbatim.
  */
-export type MediaUnit = 'episode' | 'chapter' | 'volume' | 'play';
+export type MediaUnit =
+  | "episode"
+  | "chapter"
+  | "volume"
+  | "play"
 
 /**
  * The WORDS a provider's medium is described in — the provider's own fact, exposed so no
@@ -84,15 +88,15 @@ export type MediaUnit = 'episode' | 'chapter' | 'volume' | 'play';
  */
 export interface ProviderVocabulary {
   /** The imperative on a start affordance: "Play" / "Read". */
-  verb: string;
+  verb: string
   /** What one lineup item is, singular: "episode" / "chapter". */
-  unit: string;
+  unit: string
   /** …and plural, because English is not reliably `+ 's'` for every future backend. */
-  units: string;
+  units: string
   /** What a lineup MEMBER is: "show" / "series". */
-  member: string;
+  member: string
   /** The finished state, for "All watched" / "All read". */
-  done: string;
+  done: string
   /**
    * The unit abbreviated to fit on a poster tile: "eps" / "ch" / "plays".
    *
@@ -100,12 +104,12 @@ export interface ProviderVocabulary {
    * `unit === 'episode' ? 'eps' : 'ch'` — a binary that silently tags a board game "3 ch".
    * A third medium is what exposed it; the fourth should not have to find it again.
    */
-  unitShort: string;
+  unitShort: string
   /**
    * The product name used in authored copy: "Plex" / "Kavita".
    * The replacement engine swaps this for the word "Plex" in leftover sentences.
    */
-  name: string;
+  name: string
   /**
    * The glyph on the start affordance: `▶` for Plex, `📖` for Kavita, `🎲` for the picker.
    *
@@ -114,7 +118,7 @@ export interface ProviderVocabulary {
    * claiming "this is going to play on a screen" after the label had stopped. An icon is
    * copy; it is authored per provider like the rest of the vocabulary.
    */
-  startIcon: string;
+  startIcon: string
 }
 
 /**
@@ -124,9 +128,9 @@ export interface ProviderVocabulary {
  * `multiSeason: false` hides the season row.
  */
 export interface UnitList {
-  multiSeason: boolean;
+  multiSeason: boolean
   seasons: {
-    season: number;
+    season: number
     episodes: {
       /**
        * The unit's OWN id — a Plex episode ratingKey, a Kavita chapter id — which is what a
@@ -134,12 +138,12 @@ export interface UnitList {
        * cannot support skipping either; the member list simply offers no control on a row
        * that has no id, the same way the tile menu omits Skip there.
        */
-      ratingKey?: string | null;
-      episode: number | null;
-      title: string;
-      watched: boolean;
-    }[];
-  }[];
+      ratingKey?: string | null
+      episode: number | null
+      title: string
+      watched: boolean
+    }[]
+  }[]
 }
 
 /**
@@ -154,9 +158,9 @@ export interface UnitList {
  * may name it by title, and the engine matches either).
  */
 export interface Start {
-  series?: string;
-  season?: number;
-  episode?: number;
+  series?: string
+  season?: number
+  episode?: number
   /**
    * WHERE INSIDE the first played unit playback begins, in milliseconds.
    *
@@ -173,9 +177,9 @@ export interface Start {
    * the reader no unit. Sparse like every other per-entry override: absent, negative or
    * non-numeric DROPS the key rather than writing a 0 nobody typed.
    */
-  position_ms?: number;
+  position_ms?: number
   /** Legacy location of the entry's history override. New writes use EntryExtras.watch_history. */
-  history?: 'queue' | 'provider';
+  history?: "queue" | "provider"
 }
 
 /**
@@ -192,7 +196,7 @@ export interface Start {
  * check; they are the only readers that can see both sides at once.
  */
 export interface End {
-  position_ms?: number;
+  position_ms?: number
 }
 
 // --- bindings ---------------------------------------------------------------- //
@@ -204,16 +208,16 @@ export interface End {
  * `EngineBinding` for the engine's twin, where they are `Set<string>`.
  */
 export interface Binding {
-  plex_user: string | null;
-  account_id: number | null;
-  user_uuid: string | null;
+  plex_user: string | null
+  account_id: number | null
+  user_uuid: string | null
   /** null (not `[]`) when the key is absent — normalizeBinding distinguishes the two. */
-  allowed_ratings: string[] | null;
-  movie_ratings: string[] | null;
+  allowed_ratings: string[] | null
+  movie_ratings: string[] | null
   /** Coerced through `toInts`, so always a list (possibly empty), never null. */
-  watch_count_accounts: number[];
+  watch_count_accounts: number[]
   /** Defaults to `[]`, unlike the two ratings lists above. */
-  movie_excludes: string[];
+  movie_excludes: string[]
 }
 
 /**
@@ -231,13 +235,13 @@ export interface Binding {
  * Consumers: engine/select.js, engine/rotation.js, providers/plex.js, session.js.
  */
 export interface EngineBinding {
-  plex_user: string | null;
-  account_id: number | null;
-  user_uuid: string | null;
-  allowed_ratings: Set<string> | null;
-  movie_ratings: Set<string> | null;
-  watch_count_accounts: number[] | null;
-  movie_excludes: string[];
+  plex_user: string | null
+  account_id: number | null
+  user_uuid: string | null
+  allowed_ratings: Set<string> | null
+  movie_ratings: Set<string> | null
+  watch_count_accounts: number[] | null
+  movie_excludes: string[]
 }
 
 // --- provider blocks + definitions ------------------------------------------- //
@@ -248,42 +252,42 @@ export interface EngineBinding {
  * a library id.
  */
 export interface ProviderBlock {
-  provider: string;
+  provider: string
   /**
    * Provider-SCOPED and means different things per provider: a Plex Home profile the
    * Shield switches to, versus which Kavita user owns the reading list.
    */
-  profile: string | null;
+  profile: string | null
   /** Bare provider-scoped strings — never prefixed with `plex:` / `kavita:`. */
-  libraries: string[];
+  libraries: string[]
   /** Kavita only: chapters to read before switching series. Absent on a Plex block. */
-  batch?: number;
+  batch?: number
   /**
    * READ-TIME marker: this block was SYNTHESIZED by `blocksForSet()` for a set written
    * before blocks existed. It must never be written back to disk, or a re-read would
    * treat a synthesized block as a real one. `sets.js writableBlocks()` drops it.
    */
-  implicit?: boolean;
+  implicit?: boolean
 }
 
 /** The on-disk projection of a block — `sets.js writableBlocks()`. Omits `implicit`, and
  * omits every empty knob rather than writing a null. */
 export interface WritableProviderBlock {
-  provider: string;
-  profile?: string;
-  libraries?: string[];
-  batch?: number;
+  provider: string
+  profile?: string
+  libraries?: string[]
+  batch?: number
 }
 
 /** A configured backend — `providers/config.js normalizeDefinition()` plus the implicit
  * Plex/Kavita definitions built from deploy-time env. */
 export interface ProviderDefinition {
-  id: string;
+  id: string
   /** Lower-cased. This build knows `plex` and `kavita`; anything else throws in providerFor. */
-  kind: string;
-  label: string;
+  kind: string
+  label: string
   /** Trailing slashes stripped. `''` for Plex, which is configured by env, not by URL here. */
-  base_url: string;
+  base_url: string
 }
 
 // --- the set registry (sets.yaml, WEB API side) ------------------------------ //
@@ -301,7 +305,7 @@ interface SetRegistryCommon {
    * fourth called it a window: "What we _really_ need is a way to specify or configure the
    * number of movies/episodes to watch in a given setting" (owner).
    */
-  length: number | 'infinite' | null;
+  length: number | "infinite" | null
   /**
    * What `length: null` resolves to for THIS set — its kind's own historical behaviour (a
    * rewatch pool 1, a filtered or curated pool 12, an ordered queue 1).
@@ -310,7 +314,7 @@ interface SetRegistryCommon {
    * `kind`, and a second copy of it in the bundle is how the editor ends up chipping the
    * wrong option "Default".
    */
-  length_default: number;
+  length_default: number
   /**
    * Announce, when this sitting finishes, that the room should be shut down.
    *
@@ -319,22 +323,22 @@ interface SetRegistryCommon {
    * request — who is still in the room, what time it is — is exactly the judgement that
    * belongs in an automation rather than in a queue builder.
    */
-  power_off_when_done: boolean;
+  power_off_when_done: boolean
   /**
    * "Locked on TV": the QueuePilot TV asks for the household TV PIN before it opens or plays
    * this queue, and the server refuses it (423) without an unlock. Stored sparsely — absent
    * means unlocked — and inert while no PIN is set (`nativeLock.ts`).
    */
-  is_locked_on_tv: boolean;
+  is_locked_on_tv: boolean
   /** IMMUTABLE — HA automations / NFC cards / MQTT reference it. */
-  id: string;
+  id: string
   /**
    * The queue's own name, or its ID when it has none.
    *
    * The id fallback is what makes this field always printable, and it is exactly why a caller
    * cannot use it to decide whether a name was TYPED — `has_explicit_label` answers that.
    */
-  label: string;
+  label: string
   /**
    * Whether `label:` is actually on disk.
    *
@@ -344,32 +348,32 @@ interface SetRegistryCommon {
    * The same shape as `has_explicit_profiles`, and for the same reason — the normalized field
    * cannot tell "absent" from "written", and here the difference decides what the UI prints.
    */
-  has_explicit_label: boolean;
+  has_explicit_label: boolean
   /**
    * Product kind: `picks` | `rules` after normalize(). On disk the legacy spellings
    * (`movies` / `anime` / `cartoons` / `demo`) are still accepted and mapped here
    * (decision 2026-08-23-kind-is-picks-or-rules).
    */
-  kind: string;
+  kind: string
   /**
    * Default lane for NEW entries on a Picks queue: `priority` | `random`. Absent on Rules
    * queues. Reported as the EFFECTIVE value (legacy movies → priority, anime → random).
    */
-  add_as?: 'priority' | 'random';
+  add_as?: "priority" | "random"
   /** Default lead cooldown for Priority entries (`16h`, `7d`, …). Picks only; sparse. */
-  promote_window?: string | null;
-  sections: number[];
-  item_sections: number[];
-  blocklist: string[];
+  promote_window?: string | null
+  sections: number[]
+  item_sections: number[]
+  blocklist: string[]
   /**
    * The items a CURATED queue skips — the queue-side twin of `blocklist`, which is the
    * rotation-side one. Present on every set for one response shape (as `blocklist` is), but
    * only a queue set can act on it: `updateSet` rejects the key on a rotation channel, where
    * `blocklist` is already the answer.
    */
-  skipped: string[];
+  skipped: string[]
   /** Regular Season-0 leaf ids this curated queue opts into. Empty means skipped by default. */
-  included_specials: string[];
+  included_specials: string[]
   /**
    * `'whole'` | `'split'` — how a `Collection:` member enters a filtered pool. Reported as
    * the EFFECTIVE value (never the absence the file stores for the default), so the pool
@@ -377,30 +381,30 @@ interface SetRegistryCommon {
    *
    * Present on every set for one response shape; only a rotation set can act on it.
    */
-  collection_members: 'whole' | 'split';
+  collection_members: "whole" | "split"
   /** Rotation: mirrored from `profiles[0]`. Queue: read from the top level. */
-  allowed_ratings: string[] | null;
-  movie_ratings: string[] | null;
-  movie_excludes: string[];
-  watch_count_accounts: number[];
-  plex_user: string | null;
-  account_id: number | null;
-  user_uuid: string | null;
+  allowed_ratings: string[] | null
+  movie_ratings: string[] | null
+  movie_excludes: string[]
+  watch_count_accounts: number[]
+  plex_user: string | null
+  account_id: number | null
+  user_uuid: string | null
   /** null on a queue set; rotation sets default to 'both'. */
-  mode: SetMode | null;
-  audio_language: string | null;
+  mode: SetMode | null
+  audio_language: string | null
   /**
    * Gate a curated queue to a Plex Home profile. Rotation channels are ungated by design,
    * so normalize() still emits the field for them but the engine never reads it there.
    */
-  requires_profile: string | null;
+  requires_profile: string | null
   /** Per shared Plex server, selected library ids. Missing server = all granted libraries. */
-  shared_libraries: Record<string, string[]>;
+  shared_libraries: Record<string, string[]>
   /** ALWAYS a list, never null — a legacy set reports its one implicit Plex block. */
-  providers: ProviderBlock[];
-  delivery: Delivery;
+  providers: ProviderBlock[]
+  delivery: Delivery
   /** The words this set's medium is described in, from its own provider. See `sets.ts`. */
-  vocabulary: ProviderVocabulary;
+  vocabulary: ProviderVocabulary
   /**
    * The KIND of backend this set draws from (`plex` / `kavita`), for the UI's
    * `[data-provider]` accent scoping.
@@ -409,7 +413,7 @@ interface SetRegistryCommon {
    * surface has its own id (`my-kavita`) and must still come out Kavita-green — keying the
    * stylesheet on ids would silently drop such a queue back to the neutral accent.
    */
-  provider_kind: string;
+  provider_kind: string
   /**
    * WP-5. WHAT YOU ARE DOING with this queue — the EFFECTIVE value, so the UI never
    * re-derives it: the stored override if there is one, otherwise the provider's.
@@ -419,13 +423,13 @@ interface SetRegistryCommon {
    * (decision `2026-08-25-a-queue-is-people-plus-an-activity`). Reported on every set,
    * because a rotation channel is as much a `watching` thing as a curated queue is.
    */
-  activity: Activity;
+  activity: Activity
   /** What `activity` would be with nothing stored — the provider's own answer. Sent so the
    *  editor's picker can chip "Default" without shipping the provider table to the browser,
    *  the same way `length_default` does. */
-  activity_default: Activity;
+  activity_default: Activity
   /** Per-scan cap; blank/<=0 = no limit. Applies to queues AND channels. */
-  max_items: number | null;
+  max_items: number | null
   /**
    * The queue this one is a FILTERED VIEW of, or null for an ordinary queue.
    *
@@ -434,19 +438,19 @@ interface SetRegistryCommon {
    * (`filteredQueues.ts`). Its entries and their done flags are the parent's too, so what is
    * finished in one is finished in both. See `filteredQueues.ts` for why it is a view.
    */
-  filtered_from: string | null;
+  filtered_from: string | null
   /** What this view narrows to. Null on an ordinary queue; never null when `filtered_from`
    *  is set, though its lists may be empty on a half-configured one. */
-  filter: QueueFilter | null;
+  filter: QueueFilter | null
   /** `enabled: false` is the only falsy form — absent reads as enabled. */
-  enabled: boolean;
+  enabled: boolean
   /**
    * THE SEASON WINDOW — `MM-DD` / `MM-DD`, repeating every year, or null for a queue that is
    * available all year. Both ends or neither; a half-written pair is refused by the writer
    * and read as no window at all.
    */
-  season_start: string | null;
-  season_end: string | null;
+  season_start: string | null
+  season_end: string | null
   /**
    * Is today inside that window — computed on THIS READ, never stored and never a timer.
    *
@@ -455,19 +459,19 @@ interface SetRegistryCommon {
    * off" apart from "it is June", and mark only the second
    * (decision `2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
    */
-  is_in_season: boolean;
+  is_in_season: boolean
 }
 
 /** A curated queue as the web API reports it (`source: 'queue'`). */
 export interface QueueSet extends SetRegistryCommon {
-  source: 'queue';
+  source: "queue"
   /** Effective history default. Absent on disk is reported as provider. */
-  watch_history: 'provider' | 'queue';
+  watch_history: "provider" | "queue"
   /** Never mark entries done (a non-consuming / playlist queue). `reel` implies it, and
    * normalize() reports both so the UI prefill matches the engine. */
-  keep_completed: boolean;
+  keep_completed: boolean
   /** Play the whole lineup every scan. */
-  reel: boolean;
+  reel: boolean
   /**
    * Mark entries done as usual, and clear the whole queue's watched state once the LAST one
    * finishes, so a new round starts. The THIRD completion axis: `keep_completed` and `reel`
@@ -479,9 +483,9 @@ export interface QueueSet extends SetRegistryCommon {
    * this reads back false. That is the existing precedence rule applied, not a refusal — a
    * hand-written contradiction still parses.
    */
-  restart_when_exhausted: boolean;
+  restart_when_exhausted: boolean
   /** TTL string ("24h"/"7d"/…) or null = keep finished entries forever (the default). */
-  remove_completed_after: string | null;
+  remove_completed_after: string | null
   /**
    * `MM-DD` — the day each year this queue clears its own watched state, or null = never
    * (the default, and what every queue written before 2026-09-08 means).
@@ -491,8 +495,8 @@ export interface QueueSet extends SetRegistryCommon {
    * time the date arrives. The Set editor says so where the two sit
    * (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
    */
-  reset_watched_on: string | null;
-  batch_stops_at: BatchStop;
+  reset_watched_on: string | null
+  batch_stops_at: BatchStop
   /**
    * This queue's DEFAULT batch: how many items one entry contributes per visit when the
    * entry says nothing. null = the engine default (env `QUEUE_SERIES_DEFAULT`, which is 1).
@@ -502,30 +506,30 @@ export interface QueueSet extends SetRegistryCommon {
    * chapters — by choice for this queue" (owner, 2026-08-15). A per-entry `episodes:` still
    * wins over it.
    */
-  episodes: number | null;
+  episodes: number | null
   /**
    * How many VOLUMES one volume-based entry contributes per visit. Independent of
    * `episodes` — a volume is a collection of chapters, so the chapter count must not
    * apply. null = 1. Sparse on disk the same way `episodes` is.
    */
-  volumes: number | null;
+  volumes: number | null
 }
 
 /** A dynamic channel as the web API reports it (`source: 'rotation'`). */
 export interface RotationSet extends SetRegistryCommon {
-  source: 'rotation';
+  source: "rotation"
   /** ALWAYS >= 1 entry: synthesized from the legacy top-level fields when `profiles:` is
    * absent, which is why `has_explicit_profiles` exists to tell the two apart. */
-  profiles: Binding[];
+  profiles: Binding[]
   /** True only when the FILE carried a real `profiles:` array. The `set:"auto"` router and
    * the web editor branch on this — a synthesized single binding must not qualify. */
-  has_explicit_profiles: boolean;
+  has_explicit_profiles: boolean
   /** UI-seed hint only (a binding's `plex_user`); the engine ignores it. */
-  default_profile: string | null;
+  default_profile: string | null
   /** A legacy tier kept readable during the migration soak: hidden from pickers, skipped
    * by the auto router, still playable by id. */
-  superseded_by: string | null;
-  behavior: SetBehavior | null;
+  superseded_by: string | null
+  behavior: SetBehavior | null
   /**
    * How many items this channel's lineup holds. null = the engine default (env
    * `ROTATION_LENGTH`, which is 12).
@@ -535,16 +539,16 @@ export interface RotationSet extends SetRegistryCommon {
    */
   /** DEPRECATED — the 2026-08-17 spelling of `length: 'infinite'`, still reported (and still
    *  read by the engine) so a file written before the rename keeps working. */
-  refill: boolean;
+  refill: boolean
   /** What a FINISHED series does: `'restart'` (back to its start floor) or null = drop. */
-  on_complete: 'restart' | null;
+  on_complete: "restart" | null
   /** Explicit curated members ([] = pure dynamic rule pool). */
-  members: MemberValue[];
+  members: MemberValue[]
   /** Per-show manual start floors, keyed by ratingKey. */
-  starts: Record<string, Start>;
+  starts: Record<string, Start>
   /** Per-show weights, keyed by ratingKey (or `section-<id>` for a whole item bucket).
    * A weight of 1 is the default and is DROPPED rather than stored. */
-  weights: Record<string, number>;
+  weights: Record<string, number>
   /**
    * Per-show `on_complete` overrides, keyed exactly as `starts` / `weights` are
    * (`section-<id>` for a whole item bucket).
@@ -554,7 +558,7 @@ export interface RotationSet extends SetRegistryCommon {
    * The third is the point - a pool set to restart everything needs a way to say "except this
    * one", and a boolean could only express the other direction.
    */
-  on_complete_by_show: Record<string, 'restart' | 'drop'>;
+  on_complete_by_show: Record<string, "restart" | "drop">
 }
 
 /**
@@ -563,11 +567,11 @@ export interface RotationSet extends SetRegistryCommon {
  *
  * NOT the shape the engine runs on: see `RoutingSetCfg`.
  */
-export type SetRegistryEntry = QueueSet | RotationSet;
+export type SetRegistryEntry = QueueSet | RotationSet
 
 /** `sets.js readRegistry()` — the whole registry in file order. */
 export interface SetRegistry {
-  sets: SetRegistryEntry[];
+  sets: SetRegistryEntry[]
 }
 
 /**
@@ -575,19 +579,19 @@ export interface SetRegistry {
  * (`sets.js memberWriteValue()`, mirroring queues.py): a bare ratingKey / title string,
  * or a mapping. `describe()` in engine/resolve.js parses either.
  */
-export type MemberValue = string | MemberObject;
+export type MemberValue = string | MemberObject
 
 export interface MemberObject {
-  ratingKey?: string;
-  collection?: string;
-  title?: string;
+  ratingKey?: string
+  collection?: string
+  title?: string
   /** How many episodes this member contributes per visit. */
-  episodes?: number;
+  episodes?: number
   /** Slots per round. 1 is the default and is never written. */
-  weight?: number;
-  start?: Start;
+  weight?: number
+  start?: Start
   /** Plex collection member ratingKeys in the owner's custom order. Absent means Plex order. */
-  collection_order?: string[];
+  collection_order?: string[]
 }
 
 // --- the set registry (sets.yaml, ENGINE side) ------------------------------- //
@@ -614,25 +618,25 @@ export interface MemberObject {
  * Consumers: session.js, engine/resolve.js, engine/select.js, playback.js.
  */
 interface RoutingSetCfgCommon {
-  label: string;
-  kind: string | null;
-  enabled: boolean;
-  mode: string | null;
-  behavior: string | null;
+  label: string
+  kind: string | null
+  enabled: boolean
+  mode: string | null
+  behavior: string | null
   /** The set's episodic library ids. Named for what Python calls them. */
-  episodic_sections: number[];
-  item_sections: number[];
-  plex_user: string | null;
-  account_id: number | null;
-  user_uuid: string | null;
-  allowed_ratings: Set<string> | null;
-  movie_ratings: Set<string> | null;
-  watch_count_accounts: number[] | null;
+  episodic_sections: number[]
+  item_sections: number[]
+  plex_user: string | null
+  account_id: number | null
+  user_uuid: string | null
+  allowed_ratings: Set<string> | null
+  movie_ratings: Set<string> | null
+  watch_count_accounts: number[] | null
   /** Present on the queue branch and on the rotation branch's mirrored default binding. */
-  movie_excludes?: string[];
+  movie_excludes?: string[]
   // --- optional passthroughs: ABSENT, not null, when the file omits them --------
-  requires_profile?: string;
-  remove_completed_after?: string;
+  requires_profile?: string
+  remove_completed_after?: string
   /**
    * `MM-DD` — the day each year this queue clears its own watched state, read on the PLAY
    * path and never on a timer
@@ -641,7 +645,7 @@ interface RoutingSetCfgCommon {
    * `seasonalReset.parseResetDate` owns the reading, so an unrecognised value reads as "this
    * queue does not reset" at the consumer.
    */
-  reset_watched_on?: string;
+  reset_watched_on?: string
   /**
    * The Picks lane knobs, trimmed and lower-cased and otherwise UNINTERPRETED —
    * `kind.normalizeAddAs` and `leadWindow.parsePromoteWindow` own the reading, so an
@@ -650,8 +654,8 @@ interface RoutingSetCfgCommon {
    * promoted entry stays led-out. Both are `string` and not the narrowed union for that
    * reason.
    */
-  promote_window?: string;
-  add_as?: string;
+  promote_window?: string
+  add_as?: string
   /**
    * THE SEASON WINDOW — `MM-DD` and `MM-DD`, repeating every year. Both ends or neither.
    *
@@ -665,31 +669,31 @@ interface RoutingSetCfgCommon {
    * folding one into the other is the failure the decision record exists to prevent
    * (`2026-09-08-a-season-window-gates-the-existing-enabled-flag`).
    */
-  season_start?: string;
-  season_end?: string;
-  include_specials?: true;
+  season_start?: string
+  season_end?: string
+  include_specials?: true
   /** Selective replacement for the legacy all-specials switch. */
-  included_specials?: string[];
-  batch_stops_at?: string;
+  included_specials?: string[]
+  batch_stops_at?: string
   /**
    * A FILTERED queue's parent — whose `queues.yaml` entries and done flags this queue reads.
    * Absent on an ordinary queue. See `filteredQueues.ts`.
    */
-  filtered_from?: string;
+  filtered_from?: string
   /**
    * The provider library ids a filtered queue narrows its parent's entries to. Absent on an
    * ordinary queue; present-and-empty on one whose filter says nothing yet, which narrows
    * nothing. `providers/pullLineup.ts` hands it to the provider's `buckets()`.
    */
-  filter_libraries?: string[];
+  filter_libraries?: string[]
   /** The set's default batch — how many items one entry contributes per visit. See
    *  resolve.ts `setBatch()`; entry `episodes:` overrides it, env is the floor. */
-  episodes?: string;
+  episodes?: string
   /**
    * How many VOLUMES one volume-based entry contributes per visit. Independent of
    * `episodes` — a volume is not a chapter. Absent = 1.
    */
-  volumes?: string;
+  volumes?: string
   /**
    * How many items this set's LINEUP holds — the whole scan, not one entry's share. The
    * SIZE to `episodes`'s per-entry share: a rotation channel of `length: 30` still hands
@@ -702,7 +706,7 @@ interface RoutingSetCfgCommon {
    * Rotation channels only, today. Curated queues size themselves from their entries, and
    * Kavita reads `limit ?? max_items ?? ROTATION_LENGTH` — both are follow-up work.
    */
-  length?: string;
+  length?: string
   /**
    * `refill: true` — keep this channel's lineup topped up instead of letting it end.
    *
@@ -716,7 +720,7 @@ interface RoutingSetCfgCommon {
    * exactly the window shape: "it'd load up X number in the queue, and then add more as you
    * started getting close to the end of the queue" (2026-08-17).
    */
-  refill?: true;
+  refill?: true
   /**
    * What happens to a SERIES that has no unwatched episodes left, on a refilling channel:
    * `restart` puts it back at episode 1, `drop` retires it from the lineup. Absent = drop.
@@ -725,52 +729,54 @@ interface RoutingSetCfgCommon {
    * stopped drawing from it. Those are different questions and conflating them would restart
    * a show every window.
    */
-  on_complete?: string;
-  audio_language?: string;
+  on_complete?: string
+  audio_language?: string
   /** Always set (null when uncapped), unlike the passthroughs above it. */
-  max_items: number | null;
+  max_items: number | null
   /** Carried VERBATIM and uninterpreted; providers/blocks.js owns normalization, and
    * absence is NOT defaulted to a Plex block here. */
-  providers?: unknown[];
+  providers?: unknown[]
 }
 
-export interface RoutingQueueCfg extends RoutingSetCfgCommon {
-  source: 'queue';
+export interface RoutingQueueCfg
+  extends RoutingSetCfgCommon {
+  source: "queue"
   /** Mirrors of `episodic_sections` that resolve.js reads first. */
-  queue_sections: number[];
-  queue_section: number | undefined;
-  item_sections: [];
-  reel: boolean;
-  keep_completed: boolean;
+  queue_sections: number[]
+  queue_section: number | undefined
+  item_sections: []
+  reel: boolean
+  keep_completed: boolean
   /**
    * Clear this queue's watched state when the last entry finishes, so a new round starts.
    * Effective: false whenever `keep_completed`/`reel` is on, because those never mark
    * anything done and so can never exhaust. Read by `finished.applyQueueWriteSide`.
    */
-  restart_when_exhausted: boolean;
+  restart_when_exhausted: boolean
   /** Effective queue default. Absent on disk is normalized to provider. */
-  watch_history: 'provider' | 'queue';
+  watch_history: "provider" | "queue"
   /**
    * The ratingKeys this queue never plays — a rotation's `blocklist`, for a curated set.
    * Always a list (possibly empty), like `blocklist` and unlike the nullable ratings caps.
    * Read by `engine/resolve.ts`, which drops a skipped LEAF: one episode of a show entry, or
    * one child of a `{collection: X}` entry.
    */
-  skipped: string[];
+  skipped: string[]
 }
 
-export interface RoutingRotationCfg extends RoutingSetCfgCommon {
-  source: 'rotation';
+export interface RoutingRotationCfg
+  extends RoutingSetCfgCommon {
+  source: "rotation"
   /** Raw off the YAML: `{ratingKey: {season?, episode?, series?}}`, uncleaned. */
-  starts: Record<string, Start>;
+  starts: Record<string, Start>
   /** Raw off the YAML: `{ratingKey | 'section-<id>': n}`, uncleaned. */
-  weights: Record<string, number>;
+  weights: Record<string, number>
   /** Raw off the YAML: `{ratingKey | 'section-<id>': 'restart'|'drop'}`, uncleaned.
    *  Absent, or unrecognised, follows the set's own `on_complete`. */
-  on_complete_by_show: Record<string, string>;
-  blocklist: string[];
+  on_complete_by_show: Record<string, string>
+  blocklist: string[]
   /** Raw queues.yaml-style member values; `describe()` parses them. */
-  members: MemberValue[];
+  members: MemberValue[]
   /**
    * How a `Collection:` MEMBER enters this pool: `'whole'` (the default, and what `null`
    * means) plays it as one ordered member; `'split'` turns each of its children into a
@@ -780,19 +786,21 @@ export interface RoutingRotationCfg extends RoutingSetCfgCommon {
    * Lower-cased on the way in but otherwise uninterpreted: `isSplittingCollections()` owns
    * the "anything unrecognised is whole" rule, so a hand-edited typo cannot be frozen here.
    */
-  collection_members: string | null;
-  profiles: EngineBinding[];
-  has_explicit_profiles: boolean;
-  superseded_by: string | null;
+  collection_members: string | null
+  profiles: EngineBinding[]
+  has_explicit_profiles: boolean
+  superseded_by: string | null
 }
 
-export type RoutingSetCfg = RoutingQueueCfg | RoutingRotationCfg;
+export type RoutingSetCfg =
+  | RoutingQueueCfg
+  | RoutingRotationCfg
 
 /** `engine/routing.js loadSets()` returns this, or null to KEEP CURRENT SETS (file absent,
  * unreadable, or empty) — matching Python. null is not "no sets". */
 export interface RoutingRegistry {
-  sets: Record<string, RoutingSetCfg>;
-  order: string[];
+  sets: Record<string, RoutingSetCfg>
+  order: string[]
 }
 
 // --- queues.yaml entries ----------------------------------------------------- //
@@ -804,7 +812,7 @@ export interface RoutingRegistry {
  */
 export interface EntryExtras {
   /** Plex machine ID for an item on another server. Absent means this server. */
-  plex_server?: string;
+  plex_server?: string
   /**
    * An opaque id for this LINE — `queues.entryKey()`'s FIRST branch, when it is present.
    *
@@ -818,39 +826,39 @@ export interface EntryExtras {
    * `loadEntries()` per ENTRY (decision
    * `2026-09-01-an-entry-can-carry-an-id-so-one-file-can-hold-two-lines`).
    */
-  id?: string;
+  id?: string
   /** How many episodes this entry contributes per visit. */
-  episodes?: number;
+  episodes?: number
   /**
    * Order of playable leaves inside this show or Collection. `shuffle` includes watched
    * items; absence is the existing next-unwatched, in-order behavior.
    */
-  item_order?: string;
+  item_order?: string
   /**
    * How many VOLUMES this entry contributes per visit. Independent of `episodes:` —
    * a volume is a collection of chapters, not a chapter, so the chapter count must
    * not apply to a volume-based series. Absent / 1 = one volume.
    */
-  volumes?: number;
+  volumes?: number
   /** Slots per round when the set is randomized. */
-  weight?: number;
-  start?: Start;
+  weight?: number
+  start?: Start
   /**
    * Where this entry's first played unit STOPS. Absent means "play to the end of the unit",
    * which is what every entry written before 2026-09-01 says.
    *
    * Paired with `start.position_ms`, but neither requires the other — see `End`.
    */
-  end?: End;
+  end?: End
   /** Per-entry history override. Absent means follow the queue's watch_history default. */
-  watch_history?: 'provider' | 'queue';
+  watch_history?: "provider" | "queue"
   /** Written only for 'member'/'season'; "none" DROPS the key. */
-  batch_stops_at?: string;
+  batch_stops_at?: string
   /** The Python service's keep-and-tag marker for a finished entry. */
-  done?: boolean;
+  done?: boolean
   /** Epoch SECONDS, stamped alongside `done: true`. A hand-marked done with no timestamp
    * reads as null and is never auto-swept. */
-  done_at?: number;
+  done_at?: number
   /**
    * Epoch SECONDS this entry joined the queue.
    *
@@ -859,28 +867,31 @@ export interface EntryExtras {
    * queued; progress is counted from this stamp instead. Absent on a hand-written entry,
    * which is stamped on first read rather than treated as "since the beginning of time".
    */
-  queued_at?: number;
-  collection?: string;
+  queued_at?: number
+  collection?: string
   /**
    * Which LANE of a Picks queue this entry is in — `priority` (guaranteed, ordered) or
    * `random` (the pool). Absent means "follow the set's `add_as`", which is what every entry
    * written before promote existed says (decision `2026-08-23-kind-is-picks-or-rules` §2).
    */
-  placement?: string;
+  placement?: string
   /** Priority lane only: `always` = sticky head every sitting, `once` = lead at most once per
    *  `promote_window`. Absent follows `kind.normalizeLead`. */
-  lead?: string;
+  lead?: string
   /** Priority lane only: this entry's lead cooldown (`24h`, `7d`, …). Absent follows the set,
    *  then `leadWindow.DEFAULT_PROMOTE_WINDOW_MS`. */
-  promote_window?: string;
-  [extra: string]: unknown;
+  promote_window?: string
+  [extra: string]: unknown
 }
 
 /**
  * One entry MAPPING — the only shape `queues.yaml` holds since 2026-08-21
  * (decision `2026-08-21-a-queue-entry-is-an-object-and-carries-its-rating-key`).
  */
-export type EntryObject = { ratingKey?: string | number; title?: string } & EntryExtras;
+export type EntryObject = {
+  ratingKey?: string | number
+  title?: string
+} & EntryExtras
 
 /**
  * One entry as it may reach a WRITER: the mapping above, or a bare title/ratingKey scalar.
@@ -890,7 +901,7 @@ export type EntryObject = { ratingKey?: string | number; title?: string } & Entr
  * normalizes it at the write boundary, so what lands ON DISK is always a mapping.
  * `entryKey()` is identical either side of that normalization.
  */
-export type EntryValue = string | number | EntryObject;
+export type EntryValue = string | number | EntryObject
 
 /** One entry as `queues.js entriesOf()` reports it. Entries whose key is null are dropped
  * before this, so `key` is non-null here. */
@@ -910,18 +921,18 @@ export interface QueueEntry {
    * as a React key, a selection id and a `?only=` URL segment. The optional entry `id` exists
    * to KEEP that true when one queue holds the same file twice.
    */
-  key: string;
-  value: EntryValue;
-  done: boolean;
+  key: string
+  value: EntryValue
+  done: boolean
   /** null when absent or non-numeric. */
-  doneAt: number | null;
+  doneAt: number | null
 }
 
 /** `queues.js splitEntry()` — an entry decomposed into identity + everything else. */
 export interface EntryIdentity {
-  ratingKey: string | null;
-  title: string | null;
-  extras: EntryExtras;
+  ratingKey: string | null
+  title: string | null
+  extras: EntryExtras
 }
 
 // --- Plex wire + client seam ------------------------------------------------- //
@@ -932,48 +943,48 @@ export interface EntryIdentity {
  * returns exactly what was recorded.
  */
 export interface PlexMediaContainer {
-  Metadata?: PlexMetadata[];
-  Directory?: PlexDirectory[];
-  size?: number;
-  totalSize?: number;
+  Metadata?: PlexMetadata[]
+  Directory?: PlexDirectory[]
+  size?: number
+  totalSize?: number
 }
 
 export interface PlexDirectory {
-  key?: string | number;
-  type?: string;
-  title?: string;
+  key?: string | number
+  type?: string
+  title?: string
 }
 
 /** One Plex item. Only the fields `engine/select.js`, `plex.js` and `tiles.js` actually
  * read are named; the index signature is what keeps a raw container usable without a cast. */
 export interface PlexMetadata {
-  ratingKey?: string | number;
-  key?: string;
-  guid?: string;
-  type?: string;
-  title?: string;
-  year?: number;
-  index?: number;
-  parentIndex?: number;
-  grandparentTitle?: string;
-  grandparentRatingKey?: string | number;
+  ratingKey?: string | number
+  key?: string
+  guid?: string
+  type?: string
+  title?: string
+  year?: number
+  index?: number
+  parentIndex?: number
+  grandparentTitle?: string
+  grandparentRatingKey?: string | number
   /** History rows carry the PATH (`/library/metadata/<rk>`), not the bare key. */
-  grandparentKey?: string;
-  duration?: number;
-  extraType?: number;
-  contentRating?: string;
+  grandparentKey?: string
+  duration?: number
+  extraType?: number
+  contentRating?: string
   /** Plex's EDITION label ("3D", "Director's Cut", …) — the `{edition-…}` folder tag. Absent
    * on the plain edition, which is why two library items can share a title and a year and
    * only one of them names itself. */
-  editionTitle?: string;
-  viewCount?: number;
-  viewOffset?: number;
-  leafCount?: number;
-  viewedLeafCount?: number;
-  childCount?: number;
-  thumb?: string;
-  Collection?: { tag?: string }[];
-  [field: string]: unknown;
+  editionTitle?: string
+  viewCount?: number
+  viewOffset?: number
+  leafCount?: number
+  viewedLeafCount?: number
+  childCount?: number
+  thumb?: string
+  Collection?: { tag?: string }[]
+  [field: string]: unknown
 }
 
 /**
@@ -996,12 +1007,17 @@ export interface PlexClient {
    * The replay client buckets by token identity, so passing null vs a token picks a
    * different corpus directory — it is not an optimization detail.
    */
-  container(path: string, token?: string | null): PlexMediaContainer | Promise<PlexMediaContainer>;
+  container(
+    path: string,
+    token?: string | null,
+  ): PlexMediaContainer | Promise<PlexMediaContainer>
   /**
    * Mint (or, in replay, echo) the managed-user token for `uuid`. A null/empty uuid means
    * "use the default token" and returns null.
    */
-  accountToken(uuid: string | null | undefined): string | null | Promise<string | null>;
+  accountToken(
+    uuid: string | null | undefined,
+  ): string | null | Promise<string | null>
 }
 
 // --- selection engine pool --------------------------------------------------- //
@@ -1016,19 +1032,19 @@ export interface PlexClient {
  * So everything past the first three is optional, and `season`/`episode` are nullable.
  */
 export interface PoolItem {
-  ratingKey: string;
-  title?: string;
+  ratingKey: string
+  title?: string
   /** The SERIES title for an episode; the literal 'Shorts' for an item-section entry. */
-  show?: string;
-  season?: number | null;
-  episode?: number | null;
-  duration?: number;
-  type?: string;
-  extraType?: number;
-  viewCount?: number;
-  viewOffset?: number;
+  show?: string
+  season?: number | null
+  episode?: number | null
+  duration?: number
+  type?: string
+  extraType?: number
+  viewCount?: number
+  viewOffset?: number
   /** Plex air date. Used only to place an explicitly included special in viewing order. */
-  originallyAvailableAt?: string | null;
+  originallyAvailableAt?: string | null
 }
 
 /**
@@ -1042,38 +1058,38 @@ export interface PoolItem {
  */
 export interface Bucket {
   /** Display name: the show title, or 'Shorts' for an item-section bucket. */
-  show: string;
+  show: string
   /** A ratingKey, or the synthetic `section-<id>` for an item-section bucket. */
-  ratingKey: string;
-  episodes: PoolItem[];
-  multi_season?: boolean;
-  weight?: number;
+  ratingKey: string
+  episodes: PoolItem[]
+  multi_season?: boolean
+  weight?: number
 }
 
 // --- provider seam ----------------------------------------------------------- //
 
 /** One library row for the queue editor's provider block. Ids are provider-scoped strings. */
 export interface ProviderLibrary {
-  id: string;
-  title: string;
+  id: string
+  title: string
   /** Kavita passes its numeric library type through; Plex omits it. */
-  type?: number;
+  type?: number
 }
 
 /** One search hit from a provider's own search (`providers/kavita.js search()`). */
 export interface ProviderSearchHit {
-  id: string;
-  title: string;
-  libraryId: string;
-  libraryTitle?: string | null;
-  format?: number | null;
-  type: string;
+  id: string
+  title: string
+  libraryId: string
+  libraryTitle?: string | null
+  format?: number | null
+  type: string
 }
 
 /** `providers/kavita.js cover()` — bytes, so the API key never reaches the browser. */
 export interface ProviderCover {
-  buffer: Buffer;
-  contentType: string;
+  buffer: Buffer
+  contentType: string
 }
 
 /**
@@ -1094,7 +1110,7 @@ export interface ProviderTileOpts {
    * A provider applies it for the same reason the engine does: the tile's next-up must not
    * name something the next launch is going to refuse to play.
    */
-  skipped?: readonly string[];
+  skipped?: readonly string[]
   /**
    * Re-read the provider instead of serving its cached rows.
    *
@@ -1102,25 +1118,25 @@ export interface ProviderTileOpts {
    * after the page paints. A provider that caches nothing may ignore it
    * (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
    */
-  isFresh?: boolean;
+  isFresh?: boolean
 }
 
 export interface ProviderTileRow {
-  id: string;
+  id: string
   /** Optional for the same reason `ProviderSearchHit.title` is asserted: `name` is a remote
    * field, and a nameless series is a provider-side anomaly, not a shape this invents. */
-  title?: string;
-  libraryId: string;
-  format?: number | null;
+  title?: string
+  libraryId: string
+  format?: number | null
   /** Items left to consume — chapters for Kavita, the "how much is waiting" a tile means. */
-  unreadCount: number;
+  unreadCount: number
   /** The next item to play/read, or null when there is nothing left. */
   next:
     | KavitaPlayItem
     | BoardGamesPlayItem
     | SteamPlayItem
     | MisterPlayItem
-    | null;
+    | null
 }
 
 /**
@@ -1130,19 +1146,19 @@ export interface ProviderTileRow {
  * is unambiguous only because a queue draws from exactly one provider.
  */
 export interface ProviderPoolBucket {
-  ratingKey: string;
-  show: string;
+  ratingKey: string
+  show: string
   /** Chapters left, not series left. */
-  unwatched: number;
-  isMember: boolean;
-  libraryId: string;
+  unwatched: number
+  isMember: boolean
+  libraryId: string
   next: {
-    ratingKey: string;
-    title: string;
+    ratingKey: string
+    title: string
     /** Chapters have no season; `episode` carries the chapter number. */
-    episode: number | null;
-    season: null;
-  } | null;
+    episode: number | null
+    season: null
+  } | null
 }
 
 /**
@@ -1152,19 +1168,19 @@ export interface ProviderPoolBucket {
  * queues.yaml) is provider-neutral.
  */
 export interface BucketsResult {
-  play: PlayItem[];
+  play: PlayItem[]
   /** Resume offset in ms for the HEAD item (curated queues). */
-  offset?: number;
+  offset?: number
   /** The item to publish as last-played. */
-  last?: PlayItem | null;
+  last?: PlayItem | null
   /** Entry keys that finished. */
-  done?: string[];
+  done?: string[]
   /** Entry keys that could not be resolved this scan. */
-  unresolved?: string[];
+  unresolved?: string[]
   /** Entry keys marked done that are playable again — cleared before the scan plays. */
-  revived?: string[];
+  revived?: string[]
   /** Entry keys to persist as done after this scan. */
-  newlyDone?: string[];
+  newlyDone?: string[]
   /**
    * Priority-lane entry keys that LED this lineup on a `lead: once` window: Priority supplied
    * the head, and these batches contributed inside the playback cap. The caller stamps their
@@ -1174,33 +1190,33 @@ export interface BucketsResult {
    * `2026-08-26-the-lead-window-is-stamped-when-playback-starts` and
    * `2026-09-08-a-priority-cooldown-is-spent-only-when-priority-leads`).
    */
-  led?: string[];
+  led?: string[]
   /** Priority-lane entry keys held back this scan by an unexpired lead window. */
-  suppressed?: string[];
+  suppressed?: string[]
   /** Set by the rewatch branch, which returns a single pick rather than a lineup. */
-  rewatch?: boolean;
+  rewatch?: boolean
   /** Kavita returns its buckets alongside `play` so the caller can render the pool. */
-  buckets?: unknown[];
+  buckets?: unknown[]
   /**
    * The `only` entry key that named an entry the set no longer holds — set INSTEAD of a
    * lineup, and only on the one-entry path. session.js branches on it for its own error
    * sentence ("has no entry X any more"), which is why it is a key rather than a boolean.
    */
-  unknownEntry?: string;
+  unknownEntry?: string
 }
 
 /** A Plex lineup item, as session.js consumes it. */
 export interface PlexPlayItem {
-  ratingKey: string | number;
+  ratingKey: string | number
   /** Plex machine ID when this leaf lives on a shared server. */
-  plexServer?: string;
-  title?: string;
-  show?: string;
-  season?: number | null;
-  episode?: number | null;
-  type?: string;
-  viewOffset?: number;
-  duration?: number;
+  plexServer?: string
+  title?: string
+  show?: string
+  season?: number | null
+  episode?: number | null
+  type?: string
+  viewOffset?: number
+  duration?: number
 }
 
 /**
@@ -1209,17 +1225,17 @@ export interface PlexPlayItem {
  * NOTE: it has NO `ratingKey`, no `season`, no `episode` — see the note on `PlayItem`.
  */
 export interface KavitaPlayItem {
-  chapterId: number | string;
-  seriesId: number | string;
-  title: string;
-  number?: number | string;
+  chapterId: number | string
+  seriesId: number | string
+  title: string
+  number?: number | string
   /** `volume` when this item is a whole volume rather than a chapter — see `MediaUnit`. */
-  unit?: MediaUnit;
-  pages?: number;
-  pagesRead?: number;
-  bucket?: string;
-  seriesFormat?: number | null;
-  libraryId?: number | string | null;
+  unit?: MediaUnit
+  pages?: number
+  pagesRead?: number
+  bucket?: string
+  seriesFormat?: number | null
+  libraryId?: number | string | null
 }
 
 /**
@@ -1239,41 +1255,41 @@ export interface KavitaPlayItem {
  * this is, so a tile can say "Play 2 of 3" without re-counting.
  */
 export interface BoardGamesPlayItem {
-  gameId: string;
-  title: string;
+  gameId: string
+  title: string
   /** Always `'play'`. Present so a mixed lineup can be told apart by unit alone. */
-  unit?: MediaUnit;
+  unit?: MediaUnit
   /** Which play of the entry's batch this is. Named `number` to match what the tile layer
    * already reads off a next-up item, so a game needs no second mapping path. */
-  number?: number | string;
-  slot?: number;
-  of?: number;
-  bucket?: string;
+  number?: number | string
+  slot?: number
+  of?: number
+  bucket?: string
 }
 
 /** One Steam session. Shaped like the picker's play item, keyed by appid instead of gameId. */
 export interface SteamPlayItem {
-  appid: string;
-  title: string;
+  appid: string
+  title: string
   /** Always `'play'`. Present so a mixed lineup can be told apart by unit alone. */
-  unit?: MediaUnit;
+  unit?: MediaUnit
   /** Which play of the entry this is. Named `number` to match what the tile layer already
    * reads off a next-up item, so a game needs no second mapping path. */
-  number?: number | string;
-  slot?: number;
-  of?: number;
-  bucket?: string;
+  number?: number | string
+  slot?: number
+  of?: number
+  bucket?: string
 }
 
 /** One MiSTer session. Keyed by the ROM's absolute path — see providers/mister-client.ts. */
 export interface MisterPlayItem {
-  path: string;
-  title: string;
-  unit?: MediaUnit;
-  number?: number | string;
-  slot?: number;
-  of?: number;
-  bucket?: string;
+  path: string
+  title: string
+  unit?: MediaUnit
+  number?: number | string
+  slot?: number
+  of?: number
+  bucket?: string
 }
 
 export type PlayItem =
@@ -1281,37 +1297,37 @@ export type PlayItem =
   | KavitaPlayItem
   | BoardGamesPlayItem
   | SteamPlayItem
-  | MisterPlayItem;
+  | MisterPlayItem
 
 /** Plex's runtime artifact: a playQueue descriptor. Fused with the push in `handoff()`. */
 export interface PlexArtifact {
-  provider: string;
-  kind: 'plex';
+  provider: string
+  kind: "plex"
   /** The ordered lineup with each item's source server preserved. */
-  items: PlexPlayItem[];
+  items: PlexPlayItem[]
   /** Compatibility projection for logs and consumers that only need item ids. */
-  ratingKeys: string[];
-  offset: number;
-  setName: string | null;
+  ratingKeys: string[]
+  offset: number
+  setName: string | null
   /** The account the lineup was SELECTED as must be the account it is PLAYED as, so the
    * binding's uuid rides on the artifact rather than being re-derived from the set. */
-  userUuid: string | null;
+  userUuid: string | null
   /** The same binding's numeric account id. `userUuid` picks the token playback is BUILT
    * with; this is what the post-play audit holds the running session TO. Both, because a
    * correct token has never implied a correct session — the Shield scrobbles as whoever it
    * is signed in as, whatever token built the playQueue. */
-  accountId: number | null;
+  accountId: number | null
 }
 
 /** Kavita's runtime artifact: a persistent Reading List, rebuilt per launch. */
 export interface KavitaArtifact {
-  provider: string;
-  kind: 'kavita';
-  readingListId: number | string | null;
-  title: string;
-  setName: string;
-  head: KavitaPlayItem | null;
-  count: number;
+  provider: string
+  kind: "kavita"
+  readingListId: number | string | null
+  title: string
+  setName: string
+  head: KavitaPlayItem | null
+  count: number
 }
 
 /**
@@ -1323,15 +1339,15 @@ export interface KavitaArtifact {
  * `materialize()` here just names the head game and how many plays it still owes.
  */
 export interface BoardGamesArtifact {
-  provider: string;
-  kind: 'board-game-picker';
-  gameId: string;
-  url: string;
-  setName: string;
+  provider: string
+  kind: "board-game-picker"
+  gameId: string
+  url: string
+  setName: string
   /** Plays still owed on the head entry when the lineup was built. */
-  remaining: number;
-  head: BoardGamesPlayItem | null;
-  count: number;
+  remaining: number
+  head: BoardGamesPlayItem | null
+  count: number
 }
 
 /**
@@ -1341,14 +1357,14 @@ export interface BoardGamesArtifact {
  * like the picker's, this describes the ONE game that is next.
  */
 export interface SteamArtifact {
-  provider: string;
-  kind: 'steam';
-  appid: string;
+  provider: string
+  kind: "steam"
+  appid: string
   /** `steam://rungameid/<appid>`. Empty when there is nothing left to play. */
-  url: string;
-  setName: string;
-  head: SteamPlayItem | null;
-  count: number;
+  url: string
+  setName: string
+  head: SteamPlayItem | null
+  count: number
 }
 
 /**
@@ -1358,15 +1374,15 @@ export interface SteamArtifact {
  * Assistant, so this describes WHAT to launch and stops there — see providers/mister.ts.
  */
 export interface MisterArtifact {
-  provider: string;
-  kind: 'mister';
+  provider: string
+  kind: "mister"
   /** The ROM's absolute path on the MiSTer. Empty when there is nothing left to play. */
-  path: string;
+  path: string
   /** The system id the path sits under (`SNES`), for a caller that wants to name it. */
-  system: string;
-  setName: string;
-  head: MisterPlayItem | null;
-  count: number;
+  system: string
+  setName: string
+  head: MisterPlayItem | null
+  count: number
 }
 
 export type ProviderArtifact =
@@ -1374,32 +1390,32 @@ export type ProviderArtifact =
   | KavitaArtifact
   | BoardGamesArtifact
   | SteamArtifact
-  | MisterArtifact;
+  | MisterArtifact
 
 /** What a PUSH handoff returns (playback.js playRatingKeys / castPlay, and driver.js
  * driveToPlaying, which returns the same object or its own error/cancel form). */
 export interface PushResult {
-  queued?: number;
-  played?: boolean;
-  mode?: 'client' | 'cast';
-  client?: string | null;
-  error?: string;
-  cancelled?: boolean;
+  queued?: number
+  played?: boolean
+  mode?: "client" | "cast"
+  client?: string | null
+  error?: string
+  cancelled?: boolean
   /** driver.js internals, surfaced for the log/state payload only. */
-  _profile?: string | null;
-  _diag?: unknown;
+  _profile?: string | null
+  _diag?: unknown
 }
 
 /** What a PULL handoff returns: a URL to open, and no device/session to wait for. */
 export interface PullResult {
-  mode: 'pull';
-  url: string | null;
-  readingListId?: number | string | null;
-  awaiting?: null;
-  error?: string;
+  mode: "pull"
+  url: string | null
+  readingListId?: number | string | null
+  awaiting?: null
+  error?: string
 }
 
-export type HandoffResult = PushResult | PullResult;
+export type HandoffResult = PushResult | PullResult
 
 /** Context for `buckets()`. The two providers read disjoint subsets of it: Plex uses
  * setName/cfg/binding/token/kind/lastMovieRk, Kavita uses cfg/libraries/batch/limit. */
@@ -1410,40 +1426,40 @@ export type HandoffResult = PushResult | PullResult;
  */
 export interface CuratedEntryRef {
   /** The provider's own item id (a Kavita seriesId), off the entry's `ratingKey`. */
-  id: string;
+  id: string
   /**
    * The entry's explicit Picks lane. Absent / null follows the set's `add_as` default.
    */
-  placement?: 'priority' | 'random' | null;
+  placement?: "priority" | "random" | null
   /** Plex-only today: order of items inside one show or Collection entry. */
-  itemOrder?: 'shuffle' | null;
-  batch?: number | null;
+  itemOrder?: "shuffle" | null
+  batch?: number | null
   /**
    * Epoch seconds this entry was queued — `EntryExtras.queued_at`. Providers that count
    * lifetime progress on their own side measure from here; the rest ignore it.
    */
-  queuedAt?: number | null;
+  queuedAt?: number | null
   /**
    * Per-visit VOLUME count for a volume-based series. Independent of `batch`
    * (which is chapters). Absent = follow the queue's volume default (1).
    */
-  volumes?: number | null;
+  volumes?: number | null
   /**
    * The entry's manual START floor, if any. Earlier unread chapters are skipped
    * from the pick and never marked read — the same rule Plex's start floor has
    * always meant. Absent = automatic next-unread.
    */
-  start?: Start | null;
+  start?: Start | null
 }
 
 export interface BucketsContext {
-  setName?: string;
-  cfg?: RoutingSetCfg | Record<string, unknown>;
-  binding?: EngineBinding;
-  token?: string | null;
-  kind?: string;
-  lastMovieRk?: string | null;
-  libraries?: string[];
+  setName?: string
+  cfg?: RoutingSetCfg | Record<string, unknown>
+  binding?: EngineBinding
+  token?: string | null
+  kind?: string
+  lastMovieRk?: string | null
+  libraries?: string[]
   /**
    * The curated ENTRIES of a `source: queue` set, in stored order, with their explicit lanes.
    *
@@ -1452,7 +1468,7 @@ export interface BucketsContext {
    * the two is what made the live "Manga & Webtoons" reading list hold twelve series off the
    * library shelf and only one of the ninety-three the owner had actually added.
    */
-  entries?: CuratedEntryRef[];
+  entries?: CuratedEntryRef[]
   /**
    * A FILTERED queue's narrowing, in the provider's own library ids.
    *
@@ -1462,35 +1478,35 @@ export interface BucketsContext {
    * the entries the parent queue already holds and drops the ones that are not in one of these
    * libraries. Absent / empty = no narrowing, which is every ordinary queue.
    */
-  filterLibraries?: string[];
+  filterLibraries?: string[]
   /**
    * Shuffle which entries lead this launch. True for a `kind: anime` set — the same rule
    * `playbackRoutes` uses to tell the engine a curated set plays in random order, and the
    * one the editor's own copy promises ("members play in random order").
    */
-  isRandomOrder?: boolean;
-  batch?: number | null;
+  isRandomOrder?: boolean
+  batch?: number | null
   /**
    * How many VOLUMES one volume-based series contributes per visit. Separate from
    * `batch` (chapters). Absent / null = 1. The chapter count must not leak onto
    * a volume — a volume is a collection of chapters, not a chapter.
    */
-  volumeBatch?: number | null;
-  limit?: number | null;
+  volumeBatch?: number | null
+  limit?: number | null
   /**
    * "Play THIS entry": an ENTRY KEY that narrows a curated set's lineup to one member.
    * Web-only — no physical card sends it, and only the curated-queue branch reads it.
    */
-  only?: string | null;
+  only?: string | null
 }
 
 /** Options for `handoff()`. Plex reads all of them; Kavita ignores them entirely. */
 export interface HandoffOptions {
-  useFsm?: boolean;
-  requiredProfile?: string | null;
-  device?: Device | null;
-  cancel?: CancelFlag | null;
-  setLabel?: string | null;
+  useFsm?: boolean
+  requiredProfile?: string | null
+  device?: Device | null
+  cancel?: CancelFlag | null
+  setLabel?: string | null
 }
 
 /**
@@ -1506,17 +1522,17 @@ export interface HandoffOptions {
  * one of those required would let a third backend typecheck and then 500 at runtime.
  */
 export interface Provider {
-  id: string;
-  kind: string;
-  label: string;
+  id: string
+  kind: string
+  label: string
   /** Static, not a method — the UI reads it to decide whether "Play on <device>" exists. */
-  delivery: Delivery;
+  delivery: Delivery
   /**
    * Static, like `delivery`, and OPTIONAL for the same reason the members below are: every
    * reader spells it `provider.unit || 'episode'`, so a provider that predates the field
    * keeps counting in episodes rather than failing to typecheck.
    */
-  unit?: MediaUnit;
+  unit?: MediaUnit
   /**
    * Does this provider count progress from WHEN AN ENTRY WAS QUEUED rather than from the
    * backend's lifetime total?
@@ -1526,7 +1542,7 @@ export interface Provider {
    * Board Game Picker needs it because its play log is the household's book of record and
    * goes back years.
    */
-  stampsQueuedAt?: boolean;
+  stampsQueuedAt?: boolean
   /**
    * Can this provider play a SECTION of an item — begin at an offset and stop at one?
    *
@@ -1543,33 +1559,42 @@ export interface Provider {
    * reading queue whose token is not configured
    * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
    */
-  playsSections?: boolean;
+  playsSections?: boolean
 
   // --- required -------------------------------------------------------------- //
-  buckets(ctx: BucketsContext): Promise<BucketsResult>;
+  buckets(ctx: BucketsContext): Promise<BucketsResult>
   /** Plex returns the watched ratingKey set; Kavita returns per-item read state. */
-  progressState(ctx: BucketsContext & { artifactId?: string | number | null }):
-    Promise<Set<string>> | Promise<KavitaProgressState>;
+  progressState(
+    ctx: BucketsContext & {
+      artifactId?: string | number | null
+    },
+  ): Promise<Set<string>> | Promise<KavitaProgressState>
   /** SYNC on Plex (it returns a descriptor), ASYNC on Kavita (it builds the list) — so both
    * shapes are declared and every caller must await. */
   materialize(
     items: PlayItem[],
     opts?: {
-      offset?: number;
-      setName?: string | null;
+      offset?: number
+      setName?: string | null
       /** The set's HUMAN label. Kavita paints it on the list's cover; the other providers
        *  have no persistent artifact to name and ignore it. */
-      setLabel?: string | null;
-      binding?: EngineBinding | null;
+      setLabel?: string | null
+      binding?: EngineBinding | null
     },
-  ): ProviderArtifact | Promise<ProviderArtifact>;
+  ): ProviderArtifact | Promise<ProviderArtifact>
   /** ASYNC on Plex (it performs the drive), SYNC on Kavita (it builds a URL). */
-  handoff(artifact: ProviderArtifact, opts?: HandoffOptions): HandoffResult | Promise<HandoffResult>;
+  handoff(
+    artifact: ProviderArtifact,
+    opts?: HandoffOptions,
+  ): HandoffResult | Promise<HandoffResult>
 
   // --- optional: every call site guards these -------------------------------- //
-  libraries?(): Promise<ProviderLibrary[]>;
-  search?(q: string, opts?: { libraries?: string[] }): Promise<ProviderSearchHit[]>;
-  cover?(itemId: string): Promise<ProviderCover>;
+  libraries?(): Promise<ProviderLibrary[]>
+  search?(
+    q: string,
+    opts?: { libraries?: string[] },
+  ): Promise<ProviderSearchHit[]>
+  cover?(itemId: string): Promise<ProviderCover>
   /**
    * Record ONE unit consumed, on the provider's own side.
    *
@@ -1580,8 +1605,13 @@ export interface Provider {
    *
    * Guarded at the call site like every optional member; a provider without it answers 404.
    */
-  logProgress?(itemId: string): Promise<{ ok: boolean; remaining?: number }>;
-  pool?(opts: { libraries?: string[]; members?: string[] }): Promise<ProviderPoolBucket[]>;
+  logProgress?(
+    itemId: string,
+  ): Promise<{ ok: boolean; remaining?: number }>
+  pool?(opts: {
+    libraries?: string[]
+    members?: string[]
+  }): Promise<ProviderPoolBucket[]>
   /**
    * Top up a PULL provider's persistent artifact — Kavita's reading list.
    *
@@ -1595,16 +1625,22 @@ export interface Provider {
    * `buckets()`.
    */
   topupList?(opts: {
-    setName: string;
+    setName: string
     /** The set's human label. Kavita's list is TITLED with it, so a top-up that omits it
      *  cannot find a list built since the 2026-08-17 rename. */
-    setLabel?: string | null;
+    setLabel?: string | null
     /** How many unread items to keep queued ahead. */
-    window: number;
+    window: number
     /** Top up only when unread has fallen to this or below. */
-    at: number;
-    build: () => Promise<PlayItem[]>;
-  }): Promise<{ ok: boolean; reason?: string; added?: number; trimmed?: number; unread?: number }>;
+    at: number
+    build: () => Promise<PlayItem[]>
+  }): Promise<{
+    ok: boolean
+    reason?: string
+    added?: number
+    trimmed?: number
+    unread?: number
+  }>
   /**
    * Resolve stored item ids to poster rows, INDEX-ALIGNED with `ids`. Optional and guarded
    * (`providers/tiles.ts` checks `typeof provider.tiles !== 'function'` and degrades the
@@ -1615,7 +1651,7 @@ export interface Provider {
     ids: Iterable<string>,
     entries?: CuratedEntryRef[],
     opts?: ProviderTileOpts,
-  ): Promise<(ProviderTileRow | null)[]>;
+  ): Promise<(ProviderTileRow | null)[]>
   /**
    * This item's page in the provider's own UI, resolved on demand.
    *
@@ -1626,7 +1662,7 @@ export interface Provider {
    *
    * Absent on a provider with no web UI; null for an item it cannot address.
    */
-  webUrl?(itemId: string): Promise<string | null>;
+  webUrl?(itemId: string): Promise<string | null>
   /**
    * The "Start from…" picker's list of playable units, grouped the way the
    * modal already consumes (`seasons[].episodes[]`). Optional: a provider that
@@ -1636,14 +1672,19 @@ export interface Provider {
    */
   listUnits?(
     itemId: string,
-    opts?: { uuid?: string | null; includeSpecialChoices?: boolean },
-  ): Promise<UnitList | null>;
+    opts?: {
+      uuid?: string | null
+      includeSpecialChoices?: boolean
+    },
+  ): Promise<UnitList | null>
   /**
    * Optional per the guarded-call-site rule, but note session.js:170 calls it UNGUARDED on
    * the push path — a push provider without it throws at start. Both real providers define
    * it, so this is a latent requirement of the push path rather than of the interface.
    */
-  profileToken?(userUuid: string | null): Promise<string | null> | string | null;
+  profileToken?(
+    userUuid: string | null,
+  ): Promise<string | null> | string | null
   /**
    * Fill in a binding that names a profile but carries no ACCOUNT for it — the shape every
    * curated queue has, since `requires_profile` stores a display name and nothing else.
@@ -1656,23 +1697,23 @@ export interface Provider {
   profileBinding?(
     binding: EngineBinding,
     profileTitle: string | null,
-  ): Promise<EngineBinding> | EngineBinding;
+  ): Promise<EngineBinding> | EngineBinding
   /** Kavita only, and currently called by nothing — kept declared so a future members
    * endpoint reaches for the existing method instead of inventing a second one. */
-  resolveMembers?(ids: Iterable<string>): Promise<unknown[]>;
+  resolveMembers?(ids: Iterable<string>): Promise<unknown[]>
 }
 
 /** `providers/kavita.js progressState()` — the whole queue's completion state in one call. */
 export interface KavitaProgressState {
   items: {
-    chapterId: number | string;
-    seriesId: number | string;
-    order: number;
-    pagesRead: number;
-    pagesTotal: number;
-    done: boolean;
-    lastReadAt: string | null;
-  }[];
+    chapterId: number | string
+    seriesId: number | string
+    order: number
+    pagesRead: number
+    pagesTotal: number
+    done: boolean
+    lastReadAt: string | null
+  }[]
 }
 
 // --- tiles ------------------------------------------------------------------- //
@@ -1681,9 +1722,9 @@ export interface KavitaProgressState {
  * for a collection. Optional throughout — a collection hit sets member fields a show hit
  * never does, and vice versa. */
 export interface NextEp {
-  season?: number | null;
-  episode?: number | null;
-  title?: string | null;
+  season?: number | null
+  episode?: number | null
+  title?: string | null
   /**
    * The LEAF's own ratingKey — the episode, or the collection child, that would actually play.
    *
@@ -1692,18 +1733,18 @@ export interface NextEp {
    * to the set's `skipped` list, so the grid can name the item it is about to drop rather than
    * the container it lives in. Absent on a provider that does not resolve a leaf key.
    */
-  ratingKey?: string | null;
+  ratingKey?: string | null
   /** The total this next-up counts towards: "Play 2 OF 3". Only a provider that counts a
    * finite per-entry batch sets it; absent everywhere else. */
-  of?: number | null;
-  multiSeason?: boolean;
-  member?: string;
-  memberRatingKey?: string;
-  memberYear?: number | null;
-  position?: number | null;
-  kind?: 'show' | 'movie';
+  of?: number | null
+  multiSeason?: boolean
+  member?: string
+  memberRatingKey?: string
+  memberYear?: number | null
+  position?: number | null
+  kind?: "show" | "movie"
   /** Which member the stored start point named — may be EARLIER than `member`. */
-  startMember?: string;
+  startMember?: string
   /**
    * The MEMBER's own Plex edition ("Extended Cut"), collection entries only.
    *
@@ -1712,10 +1753,10 @@ export interface NextEp {
    * a collection that holds all three (the live case, 2026-08-26) printed the same title
    * whichever it picked. Null for a show member and for a member with no edition.
    */
-  memberEdition?: string | null;
-  partiallyWatched?: boolean;
-  viewOffset?: number;
-  duration?: number;
+  memberEdition?: string | null
+  partiallyWatched?: boolean
+  viewOffset?: number
+  duration?: number
 }
 
 /**
@@ -1727,12 +1768,12 @@ export interface NextEp {
  * fields that only one route emits. See `QueueTile` / `MemberTile`.
  */
 export interface Tile {
-  resolved: boolean;
-  ratingKey: string | null;
-  type: string | null;
+  resolved: boolean
+  ratingKey: string | null
+  type: string | null
   /** The resolved title, or `displayFor(value)` when unresolved. */
-  title: string;
-  year: number | null;
+  title: string
+  year: number | null
   /**
    * Plex's EDITION label, when the resolved item has one — `null` on a collection, on an
    * unresolved entry, and on the plain edition of a pair (only the tagged item names
@@ -1742,16 +1783,16 @@ export interface Tile {
    * so without this the two tiles are identical and the grid cannot tell them apart. The
    * field was already on `PosterFields` and was dropped here, one layer short of the wire.
    */
-  editionTitle: string | null;
+  editionTitle: string | null
   /** Collections only; null for everything else. */
-  childCount: number | null;
-  nextEp: NextEp | null;
+  childCount: number | null
+  nextEp: NextEp | null
   /**
    * The next-up LOOKUP threw, as opposed to answering "nothing left". A null `nextEp` means
    * both, and the tile says something different for each ("All watched" vs the neutral
    * "N in order"), so the failure is carried rather than collapsed into the same null.
    */
-  isNextEpFailed: boolean;
+  isNextEpFailed: boolean
   /**
    * How many of the SET's skipped keys belong to this entry — a collection member, an
    * episode of this show. Zero for a movie, and zero on a set that skips nothing.
@@ -1761,13 +1802,13 @@ export interface Tile {
    * points at the member list, which is where a skip is undone. Direct members only — see
    * `plex.countSkippedInside`.
    */
-  skippedCount: number;
+  skippedCount: number
   /** Mid-playback and unwatched — the exact state the engine resumes from. Per-EPISODE:
    * a movie reads its own viewOffset, a show/collection reads the next-up leaf's. */
-  partiallyWatched: boolean;
+  partiallyWatched: boolean
   /** ms; 0 when not started / unknown. */
-  viewOffset: number;
-  duration: number;
+  viewOffset: number
+  duration: number
   /**
    * Where this item lives in the app that owns it — a Plex details page on
    * `PLEX_API_SERVER_URL`, a Kavita series page. The SHOW or the FILM, never the next
@@ -1777,38 +1818,38 @@ export interface Tile {
    * null on an unresolved entry, and on a resolved one whose owner could not be addressed
    * (no machineIdentifier read yet). The tile then renders its title as plain text.
    */
-  webUrl: string | null;
+  webUrl: string | null
 }
 
 /** A tile as `GET /api/queues` emits it (server.js ~:264-279). */
 export interface QueueTile extends Tile {
   /** The queue entry's stable key. */
-  key: string;
+  key: string
   /** `tiles.displayFor(value)` — the raw title string, for the editor. */
-  raw: string;
+  raw: string
   /**
    * Per-entry override of the set's chapter/episode batch. `null` = follow the set.
    * A stored `1` is a real override when the set default is not 1.
    */
-  episodes: number | null;
+  episodes: number | null
   /** Per-entry override of the set's volume batch. `null` = follow the set. */
-  volumes: number | null;
-  weight: number;
-  batch_stops_at: BatchStop;
-  start: Start | null;
+  volumes: number | null
+  weight: number
+  batch_stops_at: BatchStop
+  start: Start | null
   /** A finished-but-kept entry; the grid greys it. */
-  done: boolean;
+  done: boolean
 }
 
 /** A tile as `GET /api/sets/:id/members` emits it (server.js ~:386-395). */
 export interface MemberTile extends Tile {
   /** Index into the STORED (unsorted) members array — what a write must address. */
-  index: number;
+  index: number
   /** The ORIGINAL stored value (not the collection-mapped one), so a PATCH round-trips. */
-  raw: MemberValue;
-  start: Start | null;
-  episodes: number;
-  weight: number;
+  raw: MemberValue
+  start: Start | null
+  episodes: number
+  weight: number
 }
 
 // --- devices ----------------------------------------------------------------- //
@@ -1822,18 +1863,18 @@ export interface MemberTile extends Tile {
  */
 export interface Device {
   /** Explicit authorized ADB endpoint, supplied by deployment configuration. */
-  adbTarget?: string;
-  id: string;
-  name: string;
+  adbTarget?: string
+  id: string
+  name: string
   /** `''` when the env didn't provide one (and the plex.tv sweep didn't fill it in). */
-  machineIdentifier: string;
-  uri: string | null;
+  machineIdentifier: string
+  uri: string | null
   /** 'cast' is the Shield's own sidecar path and cannot be inferred for a foreign device,
    * so every plex.tv row is announced as 'client'. */
-  mode: string;
-  default: boolean;
+  mode: string
+  default: boolean
   /** Epoch seconds, one value per announce round. */
-  seen?: number;
+  seen?: number
 }
 
 // --- now playing ------------------------------------------------------------- //
@@ -1849,17 +1890,17 @@ export interface Device {
  * live automation happens to send it.
  */
 export interface NowPlaying {
-  state?: string;
-  ratingKey?: string;
+  state?: string
+  ratingKey?: string
   /** Server of the queued item, when attribution is unambiguous. */
-  plexServer?: string | null;
-  title?: string;
-  showTitle?: string;
-  show?: string;
+  plexServer?: string | null
+  title?: string
+  showTitle?: string
+  show?: string
   /** Added by `server.js withContext()`, not by HA: null when not playing/paused or when
    * the lookup failed. */
-  context?: PlayingContext | null;
-  [field: string]: unknown;
+  context?: PlayingContext | null
+  [field: string]: unknown
 }
 
 /**
@@ -1867,13 +1908,13 @@ export interface NowPlaying {
  * ratingKey because the answer is immutable, so pause/resume storms cost nothing.
  */
 export interface PlayingContext {
-  ratingKey: string;
-  type: string | null;
+  ratingKey: string
+  type: string | null
   /** An episode's grandparent IS its series, which is what a series tile stores. */
-  showRatingKey: string | null;
+  showRatingKey: string | null
   /** Collection membership comes back as name TAGS, and a collection tile is stored by
    * name ("Collection: <name>") — names are the only join available. */
-  collections: string[];
+  collections: string[]
 }
 
 // --- session ----------------------------------------------------------------- //
@@ -1884,12 +1925,12 @@ export interface PlayingContext {
  */
 export interface SessionState {
   /** Active playback device; absent means the existing default player. */
-  deviceId?: string | null;
-  kind: string | null;
-  set: string | null;
-  profile: string | null;
-  queue_len: number;
-  cursor: number;
+  deviceId?: string | null
+  kind: string | null
+  set: string | null
+  profile: string | null
+  queue_len: number
+  cursor: number
 }
 
 /**
@@ -1897,13 +1938,14 @@ export interface SessionState {
  * with a per-call `extra` and stamps `engine`. The `extra` keys below are every one any
  * caller passes (session.js, mqttd.js, driver.js).
  */
-export interface PublishedSessionState extends SessionState {
-  engine: string;
+export interface PublishedSessionState
+  extends SessionState {
+  engine: string
   /** A human sentence, read aloud verbatim by the HA status announcement automation. */
-  error?: string;
+  error?: string
   /** 'profile' while waiting for any profile, `profile:<name>` while waiting for one. */
-  awaiting?: string;
-  playback?: HandoffResult;
+  awaiting?: string
+  playback?: HandoffResult
 }
 
 /**
@@ -1917,8 +1959,9 @@ export interface PublishedSessionState extends SessionState {
  * three separate hand-written versions are how the driver came to call this publisher with
  * an argument list it never had (see the arity fix, 2026-08-15).
  */
-export type PublishedStateExtra =
-  Partial<Omit<PublishedSessionState, 'engine'>> & { boot?: boolean };
+export type PublishedStateExtra = Partial<
+  Omit<PublishedSessionState, "engine">
+> & { boot?: boolean }
 
 /**
  * The MQTT/API payload that starts a session (`session.js startSession()`).
@@ -1933,23 +1976,23 @@ export type PublishedStateExtra =
  * here — the fix is to resolve in one place, and that is a behaviour change.
  */
 export interface SessionStartPayload {
-  set?: string;
+  set?: string
   /** Product kind picks|rules (legacy anime|movie|cartoons still accepted on read). */
-  kind?: string;
-  profile?: string;
-  target?: string | Device | null;
+  kind?: string
+  profile?: string
+  target?: string | Device | null
   /**
    * "Play THIS entry" — an entry key from the web grid's per-tile ▶. A physical card never
    * sends it; it only ever arrives from the UI, via `mqttc.play()`'s 5th argument.
    */
-  only?: string;
+  only?: string
   /**
    * Auto-routing hint when `set` is `auto`: `rewatch` picks the Movies Rules channel.
    * Product kind alone is `rules` for both shows and Movies auto buttons.
    */
-  behavior?: string;
+  behavior?: string
   /** Alias some callers may send; treated like `behavior` for auto rewatch detection. */
-  mode?: string;
+  mode?: string
 }
 
 // --- SSE --------------------------------------------------------------------- //
@@ -1957,8 +2000,8 @@ export interface SessionStartPayload {
 /** The `now` payload: the enriched now-playing snapshot plus which queue we STARTED
  * (authoritative in a way the Plex-side payload can't be). */
 export interface SseNowPayload {
-  now: NowPlaying | null;
-  set: string | null;
+  now: NowPlaying | null
+  set: string | null
 }
 
 /**
@@ -1972,10 +2015,13 @@ export interface SseNowPayload {
  *               receiving it also kicks the warm cache server-side.
  */
 export type SseEvent =
-  | { type: 'hello'; data: Record<string, never> }
-  | { type: 'now'; data: SseNowPayload }
-  | { type: 'state'; data: PublishedSessionState | Record<string, never> }
-  | { type: 'data'; data: Record<string, never> };
+  | { type: "hello"; data: Record<string, never> }
+  | { type: "now"; data: SseNowPayload }
+  | {
+      type: "state"
+      data: PublishedSessionState | Record<string, never>
+    }
+  | { type: "data"; data: Record<string, never> }
 
 // --- known trouble spots ----------------------------------------------------- //
 
@@ -1992,12 +2038,12 @@ export type SseEvent =
  */
 export interface CancelFlag {
   /** Node/JS spelling. */
-  isSet?: () => boolean;
+  isSet?: () => boolean
   /** Python `threading.Event` spelling, still honoured by driver.js. */
-  is_set?: () => boolean;
+  is_set?: () => boolean
   /** Raise the flag. `session.js` calls this on the PREVIOUS start when a new one arrives. */
-  set?: () => void;
-  clear?: () => void;
+  set?: () => void
+  clear?: () => void
 }
 
 /**
@@ -2013,4 +2059,4 @@ export interface CancelFlag {
  * round-trip — which is precisely the cost the negative cache exists to avoid. Callers
  * must test `=== undefined` explicitly.
  */
-export type CachedResolved<T> = T | null | undefined;
+export type CachedResolved<T> = T | null | undefined

@@ -20,7 +20,9 @@ import { readFileSync, writeFileSync } from "node:fs"
 
 const source = "src/store/schema.sql"
 const target = "src/store/schema.generated.ts"
-const prefix = process.cwd().endsWith("/server") ? "" : "server/"
+const prefix = process.cwd().endsWith("/server")
+  ? ""
+  : "server/"
 
 const sql = readFileSync(prefix + source, "utf8")
 
@@ -37,4 +39,6 @@ export const SCHEMA_SQL = ${JSON.stringify(sql)};
 `,
 )
 
-console.log(`[schema] ${target} — ${(sql.length / 1024).toFixed(1)} KB of SQL`)
+console.log(
+  `[schema] ${target} — ${(sql.length / 1024).toFixed(1)} KB of SQL`,
+)

@@ -86,44 +86,74 @@
 // does not either, and because the absorbed code already hoists its own `const insert =
 // db.prepare(…)`), and every export has an `async` signature so the module can move into a
 // worker_thread later without touching a caller.
-import { DatabaseSync, type StatementSync } from 'node:sqlite';
+import {
+  DatabaseSync,
+  type StatementSync,
+} from "node:sqlite"
 
 /** What SQLite will accept as a bound value. `boolean` and `undefined` are absent on purpose:
  * both drivers reject them, and widening this to include them would move a compile error to
  * runtime. */
-export type BindValue = null | number | bigint | string | NodeJS.ArrayBufferView;
+export type BindValue =
+  | null
+  | number
+  | bigint
+  | string
+  | NodeJS.ArrayBufferView
 
 /** better-sqlite3's `RunResult`, to the letter. `changes` is narrowed to `number` here;
  * `lastInsertRowid` keeps the union because better-sqlite3's own types do. */
 export interface RunResult {
-  changes: number;
-  lastInsertRowid: number | bigint;
+  changes: number
+  lastInsertRowid: number | bigint
 }
 
 /** One compiled statement. `Result` defaults to `unknown` so an existing `as` cast on the
  * result still compiles; name it to get a typed row instead. */
 export interface PreparedStatement<Result = unknown> {
   /** The first row, or `undefined` when the query matched nothing. */
-  get(...params: readonly (BindValue | Record<string, BindValue>)[]): Result | undefined;
+  get(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): Result | undefined
   /** Every row. `[]` when the query matched nothing. */
-  all(...params: readonly (BindValue | Record<string, BindValue>)[]): Result[];
+  all(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): Result[]
   /** Row-at-a-time. Each row is materialized as it is yielded, not up front. */
-  iterate(...params: readonly (BindValue | Record<string, BindValue>)[]): IterableIterator<Result>;
+  iterate(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): IterableIterator<Result>
   /** For INSERT / UPDATE / DELETE. */
-  run(...params: readonly (BindValue | Record<string, BindValue>)[]): RunResult;
+  run(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): RunResult
   /** The SQL this statement was compiled from. Handy in an error message; better-sqlite3
    * calls the same thing `source`, and this is the one property name that differs. */
-  readonly sql: string;
+  readonly sql: string
 }
 
 export interface SqliteDatabase {
-  prepare<Result = unknown>(sql: string): PreparedStatement<Result>;
+  prepare<Result = unknown>(
+    sql: string,
+  ): PreparedStatement<Result>
   /** Run one or more statements for their effect. Returns nothing — better-sqlite3 returns
    * `this` for chaining and no absorbed call site chains. */
-  exec(sql: string): void;
+  exec(sql: string): void
   /** `PRAGMA <source>`. Rows for a reading pragma, `[]` for a setting one. Never `exec()` —
    * see the header; `exec` swallows a row-returning pragma and hands back `undefined`. */
-  pragma(source: string): unknown[];
+  pragma(source: string): unknown[]
   /**
    * Run `body` inside a transaction. Commits on return, rolls back on throw, and re-throws.
    *
@@ -138,11 +168,11 @@ export interface SqliteDatabase {
    * `cannot start a transaction within a transaction`, which is a confusing SQLite error
    * arriving at whichever caller happens to be second.
    */
-  withTransaction<T>(body: () => T): T;
-  close(): void;
+  withTransaction<T>(body: () => T): T
+  close(): void
   /** The underlying driver, for the handful of things this shim does not wrap (`isTransaction`,
    * `setReadBigInts`, session/changeset APIs). Reach for it knowingly. */
-  readonly raw: DatabaseSync;
+  readonly raw: DatabaseSync
 }
 
 /** A bound value that is a named-parameter OBJECT rather than a scalar. `Uint8Array` is an
@@ -150,17 +180,26 @@ export interface SqliteDatabase {
 const isNamedParameters = (
   value: BindValue | Record<string, BindValue> | undefined,
 ): value is Record<string, BindValue> =>
-  typeof value === 'object' && value !== null && !ArrayBuffer.isView(value);
+  typeof value === "object" &&
+  value !== null &&
+  !ArrayBuffer.isView(value)
 
 /** Keep the binding contract stable when a JavaScript caller bypasses the TypeScript type. */
 const rejectUnsupportedBinding = (value: unknown): void => {
-  if (value === undefined || typeof value === 'boolean')
-    throw new TypeError('sqlite shim: booleans and undefined are not bindable');
+  if (value === undefined || typeof value === "boolean")
+    throw new TypeError(
+      "sqlite shim: booleans and undefined are not bindable",
+    )
 
-  if (typeof value === 'object' && value !== null && !ArrayBuffer.isView(value)) {
-    for (const nested of Object.values(value)) rejectUnsupportedBinding(nested);
+  if (
+    typeof value === "object" &&
+    value !== null &&
+    !ArrayBuffer.isView(value)
+  ) {
+    for (const nested of Object.values(value))
+      rejectUnsupportedBinding(nested)
   }
-};
+}
 
 /**
  * Split the variadic arguments the way node:sqlite's signature wants them: the named-parameter
@@ -171,152 +210,196 @@ const rejectUnsupportedBinding = (value: unknown): void => {
  * the two forms — every one is all-positional or a single object.
  */
 const splitParams = (
-  params: readonly (BindValue | Record<string, BindValue>)[],
-): { named: Record<string, BindValue> | undefined; anonymous: BindValue[] } => {
-  for (const param of params) rejectUnsupportedBinding(param);
+  params: readonly (
+    | BindValue
+    | Record<string, BindValue>
+  )[],
+): {
+  named: Record<string, BindValue> | undefined
+  anonymous: BindValue[]
+} => {
+  for (const param of params)
+    rejectUnsupportedBinding(param)
 
-  const [first, ...rest] = params;
+  const [first, ...rest] = params
 
   if (isNamedParameters(first)) {
     for (const later of rest) {
       if (isNamedParameters(later)) {
         throw new TypeError(
-          'sqlite shim: a named-parameter object must be the only object argument, and must come first',
-        );
+          "sqlite shim: a named-parameter object must be the only object argument, and must come first",
+        )
       }
     }
-    return { named: first, anonymous: rest as BindValue[] };
+    return { named: first, anonymous: rest as BindValue[] }
   }
 
   for (const later of rest) {
     if (isNamedParameters(later)) {
       throw new TypeError(
-        'sqlite shim: a named-parameter object must be the FIRST argument, not a later one',
-      );
+        "sqlite shim: a named-parameter object must be the FIRST argument, not a later one",
+      )
     }
   }
 
-  return { named: undefined, anonymous: params as BindValue[] };
-};
+  return {
+    named: undefined,
+    anonymous: params as BindValue[],
+  }
+}
 
 /** node:sqlite hands back null-prototype objects. Spread each one so it is an ordinary object
  * with an ordinary prototype — see the header. `Result` is the caller's claim about the row,
  * exactly as better-sqlite3's `Statement<…, Result>` is. */
-const materialize = <Result,>(row: Record<string, unknown>): Result => ({ ...row }) as Result;
+const materialize = <Result>(
+  row: Record<string, unknown>,
+): Result => ({ ...row }) as Result
 
-class ShimStatement<Result> implements PreparedStatement<Result> {
-  readonly #statement: StatementSync;
-  readonly sql: string;
+class ShimStatement<Result>
+  implements PreparedStatement<Result>
+{
+  readonly #statement: StatementSync
+  readonly sql: string
 
   constructor(statement: StatementSync, sql: string) {
-    this.#statement = statement;
-    this.sql = sql;
+    this.#statement = statement
+    this.sql = sql
   }
 
-  get(...params: readonly (BindValue | Record<string, BindValue>)[]): Result | undefined {
-    const { named, anonymous } = splitParams(params);
+  get(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): Result | undefined {
+    const { named, anonymous } = splitParams(params)
     const row =
       named === undefined
         ? this.#statement.get(...anonymous)
-        : this.#statement.get(named, ...anonymous);
+        : this.#statement.get(named, ...anonymous)
 
-    return row === undefined ? undefined : materialize<Result>(row);
+    return row === undefined
+      ? undefined
+      : materialize<Result>(row)
   }
 
-  all(...params: readonly (BindValue | Record<string, BindValue>)[]): Result[] {
-    const { named, anonymous } = splitParams(params);
+  all(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): Result[] {
+    const { named, anonymous } = splitParams(params)
     const rows =
       named === undefined
         ? this.#statement.all(...anonymous)
-        : this.#statement.all(named, ...anonymous);
+        : this.#statement.all(named, ...anonymous)
 
-    return rows.map((row) => materialize<Result>(row));
+    return rows.map((row) => materialize<Result>(row))
   }
 
   *iterate(
-    ...params: readonly (BindValue | Record<string, BindValue>)[]
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
   ): IterableIterator<Result> {
-    const { named, anonymous } = splitParams(params);
+    const { named, anonymous } = splitParams(params)
     const rows =
       named === undefined
         ? this.#statement.iterate(...anonymous)
-        : this.#statement.iterate(named, ...anonymous);
+        : this.#statement.iterate(named, ...anonymous)
 
-    for (const row of rows as Iterable<Record<string, unknown>>) {
-      yield materialize<Result>(row);
+    for (const row of rows as Iterable<
+      Record<string, unknown>
+    >) {
+      yield materialize<Result>(row)
     }
   }
 
-  run(...params: readonly (BindValue | Record<string, BindValue>)[]): RunResult {
-    const { named, anonymous } = splitParams(params);
+  run(
+    ...params: readonly (
+      | BindValue
+      | Record<string, BindValue>
+    )[]
+  ): RunResult {
+    const { named, anonymous } = splitParams(params)
     const result =
       named === undefined
         ? this.#statement.run(...anonymous)
-        : this.#statement.run(named, ...anonymous);
+        : this.#statement.run(named, ...anonymous)
 
-    return { changes: Number(result.changes), lastInsertRowid: result.lastInsertRowid };
+    return {
+      changes: Number(result.changes),
+      lastInsertRowid: result.lastInsertRowid,
+    }
   }
 }
 
 class ShimDatabase implements SqliteDatabase {
-  readonly raw: DatabaseSync;
+  readonly raw: DatabaseSync
   /** Savepoint names have to be unique down a nest, and SQLite scopes them by name — reusing
    * one would release the wrong frame. A monotonic counter is enough; it never wraps in a
    * process's life and it never has to be decremented back. */
-  #savepoints = 0;
+  #savepoints = 0
 
   constructor(raw: DatabaseSync) {
-    this.raw = raw;
+    this.raw = raw
   }
 
-  prepare<Result = unknown>(sql: string): PreparedStatement<Result> {
-    return new ShimStatement<Result>(this.raw.prepare(sql), sql);
+  prepare<Result = unknown>(
+    sql: string,
+  ): PreparedStatement<Result> {
+    return new ShimStatement<Result>(
+      this.raw.prepare(sql),
+      sql,
+    )
   }
 
   exec(sql: string): void {
-    this.raw.exec(sql);
+    this.raw.exec(sql)
   }
 
   pragma(source: string): unknown[] {
-    return this.prepare(`PRAGMA ${source}`).all();
+    return this.prepare(`PRAGMA ${source}`).all()
   }
 
   withTransaction<T>(body: () => T): T {
     if (this.raw.isTransaction) {
-      const name = `qp_savepoint_${(this.#savepoints += 1)}`;
-      this.raw.exec(`SAVEPOINT ${name}`);
+      const name = `qp_savepoint_${(this.#savepoints += 1)}`
+      this.raw.exec(`SAVEPOINT ${name}`)
 
       try {
-        const result = body();
-        this.raw.exec(`RELEASE ${name}`);
-        return result;
+        const result = body()
+        this.raw.exec(`RELEASE ${name}`)
+        return result
       } catch (error) {
         // ROLLBACK TO leaves the savepoint OPEN — the RELEASE after it is what pops the frame.
         // Skipping it leaves a savepoint the outer COMMIT then has to unwind by accident.
-        this.raw.exec(`ROLLBACK TO ${name}`);
-        this.raw.exec(`RELEASE ${name}`);
-        throw error;
+        this.raw.exec(`ROLLBACK TO ${name}`)
+        this.raw.exec(`RELEASE ${name}`)
+        throw error
       }
     }
 
-    this.raw.exec('BEGIN');
+    this.raw.exec("BEGIN")
 
     try {
-      const result = body();
-      this.raw.exec('COMMIT');
-      return result;
+      const result = body()
+      this.raw.exec("COMMIT")
+      return result
     } catch (error) {
       // Guarded, because some failures (a constraint violation with ON CONFLICT ROLLBACK, a
       // full disk) roll the transaction back themselves. An unguarded ROLLBACK would then
       // throw "cannot rollback - no transaction is active" and REPLACE the real error with a
       // meaningless one.
-      if (this.raw.isTransaction) this.raw.exec('ROLLBACK');
-      throw error;
+      if (this.raw.isTransaction) this.raw.exec("ROLLBACK")
+      throw error
     }
   }
 
   close(): void {
-    this.raw.close();
+    this.raw.close()
   }
 }
 
@@ -326,8 +409,11 @@ class ShimDatabase implements SqliteDatabase {
  * No `mkdirSync` and no schema load here on purpose — this file is the DRIVER, not a
  * migration runner. The caller owns where the file lives and what shape it has.
  */
-export const openSqlite = (path: string): SqliteDatabase => new ShimDatabase(new DatabaseSync(path));
+export const openSqlite = (path: string): SqliteDatabase =>
+  new ShimDatabase(new DatabaseSync(path))
 
 /** Wrap a DatabaseSync somebody else opened — a deserialized snapshot, or a handle from a
  * module that already has one. */
-export const wrapSqlite = (raw: DatabaseSync): SqliteDatabase => new ShimDatabase(raw);
+export const wrapSqlite = (
+  raw: DatabaseSync,
+): SqliteDatabase => new ShimDatabase(raw)

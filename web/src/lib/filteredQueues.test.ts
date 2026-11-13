@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, test } from "vitest"
 
 import {
   filteredParent,
@@ -30,7 +30,7 @@ const registry = (...sets: RegistrySet[]) => {
 }
 
 describe("nestFilteredQueues", () => {
-  it("moves a filtered queue directly under the queue it views", () => {
+  test("moves a filtered queue directly under the queue it views", () => {
     const byId = registry(
       set("reading"),
       set("movies"),
@@ -45,7 +45,7 @@ describe("nestFilteredQueues", () => {
     ).toEqual(["reading", "strips", "movies"])
   })
 
-  it("keeps several views of one queue in their own order", () => {
+  test("keeps several views of one queue in their own order", () => {
     const byId = registry(
       set("reading"),
       set("strips", "reading"),
@@ -60,7 +60,7 @@ describe("nestFilteredQueues", () => {
     ).toEqual(["reading", "panels", "strips"])
   })
 
-  it("leaves an ordinary list untouched", () => {
+  test("leaves an ordinary list untouched", () => {
     const byId = registry(set("reading"), set("movies"))
 
     expect(
@@ -68,7 +68,7 @@ describe("nestFilteredQueues", () => {
     ).toEqual(["reading", "movies"])
   })
 
-  it("keeps an ORPHAN in place rather than dropping it", () => {
+  test("keeps an ORPHAN in place rather than dropping it", () => {
     // Its parent is not in this list — filtered out by the people bar, or a typo. Losing a
     // queue quietly is the worse failure.
     const byId = registry(set("strips", "reading"))
@@ -78,7 +78,7 @@ describe("nestFilteredQueues", () => {
     ).toEqual(["movies", "strips"])
   })
 
-  it("never repeats or drops an id", () => {
+  test("never repeats or drops an id", () => {
     const byId = registry(
       set("reading"),
       set("movies"),
@@ -106,7 +106,7 @@ describe("nestFilteredQueues", () => {
 })
 
 describe("filteredParent", () => {
-  it("names the queue a view is a view of", () => {
+  test("names the queue a view is a view of", () => {
     const byId = registry(
       set("reading"),
       set("strips", "reading"),
@@ -118,13 +118,13 @@ describe("filteredParent", () => {
     })
   })
 
-  it("answers null for an ordinary queue", () => {
+  test("answers null for an ordinary queue", () => {
     const byId = registry(set("reading"))
 
     expect(filteredParent(byId("reading"), byId)).toBeNull()
   })
 
-  it("falls back to the id when the parent is missing", () => {
+  test("falls back to the id when the parent is missing", () => {
     const byId = registry(set("strips", "reading"))
 
     expect(filteredParent(byId("strips"), byId)).toEqual({
@@ -135,7 +135,7 @@ describe("filteredParent", () => {
 })
 
 describe("groupQueueFamilies", () => {
-  it("keeps nested filtered views with their parent during a grid reorder", () => {
+  test("keeps nested filtered views with their parent during a grid reorder", () => {
     const byId = registry(
       set("reading"),
       set("strips", "reading"),
@@ -149,7 +149,7 @@ describe("groupQueueFamilies", () => {
       ),
     ).toEqual([["reading", "strips", "short"], ["movies"]])
   })
-  it("keeps a filtered view when its parent belongs to another people tier", () => {
+  test("keeps a filtered view when its parent belongs to another people tier", () => {
     const byId = registry(
       set("reading"),
       set("strips", "reading"),

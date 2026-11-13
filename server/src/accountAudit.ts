@@ -22,58 +22,66 @@
 // same libraries — a family queue bound to the owner and a kids' queue bound to a child both
 // draw from Shows — so "a Shows row on another account" is a normal evening, not a finding.
 // Only an item THIS push put in the play queue counts.
-import { ACCOUNT_AUDIT_LOOKBACK_SECONDS, ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS } from './env.js';
-import { liveClient } from './engine/plex-live.js';
-import * as gatedPush from './store/db/gatedPush.js';
-import type { GatedPush } from './store/db/gatedPush.js';
-import { errMessage } from './errors.js';
-import type { SqliteDatabase } from './store/sqlite.js';
-import type { PlexClient } from './types.js';
+
+import { liveClient } from "./engine/plex-live.js"
+import {
+  ACCOUNT_AUDIT_LOOKBACK_SECONDS,
+  ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS,
+} from "./env.js"
+import { errMessage } from "./errors.js"
+import type { GatedPush } from "./store/db/gatedPush.js"
+import * as gatedPush from "./store/db/gatedPush.js"
+import type { SqliteDatabase } from "./store/sqlite.js"
+import type { PlexClient } from "./types.js"
 
 /** One item a gated push played under the wrong account. */
 export interface AttributionFinding {
-  setId: string;
-  profile: string | null;
+  setId: string
+  profile: string | null
   /** The account the queue is bound to. */
-  expectedAccountId: number;
+  expectedAccountId: number
   /** The account Plex actually filed the item under. */
-  actualAccountId: number;
-  ratingKey: string;
-  title: string | null;
+  actualAccountId: number
+  ratingKey: string
+  title: string | null
   /** Unix epoch SECONDS, from the history row. */
-  viewedAt: number;
+  viewedAt: number
   /** Unix epoch SECONDS of the push this item belongs to. */
-  pushedAt: number;
-  playQueueId: number | null;
+  pushedAt: number
+  playQueueId: number | null
 }
 
 export interface AttributionReport {
   /** Unix epoch SECONDS — the oldest push this run considered. */
-  since: number;
+  since: number
   /** How many `gated_push` rows were examined. */
-  pushesChecked: number;
+  pushesChecked: number
   /** How many history rows were matched to a push, right or wrong. */
-  itemsMatched: number;
-  findings: AttributionFinding[];
+  itemsMatched: number
+  findings: AttributionFinding[]
   /**
    * Why the history read failed, when it did. A failed read is NOT a clean run, and a caller
    * must be able to tell "nothing was mis-filed" from "I could not look".
    */
-  unreadable: string | null;
+  unreadable: string | null
 }
 
 interface HistoryRow {
-  ratingKey?: string | number;
-  accountID?: string | number;
-  title?: string;
-  viewedAt?: number;
+  ratingKey?: string | number
+  accountID?: string | number
+  title?: string
+  viewedAt?: number
 }
 
 /** quote_plus, matching `engine/select.ts`'s encoder so both build the same query string. */
 function encQ(value: unknown): string {
   return encodeURIComponent(String(value))
-    .replace(/%20/g, '+')
-    .replace(/[!'()*~]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+    .replace(/%20/g, "+")
+    .replace(
+      /[!'()*~]/g,
+      (c) =>
+        "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+    )
 }
 
 /**
@@ -93,26 +101,34 @@ async function historySince(
   sinceSec: number,
   page = 500,
 ): Promise<HistoryRow[]> {
-  const rows: HistoryRow[] = [];
-  let start = 0;
+  const rows: HistoryRow[] = []
+  let start = 0
   for (;;) {
     const pairs: [string, number | string][] = [
-      ['viewedAt>', Math.floor(sinceSec) - 1],
-      ['X-Plex-Container-Start', start],
-      ['X-Plex-Container-Size', page],
-      ['sort', 'viewedAt:asc'],
-    ];
-    const query = pairs.map(([k, v]) => `${encQ(k)}=${encQ(v)}`).join('&');
-    const container = await client.container('/status/sessions/history/all?' + query, null);
-    const batch = (container.Metadata || []) as HistoryRow[];
-    for (const row of batch) rows.push(row);
-    start += batch.length;
-    const total = container.totalSize != null
-      ? Number(container.totalSize)
-      : container.size != null ? Number(container.size) : 0;
-    if (!batch.length || start >= total) break;
+      ["viewedAt>", Math.floor(sinceSec) - 1],
+      ["X-Plex-Container-Start", start],
+      ["X-Plex-Container-Size", page],
+      ["sort", "viewedAt:asc"],
+    ]
+    const query = pairs
+      .map(([k, v]) => `${encQ(k)}=${encQ(v)}`)
+      .join("&")
+    const container = await client.container(
+      "/status/sessions/history/all?" + query,
+      null,
+    )
+    const batch = (container.Metadata || []) as HistoryRow[]
+    for (const row of batch) rows.push(row)
+    start += batch.length
+    const total =
+      container.totalSize != null
+        ? Number(container.totalSize)
+        : container.size != null
+          ? Number(container.size)
+          : 0
+    if (!batch.length || start >= total) break
   }
-  return rows;
+  return rows
 }
 
 /**
@@ -129,66 +145,79 @@ export async function auditAttribution({
   client = liveClient(),
   db,
 }: {
-  lookbackSeconds?: number;
-  nowSec?: number;
-  client?: PlexClient;
+  lookbackSeconds?: number
+  nowSec?: number
+  client?: PlexClient
   /** Test seam. Omitted in production, where the book of record is the only store. */
-  db?: SqliteDatabase;
+  db?: SqliteDatabase
 } = {}): Promise<AttributionReport> {
-  const since = Math.floor(nowSec - Math.max(0, lookbackSeconds));
-  const pushes = db ? gatedPush.pushesSince(since, 500, db) : gatedPush.pushesSince(since);
+  const since = Math.floor(
+    nowSec - Math.max(0, lookbackSeconds),
+  )
+  const pushes = db
+    ? gatedPush.pushesSince(since, 500, db)
+    : gatedPush.pushesSince(since)
   const report: AttributionReport = {
     since,
     pushesChecked: pushes.length,
     itemsMatched: 0,
     findings: [],
     unreadable: null,
-  };
-  if (!pushes.length) return report;
+  }
+  if (!pushes.length) return report
 
   // The window a push owns ends at the next push of the SAME set, or after the fixed window.
   // Two sets playing in turn on one device is normal (it is what happened on 2026-09-12), so
   // the boundary has to be per set rather than global.
-  const nextPushBySet = new Map<string, number[]>();
+  const nextPushBySet = new Map<string, number[]>()
   for (const push of pushes) {
-    const list = nextPushBySet.get(push.setId) ?? [];
-    list.push(push.pushedAt);
-    nextPushBySet.set(push.setId, list);
+    const list = nextPushBySet.get(push.setId) ?? []
+    list.push(push.pushedAt)
+    nextPushBySet.set(push.setId, list)
   }
   const windowEnd = (push: GatedPush): number => {
-    const fixed = push.pushedAt + Math.max(60, ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS);
-    const later = (nextPushBySet.get(push.setId) ?? []).filter((at) => at > push.pushedAt);
-    return later.length ? Math.min(fixed, Math.min(...later)) : fixed;
-  };
+    const fixed =
+      push.pushedAt +
+      Math.max(60, ACCOUNT_AUDIT_PUSH_WINDOW_SECONDS)
+    const later = (
+      nextPushBySet.get(push.setId) ?? []
+    ).filter((at) => at > push.pushedAt)
+    return later.length
+      ? Math.min(fixed, Math.min(...later))
+      : fixed
+  }
 
   // ONE read, shared by every push. Narrowing or re-reading per push would multiply the cost
   // for an identical answer.
-  let history: HistoryRow[];
+  let history: HistoryRow[]
   try {
-    history = await historySince(client, since);
+    history = await historySince(client, since)
   } catch (e) {
-    report.unreadable = errMessage(e);
-    return report;
+    report.unreadable = errMessage(e)
+    return report
   }
 
   for (const push of pushes) {
-    const wanted = new Set(push.ratingKeys);
-    if (!wanted.size) continue;
-    const end = windowEnd(push);
+    const wanted = new Set(push.ratingKeys)
+    if (!wanted.size) continue
+    const end = windowEnd(push)
 
     for (const row of history) {
-      const ratingKey = row.ratingKey == null ? null : String(row.ratingKey);
-      if (ratingKey == null || !wanted.has(ratingKey)) continue;
-      const viewedAt = Number(row.viewedAt ?? 0);
-      if (viewedAt < push.pushedAt || viewedAt > end) continue;
+      const ratingKey =
+        row.ratingKey == null ? null : String(row.ratingKey)
+      if (ratingKey == null || !wanted.has(ratingKey))
+        continue
+      const viewedAt = Number(row.viewedAt ?? 0)
+      if (viewedAt < push.pushedAt || viewedAt > end)
+        continue
 
-      report.itemsMatched += 1;
-      const actual = Number(row.accountID);
+      report.itemsMatched += 1
+      const actual = Number(row.accountID)
       // An unstamped history row proves nothing. Plex has always stamped `accountID` on this
       // endpoint, but a row without one must not be reported as a mismatch against account
       // 0 — that would be a fabricated finding, which is worse than a missed one.
-      if (!Number.isFinite(actual)) continue;
-      if (actual === push.accountId) continue;
+      if (!Number.isFinite(actual)) continue
+      if (actual === push.accountId) continue
 
       report.findings.push({
         setId: push.setId,
@@ -200,27 +229,31 @@ export async function auditAttribution({
         viewedAt,
         pushedAt: push.pushedAt,
         playQueueId: push.playQueueId,
-      });
+      })
     }
   }
 
   // Prune on the way out rather than on a timer, for the reason at the top of this file. The
   // audit is the only reader, so anything outside the longest window it will ever ask about
   // is dead weight.
-  const pruneBefore = nowSec - Math.max(0, lookbackSeconds) * 4;
-  if (db) gatedPush.prunePushesBefore(pruneBefore, db);
-  else gatedPush.prunePushesBefore(pruneBefore);
+  const pruneBefore =
+    nowSec - Math.max(0, lookbackSeconds) * 4
+  if (db) gatedPush.prunePushesBefore(pruneBefore, db)
+  else gatedPush.prunePushesBefore(pruneBefore)
 
-  return report;
+  return report
 }
 
 /** A one-line summary for the runtime log and the MQTT reply. */
-export function summarise(report: AttributionReport): string {
+export function summarise(
+  report: AttributionReport,
+): string {
   const parts = [
     `${report.pushesChecked} gated push(es)`,
     `${report.itemsMatched} item(s) matched`,
     `${report.findings.length} wrong-account item(s)`,
-  ];
-  if (report.unreadable) parts.push(`history unreadable: ${report.unreadable}`);
-  return parts.join(', ');
+  ]
+  if (report.unreadable)
+    parts.push(`history unreadable: ${report.unreadable}`)
+  return parts.join(", ")
 }

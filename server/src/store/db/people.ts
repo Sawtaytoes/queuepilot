@@ -22,53 +22,71 @@
 // mapping file in `store/migrate/people.ts`. There is no `findPersonByName` here and there
 // must not be one — a fuzzy match writing the wrong person's known-how claim is the failure
 // this whole package is shaped around.
-import { normalizeAccounts, type Person, type PersonWrite } from '../../people.js';
-import { type GroupMembership, type GroupRosterMember, isMemberRole } from '../../queuePeople.js';
-import type { ProfileAccounts } from '../../groups.js';
-import { bumpVersion, readMeta, writeMeta } from './common.js';
-import { bookOfRecord, prepareChecked } from './open.js';
-import { forgetMember } from './queuePeople.js';
-import type { SqliteDatabase } from '../sqlite.js';
+
+import type { ProfileAccounts } from "../../groups.js"
+import {
+  normalizeAccounts,
+  type Person,
+  type PersonWrite,
+} from "../../people.js"
+import {
+  type GroupMembership,
+  type GroupRosterMember,
+  isMemberRole,
+} from "../../queuePeople.js"
+import type { SqliteDatabase } from "../sqlite.js"
+import {
+  bumpVersion,
+  readMeta,
+  writeMeta,
+} from "./common.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
+import { forgetMember } from "./queuePeople.js"
 
 interface PersonRow {
-  id: string;
-  position: number;
-  display_name: string;
-  birth_year: number | null;
-  max_weight: number | null;
-  is_beginner: number;
-  source: string | null;
-  source_id: string | null;
-  created_at: string | null;
+  id: string
+  position: number
+  display_name: string
+  birth_year: number | null
+  max_weight: number | null
+  is_beginner: number
+  source: string | null
+  source_id: string | null
+  created_at: string | null
 }
 
 interface AccountRow {
-  person_id: string;
-  kind: string;
-  account: string;
-  position: number;
+  person_id: string
+  kind: string
+  account: string
+  position: number
 }
 
 const PERSON_COLUMNS =
-  'id, position, display_name, birth_year, max_weight, is_beginner, source, source_id, created_at';
+  "id, position, display_name, birth_year, max_weight, is_beginner, source, source_id, created_at"
 
 /** Accounts for the whole roster in one query, so listing N people is two statements and not
  * N + 1. A household is tens of rows, but the shape is the one WP-5 will lean on. */
-function accountsByPerson(db: SqliteDatabase): Map<string, ProfileAccounts> {
-  const out = new Map<string, ProfileAccounts>();
+function accountsByPerson(
+  db: SqliteDatabase,
+): Map<string, ProfileAccounts> {
+  const out = new Map<string, ProfileAccounts>()
   const rows = prepareChecked<AccountRow>(
     db,
-    'SELECT person_id, kind, account, position FROM person_accounts ORDER BY person_id, kind, position',
-  ).all();
+    "SELECT person_id, kind, account, position FROM person_accounts ORDER BY person_id, kind, position",
+  ).all()
   for (const row of rows) {
-    const map = out.get(row.person_id) ?? {};
-    (map[row.kind] ??= []).push(row.account);
-    out.set(row.person_id, map);
+    const map = out.get(row.person_id) ?? {}
+    ;(map[row.kind] ??= []).push(row.account)
+    out.set(row.person_id, map)
   }
-  return out;
+  return out
 }
 
-const toPerson = (row: PersonRow, accounts: ProfileAccounts): Person => ({
+const toPerson = (
+  row: PersonRow,
+  accounts: ProfileAccounts,
+): Person => ({
   accounts,
   birthYear: row.birth_year,
   createdAt: row.created_at,
@@ -79,34 +97,39 @@ const toPerson = (row: PersonRow, accounts: ProfileAccounts): Person => ({
   position: row.position,
   source: row.source,
   sourceId: row.source_id,
-});
+})
 
 /** The whole roster, in position order. */
-export function listPeople(db: SqliteDatabase = bookOfRecord()): Person[] {
-  const accounts = accountsByPerson(db);
+export function listPeople(
+  db: SqliteDatabase = bookOfRecord(),
+): Person[] {
+  const accounts = accountsByPerson(db)
   return prepareChecked<PersonRow>(
     db,
     `SELECT ${PERSON_COLUMNS} FROM people ORDER BY position, id`,
   )
     .all()
-    .map((row) => toPerson(row, accounts.get(row.id) ?? {}));
+    .map((row) => toPerson(row, accounts.get(row.id) ?? {}))
 }
 
 /** One person by id, or null. */
-export function getPerson(id: string, db: SqliteDatabase = bookOfRecord()): Person | null {
+export function getPerson(
+  id: string,
+  db: SqliteDatabase = bookOfRecord(),
+): Person | null {
   const row = prepareChecked<PersonRow>(
     db,
     `SELECT ${PERSON_COLUMNS} FROM people WHERE id = :id`,
-  ).get({ id });
-  if (!row) return null;
-  const accounts: ProfileAccounts = {};
+  ).get({ id })
+  if (!row) return null
+  const accounts: ProfileAccounts = {}
   for (const account of prepareChecked<AccountRow>(
     db,
-    'SELECT person_id, kind, account, position FROM person_accounts WHERE person_id = :id ORDER BY kind, position',
+    "SELECT person_id, kind, account, position FROM person_accounts WHERE person_id = :id ORDER BY kind, position",
   ).all({ id })) {
-    (accounts[account.kind] ??= []).push(account.account);
+    ;(accounts[account.kind] ??= []).push(account.account)
   }
-  return toPerson(row, accounts);
+  return toPerson(row, accounts)
 }
 
 /** One person by where they came from — the lookup that makes the import idempotent. */
@@ -117,9 +140,9 @@ export function getPersonBySource(
 ): Person | null {
   const row = prepareChecked<{ id: string }>(
     db,
-    'SELECT id FROM people WHERE source = :source AND source_id = :source_id',
-  ).get({ source, source_id: sourceId });
-  return row ? getPerson(row.id, db) : null;
+    "SELECT id FROM people WHERE source = :source AND source_id = :source_id",
+  ).get({ source, source_id: sourceId })
+  return row ? getPerson(row.id, db) : null
 }
 
 /**
@@ -136,9 +159,12 @@ export function getPersonBySource(
  * Not transactional by itself. Callers that write several people wrap the lot, so a half-run
  * import is never committed.
  */
-export function upsertPerson(person: PersonWrite, db: SqliteDatabase = bookOfRecord()): void {
-  const id = String(person.id ?? '').trim();
-  if (!id) throw new Error('a person needs an id');
+export function upsertPerson(
+  person: PersonWrite,
+  db: SqliteDatabase = bookOfRecord(),
+): void {
+  const id = String(person.id ?? "").trim()
+  if (!id) throw new Error("a person needs an id")
 
   prepareChecked(
     db,
@@ -163,21 +189,27 @@ export function upsertPerson(person: PersonWrite, db: SqliteDatabase = bookOfRec
     created_at: person.createdAt ?? null,
     display_name: person.displayName ?? null,
     id,
-    is_beginner: person.isBeginner === undefined ? null : person.isBeginner ? 1 : 0,
+    is_beginner:
+      person.isBeginner === undefined
+        ? null
+        : person.isBeginner
+          ? 1
+          : 0,
     max_weight: person.maxWeight ?? null,
     position: person.position ?? null,
     source: person.source ?? null,
     source_id: person.sourceId ?? null,
-  });
+  })
 
   // `display_name` and `is_beginner` are NOT NULL with defaults, so a first INSERT that passed
   // NULL for either would have been refused. Fill them here rather than branching the SQL.
   prepareChecked(
     db,
     "UPDATE people SET display_name = :display_name WHERE id = :id AND display_name = ''",
-  ).run({ display_name: id, id });
+  ).run({ display_name: id, id })
 
-  if (person.accounts !== undefined) setPersonAccounts(id, person.accounts, db);
+  if (person.accounts !== undefined)
+    setPersonAccounts(id, person.accounts, db)
 }
 
 /** Replace one person's provider accounts. Empty kinds are dropped, never written as `[]`. */
@@ -186,18 +218,28 @@ export function setPersonAccounts(
   accounts: ProfileAccounts,
   db: SqliteDatabase = bookOfRecord(),
 ): void {
-  prepareChecked(db, 'DELETE FROM person_accounts WHERE person_id = :person_id').run({
+  prepareChecked(
+    db,
+    "DELETE FROM person_accounts WHERE person_id = :person_id",
+  ).run({
     person_id: personId,
-  });
+  })
   const insert = prepareChecked(
     db,
-    'INSERT OR REPLACE INTO person_accounts (person_id, kind, account, position) ' +
-      'VALUES (:person_id, :kind, :account, :position)',
-  );
-  for (const [kind, names] of Object.entries(normalizeAccounts(accounts))) {
+    "INSERT OR REPLACE INTO person_accounts (person_id, kind, account, position) " +
+      "VALUES (:person_id, :kind, :account, :position)",
+  )
+  for (const [kind, names] of Object.entries(
+    normalizeAccounts(accounts),
+  )) {
     names.forEach((account, position) => {
-      insert.run({ account, kind, person_id: personId, position });
-    });
+      insert.run({
+        account,
+        kind,
+        person_id: personId,
+        position,
+      })
+    })
   }
 }
 
@@ -209,10 +251,16 @@ export function setPersonAccounts(
  * explicit delete rather than a constraint. Leaving the rows would put a stranger in a queue's
  * Must-be-here tray, which changes which queues come up.
  */
-export function deletePerson(id: string, db: SqliteDatabase = bookOfRecord()): boolean {
-  forgetMember('person', id, db);
-  const result = prepareChecked(db, 'DELETE FROM people WHERE id = :id').run({ id });
-  return Number(result.changes) > 0;
+export function deletePerson(
+  id: string,
+  db: SqliteDatabase = bookOfRecord(),
+): boolean {
+  forgetMember("person", id, db)
+  const result = prepareChecked(
+    db,
+    "DELETE FROM people WHERE id = :id",
+  ).run({ id })
+  return Number(result.changes) > 0
 }
 
 // ── Groups as saved sets of people ────────────────────────────────────────────────────── //
@@ -224,22 +272,30 @@ export function groupPersonIds(
 ): string[] {
   return prepareChecked<{ person_id: string }>(
     db,
-    'SELECT person_id FROM group_people WHERE group_id = :group_id ORDER BY position, person_id',
+    "SELECT person_id FROM group_people WHERE group_id = :group_id ORDER BY position, person_id",
   )
     .all({ group_id: groupId })
-    .map((row) => row.person_id);
+    .map((row) => row.person_id)
 }
 
 /** Every group's roster at once, keyed by group id. */
-export function rostersByGroup(db: SqliteDatabase = bookOfRecord()): Map<string, string[]> {
-  const out = new Map<string, string[]>();
-  for (const row of prepareChecked<{ group_id: string; person_id: string }>(
+export function rostersByGroup(
+  db: SqliteDatabase = bookOfRecord(),
+): Map<string, string[]> {
+  const out = new Map<string, string[]>()
+  for (const row of prepareChecked<{
+    group_id: string
+    person_id: string
+  }>(
     db,
-    'SELECT group_id, person_id FROM group_people ORDER BY group_id, position, person_id',
+    "SELECT group_id, person_id FROM group_people ORDER BY group_id, position, person_id",
   ).all()) {
-    out.set(row.group_id, [...(out.get(row.group_id) ?? []), row.person_id]);
+    out.set(row.group_id, [
+      ...(out.get(row.group_id) ?? []),
+      row.person_id,
+    ])
   }
-  return out;
+  return out
 }
 
 /**
@@ -253,7 +309,11 @@ export function groupRoster(
   groupId: string,
   db: SqliteDatabase = bookOfRecord(),
 ): GroupRosterMember[] {
-  return prepareChecked<{ person_id: string; role: string; position: number }>(
+  return prepareChecked<{
+    person_id: string
+    role: string
+    position: number
+  }>(
     db,
     "SELECT person_id, role, position FROM group_people WHERE group_id = :group_id " +
       "ORDER BY CASE role WHEN 'required' THEN 0 ELSE 1 END, position, person_id",
@@ -262,23 +322,23 @@ export function groupRoster(
     .map((row) => ({
       personId: row.person_id,
       position: row.position,
-      role: isMemberRole(row.role) ? row.role : 'required',
-    }));
+      role: isMemberRole(row.role) ? row.role : "required",
+    }))
 }
 
 /** Every group's roster with roles, keyed by group id. The whole-page read. */
 export function rosterMembersByGroup(
   db: SqliteDatabase = bookOfRecord(),
 ): Map<string, GroupRosterMember[]> {
-  const out = new Map<string, GroupRosterMember[]>();
+  const out = new Map<string, GroupRosterMember[]>()
   for (const row of prepareChecked<{
-    group_id: string;
-    person_id: string;
-    position: number;
-    role: string;
+    group_id: string
+    person_id: string
+    position: number
+    role: string
   }>(
     db,
-    'SELECT group_id, person_id, role, position FROM group_people ' +
+    "SELECT group_id, person_id, role, position FROM group_people " +
       "ORDER BY group_id, CASE role WHEN 'required' THEN 0 ELSE 1 END, position, person_id",
   ).all()) {
     out.set(row.group_id, [
@@ -286,11 +346,13 @@ export function rosterMembersByGroup(
       {
         personId: row.person_id,
         position: row.position,
-        role: isMemberRole(row.role) ? row.role : 'required',
+        role: isMemberRole(row.role)
+          ? row.role
+          : "required",
       },
-    ]);
+    ])
   }
-  return out;
+  return out
 }
 
 /**
@@ -309,40 +371,59 @@ export function setGroupPeople(
   members: readonly (string | GroupRosterMember)[],
   db: SqliteDatabase = bookOfRecord(),
 ): void {
-  const roster: GroupRosterMember[] = members.map((member, index) =>
-    typeof member === 'string'
-      ? { personId: member, position: index, role: 'required' }
-      : {
-          personId: String(member.personId ?? '').trim(),
-          position: index,
-          role: isMemberRole(member.role) ? member.role : 'required',
-        },
-  );
+  const roster: GroupRosterMember[] = members.map(
+    (member, index) =>
+      typeof member === "string"
+        ? {
+            personId: member,
+            position: index,
+            role: "required",
+          }
+        : {
+            personId: String(member.personId ?? "").trim(),
+            position: index,
+            role: isMemberRole(member.role)
+              ? member.role
+              : "required",
+          },
+  )
 
   const known = new Set(
-    prepareChecked<{ id: string }>(db, 'SELECT id FROM people').all().map((row) => row.id),
-  );
-  const missing = roster.map((member) => member.personId).filter((id) => !known.has(id));
+    prepareChecked<{ id: string }>(
+      db,
+      "SELECT id FROM people",
+    )
+      .all()
+      .map((row) => row.id),
+  )
+  const missing = roster
+    .map((member) => member.personId)
+    .filter((id) => !known.has(id))
   if (missing.length) {
-    throw new Error(`group '${groupId}' names ${missing.length} unknown person id(s): ${missing.join(', ')}`);
+    throw new Error(
+      `group '${groupId}' names ${missing.length} unknown person id(s): ${missing.join(", ")}`,
+    )
   }
 
-  prepareChecked(db, 'DELETE FROM group_people WHERE group_id = :group_id').run({
+  prepareChecked(
+    db,
+    "DELETE FROM group_people WHERE group_id = :group_id",
+  ).run({
     group_id: groupId,
-  });
+  })
   const insert = prepareChecked(
     db,
-    'INSERT OR REPLACE INTO group_people (group_id, person_id, position, role) ' +
-      'VALUES (:group_id, :person_id, :position, :role)',
-  );
+    "INSERT OR REPLACE INTO group_people (group_id, person_id, position, role) " +
+      "VALUES (:group_id, :person_id, :position, :role)",
+  )
   roster.forEach((member, position) => {
     insert.run({
       group_id: groupId,
       person_id: member.personId,
       position,
       role: member.role,
-    });
-  });
+    })
+  })
 }
 
 /** Remove the people rule for a group that was deleted from the groups store. */
@@ -350,12 +431,18 @@ export function deleteGroupMembership(
   groupId: string,
   db: SqliteDatabase = bookOfRecord(),
 ): void {
-  prepareChecked(db, 'DELETE FROM group_people WHERE group_id = :group_id').run({
+  prepareChecked(
+    db,
+    "DELETE FROM group_people WHERE group_id = :group_id",
+  ).run({
     group_id: groupId,
-  });
-  prepareChecked(db, 'DELETE FROM group_membership WHERE group_id = :group_id').run({
+  })
+  prepareChecked(
+    db,
+    "DELETE FROM group_membership WHERE group_id = :group_id",
+  ).run({
     group_id: groupId,
-  });
+  })
 }
 
 /**
@@ -371,21 +458,26 @@ export function groupMinPresent(
 ): number | null {
   const row = prepareChecked<{ min_present: number }>(
     db,
-    'SELECT min_present FROM group_membership WHERE group_id = :group_id',
-  ).get({ group_id: groupId });
-  return row ? Number(row.min_present) : null;
+    "SELECT min_present FROM group_membership WHERE group_id = :group_id",
+  ).get({ group_id: groupId })
+  return row ? Number(row.min_present) : null
 }
 
 /** Every group's rule at once, keyed by group id. Only groups that HAVE one appear. */
-export function minPresentByGroup(db: SqliteDatabase = bookOfRecord()): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const row of prepareChecked<{ group_id: string; min_present: number }>(
+export function minPresentByGroup(
+  db: SqliteDatabase = bookOfRecord(),
+): Map<string, number> {
+  const out = new Map<string, number>()
+  for (const row of prepareChecked<{
+    group_id: string
+    min_present: number
+  }>(
     db,
-    'SELECT group_id, min_present FROM group_membership',
+    "SELECT group_id, min_present FROM group_membership",
   ).all()) {
-    out.set(row.group_id, Number(row.min_present));
+    out.set(row.group_id, Number(row.min_present))
   }
-  return out;
+  return out
 }
 
 /** Set (or with `null`, clear) one group's rule. Clearing DELETES the row rather than storing
@@ -397,19 +489,24 @@ export function setGroupMinPresent(
   db: SqliteDatabase = bookOfRecord(),
 ): void {
   if (minPresent == null) {
-    prepareChecked(db, 'DELETE FROM group_membership WHERE group_id = :group_id').run({
+    prepareChecked(
+      db,
+      "DELETE FROM group_membership WHERE group_id = :group_id",
+    ).run({
       group_id: groupId,
-    });
-    return;
+    })
+    return
   }
-  const value = Number(minPresent);
+  const value = Number(minPresent)
   if (!Number.isInteger(value) || value < 1) {
-    throw new Error('"at least N" must be a whole number of 1 or more');
+    throw new Error(
+      '"at least N" must be a whole number of 1 or more',
+    )
   }
   prepareChecked(
     db,
-    'INSERT OR REPLACE INTO group_membership (group_id, min_present) VALUES (:group_id, :min_present)',
-  ).run({ group_id: groupId, min_present: value });
+    "INSERT OR REPLACE INTO group_membership (group_id, min_present) VALUES (:group_id, :min_present)",
+  ).run({ group_id: groupId, min_present: value })
 }
 
 /** One group's whole WP-5 rule: the roster with roles, and the number over it. */
@@ -421,7 +518,7 @@ export function groupMembership(
     groupId,
     minPresent: groupMinPresent(groupId, db),
     roster: groupRoster(groupId, db),
-  };
+  }
 }
 
 /**
@@ -432,27 +529,32 @@ export function groupMembership(
  * look orphaned. Callers must treat a non-empty answer as a thing to LOOK AT, never as a thing
  * to delete.
  */
-export function orphanGroupIds(db: SqliteDatabase = bookOfRecord()): string[] {
+export function orphanGroupIds(
+  db: SqliteDatabase = bookOfRecord(),
+): string[] {
   return prepareChecked<{ group_id: string }>(
     db,
-    'SELECT DISTINCT gp.group_id FROM group_people gp ' +
-      'LEFT JOIN groups g ON g.id = gp.group_id WHERE g.id IS NULL ORDER BY gp.group_id',
+    "SELECT DISTINCT gp.group_id FROM group_people gp " +
+      "LEFT JOIN groups g ON g.id = gp.group_id WHERE g.id IS NULL ORDER BY gp.group_id",
   )
     .all()
-    .map((row) => row.group_id);
+    .map((row) => row.group_id)
 }
 
 // ── bookkeeping ───────────────────────────────────────────────────────────────────────── //
 
 /** Record that the people store changed. Call INSIDE the transaction that wrote the rows. */
-export const bumpPeopleVersion = (db: SqliteDatabase = bookOfRecord()): void =>
-  bumpVersion(db, 'people');
+export const bumpPeopleVersion = (
+  db: SqliteDatabase = bookOfRecord(),
+): void => bumpVersion(db, "people")
 
-export const readPeopleMeta = (key: string, db: SqliteDatabase = bookOfRecord()): string | null =>
-  readMeta(db, 'people', key);
+export const readPeopleMeta = (
+  key: string,
+  db: SqliteDatabase = bookOfRecord(),
+): string | null => readMeta(db, "people", key)
 
 export const writePeopleMeta = (
   key: string,
   value: string | null,
   db: SqliteDatabase = bookOfRecord(),
-): void => writeMeta(db, 'people', key, value);
+): void => writeMeta(db, "people", key, value)

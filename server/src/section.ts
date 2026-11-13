@@ -29,13 +29,13 @@
 // inserts after the currently-playing item. So a located row is checked against the LIVE
 // playQueue before it is used, and an ambiguous reading declines rather than guessing — a
 // section seek on the wrong occurrence is a worse outcome than no section at all.
-import type { PlexPlayItem } from './types.js';
+import type { PlexPlayItem } from "./types.js"
 
 /** How long a recorded boundary stays claimable by `takeBoundary()`. */
-const BOUNDARY_TTL_MS = 120_000;
+const BOUNDARY_TTL_MS = 120_000
 
 /** How many times a section start may be declined before it is given up on. */
-const START_ATTEMPTS = 8;
+const START_ATTEMPTS = 8
 
 /**
  * The two fields `engine/resolve.ts sectionOf()` stamps on the FIRST unit an entry
@@ -43,63 +43,63 @@ const START_ATTEMPTS = 8;
  */
 export interface SectionFields {
   /** Where the first played unit BEGINS. Null = the beginning of the unit. */
-  sectionStartMs?: number | null;
+  sectionStartMs?: number | null
   /** Where it STOPS, at which point the lineup advances. Null = the end of the unit. */
-  sectionEndMs?: number | null;
+  sectionEndMs?: number | null
 }
 
 /** What `sectionPlan()` reads off one lineup item. */
 export interface SectionCandidate extends SectionFields {
-  ratingKey?: string | number | null;
-  duration?: number | null;
+  ratingKey?: string | number | null
+  duration?: number | null
   /** Which queue LINE this item came from — see `EntryExtras.id` / `queues.entryKey()`. */
-  queueEntryKey?: string | undefined;
+  queueEntryKey?: string | undefined
   /** True when completion belongs to QueuePilot's private ledger, not the provider's. */
-  queueOwnHistory?: boolean | undefined;
+  queueOwnHistory?: boolean | undefined
 }
 
 /** One row of the plan: what to do to the item at one playQueue index. */
 export interface SectionRow {
-  ratingKey: string;
+  ratingKey: string
   /** Null when there is nothing to seek to — no `start`, a `start` of 0, or the head's start
    *  already went out as playMedia's `offset`. */
-  startMs: number | null;
+  startMs: number | null
   /** Null when the unit plays to its natural end. */
-  endMs: number | null;
-  entryKey: string | null;
-  isOwnHistory: boolean;
+  endMs: number | null
+  entryKey: string | null
+  isOwnHistory: boolean
   /** Set once the start has been seeked, given up on, or was never needed. */
-  isStartDone: boolean;
+  isStartDone: boolean
   /** Set once this row has nothing left to do. `pendingCount()` counts the rest. */
-  isDone: boolean;
+  isDone: boolean
   /** Declines so far, so a viewer who is deliberately past the start is not fought forever. */
-  attempts: number;
+  attempts: number
 }
 
 /** Where the player is in the LIVE playQueue — `playback.readPlayQueue()`'s answer. */
 export interface PlayQueuePlace {
-  index: number;
-  ratingKeys: readonly string[];
+  index: number
+  ratingKeys: readonly string[]
 }
 
 /** One observed `/status/sessions` reading. Same shape `resume.ts` reads. */
 export interface ObservedPosition {
-  ratingKey?: string | number | null;
-  viewOffset?: number | null;
+  ratingKey?: string | number | null
+  viewOffset?: number | null
 }
 
 /** What `consider()` decided, and why. Every `reason` is logged verbatim. */
 export interface SectionDecision {
-  action: 'seek' | 'next' | 'wait' | 'none';
-  reason: string;
+  action: "seek" | "next" | "wait" | "none"
+  reason: string
   /** Set on `seek`: the millisecond offset to seek to. */
-  ms?: number;
+  ms?: number
   /** Set on `wait`: how long until the end mark, at the observed rate. */
-  dueInMs?: number;
-  index?: number;
-  rk?: string;
+  dueInMs?: number
+  index?: number
+  rk?: string
   /** Set when the decline is provisional and the next read should reconsider. */
-  retry?: boolean;
+  retry?: boolean
   /**
    * The lineup DOES window this file, and the window here is already spent.
    *
@@ -108,7 +108,7 @@ export interface SectionDecision {
    * row, falls through, and a resume marker drags the viewer back out of the section that was
    * just set up. A spent window is quiet — it is the steady state for the rest of the item.
    */
-  isSpent?: boolean;
+  isSpent?: boolean
 }
 
 /**
@@ -133,11 +133,15 @@ export function headStartOffsetMs(
   resumeOffsetMs: number,
   { playsSections }: { playsSections: boolean },
 ): number {
-  const fallback = Math.max(0, Math.round(Number(resumeOffsetMs) || 0));
-  if (!playsSections || !head) return fallback;
-  if (head.sectionStartMs != null) return Math.max(0, Math.round(head.sectionStartMs));
-  if (head.sectionEndMs != null) return 0;
-  return fallback;
+  const fallback = Math.max(
+    0,
+    Math.round(Number(resumeOffsetMs) || 0),
+  )
+  if (!playsSections || !head) return fallback
+  if (head.sectionStartMs != null)
+    return Math.max(0, Math.round(head.sectionStartMs))
+  if (head.sectionEndMs != null) return 0
+  return fallback
 }
 
 /**
@@ -158,42 +162,62 @@ export function headStartOffsetMs(
  */
 export function sectionPlan(
   items: readonly SectionCandidate[] | null | undefined,
-  { isHeadStartApplied = false, playsSections = true }: {
-    isHeadStartApplied?: boolean;
-    playsSections?: boolean;
+  {
+    isHeadStartApplied = false,
+    playsSections = true,
+  }: {
+    isHeadStartApplied?: boolean
+    playsSections?: boolean
   } = {},
 ): Map<number, SectionRow> {
-  const plan = new Map<number, SectionRow>();
-  if (!playsSections) return plan;
-  (items || []).forEach((item, index) => {
-    if (!item || item.ratingKey == null) return;
-    const duration = Math.max(0, Number(item.duration) || 0);
-    let startMs = item.sectionStartMs != null ? Math.max(0, Math.round(item.sectionStartMs)) : null;
-    let endMs = item.sectionEndMs != null ? Math.max(0, Math.round(item.sectionEndMs)) : null;
-    if (startMs != null && duration > 0 && startMs >= duration) startMs = null;
-    if (endMs != null && duration > 0 && endMs >= duration) endMs = null;
+  const plan = new Map<number, SectionRow>()
+  if (!playsSections) return plan
+  ;(items || []).forEach((item, index) => {
+    if (!item || item.ratingKey == null) return
+    const duration = Math.max(0, Number(item.duration) || 0)
+    let startMs =
+      item.sectionStartMs != null
+        ? Math.max(0, Math.round(item.sectionStartMs))
+        : null
+    let endMs =
+      item.sectionEndMs != null
+        ? Math.max(0, Math.round(item.sectionEndMs))
+        : null
+    if (
+      startMs != null &&
+      duration > 0 &&
+      startMs >= duration
+    )
+      startMs = null
+    if (endMs != null && duration > 0 && endMs >= duration)
+      endMs = null
     // A start of 0 IS the default, and `playback.seekTo()` refuses a non-positive offset
     // anyway. Nothing to do is not the same as no section — the row may still carry an end.
-    if (startMs != null && startMs <= 0) startMs = null;
-    if (startMs == null && endMs == null) return;
-    const isHead = index === 0;
+    if (startMs != null && startMs <= 0) startMs = null
+    if (startMs == null && endMs == null) return
+    const isHead = index === 0
     plan.set(index, {
       ratingKey: String(item.ratingKey),
-      startMs: isHead && isHeadStartApplied ? null : startMs,
+      startMs:
+        isHead && isHeadStartApplied ? null : startMs,
       endMs,
       entryKey: item.queueEntryKey ?? null,
       isOwnHistory: item.queueOwnHistory === true,
-      isStartDone: isHead && isHeadStartApplied ? true : startMs == null,
+      isStartDone:
+        isHead && isHeadStartApplied
+          ? true
+          : startMs == null,
       isDone: false,
       attempts: 0,
-    });
-  });
+    })
+  })
   // A row with nothing left to do at build time (the head's start went out with playMedia and
   // it has no end) is not a pending row.
   for (const [index, row] of plan) {
-    if (row.isStartDone && row.endMs == null) plan.delete(index);
+    if (row.isStartDone && row.endMs == null)
+      plan.delete(index)
   }
-  return plan;
+  return plan
 }
 
 // --- the armed plan ------------------------------------------------------------ //
@@ -201,28 +225,35 @@ export function sectionPlan(
 // A session is a fresh scan, so arming replaces the plan wholesale — a re-scan must never
 // inherit the previous lineup's pending windows.
 
-const ARMED: { plan: Map<number, SectionRow>; setName: string | null } = {
-  plan: new Map(), setName: null,
-};
+const ARMED: {
+  plan: Map<number, SectionRow>
+  setName: string | null
+} = {
+  plan: new Map(),
+  setName: null,
+}
 
-export function arm({ plan = null, setName = null }: {
-  plan?: Map<number, SectionRow> | null;
-  setName?: string | null;
+export function arm({
+  plan = null,
+  setName = null,
+}: {
+  plan?: Map<number, SectionRow> | null
+  setName?: string | null
 } = {}): number {
-  ARMED.plan = plan instanceof Map ? plan : new Map();
-  ARMED.setName = setName;
-  return ARMED.plan.size;
+  ARMED.plan = plan instanceof Map ? plan : new Map()
+  ARMED.setName = setName
+  return ARMED.plan.size
 }
 
 export function disarm(): void {
-  ARMED.plan = new Map();
-  ARMED.setName = null;
+  ARMED.plan = new Map()
+  ARMED.setName = null
 }
 
-export const armedCount = (): number => ARMED.plan.size;
-export const pendingCount = (): number => (
-  [...ARMED.plan.values()].filter((row) => !row.isDone).length
-);
+export const armedCount = (): number => ARMED.plan.size
+export const pendingCount = (): number =>
+  [...ARMED.plan.values()].filter((row) => !row.isDone)
+    .length
 
 /**
  * Would locating this ratingKey need the live playQueue?
@@ -232,12 +263,13 @@ export const pendingCount = (): number => (
  * adds nothing. Two pending rows for one file is the case `selectedOffset` exists for.
  */
 export function isAmbiguous(ratingKey: string): boolean {
-  let seen = 0;
+  let seen = 0
   for (const row of ARMED.plan.values()) {
-    if (!row.isDone && row.ratingKey === ratingKey) seen += 1;
-    if (seen > 1) return true;
+    if (!row.isDone && row.ratingKey === ratingKey)
+      seen += 1
+    if (seen > 1) return true
   }
-  return false;
+  return false
 }
 
 /**
@@ -254,16 +286,17 @@ export function isAmbiguous(ratingKey: string): boolean {
  * missing resume point is recoverable; a completion silently undone is not.
  */
 export function isWindowed(ratingKey: string): boolean {
-  for (const row of ARMED.plan.values()) if (row.ratingKey === ratingKey) return true;
-  return false;
+  for (const row of ARMED.plan.values())
+    if (row.ratingKey === ratingKey) return true
+  return false
 }
 
 /** Every pending row BEFORE `index` is behind the player now, so it will never fire. */
 function retirePassed(index: number): void {
   for (const [at, row] of ARMED.plan) {
     if (at < index && !row.isDone) {
-      row.isDone = true;
-      row.isStartDone = true;
+      row.isDone = true
+      row.isStartDone = true
     }
   }
 }
@@ -272,19 +305,31 @@ function retirePassed(index: number): void {
 function locate(
   ratingKey: string,
   place: PlayQueuePlace | null | undefined,
-): { index: number; row: SectionRow } | { index: null; reason: string; retry?: boolean } {
-  const named = place && place.index >= 0 ? ARMED.plan.get(place.index) : undefined;
+):
+  | { index: number; row: SectionRow }
+  | { index: null; reason: string; retry?: boolean } {
+  const named =
+    place && place.index >= 0
+      ? ARMED.plan.get(place.index)
+      : undefined
   // The live playQueue's own answer, checked against what it is actually holding at that
   // index — Plex reorders, drops what a token cannot see, and a top-up inserts mid-queue.
-  if (place && named && !named.isDone && named.ratingKey === ratingKey
-    && (place.ratingKeys[place.index] == null || place.ratingKeys[place.index] === ratingKey)) {
-    return { index: place.index, row: named };
+  if (
+    place &&
+    named &&
+    !named.isDone &&
+    named.ratingKey === ratingKey &&
+    (place.ratingKeys[place.index] == null ||
+      place.ratingKeys[place.index] === ratingKey)
+  ) {
+    return { index: place.index, row: named }
   }
-  const candidates = [...ARMED.plan.entries()]
-    .filter(([, row]) => !row.isDone && row.ratingKey === ratingKey);
+  const candidates = [...ARMED.plan.entries()].filter(
+    ([, row]) => !row.isDone && row.ratingKey === ratingKey,
+  )
   if (candidates.length === 1) {
-    const [index, row] = candidates[0]!;
-    return { index, row };
+    const [index, row] = candidates[0]!
+    return { index, row }
   }
   if (candidates.length > 1) {
     return {
@@ -294,9 +339,12 @@ function locate(
       // playQueue read was simply late.
       reason: `${candidates.length} windows name rk=${ratingKey} and the playQueue index did not pick one`,
       retry: true,
-    };
+    }
   }
-  return { index: null, reason: 'no window at this position' };
+  return {
+    index: null,
+    reason: "no window at this position",
+  }
 }
 
 /**
@@ -309,34 +357,46 @@ export function consider(
   session: ObservedPosition | null | undefined,
   place: PlayQueuePlace | null = null,
 ): SectionDecision {
-  if (!ARMED.plan.size) return { action: 'none', reason: 'no section plan' };
-  if (!session || session.ratingKey == null) return { action: 'none', reason: 'nothing playing' };
-  const rk = String(session.ratingKey);
-  const found = locate(rk, place);
+  if (!ARMED.plan.size)
+    return { action: "none", reason: "no section plan" }
+  if (!session || session.ratingKey == null)
+    return { action: "none", reason: "nothing playing" }
+  const rk = String(session.ratingKey)
+  const found = locate(rk, place)
   if (found.index == null) {
-    const out: SectionDecision = { action: 'none', reason: found.reason, rk };
-    if (found.retry) out.retry = true;
+    const out: SectionDecision = {
+      action: "none",
+      reason: found.reason,
+      rk,
+    }
+    if (found.retry) out.retry = true
     // No live row, but this lineup DOES window this file — its window here is spent. The
     // resume plan still must not touch it: a section owns its item for the whole sitting.
-    else if (isWindowed(rk)) out.isSpent = true;
-    return out;
+    else if (isWindowed(rk)) out.isSpent = true
+    return out
   }
-  const { index, row } = found;
+  const { index, row } = found
   // The player is at `index`, so anything earlier is behind it. That is how a window whose
   // `end` sat past the item's real runtime stops holding the watcher open.
-  retirePassed(index);
-  const position = Math.max(0, Number(session.viewOffset) || 0);
+  retirePassed(index)
+  const position = Math.max(
+    0,
+    Number(session.viewOffset) || 0,
+  )
 
   if (!row.isStartDone && row.startMs != null) {
     if (position < row.startMs) {
-      row.isStartDone = true;
-      if (row.endMs == null) row.isDone = true;
+      row.isStartDone = true
+      if (row.endMs == null) row.isDone = true
       return {
-        action: 'seek', ms: row.startMs, index, rk,
+        action: "seek",
+        ms: row.startMs,
+        index,
+        rk,
         reason: `section start at ${Math.round(row.startMs / 1000)}s`,
-      };
+      }
     }
-    row.attempts += 1;
+    row.attempts += 1
     // At the moment of an advance /status/sessions can still report the PREVIOUS item's
     // position against the new ratingKey — recorded live in resume.ts, where one episode's
     // first sighting carried the previous one's 895 s. So a reading past the start is
@@ -345,40 +405,55 @@ export function consider(
     // once the attempts run out.
     if (row.attempts < START_ATTEMPTS) {
       return {
-        action: 'none', retry: true, index, rk,
+        action: "none",
+        retry: true,
+        index,
+        rk,
         reason: `${Math.round(position / 1000)}s in, already past the ${Math.round(row.startMs / 1000)}s section start`,
-      };
+      }
     }
-    row.isStartDone = true;
-    if (row.endMs == null) row.isDone = true;
+    row.isStartDone = true
+    if (row.endMs == null) row.isDone = true
     return {
-      action: 'none', index, rk,
+      action: "none",
+      index,
+      rk,
       reason: `gave up on the section start — ${Math.round(position / 1000)}s in after ${row.attempts} reads`,
-    };
+    }
   }
 
   if (row.endMs == null) {
-    row.isDone = true;
-    return { action: 'none', index, rk, reason: 'the window is handled' };
+    row.isDone = true
+    return {
+      action: "none",
+      index,
+      rk,
+      reason: "the window is handled",
+    }
   }
 
   if (position >= row.endMs) {
-    row.isDone = true;
+    row.isDone = true
     recordBoundary(rk, {
       entryKey: row.entryKey,
       setName: ARMED.setName,
       isOwnHistory: row.isOwnHistory,
-    });
+    })
     return {
-      action: 'next', index, rk,
+      action: "next",
+      index,
+      rk,
       reason: `section end at ${Math.round(row.endMs / 1000)}s reached (${Math.round(position / 1000)}s)`,
-    };
+    }
   }
 
   return {
-    action: 'wait', index, rk, dueInMs: row.endMs - position,
+    action: "wait",
+    index,
+    rk,
+    dueInMs: row.endMs - position,
     reason: `${Math.round((row.endMs - position) / 1000)}s until the section ends`,
-  };
+  }
 }
 
 // --- the boundary ledger ------------------------------------------------------- //
@@ -403,24 +478,34 @@ export function consider(
 
 /** One recorded stop-and-advance, waiting for `finished.ts` to attribute it. */
 export interface Boundary {
-  entryKey: string | null;
-  setName: string | null;
-  isOwnHistory: boolean;
-  at: number;
+  entryKey: string | null
+  setName: string | null
+  isOwnHistory: boolean
+  at: number
 }
 
-const BOUNDARIES = new Map<string, Boundary>();
+const BOUNDARIES = new Map<string, Boundary>()
 
 export function recordBoundary(
   ratingKey: string,
-  { entryKey, setName, isOwnHistory, now = Date.now }: {
-    entryKey: string | null;
-    setName: string | null;
-    isOwnHistory: boolean;
-    now?: () => number;
+  {
+    entryKey,
+    setName,
+    isOwnHistory,
+    now = Date.now,
+  }: {
+    entryKey: string | null
+    setName: string | null
+    isOwnHistory: boolean
+    now?: () => number
   },
 ): void {
-  BOUNDARIES.set(String(ratingKey), { entryKey, setName, isOwnHistory, at: now() });
+  BOUNDARIES.set(String(ratingKey), {
+    entryKey,
+    setName,
+    isOwnHistory,
+    at: now(),
+  })
 }
 
 /**
@@ -434,21 +519,21 @@ export function takeBoundary(
   ratingKey: string,
   { now = Date.now }: { now?: () => number } = {},
 ): Boundary | null {
-  const key = String(ratingKey);
-  const found = BOUNDARIES.get(key);
-  if (!found) return null;
-  BOUNDARIES.delete(key);
-  return now() - found.at > BOUNDARY_TTL_MS ? null : found;
+  const key = String(ratingKey)
+  const found = BOUNDARIES.get(key)
+  if (!found) return null
+  BOUNDARIES.delete(key)
+  return now() - found.at > BOUNDARY_TTL_MS ? null : found
 }
 
 export function forgetBoundaries(): void {
-  BOUNDARIES.clear();
+  BOUNDARIES.clear()
 }
 
 /** Test seam — the armed plan and the boundary ledger, for harnesses that assert on them. */
-export const _internals = { ARMED, BOUNDARIES };
+export const _internals = { ARMED, BOUNDARIES }
 
 /** Narrow a lineup item to the fields this file reads, without a cast at every call site. */
-export const asCandidate = (item: PlexPlayItem): SectionCandidate => (
-  item as unknown as SectionCandidate
-);
+export const asCandidate = (
+  item: PlexPlayItem,
+): SectionCandidate => item as unknown as SectionCandidate

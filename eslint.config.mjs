@@ -80,5 +80,7 @@ export default defineConfig(
   },
   // Again after the block above, so files that may declare several
   // components (tests, stories, icon modules) stay exempt.
-  createStoryOverrides({ files: MULTI_COMPONENT_FILE_GLOBS }),
+  createStoryOverrides({
+    files: MULTI_COMPONENT_FILE_GLOBS,
+  }),
 )

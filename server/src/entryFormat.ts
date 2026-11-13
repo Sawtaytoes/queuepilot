@@ -23,11 +23,12 @@
 // This is its own module rather than part of `queues.ts` so the engine (`engine/resolve.ts`)
 // can state the rule without importing the whole YAML write-side, which would put a cycle
 // through `sets.ts` and the provider registry.
-import { randomBytes } from 'node:crypto';
-import type { EntryObject, EntryValue } from './types.js';
+import { randomBytes } from "node:crypto"
+import type { EntryObject, EntryValue } from "./types.js"
 
 /** `Collection: <name>` — the older, string-encoded spelling of a collection entry. */
-export const COLLECTION_PREFIX_RE = /^\s*collection:\s*(.+)$/i;
+export const COLLECTION_PREFIX_RE =
+  /^\s*collection:\s*(.+)$/i
 
 /**
  * Is this the legacy SCALAR entry form — a bare string or number where a mapping belongs?
@@ -35,9 +36,11 @@ export const COLLECTION_PREFIX_RE = /^\s*collection:\s*(.+)$/i;
  * `null`/`undefined` is not a legacy scalar; it is nothing at all, and `entryKey()` already
  * drops it. An ARRAY is: it is not a mapping, and it was never a valid entry either.
  */
-export function isLegacyScalarEntry(value: unknown): boolean {
-  if (value == null) return false;
-  return typeof value !== 'object' || Array.isArray(value);
+export function isLegacyScalarEntry(
+  value: unknown,
+): boolean {
+  if (value == null) return false
+  return typeof value !== "object" || Array.isArray(value)
 }
 
 /**
@@ -53,21 +56,39 @@ export function isLegacyScalarEntry(value: unknown): boolean {
  * normalizes that one; a write path must not, or an edit to an unrelated field would silently
  * re-shape a line the owner never touched.
  */
-export function toEntryObject(value: EntryValue): EntryObject {
-  if (value != null && typeof value === 'object' && !Array.isArray(value)) return value;
-  const s = String(value).trim();
-  if (/^\d+$/.test(s)) return { ratingKey: typeof value === 'number' ? value : s };
-  const coll = COLLECTION_PREFIX_RE.exec(s)?.[1];
-  if (coll !== undefined) return { collection: coll.trim() };
-  return { title: String(value) };
+export function toEntryObject(
+  value: EntryValue,
+): EntryObject {
+  if (
+    value != null &&
+    typeof value === "object" &&
+    !Array.isArray(value)
+  )
+    return value
+  const s = String(value).trim()
+  if (/^\d+$/.test(s))
+    return {
+      ratingKey: typeof value === "number" ? value : s,
+    }
+  const coll = COLLECTION_PREFIX_RE.exec(s)?.[1]
+  if (coll !== undefined) return { collection: coll.trim() }
+  return { title: String(value) }
 }
 
 /** The named complaint a legacy scalar earns, for a log line or an error message. */
-export function legacyEntryMessage(setName: string, index: number, value: unknown): string {
-  const shown = JSON.stringify(value);
-  const want = JSON.stringify(toEntryObject(value as EntryValue));
-  return `${setName}[${index}] ${shown} is a bare ${typeof value}. A queue entry is a mapping `
-    + `since 2026-08-21 — write ${want} instead. This entry is NOT played until it is fixed.`;
+export function legacyEntryMessage(
+  setName: string,
+  index: number,
+  value: unknown,
+): string {
+  const shown = JSON.stringify(value)
+  const want = JSON.stringify(
+    toEntryObject(value as EntryValue),
+  )
+  return (
+    `${setName}[${index}] ${shown} is a bare ${typeof value}. A queue entry is a mapping ` +
+    `since 2026-08-21 — write ${want} instead. This entry is NOT played until it is fixed.`
+  )
 }
 
 // --- the optional entry `id` (2026-09-01) ------------------------------------- //
@@ -91,11 +112,16 @@ export function legacyEntryMessage(setName: string, index: number, value: unknow
  * all-digit id, and both `entryKey()` copies must agree on the spelling.
  */
 export function entryIdOf(value: unknown): string | null {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const raw = (value as { id?: unknown }).id;
-  if (raw == null) return null;
-  const id = String(raw).trim();
-  return id ? id : null;
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
+    return null
+  const raw = (value as { id?: unknown }).id
+  if (raw == null) return null
+  const id = String(raw).trim()
+  return id ? id : null
 }
 
 /**
@@ -106,8 +132,8 @@ export function entryIdOf(value: unknown): string | null {
  * no escaping. It is also read in hand-edited YAML over SMB, so it has to be short enough to
  * copy by eye — six characters, the length the design doc's example uses.
  */
-const ID_ALPHABET = '0123456789abcdef';
-const ID_LENGTH = 6;
+const ID_ALPHABET = "0123456789abcdef"
+const ID_LENGTH = 6
 
 /**
  * A short opaque id no entry in `taken` already uses.
@@ -123,19 +149,26 @@ const ID_LENGTH = 6;
  * whose type depends on which six characters came out of the generator is a trap for the next
  * reader.
  */
-export function mintEntryId(taken: ReadonlySet<string>): string {
-  for (let length = ID_LENGTH; length <= ID_LENGTH + 6; length += 1) {
+export function mintEntryId(
+  taken: ReadonlySet<string>,
+): string {
+  for (
+    let length = ID_LENGTH;
+    length <= ID_LENGTH + 6;
+    length += 1
+  ) {
     for (let attempt = 0; attempt < 32; attempt += 1) {
-      const bytes = randomBytes(length);
-      let id = '';
-      for (const byte of bytes) id += ID_ALPHABET[byte % ID_ALPHABET.length];
-      if (/^\d+$/.test(id)) continue;
-      if (!taken.has(id)) return id;
+      const bytes = randomBytes(length)
+      let id = ""
+      for (const byte of bytes)
+        id += ID_ALPHABET[byte % ID_ALPHABET.length]
+      if (/^\d+$/.test(id)) continue
+      if (!taken.has(id)) return id
     }
   }
   // Unreachable in practice: 12 hex characters is 48 bits against a file of a few hundred
   // lines. Throwing beats returning a colliding id, which would silently merge two lines.
-  throw new Error('could not mint a unique entry id');
+  throw new Error("could not mint a unique entry id")
 }
 
 // --- the section window (2026-09-01) ------------------------------------------ //
@@ -160,12 +193,19 @@ export function mintEntryId(taken: ReadonlySet<string>): string {
  * body is JSON somebody may have typed. `Math.round` because a millisecond is the smallest
  * unit any of this speaks; a fractional one is a UI rounding artefact, not a finer offset.
  */
-export function toPositionMs(value: unknown): number | null {
-  if (typeof value !== 'number' && typeof value !== 'string') return null;
-  if (typeof value === 'string' && value.trim() === '') return null;
-  const ms = Number(value);
-  if (!Number.isFinite(ms) || ms < 0) return null;
-  return Math.round(ms);
+export function toPositionMs(
+  value: unknown,
+): number | null {
+  if (
+    typeof value !== "number" &&
+    typeof value !== "string"
+  )
+    return null
+  if (typeof value === "string" && value.trim() === "")
+    return null
+  const ms = Number(value)
+  if (!Number.isFinite(ms) || ms < 0) return null
+  return Math.round(ms)
 }
 
 /**
@@ -178,9 +218,14 @@ export function toPositionMs(value: unknown): number | null {
  * and belongs with the writers in `queues.ts`.
  */
 export function hasSection(value: unknown): boolean {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const m = value as { start?: unknown; end?: unknown };
-  return hasPositionMs(m.start) || hasPositionMs(m.end);
+  if (
+    !value ||
+    typeof value !== "object" ||
+    Array.isArray(value)
+  )
+    return false
+  const m = value as { start?: unknown; end?: unknown }
+  return hasPositionMs(m.start) || hasPositionMs(m.end)
 }
 
 /**
@@ -194,8 +239,17 @@ export function hasSection(value: unknown): boolean {
  * `normalizeStart` correctly dropped the key. `''` did the same thing.
  */
 function hasPositionMs(side: unknown): boolean {
-  if (!side || typeof side !== 'object' || Array.isArray(side)) return false;
-  return toPositionMs((side as { position_ms?: unknown }).position_ms) != null;
+  if (
+    !side ||
+    typeof side !== "object" ||
+    Array.isArray(side)
+  )
+    return false
+  return (
+    toPositionMs(
+      (side as { position_ms?: unknown }).position_ms,
+    ) != null
+  )
 }
 
 /**
@@ -211,9 +265,11 @@ export function duplicateEntryMessage(
   value: unknown,
   key: string,
 ): string {
-  const shown = JSON.stringify(value);
-  return `${setName}[${index}] ${shown} repeats the key ${JSON.stringify(key)}, which an `
-    + 'earlier entry in this queue already holds. A key names ONE line since 2026-09-01 — give '
-    + 'this entry an `id:` of its own (any short unique text) so it can be addressed, played '
-    + 'and tracked separately. This entry is NOT played until it is fixed.';
+  const shown = JSON.stringify(value)
+  return (
+    `${setName}[${index}] ${shown} repeats the key ${JSON.stringify(key)}, which an ` +
+    "earlier entry in this queue already holds. A key names ONE line since 2026-09-01 — give " +
+    "this entry an `id:` of its own (any short unique text) so it can be addressed, played " +
+    "and tracked separately. This entry is NOT played until it is fixed."
+  )
 }

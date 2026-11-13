@@ -9,22 +9,33 @@
 //
 // Not configured is not a failure. No token means the upstream cannot be asked, which is the
 // normal state of a container nobody has given credentials to.
-import { bggConfigFromEnv, fetchOwnedRows } from '../import/bgg.js';
-import { applyBoardGameSync } from '../../store/db/boardgameSync.js';
-import { failed, skipped, type CollectionJobResult, type OnProgress } from './types.js';
 
-export async function runSyncBgg(onProgress: OnProgress = () => {}): Promise<CollectionJobResult> {
-  const config = bggConfigFromEnv(process.env);
+import { applyBoardGameSync } from "../../store/db/boardgameSync.js"
+import {
+  bggConfigFromEnv,
+  fetchOwnedRows,
+} from "../import/bgg.js"
+import {
+  type CollectionJobResult,
+  failed,
+  type OnProgress,
+  skipped,
+} from "./types.js"
+
+export async function runSyncBgg(
+  onProgress: OnProgress = () => {},
+): Promise<CollectionJobResult> {
+  const config = bggConfigFromEnv(process.env)
   if (config === null) {
     return skipped(
-      'sync-bgg',
-      'no BoardGameGeek credentials — set BOARD_GAME_GEEK_API_TOKEN and BGG_USERNAME to sync',
-    );
+      "sync-bgg",
+      "no BoardGameGeek credentials — set BOARD_GAME_GEEK_API_TOKEN and BGG_USERNAME to sync",
+    )
   }
 
   try {
-    onProgress('asking the upstream for the collection…');
-    const rows = await fetchOwnedRows(config, onProgress);
+    onProgress("asking the upstream for the collection…")
+    const rows = await fetchOwnedRows(config, onProgress)
 
     // A collection that comes back EMPTY is refused rather than applied. An upstream that
     // answers 200 with nothing in it — a rate limit, a renamed account, a bad token that still
@@ -34,14 +45,14 @@ export async function runSyncBgg(onProgress: OnProgress = () => {}): Promise<Col
       return {
         isOk: false,
         isSkipped: false,
-        name: 'sync-bgg',
+        name: "sync-bgg",
         summary:
-          'the upstream returned an EMPTY collection — refusing to mark every title removed. ' +
-          'Nothing was written.',
-      };
+          "the upstream returned an EMPTY collection — refusing to mark every title removed. " +
+          "Nothing was written.",
+      }
     }
 
-    const report = applyBoardGameSync(rows);
+    const report = applyBoardGameSync(rows)
     return {
       counts: {
         boxes: report.stats.boxes,
@@ -53,13 +64,13 @@ export async function runSyncBgg(onProgress: OnProgress = () => {}): Promise<Col
       },
       isOk: true,
       isSkipped: false,
-      name: 'sync-bgg',
+      name: "sync-bgg",
       summary:
         `${report.stats.games} title(s) in ${report.stats.boxes} box(es); ` +
         `${report.removed.length} removed, ${report.restored.length} restored, ` +
         `${report.leftAlone.length} left alone`,
-    };
+    }
   } catch (error) {
-    return failed('sync-bgg', error);
+    return failed("sync-bgg", error)
   }
 }

@@ -38,12 +38,17 @@
 // * Long waits are `async`/await so a future Node driver can interleave with waitForProfile.
 // * Pure helpers (order index/offset, XML selection parse) are exported for offline unit tests.
 
-import { adbTarget, deviceOperationCancelled } from './deviceScope.js';
-import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
-import type { CancelFlag } from './types.js';
-import { errMessage, isCancelled } from './errors.js';
+import { spawnSync } from "node:child_process"
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+} from "node:fs"
+import path from "node:path"
+import {
+  adbTarget,
+  deviceOperationCancelled,
+} from "./deviceScope.js"
 import {
   ADB_BIN,
   ADB_ENABLED,
@@ -56,48 +61,56 @@ import {
   ADB_PROFILE_ORDER_TTL,
   ADB_RESTART_TO_PICKER,
   ADB_TIMEOUT,
-} from './env.js';
+} from "./env.js"
+import { errMessage, isCancelled } from "./errors.js"
+import type { CancelFlag } from "./types.js"
 
-const PICKER_ACTIVITY = 'PickUserActivity';
-const HOME_ACTIVITY = 'HomeActivityTV';
-const MODAL_ACTIVITY = 'ListDualPaneModalActivity';
-const PLEX_PKG = 'com.plexapp.android';
-export const TITLE_ID = `${PLEX_PKG}:id/title_text`;
-const DUMP_PATH = '/sdcard/queuepilot-ui.xml';
+const PICKER_ACTIVITY = "PickUserActivity"
+const HOME_ACTIVITY = "HomeActivityTV"
+const MODAL_ACTIVITY = "ListDualPaneModalActivity"
+const PLEX_PKG = "com.plexapp.android"
+export const TITLE_ID = `${PLEX_PKG}:id/title_text`
+const DUMP_PATH = "/sdcard/queuepilot-ui.xml"
 
 // How many BACK presses to spend getting from a player/detail screen to Home.
 // Mutable so integration/unit tests can zero them (mirrors adb.py module-level knobs).
-export let MAX_BACKS = 3;
+export const MAX_BACKS = 3
 // The recycler animates the scroll; read back too fast and you sample mid-flight. Kept short
 // because the ~1.9s dump that usually follows is itself far more settling time than the UI needs.
-export let SETTLE = 0.35;
+export const SETTLE = 0.35
 // HomeActivityTV goes foreground before its hubs can take a D-pad press. Hold still this long
 // before walking the sidebar, or the presses land on a screen that is still rendering.
-export let HOME_SETTLE = 2.0;
+export const HOME_SETTLE = 2.0
 // How long to let the panel come up after a WAKEUP before re-reading the foreground.
-export let WAKE_SETTLE = 1.0;
+export const WAKE_SETTLE = 1.0
 // Attempts at Plex's own Switch-user route before falling back to a force-stop.
-export let MAX_MENU_TRIES = 2;
+export const MAX_MENU_TRIES = 2
 
 /**
  * One picker slot's aliases. `profileOrder()` returns a list of these — see its comment for
  * why the picker and plex.tv disagree on what to call the owner.
  */
-type AliasGroup = string[];
+type AliasGroup = string[]
 
 /** What `asGroups()` accepts: the alias-group form, or the pre-alias flat list of names. */
-type OrderLike = readonly (string | readonly string[])[] | null | undefined;
+type OrderLike =
+  | readonly (string | readonly string[])[]
+  | null
+  | undefined
 
 /** A key to press, or `[code, n]` to repeat it n times. */
-type Keycode = string | [string, number];
+type Keycode = string | [string, number]
 
 /** `press()`'s optional trailing options object. */
 interface PressOptions {
   /** Seconds to hold still after the batch lands, for when the NEXT thing is another press. */
-  settle?: number;
+  settle?: number
 }
 
-const sleep = (seconds: number): Promise<void> => new Promise((r) => { setTimeout(r, seconds * 1000); });
+const sleep = (seconds: number): Promise<void> =>
+  new Promise((r) => {
+    setTimeout(r, seconds * 1000)
+  })
 
 // isCancelled now comes from ./errors.js — it is the same isSet-then-is_set probe this
 // module inlined (see CancelFlag in types.ts), so the duck-typing lives in one place.
@@ -121,45 +134,58 @@ function envForAdb(): NodeJS.ProcessEnv {
   // (= `Dict<string>`, i.e. `string | undefined` per key), which is exactly what a
   // `process.env` spread is. Stripping the undefined entries would be a behaviour change for
   // nothing — Node already drops them when it builds the child's environment.
-  const env: NodeJS.ProcessEnv = { ...process.env };
-  const key = ADB_KEY_PATH;
+  const env: NodeJS.ProcessEnv = { ...process.env }
+  const key = ADB_KEY_PATH
   if (key && existsSync(key)) {
-    const keyDir = path.dirname(key);
-    env.HOME = path.dirname(keyDir);
-    env.ANDROID_USER_HOME = keyDir;
-    env.ADB_VENDOR_KEYS = key;
+    const keyDir = path.dirname(key)
+    env.HOME = path.dirname(keyDir)
+    env.ANDROID_USER_HOME = keyDir
+    env.ADB_VENDOR_KEYS = key
   }
-  return env;
+  return env
 }
 
 /** Run an adb command. Returns stdout on success, null on any failure. */
-export function run(args: string[], timeoutSec: number | null = null): string | null {
-  if (!adbTarget() || deviceOperationCancelled()) return null;
-  const timeoutMs = (timeoutSec == null ? ADB_TIMEOUT : timeoutSec) * 1000;
+export function run(
+  args: string[],
+  timeoutSec: number | null = null,
+): string | null {
+  if (!adbTarget() || deviceOperationCancelled())
+    return null
+  const timeoutMs =
+    (timeoutSec == null ? ADB_TIMEOUT : timeoutSec) * 1000
   try {
-    const p = spawnSync(ADB_BIN, ['-s', adbTarget()!, ...args], {
-      encoding: 'utf8',
-      env: envForAdb(),
-      timeout: timeoutMs,
-      // maxBuffer: uiautomator dumps can be a few hundred KB.
-      maxBuffer: 8 * 1024 * 1024,
-    });
+    const p = spawnSync(
+      ADB_BIN,
+      ["-s", adbTarget()!, ...args],
+      {
+        encoding: "utf8",
+        env: envForAdb(),
+        timeout: timeoutMs,
+        // maxBuffer: uiautomator dumps can be a few hundred KB.
+        maxBuffer: 8 * 1024 * 1024,
+      },
+    )
     if (p.error) {
       // spawnSync puts TimeoutExpired-style failures on .error (ETIMEDOUT) or signal.
-      console.log(`[adb] ${args.join(' ')}: ${p.error.message}`);
-      return null;
+      console.log(
+        `[adb] ${args.join(" ")}: ${p.error.message}`,
+      )
+      return null
     }
     if (p.status !== 0) {
-      const err = String(p.stderr || '')
+      const err = String(p.stderr || "")
         .trim()
-        .slice(0, 200);
-      console.log(`[adb] ${args.join(' ')}: rc=${p.status} ${err}`);
-      return null;
+        .slice(0, 200)
+      console.log(
+        `[adb] ${args.join(" ")}: rc=${p.status} ${err}`,
+      )
+      return null
     }
-    return p.stdout ?? '';
+    return p.stdout ?? ""
   } catch (e) {
-    console.log(`[adb] ${args.join(' ')}: ${errMessage(e)}`);
-    return null;
+    console.log(`[adb] ${args.join(" ")}: ${errMessage(e)}`)
+    return null
   }
 }
 
@@ -173,44 +199,55 @@ export function run(args: string[], timeoutSec: number | null = null): string | 
  * Returns null only when adb could not be run at all.
  */
 function deviceState(): string | null {
-  if (!adbTarget() || deviceOperationCancelled()) return null;
+  if (!adbTarget() || deviceOperationCancelled())
+    return null
   try {
-    const p = spawnSync(ADB_BIN, ['-s', adbTarget()!, 'get-state'], {
-      encoding: 'utf8',
-      env: envForAdb(),
-      timeout: ADB_TIMEOUT * 1000,
-    });
-    if (p.error) return null;
-    const text = `${p.stdout ?? ''} ${p.stderr ?? ''}`.toLowerCase();
-    if (/\bunauthorized\b/.test(text)) return 'unauthorized';
-    if (/\boffline\b/.test(text)) return 'offline';
-    return String(p.stdout ?? '').trim() || null;
+    const p = spawnSync(
+      ADB_BIN,
+      ["-s", adbTarget()!, "get-state"],
+      {
+        encoding: "utf8",
+        env: envForAdb(),
+        timeout: ADB_TIMEOUT * 1000,
+      },
+    )
+    if (p.error) return null
+    const text =
+      `${p.stdout ?? ""} ${p.stderr ?? ""}`.toLowerCase()
+    if (/\bunauthorized\b/.test(text)) return "unauthorized"
+    if (/\boffline\b/.test(text)) return "offline"
+    return String(p.stdout ?? "").trim() || null
   } catch (e) {
-    console.log(`[adb] get-state ${adbTarget()}: ${errMessage(e)}`);
-    return null;
+    console.log(
+      `[adb] get-state ${adbTarget()}: ${errMessage(e)}`,
+    )
+    return null
   }
 }
 
 /** `adb connect` then `get-state`. Null when adb itself could not run. */
 function connectOnce(): string | null {
   try {
-    spawnSync(ADB_BIN, ['connect', adbTarget()!], {
-      encoding: 'utf8',
+    spawnSync(ADB_BIN, ["connect", adbTarget()!], {
+      encoding: "utf8",
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
-    });
+    })
   } catch (e) {
-    console.log(`[adb] connect ${adbTarget()}: ${errMessage(e)}`);
-    return null;
+    console.log(
+      `[adb] connect ${adbTarget()}: ${errMessage(e)}`,
+    )
+    return null
   }
-  return deviceState();
+  return deviceState()
 }
 
 /** Idempotent — 'already connected' is success. Returns true if the device is up. */
 export function connect(): boolean {
-  if (!adbTarget() || deviceOperationCancelled()) return false;
-  let state = connectOnce();
-  if (state === 'device') return true;
+  if (!adbTarget() || deviceOperationCancelled())
+    return false
+  let state = connectOnce()
+  if (state === "device") return true
 
   // A WEDGED connection record, and the reason this retry exists. When the Shield reboots
   // (or its adbd restarts) the server keeps an entry for the target in `unauthorized` or
@@ -219,14 +256,19 @@ export function connect(): boolean {
   // whole life of the container. Observed 2026-08-22: 49 consecutive `device unauthorized`
   // failures, every profile-gated play dead, with a key the Shield still trusted. An
   // explicit disconnect is the only thing that drops the record and forces a new handshake.
-  if (state === 'unauthorized' || state === 'offline') {
-    console.log(`[adb] ${adbTarget()} is ${state}; dropping the stale record and re-handshaking`);
-    disconnect();
-    state = connectOnce();
+  if (state === "unauthorized" || state === "offline") {
+    console.log(
+      `[adb] ${adbTarget()} is ${state}; dropping the stale record and re-handshaking`,
+    )
+    disconnect()
+    state = connectOnce()
   }
 
-  if (state !== 'device') console.log(`[adb] ${adbTarget()} is ${state ?? 'unreachable'}`);
-  return state === 'device';
+  if (state !== "device")
+    console.log(
+      `[adb] ${adbTarget()} is ${state ?? "unreachable"}`,
+    )
+  return state === "device"
 }
 
 /**
@@ -237,15 +279,17 @@ export function connect(): boolean {
  * would strand it.
  */
 function disconnect(): void {
-  if (!adbTarget() || deviceOperationCancelled()) return;
+  if (!adbTarget() || deviceOperationCancelled()) return
   try {
-    spawnSync(ADB_BIN, ['disconnect', adbTarget()!], {
-      encoding: 'utf8',
+    spawnSync(ADB_BIN, ["disconnect", adbTarget()!], {
+      encoding: "utf8",
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
-    });
+    })
   } catch (e) {
-    console.log(`[adb] disconnect ${adbTarget()}: ${errMessage(e)}`);
+    console.log(
+      `[adb] disconnect ${adbTarget()}: ${errMessage(e)}`,
+    )
   }
 }
 
@@ -253,10 +297,13 @@ function disconnect(): void {
 export function foregroundActivity(): string | null {
   // No `grep -m1`: closing the pipe early makes dumpsys fail with a broken pipe, which
   // would surface as a command failure. Let it finish and take the first match here.
-  const out = run(['shell', 'dumpsys window | grep mCurrentFocus']);
-  if (!out) return null;
-  const m = out.match(/(\S+\/\S+)\}/);
-  return m ? m[1] ?? null : null;
+  const out = run([
+    "shell",
+    "dumpsys window | grep mCurrentFocus",
+  ])
+  if (!out) return null
+  const m = out.match(/(\S+\/\S+)\}/)
+  return m ? (m[1] ?? null) : null
 }
 
 /**
@@ -269,8 +316,8 @@ export function foregroundActivity(): string | null {
  * exclusive, which is exactly what the 2026-09-23 cold-start scan showed.
  */
 export function isPickerForeground(): boolean {
-  const act = foregroundActivity() || '';
-  return act.includes(PICKER_ACTIVITY);
+  const act = foregroundActivity() || ""
+  return act.includes(PICKER_ACTIVITY)
 }
 
 /**
@@ -281,11 +328,14 @@ export function isPickerForeground(): boolean {
  * the caller as "not known-awake", i.e. wake to be safe.
  */
 export function isAwake(): boolean | null {
-  const out = run(['shell', 'dumpsys power | grep mWakefulness']);
-  if (!out) return null;
-  const m = out.match(/mWakefulness=(\w+)/);
-  if (!m) return null;
-  return (m[1] ?? '').trim().toLowerCase() === 'awake';
+  const out = run([
+    "shell",
+    "dumpsys power | grep mWakefulness",
+  ])
+  if (!out) return null
+  const m = out.match(/mWakefulness=(\w+)/)
+  if (!m) return null
+  return (m[1] ?? "").trim().toLowerCase() === "awake"
 }
 
 /**
@@ -296,42 +346,61 @@ export function isAwake(): boolean | null {
  * returns true if Plex is (now) foreground, false if ADB is unreachable or Plex didn't come
  * up in time (the caller still tries; HA may have launched it).
  */
-export async function ensurePlexOpen(wait: number | null = null): Promise<boolean> {
-  if (!connect()) return false;
-  let act = foregroundActivity() || '';
-  if (act.includes(PLEX_PKG)) return true;
+export async function ensurePlexOpen(
+  wait: number | null = null,
+): Promise<boolean> {
+  if (!connect()) return false
+  let act = foregroundActivity() || ""
+  if (act.includes(PLEX_PKG)) return true
   // device_on transition: a dozing / screen-off Shield reports a null or screensaver
   // foreground, and `am start plex://` on a SLEEPING device does not bring Plex forward —
   // the launch queues behind the dream. WAKEUP is safe to send blind (it cannot select or
   // dismiss anything) and restores whatever was up behind the screensaver, so wake FIRST when
   // the device isn't already awake, then re-read (the wake alone may have brought Plex back).
   if (isAwake() !== true || !act) {
-    console.log(`[adb] Shield not awake (foreground '${act || 'unknown'}'); sending WAKEUP`);
-    await press('KEYCODE_WAKEUP');
-    await sleep(WAKE_SETTLE);
-    act = foregroundActivity() || '';
+    console.log(
+      `[adb] Shield not awake (foreground '${act || "unknown"}'); sending WAKEUP`,
+    )
+    await press("KEYCODE_WAKEUP")
+    await sleep(WAKE_SETTLE)
+    act = foregroundActivity() || ""
     if (act.includes(PLEX_PKG)) {
-      console.log('[adb] Plex is foreground after waking the Shield');
-      return true;
+      console.log(
+        "[adb] Plex is foreground after waking the Shield",
+      )
+      return true
     }
   }
-  console.log(`[adb] Plex not foreground (on '${act || 'unknown'}'); launching via plex://`);
+  console.log(
+    `[adb] Plex not foreground (on '${act || "unknown"}'); launching via plex://`,
+  )
   if (
-    run(['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'plex://']) === null
+    run([
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      "plex://",
+    ]) === null
   ) {
-    return false;
+    return false
   }
-  const waitS = wait == null ? ADB_PLEX_LAUNCH_WAIT_SECONDS : wait;
-  const deadline = Date.now() + waitS * 1000;
+  const waitS =
+    wait == null ? ADB_PLEX_LAUNCH_WAIT_SECONDS : wait
+  const deadline = Date.now() + waitS * 1000
   while (Date.now() < deadline) {
-    if ((foregroundActivity() || '').includes(PLEX_PKG)) {
-      console.log('[adb] Plex is foreground');
-      return true;
+    if ((foregroundActivity() || "").includes(PLEX_PKG)) {
+      console.log("[adb] Plex is foreground")
+      return true
     }
-    await sleep(0.5);
+    await sleep(0.5)
   }
-  console.log('[adb] Plex did not reach the foreground in time');
-  return false;
+  console.log(
+    "[adb] Plex did not reach the foreground in time",
+  )
+  return false
 }
 
 // --- UI dump / selection ------------------------------------------------------ //
@@ -340,57 +409,66 @@ export async function ensurePlexOpen(wait: number | null = null): Promise<boolea
  * Parse attribute bags out of every `<node ...>` in a uiautomator dump.
  * No external XML dependency — the dump is a flat attribute soup we only need attrs from.
  */
-export function parseUiNodes(xml: string | null | undefined): Record<string, string>[] {
-  if (!xml) return [];
-  const cleaned = String(xml).replace(/\r/g, '').trim();
-  const nodes: Record<string, string>[] = [];
-  const re = /<node\b([^>]*)\/?>/g;
-  let m: RegExpExecArray | null;
+export function parseUiNodes(
+  xml: string | null | undefined,
+): Record<string, string>[] {
+  if (!xml) return []
+  const cleaned = String(xml).replace(/\r/g, "").trim()
+  const nodes: Record<string, string>[] = []
+  const re = /<node\b([^>]*)\/?>/g
+  let m: RegExpExecArray | null
   while ((m = re.exec(cleaned)) !== null) {
-    const attrs: Record<string, string> = {};
-    const attrRe = /([\w:.-]+)="([^"]*)"/g;
-    let am: RegExpExecArray | null;
-    while ((am = attrRe.exec(m[1] ?? '')) !== null) {
-      attrs[am[1] ?? ''] = am[2] ?? '';
+    const attrs: Record<string, string> = {}
+    const attrRe = /([\w:.-]+)="([^"]*)"/g
+    let am: RegExpExecArray | null
+    while ((am = attrRe.exec(m[1] ?? "")) !== null) {
+      attrs[am[1] ?? ""] = am[2] ?? ""
     }
-    nodes.push(attrs);
+    nodes.push(attrs)
   }
-  return nodes;
+  return nodes
 }
 
 /**
  * The NAME on the currently-highlighted picker tile from a dump string, or null.
  * Exported so unit tests can feed recorded fixtures without a device.
  */
-export function selectedProfileFromXml(xml: string | null | undefined): string | null {
+export function selectedProfileFromXml(
+  xml: string | null | undefined,
+): string | null {
   for (const node of parseUiNodes(xml)) {
-    const text = (node.text || '').trim();
+    const text = (node.text || "").trim()
     if (
-      node['resource-id'] === TITLE_ID &&
-      node.selected === 'true' &&
+      node["resource-id"] === TITLE_ID &&
+      node.selected === "true" &&
       text
     ) {
-      return text;
+      return text
     }
   }
-  return null;
+  return null
 }
 
 function dumpXml(): string | null {
   // Dump and cat are one shell invocation to save a round trip; `--compressed` is not
   // faster and drops the title_text nodes we need, so don't reach for it.
-  return run(['shell', `uiautomator dump ${DUMP_PATH} >/dev/null && cat ${DUMP_PATH}`]);
+  return run([
+    "shell",
+    `uiautomator dump ${DUMP_PATH} >/dev/null && cat ${DUMP_PATH}`,
+  ])
 }
 
 /** The NAME on the currently-highlighted picker tile, or null if not on the picker. */
 export function selectedProfile(): string | null {
-  const xml = dumpXml();
-  if (!xml) return null;
+  const xml = dumpXml()
+  if (!xml) return null
   try {
-    return selectedProfileFromXml(xml);
+    return selectedProfileFromXml(xml)
   } catch (e) {
-    console.log(`[adb] unparseable uiautomator dump: ${errMessage(e)}`);
-    return null;
+    console.log(
+      `[adb] unparseable uiautomator dump: ${errMessage(e)}`,
+    )
+    return null
   }
 }
 
@@ -400,14 +478,20 @@ export function selectedProfile(): string | null {
  * `known` skips the ~1.9s dump by trusting a caller-supplied guess at the selection
  * (see profiles.LAST_SEEN). Safe only because every caller reads back after pressing.
  */
-export function pickerReady(known: string | null = null): [boolean, string | null] {
-  const act = foregroundActivity();
-  if (!act || !act.includes(PLEX_PKG) || !act.includes(PICKER_ACTIVITY)) {
-    return [false, null];
+export function pickerReady(
+  known: string | null = null,
+): [boolean, string | null] {
+  const act = foregroundActivity()
+  if (
+    !act ||
+    !act.includes(PLEX_PKG) ||
+    !act.includes(PICKER_ACTIVITY)
+  ) {
+    return [false, null]
   }
-  if (known) return [true, known];
-  const name = selectedProfile();
-  return [name != null, name];
+  if (known) return [true, known]
+  const name = selectedProfile()
+  return [name != null, name]
 }
 
 /**
@@ -417,45 +501,53 @@ export function pickerReady(known: string | null = null): [boolean, string | nul
  * UI having caught up. When a ~1.9s dump follows, that is already far more settling than
  * the UI needs, so the default is not to sleep at all.
  */
-export async function press(...keycodes: (Keycode | PressOptions)[]): Promise<boolean> {
+export async function press(
+  ...keycodes: (Keycode | PressOptions)[]
+): Promise<boolean> {
   // Optional trailing options object: press('X', { settle: 0.35 }) or press(['X', 2], { settle }).
-  let settle = 0;
-  let codes: (Keycode | PressOptions)[] = keycodes;
-  const last = keycodes.length ? keycodes[keycodes.length - 1] : undefined;
+  let settle = 0
+  let codes: (Keycode | PressOptions)[] = keycodes
+  const last = keycodes.length
+    ? keycodes[keycodes.length - 1]
+    : undefined
   if (
     keycodes.length &&
-    typeof last === 'object' &&
+    typeof last === "object" &&
     !Array.isArray(last)
   ) {
-    const opts: PressOptions = last || {};
-    settle = opts.settle || 0;
-    codes = keycodes.slice(0, -1);
+    const opts: PressOptions = last || {}
+    settle = opts.settle || 0
+    codes = keycodes.slice(0, -1)
   }
-  const keys: string[] = [];
+  const keys: string[] = []
   for (const k of codes) {
     if (Array.isArray(k)) {
-      const [code, n] = k;
-      for (let i = 0; i < n; i++) keys.push(code);
-    } else if (typeof k === 'string') {
-      keys.push(k);
+      const [code, n] = k
+      for (let i = 0; i < n; i++) keys.push(code)
+    } else if (typeof k === "string") {
+      keys.push(k)
     }
     // An options object anywhere but last was never reachable: the loop below would have
     // pushed it into an `input keyevent` argv. Dropped here rather than stringified.
   }
-  if (!keys.length) return true;
-  if (run(['shell', 'input', 'keyevent', ...keys]) === null) return false;
-  if (settle) await sleep(settle);
-  return true;
+  if (!keys.length) return true
+  if (run(["shell", "input", "keyevent", ...keys]) === null)
+    return false
+  if (settle) await sleep(settle)
+  return true
 }
 
 // --- profile order (alias groups) -------------------------------------------- //
 
-const ORDER: { titles: AliasGroup[] | null; at: number } = { titles: null, at: 0 };
+const ORDER: { titles: AliasGroup[] | null; at: number } = {
+  titles: null,
+  at: 0,
+}
 
 /** Test seam: drop the in-memory order cache (env override still wins). */
 export function _resetOrderCache(): void {
-  ORDER.titles = null;
-  ORDER.at = 0;
+  ORDER.titles = null
+  ORDER.at = 0
 }
 
 /**
@@ -465,18 +557,23 @@ export function _resetOrderCache(): void {
  * flat ["Bob Smith", ...]; both forms have to keep working.
  */
 export function asGroups(order: OrderLike): AliasGroup[] {
-  return (order || []).map((g) => (typeof g === 'string' ? [g] : [...g]));
+  return (order || []).map((g) =>
+    typeof g === "string" ? [g] : [...g],
+  )
 }
 
 /** Position of the picker slot `name` refers to, by any alias, or null. */
-export function indexOfName(order: readonly AliasGroup[], name: string | null | undefined): number | null {
+export function indexOfName(
+  order: readonly AliasGroup[],
+  name: string | null | undefined,
+): number | null {
   // The null guard is new but not a behaviour change: no alias group holds a null, so a
   // null/undefined `name` already fell through every `includes()` to the same null.
-  if (name == null) return null;
+  if (name == null) return null
   for (let i = 0; i < order.length; i++) {
-    if ((order[i] ?? []).includes(name)) return i;
+    if ((order[i] ?? []).includes(name)) return i
   }
-  return null;
+  return null
 }
 
 /**
@@ -488,10 +585,10 @@ export function offsetBetween(
   current: string | null | undefined,
   target: string | null | undefined,
 ): number | null {
-  const iCur = indexOfName(order, current);
-  const iTgt = indexOfName(order, target);
-  if (iCur == null || iTgt == null) return null;
-  return iTgt - iCur;
+  const iCur = indexOfName(order, current)
+  const iTgt = indexOfName(order, target)
+  if (iCur == null || iTgt == null) return null
+  return iTgt - iCur
 }
 
 /**
@@ -503,47 +600,56 @@ export function sameProfileInOrder(
   a: string | null | undefined,
   b: string | null | undefined,
 ): boolean {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const ia = indexOfName(order, a);
-  const ib = indexOfName(order, b);
-  return ia != null && ia === ib;
+  if (a === b) return true
+  if (!a || !b) return false
+  const ia = indexOfName(order, a)
+  const ib = indexOfName(order, b)
+  return ia != null && ia === ib
 }
 
 /** One plex.tv Home user as `plex.js homeUsers()` reports it (that module is still JS). */
 interface HomeUserRow {
-  name?: string | null;
-  title?: string | null;
-  friendlyName?: string | null;
-  username?: string | null;
+  name?: string | null
+  title?: string | null
+  friendlyName?: string | null
+  username?: string | null
 }
 
 async function fetchHomeUserNames(): Promise<AliasGroup[]> {
   // Local import: adb must stay importable without a Plex reachable (mirrors adb.py).
-  const plex = await import('./plex.js');
+  const plex = await import("./plex.js")
   // `homeUserNames` is the alias-group form the Python port had and plex.js has never
   // exported. The probe stays — it is the preferred source the moment that lands — but it
   // has to be reached for off a widened view, because the module's real type has no such
   // member and TS would (correctly) call the branch dead.
-  const maybe = plex as { homeUserNames?: () => Promise<AliasGroup[]> };
-  if (typeof maybe.homeUserNames === 'function') {
-    return await maybe.homeUserNames();
+  const maybe = plex as {
+    homeUserNames?: () => Promise<AliasGroup[]>
+  }
+  if (typeof maybe.homeUserNames === "function") {
+    return await maybe.homeUserNames()
   }
   // Derive alias groups from the UI-facing homeUsers() shape. plex.tv title / friendlyName /
   // username all land as aliases so the owner ('sawtaytoes' vs display title) matches.
-  if (typeof plex.homeUsers !== 'function') {
-    throw new Error('plex.homeUsers / homeUserNames unavailable');
+  if (typeof plex.homeUsers !== "function") {
+    throw new Error(
+      "plex.homeUsers / homeUserNames unavailable",
+    )
   }
-  const users: HomeUserRow[] = await plex.homeUsers();
-  const out: AliasGroup[] = [];
+  const users: HomeUserRow[] = await plex.homeUsers()
+  const out: AliasGroup[] = []
   for (const u of users || []) {
-    const names: string[] = [];
-    for (const n of [u.name, u.title, u.friendlyName, u.username]) {
-      if (n && !names.includes(n)) names.push(n);
+    const names: string[] = []
+    for (const n of [
+      u.name,
+      u.title,
+      u.friendlyName,
+      u.username,
+    ]) {
+      if (n && !names.includes(n)) names.push(n)
     }
-    if (names.length) out.push(names);
+    if (names.length) out.push(names)
   }
-  return out;
+  return out
 }
 
 /**
@@ -555,42 +661,58 @@ async function fetchHomeUserNames(): Promise<AliasGroup[]> {
  * Returns [] if every source fails — callers must treat that as "cannot compute a direction"
  * rather than guessing.
  */
-export async function profileOrder(): Promise<AliasGroup[]> {
+export async function profileOrder(): Promise<
+  AliasGroup[]
+> {
   if (ADB_PROFILE_ORDER && ADB_PROFILE_ORDER.length) {
-    return asGroups(ADB_PROFILE_ORDER);
+    return asGroups(ADB_PROFILE_ORDER)
   }
-  const now = Date.now() / 1000;
-  if (ORDER.titles && now - ORDER.at < ADB_PROFILE_ORDER_TTL) {
-    return ORDER.titles;
+  const now = Date.now() / 1000
+  if (
+    ORDER.titles &&
+    now - ORDER.at < ADB_PROFILE_ORDER_TTL
+  ) {
+    return ORDER.titles
   }
-  let names: AliasGroup[] = [];
+  let names: AliasGroup[] = []
   try {
-    names = await fetchHomeUserNames();
+    names = await fetchHomeUserNames()
   } catch (e) {
-    console.log(`[adb] plex.tv home users unavailable (${errMessage(e)}); using cached order`);
-    names = [];
+    console.log(
+      `[adb] plex.tv home users unavailable (${errMessage(e)}); using cached order`,
+    )
+    names = []
   }
   if (names && names.length) {
-    ORDER.titles = names;
-    ORDER.at = now;
+    ORDER.titles = names
+    ORDER.at = now
     try {
-      writeFileSync(ADB_PROFILE_ORDER_CACHE, JSON.stringify(names));
+      writeFileSync(
+        ADB_PROFILE_ORDER_CACHE,
+        JSON.stringify(names),
+      )
     } catch (e) {
-      console.log(`[adb] could not cache the picker order: ${errMessage(e)}`);
+      console.log(
+        `[adb] could not cache the picker order: ${errMessage(e)}`,
+      )
     }
-    return names;
+    return names
   }
-  if (ORDER.titles) return ORDER.titles;
+  if (ORDER.titles) return ORDER.titles
   try {
-    const cached = asGroups(JSON.parse(readFileSync(ADB_PROFILE_ORDER_CACHE, 'utf8')) as OrderLike);
+    const cached = asGroups(
+      JSON.parse(
+        readFileSync(ADB_PROFILE_ORDER_CACHE, "utf8"),
+      ) as OrderLike,
+    )
     if (cached.length) {
-      ORDER.titles = cached;
-      return cached;
+      ORDER.titles = cached
+      return cached
     }
   } catch {
     /* missing / corrupt cache */
   }
-  return [];
+  return []
 }
 
 /**
@@ -604,10 +726,10 @@ export async function sameProfile(
   a: string | null | undefined,
   b: string | null | undefined,
 ): Promise<boolean> {
-  if (a === b) return true;
-  if (!a || !b) return false;
-  const order = await profileOrder();
-  return sameProfileInOrder(order, a, b);
+  if (a === b) return true
+  if (!a || !b) return false
+  const order = await profileOrder()
+  return sameProfileInOrder(order, a, b)
 }
 
 async function offset(
@@ -616,18 +738,22 @@ async function offset(
 ): Promise<number | null> {
   // Fast path only. The list is NOT assumed to wrap — a shorter wrap-around route is never
   // taken, because whether the picker wraps at the ends is unverified.
-  const order = await profileOrder();
-  return offsetBetween(order, current, target);
+  const order = await profileOrder()
+  return offsetBetween(order, current, target)
 }
 
-async function waitActivity(fragment: string, timeout = 8.0, poll = 0.2): Promise<boolean> {
-  const deadline = Date.now() + timeout * 1000;
+async function waitActivity(
+  fragment: string,
+  timeout = 8.0,
+  poll = 0.2,
+): Promise<boolean> {
+  const deadline = Date.now() + timeout * 1000
   while (Date.now() < deadline) {
-    const act = foregroundActivity() || '';
-    if (act.includes(fragment)) return true;
-    await sleep(poll);
+    const act = foregroundActivity() || ""
+    if (act.includes(fragment)) return true
+    await sleep(poll)
   }
-  return false;
+  return false
 }
 
 /**
@@ -638,14 +764,17 @@ async function waitActivity(fragment: string, timeout = 8.0, poll = 0.2): Promis
  * round trip, so a picker still up after a couple of seconds is a picker that rejected the
  * pick. A LONGER wait here would just delay the error.
  */
-async function pickerGone(timeout = 3.0, poll = 0.2): Promise<boolean> {
-  const deadline = Date.now() + timeout * 1000;
+async function pickerGone(
+  timeout = 3.0,
+  poll = 0.2,
+): Promise<boolean> {
+  const deadline = Date.now() + timeout * 1000
   while (Date.now() < deadline) {
-    const act = foregroundActivity() || '';
-    if (!act.includes(PICKER_ACTIVITY)) return true;
-    await sleep(poll);
+    const act = foregroundActivity() || ""
+    if (!act.includes(PICKER_ACTIVITY)) return true
+    await sleep(poll)
   }
-  return false;
+  return false
 }
 
 /**
@@ -654,29 +783,41 @@ async function pickerGone(timeout = 3.0, poll = 0.2): Promise<boolean> {
  * Verified 2026-07-26: LEFT (open sidebar) -> UP to the pinned user -> CENTER ->
  * ListDualPaneModalActivity -> CENTER on "Switch user" -> PickUserActivity.
  */
-export async function pickerViaMenu(attempt = 1): Promise<boolean> {
+export async function pickerViaMenu(
+  attempt = 1,
+): Promise<boolean> {
   console.log(
     `[adb] signed in with no picker; trying Plex's own Switch-user path ` +
       `(attempt ${attempt}/${MAX_MENU_TRIES})`,
-  );
+  )
   // A previous attempt may have left the sidebar half-open or focus somewhere odd, and
   // this walk assumes it starts on the hubs. BACK returns to a known state; on a clean
   // first attempt there is nothing to undo, so only retries pay for it.
-  if (attempt > 1 && !(await press('KEYCODE_BACK', { settle: SETTLE }))) return false;
+  if (
+    attempt > 1 &&
+    !(await press("KEYCODE_BACK", { settle: SETTLE }))
+  )
+    return false
   // Sidebar open + walk to the pinned user entry, in one `input` call. Extra LEFTs are
   // harmless (focus stops at the sidebar) and UP saturates at the top entry.
-  if (!(await press(['KEYCODE_DPAD_LEFT', 2], ['KEYCODE_DPAD_UP', 10], { settle: SETTLE }))) {
-    return false;
+  if (
+    !(await press(
+      ["KEYCODE_DPAD_LEFT", 2],
+      ["KEYCODE_DPAD_UP", 10],
+      { settle: SETTLE },
+    ))
+  ) {
+    return false
   }
-  if (!(await press('KEYCODE_DPAD_CENTER'))) return false;
+  if (!(await press("KEYCODE_DPAD_CENTER"))) return false
   if (!(await waitActivity(MODAL_ACTIVITY))) {
-    console.log('[adb] the user modal did not open');
-    return false;
+    console.log("[adb] the user modal did not open")
+    return false
   }
   // "Switch user" is the modal's first and focused entry. Deliberately NOT verified by
   // text: that costs a ~1.9s dump, and landing on the picker below proves it anyway.
-  if (!(await press('KEYCODE_DPAD_CENTER'))) return false;
-  return waitActivity(PICKER_ACTIVITY);
+  if (!(await press("KEYCODE_DPAD_CENTER"))) return false
+  return waitActivity(PICKER_ACTIVITY)
 }
 
 /**
@@ -686,15 +827,26 @@ export async function pickerViaMenu(attempt = 1): Promise<boolean> {
  * route above failed, because a force-stop kills whatever Plex was playing.
  */
 export async function restartToPicker(): Promise<boolean> {
-  console.log('[adb] falling back to force-stopping Plex to get the picker back');
-  if (run(['shell', 'am', 'force-stop', PLEX_PKG]) === null) return false;
-  await sleep(1.0);
+  console.log(
+    "[adb] falling back to force-stopping Plex to get the picker back",
+  )
+  if (run(["shell", "am", "force-stop", PLEX_PKG]) === null)
+    return false
+  await sleep(1.0)
   if (
-    run(['shell', 'am', 'start', '-a', 'android.intent.action.VIEW', '-d', 'plex://']) === null
+    run([
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.intent.action.VIEW",
+      "-d",
+      "plex://",
+    ]) === null
   ) {
-    return false;
+    return false
   }
-  return true;
+  return true
 }
 
 /**
@@ -711,35 +863,41 @@ export async function summonPicker(
   cancel: CancelFlag | null = null,
   knownCurrent: string | null = null,
 ): Promise<[string | null, boolean]> {
-  const deadline = Date.now() + ADB_PICKER_WAIT_SECONDS * 1000;
-  let woken = false;
-  let menuTries = 0;
-  let homeSince: number | null = null;
-  let backs = 0;
-  let otherSince = Date.now();
+  const deadline =
+    Date.now() + ADB_PICKER_WAIT_SECONDS * 1000
+  let woken = false
+  let menuTries = 0
+  let homeSince: number | null = null
+  let backs = 0
+  let otherSince = Date.now()
   while (Date.now() < deadline) {
-    if (isCancelled(cancel)) return [null, false];
-    const [ready, name] = pickerReady(knownCurrent);
-    if (ready) return [name, knownCurrent == null];
-    const act = foregroundActivity() || '';
+    if (isCancelled(cancel)) return [null, false]
+    const [ready, name] = pickerReady(knownCurrent)
+    if (ready) return [name, knownCurrent == null]
+    const act = foregroundActivity() || ""
     if (!act.includes(PLEX_PKG)) {
       // A dozing Shield reports the screensaver, not Plex. WAKEUP is not a navigation
       // press — it cannot select or dismiss anything — so it is safe to send blind.
       if (!woken) {
-        console.log(`[adb] not on Plex (on '${act}'); waking the Shield`);
-        await press('KEYCODE_WAKEUP');
-        woken = true;
+        console.log(
+          `[adb] not on Plex (on '${act}'); waking the Shield`,
+        )
+        await press("KEYCODE_WAKEUP")
+        woken = true
       }
-      await sleep(0.4);
-      continue;
+      await sleep(0.4)
+      continue
     }
     if (act.includes(HOME_ACTIVITY)) {
-      otherSince = Date.now();
-      if (homeSince == null) homeSince = Date.now();
+      otherSince = Date.now()
+      if (homeSince == null) homeSince = Date.now()
       // Signed in already: no picker will ever appear on its own. Drive Plex's own
       // Switch-user route — and give it more than one shot before force-stopping.
-      if (menuTries < MAX_MENU_TRIES && Date.now() - homeSince >= HOME_SETTLE * 1000) {
-        menuTries += 1;
+      if (
+        menuTries < MAX_MENU_TRIES &&
+        Date.now() - homeSince >= HOME_SETTLE * 1000
+      ) {
+        menuTries += 1
         if (await pickerViaMenu(menuTries)) {
           // Trust the hint here rather than paying a dump: this is the moment the picker
           // has just animated open, which is exactly when uiautomator blocks longest
@@ -747,38 +905,50 @@ export async function summonPicker(
           if (knownCurrent) {
             console.log(
               `[adb] assuming picker opened on '${knownCurrent}' (will verify by read-back)`,
-            );
-            return [knownCurrent, false];
+            )
+            return [knownCurrent, false]
           }
-          return [selectedProfile(), true];
+          return [selectedProfile(), true]
         }
       } else if (menuTries < MAX_MENU_TRIES) {
-        await sleep(0.4); // still settling — come back for the next attempt
-        continue;
+        await sleep(0.4) // still settling — come back for the next attempt
+        continue
       } else if (ADB_RESTART_TO_PICKER) {
         if (await restartToPicker()) {
-          return [await waitForPicker(deadline, cancel), true];
+          return [
+            await waitForPicker(deadline, cancel),
+            true,
+          ]
         }
-        return [null, false];
+        return [null, false]
       } else {
-        return [null, false];
+        return [null, false]
       }
     }
     // On Plex but on neither the picker nor Home: a splash still loading, a detail page,
     // or — the case that actually bites — a PLAYER. Give a splash a moment to resolve on
     // its own, then back out toward Home, which is where the Switch-user route starts.
-    if (Date.now() - otherSince > 3000 && backs < MAX_BACKS) {
-      backs += 1;
-      const short = act.includes('.') ? act.split('.').pop() : act;
-      console.log(`[adb] on '${short}'; backing out toward Home (${backs}/${MAX_BACKS})`);
-      await press('KEYCODE_BACK', { settle: 1.2 });
-      otherSince = Date.now();
-      continue;
+    if (
+      Date.now() - otherSince > 3000 &&
+      backs < MAX_BACKS
+    ) {
+      backs += 1
+      const short = act.includes(".")
+        ? act.split(".").pop()
+        : act
+      console.log(
+        `[adb] on '${short}'; backing out toward Home (${backs}/${MAX_BACKS})`,
+      )
+      await press("KEYCODE_BACK", { settle: 1.2 })
+      otherSince = Date.now()
+      continue
     }
-    await sleep(0.4);
+    await sleep(0.4)
   }
-  console.log(`[adb] gave up waiting for the picker after ${ADB_PICKER_WAIT_SECONDS}s`);
-  return [null, false];
+  console.log(
+    `[adb] gave up waiting for the picker after ${ADB_PICKER_WAIT_SECONDS}s`,
+  )
+  return [null, false]
 }
 
 /**
@@ -793,12 +963,12 @@ export async function waitForPicker(
   knownCurrent: string | null = null,
 ): Promise<string | null> {
   while (Date.now() < deadline) {
-    if (isCancelled(cancel)) return null;
-    const [ready, name] = pickerReady(knownCurrent);
-    if (ready) return name;
-    await sleep(0.4);
+    if (isCancelled(cancel)) return null
+    const [ready, name] = pickerReady(knownCurrent)
+    if (ready) return name
+    await sleep(0.4)
   }
-  return null;
+  return null
 }
 
 /**
@@ -812,137 +982,167 @@ export async function switchTo(
   cancel: CancelFlag | null = null,
   knownCurrent: string | null = null,
 ): Promise<[boolean, string]> {
-  if (!ADB_ENABLED) return [false, 'ADB_ENABLED is off'];
-  if (!connect()) return [false, `cannot reach ${adbTarget()} over adb`];
+  if (!ADB_ENABLED) return [false, "ADB_ENABLED is off"]
+  if (!connect())
+    return [false, `cannot reach ${adbTarget()} over adb`]
 
-  const deadline = Date.now() + ADB_PICKER_WAIT_SECONDS * 1000;
+  const deadline =
+    Date.now() + ADB_PICKER_WAIT_SECONDS * 1000
 
-  async function resummon(why: string): Promise<[string | null, boolean]> {
+  async function resummon(
+    why: string,
+  ): Promise<[string | null, boolean]> {
     // Losing the picker mid-switch is usually transient — go get it again.
-    if (Date.now() >= deadline) return [null, false];
-    console.log(`[adb] ${why}; re-summoning the picker`);
-    return summonPicker(cancel); // no hint: re-read for real
+    if (Date.now() >= deadline) return [null, false]
+    console.log(`[adb] ${why}; re-summoning the picker`)
+    return summonPicker(cancel) // no hint: re-read for real
   }
 
-  let [current, verified] = await summonPicker(cancel, knownCurrent);
+  let [current, verified] = await summonPicker(
+    cancel,
+    knownCurrent,
+  )
   if (current == null) {
     return [
       false,
-      'could not get the Plex profile picker on screen ' +
-        '(not signed in and no picker, or the Plex UI changed)',
-    ];
+      "could not get the Plex profile picker on screen " +
+        "(not signed in and no picker, or the Plex UI changed)",
+    ]
   }
-  console.log(`[adb] picker is up, on '${current}', want '${target}'`);
+  console.log(
+    `[adb] picker is up, on '${current}', want '${target}'`,
+  )
 
-  let presses = 0;
-  // eslint-disable-next-line no-constant-condition
+  let presses = 0
+
   while (true) {
     if (Date.now() >= deadline) {
       return [
         false,
         `ran out of time after ${presses} presses, last on '${current}' wanting '${target}'`,
-      ];
+      ]
     }
     if (await sameProfile(current, target)) {
-      if (verified) break;
+      if (verified) break
       // The hint said we are already there, so the press loop below — and with it every
       // read-back — would be skipped entirely, and CENTER would commit whoever is REALLY
       // highlighted. That is how a stale LAST_SEEN signed the Shield into the wrong profile
       // while this reported "ok". One dump is the price of the fast path being allowed to
       // be wrong.
-      const live = selectedProfile();
+      const live = selectedProfile()
       if (live == null) {
-        [current, verified] = await resummon(
-          'the picker went before the selection was confirmed',
-        );
+        ;[current, verified] = await resummon(
+          "the picker went before the selection was confirmed",
+        )
         if (current == null) {
           return [
             false,
-            'the picker went away before the selection could be confirmed, and did not come back',
-          ];
+            "the picker went away before the selection could be confirmed, and did not come back",
+          ]
         }
-        continue;
+        continue
       }
       if (live !== current) {
-        console.log(`[adb] hint said '${current}', picker is really on '${live}'`);
+        console.log(
+          `[adb] hint said '${current}', picker is really on '${live}'`,
+        )
       }
-      current = live;
-      verified = true;
-      continue;
+      current = live
+      verified = true
+      continue
     }
-    if (isCancelled(cancel)) return [false, 'cancelled by a newer scan'];
+    if (isCancelled(cancel))
+      return [false, "cancelled by a newer scan"]
     if (presses >= ADB_MAX_PRESSES) {
       return [
         false,
         `gave up after ${presses} presses, stuck on '${current}' ` +
           `(is '${target}' still a Plex Home user?)`,
-      ];
+      ]
     }
 
-    const step = await offset(current, target);
+    const step = await offset(current, target)
     if (step == null) {
-      const order = await profileOrder();
+      const order = await profileOrder()
       if (!order.length) {
         return [
           false,
-          'no picker order available - plex.tv is unreachable and ' +
+          "no picker order available - plex.tv is unreachable and " +
             `nothing is cached at ${ADB_PROFILE_ORDER_CACHE}`,
-        ];
+        ]
       }
       return [
         false,
         `'${current}' or '${target}' is not in the picker order ` +
-          '(a Home user was added or removed?)',
-      ];
+          "(a Home user was added or removed?)",
+      ]
     }
 
     // Re-guard immediately before pressing: the picker may have been dismissed by a human
     // between the read-back and now.
-    const [ready, live] = pickerReady();
+    const [ready, live] = pickerReady()
     if (!ready) {
-      [current, verified] = await resummon('the picker went away mid-switch');
+      ;[current, verified] = await resummon(
+        "the picker went away mid-switch",
+      )
       if (current == null) {
-        return [false, 'the picker went away mid-switch and did not come back'];
+        return [
+          false,
+          "the picker went away mid-switch and did not come back",
+        ]
       }
-      continue;
+      continue
     }
     if (live !== current) {
-      current = live;
-      verified = true;
-      continue;
+      current = live
+      verified = true
+      continue
     }
 
-    const n = Math.min(Math.abs(step), ADB_MAX_PRESSES - presses);
-    const keycode = step > 0 ? 'KEYCODE_DPAD_RIGHT' : 'KEYCODE_DPAD_LEFT';
-    if (!(await press([keycode, n]))) return [false, 'a D-pad press failed'];
-    presses += n;
+    const n = Math.min(
+      Math.abs(step),
+      ADB_MAX_PRESSES - presses,
+    )
+    const keycode =
+      step > 0 ? "KEYCODE_DPAD_RIGHT" : "KEYCODE_DPAD_LEFT"
+    if (!(await press([keycode, n])))
+      return [false, "a D-pad press failed"]
+    presses += n
 
-    const moved = selectedProfile();
+    const moved = selectedProfile()
     if (moved == null) {
       // Presses already landed, so where the selection ended up is now unknown — re-read
       // rather than assume, and let the loop re-derive the offset.
-      [current, verified] = await resummon('the picker went away after pressing');
+      ;[current, verified] = await resummon(
+        "the picker went away after pressing",
+      )
       if (current == null) {
-        return [false, 'the picker went away mid-switch and did not come back'];
+        return [
+          false,
+          "the picker went away mid-switch and did not come back",
+        ]
       }
-      continue;
+      continue
     }
     if (moved === current) {
       // Pressed, nothing moved: an end of a non-wrapping list, or a changed UI.
       return [
         false,
         `'${current}' did not move after ${n} x ${keycode} ` +
-          '(end of the list, or the Plex UI changed)',
-      ];
+          "(end of the list, or the Plex UI changed)",
+      ]
     }
-    console.log(`[adb] ${n} x ${keycode}: '${current}' -> '${moved}'`);
-    current = moved;
-    verified = true;
+    console.log(
+      `[adb] ${n} x ${keycode}: '${current}' -> '${moved}'`,
+    )
+    current = moved
+    verified = true
   }
 
   // Commit. The loop only exits on a VERIFIED read-back showing `target` moments ago, so the
   // right tile WAS highlighted — but that is a statement about the picker, not about Plex.
-  if (!(await press('KEYCODE_DPAD_CENTER'))) return [false, 'the commit press failed'];
+  if (!(await press("KEYCODE_DPAD_CENTER")))
+    return [false, "the commit press failed"]
 
   // Then confirm the commit was ACCEPTED, by waiting for the picker to go away.
   //
@@ -962,9 +1162,11 @@ export async function switchTo(
     return [
       false,
       `pressed CENTER on '${current}' but the picker is still up — Plex did not accept the ` +
-        'pick (a profile PIN, or the Plex UI changed)',
-    ];
+        "pick (a profile PIN, or the Plex UI changed)",
+    ]
   }
-  console.log(`[adb] committed '${current}' after ${presses} presses; picker dismissed`);
-  return [true, `selected '${current}' on the picker`];
+  console.log(
+    `[adb] committed '${current}' after ${presses} presses; picker dismissed`,
+  )
+  return [true, `selected '${current}' on the picker`]
 }

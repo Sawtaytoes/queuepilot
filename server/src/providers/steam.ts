@@ -21,6 +21,8 @@
 // play log sets, and the reason `Provider.stampsQueuedAt` exists.
 //
 // ONE PLAY PER ENTRY, deliberately — see PLAYS_PER_GAME below.
+
+import { errMessage } from "../errors.js"
 import type {
   BucketsContext,
   BucketsResult,
@@ -33,10 +35,11 @@ import type {
   ProviderTileRow,
   SteamArtifact,
   SteamPlayItem,
-} from '../types.js';
-
-import { errMessage } from '../errors.js';
-import { steamClient, type SteamHttpClient } from './steam-client.js';
+} from "../types.js"
+import {
+  type SteamHttpClient,
+  steamClient,
+} from "./steam-client.js"
 
 /**
  * The implicit "everything you own" library.
@@ -47,7 +50,7 @@ import { steamClient, type SteamHttpClient } from './steam-client.js';
  * `2026-08-17-no-libraries-checked-means-every-library`). This id exists only to label a
  * search hit, which the editor requires.
  */
-export const LIBRARY_ID = 'library';
+export const LIBRARY_ID = "library"
 
 /**
  * How many plays one Steam entry owes: ALWAYS one.
@@ -62,57 +65,72 @@ export const LIBRARY_ID = 'library';
  * session. If per-session counting is wanted later, it needs a persisted per-entry playtime
  * baseline — a real feature, not a tweak here.
  */
-const PLAYS_PER_GAME = 1;
+const PLAYS_PER_GAME = 1
 
 /** How many entries are resolved at once. Every one is a lookup in the SAME memoized
  *  library response, so this is a loop bound rather than a politeness limit. */
-const PROBE_CONCURRENCY = 16;
+const PROBE_CONCURRENCY = 16
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const out: R[] = new Array(items.length);
-  let next = 0;
-  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-    for (;;) {
-      const i = next;
-      next += 1;
-      if (i >= items.length) return;
-      out[i] = await fn(items[i] as T, i);
-    }
-  });
-  await Promise.all(workers);
-  return out;
+async function mapLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, i: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let next = 0
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    async () => {
+      for (;;) {
+        const i = next
+        next += 1
+        if (i >= items.length) return
+        out[i] = await fn(items[i] as T, i)
+      }
+    },
+  )
+  await Promise.all(workers)
+  return out
 }
 
 /** One entry, resolved against the library: what it owes and whether it has been played. */
 export interface SteamEntryState {
-  appid: string;
-  title: string;
-  owed: number;
-  played: number;
-  remaining: number;
+  appid: string
+  title: string
+  owed: number
+  played: number
+  remaining: number
   /** Epoch seconds of the last session's end, or null for a game never played. */
-  lastPlayed: number | null;
+  lastPlayed: number | null
 }
 
 export interface SteamProviderOptions {
-  def: ProviderDefinition;
-  apiKey: string;
-  steamId: string;
-  client?: SteamHttpClient | null;
+  def: ProviderDefinition
+  apiKey: string
+  steamId: string
+  client?: SteamHttpClient | null
 }
 
-export function steamProvider({ def, apiKey, steamId, client = null }: SteamProviderOptions): Provider {
-  const c = client || steamClient({ apiKey, steamId });
+export function steamProvider({
+  def,
+  apiKey,
+  steamId,
+  client = null,
+}: SteamProviderOptions): Provider {
+  const c = client || steamClient({ apiKey, steamId })
 
-  const playItem = (state: SteamEntryState, slot: number): SteamPlayItem => ({
+  const playItem = (
+    state: SteamEntryState,
+    slot: number,
+  ): SteamPlayItem => ({
     appid: state.appid,
     bucket: state.appid,
     number: slot,
     of: state.owed,
     slot,
     title: state.title,
-    unit: 'play',
-  });
+    unit: "play",
+  })
 
   /**
    * Resolve one curated entry: the game, and whether it has been played SINCE IT WAS QUEUED.
@@ -126,21 +144,26 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
    * launch, and until it does, reading a lifetime total as "played" would retire a game the
    * owner has never played *from this queue*.
    */
-  async function entryState(
-    entry: { id: string; queuedAt?: number | null },
-  ): Promise<SteamEntryState | null> {
-    const game = await c.game(entry.id);
-    if (!game) return null;
+  async function entryState(entry: {
+    id: string
+    queuedAt?: number | null
+  }): Promise<SteamEntryState | null> {
+    const game = await c.game(entry.id)
+    if (!game) return null
 
-    const appid = String(game.appid ?? entry.id);
-    const rtime = Number(game.rtime_last_played ?? 0);
-    const lastPlayed = Number.isFinite(rtime) && rtime > 0 ? rtime : null;
-    const queuedAt = Number(entry.queuedAt ?? 0);
+    const appid = String(game.appid ?? entry.id)
+    const rtime = Number(game.rtime_last_played ?? 0)
+    const lastPlayed =
+      Number.isFinite(rtime) && rtime > 0 ? rtime : null
+    const queuedAt = Number(entry.queuedAt ?? 0)
 
-    const played = (
-      Number.isFinite(queuedAt) && queuedAt > 0
-      && lastPlayed != null && lastPlayed > queuedAt
-    ) ? 1 : 0;
+    const played =
+      Number.isFinite(queuedAt) &&
+      queuedAt > 0 &&
+      lastPlayed != null &&
+      lastPlayed > queuedAt
+        ? 1
+        : 0
 
     return {
       appid,
@@ -149,7 +172,7 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
       played,
       remaining: Math.max(0, PLAYS_PER_GAME - played),
       title: String(game.name ?? entry.id),
-    };
+    }
   }
 
   return {
@@ -159,8 +182,8 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
     // A launch is a `steam://` URL, which is a thing to OPEN rather than a lineup to push at
     // a device. That URL is also the integration point for launching from Home Assistant:
     // it is handed to the PC as a command argument rather than being followed by a browser.
-    delivery: 'pull',
-    unit: 'play',
+    delivery: "pull",
+    unit: "play",
     // Steam's playtime is lifetime; a queue entry's progress is not. See the header.
     stampsQueuedAt: true,
 
@@ -172,19 +195,19 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
      * expects rather than making the caller special-case this provider.
      */
     async search(q: string): Promise<ProviderSearchHit[]> {
-      const games = await c.search(q);
+      const games = await c.search(q)
       return games.map((g) => ({
         id: String(g.appid),
-        title: String(g.name ?? ''),
+        title: String(g.name ?? ""),
         libraryId: LIBRARY_ID,
-        libraryTitle: 'Library',
-        type: 'game',
-      }));
+        libraryTitle: "Library",
+        type: "game",
+      }))
     },
 
     /** Library art, re-served from this origin like every other provider's. */
     cover(appid: string): Promise<ProviderCover> {
-      return c.cover(appid);
+      return c.cover(appid)
     },
 
     /**
@@ -193,27 +216,43 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
      *
      * Index-aligned with `ids`, `null` for a game no longer owned.
      */
-    async tiles(ids: Iterable<string>, entries: CuratedEntryRef[] = []): Promise<(ProviderTileRow | null)[]> {
-      const wanted = [...ids].map(String);
-      const byId = new Map(entries.map((e) => [String(e.id), e]));
-      return mapLimit(wanted, PROBE_CONCURRENCY, async (id): Promise<ProviderTileRow | null> => {
-        try {
-          // The ENTRY's own context, not just the game's: when it was queued is a property
-          // of the queue entry, and without it every tile reads as never-played.
-          const state = await entryState(byId.get(id) ?? { id });
-          if (!state) return null;
-          return {
-            id: state.appid,
-            title: state.title,
-            libraryId: LIBRARY_ID,
-            unreadCount: state.remaining,
-            next: state.remaining > 0 ? playItem(state, state.played + 1) : null,
-          };
-        } catch (e) {
-          console.log(`[steam] tile ${id}: ${errMessage(e)}`);
-          return null;
-        }
-      });
+    async tiles(
+      ids: Iterable<string>,
+      entries: CuratedEntryRef[] = [],
+    ): Promise<(ProviderTileRow | null)[]> {
+      const wanted = [...ids].map(String)
+      const byId = new Map(
+        entries.map((e) => [String(e.id), e]),
+      )
+      return mapLimit(
+        wanted,
+        PROBE_CONCURRENCY,
+        async (id): Promise<ProviderTileRow | null> => {
+          try {
+            // The ENTRY's own context, not just the game's: when it was queued is a property
+            // of the queue entry, and without it every tile reads as never-played.
+            const state = await entryState(
+              byId.get(id) ?? { id },
+            )
+            if (!state) return null
+            return {
+              id: state.appid,
+              title: state.title,
+              libraryId: LIBRARY_ID,
+              unreadCount: state.remaining,
+              next:
+                state.remaining > 0
+                  ? playItem(state, state.played + 1)
+                  : null,
+            }
+          } catch (e) {
+            console.log(
+              `[steam] tile ${id}: ${errMessage(e)}`,
+            )
+            return null
+          }
+        },
+      )
     },
 
     /**
@@ -227,20 +266,26 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
      * The head is the first game not yet played since it was queued. Exactly one item is
      * ever returned: a session is a whole evening, so there is no batch to spill into.
      */
-    async buckets(ctx: BucketsContext): Promise<BucketsResult> {
-      const entries = (ctx.entries || []).filter((e) => e && e.id);
-      if (!entries.length) return { play: [], buckets: [] };
+    async buckets(
+      ctx: BucketsContext,
+    ): Promise<BucketsResult> {
+      const entries = (ctx.entries || []).filter(
+        (e) => e && e.id,
+      )
+      if (!entries.length) return { play: [], buckets: [] }
 
-      const states = (await mapLimit(
-        entries,
-        PROBE_CONCURRENCY,
-        (e) => entryState(e).catch((err: unknown) => {
-          console.log(`[steam] entry ${e.id}: ${errMessage(err)}`);
-          return null;
-        }),
-      )).filter((s): s is SteamEntryState => s != null);
+      const states = (
+        await mapLimit(entries, PROBE_CONCURRENCY, (e) =>
+          entryState(e).catch((err: unknown) => {
+            console.log(
+              `[steam] entry ${e.id}: ${errMessage(err)}`,
+            )
+            return null
+          }),
+        )
+      ).filter((s): s is SteamEntryState => s != null)
 
-      const head = states.find((s) => s.remaining > 0);
+      const head = states.find((s) => s.remaining > 0)
       if (!head) {
         return {
           play: [],
@@ -249,14 +294,18 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
           // bookkeeping (TTL sweep, "remove all completed") still works — this provider
           // never writes queues.yaml itself.
           newlyDone: states.map((s) => s.appid),
-        };
+        }
       }
 
       return {
-        play: [playItem(head, head.played + 1)] as PlayItem[],
+        play: [
+          playItem(head, head.played + 1),
+        ] as PlayItem[],
         buckets: states,
-        newlyDone: states.filter((s) => s.remaining === 0).map((s) => s.appid),
-      };
+        newlyDone: states
+          .filter((s) => s.remaining === 0)
+          .map((s) => s.appid),
+      }
     },
 
     /**
@@ -265,19 +314,28 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
      * Same shape Plex answers with (a Set of ids), because progress on this provider IS the
      * last-played timestamp, exactly as Kavita's progress is pages read.
      */
-    async progressState(ctx: BucketsContext): Promise<Set<string>> {
-      const entries = (ctx.entries || []).filter((e) => e && e.id);
-      if (!entries.length) return new Set();
+    async progressState(
+      ctx: BucketsContext,
+    ): Promise<Set<string>> {
+      const entries = (ctx.entries || []).filter(
+        (e) => e && e.id,
+      )
+      if (!entries.length) return new Set()
 
       const states = await mapLimit(
         entries,
         PROBE_CONCURRENCY,
         (e) => entryState(e).catch(() => null),
-      );
+      )
 
       return new Set(
-        states.filter((s): s is SteamEntryState => s != null && s.remaining === 0).map((s) => s.appid),
-      );
+        states
+          .filter(
+            (s): s is SteamEntryState =>
+              s != null && s.remaining === 0,
+          )
+          .map((s) => s.appid),
+      )
     },
 
     /**
@@ -287,29 +345,43 @@ export function steamProvider({ def, apiKey, steamId, client = null }: SteamProv
      * object on their side. Steam does not — there is no such thing as a Steam queue — so
      * this describes the one game that is next and lets `handoff()` turn it into a URL.
      */
-    materialize(items: PlayItem[], opts: { setName?: string | null } = {}): SteamArtifact {
-      const head = (items[0] as SteamPlayItem | undefined) || null;
-      const appid = head ? String(head.appid) : '';
+    materialize(
+      items: PlayItem[],
+      opts: { setName?: string | null } = {},
+    ): SteamArtifact {
+      const head =
+        (items[0] as SteamPlayItem | undefined) || null
+      const appid = head ? String(head.appid) : ""
 
       return {
         provider: def.id,
-        kind: 'steam',
+        kind: "steam",
         appid,
         count: items.length,
         head,
-        setName: String(opts.setName ?? ''),
+        setName: String(opts.setName ?? ""),
         // The launch primitive. `rungameid` takes NO arguments — everything about how a game
         // starts is configured on the PC — which is why this is the whole payload.
-        url: appid ? `steam://rungameid/${encodeURIComponent(appid)}` : '',
-      };
+        url: appid
+          ? `steam://rungameid/${encodeURIComponent(appid)}`
+          : "",
+      }
     },
 
     /** Start tonight's game. The queue already chose; this is the URL that opens it. */
     handoff(artifact: SteamArtifact) {
       if (!artifact?.appid || !artifact.url) {
-        return { mode: 'pull' as const, url: null, error: 'nothing left to play in this queue' };
+        return {
+          mode: "pull" as const,
+          url: null,
+          error: "nothing left to play in this queue",
+        }
       }
-      return { mode: 'pull' as const, url: artifact.url, awaiting: null };
+      return {
+        mode: "pull" as const,
+        url: artifact.url,
+        awaiting: null,
+      }
     },
-  };
+  }
 }

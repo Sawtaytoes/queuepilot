@@ -13,17 +13,20 @@
 // cannot work here and should not: the production image ships ONE bundled `server/dist/index.js`
 // with no `.ts`, no yarn and no repo. Calling the functions also gets back the error messages
 // the old `catch {}` threw away — a step that failed used to report a bare `false`.
-import { runEnrich } from './enrich.js';
-import { runLinkRulebooks } from './linkRulebooks.js';
-import { runLinkVideos } from './linkVideos.js';
-import { runSyncBgg } from './syncBgg.js';
-import type { CollectionJobResult, OnProgress } from './types.js';
+import { runEnrich } from "./enrich.js"
+import { runLinkRulebooks } from "./linkRulebooks.js"
+import { runLinkVideos } from "./linkVideos.js"
+import { runSyncBgg } from "./syncBgg.js"
+import type {
+  CollectionJobResult,
+  OnProgress,
+} from "./types.js"
 
 export interface CollectionSyncResult {
   /** How many steps FAILED. A skipped step is not one. */
-  failed: number;
-  isOk: boolean;
-  steps: CollectionJobResult[];
+  failed: number
+  isOk: boolean
+  steps: CollectionJobResult[]
 }
 
 /**
@@ -33,18 +36,20 @@ export interface CollectionSyncResult {
 export async function runCollectionSync(
   onProgress: OnProgress = () => {},
 ): Promise<CollectionSyncResult> {
-  const steps: CollectionJobResult[] = [];
+  const steps: CollectionJobResult[] = []
 
   const record = (result: CollectionJobResult): void => {
-    steps.push(result);
-    onProgress(`[${result.name}] ${result.isSkipped ? 'skipped: ' : ''}${result.summary}`);
-  };
+    steps.push(result)
+    onProgress(
+      `[${result.name}] ${result.isSkipped ? "skipped: " : ""}${result.summary}`,
+    )
+  }
 
-  record(await runSyncBgg(onProgress));
-  record(await runEnrich({}, onProgress));
-  record(await runLinkRulebooks({}, onProgress));
-  record(await runLinkVideos({}, onProgress));
+  record(await runSyncBgg(onProgress))
+  record(await runEnrich({}, onProgress))
+  record(await runLinkRulebooks({}, onProgress))
+  record(await runLinkVideos({}, onProgress))
 
-  const failed = steps.filter((step) => !step.isOk).length;
-  return { failed, isOk: failed === 0, steps };
+  const failed = steps.filter((step) => !step.isOk).length
+  return { failed, isOk: failed === 0, steps }
 }

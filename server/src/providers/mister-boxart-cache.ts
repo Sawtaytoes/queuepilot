@@ -13,17 +13,18 @@
 // forever; a miss costs THREE (boxart, then title, then snap) on every single render, and
 // the games with no art are exactly the ones that will never grow any. A miss is remembered
 // for a week rather than forever, so art added to the archive later still turns up.
-import { createHash } from 'node:crypto';
-import fsp from 'node:fs/promises';
-import path from 'node:path';
+import { createHash } from "node:crypto"
+import fsp from "node:fs/promises"
+import path from "node:path"
 
-import { CACHE_PATH } from '../env.js';
+import { CACHE_PATH } from "../env.js"
 
 /** How long a "there is no art for this" answer is trusted. */
-const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MISS_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
 /** Beside the SQLite cache, because it is the same kind of thing: derived, and safe to lose. */
-export const boxartCacheDir = (): string => path.join(path.dirname(CACHE_PATH), 'boxart');
+export const boxartCacheDir = (): string =>
+  path.join(path.dirname(CACHE_PATH), "boxart")
 
 /**
  * A filesystem-safe key.
@@ -32,27 +33,44 @@ export const boxartCacheDir = (): string => path.join(path.dirname(CACHE_PATH), 
  * portably hold (the `:` in "Sonic 3: …", 200-character titles, leading dots), and every
  * sanitizer eventually collapses two different games onto one key.
  */
-const keyFor = (system: string, title: string): string => (
-  createHash('sha1').update(`${system} ${title}`).digest('hex')
-);
+const keyFor = (system: string, title: string): string =>
+  createHash("sha1")
+    .update(`${system} ${title}`)
+    .digest("hex")
 
 /** The cached bytes, or null when this game is not cached. */
-export async function readCachedArt(system: string, title: string): Promise<Buffer | null> {
+export async function readCachedArt(
+  system: string,
+  title: string,
+): Promise<Buffer | null> {
   try {
-    const buf = await fsp.readFile(path.join(boxartCacheDir(), `${keyFor(system, title)}.png`));
-    return buf.length ? buf : null;
+    const buf = await fsp.readFile(
+      path.join(
+        boxartCacheDir(),
+        `${keyFor(system, title)}.png`,
+      ),
+    )
+    return buf.length ? buf : null
   } catch {
-    return null;
+    return null
   }
 }
 
 /** True when this game is known to have no art, and that answer is still fresh. */
-export async function isCachedMiss(system: string, title: string): Promise<boolean> {
+export async function isCachedMiss(
+  system: string,
+  title: string,
+): Promise<boolean> {
   try {
-    const st = await fsp.stat(path.join(boxartCacheDir(), `${keyFor(system, title)}.miss`));
-    return Date.now() - st.mtimeMs < MISS_TTL_MS;
+    const st = await fsp.stat(
+      path.join(
+        boxartCacheDir(),
+        `${keyFor(system, title)}.miss`,
+      ),
+    )
+    return Date.now() - st.mtimeMs < MISS_TTL_MS
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -72,15 +90,18 @@ export async function writeCachedArt(
   title: string,
   buffer: Buffer | null,
 ): Promise<void> {
-  const dir = boxartCacheDir();
+  const dir = boxartCacheDir()
   try {
-    await fsp.mkdir(dir, { recursive: true });
-    const file = path.join(dir, `${keyFor(system, title)}${buffer ? '.png' : '.miss'}`);
+    await fsp.mkdir(dir, { recursive: true })
+    const file = path.join(
+      dir,
+      `${keyFor(system, title)}${buffer ? ".png" : ".miss"}`,
+    )
     // Write-then-rename, so a crash mid-write cannot leave a truncated PNG to be served
     // forever afterwards as a corrupt poster.
-    const tmp = `${file}.tmp`;
-    await fsp.writeFile(tmp, buffer ?? Buffer.alloc(0));
-    await fsp.rename(tmp, file);
+    const tmp = `${file}.tmp`
+    await fsp.writeFile(tmp, buffer ?? Buffer.alloc(0))
+    await fsp.rename(tmp, file)
   } catch {
     // Deliberately silent — see this function's note.
   }

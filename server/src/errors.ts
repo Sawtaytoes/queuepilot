@@ -11,7 +11,7 @@
  * Nothing in this module throws or logs. It is pure narrowing.
  */
 
-import type { CancelFlag } from './types.js';
+import type { CancelFlag } from "./types.js"
 
 /**
  * True when `e` is an Error carrying Node's errno extras (`code`, `errno`, `path`,
@@ -23,8 +23,10 @@ import type { CancelFlag } from './types.js';
  *
  *     catch (e) { if (!isNodeError(e) || e.code !== 'ENOENT') throw e; }
  */
-export function isNodeError(e: unknown): e is NodeJS.ErrnoException {
-  return e instanceof Error;
+export function isNodeError(
+  e: unknown,
+): e is NodeJS.ErrnoException {
+  return e instanceof Error
 }
 
 /**
@@ -38,12 +40,16 @@ export function isNodeError(e: unknown): e is NodeJS.ErrnoException {
  * topic and read aloud by Home Assistant.
  */
 export function errMessage(e: unknown): string {
-  if (e instanceof Error && e.message) return e.message;
-  if (e != null && typeof e === 'object' && 'message' in e) {
-    const m = (e as { message?: unknown }).message;
-    if (m) return String(m);
+  if (e instanceof Error && e.message) return e.message
+  if (
+    e != null &&
+    typeof e === "object" &&
+    "message" in e
+  ) {
+    const m = (e as { message?: unknown }).message
+    if (m) return String(m)
   }
-  return String(e);
+  return String(e)
 }
 
 /**
@@ -61,15 +67,15 @@ export function errMessage(e: unknown): string {
  * make an HTTP 500 look like a syscall failure.
  */
 export class PlexError extends Error {
-  readonly plexStatus: number;
+  readonly plexStatus: number
 
-  readonly code: number;
+  readonly code: number
 
   constructor(status: number, path: string) {
-    super(`plex ${status} for ${path}`);
-    this.name = 'PlexError';
-    this.plexStatus = status;
-    this.code = status;
+    super(`plex ${status} for ${path}`)
+    this.name = "PlexError"
+    this.plexStatus = status
+    this.code = status
   }
 }
 
@@ -79,11 +85,14 @@ export class PlexError extends Error {
  * structural check and not `e instanceof PlexError`. Any of those may still be in flight
  * from a bundled older build or a test fixture.
  */
-export function isPlexError(e: unknown): e is Error & { plexStatus: number } {
+export function isPlexError(
+  e: unknown,
+): e is Error & { plexStatus: number } {
   return (
-    e instanceof Error
-    && typeof (e as { plexStatus?: unknown }).plexStatus === 'number'
-  );
+    e instanceof Error &&
+    typeof (e as { plexStatus?: unknown }).plexStatus ===
+      "number"
+  )
 }
 
 /**
@@ -94,9 +103,13 @@ export function isPlexError(e: unknown): e is Error & { plexStatus: number } {
  * `driver.js isCancelled()` — `isSet` first — so behaviour is unchanged. A null/absent
  * flag is NOT cancelled: most call sites pass one only when the caller owns a cancellation.
  */
-export function isCancelled(flag: CancelFlag | null | undefined): boolean {
-  if (!flag) return false;
-  if (typeof flag.isSet === 'function') return Boolean(flag.isSet());
-  if (typeof flag.is_set === 'function') return Boolean(flag.is_set());
-  return false;
+export function isCancelled(
+  flag: CancelFlag | null | undefined,
+): boolean {
+  if (!flag) return false
+  if (typeof flag.isSet === "function")
+    return Boolean(flag.isSet())
+  if (typeof flag.is_set === "function")
+    return Boolean(flag.is_set())
+  return false
 }

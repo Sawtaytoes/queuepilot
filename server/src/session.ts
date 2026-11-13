@@ -1,5 +1,14 @@
-import { withDevice, withCancellation, invalidateDeviceOperations, deviceOperationCancelled } from './deviceScope.js';
-import * as devices from './devices.js';
+import * as adb from "./adb.js"
+import {
+  deviceOperationCancelled,
+  invalidateDeviceOperations,
+  withCancellation,
+  withDevice,
+} from "./deviceScope.js"
+import * as devices from "./devices.js"
+import * as driver from "./driver.js"
+import { playbackLength } from "./engine/playbackLength.js"
+import { liveClient } from "./engine/plex-live.js"
 // In-process session start: the sole implementation since Python was removed (2026-08-12).
 //
 // Selection and delivery both go through a PROVIDER (./providers) rather than a Plex client:
@@ -11,32 +20,48 @@ import * as devices from './devices.js';
 // entries in the shared queues.yaml recipe store being finished, not about Plex — and it now
 // lives in finished.js, which runs it from here on a session START and again when PLAYBACK
 // ENDS. This file still owns WHEN a scan happens; it no longer owns the rule.
-import * as routing from './engine/routing.js';
-import { playbackLength } from './engine/playbackLength.js';
-import * as finished from './finished.js';
-import { isAutoRewatch, wireKindForSet } from './kind.js';
-import { providerFor } from './providers/index.js';
-import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
-import * as profiles from './profiles.js';
-import * as promote from './promote.js';
-import * as adb from './adb.js';
-import * as playback from './playback.js';
-import * as driver from './driver.js';
-import * as resume from './resume.js';
-import * as section from './section.js';
-import { isSetAvailable, seasonReturnLabel } from './season.js';
-import * as watchedReset from './watchedReset.js';
-import { liveClient } from './engine/plex-live.js';
-import { plexServerAccessForProfile, plexServerClient } from './plexSources.js';
-import * as mqttc from './mqttc.js';
+import * as routing from "./engine/routing.js"
 import {
-  PLAYBACK_FSM, ADB_ENABLED, RESUME_ON_ADVANCE, RESUME_PUSH_TRIGGER,
-} from './env.js';
-import { errMessage, isCancelled } from './errors.js';
+  ADB_ENABLED,
+  PLAYBACK_FSM,
+  RESUME_ON_ADVANCE,
+  RESUME_PUSH_TRIGGER,
+} from "./env.js"
+import { errMessage, isCancelled } from "./errors.js"
+import * as finished from "./finished.js"
+import { isAutoRewatch, wireKindForSet } from "./kind.js"
+import * as mqttc from "./mqttc.js"
+import * as playback from "./playback.js"
+import {
+  plexServerAccessForProfile,
+  plexServerClient,
+} from "./plexSources.js"
+import * as profiles from "./profiles.js"
+import * as promote from "./promote.js"
+import {
+  type BlockSourceCfg,
+  providerIdForSet,
+} from "./providers/blocks.js"
+import { providerFor } from "./providers/index.js"
+import * as resume from "./resume.js"
+import {
+  isSetAvailable,
+  seasonReturnLabel,
+} from "./season.js"
+import * as section from "./section.js"
 import type {
-  CancelFlag, Device, HandoffResult, NowPlaying, PlayItem, PlexPlayItem,
-  ProviderArtifact, PublishedStateExtra, SessionStartPayload, SessionState,
-} from './types.js';
+  CancelFlag,
+  Device,
+  HandoffResult,
+  NowPlaying,
+  PlayItem,
+  PlexPlayItem,
+  ProviderArtifact,
+  PublishedStateExtra,
+  SessionStartPayload,
+  SessionState,
+} from "./types.js"
+import * as watchedReset from "./watchedReset.js"
 
 /**
  * One lineup item as the SESSION holds it, once the play items have been flattened.
@@ -48,30 +73,30 @@ import type {
  * never runs through `startSession`; the optional fields are what keep the gap visible.
  */
 interface SessionQueueItem {
-  ratingKey: string;
-  plexServer?: string | undefined;
-  title?: string | undefined;
-  season?: number | null | undefined;
-  episode?: number | null | undefined;
-  queueEntryKey?: string | undefined;
-  queueOwnHistory?: boolean | undefined;
-  queueProviderViewCount?: number | undefined;
+  ratingKey: string
+  plexServer?: string | undefined
+  title?: string | undefined
+  season?: number | null | undefined
+  episode?: number | null | undefined
+  queueEntryKey?: string | undefined
+  queueOwnHistory?: boolean | undefined
+  queueProviderViewCount?: number | undefined
 }
 
 /** The mutable module-level singleton. Declared as an interface so `this` inside `asDict()`
  * is the session itself — it is a real method, NOT an arrow function, and typing it as one
  * would break the `this` it reads. */
 interface SessionSingleton {
-  sittingId: number;
-  isPreparing: boolean;
-  device: Device | null;
-  kind: string | null;
-  set: string | null;
-  profile: string | null;
-  queue: SessionQueueItem[];
-  cursor: number;
-  lastMovieRk: string | null;
-  userUuid: string | null;
+  sittingId: number
+  isPreparing: boolean
+  device: Device | null
+  kind: string | null
+  set: string | null
+  profile: string | null
+  queue: SessionQueueItem[]
+  cursor: number
+  lastMovieRk: string | null
+  userUuid: string | null
   /**
    * The LIVE playQueue this session pushed, so a later top-up can extend the queue the
    * viewer is actually in rather than building a second one.
@@ -81,7 +106,7 @@ interface SessionSingleton {
    * provider (Kavita has no playQueue; its artifact is a reading list) and null before the
    * first scan.
    */
-  playQueueID: number | string | null;
+  playQueueID: number | string | null
   /**
    * How many items this session has handed the viewer in total — the initial lineup plus every
    * top-up since. The counter a FINITE playback length is measured against.
@@ -91,22 +116,22 @@ interface SessionSingleton {
    * four items the queue no longer holds. "Plays 8 and stops" means eight handed over, not
    * eight surviving.
    */
-  queuedTotal: number;
+  queuedTotal: number
   /**
    * The playback length this session started under, so the finish event can say whether the
    * sitting reached its end or merely ran out of material. Null = infinite.
    */
-  target: number | null;
-  asDict(this: SessionSingleton): SessionState;
+  target: number | null
+  asDict(this: SessionSingleton): SessionState
 }
 
 /** The retained `queuepilot/resp/last-played` payload — `lastPlayedFromItem()`'s return, and
  * what `mqttd.js publishLastPlayed()` puts on the wire. Exported so that publisher's
  * parameter is this type rather than a second hand-written copy of it. */
 export interface LastPlayed {
-  title: string | null;
-  type: string;
-  ratingKey: string | null;
+  title: string | null
+  type: string
+  ratingKey: string | null
 }
 
 /** The `extra` half of a state publish: everything a caller may merge on top of `asDict()`.
@@ -115,10 +140,14 @@ export interface LastPlayed {
  * An alias of the shared `PublishedStateExtra` (types.ts) — it was an identical hand-written
  * copy, as were mqttd's and driver's, which is what let the driver's copy grow an argument
  * the publisher never took. The name stays because the e2e harnesses import it. */
-export type SessionStateExtra = PublishedStateExtra;
+export type SessionStateExtra = PublishedStateExtra
 
-export type PublishState = (extra: SessionStateExtra) => void;
-export type PublishLastPlayed = (item: LastPlayed | null) => void;
+export type PublishState = (
+  extra: SessionStateExtra,
+) => void
+export type PublishLastPlayed = (
+  item: LastPlayed | null,
+) => void
 
 /**
  * What `startSession()` hands back: one of its own early-outs, or the handoff result
@@ -127,8 +156,13 @@ export type PublishLastPlayed = (item: LastPlayed | null) => void;
 export type SessionResult =
   | { cancelled: true }
   | { error: string }
-  | { ok: true; playback: HandoffResult; set: string; count: number }
-  | HandoffResult;
+  | {
+      ok: true
+      playback: HandoffResult
+      set: string
+      count: number
+    }
+  | HandoffResult
 
 // Mutable session (mirrors service.Session) for advance + last-played.
 export const SESSION: SessionSingleton = {
@@ -149,58 +183,78 @@ export const SESSION: SessionSingleton = {
   target: null,
   asDict() {
     return {
-      kind: this.kind, set: this.set, profile: this.profile,
-      queue_len: this.queue.length, cursor: this.cursor, deviceId: this.device?.id ?? null,
-    };
+      kind: this.kind,
+      set: this.set,
+      profile: this.profile,
+      queue_len: this.queue.length,
+      cursor: this.cursor,
+      deviceId: this.device?.id ?? null,
+    }
   },
-};
-
-let _statePublisher: PublishState = () => {};
-let _preparationError: string | undefined;
-function _publishState(extra: SessionStateExtra): void {
-  if (SESSION.isPreparing && !deviceOperationCancelled() && typeof extra.error === 'string') {
-    _preparationError = extra.error;
-  }
-  _statePublisher(extra);
 }
-let _publishLastPlayed: PublishLastPlayed = () => {};
-export function setPublishers(
-  { state, lastPlayed }: { state?: PublishState; lastPlayed?: PublishLastPlayed } = {},
-): void {
-  if (state) _statePublisher = state;
-  if (lastPlayed) _publishLastPlayed = lastPlayed;
+
+let _statePublisher: PublishState = () => {}
+let _preparationError: string | undefined
+function _publishState(extra: SessionStateExtra): void {
+  if (
+    SESSION.isPreparing &&
+    !deviceOperationCancelled() &&
+    typeof extra.error === "string"
+  ) {
+    _preparationError = extra.error
+  }
+  _statePublisher(extra)
+}
+let _publishLastPlayed: PublishLastPlayed = () => {}
+export function setPublishers({
+  state,
+  lastPlayed,
+}: {
+  state?: PublishState
+  lastPlayed?: PublishLastPlayed
+} = {}): void {
+  if (state) _statePublisher = state
+  if (lastPlayed) _publishLastPlayed = lastPlayed
   // The SAME publisher the session uses, handed to the driver so the FSM path's mid-flight
   // "awaiting" reaches the state topic. `?? null` only because driver's setter is typed
   // `PublishStateFn | null`; it stored the undefined before and guards with a truthiness test
   // either way, so nothing changes. No cast: both sides are `PublishedStateExtra` now, which
   // is what makes an arity slip here a compile error rather than a silent dropped payload.
-  driver.setPublishState?.(state ? _publishState : null);
+  driver.setPublishState?.(state ? _publishState : null)
 }
 
 function cancelFlag(): Required<CancelFlag> {
-  let isRaised = false;
+  let isRaised = false
   return {
     is_set: () => isRaised,
     isSet: () => isRaised,
-    set: () => { isRaised = true; },
-    clear: () => { isRaised = false; },
-  };
+    set: () => {
+      isRaised = true
+    },
+    clear: () => {
+      isRaised = false
+    },
+  }
 }
 
 // Only one start in flight; a newer start cancels the prior.
-let _activeCancel: CancelFlag | null = null;
+let _activeCancel: CancelFlag | null = null
 
-function lastPlayedFromItem(item: PlayItem | null | undefined): LastPlayed | null {
-  if (!item) return null;
+function lastPlayedFromItem(
+  item: PlayItem | null | undefined,
+): LastPlayed | null {
+  if (!item) return null
   // A Plex-shaped VIEW of a lineup item, every field optional: `show`, `type`, `season` and
   // `ratingKey` exist on `PlexPlayItem` only, and reading them off a Kavita item yields
   // undefined at runtime — which is exactly what the original expression did. See `PlayItem`.
-  const it = item as Partial<PlexPlayItem>;
+  const it = item as Partial<PlexPlayItem>
   return {
     title: it.title || it.show || null,
-    type: it.type || (it.season != null ? 'episode' : 'movie'),
-    ratingKey: it.ratingKey != null ? String(it.ratingKey) : null,
-  };
+    type:
+      it.type || (it.season != null ? "episode" : "movie"),
+    ratingKey:
+      it.ratingKey != null ? String(it.ratingKey) : null,
+  }
 }
 
 /**
@@ -212,64 +266,96 @@ async function startSessionOnDevice(
 ): Promise<SessionResult> {
   // `.set!` rather than `.set?.()`: a flag without `set` is a caller error and threw here
   // before, and swallowing it would leave the previous start running.
-  if (_activeCancel) _activeCancel.set!();
-  const cancel = opts.cancel || cancelFlag();
-  _activeCancel = cancel;
-  const isSuperseded = (): boolean => isCancelled(cancel) || deviceOperationCancelled();
+  if (_activeCancel) _activeCancel.set!()
+  const cancel = opts.cancel || cancelFlag()
+  _activeCancel = cancel
+  const isSuperseded = (): boolean =>
+    isCancelled(cancel) || deviceOperationCancelled()
 
   if (ADB_ENABLED) {
-    try { await adb.ensurePlexOpen(); } catch (e) {
-      console.log(`[session] ensurePlexOpen: ${errMessage(e)}`);
+    try {
+      await adb.ensurePlexOpen()
+    } catch (e) {
+      console.log(
+        `[session] ensurePlexOpen: ${errMessage(e)}`,
+      )
     }
   }
 
-  if (isSuperseded()) return { cancelled: true };
-  let setName: string | null = payload.set || 'auto';
-  const cardProfile = payload.profile || null;
+  if (isSuperseded()) return { cancelled: true }
+  let setName: string | null = payload.set || "auto"
+  const cardProfile = payload.profile || null
   // "Play THIS entry" — an entry key from the web grid's per-tile ▶, narrowing the lineup to
   // one member of a curated queue/channel. Everything else about the start is unchanged: the
   // same profile gate, the same device, the same resume/mark-done bookkeeping. A physical
   // card never sends it; it only ever arrives from the UI.
-  const only = payload.only ? String(payload.only) : null;
-  const isAuto = setName === 'auto' || setName === '' || setName == null;
+  const only = payload.only ? String(payload.only) : null
+  const isAuto =
+    setName === "auto" || setName === "" || setName == null
   const wantRewatch = isAutoRewatch({
     kind: payload.kind,
     behavior: payload.behavior,
     mode: payload.mode,
-  });
-  let profileTitle: string | null = null;
-  let detectedProfile: string | null = null;
+  })
+  let profileTitle: string | null = null
+  let detectedProfile: string | null = null
 
   // NOTE (found, not fixed): `loadSets()` returns null for "keep the current sets" — the file
   // was absent, unreadable or empty — and this function has never handled that; it reads
   // `reg.sets` straight away and throws. The `!` preserves that exactly rather than inventing
   // an error path that mqttd would then publish differently.
-  const reg = routing.loadSets();
+  const reg = routing.loadSets()
 
   if (isAuto) {
-    _publishState({ awaiting: 'profile', ...SESSION.asDict() });
-    const active = await playback.currentAccount({ device: typeof payload.target === 'object' ? payload.target : null, timeoutMs: 1_000 });
-    const title = active?.title ?? await profiles.waitForProfile({ cancel, match: null });
-    if (isCancelled(cancel)) return { cancelled: true };
+    _publishState({
+      awaiting: "profile",
+      ...SESSION.asDict(),
+    })
+    const active = await playback.currentAccount({
+      device:
+        typeof payload.target === "object"
+          ? payload.target
+          : null,
+      timeoutMs: 1_000,
+    })
+    const title =
+      active?.title ??
+      (await profiles.waitForProfile({
+        cancel,
+        match: null,
+      }))
+    if (isCancelled(cancel)) return { cancelled: true }
     if (!title) {
-      _publishState({ error: 'no profile is signed in on the Shield. Open Plex and pick one.', ...SESSION.asDict() });
-      return { error: 'no profile' };
+      _publishState({
+        error:
+          "no profile is signed in on the Shield. Open Plex and pick one.",
+        ...SESSION.asDict(),
+      })
+      return { error: "no profile" }
     }
-    profileTitle = detectedProfile = title;
-    setName = routing.channelFor(payload.kind, title, reg!, wantRewatch)
-      || profiles.setForProfile(title);
+    profileTitle = detectedProfile = title
+    setName =
+      routing.channelFor(
+        payload.kind,
+        title,
+        reg!,
+        wantRewatch,
+      ) || profiles.setForProfile(title)
     if (!setName) {
-      _publishState({ error: `profile '${title}' has no set mapped`, ...SESSION.asDict() });
-      return { error: 'no set' };
+      _publishState({
+        error: `profile '${title}' has no set mapped`,
+        ...SESSION.asDict(),
+      })
+      return { error: "no set" }
     }
     console.log(
       `[session] '${title}' + auto(rewatch=${wantRewatch}) -> set '${setName}'`,
-    );
+    )
   } else {
-    profileTitle = cardProfile;
+    profileTitle = cardProfile
   }
 
-  const cfg = reg!.sets[setName];
+  const cfg = reg!.sets[setName]
   // AVAILABLE, which is `enabled` AND in season — one predicate, shared with the five other
   // places that used to ask `cfg.enabled === false` on its own. The season half is evaluated
   // HERE, on this read, because a card tapped in June must be refused in June
@@ -279,47 +365,63 @@ async function startSessionOnDevice(
     // in this app with no screen attached to it — the theater simply does not start — so the
     // one line anybody ever reads has to name which of the two it was, and when the queue
     // comes back.
-    const returns = cfg ? seasonReturnLabel(cfg) : null;
+    const returns = cfg ? seasonReturnLabel(cfg) : null
 
     _publishState({
       error: returns
         ? `set '${setName}' is out of season — it returns ${returns}`
         : `set '${setName}' not enabled`,
       ...SESSION.asDict(),
-    });
-    return { error: returns ? 'out of season' : 'disabled' };
+    })
+    return { error: returns ? "out of season" : "disabled" }
   }
 
-  let required: string | null = cfg.requires_profile || null;
-  if (required && cardProfile && cardProfile !== required && !isAuto) {
+  let required: string | null = cfg.requires_profile || null
+  if (
+    required &&
+    cardProfile &&
+    cardProfile !== required &&
+    !isAuto
+  ) {
     _publishState({
       error: `card asks for profile '${cardProfile}' but set '${cfg.label || setName}' requires '${required}'`,
       ...SESSION.asDict(),
-    });
-    return { error: 'profile mismatch' };
+    })
+    return { error: "profile mismatch" }
   }
-  if (!required && !isAuto) required = cardProfile;
+  if (!required && !isAuto) required = cardProfile
 
   if (PLAYBACK_FSM) {
-    if (required && !profileTitle) profileTitle = required;
+    if (required && !profileTitle) profileTitle = required
   } else if (required && detectedProfile !== required) {
-    _publishState({ awaiting: `profile:${required}`, ...SESSION.asDict() });
+    _publishState({
+      awaiting: `profile:${required}`,
+      ...SESSION.asDict(),
+    })
     // Best-effort ADB switch in background + log wait
     const switchP = ADB_ENABLED
-      ? adb.switchTo(required, cancel, null).catch((e: unknown) => [false, errMessage(e)])
-      : Promise.resolve([false, 'ADB off']);
-    const title = await profiles.waitForProfile({ cancel, match: required });
-    if (isCancelled(cancel)) return { cancelled: true };
+      ? adb
+          .switchTo(required, cancel, null)
+          .catch((e: unknown) => [false, errMessage(e)])
+      : Promise.resolve([false, "ADB off"])
+    const title = await profiles.waitForProfile({
+      cancel,
+      match: required,
+    })
+    if (isCancelled(cancel)) return { cancelled: true }
     if (!title) {
-      const [, why] = await switchP;
-      if (why) console.log(`[session] gate failed for '${required}' (${why})`);
+      const [, why] = await switchP
+      if (why)
+        console.log(
+          `[session] gate failed for '${required}' (${why})`,
+        )
       _publishState({
         error: `'${cfg.label || setName}' needs the '${required}' Plex profile, and the Shield did not switch to it. Pick it on the TV.`,
         ...SESSION.asDict(),
-      });
-      return { error: 'profile gate' };
+      })
+      return { error: "profile gate" }
     }
-    profileTitle = detectedProfile = title;
+    profileTitle = detectedProfile = title
   }
 
   // The engine no longer holds a Plex client — it holds a PROVIDER (decision
@@ -330,38 +432,48 @@ async function startSessionOnDevice(
   // A `RoutingSetCfg` IS a block source; it just isn't assignable to `BlockSourceCfg`'s
   // index signature, which an interface never gets implicitly. The cast is that rule, not a
   // shape change.
-  const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
+  const provider = providerFor(
+    providerIdForSet(cfg as unknown as BlockSourceCfg),
+  )
   // `bindingFor` can only read what the SET stores, and a curated queue stores no account —
   // just `requires_profile`, a display name. Left at that, the queue selected its lineup as
   // the OWNER (env WATCH_COUNT_ACCOUNTS + the admin token) however it was gated. The provider
   // fills the account in, because a name -> an accountID is a provider fact; a binding that
   // already names one (every rotation channel) comes back untouched.
-  let binding = routing.bindingFor(cfg, profileTitle);
-  if (typeof provider.profileBinding === 'function') {
-    binding = await provider.profileBinding(binding, profileTitle);
+  let binding = routing.bindingFor(cfg, profileTitle)
+  if (typeof provider.profileBinding === "function") {
+    binding = await provider.profileBinding(
+      binding,
+      profileTitle,
+    )
   }
-  if (isSuperseded()) return { cancelled: true };
+  if (isSuperseded()) return { cancelled: true }
   // Product kind on the session / retained state — never the legacy wire spellings.
-  const kind = wireKindForSet(cfg);
-  SESSION.device = typeof payload.target === 'object' ? payload.target ?? null : null;
-  SESSION.kind = kind;
-  SESSION.set = setName;
-  SESSION.profile = profileTitle;
-  SESSION.cursor = 0;
-  SESSION.userUuid = binding.user_uuid || null;
-  let resumeMs = 0;
-  let playItems: PlayItem[] = [];
+  const kind = wireKindForSet(cfg)
+  SESSION.device =
+    typeof payload.target === "object"
+      ? (payload.target ?? null)
+      : null
+  SESSION.kind = kind
+  SESSION.set = setName
+  SESSION.profile = profileTitle
+  SESSION.cursor = 0
+  SESSION.userUuid = binding.user_uuid || null
+  let resumeMs = 0
+  let playItems: PlayItem[] = []
   // Priority entries that LED this lineup on a once-per-window lead. Stamped only after the
   // handoff succeeds — see `BucketsResult.led`.
-  let ledKeys: string[] = [];
+  let ledKeys: string[] = []
 
   // UNGUARDED on purpose, and the `!` says so: `profileToken` is OPTIONAL on the `Provider`
   // interface (every other optional member is called behind a `typeof … === 'function'`
   // check), but this call site has never had one. A push provider without it throws right
   // here — a latent requirement of the push path, not of the interface. Adding a guard would
   // change behaviour, so the assertion preserves the throw instead.
-  const tok = await provider.profileToken!(binding.user_uuid);
-  if (isSuperseded()) return { cancelled: true };
+  const tok = await provider.profileToken!(
+    binding.user_uuid,
+  )
+  if (isSuperseded()) return { cancelled: true }
 
   // THE SEASONAL RESET, EVALUATED ON THIS READ — there is no timer anywhere in the feature
   // (decision 2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year).
@@ -377,21 +489,29 @@ async function startSessionOnDevice(
   //
   // Best-effort: a queue must still play if the stamp cannot be written. A reset that does not
   // happen today happens on the next read, which is what a missed day already means.
-  if (cfg.source === 'queue') {
+  if (cfg.source === "queue") {
     try {
-      await watchedReset.applySeasonalReset(setName, cfg);
+      await watchedReset.applySeasonalReset(setName, cfg)
     } catch (e) {
-      console.log(`[session] ${setName}: seasonal reset failed (${errMessage(e)})`);
+      console.log(
+        `[session] ${setName}: seasonal reset failed (${errMessage(e)})`,
+      )
     }
   }
 
-  if (isSuperseded()) return { cancelled: true };
+  if (isSuperseded()) return { cancelled: true }
   const res = await provider.buckets({
-    setName, cfg, binding, token: tok, kind, lastMovieRk: SESSION.lastMovieRk, only,
-  });
-  if (isSuperseded()) return { cancelled: true };
+    setName,
+    cfg,
+    binding,
+    token: tok,
+    kind,
+    lastMovieRk: SESSION.lastMovieRk,
+    only,
+  })
+  if (isSuperseded()) return { cancelled: true }
 
-  if (cfg.source === 'queue') {
+  if (cfg.source === "queue") {
     // D4 write-side: persist finished + revive stale-done + TTL sweep. This stays ABOVE the
     // seam on purpose — it is about entries in the shared queues.yaml recipe store being
     // finished, not about Plex, so a second provider reuses it verbatim.
@@ -399,10 +519,16 @@ async function startSessionOnDevice(
     // It now lives in finished.js because a session START is no longer the only thing that
     // runs it: the end of PLAYBACK reconciles the same set the same way, so the file agrees
     // with Plex without waiting for the next scan. One copy, so the two cannot drift.
-    await finished.applyQueueWriteSide(setName, cfg, res);
-    if (isSuperseded()) return { cancelled: true };
-    if (res.done?.length) console.log(`[session] ${setName} finished (kept): ${res.done}`);
-    if (res.unresolved?.length) console.log(`[session] ${setName} unresolved: ${res.unresolved}`);
+    await finished.applyQueueWriteSide(setName, cfg, res)
+    if (isSuperseded()) return { cancelled: true }
+    if (res.done?.length)
+      console.log(
+        `[session] ${setName} finished (kept): ${res.done}`,
+      )
+    if (res.unresolved?.length)
+      console.log(
+        `[session] ${setName} unresolved: ${res.unresolved}`,
+      )
     if (!res.play?.length) {
       // A one-entry start fails for its own reasons, and "add entries to queues.yaml" is the
       // wrong advice for every one of them — the queue is fine, this entry is not.
@@ -410,112 +536,165 @@ async function startSessionOnDevice(
         ? `'${setName}' has no entry ${res.unknownEntry} any more — it was removed or renamed. Reload the page.`
         : only
           ? `that entry in '${cfg.label || setName}' has nothing left to play — it is fully watched, or it no longer resolves in the library.`
-          : `queue '${setName}' has nothing to play (empty, or every entry watched - add entries to queues.yaml)`;
-      _publishState({ error: why, ...SESSION.asDict() });
-      return { error: only ? 'empty entry' : 'empty queue' };
+          : `queue '${setName}' has nothing to play (empty, or every entry watched - add entries to queues.yaml)`
+      _publishState({ error: why, ...SESSION.asDict() })
+      return { error: only ? "empty entry" : "empty queue" }
     }
-    playItems = res.play;
-    resumeMs = res.offset || 0;
-    ledKeys = res.led || [];
+    playItems = res.play
+    resumeMs = res.offset || 0
+    ledKeys = res.led || []
     if (res.suppressed?.length) {
-      console.log(`[session] ${setName} held back by a lead window: ${res.suppressed}`);
+      console.log(
+        `[session] ${setName} held back by a lead window: ${res.suppressed}`,
+      )
     }
-    if (res.last) _publishLastPlayed(lastPlayedFromItem(res.last));
+    if (res.last)
+      _publishLastPlayed(lastPlayedFromItem(res.last))
   } else if (res.rewatch) {
     if (!res.play?.length) {
-      _publishState({ error: 'no rewatch candidate found for this profile', ...SESSION.asDict() });
-      return { error: 'no rewatch' };
+      _publishState({
+        error:
+          "no rewatch candidate found for this profile",
+        ...SESSION.asDict(),
+      })
+      return { error: "no rewatch" }
     }
-    playItems = res.play;
+    playItems = res.play
     // Same Plex-shaped read as everywhere else on this path (see `SessionQueueItem`):
     // `ratingKey` is `string | number` on a Plex item and absent on a Kavita one, while
     // `lastMovieRk` and `BucketsContext.lastMovieRk` are `string | null`. Assigned verbatim,
     // as before — the cast records the mismatch rather than coercing it away.
-    SESSION.lastMovieRk = (playItems[0] as Partial<PlexPlayItem>).ratingKey as unknown as string;
-    _publishLastPlayed(lastPlayedFromItem(playItems[0]));
+    SESSION.lastMovieRk = (
+      playItems[0] as Partial<PlexPlayItem>
+    ).ratingKey as unknown as string
+    _publishLastPlayed(lastPlayedFromItem(playItems[0]))
   } else {
     if (!res.play?.length) {
-      _publishState({ error: `channel '${setName}' has nothing unwatched to play`, ...SESSION.asDict() });
-      return { error: 'empty rotation' };
+      _publishState({
+        error: `channel '${setName}' has nothing unwatched to play`,
+        ...SESSION.asDict(),
+      })
+      return { error: "empty rotation" }
     }
-    playItems = res.play;
-    _publishLastPlayed(lastPlayedFromItem(playItems[0]));
+    playItems = res.play
+    _publishLastPlayed(lastPlayedFromItem(playItems[0]))
   }
 
   // max_items cap
-  const cap = cfg.max_items;
-  if (typeof cap === 'number' && cap > 0) playItems = playItems.slice(0, cap);
+  const cap = cfg.max_items
+  if (typeof cap === "number" && cap > 0)
+    playItems = playItems.slice(0, cap)
 
   // A cached allLeaves row is enough to choose an episode, but not enough to baseline a
   // REWATCH completion: another device may have incremented viewCount since that row was
   // cached. Read each queue-owned head directly before handoff, so only THIS play can make
   // the final count larger than the captured count.
-  const baselineAccess = new Map<string, ReturnType<typeof plexServerAccessForProfile>>();
-  await Promise.all(playItems.map(async (item) => {
-    const it = item as PlexPlayItem & {
-      queueOwnHistory?: boolean; queueProviderViewCount?: number;
-    };
-    if (!it.queueOwnHistory) return;
-    try {
-      if (it.plexServer && !baselineAccess.has(it.plexServer)) {
-        baselineAccess.set(it.plexServer, plexServerAccessForProfile(SESSION.userUuid, it.plexServer));
+  const baselineAccess = new Map<
+    string,
+    ReturnType<typeof plexServerAccessForProfile>
+  >()
+  await Promise.all(
+    playItems.map(async (item) => {
+      const it = item as PlexPlayItem & {
+        queueOwnHistory?: boolean
+        queueProviderViewCount?: number
       }
-      const remote = it.plexServer ? await baselineAccess.get(it.plexServer) : null;
-      if (it.plexServer && !remote) throw new Error('Shared Plex server is unavailable');
-      const mc = await (remote ? plexServerClient(remote) : liveClient())
-        .container(`/library/metadata/${it.ratingKey}`, remote?.token ?? tok);
-      it.queueProviderViewCount = Math.max(0, Number(mc.Metadata?.[0]?.viewCount) || 0);
-    } catch {
-      // Keep the resolver's count. A failed baseline read must not block playback; the final
-      // read then fails the same way and preserves the live QueuePilot position.
-    }
-  }));
+      if (!it.queueOwnHistory) return
+      try {
+        if (
+          it.plexServer &&
+          !baselineAccess.has(it.plexServer)
+        ) {
+          baselineAccess.set(
+            it.plexServer,
+            plexServerAccessForProfile(
+              SESSION.userUuid,
+              it.plexServer,
+            ),
+          )
+        }
+        const remote = it.plexServer
+          ? await baselineAccess.get(it.plexServer)
+          : null
+        if (it.plexServer && !remote)
+          throw new Error(
+            "Shared Plex server is unavailable",
+          )
+        const mc = await (remote
+          ? plexServerClient(remote)
+          : liveClient()
+        ).container(
+          `/library/metadata/${it.ratingKey}`,
+          remote?.token ?? tok,
+        )
+        it.queueProviderViewCount = Math.max(
+          0,
+          Number(mc.Metadata?.[0]?.viewCount) || 0,
+        )
+      } catch {
+        // Keep the resolver's count. A failed baseline read must not block playback; the final
+        // read then fails the same way and preserves the live QueuePilot position.
+      }
+    }),
+  )
 
   // The Plex-only read the `PlayItem` union exists to make visible: `String(it.ratingKey)` is
   // `'undefined'` for a Kavita item and `season`/`episode` are simply absent. Left exactly as
   // it was — the pull path does not reach `startSession`, so this stays unreachable.
-  if (isSuperseded()) return { cancelled: true };
+  if (isSuperseded()) return { cancelled: true }
   SESSION.queue = playItems.map((item) => {
-    const it = item as Partial<PlexPlayItem>;
+    const it = item as Partial<PlexPlayItem>
     return {
       ratingKey: String(it.ratingKey),
       plexServer: it.plexServer,
       title: it.title,
       season: it.season,
       episode: it.episode,
-      queueEntryKey: (it as PlexPlayItem & { queueEntryKey?: string }).queueEntryKey,
-      queueOwnHistory: (it as PlexPlayItem & { queueOwnHistory?: boolean }).queueOwnHistory,
-      queueProviderViewCount: (it as PlexPlayItem & { queueProviderViewCount?: number })
-        .queueProviderViewCount,
-    };
-  });
+      queueEntryKey: (
+        it as PlexPlayItem & { queueEntryKey?: string }
+      ).queueEntryKey,
+      queueOwnHistory: (
+        it as PlexPlayItem & { queueOwnHistory?: boolean }
+      ).queueOwnHistory,
+      queueProviderViewCount: (
+        it as PlexPlayItem & {
+          queueProviderViewCount?: number
+        }
+      ).queueProviderViewCount,
+    }
+  })
 
   // A scan STARTS a sitting, so the running total restarts with it — a top-up adds to this,
   // and a finite playback length is met when it reaches the target.
-  SESSION.queuedTotal = SESSION.queue.length;
-  SESSION.target = playbackLength(cfg);
+  SESSION.queuedTotal = SESSION.queue.length
+  SESSION.target = playbackLength(cfg)
 
-  const ratingKeys = SESSION.queue.map((q) => q.ratingKey);
+  const ratingKeys = SESSION.queue.map((q) => q.ratingKey)
   // LATENT BUG (types.ts `SessionStartPayload.target`): this is EITHER a resolved device (the
   // MQTT path, where mqttd.js swapped the id for the announced entry) OR a bare registry-id
   // string (any caller that skips mqttd), and playback/driver read `.uri`/`.mode`/`.name` off
   // it either way. The union is the honest type; resolving it here would be the fix, and the
   // fix is a behaviour change.
-  const device: string | Device | null = payload.target || null;
+  const device: string | Device | null =
+    payload.target || null
 
   // PLAYING A SECTION IS A PROVIDER CAPABILITY, and this is the guard. Only Plex can serve one
   // — a section is a seek plus a stop on a timeline this app can command, and every other
   // provider is `delivery: 'pull'`, so control leaves with the artifact. A backend that cannot
   // serve a section offers NO section rather than accepting one and playing the item in full
   // (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
-  const playsSections = provider.playsSections === true;
+  const playsSections = provider.playsSections === true
 
   // The head's start is FREE. Companion `playMedia` already takes an `offset` that applies to
   // the item it starts on, and that offset IS the section start — no poll, no seek, no delay.
   // An AUTHORED section start outranks the INFERRED resume marker this line used to carry,
   // including the private ledger's position on a `watch_history: queue` entry.
-  const head = playItems.length ? section.asCandidate(playItems[0] as PlexPlayItem) : null;
-  resumeMs = section.headStartOffsetMs(head, resumeMs, { playsSections });
+  const head = playItems.length
+    ? section.asCandidate(playItems[0] as PlexPlayItem)
+    : null
+  resumeMs = section.headStartOffsetMs(head, resumeMs, {
+    playsSections,
+  })
 
   // Arm resume-on-advance for THIS lineup before playing: playMedia resumes only the head, so
   // every other episode needs a seek once the player reaches it. Re-arming replaces any plan
@@ -530,80 +709,126 @@ async function startSessionOnDevice(
   // noted above: resume/playback/driver all read `.uri`/`.mode`/`.name` off it, and a string
   // id reaching them is the latent bug, not something to normalise here.
   const plan = RESUME_ON_ADVANCE
-    ? resume.resumePlan(playItems as resume.ResumeCandidate[], { headRatingKey: ratingKeys[0] })
-    : new Map<string, number>();
+    ? resume.resumePlan(
+        playItems as resume.ResumeCandidate[],
+        { headRatingKey: ratingKeys[0] },
+      )
+    : new Map<string, number>()
   // `isHeadStartApplied` because the line above just put the head's start on playMedia. Its
   // END still belongs in the plan — stopping the first clip of a demo reel is the point.
   const sections = section.sectionPlan(
-    playItems.map((item) => section.asCandidate(item as PlexPlayItem)),
+    playItems.map((item) =>
+      section.asCandidate(item as PlexPlayItem),
+    ),
     { isHeadStartApplied: true, playsSections },
-  );
+  )
   // Resolve the Companion target ONCE, here. It used to be re-derived on every poll and
   // again on every seek, and on a player advertising no connection each of those was a
   // plex.tv WAN round trip — on the exact path that has to be fast. A failure is not fatal:
   // null means the watcher resolves it per call, exactly as it always did.
-  let client: playback.ClientTarget | null = null;
+  let client: playback.ClientTarget | null = null
   if (plan.size || sections.size) {
     try {
-      client = await playback.findClient(device as Device | null);
+      client = await playback.findClient(
+        device as Device | null,
+      )
     } catch {
-      client = null;
+      client = null
     }
   }
-  if (isSuperseded()) return { cancelled: true };
-  resume.arm({ plan, device: device as Device | null, setName, client });
-  section.arm({ plan: sections, setName });
-  section.forgetBoundaries(); // a new sitting never inherits the last one's stop-and-advance
+  if (isSuperseded()) return { cancelled: true }
+  resume.arm({
+    plan,
+    device: device as Device | null,
+    setName,
+    client,
+  })
+  section.arm({ plan: sections, setName })
+  section.forgetBoundaries() // a new sitting never inherits the last one's stop-and-advance
   if (plan.size) {
-    console.log(`[resume] armed ${plan.size} queued episode(s) to resume on advance: `
-      + [...plan.entries()].map(([k, v]) => `${k}@${Math.round(v / 1000)}s`).join(' '));
+    console.log(
+      `[resume] armed ${plan.size} queued episode(s) to resume on advance: ` +
+        [...plan.entries()]
+          .map(([k, v]) => `${k}@${Math.round(v / 1000)}s`)
+          .join(" "),
+    )
   }
   if (sections.size) {
-    console.log(`[section] armed ${sections.size} window(s): `
-      + [...sections.entries()].map(([i, row]) => `#${i} rk=${row.ratingKey} `
-        + `${row.startMs == null ? 'start' : `${Math.round(row.startMs / 1000)}s`}`
-        + `->${row.endMs == null ? 'end' : `${Math.round(row.endMs / 1000)}s`}`).join(' '));
+    console.log(
+      `[section] armed ${sections.size} window(s): ` +
+        [...sections.entries()]
+          .map(
+            ([i, row]) =>
+              `#${i} rk=${row.ratingKey} ` +
+              `${row.startMs == null ? "start" : `${Math.round(row.startMs / 1000)}s`}` +
+              `->${row.endMs == null ? "end" : `${Math.round(row.endMs / 1000)}s`}`,
+          )
+          .join(" "),
+    )
   }
   if (plan.size || sections.size) {
     resume.startWatch({
-      fetchSession: () => playback.currentSession({
-        device: device as Device | null, client,
-        playQueueID: SESSION.playQueueID, userUuid: SESSION.userUuid,
-      }),
-      seek: (ms: number) => playback.seekTo(ms, {
-        device: device as Device | null, client, setName, userUuid: SESSION.userUuid,
-        playQueueID: SESSION.playQueueID,
-      }),
+      fetchSession: () =>
+        playback.currentSession({
+          device: device as Device | null,
+          client,
+          playQueueID: SESSION.playQueueID,
+          userUuid: SESSION.userUuid,
+        }),
+      seek: (ms: number) =>
+        playback.seekTo(ms, {
+          device: device as Device | null,
+          client,
+          setName,
+          userUuid: SESSION.userUuid,
+          playQueueID: SESSION.playQueueID,
+        }),
       // WHICH OCCURRENCE is playing. Read lazily off the session because the playQueue does
       // not exist yet — `handoff()` below is what creates it — and called by the watcher only
       // when two pending windows name the same file, which is the only case it can settle.
       fetchPlace: async () => {
-        const pqId = SESSION.playQueueID;
-        if (pqId == null) return null;
-        const live = await playback.readPlayQueue(pqId, { token: tok });
-        return live ? { index: live.selectedOffset, ratingKeys: live.ratingKeys } : null;
+        const pqId = SESSION.playQueueID
+        if (pqId == null) return null
+        const live = await playback.readPlayQueue(pqId, {
+          token: tok,
+        })
+        return live
+          ? {
+              index: live.selectedOffset,
+              ratingKeys: live.ratingKeys,
+            }
+          : null
       },
       // The stop-at. Companion `skipNext`, NOT `advanceSession()` — that rebuilds the whole
       // playQueue and restarts playback, which `topup.ts` names as the thing to avoid.
-      advance: () => playback.transport('next', device as Device | null),
+      advance: () =>
+        playback.transport("next", device as Device | null),
       // The now-playing wake-up. resume.js takes a subscriber rather than importing mqttc
       // itself, which is the same seam `fetchSession`/`seek` use: the watcher stays
       // drivable without a broker, a player or Plex.
       subscribePush: RESUME_PUSH_TRIGGER
         ? (onEvent) => {
-          const listener = (nowPlaying: NowPlaying | null): void => {
-            onEvent(nowPlaying?.ratingKey ? String(nowPlaying.ratingKey) : null);
-          };
-          mqttc.onNowPlaying(listener);
-          return () => { mqttc.offNowPlaying(listener); };
-        }
+            const listener = (
+              nowPlaying: NowPlaying | null,
+            ): void => {
+              onEvent(
+                nowPlaying?.ratingKey
+                  ? String(nowPlaying.ratingKey)
+                  : null,
+              )
+            }
+            mqttc.onNowPlaying(listener)
+            return () => {
+              mqttc.offNowPlaying(listener)
+            }
+          }
         : null,
-    });
+    })
   } else {
-    resume.disarm();
-    section.disarm();
+    resume.disarm()
+    section.disarm()
   }
-  const setLabel = cfg.label || setName;
+  const setLabel = cfg.label || setName
 
   // materialize -> handoff. Both return a DESCRIPTOR of how to start this; neither performs
   // playback itself. On Plex that is a playQueue pushed at the Shield; on a pull provider it
@@ -613,104 +838,184 @@ async function startSessionOnDevice(
   // a Promise instead of an artifact. Unreachable today for the same reason the `PlayItem`
   // mismatch is (the pull path never reaches `startSession`); adding an `await` here is a
   // behaviour change on the push path, so the cast records the gap instead.
-  const artifact = provider.materialize(
-    playItems,
-    { offset: resumeMs, setName, setLabel, binding },
-  ) as ProviderArtifact;
+  const artifact = provider.materialize(playItems, {
+    offset: resumeMs,
+    setName,
+    setLabel,
+    binding,
+  }) as ProviderArtifact
 
   // `cancelled` is a PUSH-result field (a pull handoff has no device to cancel), so the read
   // below is total over both members of `HandoffResult` without widening either.
-  if (isSuperseded()) return { cancelled: true };
-  let result: HandoffResult & { cancelled?: boolean };
+  if (isSuperseded()) return { cancelled: true }
+  let result: HandoffResult & { cancelled?: boolean }
   if (PLAYBACK_FSM) {
     result = await provider.handoff(artifact, {
-      useFsm: true, requiredProfile: required, device: device as Device | null, cancel, setLabel,
-    });
+      useFsm: true,
+      requiredProfile: required,
+      device: device as Device | null,
+      cancel,
+      setLabel,
+    })
   } else {
     // Legacy: join ADB switch then play
     if (required && ADB_ENABLED) {
-      try { await adb.switchTo(required, cancel, null); } catch (e) {
-        console.log(`[session] adb switch: ${errMessage(e)}`);
+      try {
+        await adb.switchTo(required, cancel, null)
+      } catch (e) {
+        console.log(
+          `[session] adb switch: ${errMessage(e)}`,
+        )
       }
     }
-    if (isCancelled(cancel)) return { cancelled: true };
-    result = await provider.handoff(artifact, { useFsm: false, device: device as Device | null });
+    if (isCancelled(cancel)) return { cancelled: true }
+    result = await provider.handoff(artifact, {
+      useFsm: false,
+      device: device as Device | null,
+    })
   }
 
-  if (isSuperseded()) return { cancelled: true };
-  if (result?.cancelled) return result;
+  if (isSuperseded()) return { cancelled: true }
+  if (result?.cancelled) return result
   if (result?.error) {
-    _publishState({ error: result.error, playback: result, ...SESSION.asDict() });
-    return result;
+    _publishState({
+      error: result.error,
+      playback: result,
+      ...SESSION.asDict(),
+    })
+    return result
   }
   // Remember the queue we just pushed, so `topup` extends THIS one. Read off the handoff
   // result because that is where it is created; a pull provider has no playQueue and leaves
   // it null, which is exactly what topup's Plex branch checks for.
-  SESSION.playQueueID = (result as { playQueueID?: number | string | null }).playQueueID ?? null;
+  SESSION.playQueueID =
+    (result as { playQueueID?: number | string | null })
+      .playQueueID ?? null
   // Playback started, so the promises this lineup made are now spent. Every earlier `return`
   // above this line is a sitting that did NOT play — a profile gate that never opened, a
   // cancel, a Plex error — and none of them may consume a 24h window.
   for (const key of ledKeys) {
-    await promote.recordLead(setName, key);
-    if (isSuperseded()) return { cancelled: true };
-    console.log(`[session] ${setName}: '${key}' led — its window restarts now`);
+    await promote.recordLead(setName, key)
+    if (isSuperseded()) return { cancelled: true }
+    console.log(
+      `[session] ${setName}: '${key}' led — its window restarts now`,
+    )
   }
-  _publishState({ playback: result, ...SESSION.asDict() });
-  return { ok: true, playback: result, set: setName, count: ratingKeys.length };
+  _publishState({ playback: result, ...SESSION.asDict() })
+  return {
+    ok: true,
+    playback: result,
+    set: setName,
+    count: ratingKeys.length,
+  }
 }
 
 export async function advanceSession(): Promise<SessionResult> {
-  if (SESSION.isPreparing) return { error: 'session is preparing' };
-  if (!SESSION.queue.length) return { error: 'no active session' };
-  const sittingId = SESSION.sittingId;
-  const cancelled = () => SESSION.sittingId !== sittingId || SESSION.isPreparing;
-  SESSION.cursor = Math.min(SESSION.cursor + 1, SESSION.queue.length - 1);
-  const rest = SESSION.queue.slice(SESSION.cursor);
+  if (SESSION.isPreparing)
+    return { error: "session is preparing" }
+  if (!SESSION.queue.length)
+    return { error: "no active session" }
+  const sittingId = SESSION.sittingId
+  const cancelled = () =>
+    SESSION.sittingId !== sittingId || SESSION.isPreparing
+  SESSION.cursor = Math.min(
+    SESSION.cursor + 1,
+    SESSION.queue.length - 1,
+  )
+  const rest = SESSION.queue.slice(SESSION.cursor)
   if (!rest.length) {
-    _publishState({ error: 'end of queue', ...SESSION.asDict() });
-    return { error: 'end of queue' };
+    _publishState({
+      error: "end of queue",
+      ...SESSION.asDict(),
+    })
+    return { error: "end of queue" }
   }
-  const result = await withDevice(SESSION.device, () => withCancellation(cancelled, () => playback.playRatingKeys(rest, {
-    setName: SESSION.set, offset: 0, userUuid: SESSION.userUuid, device: SESSION.device,
-  })), true);
-  if (cancelled()) return { cancelled: true };
-  _publishLastPlayed(lastPlayedFromItem(rest[0]));
-  _publishState({ playback: result, ...SESSION.asDict() });
-  return result;
+  const result = await withDevice(
+    SESSION.device,
+    () =>
+      withCancellation(cancelled, () =>
+        playback.playRatingKeys(rest, {
+          setName: SESSION.set,
+          offset: 0,
+          userUuid: SESSION.userUuid,
+          device: SESSION.device,
+        }),
+      ),
+    true,
+  )
+  if (cancelled()) return { cancelled: true }
+  _publishLastPlayed(lastPlayedFromItem(rest[0]))
+  _publishState({ playback: result, ...SESSION.asDict() })
+  return result
 }
 
 /** Resolve wire IDs before any device action, including the initial Plex launch. */
-export function startSession(payload: SessionStartPayload = {}, opts: { cancel?: CancelFlag } = {}): Promise<SessionResult> {
-  let device: Device | null = null;
+export function startSession(
+  payload: SessionStartPayload = {},
+  opts: { cancel?: CancelFlag } = {},
+): Promise<SessionResult> {
+  let device: Device | null = null
   if (payload.target) {
-    device = typeof payload.target === 'string' ? devices.known(payload.target) as Device | null : payload.target;
-    if (!device) return Promise.resolve({ error: `unknown device '${String(payload.target)}'` });
+    device =
+      typeof payload.target === "string"
+        ? (devices.known(payload.target) as Device | null)
+        : payload.target
+    if (!device)
+      return Promise.resolve({
+        error: `unknown device '${String(payload.target)}'`,
+      })
   }
-  invalidateDeviceOperations();
-  resume.stopWatch();
-  const sittingId = ++SESSION.sittingId;
-  SESSION.isPreparing = true;
-  _preparationError = undefined;
+  invalidateDeviceOperations()
+  resume.stopWatch()
+  const sittingId = ++SESSION.sittingId
+  SESSION.isPreparing = true
+  _preparationError = undefined
   const clearFailedPreparation = (): void => {
-    if (SESSION.sittingId !== sittingId) return;
-    resume.disarm();
-    section.disarm();
-    Object.assign(SESSION, { device: null, kind: null, set: null, profile: null,
-      queue: [], cursor: 0, userUuid: null, playQueueID: null, queuedTotal: 0, target: null });
-  };
-  return withDevice(device, async () => {
-    try {
-      const result = await startSessionOnDevice({ ...payload, target: device }, opts);
-      if (SESSION.sittingId === sittingId && !('ok' in result && result.ok)) {
-        clearFailedPreparation();
-        _publishState({ ...('error' in result ? { error: _preparationError ?? result.error } : {}), ...SESSION.asDict() });
+    if (SESSION.sittingId !== sittingId) return
+    resume.disarm()
+    section.disarm()
+    Object.assign(SESSION, {
+      device: null,
+      kind: null,
+      set: null,
+      profile: null,
+      queue: [],
+      cursor: 0,
+      userUuid: null,
+      playQueueID: null,
+      queuedTotal: 0,
+      target: null,
+    })
+  }
+  return withDevice(
+    device,
+    async () => {
+      try {
+        const result = await startSessionOnDevice(
+          { ...payload, target: device },
+          opts,
+        )
+        if (
+          SESSION.sittingId === sittingId &&
+          !("ok" in result && result.ok)
+        ) {
+          clearFailedPreparation()
+          _publishState({
+            ...("error" in result
+              ? { error: _preparationError ?? result.error }
+              : {}),
+            ...SESSION.asDict(),
+          })
+        }
+        return result
+      } catch (error) {
+        clearFailedPreparation()
+        throw error
+      } finally {
+        if (SESSION.sittingId === sittingId)
+          SESSION.isPreparing = false
       }
-      return result;
-    } catch (error) {
-      clearFailedPreparation();
-      throw error;
-    } finally {
-      if (SESSION.sittingId === sittingId) SESSION.isPreparing = false;
-    }
-  }, true);
+    },
+    true,
+  )
 }

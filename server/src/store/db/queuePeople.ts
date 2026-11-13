@@ -10,60 +10,72 @@
 //   * **A member id is never matched by NAME.** It arrives already decided, from the trays or
 //     from the migration's group-claim join. There is no `findMemberByLabel` here and there
 //     must not be one.
-import { bumpVersion } from './common.js';
-import { bookOfRecord, prepareChecked } from './open.js';
+
 import {
   isMemberKind,
   isMemberRole,
   type MemberKind,
   type MemberRole,
   type QueueMember,
-} from '../../queuePeople.js';
-import type { SqliteDatabase } from '../sqlite.js';
+} from "../../queuePeople.js"
+import type { SqliteDatabase } from "../sqlite.js"
+import { bumpVersion } from "./common.js"
+import { bookOfRecord, prepareChecked } from "./open.js"
 
 interface MemberRow {
-  set_id: string;
-  member_kind: string;
-  member_id: string;
-  role: string;
-  position: number;
+  set_id: string
+  member_kind: string
+  member_id: string
+  role: string
+  position: number
 }
 
 const toMember = (row: MemberRow): QueueMember => ({
   id: row.member_id,
-  kind: isMemberKind(row.member_kind) ? row.member_kind : 'person',
+  kind: isMemberKind(row.member_kind)
+    ? row.member_kind
+    : "person",
   position: row.position,
-  role: isMemberRole(row.role) ? row.role : 'required',
-});
+  role: isMemberRole(row.role) ? row.role : "required",
+})
 
 /**
  * Order is `role` first and `position` second, so a read comes back tray by tray and the
  * caller never sorts. 'optional' sorts before 'required' alphabetically, which is the wrong
  * way round for a screen that reads Must be here first — hence the CASE.
  */
-const MEMBER_ORDER = "ORDER BY CASE role WHEN 'required' THEN 0 ELSE 1 END, position, member_id";
+const MEMBER_ORDER =
+  "ORDER BY CASE role WHEN 'required' THEN 0 ELSE 1 END, position, member_id"
 
 /** One queue's members, Must-be-here first. */
-export function queueMembers(setId: string, db: SqliteDatabase = bookOfRecord()): QueueMember[] {
+export function queueMembers(
+  setId: string,
+  db: SqliteDatabase = bookOfRecord(),
+): QueueMember[] {
   return prepareChecked<MemberRow>(
     db,
     `SELECT set_id, member_kind, member_id, role, position FROM queue_people WHERE set_id = :set_id ${MEMBER_ORDER}`,
   )
     .all({ set_id: setId })
-    .map(toMember);
+    .map(toMember)
 }
 
 /** Every queue's members at once, keyed by set id — two statements for the whole page rather
  *  than one per shelf. */
-export function membersByQueue(db: SqliteDatabase = bookOfRecord()): Map<string, QueueMember[]> {
-  const out = new Map<string, QueueMember[]>();
+export function membersByQueue(
+  db: SqliteDatabase = bookOfRecord(),
+): Map<string, QueueMember[]> {
+  const out = new Map<string, QueueMember[]>()
   for (const row of prepareChecked<MemberRow>(
     db,
-    `SELECT set_id, member_kind, member_id, role, position FROM queue_people ${MEMBER_ORDER.replace('ORDER BY', 'ORDER BY set_id,')}`,
+    `SELECT set_id, member_kind, member_id, role, position FROM queue_people ${MEMBER_ORDER.replace("ORDER BY", "ORDER BY set_id,")}`,
   ).all()) {
-    out.set(row.set_id, [...(out.get(row.set_id) ?? []), toMember(row)]);
+    out.set(row.set_id, [
+      ...(out.get(row.set_id) ?? []),
+      toMember(row),
+    ])
   }
-  return out;
+  return out
 }
 
 /**
@@ -82,39 +94,58 @@ export function setQueueMembers(
   members: readonly QueueMember[],
   db: SqliteDatabase = bookOfRecord(),
 ): void {
-  prepareChecked(db, 'DELETE FROM queue_people WHERE set_id = :set_id').run({ set_id: setId });
+  prepareChecked(
+    db,
+    "DELETE FROM queue_people WHERE set_id = :set_id",
+  ).run({ set_id: setId })
 
   const insert = prepareChecked(
     db,
-    'INSERT OR REPLACE INTO queue_people (set_id, member_kind, member_id, role, position) ' +
-      'VALUES (:set_id, :member_kind, :member_id, :role, :position)',
-  );
+    "INSERT OR REPLACE INTO queue_people (set_id, member_kind, member_id, role, position) " +
+      "VALUES (:set_id, :member_kind, :member_id, :role, :position)",
+  )
 
   // Position is re-numbered PER TRAY from the incoming order, so a caller that hands over two
   // lists concatenated does not have to invent a global index that then means nothing.
-  const next: Record<MemberRole, number> = { optional: 0, required: 0 };
+  const next: Record<MemberRole, number> = {
+    optional: 0,
+    required: 0,
+  }
   for (const member of members) {
-    const id = String(member.id ?? '').trim();
-    if (!id) throw new Error(`queue '${setId}' has a member with no id`);
-    const role: MemberRole = isMemberRole(member.role) ? member.role : 'required';
-    const kind: MemberKind = isMemberKind(member.kind) ? member.kind : 'person';
+    const id = String(member.id ?? "").trim()
+    if (!id)
+      throw new Error(
+        `queue '${setId}' has a member with no id`,
+      )
+    const role: MemberRole = isMemberRole(member.role)
+      ? member.role
+      : "required"
+    const kind: MemberKind = isMemberKind(member.kind)
+      ? member.kind
+      : "person"
     insert.run({
       member_id: id,
       member_kind: kind,
       position: next[role]++,
       role,
       set_id: setId,
-    });
+    })
   }
 }
 
 /** Forget a queue's audience. Called when the SET is deleted — there is no cascade, on
  *  purpose (see the schema), so the delete path names it explicitly. */
-export function deleteQueueMembers(setId: string, db: SqliteDatabase = bookOfRecord()): number {
-  const result = prepareChecked(db, 'DELETE FROM queue_people WHERE set_id = :set_id').run({
+export function deleteQueueMembers(
+  setId: string,
+  db: SqliteDatabase = bookOfRecord(),
+): number {
+  const result = prepareChecked(
+    db,
+    "DELETE FROM queue_people WHERE set_id = :set_id",
+  ).run({
     set_id: setId,
-  });
-  return Number(result.changes);
+  })
+  return Number(result.changes)
 }
 
 /** Remove one person or group from EVERY queue — what a person's deletion means, since the
@@ -126,9 +157,9 @@ export function forgetMember(
 ): number {
   const result = prepareChecked(
     db,
-    'DELETE FROM queue_people WHERE member_kind = :member_kind AND member_id = :member_id',
-  ).run({ member_id: memberId, member_kind: kind });
-  return Number(result.changes);
+    "DELETE FROM queue_people WHERE member_kind = :member_kind AND member_id = :member_id",
+  ).run({ member_id: memberId, member_kind: kind })
+  return Number(result.changes)
 }
 
 /**
@@ -139,7 +170,9 @@ export function forgetMember(
  * group member looks orphaned there. A non-empty answer is a thing to LOOK AT, never a thing
  * to delete. Same warning `orphanGroupIds()` carries, and for the same reason.
  */
-export function orphanQueueMembers(db: SqliteDatabase = bookOfRecord()): QueueMember[] {
+export function orphanQueueMembers(
+  db: SqliteDatabase = bookOfRecord(),
+): QueueMember[] {
   return prepareChecked<MemberRow>(
     db,
     `SELECT qp.set_id, qp.member_kind, qp.member_id, qp.role, qp.position FROM queue_people qp
@@ -149,10 +182,11 @@ export function orphanQueueMembers(db: SqliteDatabase = bookOfRecord()): QueueMe
       ORDER BY qp.set_id, qp.member_kind, qp.member_id`,
   )
     .all()
-    .map(toMember);
+    .map(toMember)
 }
 
 /** Record that the queue audience changed. Call INSIDE the transaction that wrote the rows —
  *  `people` is the store these rows belong to, the way `group_people` does. */
-export const bumpQueuePeopleVersion = (db: SqliteDatabase = bookOfRecord()): void =>
-  bumpVersion(db, 'people');
+export const bumpQueuePeopleVersion = (
+  db: SqliteDatabase = bookOfRecord(),
+): void => bumpVersion(db, "people")

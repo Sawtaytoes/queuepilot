@@ -10,23 +10,33 @@
 //
 // This is a genuinely better fit than cast would be, not a consolation prize: reading is
 // PULL — you pick up the tablet when you are ready — where TV is PUSH.
-import { Hono } from 'hono';
-import type { ContentfulStatusCode } from 'hono/utils/http-status';
-import * as routing from '../engine/routing.js';
-import { errMessage } from '../errors.js';
-import { isSetAvailable, seasonReturnLabel } from '../season.js';
-import type { PlexClient } from '../types.js';
-import { resolveSingle, isMixed } from './blocks.js';
-import { providerFor } from './index.js';
+import { Hono } from "hono"
+import type { ContentfulStatusCode } from "hono/utils/http-status"
+import * as routing from "../engine/routing.js"
+import { errMessage } from "../errors.js"
+import {
+  isSetAvailable,
+  seasonReturnLabel,
+} from "../season.js"
+import type { PlexClient } from "../types.js"
+import { isMixed, resolveSingle } from "./blocks.js"
+import { providerFor } from "./index.js"
 // The lineup itself is built in ONE place, shared with top-up — see that module's header for
 // why a second copy of the `buckets()` call was a bug waiting to be reintroduced.
-import { pullLineup } from './pullLineup.js';
-import { readerHandoff } from './readerHandoff.js';
+import { pullLineup } from "./pullLineup.js"
+import { readerHandoff } from "./readerHandoff.js"
 
 /** What `launchDescriptor()` answers with: either a redirect target or an error + status. */
 export type LaunchDescriptor =
-  | { url: string; providerKind: string; readingListId?: number | string | null; count: number; status: 302; error?: undefined }
-  | { error: string; status: number; url?: undefined };
+  | {
+      url: string
+      providerKind: string
+      readingListId?: number | string | null
+      count: number
+      status: 302
+      error?: undefined
+    }
+  | { error: string; status: number; url?: undefined }
 
 /**
  * Resolve a set to a launch descriptor without performing any redirect.
@@ -35,23 +45,33 @@ export type LaunchDescriptor =
  */
 export async function launchDescriptor(
   setId: string,
-  { client = null, only = null }: { client?: PlexClient | null; only?: string | null } = {},
+  {
+    client = null,
+    only = null,
+  }: {
+    client?: PlexClient | null
+    only?: string | null
+  } = {},
 ): Promise<LaunchDescriptor> {
-  const reg = routing.loadSets();
-  const cfg = reg?.sets?.[setId];
-  if (!cfg) return { error: `unknown queue '${setId}'`, status: 404 };
+  const reg = routing.loadSets()
+  const cfg = reg?.sets?.[setId]
+  if (!cfg)
+    return {
+      error: `unknown queue '${setId}'`,
+      status: 404,
+    }
   // `enabled` AND in season, through the one predicate. 409 either way — the queue exists and
   // is simply not available to launch right now — but the message names which, because this
   // one reaches a browser as the body of a failed `/go/<id>`.
   if (!isSetAvailable(cfg)) {
-    const returns = seasonReturnLabel(cfg);
+    const returns = seasonReturnLabel(cfg)
 
     return {
       error: returns
         ? `queue '${setId}' is out of season — it returns ${returns}`
         : `queue '${setId}' is not enabled`,
       status: 409,
-    };
+    }
   }
 
   // `{ ...cfg }` rather than `cfg`: `BlockSourceCfg` carries an index signature, and
@@ -59,38 +79,45 @@ export async function launchDescriptor(
   // so a structurally-compatible `RoutingSetCfg` is rejected on that technicality alone. The
   // spread is a shallow copy with no semantic change. (Widening blocks.ts's parameter to
   // accept the two real registry shapes is the actual fix, and is not this PR's file.)
-  const blockCfg = { ...cfg };
+  const blockCfg = { ...cfg }
 
   if (isMixed(blockCfg)) {
     // Deliberately not guessed. A mixed queue is a push target AND a pull URL at once, and
     // what handoff() should return is an open decision that belongs to the owner.
     return {
-      error: `queue '${setId}' draws from more than one provider, and what a mixed queue `
-        + 'hands off is not decided yet',
+      error:
+        `queue '${setId}' draws from more than one provider, and what a mixed queue ` +
+        "hands off is not decided yet",
       status: 501,
-    };
+    }
   }
 
-  const block = resolveSingle(blockCfg);
-  let provider;
+  const block = resolveSingle(blockCfg)
+  let provider
   try {
-    provider = providerFor(block.provider, { client });
+    provider = providerFor(block.provider, { client })
   } catch (e) {
     // NOT CONFIGURED lands here, by name, rather than as a silent empty reader.
-    return { error: errMessage(e), status: 503 };
+    return { error: errMessage(e), status: 503 }
   }
 
-  if (provider.delivery !== 'pull') {
+  if (provider.delivery !== "pull") {
     return {
-      error: `queue '${setId}' runs on ${provider.label}, which is pushed to a device rather `
-        + 'than opened by a link — start it from the app or a card',
+      error:
+        `queue '${setId}' runs on ${provider.label}, which is pushed to a device rather ` +
+        "than opened by a link — start it from the app or a card",
       status: 409,
-    };
+    }
   }
 
-  const play = await pullLineup(setId, cfg, provider, { only });
+  const play = await pullLineup(setId, cfg, provider, {
+    only,
+  })
   if (!play.length) {
-    return { error: `queue '${setId}' has nothing unread left`, status: 409 };
+    return {
+      error: `queue '${setId}' has nothing unread left`,
+      status: 409,
+    }
   }
 
   // Rebuild on launch: the reading list is the RUNTIME ARTIFACT, never the store. Unlike a
@@ -98,11 +125,14 @@ export async function launchDescriptor(
   // reused rather than a fresh one per launch.
   // `setLabel` is only read on the cover — same fallback the session path uses, so a set with
   // no label paints its id rather than nothing.
-  const artifact = await provider.materialize(play, { setName: setId, setLabel: cfg.label || setId });
+  const artifact = await provider.materialize(play, {
+    setName: setId,
+    setLabel: cfg.label || setId,
+  })
   // `handoff()` is declared as possibly-async (the Plex side awaits a real playback), and the
   // Kavita one is synchronous. `await` on a plain value is a no-op, so this is the same
   // behaviour the un-awaited JS had — it just says so in a way the union can be narrowed on.
-  const out = await provider.handoff(artifact);
+  const out = await provider.handoff(artifact)
   // A PUSH result has no `url` at all, which the old code saw as `undefined` and treated
   // exactly like a pull result with a null url. Same branch, spelled as the narrowing it is.
   //
@@ -111,12 +141,18 @@ export async function launchDescriptor(
   // because a MiSTer game is started by Home Assistant (which enables the controller adapter
   // and switches the activity) rather than by a link. Reporting that as a server error made
   // a working, deliberate refusal look like a crash.
-  if (!('url' in out) || !out.url) {
+  if (!("url" in out) || !out.url) {
     return out.error
       ? { error: out.error, status: 409 }
-      : { error: 'no reader URL', status: 500 };
+      : { error: "no reader URL", status: 500 }
   }
-  return { url: out.url, providerKind: provider.kind, readingListId: out.readingListId, count: play.length, status: 302 };
+  return {
+    url: out.url,
+    providerKind: provider.kind,
+    readingListId: out.readingListId,
+    count: play.length,
+    status: 302,
+  }
 }
 
 /**
@@ -127,35 +163,48 @@ export async function launchDescriptor(
  * config).
  */
 export function launcherRoutes(): Hono {
-  const app = new Hono();
+  const app = new Hono()
 
-  app.get('/go/:setId', async (c) => {
-    c.header('Cache-Control', 'no-store');
-    c.header('Vary', 'User-Agent');
+  app.get("/go/:setId", async (c) => {
+    c.header("Cache-Control", "no-store")
+    c.header("Vary", "User-Agent")
     try {
       // `?only=<entryKey>` is "read THIS one now" — the ▶ on a single tile. The pull
       // counterpart of the play-one-entry key the push path already threads; without it a
       // reading tile's ▶ could only open the Plex device menu, which offered a Shield, a
       // Plex Dash and a phone for something none of them can open (reported live 2026-08-15).
-      const d = await launchDescriptor(c.req.param('setId') || '', {
-        only: c.req.query('only') || null,
-      });
+      const d = await launchDescriptor(
+        c.req.param("setId") || "",
+        {
+          only: c.req.query("only") || null,
+        },
+      )
       // `d.url === undefined` and not `d.error` — same branch, but it discriminates the union
       // so the redirect below knows it has a string.
-      if (d.url === undefined) return c.text(d.error, d.status as ContentfulStatusCode);
+      if (d.url === undefined)
+        return c.text(
+          d.error,
+          d.status as ContentfulStatusCode,
+        )
       // 302, not 301: the target chapter changes every time you read one, so this must
       // never be cached by the browser as a permanent move.
-      c.header('Cache-Control', 'no-store');
-      if (d.providerKind === 'kavita' && /Android/i.test(c.req.header('User-Agent') || '')) {
-        c.header('Referrer-Policy', 'no-referrer');
-        c.header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'");
-        return c.html(readerHandoff(d.url));
+      c.header("Cache-Control", "no-store")
+      if (
+        d.providerKind === "kavita" &&
+        /Android/i.test(c.req.header("User-Agent") || "")
+      ) {
+        c.header("Referrer-Policy", "no-referrer")
+        c.header(
+          "Content-Security-Policy",
+          "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; frame-ancestors 'none'",
+        )
+        return c.html(readerHandoff(d.url))
       }
-      return c.redirect(d.url, 302);
+      return c.redirect(d.url, 302)
     } catch (e) {
-      return c.text(errMessage(e), 500);
+      return c.text(errMessage(e), 500)
     }
-  });
+  })
 
-  return app;
+  return app
 }

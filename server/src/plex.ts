@@ -5,17 +5,17 @@
 // TLS: a LAN Plex server may present a self-signed cert, so every call to PLEX_URL goes through
 // the scoped `agent` below, which skips the certificate check for that pool only. Nothing sets
 // a process-wide bypass: plex.tv and every other host keep full certificate checks.
-import { Agent, request } from 'undici';
-import * as cache from './cache.js';
-import { PLEX_URL, PLEX_TOKEN } from './config.js';
+import { Agent, request } from "undici"
+import * as cache from "./cache.js"
+import { PLEX_TOKEN, PLEX_URL } from "./config.js"
 import {
   episodeSeason,
   episodesAtOrAfterStart,
   isExtraOrPromoEpisode,
   orderedPlayableEpisodes,
-} from './episodeOrder.js';
-import { PlexError, isPlexError } from './errors.js';
-import { plextv } from './plexTv.js';
+} from "./episodeOrder.js"
+import { isPlexError, PlexError } from "./errors.js"
+import { plextv } from "./plexTv.js"
 import type {
   NextEp,
   PlayingContext,
@@ -23,7 +23,7 @@ import type {
   PlexMediaContainer,
   PlexMetadata,
   Start,
-} from './types.js';
+} from "./types.js"
 
 // --- local shapes: what this file reads that the shared wire types don't name ----------- //
 // Every one of these is REPORTED rather than pushed into types.ts (which this workstream may
@@ -38,12 +38,12 @@ import type {
  *     show-node aggregate call failed.
  */
 interface PlexContainer extends PlexMediaContainer {
-  Directory?: PlexDirectoryRow[];
-  machineIdentifier?: string;
-  updatedAt?: number;
-  leafCount?: number;
-  viewedLeafCount?: number;
-  childCount?: number;
+  Directory?: PlexDirectoryRow[]
+  machineIdentifier?: string
+  updatedAt?: number
+  leafCount?: number
+  viewedLeafCount?: number
+  childCount?: number
 }
 
 /**
@@ -52,8 +52,8 @@ interface PlexContainer extends PlexMediaContainer {
  * returns the value as a Directory row).
  */
 interface PlexDirectoryRow extends PlexDirectory {
-  agent?: string;
-  contentRating?: string;
+  agent?: string
+  contentRating?: string
 }
 
 /**
@@ -67,23 +67,23 @@ interface PlexDirectoryRow extends PlexDirectory {
  * here. Reported, not fixed.
  */
 export interface EpisodeLike {
-  type?: string;
-  extraType?: number | string | null;
-  parentIndex?: number | null;
-  index?: number | null;
-  season?: number | null;
-  episode?: number | null;
-  duration?: number;
-  viewCount?: number;
-  viewOffset?: number;
-  title?: string;
-  [field: string]: unknown;
+  type?: string
+  extraType?: number | string | null
+  parentIndex?: number | null
+  index?: number | null
+  season?: number | null
+  episode?: number | null
+  duration?: number
+  viewCount?: number
+  viewOffset?: number
+  title?: string
+  [field: string]: unknown
 }
 
 /** `countEpisodes()` / `episodeCounts()` — the filtered aggregate the UI's "X/Y watched" shows. */
 export interface EpisodeCounts {
-  leafCount: number;
-  viewedLeafCount: number;
+  leafCount: number
+  viewedLeafCount: number
 }
 
 /**
@@ -96,10 +96,10 @@ export interface EpisodeCounts {
  * OPTIONAL because the wire field is.
  */
 export interface PosterFields {
-  ratingKey: string;
-  type: 'movie' | 'show' | undefined;
-  title: string | undefined;
-  year: number | null;
+  ratingKey: string
+  type: "movie" | "show" | undefined
+  title: string | undefined
+  year: number | null
   /**
    * Plex's edition label, when the item has one. Two EDITIONS of a film are two separate
    * library items with the same title and year — the search rows were literally identical
@@ -107,89 +107,89 @@ export interface PosterFields {
    * twice, one of them `{edition-3D}`). `null` on the plain edition, which is Plex's own
    * shape: only the tagged one names itself.
    */
-  editionTitle: string | null;
-  sectionId: number | null;
-  hasThumb: boolean;
-  viewCount: number;
-  viewOffset: number;
-  duration: number;
-  leafCount: number;
-  viewedLeafCount: number;
+  editionTitle: string | null
+  sectionId: number | null
+  hasThumb: boolean
+  viewCount: number
+  viewOffset: number
+  duration: number
+  leafCount: number
+  viewedLeafCount: number
 }
 
 /** One row of `collections()` — a Plex Collection (type=18) inside a section. */
 export interface CollectionHit {
-  type: 'collection';
-  ratingKey: string;
-  title: string | undefined;
-  sectionId: number;
-  childCount: number | null;
-  hasThumb: boolean;
+  type: "collection"
+  ratingKey: string
+  title: string | undefined
+  sectionId: number
+  childCount: number | null
+  hasThumb: boolean
 }
 
 /** `resolveCollection()` — the same row minus the section it was found in. */
 export interface ResolvedCollection {
-  type: 'collection';
-  ratingKey: string;
-  title: string | undefined;
-  childCount: number | null;
-  hasThumb: boolean;
+  type: "collection"
+  ratingKey: string
+  title: string | undefined
+  childCount: number | null
+  hasThumb: boolean
   /**
    * ALWAYS ABSENT: a collection has no release year. Declared (as never-set) only so the one
    * shared expression in `tiles.ts` — `resolved ? resolved.year : null` — still reads the
    * union without a cast, and so the fact that a collection tile emits NO `year` key stays
    * visible instead of being quietly coerced to null.
    */
-  year?: undefined;
+  year?: undefined
 }
 
 /** What `resolveValue()` resolves a raw queue/member value to. Discriminated on `type`. */
-export type ResolvedItem = PosterFields | ResolvedCollection;
+export type ResolvedItem = PosterFields | ResolvedCollection
 
 /** One row of `sections()` — a library, video-flagged. */
 export interface SectionInfo {
-  id: number;
-  title: string | undefined;
-  type: string | undefined;
-  video: boolean;
-  other: boolean;
+  id: number
+  title: string | undefined
+  type: string | undefined
+  video: boolean
+  other: boolean
 }
 
 /** A section id, or a list of them — the `[].concat(sections)` idiom accepted both. */
-export type SectionIds = number | number[];
+export type SectionIds = number | number[]
 
 /** `parseTitleString()` — a queue entry's "Title (Year) [guid]" decomposed. */
 export interface ParsedTitle {
-  title: string;
-  year: number | null;
-  guid: string | null;
+  title: string
+  year: number | null
+  guid: string | null
 }
 
 /** One row of `homeUsers()` — a Plex Home profile, as the channel form's dropdown wants it. */
 export interface HomeUser {
-  name: string;
-  username: string | null;
-  id: number | null;
-  uuid: string | null;
-  admin: boolean;
-  restricted: boolean;
+  name: string
+  username: string | null
+  id: number | null
+  uuid: string | null
+  admin: boolean
+  restricted: boolean
 }
 
 /** The plex.tv `/api/v2/home/users` row `homeUsers()` maps. */
 interface PlexTvHomeUser {
-  title?: string;
-  username?: string;
-  friendlyName?: string;
-  id?: number | string;
-  uuid?: string;
-  admin?: boolean;
-  restricted?: boolean;
+  title?: string
+  username?: string
+  friendlyName?: string
+  id?: number | string
+  uuid?: string
+  admin?: boolean
+  restricted?: boolean
 }
 
 /** `token` + `account` scope a read to one Plex Home profile; empty = admin (Bob). */
 export interface AccountScope {
-  token?: string | null;
-  account?: string;
+  token?: string | null
+  account?: string
   /**
    * Re-read the item-resolution caches from Plex instead of serving them.
    *
@@ -201,22 +201,22 @@ export interface AccountScope {
    * busting them would trade 566 cheap calls for a full library re-read
    * (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
    */
-  isFresh?: boolean;
+  isFresh?: boolean
 }
 
 /** The show-node validator `allLeaves()` reads before trusting a cached leaves row. */
 interface ShowAggregate {
-  updatedAt: number;
-  leafCount: number;
-  viewedLeafCount: number;
+  updatedAt: number
+  leafCount: number
+  viewedLeafCount: number
 }
 
 /** One member of a Collection, as `collectionChildren()` reports it. */
 export interface CollectionChild {
-  ratingKey: string;
-  type: string | undefined;
-  title: string;
-  year: number | null;
+  ratingKey: string
+  type: string | undefined
+  title: string
+  year: number | null
   /**
    * The Plex EDITION, when the member has one — "Extended Cut", "International Cut".
    *
@@ -225,13 +225,13 @@ export interface CollectionChild {
    * member list the owner picks from (reported 2026-08-26). Null on a member with no edition,
    * which is most of them, and on a show.
    */
-  editionTitle: string | null;
+  editionTitle: string | null
   /** Movies/standalones only — a SHOW reports progress via leafCount instead. */
-  watched: boolean;
-  viewOffset: number;
-  duration: number;
-  viewedLeafCount: number | null;
-  leafCount: number | null;
+  watched: boolean
+  viewOffset: number
+  duration: number
+  viewedLeafCount: number | null
+  leafCount: number | null
 }
 
 /**
@@ -242,8 +242,9 @@ export interface CollectionChild {
  * `startMember?: string`. Reported, not fixed — flattening the null would change what the
  * tile's start chip serializes.
  */
-export interface CollectionNextEp extends Omit<NextEp, 'startMember'> {
-  startMember: string | null;
+export interface CollectionNextEp
+  extends Omit<NextEp, "startMember"> {
+  startMember: string | null
 }
 
 /** `showEpisodes()` — the "Start from…" editor's per-season episode list. */
@@ -253,20 +254,20 @@ export interface ShowEpisodeRow {
    * one episode by name. The "Start from…" picker never needed it (it writes a
    * {season, episode} floor), which is why these rows carried no identity until now.
    */
-  ratingKey: string;
-  episode: number | null;
-  title: string;
-  watched: boolean;
+  ratingKey: string
+  episode: number | null
+  title: string
+  watched: boolean
 }
 
 export interface ShowSeason {
-  season: number;
-  episodes: ShowEpisodeRow[];
+  season: number
+  episodes: ShowEpisodeRow[]
 }
 
 export interface ShowEpisodes {
-  multiSeason: boolean;
-  seasons: ShowSeason[];
+  multiSeason: boolean
+  seasons: ShowSeason[]
 }
 
 /**
@@ -275,8 +276,8 @@ export interface ShowEpisodes {
  * `cover()`); this is the Plex poster proxy, which is not part of that seam.
  */
 export interface PosterImage {
-  contentType: string;
-  buffer: Buffer;
+  contentType: string
+  buffer: Buffer
 }
 
 // --------------------------------------------------------------------------------------- //
@@ -293,7 +294,7 @@ const agent = new Agent({
   keepAliveTimeout: 60_000,
   connections: 16,
   connect: { rejectUnauthorized: false },
-});
+})
 
 // Retry ONLY on network errors and 5xx, with jittered backoff. Never on 4xx — a dead
 // ratingKey must stay dead (the resolver depends on a 404 meaning "not in library", not
@@ -301,59 +302,84 @@ const agent = new Agent({
 // attempt instead of the whole request hanging forever.
 async function withRetry<T>(
   fn: () => Promise<T>,
-  { attempts = 3, baseMs = 150 }: { attempts?: number; baseMs?: number } = {},
+  {
+    attempts = 3,
+    baseMs = 150,
+  }: { attempts?: number; baseMs?: number } = {},
 ): Promise<T> {
-  let lastErr: unknown;
+  let lastErr: unknown
   for (let i = 0; i < attempts; i++) {
     try {
-      return await fn();
+      return await fn()
     } catch (e) {
       // A 4xx is surfaced by fn() as a non-retryable marker; rethrow immediately.
-      if (isPlexError(e) && e.plexStatus >= 400 && e.plexStatus < 500) throw e;
-      lastErr = e;
-      if (i === attempts - 1) break;
-      const jitter = Math.floor((i + 1) * baseMs * (0.5 + Math.sin(i + 1) * 0.25 + 0.5));
-      await new Promise((r) => setTimeout(r, jitter));
+      if (
+        isPlexError(e) &&
+        e.plexStatus >= 400 &&
+        e.plexStatus < 500
+      )
+        throw e
+      lastErr = e
+      if (i === attempts - 1) break
+      const jitter = Math.floor(
+        (i + 1) *
+          baseMs *
+          (0.5 + Math.sin(i + 1) * 0.25 + 0.5),
+      )
+      await new Promise((r) => setTimeout(r, jitter))
     }
   }
-  throw lastErr;
+  throw lastErr
 }
 
 // Single-flight: N tiles asking for the same collection's children in one `/api/queues`
 // fan-out collapse to ONE HTTP call. Keyed on (path|token); the entry is deleted on settle so
 // a later request refetches.
-const _inflight = new Map<string, Promise<unknown>>();
+const _inflight = new Map<string, Promise<unknown>>()
 
 // `token` overrides the admin PLEX_TOKEN — used for per-account (managed-user) queries so
 // the section listing/facets reflect THAT account's restricted library view (workstream D).
-export async function plexGet(path: string, token: string | null = null): Promise<unknown> {
-  const key = `${path} ${token || ''}`;
-  const existing = _inflight.get(key);
-  if (existing) return existing;
+export async function plexGet(
+  path: string,
+  token: string | null = null,
+): Promise<unknown> {
+  const key = `${path} ${token || ""}`
+  const existing = _inflight.get(key)
+  if (existing) return existing
 
   const p = withRetry(async () => {
     const res = await request(PLEX_URL + path, {
       dispatcher: agent,
-      method: 'GET',
-      headers: { 'X-Plex-Token': token || PLEX_TOKEN, Accept: 'application/json' },
+      method: "GET",
+      headers: {
+        "X-Plex-Token": token || PLEX_TOKEN,
+        Accept: "application/json",
+      },
       signal: AbortSignal.timeout(8000),
-    });
+    })
     if (res.statusCode >= 400) {
       // Drain the body so the connection returns to the pool rather than leaking.
-      await res.body.dump();
+      await res.body.dump()
       // `PlexError` carries `plexStatus`, which withRetry uses to NOT retry 4xx, and builds
       // the same `plex <status> for <path>` message this line always threw.
-      throw new PlexError(res.statusCode, path);
+      throw new PlexError(res.statusCode, path)
     }
-    return res.body.json();
-  }).finally(() => _inflight.delete(key));
+    return res.body.json()
+  }).finally(() => _inflight.delete(key))
 
-  _inflight.set(key, p);
-  return p;
+  _inflight.set(key, p)
+  return p
 }
 
 function container(json: unknown): PlexContainer {
-  return (json as { MediaContainer?: PlexContainer } | null | undefined)?.MediaContainer || {};
+  return (
+    (
+      json as
+        | { MediaContainer?: PlexContainer }
+        | null
+        | undefined
+    )?.MediaContainer || {}
+  )
 }
 
 // --- the shared "is this a real episode?" predicate --------------------------------------- //
@@ -368,15 +394,19 @@ function container(json: unknown): PlexContainer {
 //   * index 400–499 → "other"                              → INCLUDE (meant to be played)
 // So a Season-0 leaf is an extra exactly when 200 <= index <= 399. Real seasons (>=1) are never
 // extras. Plex Extras/clips (a `clip` type or an `extraType`) are excluded too, if any appear.
-export function isExtraOrPromo(ep: EpisodeLike | null | undefined): boolean {
-  return isExtraOrPromoEpisode(ep);
+export function isExtraOrPromo(
+  ep: EpisodeLike | null | undefined,
+): boolean {
+  return isExtraOrPromoEpisode(ep)
 }
 
 // A real episode for COUNTING purposes: has a duration (a castable file) and is not an
 // extra/promo. Includes S1+ episodes AND regular Season-0 specials; excludes the junk.
-export function isCountableEpisode(ep: EpisodeLike | null | undefined): boolean {
-  if (!ep || !ep.duration) return false;
-  return !isExtraOrPromo(ep);
+export function isCountableEpisode(
+  ep: EpisodeLike | null | undefined,
+): boolean {
+  if (!ep || !ep.duration) return false
+  return !isExtraOrPromo(ep)
 }
 
 // A real episode for PLAYBACK: same junk filter, plus the 2026-07-17 rule that Season 0 is
@@ -386,28 +416,34 @@ export function isCountableEpisode(ep: EpisodeLike | null | undefined): boolean 
 // default rule and is used for counting + the start editor.
 export function isPlayableEpisode(
   ep: EpisodeLike | null | undefined,
-  { includeSpecials = false }: { includeSpecials?: boolean } = {},
+  {
+    includeSpecials = false,
+  }: { includeSpecials?: boolean } = {},
 ): boolean {
-  if (!ep) return false;
-  if (isExtraOrPromo(ep)) return false;
-  const season = ep.parentIndex != null ? ep.parentIndex : ep.season;
-  if (!includeSpecials && String(season) === '0') return false;
-  if (!ep.duration) return false;
-  return true;
+  if (!ep) return false
+  if (isExtraOrPromo(ep)) return false
+  const season =
+    ep.parentIndex != null ? ep.parentIndex : ep.season
+  if (!includeSpecials && String(season) === "0")
+    return false
+  if (!ep.duration) return false
+  return true
 }
 
 // Filtered episode counts from an allLeaves list: total real episodes and how many are watched
 // (viewCount > 0; a MISSING viewCount is treated as UNWATCHED). Pure — the caller feeds it the
 // raw Plex Metadata array — so it is unit-tested directly.
-export function countEpisodes(eps: EpisodeLike[] | null | undefined): EpisodeCounts {
-  let leafCount = 0;
-  let viewedLeafCount = 0;
+export function countEpisodes(
+  eps: EpisodeLike[] | null | undefined,
+): EpisodeCounts {
+  let leafCount = 0
+  let viewedLeafCount = 0
   for (const e of eps || []) {
-    if (!isCountableEpisode(e)) continue;
-    leafCount += 1;
-    if (e.viewCount && e.viewCount > 0) viewedLeafCount += 1;
+    if (!isCountableEpisode(e)) continue
+    leafCount += 1
+    if (e.viewCount && e.viewCount > 0) viewedLeafCount += 1
   }
-  return { leafCount, viewedLeafCount };
+  return { leafCount, viewedLeafCount }
 }
 
 // --- per-account (managed-user) tokens (mirrors queue_builder/plex.py account_token) --- //
@@ -415,41 +451,57 @@ export function countEpisodes(eps: EpisodeLike[] | null | undefined): EpisodeCou
 // from /api/v2/resources does not. Minting it lets a facet query see exactly that account's
 // restricted library. Cached per uuid. Best-effort — any failure returns null (caller uses
 // the admin token / static fallback), so the API degrades cleanly with plex.tv unreachable.
-const _accountTokens = new Map<string, string | null>(); // user_uuid -> server-scoped access token (or null)
+const _accountTokens = new Map<string, string | null>() // user_uuid -> server-scoped access token (or null)
 
 export async function machineIdentifier(): Promise<string> {
-  return container(await plexGet('/')).machineIdentifier || '';
+  return (
+    container(await plexGet("/")).machineIdentifier || ""
+  )
 }
 
-export async function accountToken(userUuid: string | null | undefined): Promise<string | null> {
-  if (!userUuid) return null; // no managed user => admin PLEX_TOKEN (Bob)
+export async function accountToken(
+  userUuid: string | null | undefined,
+): Promise<string | null> {
+  if (!userUuid) return null // no managed user => admin PLEX_TOKEN (Bob)
   // `has` + `get` in one read: the map caches `null` (a failed mint) as a real answer, so
   // only `undefined` — never a cached null — counts as a miss.
-  const memo = _accountTokens.get(userUuid);
-  if (memo !== undefined) return memo;
-  let token: string | null = null;
+  const memo = _accountTokens.get(userUuid)
+  if (memo !== undefined) return memo
+  let token: string | null = null
   try {
     const sw = await plextv<{ authToken?: string } | null>(
       `/api/v2/home/users/${userUuid}/switch`,
       PLEX_TOKEN,
-      'POST',
-    );
-    const auth = sw && sw.authToken;
+      "POST",
+    )
+    const auth = sw && sw.authToken
     if (auth) {
       const resources = await plextv<
-        { clientIdentifier?: string; accessToken?: string }[]
-        | { resources?: { clientIdentifier?: string; accessToken?: string }[] }
-      >('/api/v2/resources?includeHttps=1', auth);
-      const rows = Array.isArray(resources) ? resources : resources.resources || [];
-      const mid = await machineIdentifier();
-      const row = rows.find((r) => r.clientIdentifier === mid);
-      token = (row && row.accessToken) || null;
+        | {
+            clientIdentifier?: string
+            accessToken?: string
+          }[]
+        | {
+            resources?: {
+              clientIdentifier?: string
+              accessToken?: string
+            }[]
+          }
+      >("/api/v2/resources?includeHttps=1", auth)
+      const rows = Array.isArray(resources)
+        ? resources
+        : resources.resources || []
+      const mid = await machineIdentifier()
+      const row = rows.find(
+        (r) => r.clientIdentifier === mid,
+      )
+      token = (row && row.accessToken) || null
     }
   } catch {
-    token = null; // network/plex.tv hiccup: fall back to admin token
+    token = null // network/plex.tv hiccup: fall back to admin token
   }
-  _accountTokens.set(userUuid, token);
-  return token;
+  _accountTokens.set(userUuid, token)
+  return token
 }
 
 // --- Plex Home users (managed profiles) — the channel form's profile dropdown ---------- //
@@ -462,19 +514,23 @@ export async function accountToken(userUuid: string | null | undefined): Promise
 // admin accountID (1), so the admin row is flagged `admin` and the form fills account_id=1 for
 // it. Best-effort: any failure returns [] and the form falls back to the manual advanced fields.
 export async function homeUsers(): Promise<HomeUser[]> {
-  let data: PlexTvHomeUser[] | { users?: PlexTvHomeUser[] } | null;
+  let data:
+    | PlexTvHomeUser[]
+    | { users?: PlexTvHomeUser[] }
+    | null
   try {
-    data = await plextv<PlexTvHomeUser[] | { users?: PlexTvHomeUser[] } | null>(
-      '/api/v2/home/users',
-      PLEX_TOKEN,
-    );
+    data = await plextv<
+      PlexTvHomeUser[] | { users?: PlexTvHomeUser[] } | null
+    >("/api/v2/home/users", PLEX_TOKEN)
   } catch {
-    return [];
+    return []
   }
-  const rows = Array.isArray(data) ? data : (data && data.users) || [];
+  const rows = Array.isArray(data)
+    ? data
+    : (data && data.users) || []
   return rows
     .map((u) => ({
-      name: u.title || u.username || u.friendlyName || '',
+      name: u.title || u.username || u.friendlyName || "",
       // The plex.tv username — the string the PMS log stamps for the OWNER (managed users
       // stamp their title instead). The requires_profile gate matches that stamp, so the
       // queue-profile picker uses `username` for the admin option and `name` for the rest.
@@ -485,7 +541,7 @@ export async function homeUsers(): Promise<HomeUser[]> {
       admin: Boolean(u.admin),
       restricted: Boolean(u.restricted),
     }))
-    .filter((u) => u.name);
+    .filter((u) => u.name)
 }
 
 // --- a `requires_profile` STRING -> the account behind it ------------------------------ //
@@ -499,7 +555,7 @@ export async function homeUsers(): Promise<HomeUser[]> {
 // OWNER stamps their plex.tv `username` (`sawtaytoes`), a managed user stamps its `title`
 // (`Older Kids`). Both spellings are matched here, exactly as the queue-profile picker
 // writes them (decision 2026-08-07-choose-profile-for-queues).
-const _profileUsers = new Map<string, HomeUser | null>(); // requires_profile string -> row
+const _profileUsers = new Map<string, HomeUser | null>() // requires_profile string -> row
 
 /**
  * The Plex Home row a set's `requires_profile` names, or null when nothing matches (an
@@ -507,21 +563,26 @@ const _profileUsers = new Map<string, HomeUser | null>(); // requires_profile st
  * a real hit with `uuid: null` — which every caller already reads as "the admin token",
  * so a queue that plays as the owner keeps behaving exactly as it did.
  */
-export async function profileUser(profileTitle: string | null | undefined): Promise<HomeUser | null> {
-  const title = String(profileTitle ?? '').trim();
-  if (!title) return null;
-  const memo = _profileUsers.get(title);
-  if (memo !== undefined) return memo;
-  const users = await homeUsers();
+export async function profileUser(
+  profileTitle: string | null | undefined,
+): Promise<HomeUser | null> {
+  const title = String(profileTitle ?? "").trim()
+  if (!title) return null
+  const memo = _profileUsers.get(title)
+  if (memo !== undefined) return memo
+  const users = await homeUsers()
   // A plex.tv hiccup returns [] — indistinguishable from "no such profile" at this line, so
   // it is NOT memoized. Caching that empty answer would pin every gated queue to the admin
   // view until the container restarted, which is the exact failure this function exists to
   // end. `accountToken`'s null memo is the opposite trade on purpose: a failed MINT is per
   // uuid and retrying it on every tile would hammer plex.tv.
-  if (!users.length) return null;
-  const row = users.find((u) => u.name === title || u.username === title) ?? null;
-  _profileUsers.set(title, row);
-  return row;
+  if (!users.length) return null
+  const row =
+    users.find(
+      (u) => u.name === title || u.username === title,
+    ) ?? null
+  _profileUsers.set(title, row)
+  return row
 }
 
 /**
@@ -530,11 +591,13 @@ export async function profileUser(profileTitle: string | null | undefined): Prom
  * Empty for an ungated set, for the owner, and for a mint failure: all three mean "read as
  * admin", which is what those functions have always done.
  */
-export async function profileScope(profileTitle: string | null | undefined): Promise<AccountScope> {
-  const user = await profileUser(profileTitle);
-  if (!user || !user.uuid) return {};
-  const token = await accountToken(user.uuid);
-  return token ? { token, account: user.uuid } : {};
+export async function profileScope(
+  profileTitle: string | null | undefined,
+): Promise<AccountScope> {
+  const user = await profileUser(profileTitle)
+  if (!user || !user.uuid) return {}
+  const token = await accountToken(user.uuid)
+  return token ? { token, account: user.uuid } : {}
 }
 
 // --- content-rating facet present in a set's sections, scoped to an account token ------- //
@@ -548,58 +611,80 @@ export async function contentRatings(
   sections: SectionIds,
   token: string | null = null,
 ): Promise<string[]> {
-  const out = new Set<string>();
+  const out = new Set<string>()
   for (const section of ([] as number[]).concat(sections)) {
-    let dirs: (PlexDirectoryRow | PlexMetadata)[] = [];
+    let dirs: (PlexDirectoryRow | PlexMetadata)[] = []
     try {
-      dirs = container(await plexGet(`/library/sections/${section}/contentRating`, token)).Directory || [];
+      dirs =
+        container(
+          await plexGet(
+            `/library/sections/${section}/contentRating`,
+            token,
+          ),
+        ).Directory || []
     } catch {
-      dirs = [];
+      dirs = []
     }
     if (!dirs.length) {
       // Fallback: the grouped listing surfaces the same facet values (title = the rating).
       try {
-        const mc = container(await plexGet(`/library/sections/${section}/all?group=contentRating&X-Plex-Container-Size=0`, token));
-        dirs = mc.Directory || mc.Metadata || [];
+        const mc = container(
+          await plexGet(
+            `/library/sections/${section}/all?group=contentRating&X-Plex-Container-Size=0`,
+            token,
+          ),
+        )
+        dirs = mc.Directory || mc.Metadata || []
       } catch {
-        dirs = [];
+        dirs = []
       }
     }
     for (const d of dirs) {
-      const v = d.title || d.key || d.contentRating;
-      if (v == null) continue;
-      const s = String(v).trim();
-      if (s && s.toLowerCase() !== 'unrated' && s.toLowerCase() !== 'none') out.add(s);
+      const v = d.title || d.key || d.contentRating
+      if (v == null) continue
+      const s = String(v).trim()
+      if (
+        s &&
+        s.toLowerCase() !== "unrated" &&
+        s.toLowerCase() !== "none"
+      )
+        out.add(s)
     }
   }
-  return [...out];
+  return [...out]
 }
 
 // --- title-string parsing (matches queues.parse_title_string) ---------------- //
-export function parseTitleString(text: unknown): ParsedTitle {
-  let s = String(text).trim();
-  let guid: string | null = null;
-  let m = s.match(/\s*\[([^\]]+)\]\s*$/);
+export function parseTitleString(
+  text: unknown,
+): ParsedTitle {
+  let s = String(text).trim()
+  let guid: string | null = null
+  let m = s.match(/\s*\[([^\]]+)\]\s*$/)
   if (m) {
-    guid = (m[1] ?? '').trim();
-    s = s.slice(0, m.index).trimEnd();
+    guid = (m[1] ?? "").trim()
+    s = s.slice(0, m.index).trimEnd()
   }
-  let year: number | null = null;
-  m = s.match(/\s*\((\d{4})\)\s*$/);
+  let year: number | null = null
+  m = s.match(/\s*\((\d{4})\)\s*$/)
   if (m) {
-    year = parseInt(m[1] ?? '', 10);
-    s = s.slice(0, m.index).trimEnd();
+    year = parseInt(m[1] ?? "", 10)
+    s = s.slice(0, m.index).trimEnd()
   }
-  return { title: s.trim(), year, guid };
+  return { title: s.trim(), year, guid }
 }
 
 // `source-id` folder hint (anidb-16172) → Plex Guid id (anidb://16172). Best-effort.
-function matchGuidHint(hint: string | null | undefined, guids: (string | undefined)[]): boolean {
-  if (!hint) return false;
-  const i = hint.indexOf('-');
-  if (i <= 0) return false;
-  const want = `${hint.slice(0, i)}://${hint.slice(i + 1)}`.toLowerCase();
-  return guids.some((g) => (g || '').toLowerCase() === want);
+function matchGuidHint(
+  hint: string | null | undefined,
+  guids: (string | undefined)[],
+): boolean {
+  if (!hint) return false
+  const i = hint.indexOf("-")
+  if (i <= 0) return false
+  const want =
+    `${hint.slice(0, i)}://${hint.slice(i + 1)}`.toLowerCase()
+  return guids.some((g) => (g || "").toLowerCase() === want)
 }
 
 function posterFields(md: PlexMetadata): PosterFields {
@@ -608,11 +693,16 @@ function posterFields(md: PlexMetadata): PosterFields {
     // Every caller filters to `type` 'movie'/'show' before reaching here (search(),
     // resolveTitle() and resolveValue() all `continue`/bail otherwise), which is what makes
     // this projection the non-collection half of `ResolvedItem`.
-    type: md.type as PosterFields['type'],
+    type: md.type as PosterFields["type"],
     title: md.title,
     year: md.year ?? null,
-    editionTitle: md.editionTitle ? String(md.editionTitle) : null,
-    sectionId: md.librarySectionID != null ? Number(md.librarySectionID) : null,
+    editionTitle: md.editionTitle
+      ? String(md.editionTitle)
+      : null,
+    sectionId:
+      md.librarySectionID != null
+        ? Number(md.librarySectionID)
+        : null,
     hasThumb: Boolean(md.thumb),
     // A MOVIE's own resume state (a show reports per-episode instead — see nextEpisode).
     // viewCount is omitted at 0, so a missing count is unwatched. Lets a mid-movie tile
@@ -626,51 +716,59 @@ function posterFields(md: PlexMetadata): PosterFields {
     // section listing this came from, and omits viewedLeafCount at 0.
     leafCount: Number(md.leafCount) || 0,
     viewedLeafCount: Number(md.viewedLeafCount) || 0,
-  };
+  }
 }
 
 // All library sections, video-flagged (movie/show only are ever queueable). Feeds the
 // per-queue library picker + the global-exclude editor.
 export async function sections(): Promise<SectionInfo[]> {
-  const mc = container(await plexGet('/library/sections'));
+  const mc = container(await plexGet("/library/sections"))
   return (mc.Directory || []).map((d) => ({
     id: Number(d.key),
     title: d.title,
     type: d.type,
-    video: d.type === 'movie' || d.type === 'show',
+    video: d.type === "movie" || d.type === "show",
     // Plex "Other Videos" libraries (Personal Media, no metadata agent) — the UI groups
     // these apart from real Movie libraries, matching Plex's own library styles.
-    other: d.type === 'movie' && d.agent === 'com.plexapp.agents.none',
-  }));
+    other:
+      d.type === "movie" &&
+      d.agent === "com.plexapp.agents.none",
+  }))
 }
 
 // --- search within a set's section(s) (title filter) ------------------------- //
-export async function search(sections: SectionIds, query: string): Promise<PosterFields[]> {
-  const q = encodeURIComponent(query);
-  const out: PosterFields[] = [];
-  const seen = new Set<string>();
+export async function search(
+  sections: SectionIds,
+  query: string,
+): Promise<PosterFields[]> {
+  const q = encodeURIComponent(query)
+  const out: PosterFields[] = []
+  const seen = new Set<string>()
   for (const section of ([] as number[]).concat(sections)) {
-    let json;
+    let json
     try {
       json = await plexGet(
         `/library/sections/${section}/all?title=${q}&includeGuids=1&X-Plex-Container-Size=50`,
-      );
+      )
     } catch {
-      continue;
+      continue
     }
     for (const e of container(json).Metadata || []) {
-      if (e.type !== 'movie' && e.type !== 'show') continue;
-      const rk = String(e.ratingKey);
-      if (seen.has(rk)) continue;
-      seen.add(rk);
+      if (e.type !== "movie" && e.type !== "show") continue
+      const rk = String(e.ratingKey)
+      if (seen.has(rk)) continue
+      seen.add(rk)
       // The section is authoritative from the query itself (per-item librarySectionID is
       // not reliably present on section listings) — it drives "which queues can take this".
       // Every real item carries a `type` ('movie'|'show') from posterFields — the frontend
       // switches its result row on it (vs. the 'collection' rows below).
-      out.push({ ...posterFields(e), sectionId: Number(section) });
+      out.push({
+        ...posterFields(e),
+        sectionId: Number(section),
+      })
     }
   }
-  return out;
+  return out
 }
 
 // --- Plex Collections (type=18) within a set's section(s) -------------------- //
@@ -685,43 +783,60 @@ export async function collections(
   query: string,
   opts: AccountScope = {},
 ): Promise<CollectionHit[]> {
-  const ql = String(query || '').trim().toLowerCase();
-  const out: CollectionHit[] = [];
-  const seen = new Set<string>();
+  const ql = String(query || "")
+    .trim()
+    .toLowerCase()
+  const out: CollectionHit[] = []
+  const seen = new Set<string>()
   for (const section of ([] as number[]).concat(sections)) {
     // Cached PER SECTION and unfiltered, so the same row serves every `{collection: <name>}`
     // entry drawing from that library — 24 identical listings per warm page load before this,
     // because the filtering is client-side and each caller asked again for its own name.
-    let rows = opts.isFresh ? null : await cache.getSectionCollections<CollectionHit[]>(section);
+    let rows = opts.isFresh
+      ? null
+      : await cache.getSectionCollections<CollectionHit[]>(
+          section,
+        )
     if (!rows) {
-      let json;
+      let json
       try {
-        json = await plexGet(`/library/sections/${section}/collections?X-Plex-Container-Size=500`);
+        json = await plexGet(
+          `/library/sections/${section}/collections?X-Plex-Container-Size=500`,
+        )
       } catch {
-        continue;
+        continue
       }
-      rows = [];
+      rows = []
       for (const e of container(json).Metadata || []) {
-        if (e.type !== 'collection') continue;
+        if (e.type !== "collection") continue
         rows.push({
-          type: 'collection',
+          type: "collection",
           ratingKey: String(e.ratingKey),
           title: e.title,
           sectionId: Number(section),
-          childCount: e.childCount != null ? Number(e.childCount) : null,
+          childCount:
+            e.childCount != null
+              ? Number(e.childCount)
+              : null,
           hasThumb: Boolean(e.thumb),
-        });
+        })
       }
-      await cache.putSectionCollections(section, rows);
+      await cache.putSectionCollections(section, rows)
     }
     for (const row of rows) {
-      if (ql && !String(row.title || '').toLowerCase().includes(ql)) continue;
-      if (seen.has(row.ratingKey)) continue;
-      seen.add(row.ratingKey);
-      out.push(row);
+      if (
+        ql &&
+        !String(row.title || "")
+          .toLowerCase()
+          .includes(ql)
+      )
+        continue
+      if (seen.has(row.ratingKey)) continue
+      seen.add(row.ratingKey)
+      out.push(row)
     }
   }
-  return out;
+  return out
 }
 
 // Resolve a "Collection: <name>" queue entry to its collection (type=18), for DISPLAY —
@@ -732,18 +847,21 @@ export async function resolveCollection(
   name: string,
   opts: AccountScope = {},
 ): Promise<ResolvedCollection | null> {
-  const list = await collections(sections, name, opts);
-  if (!list.length) return null;
-  const nl = String(name).trim().toLowerCase();
-  const c = list.find((x) => String(x.title).trim().toLowerCase() === nl) || list[0];
-  if (!c) return null; // unreachable — `list.length` was checked above; index reads are unchecked
+  const list = await collections(sections, name, opts)
+  if (!list.length) return null
+  const nl = String(name).trim().toLowerCase()
+  const c =
+    list.find(
+      (x) => String(x.title).trim().toLowerCase() === nl,
+    ) || list[0]
+  if (!c) return null // unreachable — `list.length` was checked above; index reads are unchecked
   return {
-    type: 'collection',
+    type: "collection",
     ratingKey: c.ratingKey,
     title: c.title,
     childCount: c.childCount,
     hasThumb: c.hasThumb,
-  };
+  }
 }
 
 // --- resolve one parsed title to a section item (mirrors plex._resolve_title) - //
@@ -751,7 +869,7 @@ export async function resolveCollection(
 // which survives restarts — a title→ratingKey is stable, so this is the highest-hit-rate,
 // lowest-risk piece of the derived cache (7-day TTL, no validator needed).
 // `${section}|${title}|${year}|${guid}` -> item (a null is never cached here)
-const _titleCache = new Map<string, PosterFields>();
+const _titleCache = new Map<string, PosterFields>()
 
 export async function resolveTitle(
   section: number,
@@ -759,58 +877,78 @@ export async function resolveTitle(
   year: number | null = null,
   guid: string | null = null,
 ): Promise<PosterFields | null> {
-  const ck = `${section}|${title.toLowerCase()}|${year}|${(guid || '').toLowerCase()}`;
-  const memo = _titleCache.get(ck);
-  if (memo !== undefined) return memo;
-  const cached = await cache.getResolved<PosterFields>(section, title, year, guid);
+  const ck = `${section}|${title.toLowerCase()}|${year}|${(guid || "").toLowerCase()}`
+  const memo = _titleCache.get(ck)
+  if (memo !== undefined) return memo
+  const cached = await cache.getResolved<PosterFields>(
+    section,
+    title,
+    year,
+    guid,
+  )
   if (cached !== undefined) {
     // A cached hit is the resolved item; a cached `null` means "provably not in library",
     // which is worth remembering too (it saved the miss). Only positive hits go in L1, to
     // match the pre-cache behaviour that never memoized a null.
-    if (cached) _titleCache.set(ck, cached);
-    return cached;
+    if (cached) _titleCache.set(ck, cached)
+    return cached
   }
-  let mc;
+  let mc
   try {
     mc = container(
       await plexGet(
         `/library/sections/${section}/all?title=${encodeURIComponent(title)}&includeGuids=1&X-Plex-Container-Size=50`,
       ),
-    );
+    )
   } catch {
-    return null; // transient — don't cache (plexGet already retried network/5xx)
+    return null // transient — don't cache (plexGet already retried network/5xx)
   }
-  const tl = title.toLowerCase();
-  let best: PosterFields | null = null;
-  let bestScore = 0;
+  const tl = title.toLowerCase()
+  let best: PosterFields | null = null
+  let bestScore = 0
   for (const e of mc.Metadata || []) {
-    if (e.type !== 'movie' && e.type !== 'show') continue;
-    const candTitle = (e.title || '').toLowerCase();
+    if (e.type !== "movie" && e.type !== "show") continue
+    const candTitle = (e.title || "").toLowerCase()
     // `Guid` is not on the shared `PlexMetadata`; it arrives only with `includeGuids=1`.
-    const guids = ((e.Guid as { id?: string }[] | undefined) || []).map((g) => g.id);
-    let score = 0;
-    if (guid && matchGuidHint(guid, guids)) score += 100;
-    if (year != null && e.year === year) score += 10;
-    else if (year != null && e.year != null && e.year !== year) score -= 5;
-    if (candTitle === tl) score += 5;
-    else if (candTitle.startsWith(tl)) score += 1;
-    const rk = String(e.ratingKey);
+    const guids = (
+      (e.Guid as { id?: string }[] | undefined) || []
+    ).map((g) => g.id)
+    let score = 0
+    if (guid && matchGuidHint(guid, guids)) score += 100
+    if (year != null && e.year === year) score += 10
+    else if (
+      year != null &&
+      e.year != null &&
+      e.year !== year
+    )
+      score -= 5
+    if (candTitle === tl) score += 5
+    else if (candTitle.startsWith(tl)) score += 1
+    const rk = String(e.ratingKey)
     const better =
       best === null ||
       score > bestScore ||
-      (score === bestScore && /^\d+$/.test(rk) && parseInt(rk, 10) < parseInt(best.ratingKey, 10));
+      (score === bestScore &&
+        /^\d+$/.test(rk) &&
+        parseInt(rk, 10) < parseInt(best.ratingKey, 10))
     if (better) {
-      best = posterFields(e);
-      bestScore = score;
+      best = posterFields(e)
+      bestScore = score
     }
   }
   if (best === null || bestScore <= 0) {
-    await cache.putResolved(section, title, year, guid, null); // remember the miss (7d)
-    return null;
+    await cache.putResolved(
+      section,
+      title,
+      year,
+      guid,
+      null,
+    ) // remember the miss (7d)
+    return null
   }
-  _titleCache.set(ck, best);
-  await cache.putResolved(section, title, year, guid, best);
-  return best;
+  _titleCache.set(ck, best)
+  await cache.putResolved(section, title, year, guid, best)
+  return best
 }
 
 // --- resolve a raw queue value (ratingKey | title | {ratingKey,title}) -------- //
@@ -822,23 +960,36 @@ export async function resolveValue(
   opts: AccountScope = {},
 ): Promise<ResolvedItem | null> {
   // ratingKey (scalar number/numeric-string, or a mapping carrying one)
-  let ratingKey: string | null = null;
-  let titleText: string | null = null;
-  if (value && typeof value === 'object') {
-    const mapping = value as { ratingKey?: unknown; title?: unknown; collection?: unknown };
+  let ratingKey: string | null = null
+  let titleText: string | null = null
+  if (value && typeof value === "object") {
+    const mapping = value as {
+      ratingKey?: unknown
+      title?: unknown
+      collection?: unknown
+    }
     // `{collection: <name>}` is the entry form a collection takes since 2026-08-21, and it
     // resolves by NAME per section exactly as the `Collection: <name>` string below always
     // did. It was already a shape `entryKey()` and the engine's `describe()` understood, and
     // this resolver could not see it: every `{collection:}` entry painted as an UNRESOLVED
     // tile in the grid while playing perfectly. Read before the `title` branch, because a
     // collection entry may carry both.
-    if (mapping.collection) return resolveCollection(sections, String(mapping.collection), opts);
-    if (mapping.ratingKey != null) ratingKey = String(mapping.ratingKey);
-    if (mapping.title) titleText = String(mapping.title);
-  } else if (typeof value === 'number' || /^\d+$/.test(String(value).trim())) {
-    ratingKey = String(value).trim();
+    if (mapping.collection)
+      return resolveCollection(
+        sections,
+        String(mapping.collection),
+        opts,
+      )
+    if (mapping.ratingKey != null)
+      ratingKey = String(mapping.ratingKey)
+    if (mapping.title) titleText = String(mapping.title)
+  } else if (
+    typeof value === "number" ||
+    /^\d+$/.test(String(value).trim())
+  ) {
+    ratingKey = String(value).trim()
   } else {
-    titleText = String(value);
+    titleText = String(value)
   }
   if (ratingKey) {
     // THE hot path: one call per queue entry, and until 2026-08-26 it was made on every single
@@ -848,32 +999,53 @@ export async function resolveValue(
     // the entry somebody leaves in a queue for months — without it, the one line nothing can
     // resolve costs a live round trip forever.
     if (!opts.isFresh) {
-      const hit = await cache.getItemMeta<PosterFields>(ratingKey, opts.account ?? '');
-      if (hit) return hit.v;
+      const hit = await cache.getItemMeta<PosterFields>(
+        ratingKey,
+        opts.account ?? "",
+      )
+      if (hit) return hit.v
     }
-    let item: PosterFields | null = null;
+    let item: PosterFields | null = null
     try {
-      const md = (container(await plexGet(`/library/metadata/${ratingKey}`, opts.token ?? null)).Metadata || [])[0];
-      if (md && (md.type === 'movie' || md.type === 'show')) item = posterFields(md);
+      const md = (container(
+        await plexGet(
+          `/library/metadata/${ratingKey}`,
+          opts.token ?? null,
+        ),
+      ).Metadata || [])[0]
+      if (md && (md.type === "movie" || md.type === "show"))
+        item = posterFields(md)
     } catch {
       // A dead id resolves to null and is cached as one. A TRANSPORT failure must not be:
       // caching "Plex was down" as "this entry does not exist" would paint an unresolved tile
       // that never repairs itself, so nothing is written here.
-      return null;
+      return null
     }
-    await cache.putItemMeta(ratingKey, item, opts.account ?? '');
-    return item;
+    await cache.putItemMeta(
+      ratingKey,
+      item,
+      opts.account ?? "",
+    )
+    return item
   }
-  if (!titleText) return null;
-  const collName = /^\s*collection:\s*(.+)$/i.exec(titleText)?.[1];
-  if (collName !== undefined) return resolveCollection(sections, collName, opts);
-  const { title, year, guid } = parseTitleString(titleText);
-  if (!title) return null;
+  if (!titleText) return null
+  const collName = /^\s*collection:\s*(.+)$/i.exec(
+    titleText,
+  )?.[1]
+  if (collName !== undefined)
+    return resolveCollection(sections, collName, opts)
+  const { title, year, guid } = parseTitleString(titleText)
+  if (!title) return null
   for (const section of ([] as number[]).concat(sections)) {
-    const hit = await resolveTitle(section, title, year, guid);
-    if (hit) return hit;
+    const hit = await resolveTitle(
+      section,
+      title,
+      year,
+      guid,
+    )
+    if (hit) return hit
   }
-  return null;
+  return null
 }
 
 /**
@@ -885,19 +1057,19 @@ export async function resolveValue(
  * along and the panel joins them.
  */
 export interface ItemLabel {
-  ratingKey: string;
-  type: string | null;
-  title: string;
-  year: number | null;
+  ratingKey: string
+  type: string | null
+  title: string
+  year: number | null
   /** The Plex EDITION, for the same reason `CollectionChild` carries one: two skipped cuts
    *  of one film are otherwise the same row twice. */
-  editionTitle: string | null;
+  editionTitle: string | null
   /** Episodes only — the series this leaf belongs to. */
-  show: string | null;
-  season: number | null;
-  episode: number | null;
-  posterRatingKey: string | null;
-  sourceTitle: string | null;
+  show: string | null
+  season: number | null
+  episode: number | null
+  posterRatingKey: string | null
+  sourceTitle: string | null
 }
 
 /**
@@ -907,39 +1079,58 @@ export interface ItemLabel {
  * been deleted must still show up in the panel with a working ✕, or the only way to clear it
  * is to hand-edit `sets.yaml`.
  */
-export async function itemLabel(ratingKey: string | number): Promise<ItemLabel> {
-  const rk = String(ratingKey);
+export async function itemLabel(
+  ratingKey: string | number,
+): Promise<ItemLabel> {
+  const rk = String(ratingKey)
   const missing: ItemLabel = {
-    ratingKey: rk, type: null, title: `#${rk}`, year: null, editionTitle: null,
-    show: null, season: null, episode: null, posterRatingKey: null, sourceTitle: null,
-  };
-  let md;
-  try {
-    md = (container(await plexGet(`/library/metadata/${rk}`)).Metadata || [])[0];
-  } catch {
-    return missing;
+    ratingKey: rk,
+    type: null,
+    title: `#${rk}`,
+    year: null,
+    editionTitle: null,
+    show: null,
+    season: null,
+    episode: null,
+    posterRatingKey: null,
+    sourceTitle: null,
   }
-  if (!md) return missing;
+  let md
+  try {
+    md = (container(
+      await plexGet(`/library/metadata/${rk}`),
+    ).Metadata || [])[0]
+  } catch {
+    return missing
+  }
+  if (!md) return missing
   return {
     ratingKey: rk,
     type: md.type ?? null,
     title: md.title || `#${rk}`,
     year: md.year ?? null,
-    editionTitle: md.editionTitle ? String(md.editionTitle) : null,
+    editionTitle: md.editionTitle
+      ? String(md.editionTitle)
+      : null,
     // `grandparentTitle` is the SERIES on an episode; absent on everything else.
     show: md.grandparentTitle ?? null,
     season: md.parentIndex ?? null,
     episode: md.index ?? null,
-    posterRatingKey: md.grandparentRatingKey ? String(md.grandparentRatingKey) : rk,
-    sourceTitle: md.grandparentTitle ?? md.Collection?.[0]?.tag ?? null,
-  };
+    posterRatingKey: md.grandparentRatingKey
+      ? String(md.grandparentRatingKey)
+      : rk,
+    sourceTitle:
+      md.grandparentTitle ??
+      md.Collection?.[0]?.tag ??
+      null,
+  }
 }
 
 /** One item's live watch state — the three fields a movie tile's badges are computed from. */
 export interface ViewState {
-  viewCount: number;
-  viewOffset: number;
-  duration: number;
+  viewCount: number
+  viewOffset: number
+  duration: number
 }
 
 /**
@@ -959,11 +1150,18 @@ export async function viewStates(
   ratingKeys: readonly (string | number)[],
   token: string | null = null,
 ): Promise<Map<string, ViewState>> {
-  const out = new Map<string, ViewState>();
-  const keys = [...new Set(ratingKeys.map(String).filter(Boolean))];
-  if (!keys.length) return out;
+  const out = new Map<string, ViewState>()
+  const keys = [
+    ...new Set(ratingKeys.map(String).filter(Boolean)),
+  ]
+  if (!keys.length) return out
   try {
-    const mc = container(await plexGet(`/library/metadata/${keys.join(',')}`, token));
+    const mc = container(
+      await plexGet(
+        `/library/metadata/${keys.join(",")}`,
+        token,
+      ),
+    )
     for (const md of mc.Metadata || []) {
       // viewCount is OMITTED at 0 (see posterFields) — a missing count is unwatched, never
       // "unknown", which is what makes `Number(...) || 0` the right coercion here.
@@ -971,12 +1169,12 @@ export async function viewStates(
         viewCount: Number(md.viewCount) || 0,
         viewOffset: Number(md.viewOffset) || 0,
         duration: Number(md.duration) || 0,
-      });
+      })
     }
   } catch {
     /* the caller keeps whatever the tile already carried */
   }
-  return out;
+  return out
 }
 
 // The show's episodes (allLeaves), SQLite-backed. This is the single biggest source of the
@@ -997,24 +1195,29 @@ async function showAggregate(
 ): Promise<ShowAggregate | null> {
   try {
     // `token` scopes viewedLeafCount to a specific profile (per-account validator); null = admin.
-    const mc = container(await plexGet(`/library/metadata/${showRatingKey}`, token));
-    const show = (mc.Metadata || [])[0];
-    if (!show) return null;
+    const mc = container(
+      await plexGet(
+        `/library/metadata/${showRatingKey}`,
+        token,
+      ),
+    )
+    const show = (mc.Metadata || [])[0]
+    if (!show) return null
     return {
       updatedAt: Number(show.updatedAt ?? 0),
       leafCount: Number(show.leafCount ?? 0),
       viewedLeafCount: Number(show.viewedLeafCount ?? 0),
-    };
+    }
   } catch {
-    return null;
+    return null
   }
 }
 
 async function allLeaves(
   showRatingKey: string | number,
-  { token = null, account = '' }: AccountScope = {},
+  { token = null, account = "" }: AccountScope = {},
 ): Promise<PlexMetadata[] | null> {
-  const rk = String(showRatingKey);
+  const rk = String(showRatingKey)
   // Per-account rows ('' = admin/Bob): the episode STRUCTURE is universal, but each leaf's
   // viewCount is the querying account's own — so a per-profile channel's editor keys its own
   // account and never inherits the admin's watched marks. The validator below is read under the
@@ -1041,27 +1244,45 @@ async function allLeaves(
   // (updatedAt, leafCount, viewedLeafCount) for every show in it, so one call could validate
   // all 121. It needs its own decision, because that listing has a 5-minute soft TTL and
   // "revalidates on read" would quietly become "revalidates within five minutes".
-  const agg = await showAggregate(rk, token);
-  const hit = await cache.getLeaves<PlexMetadata[]>(rk, agg, account);
-  if (hit) return hit;
-  const aggForWrite = agg;
-  let mc;
+  const agg = await showAggregate(rk, token)
+  const hit = await cache.getLeaves<PlexMetadata[]>(
+    rk,
+    agg,
+    account,
+  )
+  if (hit) return hit
+  const aggForWrite = agg
+  let mc
   try {
-    mc = container(await plexGet(`/library/metadata/${rk}/allLeaves`, token));
+    mc = container(
+      await plexGet(
+        `/library/metadata/${rk}/allLeaves`,
+        token,
+      ),
+    )
   } catch {
-    return null; // transient — caller treats null as "couldn't read", distinct from []
+    return null // transient — caller treats null as "couldn't read", distinct from []
   }
-  const eps = mc.Metadata || [];
+  const eps = mc.Metadata || []
   // Store the validator fields from the SHOW-NODE aggregate (the allLeaves container omits them,
   // so reading them off `mc` stored 0s and the row could never validate). Fall back to the
   // container / leaf length only when the aggregate call failed.
-  await cache.putLeaves(rk, {
-    updatedAt: aggForWrite?.updatedAt ?? Number(mc.updatedAt ?? 0),
-    leafCount: aggForWrite?.leafCount ?? Number(mc.leafCount ?? eps.length),
-    viewedLeafCount: aggForWrite?.viewedLeafCount ?? Number(mc.viewedLeafCount ?? 0),
-    payload: eps,
-  }, account);
-  return eps;
+  await cache.putLeaves(
+    rk,
+    {
+      updatedAt:
+        aggForWrite?.updatedAt ?? Number(mc.updatedAt ?? 0),
+      leafCount:
+        aggForWrite?.leafCount ??
+        Number(mc.leafCount ?? eps.length),
+      viewedLeafCount:
+        aggForWrite?.viewedLeafCount ??
+        Number(mc.viewedLeafCount ?? 0),
+      payload: eps,
+    },
+    account,
+  )
+  return eps
 }
 
 /**
@@ -1071,7 +1292,7 @@ async function allLeaves(
  * `nextEpisode` once per member, and a rotation channel's member grid resolves hundreds of
  * tiles per paint.
  */
-const NO_SKIPS: ReadonlySet<string> = new Set<string>();
+const NO_SKIPS: ReadonlySet<string> = new Set<string>()
 
 // --- next unwatched episode for a series. Queues/admin read Bob's view; a per-profile channel
 // passes `opts` ({token, account}) so allLeaves' viewCount IS that profile's watched state — no
@@ -1088,44 +1309,67 @@ export async function nextEpisode(
   skipped: ReadonlySet<string> = NO_SKIPS,
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
   completed: ReadonlySet<string> | null = null,
-  queueProgress: ReadonlyMap<string, { positionMs: number }> | null = null,
+  queueProgress: ReadonlyMap<
+    string,
+    { positionMs: number }
+  > | null = null,
 ): Promise<NextEp | null> {
-  const eps = await allLeaves(showRatingKey, opts);
-  if (!eps) return null;
+  const eps = await allLeaves(showRatingKey, opts)
+  if (!eps) return null
   // A single-season show (every anime — Japan doesn't do American-style seasons) hides its
   // "S1", so the tile shows just "E5". Count DISTINCT real seasons (S0 specials don't count).
-  const seasons = new Set<string>();
+  const seasons = new Set<string>()
   for (const e of eps) {
-    if (isExtraOrPromo(e) || String(e.parentIndex) === '0' || !e.duration) continue;
-    if (e.parentIndex != null) seasons.add(String(e.parentIndex));
+    if (
+      isExtraOrPromo(e) ||
+      String(e.parentIndex) === "0" ||
+      !e.duration
+    )
+      continue
+    if (e.parentIndex != null)
+      seasons.add(String(e.parentIndex))
   }
-  const multiSeason = seasons.size > 1;
+  const multiSeason = seasons.size > 1
   const ordered = episodesAtOrAfterStart(
-    orderedPlayableEpisodes(eps, { included_specials: [...includedSpecials] }),
+    orderedPlayableEpisodes(eps, {
+      included_specials: [...includedSpecials],
+    }),
     start,
-  );
+  )
   for (const e of ordered) {
     // viewCount is OMITTED by Plex at 0, so a missing count is unwatched here — never watched.
-    if (completed ? completed.has(String(e.ratingKey)) : Boolean(e.viewCount && e.viewCount > 0)) {
-      continue;
+    if (
+      completed
+        ? completed.has(String(e.ratingKey))
+        : Boolean(e.viewCount && e.viewCount > 0)
+    ) {
+      continue
     }
     // On the set's SKIP list. Applied here as well as in the engine, or the tile would keep
     // naming an episode the next scan is never going to play — the caption and the playback
     // disagreeing is the whole failure this guards.
-    if (skipped.has(String(e.ratingKey))) continue;
+    if (skipped.has(String(e.ratingKey))) continue
     // This next-up leaf is unwatched; a viewOffset means it was STARTED (mid-episode resume
     // point), which the tile surfaces as its "In Progress" badge (same predicate as the
     // engine's resume_offset: viewOffset > 0 AND unwatched).
     const viewOffset = queueProgress
-      ? Number(queueProgress.get(String(e.ratingKey))?.positionMs) || 0
-      : Number(e.viewOffset) || 0;
+      ? Number(
+          queueProgress.get(String(e.ratingKey))
+            ?.positionMs,
+        ) || 0
+      : Number(e.viewOffset) || 0
     return {
       ratingKey: String(e.ratingKey),
-      season: e.parentIndex ?? null, episode: e.index ?? null, title: e.title || '',
-      multiSeason, viewOffset, duration: Number(e.duration) || 0, partiallyWatched: viewOffset > 0,
-    };
+      season: e.parentIndex ?? null,
+      episode: e.index ?? null,
+      title: e.title || "",
+      multiSeason,
+      viewOffset,
+      duration: Number(e.duration) || 0,
+      partiallyWatched: viewOffset > 0,
+    }
   }
-  return null;
+  return null
 }
 
 // Filtered episode counts for a show: {leafCount, viewedLeafCount} over its allLeaves, with the
@@ -1136,8 +1380,8 @@ export async function episodeCounts(
   showRatingKey: string | number,
   opts: AccountScope = {},
 ): Promise<EpisodeCounts | null> {
-  const eps = await allLeaves(showRatingKey, opts);
-  return eps ? countEpisodes(eps) : null;
+  const eps = await allLeaves(showRatingKey, opts)
+  return eps ? countEpisodes(eps) : null
 }
 
 // --- ordered children of a Collection (shared by collectionNext + the start editor) --- //
@@ -1145,19 +1389,26 @@ export async function episodeCounts(
 // (collectionSort), so no client-side re-sort is needed.
 export async function collectionChildren(
   collectionRatingKey: string | number,
-  { token = null, account = '' }: AccountScope = {},
+  { token = null, account = "" }: AccountScope = {},
 ): Promise<CollectionChild[] | null> {
-  const rk = String(collectionRatingKey);
+  const rk = String(collectionRatingKey)
   // Per-account rows ('' = admin/Bob), for the same reason `leaves` has them: the member LIST
   // is universal but its progress fields are the querying account's own. Sharing one row is
   // what made a queue gated to Older Kids print the owner's "154/155 watched".
-  const hit = await cache.getCollectionChildren<CollectionChild[]>(rk, null, account);
-  if (hit) return hit;
-  let mc;
+  const hit = await cache.getCollectionChildren<
+    CollectionChild[]
+  >(rk, null, account)
+  if (hit) return hit
+  let mc
   try {
-    mc = container(await plexGet(`/library/collections/${rk}/children`, token));
+    mc = container(
+      await plexGet(
+        `/library/collections/${rk}/children`,
+        token,
+      ),
+    )
   } catch {
-    return null;
+    return null
   }
   // NOTE a SHOW's `viewCount` is its number of watched episodes, not a boolean — only a
   // movie/standalone child is "watched" by viewCount. A show reports progress instead
@@ -1169,38 +1420,51 @@ export async function collectionChildren(
   // cached (24 h TTL + MQTT now-playing bust) and single-flighted, and collectionNext already
   // walks the same leaves, so this adds no cold Plex I/O beyond the first read.
   const children = await Promise.all(
-    (mc.Metadata || []).map(async (ch): Promise<CollectionChild> => {
-      let viewedLeafCount: number | null = null;
-      let leafCount: number | null = null;
-      if (ch.type === 'show') {
-        const counts = await episodeCounts(String(ch.ratingKey), { token, account });
-        if (counts) {
-          viewedLeafCount = counts.viewedLeafCount;
-          leafCount = counts.leafCount;
+    (mc.Metadata || []).map(
+      async (ch): Promise<CollectionChild> => {
+        let viewedLeafCount: number | null = null
+        let leafCount: number | null = null
+        if (ch.type === "show") {
+          const counts = await episodeCounts(
+            String(ch.ratingKey),
+            { token, account },
+          )
+          if (counts) {
+            viewedLeafCount = counts.viewedLeafCount
+            leafCount = counts.leafCount
+          }
         }
-      }
-      return {
-        ratingKey: String(ch.ratingKey),
-        type: ch.type,
-        title: ch.title || '',
-        year: ch.year ?? null,
-        editionTitle: ch.editionTitle ? String(ch.editionTitle) : null,
-        watched: ch.type !== 'show' && Boolean(ch.viewCount && ch.viewCount > 0),
-        // A movie/standalone member's own resume state, so a mid-movie collection tile can
-        // say how far in / how long (a show member reports per-episode via nextEpisode).
-        viewOffset: Number(ch.viewOffset) || 0,
-        duration: Number(ch.duration) || 0,
-        viewedLeafCount,
-        leafCount,
-      };
-    }),
-  );
-  await cache.putCollectionChildren(rk, {
-    updatedAt: Number(mc.updatedAt ?? 0),
-    childCount: Number(mc.childCount ?? children.length),
-    payload: children,
-  }, account);
-  return children;
+        return {
+          ratingKey: String(ch.ratingKey),
+          type: ch.type,
+          title: ch.title || "",
+          year: ch.year ?? null,
+          editionTitle: ch.editionTitle
+            ? String(ch.editionTitle)
+            : null,
+          watched:
+            ch.type !== "show" &&
+            Boolean(ch.viewCount && ch.viewCount > 0),
+          // A movie/standalone member's own resume state, so a mid-movie collection tile can
+          // say how far in / how long (a show member reports per-episode via nextEpisode).
+          viewOffset: Number(ch.viewOffset) || 0,
+          duration: Number(ch.duration) || 0,
+          viewedLeafCount,
+          leafCount,
+        }
+      },
+    ),
+  )
+  await cache.putCollectionChildren(
+    rk,
+    {
+      updatedAt: Number(mc.updatedAt ?? 0),
+      childCount: Number(mc.childCount ?? children.length),
+      payload: children,
+    },
+    account,
+  )
+  return children
 }
 
 /**
@@ -1226,29 +1490,41 @@ export async function countSkippedInside(
   skipped: ReadonlySet<string>,
   opts: AccountScope = {},
 ): Promise<number> {
-  if (!skipped.size) return 0;
-  if (type === 'show') {
-    const leaves = await allLeaves(ratingKey, opts);
-    if (!leaves) return 0;
-    return leaves.filter((leaf) => skipped.has(String(leaf.ratingKey))).length;
+  if (!skipped.size) return 0
+  if (type === "show") {
+    const leaves = await allLeaves(ratingKey, opts)
+    if (!leaves) return 0
+    return leaves.filter((leaf) =>
+      skipped.has(String(leaf.ratingKey)),
+    ).length
   }
-  if (type === 'collection') {
-    const children = await collectionChildren(ratingKey, opts);
-    if (!children) return 0;
-    return children.filter((ch) => skipped.has(String(ch.ratingKey))).length;
+  if (type === "collection") {
+    const children = await collectionChildren(
+      ratingKey,
+      opts,
+    )
+    if (!children) return 0
+    return children.filter((ch) =>
+      skipped.has(String(ch.ratingKey)),
+    ).length
   }
-  return 0;
+  return 0
 }
 
 // A start floor for a COLLECTION entry: {series, season, episode} — `series` names the member
 // to begin at (its ratingKey, or its title for a hand-written YAML entry). Members BEFORE it
 // in collection order are skipped entirely. Returns the index of that member, or -1.
-function startMemberIndex(children: CollectionChild[], start: Start | null): number {
-  if (!start || start.series == null) return -1;
-  const want = String(start.series).trim().toLowerCase();
+function startMemberIndex(
+  children: CollectionChild[],
+  start: Start | null,
+): number {
+  if (!start || start.series == null) return -1
+  const want = String(start.series).trim().toLowerCase()
   return children.findIndex(
-    (ch) => String(ch.ratingKey) === want || ch.title.trim().toLowerCase() === want,
-  );
+    (ch) =>
+      String(ch.ratingKey) === want ||
+      ch.title.trim().toLowerCase() === want,
+  )
 }
 
 // --- every playable episode of a series, grouped by season -------------------- //
@@ -1265,38 +1541,49 @@ export async function showEpisodes(
   // `opts` ({token, account}) scopes the `watched` marks to a specific profile — a per-profile
   // channel's start editor shows THAT profile's history, not the admin's. Empty for
   // queues/admin, preserving Bob's-view behaviour.
-  const eps = await allLeaves(showRatingKey, opts);
-  if (!eps) return null;
+  const eps = await allLeaves(showRatingKey, opts)
+  if (!eps) return null
   // The member editor asks for regular specials because a hidden row cannot be selected
   // later. The Start editor keeps the playback list: no Season 0 on a normal show. Trailers,
   // OP/ED items and clips stay absent from both.
   const realSeasonCount = new Set(
-    eps.filter((e) => isCountableEpisode(e) && episodeSeason(e) !== 0)
+    eps
+      .filter(
+        (e) =>
+          isCountableEpisode(e) && episodeSeason(e) !== 0,
+      )
       .map((e) => episodeSeason(e)),
-  ).size;
-  const hasRealSeasons = realSeasonCount > 0;
-  const seasons = new Map<number, ShowEpisodeRow[]>(); // season number -> [{episode, title, watched}]
+  ).size
+  const hasRealSeasons = realSeasonCount > 0
+  const seasons = new Map<number, ShowEpisodeRow[]>() // season number -> [{episode, title, watched}]
   for (const e of eps) {
     if (includeSpecialChoices) {
-      if (!isCountableEpisode(e)) continue;
-    } else if (!isPlayableEpisode(e, { includeSpecials: !hasRealSeasons })) continue;
-    const s = Number(e.parentIndex ?? 1);
-    let rows = seasons.get(s);
+      if (!isCountableEpisode(e)) continue
+    } else if (
+      !isPlayableEpisode(e, {
+        includeSpecials: !hasRealSeasons,
+      })
+    )
+      continue
+    const s = Number(e.parentIndex ?? 1)
+    let rows = seasons.get(s)
     if (!rows) {
-      rows = [];
-      seasons.set(s, rows);
+      rows = []
+      seasons.set(s, rows)
     }
     rows.push({
-      ratingKey: String(e.ratingKey ?? ''),
+      ratingKey: String(e.ratingKey ?? ""),
       episode: e.index ?? null,
-      title: e.title || '',
+      title: e.title || "",
       watched: Boolean(e.viewCount && e.viewCount > 0),
-    });
+    })
   }
   const out = [...seasons.entries()]
-    .sort((a, b) => (a[0] === 0 ? 1 : b[0] === 0 ? -1 : a[0] - b[0]))
-    .map(([season, episodes]) => ({ season, episodes }));
-  return { multiSeason: realSeasonCount > 1, seasons: out };
+    .sort((a, b) =>
+      a[0] === 0 ? 1 : b[0] === 0 ? -1 : a[0] - b[0],
+    )
+    .map(([season, episodes]) => ({ season, episodes }))
+  return { multiSeason: realSeasonCount > 1, seasons: out }
 }
 
 // --- next-up member of a Collection (mirrors queue_builder collection_items) --- //
@@ -1321,45 +1608,69 @@ export async function collectionNext(
   includedSpecials: ReadonlySet<string> = NO_SKIPS,
   collectionOrder: readonly string[] = [],
   completed: ReadonlySet<string> | null = null,
-  queueProgress: ReadonlyMap<string, { positionMs: number }> | null = null,
+  queueProgress: ReadonlyMap<
+    string,
+    { positionMs: number }
+  > | null = null,
 ): Promise<CollectionNextEp | null> {
   // Read as the SAME account the next-up below is resolved as. This used to be an admin read
   // with a comment conceding that "a rare movie child's `watched` short-circuit still reads the
   // admin view" — which meant a collection whose next member is a MOVIE skipped it on the
   // strength of someone else having seen it. Shows were already per-account via nextEpisode.
-  let children = await collectionChildren(collectionRatingKey, opts);
-  if (!children) return null;
+  let children = await collectionChildren(
+    collectionRatingKey,
+    opts,
+  )
+  if (!children) return null
   if (collectionOrder.length) {
-    const rank = new Map(collectionOrder.map((key, index) => [String(key), index]));
+    const rank = new Map(
+      collectionOrder.map((key, index) => [
+        String(key),
+        index,
+      ]),
+    )
     children = children
-      .map((child, plexIndex) => ({ child, plexIndex, rank: rank.get(String(child.ratingKey)) }))
-      .sort((a, b) => (a.rank ?? collectionOrder.length + a.plexIndex) - (b.rank ?? collectionOrder.length + b.plexIndex))
-      .map(({ child }) => child);
+      .map((child, plexIndex) => ({
+        child,
+        plexIndex,
+        rank: rank.get(String(child.ratingKey)),
+      }))
+      .sort(
+        (a, b) =>
+          (a.rank ?? collectionOrder.length + a.plexIndex) -
+          (b.rank ?? collectionOrder.length + b.plexIndex),
+      )
+      .map(({ child }) => child)
   }
-  const floorAt = startMemberIndex(children, start);
+  const floorAt = startMemberIndex(children, start)
   // Which member the manual start names — the tile's start chip says so in its tooltip (the
   // member that plays NEXT can be a later one, once the start member is fully watched).
-  const startMember = floorAt >= 0 ? children[floorAt]?.title ?? null : null;
-  let position = 0;
+  const startMember =
+    floorAt >= 0 ? (children[floorAt]?.title ?? null) : null
+  let position = 0
   for (let i = 0; i < children.length; i++) {
-    if (floorAt >= 0 && i < floorAt) continue; // member is before the manual start
-    const ch = children[i];
-    if (!ch) continue; // unreachable — `i < children.length`; index reads are unchecked
+    if (floorAt >= 0 && i < floorAt) continue // member is before the manual start
+    const ch = children[i]
+    if (!ch) continue // unreachable — `i < children.length`; index reads are unchecked
     // A skipped CHILD goes whole, matching `resolve.collectionItems`: the collection is the
     // member, its children are the items inside it.
-    if (skipped.has(String(ch.ratingKey))) continue;
+    if (skipped.has(String(ch.ratingKey))) continue
     // Position is in the collection that can still play. A skipped child is absent from that
     // collection, so it cannot consume a place in the "N of M" progress readout.
-    position += 1;
+    position += 1
     const where = {
-      member: ch.title, memberRatingKey: ch.ratingKey, memberYear: ch.year,
+      member: ch.title,
+      memberRatingKey: ch.ratingKey,
+      memberYear: ch.year,
       // The member's own edition, so the tile can say WHICH cut it is about to play. A show
       // member has none, and passing the collection's would be a different item's label.
-      memberEdition: ch.type === 'show' ? null : ch.editionTitle,
-      position, startMember,
-    };
-    if (ch.type === 'show') {
-      let ep = null;
+      memberEdition:
+        ch.type === "show" ? null : ch.editionTitle,
+      position,
+      startMember,
+    }
+    if (ch.type === "show") {
+      let ep = null
       try {
         // The episode floor applies only to the member the start names, not to later ones.
         ep = await nextEpisode(
@@ -1370,25 +1681,38 @@ export async function collectionNext(
           includedSpecials,
           completed,
           queueProgress,
-        );
+        )
       } catch {
         /* skip a show we can't read; try the next member */
       }
-      if (ep) return { ...where, kind: 'show', ...ep };
+      if (ep) return { ...where, kind: "show", ...ep }
     } else {
       // movie / episode / standalone member: unwatched unless it carries a viewCount.
-      if (completed ? completed.has(String(ch.ratingKey)) : ch.watched) continue;
+      if (
+        completed
+          ? completed.has(String(ch.ratingKey))
+          : ch.watched
+      )
+        continue
       const viewOffset = queueProgress
-        ? Number(queueProgress.get(String(ch.ratingKey))?.positionMs) || 0
-        : Number(ch.viewOffset) || 0;
+        ? Number(
+            queueProgress.get(String(ch.ratingKey))
+              ?.positionMs,
+          ) || 0
+        : Number(ch.viewOffset) || 0
       return {
         // A movie child IS the leaf, so the skippable key and the member key are the same one.
-        ...where, kind: 'movie', ratingKey: ch.ratingKey, title: ch.title,
-        viewOffset, duration: Number(ch.duration) || 0, partiallyWatched: viewOffset > 0,
-      };
+        ...where,
+        kind: "movie",
+        ratingKey: ch.ratingKey,
+        title: ch.title,
+        viewOffset,
+        duration: Number(ch.duration) || 0,
+        partiallyWatched: viewOffset > 0,
+      }
     }
   }
-  return null;
+  return null
 }
 
 // --- live now-playing -> which TILE is it? ----------------------------------- //
@@ -1396,57 +1720,71 @@ export async function collectionNext(
 // SERIES (the key is one of its episodes) or a COLLECTION (the key is one of its members).
 // One metadata read per newly-seen key resolves both parents; cached because the answer is
 // immutable for that key, so re-plays and pause/resume storms cost nothing.
-const _playCtx = new Map<string, PlayingContext>(); // ratingKey -> context
-export async function playingContext(ratingKey: string | number): Promise<PlayingContext | null> {
-  const key = String(ratingKey);
-  const memo = _playCtx.get(key);
-  if (memo !== undefined) return memo;
-  let md;
+const _playCtx = new Map<string, PlayingContext>() // ratingKey -> context
+export async function playingContext(
+  ratingKey: string | number,
+): Promise<PlayingContext | null> {
+  const key = String(ratingKey)
+  const memo = _playCtx.get(key)
+  if (memo !== undefined) return memo
+  let md
   try {
-    md = (container(await plexGet(`/library/metadata/${key}`)).Metadata || [])[0];
+    md = (container(
+      await plexGet(`/library/metadata/${key}`),
+    ).Metadata || [])[0]
   } catch {
-    return null; // transient — don't cache a failure
+    return null // transient — don't cache a failure
   }
-  if (!md) return null;
+  if (!md) return null
   const ctx: PlayingContext = {
     ratingKey: key,
     type: md.type || null,
     // An episode's grandparent IS its series, which is what a series tile stores.
-    showRatingKey: md.grandparentRatingKey != null ? String(md.grandparentRatingKey) : null,
+    showRatingKey:
+      md.grandparentRatingKey != null
+        ? String(md.grandparentRatingKey)
+        : null,
     // Collection membership comes back as name tags, and a collection tile is stored by
     // name ("Collection: <name>") — so names are the only join available here.
-    collections: (md.Collection || []).map((c) => c.tag).filter((t): t is string => Boolean(t)),
-  };
-  _playCtx.set(key, ctx);
-  return ctx;
+    collections: (md.Collection || [])
+      .map((c) => c.tag)
+      .filter((t): t is string => Boolean(t)),
+  }
+  _playCtx.set(key, ctx)
+  return ctx
 }
 
 // --- poster proxy: fetch a transcoded poster server-side (token never hits the
 // browser). 480x720 (not the full-res art): tiles render ~158 CSS px, so this stays
 // sharp through 150% zoom / 2-3x DPR screens — 300px visibly pixelated there — while
 // still ~10x smaller than the originals. Falls back to the raw thumb.
-const _thumbPath = new Map<string, string>(); // ratingKey -> thumb path
-const POSTER_TIMEOUT_MS = 8000; // the same per-attempt budget as plexGet
-const POSTER_MAX_REDIRECTS = 3;
-export async function thumb(ratingKey: string): Promise<PosterImage | null> {
-  let tp: string | null | undefined = _thumbPath.get(ratingKey);
+const _thumbPath = new Map<string, string>() // ratingKey -> thumb path
+const POSTER_TIMEOUT_MS = 8000 // the same per-attempt budget as plexGet
+const POSTER_MAX_REDIRECTS = 3
+export async function thumb(
+  ratingKey: string,
+): Promise<PosterImage | null> {
+  let tp: string | null | undefined =
+    _thumbPath.get(ratingKey)
   if (!tp) {
-    const md = (container(await plexGet(`/library/metadata/${ratingKey}`)).Metadata || [])[0];
-    tp = md && md.thumb ? md.thumb : null;
-    if (tp) _thumbPath.set(ratingKey, tp);
+    const md = (container(
+      await plexGet(`/library/metadata/${ratingKey}`),
+    ).Metadata || [])[0]
+    tp = md && md.thumb ? md.thumb : null
+    if (tp) _thumbPath.set(ratingKey, tp)
   }
-  if (!tp) return null;
-  const tok = encodeURIComponent(PLEX_TOKEN);
+  if (!tp) return null
+  const tok = encodeURIComponent(PLEX_TOKEN)
   const transcode =
     `${PLEX_URL}/photo/:/transcode?width=480&height=720&minSize=1&upscale=0` +
-    `&url=${encodeURIComponent(tp)}&X-Plex-Token=${tok}`;
-  const sep = tp.includes('?') ? '&' : '?';
-  const raw = `${PLEX_URL}${tp}${sep}X-Plex-Token=${tok}`; // fall back to raw art
+    `&url=${encodeURIComponent(tp)}&X-Plex-Token=${tok}`
+  const sep = tp.includes("?") ? "&" : "?"
+  const raw = `${PLEX_URL}${tp}${sep}X-Plex-Token=${tok}` // fall back to raw art
   for (const url of [transcode, raw]) {
-    const poster = await posterBytes(url);
-    if (poster) return poster;
+    const poster = await posterBytes(url)
+    if (poster) return poster
   }
-  return null;
+  return null
 }
 
 // One poster read from PLEX_URL. It goes through the scoped LAN `agent`, like every other
@@ -1457,37 +1795,55 @@ export async function thumb(ratingKey: string): Promise<PosterImage | null> {
 // redirect is followed here, a bounded number of times. A hop that stays on PLEX_URL's origin
 // keeps the scoped agent; a hop to any other origin goes through the global `fetch`, which
 // checks certificates, so the LAN exception never reaches another host.
-async function posterBytes(url: string, hops = 0): Promise<PosterImage | null> {
+async function posterBytes(
+  url: string,
+  hops = 0,
+): Promise<PosterImage | null> {
   const res = await request(url, {
     dispatcher: agent,
     signal: AbortSignal.timeout(POSTER_TIMEOUT_MS),
-  });
-  const location = res.headers.location;
-  const next = Array.isArray(location) ? location[0] : location;
-  if (res.statusCode >= 300 && res.statusCode < 400 && next && hops < POSTER_MAX_REDIRECTS) {
-    await res.body.dump(); // release the pooled socket
-    const target = new URL(next, url);
-    if (target.origin === new URL(PLEX_URL).origin) return posterBytes(target.href, hops + 1);
-    return verifiedPosterBytes(target.href);
+  })
+  const location = res.headers.location
+  const next = Array.isArray(location)
+    ? location[0]
+    : location
+  if (
+    res.statusCode >= 300 &&
+    res.statusCode < 400 &&
+    next &&
+    hops < POSTER_MAX_REDIRECTS
+  ) {
+    await res.body.dump() // release the pooled socket
+    const target = new URL(next, url)
+    if (target.origin === new URL(PLEX_URL).origin)
+      return posterBytes(target.href, hops + 1)
+    return verifiedPosterBytes(target.href)
   }
   if (res.statusCode < 200 || res.statusCode >= 300) {
-    await res.body.dump(); // release the pooled socket
-    return null;
+    await res.body.dump() // release the pooled socket
+    return null
   }
-  const type = res.headers['content-type'];
+  const type = res.headers["content-type"]
   return {
-    contentType: (Array.isArray(type) ? type[0] : type) || 'image/jpeg',
+    contentType:
+      (Array.isArray(type) ? type[0] : type) ||
+      "image/jpeg",
     buffer: Buffer.from(await res.body.arrayBuffer()),
-  };
+  }
 }
 
 // A poster redirect that leaves PLEX_URL's origin: full certificate checks, and `fetch`
 // follows any further redirects itself.
-async function verifiedPosterBytes(url: string): Promise<PosterImage | null> {
-  const res = await fetch(url, { signal: AbortSignal.timeout(POSTER_TIMEOUT_MS) });
-  if (!res.ok) return null;
+async function verifiedPosterBytes(
+  url: string,
+): Promise<PosterImage | null> {
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(POSTER_TIMEOUT_MS),
+  })
+  if (!res.ok) return null
   return {
-    contentType: res.headers.get('content-type') || 'image/jpeg',
+    contentType:
+      res.headers.get("content-type") || "image/jpeg",
     buffer: Buffer.from(await res.arrayBuffer()),
-  };
+  }
 }

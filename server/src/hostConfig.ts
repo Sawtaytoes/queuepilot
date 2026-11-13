@@ -6,9 +6,10 @@
 // Regression this closes: the Python→Node port copied the old config's *placeholder defaults*
 // verbatim but not its YAML layer, so once Node owned playback every host value fell back to
 // the non-routable placeholder — ADB dialed 192.0.2.30 and no profile-gated card played.
-import { parse } from 'yaml';
-import fs from 'node:fs';
-import { errMessage, isNodeError } from './errors.js';
+
+import fs from "node:fs"
+import { parse } from "yaml"
+import { errMessage, isNodeError } from "./errors.js"
 
 /**
  * The parsed /config YAML. `yaml`'s `parse()` is `any`, so it is taken as `unknown` and
@@ -17,34 +18,43 @@ import { errMessage, isNodeError } from './errors.js';
  * all-comments file parses to `null`, and a scalar document would previously have been
  * returned as-is, so the falsy test is reproduced exactly rather than "fixed".
  */
-type HostConfig = Record<string, unknown>;
+type HostConfig = Record<string, unknown>
 
 function loadHostConfig(): HostConfig {
-  const path = process.env.CONFIG_PATH || '/config/config.yaml';
+  const path =
+    process.env.CONFIG_PATH || "/config/config.yaml"
   try {
-    const doc: unknown = parse(fs.readFileSync(path, 'utf8'));
-    return (doc || {}) as HostConfig;
+    const doc: unknown = parse(
+      fs.readFileSync(path, "utf8"),
+    )
+    return (doc || {}) as HostConfig
   } catch (e) {
     // A missing file is fine: every value falls back to a deliberately non-routable
     // placeholder, so a misconfigured deploy fails loudly instead of reaching a stranger's
     // LAN. Anything else is worth a line in the log, but must never crash boot.
-    if (!isNodeError(e) || e.code !== 'ENOENT') {
-      console.log(`[config] could not read ${path}: ${errMessage(e)}`);
+    if (!isNodeError(e) || e.code !== "ENOENT") {
+      console.log(
+        `[config] could not read ${path}: ${errMessage(e)}`,
+      )
     }
-    return {};
+    return {}
   }
 }
 
-const HOST = loadHostConfig();
+const HOST = loadHostConfig()
 
 /** Structured deployment settings; never sourced from a browser request. */
-export const hostdata = (key: string): unknown => HOST[key];
+export const hostdata = (key: string): unknown => HOST[key]
 
 /** Resolve a host value: an env override wins, then the /config YAML, then the placeholder. */
-export const hostval = (envKey: string, yamlKey: string, fallback: string): string => {
-  const v = process.env[envKey];
-  if (v) return v;
-  const y = HOST[yamlKey];
-  if (y != null && y !== '') return String(y);
-  return fallback;
-};
+export const hostval = (
+  envKey: string,
+  yamlKey: string,
+  fallback: string,
+): string => {
+  const v = process.env[envKey]
+  if (v) return v
+  const y = HOST[yamlKey]
+  if (y != null && y !== "") return String(y)
+  return fallback
+}

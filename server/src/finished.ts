@@ -22,26 +22,38 @@
 // The persisted flag stays the record of truth for everything that WRITES (the TTL sweep,
 // "Remove all completed"); `isFinished` only ever tells the grid what the next scan will
 // decide.
-import * as cache from './cache.js';
-import { liveClient } from './engine/plex-live.js';
-import * as routing from './engine/routing.js';
-import * as select from './engine/select.js';
-import { WATCH_COUNT_ACCOUNTS } from './env.js';
-import { errMessage } from './errors.js';
-import * as exhaustion from './exhaustion.js';
-import * as mqttc from './mqttc.js';
-import { providerFor } from './providers/index.js';
-import { plexServerAccessForProfile, plexServerClient } from './plexSources.js';
-import { providerIdForSet, type BlockSourceCfg } from './providers/blocks.js';
-import * as queues from './queues.js';
-import * as queueEntryHistory from './store/db/queueEntryHistory.js';
-import * as section from './section.js';
-import { isSetAvailable } from './season.js';
-import * as sets from './sets.js';
-import { SESSION } from './session.js';
+import * as cache from "./cache.js"
+import { liveClient } from "./engine/plex-live.js"
+import * as routing from "./engine/routing.js"
+import * as select from "./engine/select.js"
+import { WATCH_COUNT_ACCOUNTS } from "./env.js"
+import { errMessage } from "./errors.js"
+import * as exhaustion from "./exhaustion.js"
+import * as mqttc from "./mqttc.js"
+import {
+  plexServerAccessForProfile,
+  plexServerClient,
+} from "./plexSources.js"
+import {
+  type BlockSourceCfg,
+  providerIdForSet,
+} from "./providers/blocks.js"
+import { providerFor } from "./providers/index.js"
+import * as queues from "./queues.js"
+import { isSetAvailable } from "./season.js"
+import * as section from "./section.js"
+import { SESSION } from "./session.js"
+import * as sets from "./sets.js"
+import * as queueEntryHistory from "./store/db/queueEntryHistory.js"
 import type {
-  BucketsResult, NowPlaying, RoutingQueueCfg, RoutingSetCfg, PlexClient, Provider, EngineBinding,
-} from './types.js';
+  BucketsResult,
+  EngineBinding,
+  NowPlaying,
+  PlexClient,
+  Provider,
+  RoutingQueueCfg,
+  RoutingSetCfg,
+} from "./types.js"
 
 /**
  * How long a set's watched-history read is reused. It is refetched on demand, so this only
@@ -51,27 +63,29 @@ import type {
  * watched state does not wait for it — `watchPlaybackEnd()` drops the memo on the same
  * now-playing event it reconciles from.
  */
-const WATCHED_TTL_MS = 60 * 1000;
+const WATCHED_TTL_MS = 60 * 1000
 
 /** How long after playback ends before the queue is reconciled — see `watchPlaybackEnd()`. */
-const RECONCILE_DELAY_MS = 5000;
+const RECONCILE_DELAY_MS = 5000
 
 /** HA reports seconds; Plex play queues and viewOffset use milliseconds. */
 export function nowPlayingMs(value: unknown): number {
-  const seconds = Number(value);
-  return Number.isFinite(seconds) && seconds > 0 ? Math.round(seconds * 1000) : 0;
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds > 0
+    ? Math.round(seconds * 1000)
+    : 0
 }
 
 interface WatchedMemo {
-  at: number;
-  value: Promise<Set<string>>;
+  at: number
+  value: Promise<Set<string>>
 }
 
-const _watched = new Map<string, WatchedMemo>();
+const _watched = new Map<string, WatchedMemo>()
 
 /** Drop every memoized watched-history read (playback ended, or a scan just wrote). */
 export function forgetWatched(): void {
-  _watched.clear();
+  _watched.clear()
 }
 
 /**
@@ -86,12 +100,17 @@ async function scopedBinding(
   cfg: RoutingSetCfg,
   profileTitle: string | null,
 ) {
-  const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
-  let binding = routing.bindingFor(cfg, profileTitle);
-  if (typeof provider.profileBinding === 'function') {
-    binding = await provider.profileBinding(binding, profileTitle);
+  const provider = providerFor(
+    providerIdForSet(cfg as unknown as BlockSourceCfg),
+  )
+  let binding = routing.bindingFor(cfg, profileTitle)
+  if (typeof provider.profileBinding === "function") {
+    binding = await provider.profileBinding(
+      binding,
+      profileTitle,
+    )
   }
-  return { binding, provider };
+  return { binding, provider }
 }
 
 /**
@@ -107,20 +126,27 @@ export async function watchedFor(
   cfg: RoutingSetCfg,
   profileTitle: string | null,
 ): Promise<Set<string>> {
-  const { binding } = await scopedBinding(cfg, profileTitle);
-  const accts = (binding && binding.watch_count_accounts) || WATCH_COUNT_ACCOUNTS;
-  const key = `${accts.join(',')}|${routing.setSections(cfg).join(',')}`;
-  const memo = _watched.get(key);
-  if (memo && Date.now() - memo.at < WATCHED_TTL_MS) return memo.value;
-  const value = select.watchedForSet(liveClient(), cfg, binding).catch((e: unknown) => {
-    // A history read that failed must never make the grid claim things are finished, and
-    // must not stick: drop it so the next request retries.
-    console.log(`[finished] watched history unavailable (${errMessage(e)})`);
-    _watched.delete(key);
-    return new Set<string>();
-  });
-  _watched.set(key, { at: Date.now(), value });
-  return value;
+  const { binding } = await scopedBinding(cfg, profileTitle)
+  const accts =
+    (binding && binding.watch_count_accounts) ||
+    WATCH_COUNT_ACCOUNTS
+  const key = `${accts.join(",")}|${routing.setSections(cfg).join(",")}`
+  const memo = _watched.get(key)
+  if (memo && Date.now() - memo.at < WATCHED_TTL_MS)
+    return memo.value
+  const value = select
+    .watchedForSet(liveClient(), cfg, binding)
+    .catch((e: unknown) => {
+      // A history read that failed must never make the grid claim things are finished, and
+      // must not stick: drop it so the next request retries.
+      console.log(
+        `[finished] watched history unavailable (${errMessage(e)})`,
+      )
+      _watched.delete(key)
+      return new Set<string>()
+    })
+  _watched.set(key, { at: Date.now(), value })
+  return value
 }
 
 /**
@@ -146,24 +172,25 @@ export async function applyQueueWriteSide(
   cfg: RoutingQueueCfg,
   res: BucketsResult,
 ): Promise<{ marked: number }> {
-  if (cfg.reel) return { marked: 0 };
+  if (cfg.reel) return { marked: 0 }
   if (Array.isArray(res.revived) && res.revived.length) {
-    await queues.clearDone(setName, res.revived);
+    await queues.clearDone(setName, res.revived)
   }
-  const newly = res.newlyDone || [];
-  const isMarking = Boolean(newly.length) && !cfg.keep_completed;
+  const newly = res.newlyDone || []
+  const isMarking =
+    Boolean(newly.length) && !cfg.keep_completed
   if (isMarking) {
-    await queues.markDone(setName, newly);
+    await queues.markDone(setName, newly)
   }
   if (cfg.restart_when_exhausted) {
-    await exhaustion.restartIfExhausted(setName);
+    await exhaustion.restartIfExhausted(setName)
   }
   await queues.sweepCompleted(setName, {
     keepCompleted: Boolean(cfg.keep_completed),
     reel: Boolean(cfg.reel),
     removeCompletedAfter: cfg.remove_completed_after,
-  });
-  return { marked: isMarking ? newly.length : 0 };
+  })
+  return { marked: isMarking ? newly.length : 0 }
 }
 
 /**
@@ -176,40 +203,72 @@ export async function applyQueueWriteSide(
 export async function reconcileQueue(
   setName: string,
   profileTitle: string | null = null,
-  scope?: {provider:Provider;binding:EngineBinding;token:string},
+  scope?: {
+    provider: Provider
+    binding: EngineBinding
+    token: string
+  },
 ): Promise<{ reconciled: boolean }> {
-  const reg = routing.loadSets();
-  const cfg = reg && reg.sets[setName];
+  const reg = routing.loadSets()
+  const cfg = reg && reg.sets[setName]
   // Only a CURATED queue has entries to mark. A rotation channel's lineup is computed, and a
   // reel writes nothing by rule.
   // `enabled` AND in season, through the one predicate. ⚠️ Skipping the reconcile is the whole
   // of it: an out-of-season queue is not swept, not cleared and not marked. A season boundary
   // clears NOTHING — that is a separate setting with its own record
   // (`2026-09-08-a-queue-can-clear-its-own-watched-state-on-a-date-each-year`).
-  if (!cfg || !isSetAvailable(cfg) || cfg.source !== 'queue' || cfg.reel) return { reconciled: false };
+  if (
+    !cfg ||
+    !isSetAvailable(cfg) ||
+    cfg.source !== "queue" ||
+    cfg.reel
+  )
+    return { reconciled: false }
   try {
-    const { binding, provider } = scope || await scopedBinding(cfg, profileTitle);
+    const { binding, provider } =
+      scope || (await scopedBinding(cfg, profileTitle))
     // Same unguarded call as `startSession` — a provider with no `profileToken` throws here
     // and is caught below rather than silently reconciling under the wrong account.
-    const token = scope?.token ?? await provider.profileToken!(binding.user_uuid);
-    const res = await provider.buckets({ setName, cfg, binding, token, kind: 'movie' });
-    const { marked } = await applyQueueWriteSide(setName, cfg, res);
+    const token =
+      scope?.token ??
+      (await provider.profileToken!(binding.user_uuid))
+    const res = await provider.buckets({
+      setName,
+      cfg,
+      binding,
+      token,
+      kind: "movie",
+    })
+    const { marked } = await applyQueueWriteSide(
+      setName,
+      cfg,
+      res,
+    )
     // The history that decided this just moved, and so did the file. Neither memo may serve
     // the pre-playback answer to the refresh this reconcile is about to trigger.
-    forgetWatched();
-    await cache.bumpGeneration();
-    if (marked) console.log(`[finished] ${setName}: marked ${marked} finished after playback`);
-    return { reconciled: true };
+    forgetWatched()
+    await cache.bumpGeneration()
+    if (marked)
+      console.log(
+        `[finished] ${setName}: marked ${marked} finished after playback`,
+      )
+    return { reconciled: true }
   } catch (e) {
-    console.log(`[finished] reconcile of '${setName}' skipped (${errMessage(e)})`);
-    return { reconciled: false };
+    console.log(
+      `[finished] reconcile of '${setName}' skipped (${errMessage(e)})`,
+    )
+    return { reconciled: false }
   }
 }
 
 /** True once the now-playing payload is showing a real item rather than an idle player. */
 function isOnScreen(now: NowPlaying | null): boolean {
-  if (!now || !now.ratingKey) return false;
-  return now.state === 'playing' || now.state === 'paused' || now.state === 'buffering';
+  if (!now || !now.ratingKey) return false
+  return (
+    now.state === "playing" ||
+    now.state === "paused" ||
+    now.state === "buffering"
+  )
 }
 
 /**
@@ -236,78 +295,94 @@ function isOnScreen(now: NowPlaying | null): boolean {
  * early — so a lights-out rule need not fire on a channel that simply had nothing left.
  */
 function announceFinished(): void {
-  const setName = SESSION.set;
+  const setName = SESSION.set
 
-  if (!setName || SESSION.isPreparing) return;
+  if (!setName || SESSION.isPreparing) return
 
-  const sittingId = SESSION.sittingId;
-  const target = SESSION.target;
-  const deviceId = SESSION.device?.id ?? null;
-  const played = SESSION.queuedTotal;
+  const sittingId = SESSION.sittingId
+  const target = SESSION.target
+  const deviceId = SESSION.device?.id ?? null
+  const played = SESSION.queuedTotal
 
   void (async () => {
     // Read at announce time, not cached at start: the owner may have toggled it mid-sitting,
     // and this is one YAML read against a file the registry already caches.
-    const entry = await sets.getSet(setName).catch(() => null);
-    if (SESSION.isPreparing || SESSION.sittingId !== sittingId) return;
+    const entry = await sets
+      .getSet(setName)
+      .catch(() => null)
+    if (
+      SESSION.isPreparing ||
+      SESSION.sittingId !== sittingId
+    )
+      return
     _publishFinished({
       isComplete: target != null && played >= target,
       played,
-      power_off: Boolean(entry && (entry as { power_off_when_done?: boolean }).power_off_when_done),
+      power_off: Boolean(
+        entry &&
+          (entry as { power_off_when_done?: boolean })
+            .power_off_when_done,
+      ),
       set: setName,
       target,
       deviceId,
-    });
-  })();
+    })
+  })()
 }
 
 /** Set by mqttd, so this module announces without importing the broker. */
-let _publishFinished: (payload: FinishedPayload) => void = () => {};
+let _publishFinished: (payload: FinishedPayload) => void =
+  () => {}
 
-export function setFinishedPublisher(fn: (payload: FinishedPayload) => void): void {
-  _publishFinished = fn;
+export function setFinishedPublisher(
+  fn: (payload: FinishedPayload) => void,
+): void {
+  _publishFinished = fn
 }
 
 /** The `resp/finished` payload — one SITTING ending, not one item. */
 export interface FinishedPayload {
-  deviceId?: string | null;
-  set: string | null;
+  deviceId?: string | null
+  set: string | null
   /** How many items this sitting handed over in total. */
-  played: number;
+  played: number
   /** The playback length it was running under; null = infinite. */
-  target: number | null;
+  target: number | null
   /** True when a finite target was actually reached, false when the pool simply ran dry. */
-  isComplete: boolean;
+  isComplete: boolean
   /** The set asked for the room to be shut down. A REQUEST for HA, never an action here. */
-  power_off: boolean;
+  power_off: boolean
 }
 
 interface OwnedQueueItem {
-  ratingKey: string;
-  plexServer?: string;
-  queueEntryKey?: string;
-  queueOwnHistory?: boolean;
-  queueProviderViewCount?: number;
+  ratingKey: string
+  plexServer?: string
+  queueEntryKey?: string
+  queueOwnHistory?: boolean
+  queueProviderViewCount?: number
 }
 
 interface AdoptedQueuePlay extends OwnedQueueItem {
-  setName: string;
-  profileTitle: string | null;
+  setName: string
+  profileTitle: string | null
 }
 
-let adoptedQueuePlay: AdoptedQueuePlay | null = null;
+let adoptedQueuePlay: AdoptedQueuePlay | null = null
 
 export function providerProgressVerdict(
   initialViewCount: unknown,
   providerViewCount: unknown,
   providerOffset: unknown,
 ): { isCompleted: boolean; positionMs: number } {
-  const initial = Math.max(0, Number(initialViewCount) || 0);
-  const count = Math.max(0, Number(providerViewCount) || 0);
+  const initial = Math.max(0, Number(initialViewCount) || 0)
+  const count = Math.max(0, Number(providerViewCount) || 0)
   return {
     isCompleted: count > initial,
-    positionMs: count > initial ? 0 : Math.max(0, Number(providerOffset) || 0),
-  };
+    positionMs:
+      count > initial
+        ? 0
+        : Math.max(0, Number(providerOffset) || 0),
+  }
 }
 
 /**
@@ -321,41 +396,78 @@ export async function finalizeQueueProgress(
   profileTitle: string | null,
   item: OwnedQueueItem,
   durationMs: number,
-  scope?: {client:PlexClient;token:string},
+  scope?: { client: PlexClient; token: string },
 ): Promise<void> {
-  if (!item.queueOwnHistory || !item.queueEntryKey) return;
+  if (!item.queueOwnHistory || !item.queueEntryKey) return
   try {
-    const cfg = routing.loadSets()?.sets[setName];
-    if (!cfg) return;
-    let client:PlexClient,token:string|null;
-    if(scope){client=scope.client;token=scope.token;}
-    else{
-      const {binding,provider}=await scopedBinding(cfg,profileTitle);token=await provider.profileToken!(binding.user_uuid);
-      const remote=item.plexServer?await plexServerAccessForProfile(binding.user_uuid,item.plexServer):null;
-      if(item.plexServer&&!remote)throw new Error('Shared Plex server is unavailable');
-      client=remote?plexServerClient(remote):liveClient();token=remote?.token ?? token;
+    const cfg = routing.loadSets()?.sets[setName]
+    if (!cfg) return
+    let client: PlexClient, token: string | null
+    if (scope) {
+      client = scope.client
+      token = scope.token
+    } else {
+      const { binding, provider } = await scopedBinding(
+        cfg,
+        profileTitle,
+      )
+      token = await provider.profileToken!(
+        binding.user_uuid,
+      )
+      const remote = item.plexServer
+        ? await plexServerAccessForProfile(
+            binding.user_uuid,
+            item.plexServer,
+          )
+        : null
+      if (item.plexServer && !remote)
+        throw new Error("Shared Plex server is unavailable")
+      client = remote
+        ? plexServerClient(remote)
+        : liveClient()
+      token = remote?.token ?? token
     }
-    const mc=await client.container(`/library/metadata/${item.ratingKey}`,token);
-    const md = mc.Metadata?.[0];
-    if (!md) throw new Error('Plex returned no item metadata');
+    const mc = await client.container(
+      `/library/metadata/${item.ratingKey}`,
+      token,
+    )
+    const md = mc.Metadata?.[0]
+    if (!md)
+      throw new Error("Plex returned no item metadata")
     const verdict = providerProgressVerdict(
-      item.queueProviderViewCount, md.viewCount, md.viewOffset,
-    );
+      item.queueProviderViewCount,
+      md.viewCount,
+      md.viewOffset,
+    )
     if (verdict.isCompleted) {
-      queueEntryHistory.markCompleted(setName, item.queueEntryKey, item.ratingKey);
-      console.log(`[progress] ${setName}: Plex completed ${item.ratingKey} for ${item.queueEntryKey}`);
+      queueEntryHistory.markCompleted(
+        setName,
+        item.queueEntryKey,
+        item.ratingKey,
+      )
+      console.log(
+        `[progress] ${setName}: Plex completed ${item.ratingKey} for ${item.queueEntryKey}`,
+      )
     } else {
       // Plex retained a resume point for a partial play. Zero means the play was too short to
       // count as progress; clear QueuePilot's transient position as Plex did.
       queueEntryHistory.savePosition(
-        setName, item.queueEntryKey, item.ratingKey, verdict.positionMs, durationMs,
-      );
-      console.log(`[progress] ${setName}: ${item.ratingKey} resumes at ${verdict.positionMs}ms`);
+        setName,
+        item.queueEntryKey,
+        item.ratingKey,
+        verdict.positionMs,
+        durationMs,
+      )
+      console.log(
+        `[progress] ${setName}: ${item.ratingKey} resumes at ${verdict.positionMs}ms`,
+      )
     }
   } catch (e) {
     // Keep the last position captured from the live player. A failed provider read must not
     // turn an incomplete episode into a completed one or erase a usable resume point.
-    console.log(`[progress] could not finalize ${setName}/${item.ratingKey} (${errMessage(e)})`);
+    console.log(
+      `[progress] could not finalize ${setName}/${item.ratingKey} (${errMessage(e)})`,
+    )
   }
 }
 
@@ -392,13 +504,21 @@ function finalizeSectionBoundary(
   ratingKey: string,
 ): void {
   if (!boundary.isOwnHistory || !boundary.entryKey) {
-    console.log(`[section] ${setName}: ${ratingKey} stopped at its end mark — provider history `
-      + 'judges this one, so nothing is written');
-    return;
+    console.log(
+      `[section] ${setName}: ${ratingKey} stopped at its end mark — provider history ` +
+        "judges this one, so nothing is written",
+    )
+    return
   }
-  queueEntryHistory.markCompleted(setName, boundary.entryKey, ratingKey);
-  console.log(`[section] ${setName}: ${ratingKey} played its whole window for `
-    + `${boundary.entryKey} — the line is complete, not abandoned`);
+  queueEntryHistory.markCompleted(
+    setName,
+    boundary.entryKey,
+    ratingKey,
+  )
+  console.log(
+    `[section] ${setName}: ${ratingKey} played its whole window for ` +
+      `${boundary.entryKey} — the line is complete, not abandoned`,
+  )
 }
 
 /**
@@ -411,112 +531,185 @@ export async function adoptQueuePlayback(
   profileTitle: string | null,
   ratingKey: string,
 ): Promise<{ tracking: true; ratingKey: string }> {
-  const cfg = routing.loadSets()?.sets[setName];
-  if (!cfg) throw new Error(`unknown set ${setName}`);
-  const binding = routing.bindingFor(cfg, profileTitle);
-  const provider = providerFor(providerIdForSet(cfg as unknown as BlockSourceCfg));
-  const token = await provider.profileToken!(binding.user_uuid);
-  const mc = await liveClient().container(`/library/metadata/${ratingKey}`, token);
-  const md = mc.Metadata?.[0];
-  if (!md) throw new Error('Plex returned no item metadata');
+  const cfg = routing.loadSets()?.sets[setName]
+  if (!cfg) throw new Error(`unknown set ${setName}`)
+  const binding = routing.bindingFor(cfg, profileTitle)
+  const provider = providerFor(
+    providerIdForSet(cfg as unknown as BlockSourceCfg),
+  )
+  const token = await provider.profileToken!(
+    binding.user_uuid,
+  )
+  const mc = await liveClient().container(
+    `/library/metadata/${ratingKey}`,
+    token,
+  )
+  const md = mc.Metadata?.[0]
+  if (!md) throw new Error("Plex returned no item metadata")
   adoptedQueuePlay = {
     setName,
     profileTitle,
     ratingKey,
     queueEntryKey: entryKey,
     queueOwnHistory: true,
-    queueProviderViewCount: Math.max(0, Number(md.viewCount) || 0),
-  };
-  const now = mqttc.lastNowPlaying();
-  const positionMs = nowPlayingMs(now?.position);
+    queueProviderViewCount: Math.max(
+      0,
+      Number(md.viewCount) || 0,
+    ),
+  }
+  const now = mqttc.lastNowPlaying()
+  const positionMs = nowPlayingMs(now?.position)
   if (positionMs > 0) {
     queueEntryHistory.savePosition(
-      setName, entryKey, ratingKey, positionMs, nowPlayingMs(now?.duration),
-    );
+      setName,
+      entryKey,
+      ratingKey,
+      positionMs,
+      nowPlayingMs(now?.duration),
+    )
   }
-  return { tracking: true, ratingKey };
+  return { tracking: true, ratingKey }
 }
 
 export function watchPlaybackEnd(): void {
-  let sittingId = -1;
-  let deviceId: string | null = null;
-  let wasOn: string | null = null;
-  let previous: NowPlaying | null = null;
-  let timer: NodeJS.Timeout | undefined;
+  let sittingId = -1
+  let deviceId: string | null = null
+  let wasOn: string | null = null
+  let previous: NowPlaying | null = null
+  let timer: NodeJS.Timeout | undefined
   mqttc.onNowPlaying((now: NowPlaying | null) => {
-    const nextDevice = String(now?.deviceId || mqttc.lastState()?.deviceId || 'shield');
-    if (SESSION.isPreparing || nextDevice !== (SESSION.device?.id || 'shield')) return;
-    if (nextDevice !== deviceId || sittingId !== SESSION.sittingId) {
-      wasOn = null;
-      previous = null;
-      if (timer) clearTimeout(timer);
-      deviceId = nextDevice;
-      sittingId = SESSION.sittingId;
+    const nextDevice = String(
+      now?.deviceId ||
+        mqttc.lastState()?.deviceId ||
+        "shield",
+    )
+    if (
+      SESSION.isPreparing ||
+      nextDevice !== (SESSION.device?.id || "shield")
+    )
+      return
+    if (
+      nextDevice !== deviceId ||
+      sittingId !== SESSION.sittingId
+    ) {
+      wasOn = null
+      previous = null
+      if (timer) clearTimeout(timer)
+      deviceId = nextDevice
+      sittingId = SESSION.sittingId
     }
-    const nowRk = isOnScreen(now) ? String(now!.ratingKey) : null;
-    const activeSet = SESSION.set;
-    const matches = nowRk ? SESSION.queue.filter((item) => item.ratingKey === nowRk) : [];
+    const nowRk = isOnScreen(now)
+      ? String(now!.ratingKey)
+      : null
+    const activeSet = SESSION.set
+    const matches = nowRk
+      ? SESSION.queue.filter(
+          (item) => item.ratingKey === nowRk,
+        )
+      : []
     // HA supplies no Plex server id. A duplicated rating key in a mixed queue is ambiguous;
     // abstain from ledger writes instead of assigning progress to the wrong server's entry.
-    const active = matches.length === 1 ? matches[0] : null;
-    const adopted = nowRk && adoptedQueuePlay?.ratingKey === nowRk ? adoptedQueuePlay : null;
-    const trackedSet = adopted?.setName ?? activeSet;
-    const tracked = adopted ?? active;
+    const active = matches.length === 1 ? matches[0] : null
+    const adopted =
+      nowRk && adoptedQueuePlay?.ratingKey === nowRk
+        ? adoptedQueuePlay
+        : null
+    const trackedSet = adopted?.setName ?? activeSet
+    const tracked = adopted ?? active
     // A WINDOWED item saves no live position, and that is a correctness rule rather than a
     // saving. `SESSION.queue.find()` matches by ratingKey, so while the SECOND section of a
     // file is playing this writer would address the FIRST section's ledger row — and
     // `savePosition` clears `is_completed`, undoing the completion that section had just
     // earned. A windowed entry has no use for a position either way: it begins at its own
     // start mark every sitting.
-    const isWindowed = Boolean(nowRk) && section.isWindowed(nowRk!);
-    if (trackedSet && tracked?.queueOwnHistory && tracked.queueEntryKey && !isWindowed) {
-      const positionMs = nowPlayingMs(now?.position);
+    const isWindowed =
+      Boolean(nowRk) && section.isWindowed(nowRk!)
+    if (
+      trackedSet &&
+      tracked?.queueOwnHistory &&
+      tracked.queueEntryKey &&
+      !isWindowed
+    ) {
+      const positionMs = nowPlayingMs(now?.position)
       if (positionMs > 0) {
         queueEntryHistory.savePosition(
-          trackedSet, tracked.queueEntryKey, nowRk!, positionMs, nowPlayingMs(now?.duration),
-        );
+          trackedSet,
+          tracked.queueEntryKey,
+          nowRk!,
+          positionMs,
+          nowPlayingMs(now?.duration),
+        )
       }
     }
-    const ended = wasOn && wasOn !== nowRk;
+    const ended = wasOn && wasOn !== nowRk
     // NOTHING is on screen now, and something was a moment ago — the SITTING ended, as
     // opposed to one item ending and the next starting (which is `ended` with a new `nowRk`).
-    const isIdle = Boolean(wasOn) && nowRk == null;
-    const endedNow = ended ? previous : null;
-    wasOn = nowRk;
-    previous = nowRk ? now : null;
-    if (isIdle) announceFinished();
-    if (!ended) return;
-    const manual = adoptedQueuePlay?.ratingKey === String(ended) ? adoptedQueuePlay : null;
-    const state = mqttc.lastState();
-    const setName = manual?.setName ?? (state && state.set ? String(state.set) : null);
-    if (!setName) return;
+    const isIdle = Boolean(wasOn) && nowRk == null
+    const endedNow = ended ? previous : null
+    wasOn = nowRk
+    previous = nowRk ? now : null
+    if (isIdle) announceFinished()
+    if (!ended) return
+    const manual =
+      adoptedQueuePlay?.ratingKey === String(ended)
+        ? adoptedQueuePlay
+        : null
+    const state = mqttc.lastState()
+    const setName =
+      manual?.setName ??
+      (state && state.set ? String(state.set) : null)
+    if (!setName) return
 
     // Did THIS APP stop it at a section's end mark, or did the play simply end? Claimed once,
     // so a later ordinary play of the same file goes down the ordinary path.
-    const boundary = manual ? null : section.takeBoundary(String(ended));
+    const boundary = manual
+      ? null
+      : section.takeBoundary(String(ended))
     // Its entry key is the authority for WHICH line just played: with two sections of one file
     // in one lineup, `SESSION.queue.find()` returns the first of them for both.
-    const queued = manual
-      ?? (boundary?.entryKey
-        ? SESSION.queue.find((item) => item.ratingKey === String(ended)
-          && item.queueEntryKey === boundary.entryKey)
-        : undefined)
-      ?? (SESSION.queue.filter((item) => item.ratingKey === String(ended)).length === 1
-        ? SESSION.queue.find((item) => item.ratingKey === String(ended)) : null);
-    const profile = manual?.profileTitle ?? (state && state.profile ? String(state.profile) : null);
+    const queued =
+      manual ??
+      (boundary?.entryKey
+        ? SESSION.queue.find(
+            (item) =>
+              item.ratingKey === String(ended) &&
+              item.queueEntryKey === boundary.entryKey,
+          )
+        : undefined) ??
+      (SESSION.queue.filter(
+        (item) => item.ratingKey === String(ended),
+      ).length === 1
+        ? SESSION.queue.find(
+            (item) => item.ratingKey === String(ended),
+          )
+        : null)
+    const profile =
+      manual?.profileTitle ??
+      (state && state.profile
+        ? String(state.profile)
+        : null)
     if (boundary) {
       // No RECONCILE_DELAY_MS: that delay exists to let Plex write a history row this then
       // reads back, and a section's verdict needs no read — we know why it stopped.
-      finalizeSectionBoundary(boundary.setName ?? setName, boundary, String(ended));
+      finalizeSectionBoundary(
+        boundary.setName ?? setName,
+        boundary,
+        String(ended),
+      )
     } else if (queued?.queueOwnHistory) {
       setTimeout(() => {
-        void finalizeQueueProgress(setName, profile, queued, nowPlayingMs(endedNow?.duration));
-      }, RECONCILE_DELAY_MS);
+        void finalizeQueueProgress(
+          setName,
+          profile,
+          queued,
+          nowPlayingMs(endedNow?.duration),
+        )
+      }, RECONCILE_DELAY_MS)
     }
-    if (manual) adoptedQueuePlay = null;
-    if (timer) clearTimeout(timer);
+    if (manual) adoptedQueuePlay = null
+    if (timer) clearTimeout(timer)
     timer = setTimeout(() => {
-      void reconcileQueue(setName, profile);
-    }, RECONCILE_DELAY_MS);
-  });
+      void reconcileQueue(setName, profile)
+    }, RECONCILE_DELAY_MS)
+  })
 }
