@@ -245,8 +245,8 @@ export const createChooser = ({
       return pending
     },
     clear: () =>
-      Array.from(selections.keys()).forEach((reader) =>
-        close(reader),
-      ),
+      Array.from(selections.keys()).forEach((reader) => {
+        close(reader)
+      }),
   }
 }

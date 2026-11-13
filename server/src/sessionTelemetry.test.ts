@@ -89,7 +89,9 @@ test("does not let the old device finish or update history for a sitting held in
   finished.setFinishedPublisher(publish)
   finished.watchPlaybackEnd()
   const emit = (event: NowPlaying) =>
-    ctl.listeners.forEach((fn) => fn(event))
+    ctl.listeners.forEach((fn) => {
+      fn(event)
+    })
   emit({
     deviceId: "player-a",
     state: "playing",

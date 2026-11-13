@@ -255,8 +255,8 @@ export function plexMetadataRoutes(): Hono {
         return libs.filter((l) => l.video).map((l) => l.id)
       }
 
-      let sections
-      let collectionSections
+      let sections: number[]
+      let collectionSections: number[]
       if (allLibraries) {
         // Regardless of any set's configured sections — so a manual include can come from a
         // library no channel's rule pool draws from.
@@ -300,7 +300,7 @@ export function plexMetadataRoutes(): Hono {
           scopedSet.shared_libraries || {},
         )
         if (!scopes.length) return []
-        let user
+        let user: Awaited<ReturnType<typeof profileUser>>
         try {
           user = await profileUser(
             scopedSet.requires_profile,

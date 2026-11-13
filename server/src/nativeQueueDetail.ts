@@ -326,15 +326,15 @@ export function assembleFullQueue(
     string,
     { entry: number; item: number }[]
   >()
-  expanded.forEach((entry, e) =>
+  expanded.forEach((entry, e) => {
     entry.items.forEach((item, i) => {
       const key = itemKey(item)
       claims.set(key, [
         ...(claims.get(key) ?? []),
         { entry: e, item: i },
       ])
-    }),
-  )
+    })
+  })
   const lineupOf = new Map<string, number>()
   const firstLineupOfEntry = new Map<number, number>()
   lineup.forEach((raw, index) => {

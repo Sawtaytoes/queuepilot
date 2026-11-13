@@ -162,7 +162,7 @@ function session(
       "INSERT INTO native_tv_sessions(id,key_hash,data) VALUES(?,?,?)",
     )
     .run(id, `hash-${id}`, JSON.stringify({ id, ...plan }))
-  events.forEach((event, sequence) =>
+  events.forEach((event, sequence) => {
     f.db
       .prepare(
         "INSERT INTO native_tv_events(session_id,id,sequence,data,recorded_at) VALUES(?,?,?,?,?)",
@@ -178,8 +178,8 @@ function session(
           durationMs: 1400000,
         }),
         event.at,
-      ),
-  )
+      )
+  })
 }
 
 beforeEach(() => {

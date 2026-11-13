@@ -143,7 +143,8 @@ export function mergeAccounts(
   const out: ProfileAccounts = {}
   for (const map of maps) {
     for (const [kind, names] of Object.entries(map ?? {})) {
-      const list = (out[kind] ??= [])
+      const list = out[kind] ?? []
+      out[kind] = list
       for (const name of names ?? []) {
         const value = String(name ?? "").trim()
         if (

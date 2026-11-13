@@ -763,7 +763,7 @@ export async function itemType(
   | ["movie" | "show", string | undefined, number, number]
   | [null, null, 0, 0]
 > {
-  let mc
+  let mc: Awaited<ReturnType<typeof client.container>>
   try {
     mc = await client.container(
       `/library/metadata/${ratingKey}`,
@@ -792,7 +792,7 @@ async function itemViewState(
   ratingKey: string | number,
   token: Token,
 ): Promise<[number, number]> {
-  let mc
+  let mc: Awaited<ReturnType<typeof client.container>>
   try {
     mc = await client.container(
       `/library/metadata/${ratingKey}`,
@@ -852,7 +852,7 @@ export async function resolveTitle(
   | [null, null, null, 0, 0]
 > {
   const q = quote(title)
-  let mc
+  let mc: Awaited<ReturnType<typeof client.container>>
   try {
     mc = await client.container(
       `/library/sections/${section}/all?title=${q}&includeGuids=1&X-Plex-Container-Size=50`,

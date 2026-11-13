@@ -42,9 +42,11 @@ beforeEach(() => {
         expect(options?.dispatcher).toBeDefined() // Every new call opts into certificate verification.
         if (input.endsWith("/api/v2/user"))
           return Response.json(
-            (options?.headers as Record<string, string>)[
-              "X-Plex-Token"
-            ] === "fixture-child"
+            (
+              options?.headers as
+                | Record<string, string>
+                | undefined
+            )?.["X-Plex-Token"] === "fixture-child"
               ? { id: 2, uuid: "grace-uuid" }
               : { id: 11, uuid: "owner-uuid" },
           )
@@ -66,9 +68,11 @@ beforeEach(() => {
           ])
         if (input.endsWith("/identity")) {
           expect(
-            (options?.headers as Record<string, string>)[
-              "X-Plex-Token"
-            ],
+            (
+              options?.headers as
+                | Record<string, string>
+                | undefined
+            )?.["X-Plex-Token"],
           ).toBe("fixture-scoped")
           return Response.json({
             MediaContainer: {

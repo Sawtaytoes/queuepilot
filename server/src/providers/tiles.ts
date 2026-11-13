@@ -159,8 +159,8 @@ export async function resolveTiles(
 ): Promise<ProviderTile[]> {
   if (!values.length) return []
 
-  let block
-  let provider
+  let block: ReturnType<typeof blocks.resolveSingle>
+  let provider: ReturnType<typeof providerFor>
   try {
     block = blocks.resolveSingle(set)
     provider = providerFor(block.provider)

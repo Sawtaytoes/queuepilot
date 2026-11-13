@@ -47,9 +47,9 @@ const addPeople = (
   db: SqliteDatabase,
   ...ids: string[]
 ): void => {
-  ids.forEach((id, position) =>
-    upsertPerson({ displayName: id, id, position }, db),
-  )
+  ids.forEach((id, position) => {
+    upsertPerson({ displayName: id, id, position }, db)
+  })
 }
 
 const member = (

@@ -366,7 +366,8 @@ class ShimDatabase implements SqliteDatabase {
 
   withTransaction<T>(body: () => T): T {
     if (this.raw.isTransaction) {
-      const name = `qp_savepoint_${(this.#savepoints += 1)}`
+      this.#savepoints += 1
+      const name = `qp_savepoint_${this.#savepoints}`
       this.raw.exec(`SAVEPOINT ${name}`)
 
       try {

@@ -217,7 +217,6 @@ export function ChannelPool({
     void run()
 
     return () => clearTimeout(slowTimer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     channel.id,
     currentProfile,

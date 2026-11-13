@@ -745,7 +745,7 @@ export async function search(
   const out: PosterFields[] = []
   const seen = new Set<string>()
   for (const section of ([] as number[]).concat(sections)) {
-    let json
+    let json: Awaited<ReturnType<typeof plexGet>>
     try {
       json = await plexGet(
         `/library/sections/${section}/all?title=${q}&includeGuids=1&X-Plex-Container-Size=50`,
@@ -798,7 +798,7 @@ export async function collections(
           section,
         )
     if (!rows) {
-      let json
+      let json: Awaited<ReturnType<typeof plexGet>>
       try {
         json = await plexGet(
           `/library/sections/${section}/collections?X-Plex-Container-Size=500`,
@@ -893,7 +893,7 @@ export async function resolveTitle(
     if (cached) _titleCache.set(ck, cached)
     return cached
   }
-  let mc
+  let mc: PlexContainer
   try {
     mc = container(
       await plexGet(
@@ -1095,7 +1095,9 @@ export async function itemLabel(
     posterRatingKey: null,
     sourceTitle: null,
   }
-  let md
+  let md:
+    | NonNullable<PlexContainer["Metadata"]>[number]
+    | undefined
   try {
     md = (container(
       await plexGet(`/library/metadata/${rk}`),
@@ -1252,7 +1254,7 @@ async function allLeaves(
   )
   if (hit) return hit
   const aggForWrite = agg
-  let mc
+  let mc: PlexContainer
   try {
     mc = container(
       await plexGet(
@@ -1399,7 +1401,7 @@ export async function collectionChildren(
     CollectionChild[]
   >(rk, null, account)
   if (hit) return hit
-  let mc
+  let mc: PlexContainer
   try {
     mc = container(
       await plexGet(
@@ -1727,7 +1729,9 @@ export async function playingContext(
   const key = String(ratingKey)
   const memo = _playCtx.get(key)
   if (memo !== undefined) return memo
-  let md
+  let md:
+    | NonNullable<PlexContainer["Metadata"]>[number]
+    | undefined
   try {
     md = (container(
       await plexGet(`/library/metadata/${key}`),

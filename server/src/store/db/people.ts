@@ -77,7 +77,9 @@ function accountsByPerson(
   ).all()
   for (const row of rows) {
     const map = out.get(row.person_id) ?? {}
-    ;(map[row.kind] ??= []).push(row.account)
+    const accounts = map[row.kind] ?? []
+    accounts.push(row.account)
+    map[row.kind] = accounts
     out.set(row.person_id, map)
   }
   return out
@@ -127,7 +129,9 @@ export function getPerson(
     db,
     "SELECT person_id, kind, account, position FROM person_accounts WHERE person_id = :id ORDER BY kind, position",
   ).all({ id })) {
-    ;(accounts[account.kind] ??= []).push(account.account)
+    const names = accounts[account.kind] ?? []
+    names.push(account.account)
+    accounts[account.kind] = names
   }
   return toPerson(row, accounts)
 }

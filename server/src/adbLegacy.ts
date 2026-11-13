@@ -416,12 +416,10 @@ export function parseUiNodes(
   const cleaned = String(xml).replace(/\r/g, "").trim()
   const nodes: Record<string, string>[] = []
   const re = /<node\b([^>]*)\/?>/g
-  let m: RegExpExecArray | null
-  while ((m = re.exec(cleaned)) !== null) {
+  for (const m of cleaned.matchAll(re)) {
     const attrs: Record<string, string> = {}
     const attrRe = /([\w:.-]+)="([^"]*)"/g
-    let am: RegExpExecArray | null
-    while ((am = attrRe.exec(m[1] ?? "")) !== null) {
+    for (const am of (m[1] ?? "").matchAll(attrRe)) {
       attrs[am[1] ?? ""] = am[2] ?? ""
     }
     nodes.push(attrs)

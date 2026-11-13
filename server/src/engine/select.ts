@@ -366,7 +366,7 @@ export async function findCollection(
   name: string,
   token: Token,
 ): Promise<string | null> {
-  let mc
+  let mc: Awaited<ReturnType<typeof client.container>>
   try {
     mc = await client.container(
       `/library/sections/${section}/collections?X-Plex-Container-Size=1000`,

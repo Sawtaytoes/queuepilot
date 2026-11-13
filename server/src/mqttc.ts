@@ -158,7 +158,9 @@ if (HOST) {
       LAST_NOW =
         deviceNow.get(LAST_STATE?.deviceId || "shield") ??
         null
-      stateListeners.forEach((fn) => fn(LAST_STATE))
+      stateListeners.forEach((fn) => {
+        fn(LAST_STATE)
+      })
       // A cached snapshot is UI state, never a new playback/history observation.
       return
     }
@@ -284,5 +286,7 @@ export function recordDeviceNowPlaying(
   if (deviceId !== (LAST_STATE?.deviceId || "shield"))
     return
   LAST_NOW = tagged
-  nowListeners.forEach((fn) => fn(tagged))
+  nowListeners.forEach((fn) => {
+    fn(tagged)
+  })
 }

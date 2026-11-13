@@ -45,7 +45,7 @@ export async function curatedEntries(
   only: string | null = null,
   { stampQueued = false }: { stampQueued?: boolean } = {},
 ): Promise<CuratedEntryRef[]> {
-  let rows
+  let rows: Awaited<ReturnType<typeof queues.listSet>>
   try {
     rows = await queues.listSet(setId)
   } catch {

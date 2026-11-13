@@ -93,7 +93,7 @@ export async function launchDescriptor(
   }
 
   const block = resolveSingle(blockCfg)
-  let provider
+  let provider: ReturnType<typeof providerFor>
   try {
     provider = providerFor(block.provider, { client })
   } catch (e) {

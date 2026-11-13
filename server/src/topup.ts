@@ -468,7 +468,7 @@ export async function topupPullLists({
     // than growing all year for a queue nobody is offered — and nothing is REMOVED from it,
     // because a season boundary clears nothing.
     if (!isSetAvailable(cfg)) continue
-    let provider
+    let provider: ReturnType<typeof deps.providerFor>
     try {
       provider = deps.providerFor(
         providerIdForSet(cfg as unknown as BlockSourceCfg),
