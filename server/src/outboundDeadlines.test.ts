@@ -9,13 +9,21 @@ vi.mock('undici', async (original) => ({
   ...await original<typeof import('undici')>(),
   request: vi.fn(async (url: string, opts: UndiciCall['opts']) => {
     undiciCalls.push({ url, opts });
-    if (url.endsWith('/library/metadata/7')) {
-      const body = JSON.stringify({ MediaContainer: { Metadata: [{ thumb: '/library/metadata/7/thumb/1' }] } });
-      return { statusCode: 200, headers: {}, body: { json: async () => JSON.parse(body), dump: async () => {} } };
+    const dump = async () => {};
+    const metadata = /\/library\/metadata\/(\d+)$/.exec(url);
+    if (metadata) {
+      const body = { MediaContainer: { Metadata: [{ thumb: `/library/metadata/${metadata[1]}/thumb/1` }] } };
+      return { statusCode: 200, headers: {}, body: { json: async () => body, dump } };
     }
-    // The transcode fails, so the raw art fallback is exercised as well.
-    if (url.includes('/photo/:/transcode')) {
-      return { statusCode: 500, headers: {}, body: { dump: async () => {} } };
+    const transcode = /\/photo\/:\/transcode.*metadata%2F(\d+)%2F/.exec(url);
+    // Item 7: the transcode fails, so the raw art fallback is exercised as well.
+    if (transcode?.[1] === '7') return { statusCode: 500, headers: {}, body: { dump } };
+    // Item 8: a redirect that stays on PLEX_URL. Item 9: a redirect to another origin.
+    if (transcode?.[1] === '8') {
+      return { statusCode: 302, headers: { location: '/redirected/poster-8.png' }, body: { dump } };
+    }
+    if (transcode?.[1] === '9') {
+      return { statusCode: 302, headers: { location: 'https://cdn.example.net/poster-9.png' }, body: { dump } };
     }
     return {
       statusCode: 200,
@@ -27,6 +35,8 @@ vi.mock('undici', async (original) => ({
 
 import { plextv } from './plexTv.js';
 import { thumb } from './plex.js';
+import { PLEX_URL } from './config.js';
+import { boardGamesHttpClient } from './providers/board-game-picker-client.js';
 import { kavitaClient } from './providers/kavita-client.js';
 import { misterClient } from './providers/mister-client.js';
 import { steamClient } from './providers/steam-client.js';
@@ -60,6 +70,29 @@ describe('TLS', () => {
       expect(call.opts.signal).toBeInstanceOf(AbortSignal);
     }
   });
+
+  it('a poster redirect on PLEX_URL keeps the scoped agent', async () => {
+    const poster = await thumb('8');
+    expect(poster?.buffer).toEqual(Buffer.from([1, 2, 3]));
+    const hop = undiciCalls.at(-1)!;
+    expect(hop.url).toBe(`${new URL(PLEX_URL).origin}/redirected/poster-8.png`);
+    expect(hop.opts.dispatcher).toBe(undiciCalls[0]!.opts.dispatcher);
+    expect(hop.opts.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('a poster redirect to another origin leaves the scoped agent for verified fetch', async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => new Response(
+      new Uint8Array([9]), { headers: { 'content-type': 'image/webp' } },
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+    const poster = await thumb('9');
+    expect(poster).toEqual({ contentType: 'image/webp', buffer: Buffer.from([9]) });
+    expect(undiciCalls.some((c) => c.url.includes('cdn.example.net'))).toBe(false);
+    const [url, init] = fetchMock.mock.calls[0]!;
+    expect(url).toBe('https://cdn.example.net/poster-9.png');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
+    expect((init as { dispatcher?: unknown }).dispatcher).toBeUndefined();
+  });
 });
 
 describe('every outbound call has a deadline', () => {
@@ -89,6 +122,15 @@ describe('every outbound call has a deadline', () => {
     const fetchImpl = vi.fn(async (_url: string, _init?: RequestInit) => jsonResponse({ data: [] }));
     await misterClient({ baseUrl: 'http://mister.example.com', fetchImpl }).search('zelda');
     expect(fetchImpl.mock.calls[0]![1]?.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('board-game picker: the API and covers', async () => {
+    const fetchImpl = vi.fn(async (url: string, _init?: RequestInit) => (url.endsWith('.png')
+      ? new Response(new Uint8Array([1]))
+      : jsonResponse({ id: 'g1', imagePath: '/images/g1.png' })));
+    await boardGamesHttpClient({ baseUrl: 'https://picker.example.com', fetchImpl }).cover('g1');
+    expect(fetchImpl.mock.calls.length).toBe(2);
+    for (const [, init] of fetchImpl.mock.calls) expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 
   it('Steam: the owned-games read', async () => {

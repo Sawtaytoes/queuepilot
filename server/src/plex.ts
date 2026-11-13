@@ -1427,6 +1427,7 @@ export async function playingContext(ratingKey: string | number): Promise<Playin
 // still ~10x smaller than the originals. Falls back to the raw thumb.
 const _thumbPath = new Map<string, string>(); // ratingKey -> thumb path
 const POSTER_TIMEOUT_MS = 8000; // the same per-attempt budget as plexGet
+const POSTER_MAX_REDIRECTS = 3;
 export async function thumb(ratingKey: string): Promise<PosterImage | null> {
   let tp: string | null | undefined = _thumbPath.get(ratingKey);
   if (!tp) {
@@ -1451,11 +1452,24 @@ export async function thumb(ratingKey: string): Promise<PosterImage | null> {
 // One poster read from PLEX_URL. It goes through the scoped LAN `agent`, like every other
 // PLEX_URL call, so a self-signed local server still serves posters without a process-wide
 // TLS bypass. The timeout covers the body too: a stalled poster must not hold a page tile.
-async function posterBytes(url: string): Promise<PosterImage | null> {
+//
+// `undici.request` does not follow redirects, and the global `fetch` this replaced did. So a
+// redirect is followed here, a bounded number of times. A hop that stays on PLEX_URL's origin
+// keeps the scoped agent; a hop to any other origin goes through the global `fetch`, which
+// checks certificates, so the LAN exception never reaches another host.
+async function posterBytes(url: string, hops = 0): Promise<PosterImage | null> {
   const res = await request(url, {
     dispatcher: agent,
     signal: AbortSignal.timeout(POSTER_TIMEOUT_MS),
   });
+  const location = res.headers.location;
+  const next = Array.isArray(location) ? location[0] : location;
+  if (res.statusCode >= 300 && res.statusCode < 400 && next && hops < POSTER_MAX_REDIRECTS) {
+    await res.body.dump(); // release the pooled socket
+    const target = new URL(next, url);
+    if (target.origin === new URL(PLEX_URL).origin) return posterBytes(target.href, hops + 1);
+    return verifiedPosterBytes(target.href);
+  }
   if (res.statusCode < 200 || res.statusCode >= 300) {
     await res.body.dump(); // release the pooled socket
     return null;
@@ -1464,5 +1478,16 @@ async function posterBytes(url: string): Promise<PosterImage | null> {
   return {
     contentType: (Array.isArray(type) ? type[0] : type) || 'image/jpeg',
     buffer: Buffer.from(await res.body.arrayBuffer()),
+  };
+}
+
+// A poster redirect that leaves PLEX_URL's origin: full certificate checks, and `fetch`
+// follows any further redirects itself.
+async function verifiedPosterBytes(url: string): Promise<PosterImage | null> {
+  const res = await fetch(url, { signal: AbortSignal.timeout(POSTER_TIMEOUT_MS) });
+  if (!res.ok) return null;
+  return {
+    contentType: res.headers.get('content-type') || 'image/jpeg',
+    buffer: Buffer.from(await res.arrayBuffer()),
   };
 }
