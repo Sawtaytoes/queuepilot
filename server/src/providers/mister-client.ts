@@ -24,6 +24,11 @@ import { isCachedMiss, readCachedArt, writeCachedArt } from './mister-boxart-cac
 
 /** How long the systems list is reused. It changes when cores are installed, i.e. rarely. */
 const SYSTEMS_TTL_MS = 300_000;
+// Every call here has a deadline. A MiSTer that is powered down is its normal state, and an
+// unanswered connect would otherwise hold the request for as long as the OS retries it.
+const MISTER_TIMEOUT_MS = 15_000;
+// The box-art archive is a public WAN host, read once per title and then cached.
+const ART_TIMEOUT_MS = 10_000;
 
 // --- the DTOs, as loosely as mrext actually returns them ---------------------- //
 
@@ -90,6 +95,7 @@ export function misterClient({ baseUrl, fetchImpl = null }: MisterClientOptions 
     const res = await doFetch(`${base}${path}`, {
       ...init,
       headers: { Accept: 'application/json', ...(init.headers || {}) },
+      signal: init.signal ?? AbortSignal.timeout(MISTER_TIMEOUT_MS),
     });
     // 404 is an ANSWER here — a game removed from the share, a system with no index — so it
     // returns the fallback. Anything else is the MiSTer being off or unreachable, which
@@ -151,7 +157,7 @@ export function misterClient({ baseUrl, fetchImpl = null }: MisterClientOptions 
         // Deliberately NOT `doFetch`: that seam exists so the offline suite can stub the
         // MiSTer, and this is a different host entirely. A test that wants to stub the
         // archive injects its own client.
-        const res = await fetch(url);
+        const res = await fetch(url, { signal: AbortSignal.timeout(ART_TIMEOUT_MS) });
         if (!res.ok) continue;
         const buffer = Buffer.from(await res.arrayBuffer());
         await writeCachedArt(system, title, buffer);

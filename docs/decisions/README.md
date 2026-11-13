@@ -6,6 +6,7 @@ One decision per file, `YYYY-MM-DD-<kebab-slug>.md` (date = when decided). Newes
 
 | Date | Decision |
 | --- | --- |
+| 2026-11-13 | [No process-wide TLS bypass, and every outbound call has a deadline](2026-11-13-no-process-wide-tls-bypass-and-every-outbound-call-has-a-deadline.md) *(security / reliability — the image drops `NODE_TLS_REJECT_UNAUTHORIZED=0`; a self-signed LAN host gets its own scoped undici agent (`plex.ts`, `playback.ts`), and plex.tv, Kavita, Steam, BGG and MQTT keep full certificate checks. One `plextv()` helper (`plexTv.ts`) with a timeout, and timeouts on poster, MiSTer, Kavita, Steam and BGG fetches.)* |
 | 2026-11-01 | [Plex does not expand selected episodes](2026-11-01-plex-does-not-expand-selected-episodes.md) — QueuePilot owns selection and refill; `continuous=0` also applies to a single episode. |
 | 2026-11-01 | [A pinned player ID outranks its display name](2026-11-01-a-pinned-player-id-outranks-its-display-name.md) — telemetry and account proof cannot come from a different same-named player. |
 | 2026-11-01 | [Media queues use Charcuterie cards](2026-11-01-media-queues-use-charcuterie-cards.md) — separate title, audience, and lane metadata; filtered views move with their parent. |

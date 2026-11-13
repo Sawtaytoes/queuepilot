@@ -30,7 +30,6 @@ import {
   SHIELD_IP,
   COMPANION_PORT,
   COMPANION_MISS_TTL_MS,
-  PLEXTV_TIMEOUT_MS,
   RESUME_POLL_TIMEOUT_MS,
   PLAYBACK_FSM_COMPANION_TIMEOUT,
   PLAYBACK_SESSION_WAIT_SECONDS,
@@ -44,6 +43,7 @@ import {
 import { accountToken, plexGet } from './plex.js';
 import { plexServerAccessForProfile } from './plexSources.js';
 import { getSet } from './sets.js';
+import { plextv } from './plexTv.js';
 import type { Device, PlexPlayItem, PushResult } from './types.js';
 import { PlexError, errMessage, isNodeError, isPlexError } from './errors.js';
 
@@ -332,9 +332,10 @@ function errName(e: unknown): string {
   return 'Error';
 }
 
-// Dedicated undici agent for Companion + playQueue POSTs. Companion is on the Shield
-// (often plain HTTP, sometimes self-signed TLS if proxied); the Plex server cert is
-// self-signed. Same rejectUnauthorized:false rule as plex.js.
+// Dedicated undici agent for Companion + playQueue POSTs, which go only to LAN hosts.
+// Companion is on the player (often plain HTTP, sometimes self-signed TLS if proxied), and a
+// LAN Plex server cert is often self-signed. Same scoped rejectUnauthorized:false rule as
+// plex.ts. plex.tv never uses this agent: it goes through `plexTv.ts` with full checks.
 const agent = new Agent({
   keepAliveTimeout: 30_000,
   connections: 8,
@@ -440,23 +441,6 @@ const _companionTarget = new Map<string, PlayerDevice>();
 // COMPANION_MISS_TTL_MS: only the hit was ever memoised, so a player advertising no
 // connection re-asked plex.tv on every single call that needed a target.
 const _companionMiss = new Map<string, number>();
-
-async function plextv<T = unknown>(path: string, token = PLEX_TOKEN, method = 'GET'): Promise<T> {
-  const res = await fetch(`https://plex.tv${path}`, {
-    method,
-    headers: {
-      'X-Plex-Token': token,
-      'X-Plex-Client-Identifier': CLIENT_ID,
-      Accept: 'application/json',
-    },
-    // A WAN call on the seek path had NO timeout: a black-holed socket hung whatever tick
-    // was waiting on it, for as long as the OS kept the connection open.
-    signal: AbortSignal.timeout(PLEXTV_TIMEOUT_MS),
-  });
-  if (!res.ok) throw new Error(`plex.tv ${res.status} for ${path}`);
-  const text = await res.text();
-  return (text ? JSON.parse(text) : {}) as T;
-}
 
 // Every plex.tv device advertising as a player, as [{name, machineIdentifier, uri}].
 // Port of the retired queue_builder/plex.py `player_devices()` (deleted with the Python

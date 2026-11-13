@@ -23,6 +23,8 @@
  * `user.username`, so it cannot be paraphrased.
  */
 const WATCH_IT_PLAYED = 'Watch It Played';
+/** A stalled BGG fails the video lookup instead of holding the request. */
+const REQUEST_TIMEOUT_MS = 15_000;
 
 const HOW_TO_PLAY = /\b(?:how|learn)\s*(?:to|2)\s*play\b|\bhow\s*it\s*works\b/i;
 
@@ -131,6 +133,7 @@ export const fetchInstructionalVideos = async (bggId: number): Promise<unknown> 
       accept: 'application/json',
       'user-agent': 'board-game-picker/0.1 (self-hosted collection picker)',
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) throw new Error(`geekdo videos ${bggId} → HTTP ${response.status}`);
