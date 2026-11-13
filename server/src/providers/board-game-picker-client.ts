@@ -163,6 +163,9 @@ export const BOARD_GAME_TRANSPORT: 'repository' | 'http' =
  */
 export const imagesPath = imagesDirectory;
 
+/** Every picker call has a deadline, so a stalled host fails the read instead of the page. */
+const PICKER_TIMEOUT_MS = 15_000;
+
 /** Content type off the file name. The staged art is `.webp`; the other two are what the
  * enrichment wrote before it was. */
 const CONTENT_TYPES: Record<string, string> = {
@@ -217,6 +220,7 @@ export function boardGamesHttpClient({
     const res = await doFetch(url, {
       ...init,
       headers: { Accept: 'application/json', ...auth, ...(init.headers || {}) },
+      signal: init.signal ?? AbortSignal.timeout(PICKER_TIMEOUT_MS),
     });
     // 404 is an ANSWER on this API — a game that was merged away or taken off the shelf —
     // so it returns the fallback rather than throwing. Anything else is the picker being
@@ -278,7 +282,7 @@ export function boardGamesHttpClient({
       if (!imagePath) throw new Error(`board-game-picker: game '${gameId}' has no box art`);
 
       const url = imagePath.startsWith('http') ? imagePath : `${base}${imagePath}`;
-      const res = await doFetch(url, { headers: { ...auth } });
+      const res = await doFetch(url, { headers: { ...auth }, signal: AbortSignal.timeout(PICKER_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`board-game-picker cover ${gameId} -> ${res.status}`);
 
       return {
@@ -405,7 +409,7 @@ export function boardGamesRepositoryClient({
 
       if (imagePath.startsWith('http')) {
         const doFetch: FetchLike = fetchImpl || globalThis.fetch;
-        const res = await doFetch(imagePath, {});
+        const res = await doFetch(imagePath, { signal: AbortSignal.timeout(PICKER_TIMEOUT_MS) });
         if (!res.ok) throw new Error(`board-game-picker cover ${gameId} -> ${res.status}`);
         return {
           buffer: Buffer.from(await res.arrayBuffer()),

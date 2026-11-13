@@ -26,6 +26,11 @@ const API = 'https://boardgamegeek.com/xmlapi2';
 
 /** BGG asks for 2 requests/second. We take half that. */
 const REQUEST_INTERVAL_MS = 1000;
+/**
+ * Each request's deadline. Generous, because a full collection export is a large XML body,
+ * but finite, so a stalled BGG fails the import instead of hanging it.
+ */
+const REQUEST_TIMEOUT_MS = 60_000;
 
 /** How many ids `thing` will accept in one call. */
 export const THING_BATCH_SIZE = 20;
@@ -96,6 +101,7 @@ const get = async (url: string, token: string): Promise<Response> =>
       authorization: `Bearer ${token}`,
       'user-agent': 'board-game-picker/0.1 (self-hosted collection picker)',
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
 /**

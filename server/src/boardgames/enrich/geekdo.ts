@@ -14,6 +14,8 @@ import type { InteractionType } from '../types.js';
  */
 
 const ENDPOINT = 'https://api.geekdo.com/api/geekitems';
+/** A stalled BGG fails this item instead of holding the enrich pass. */
+const REQUEST_TIMEOUT_MS = 15_000;
 
 export interface GeekdoVersionLink {
   id: number;
@@ -117,6 +119,7 @@ export const fetchGeekdoItem = async (
       // of a public endpoint, not something trying to look like something else.
       'user-agent': 'board-game-picker/0.1 (self-hosted collection picker)',
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!response.ok) {

@@ -1,6 +1,9 @@
 import { KAVITA_URL } from '../../env.js';
 import { tokenFor } from '../../providers/config.js';
 
+/** A stalled Kavita fails the lookup instead of holding the request. */
+const KAVITA_TIMEOUT_MS = 15_000;
+
 /**
  * A read-only client for one Kavita library.
  *
@@ -76,7 +79,7 @@ export const authenticate = async (config: KavitaConfig): Promise<string> => {
   url.searchParams.set('apiKey', config.apiKey);
   url.searchParams.set('pluginName', 'board-game-picker');
 
-  const response = await fetch(url, { method: 'POST' });
+  const response = await fetch(url, { method: 'POST', signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS) });
   if (!response.ok)
     throw new Error(`Kavita auth failed — ${response.status}. Check KAVITA_API_KEY.`);
 
@@ -113,6 +116,7 @@ export const listSeries = async (
       'content-type': 'application/json',
     },
     method: 'POST',
+    signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS),
   });
 
   if (!response.ok) throw new Error(`Kavita series listing failed — ${response.status}`);

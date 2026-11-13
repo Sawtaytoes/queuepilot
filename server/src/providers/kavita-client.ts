@@ -183,6 +183,10 @@ export interface KavitaHttpClient {
   deleteList(readingListId: number | string): Promise<unknown>;
 }
 
+// Every Kavita call has a deadline, so a stalled server fails the read instead of holding the
+// page. Generous, because a library listing can be a few hundred series in one answer.
+const KAVITA_TIMEOUT_MS = 15_000;
+
 /** The `fetch` seam. Widened from `typeof fetch` only in that the tests pass a plain URL. */
 export type FetchLike = (url: string, init?: RequestInit) => Promise<Response>;
 
@@ -231,7 +235,7 @@ export function kavitaClient({
     // therefore never reach a log line — hence the scrubbed message below.
     const url = `${base}/api/Plugin/authenticate`
       + `?apiKey=${encodeURIComponent(key)}&pluginName=${encodeURIComponent(pluginName)}`;
-    const res = await doFetch(url, { method: 'POST' });
+    const res = await doFetch(url, { method: 'POST', signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS) });
     if (!res.ok) {
       throw new Error(`kavita auth failed: HTTP ${res.status} from ${base}/api/Plugin/authenticate`);
     }
@@ -268,6 +272,7 @@ export function kavitaClient({
       method,
       headers,
       ...(body != null ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS),
     });
     if (res.status === 401 && retryOn401) {
       // The cached JWT expired mid-flight. Re-mint once, then give up rather than looping.
@@ -346,7 +351,7 @@ export function kavitaClient({
     async cover(seriesId) {
       const url = `${base}/api/Image/series-cover`
         + `?seriesId=${encodeURIComponent(seriesId)}&apiKey=${encodeURIComponent(key)}`;
-      const res = await doFetch(url);
+      const res = await doFetch(url, { signal: AbortSignal.timeout(KAVITA_TIMEOUT_MS) });
       if (!res.ok) throw new Error(`kavita cover ${seriesId} -> HTTP ${res.status}`);
       return {
         buffer: Buffer.from(await res.arrayBuffer()),

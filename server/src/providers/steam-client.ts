@@ -27,6 +27,8 @@ const CDN_BASE = 'https://cdn.cloudflare.steamstatic.com/steam/apps';
 
 /** How long the owned-games response is reused. See this file's header. */
 const LIBRARY_TTL_MS = 60_000;
+/** Every Steam call has a deadline, so a stalled Valve fails the read instead of the page. */
+const STEAM_TIMEOUT_MS = 15_000;
 
 // --- the DTOs, as loosely as Steam actually returns them ---------------------- //
 //
@@ -93,6 +95,7 @@ export function steamClient({ apiKey, steamId, fetchImpl = null }: SteamClientOp
     });
     const res = await doFetch(`${API_BASE}/IPlayerService/GetOwnedGames/v1/?${params}`, {
       headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(STEAM_TIMEOUT_MS),
     });
     // 401/403 is the key being wrong; anything else non-OK is Valve being unreachable. Both
     // throw rather than resolving empty — a queue that silently renders as "nothing owned"
@@ -191,7 +194,7 @@ export function steamClient({ apiKey, steamId, fetchImpl = null }: SteamClientOp
       ];
 
       for (const url of candidates) {
-        const res = await doFetch(url, {});
+        const res = await doFetch(url, { signal: AbortSignal.timeout(STEAM_TIMEOUT_MS) });
         if (!res.ok) continue;
         return {
           buffer: Buffer.from(await res.arrayBuffer()),

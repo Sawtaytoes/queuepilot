@@ -76,12 +76,12 @@ FROM node:26-trixie-slim
 WORKDIR /app
 RUN npm install --global --force --allow-scripts=pnpm pnpm@12.9.1
 
+# No process-wide TLS bypass. A LAN Plex server's self-signed cert is handled by the scoped
+# undici agents in server/src/plex.ts and playback.ts; plex.tv, Kavita, Steam, BGG and MQTT
+# keep full certificate checks. Do not add NODE_TLS_REJECT_UNAUTHORIZED back.
 ENV PYTHONUNBUFFERED=1 \
     NODE_ENV=production \
-    WEB_PORT=8768 \
-    # Plex serves a self-signed cert; this is the Node equivalent of the Python client's
-    # ssl.CERT_NONE. Scoped to this container, which only talks to the LAN Plex server.
-    NODE_TLS_REJECT_UNAUTHORIZED=0
+    WEB_PORT=8768
 
 # Python 3 runtime for the cast sidecar (venv keeps pip off the system interpreter).
 # `adb` drives the Shield's Plex profile picker (server/src/adb.ts) so a profile-gated
