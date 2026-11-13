@@ -1672,6 +1672,16 @@ group is not an address ([decision](docs/decisions/2026-08-26-the-landing-filter
 `groups-test.ts` still pins the WRITE it sat beside, so what is gone with it is a browser
 assertion about a control that no longer exists.
 
+**Every `tsx` browser harness runs with motion frozen.** `e2e/playwright.ts` wraps
+`chromium.launch`, so each page and context it opens gets a stylesheet that zeroes every CSS
+animation and transition — the same rules as Charcuterie's `FREEZE_MOTION_CSS`. Since
+`@charcuterie/ui` 4.28.0 a closing `Modal`, `Menu` or `Picker` panel stays in the page for its
+exit motion, and a harness that counted a selector right after a close, or clicked an option
+while its panel was still growing, raced the animation and lost on a busy CI runner. Web
+Animations (`web/src/lib/flip.ts`) are not affected, so the drag gates still see the real FLIP
+path. Do not remove the freeze to "test the real thing"; motion belongs to the VRT and to a
+person's review, not to an interaction gate.
+
 > ### The browser gates will not launch in an agent sandbox — that is the container
 >
 > Every gate in the table above launches a real chromium through `e2e/playwright.ts`. The
