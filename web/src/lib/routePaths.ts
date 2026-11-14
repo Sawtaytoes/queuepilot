@@ -121,30 +121,31 @@ export function canonicalCollectionPath(
 }
 
 /** What the back button should SAY, given where it goes. */
-export function labelForPath(p: string): string {
+export function labelForPath(path: string): string {
   if (
-    p.startsWith(WATCH_PLAY_PATH) ||
-    p === "/tonight" ||
-    p.startsWith("/tonight/")
+    path.startsWith(WATCH_PLAY_PATH) ||
+    path === "/tonight" ||
+    path.startsWith("/tonight/")
   )
     return "‹ What to Watch/Play"
   if (
-    p.startsWith(BOARD_GAME_COLLECTION_PATH) ||
-    p.startsWith(COLLECTION_PATH) ||
-    p.startsWith("/board-game-collection")
+    path.startsWith(BOARD_GAME_COLLECTION_PATH) ||
+    path.startsWith(COLLECTION_PATH) ||
+    path.startsWith("/board-game-collection")
   )
     return "‹ Collection"
-  if (p.startsWith("/result")) return "‹ What to Watch/Play"
+  if (path.startsWith("/result"))
+    return "‹ What to Watch/Play"
   if (
-    p.startsWith("/picks") ||
-    p.startsWith("/queues") ||
-    p.startsWith("/channels")
+    path.startsWith("/picks") ||
+    path.startsWith("/queues") ||
+    path.startsWith("/channels")
   )
     return "‹ Queues"
-  if (p.startsWith("/q/")) return "‹ Back"
-  if (p === "/admin" || p.startsWith("/admin/"))
+  if (path.startsWith("/q/")) return "‹ Back"
+  if (path === "/admin" || path.startsWith("/admin/"))
     return "‹ QueuePilot"
-  if (p === "/") return "‹ QueuePilot"
+  if (path === "/") return "‹ QueuePilot"
 
   return "‹ QueuePilot"
 }

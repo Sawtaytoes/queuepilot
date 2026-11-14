@@ -23,14 +23,16 @@ export function seLabel(
   if (unit === "volume") return `Vol ${ep.episode ?? "?"}`
   if (unit === "chapter") return `Ch ${ep.episode ?? "?"}`
   if (unit === "play") {
-    const n = `Play ${ep.episode ?? "?"}`
+    const playLabel = `Play ${ep.episode ?? "?"}`
 
-    return ep.of ? `${n} of ${ep.of}` : n
+    return ep.of ? `${playLabel} of ${ep.of}` : playLabel
   }
 
-  const e = `E${ep.episode ?? "?"}`
+  const episodeLabel = `E${ep.episode ?? "?"}`
 
-  return ep.multiSeason ? `S${ep.season ?? "?"} · ${e}` : e
+  return ep.multiSeason
+    ? `S${ep.season ?? "?"} · ${episodeLabel}`
+    : episodeLabel
 }
 
 /**
@@ -39,15 +41,15 @@ export function seLabel(
  * under B, not T.
  */
 export const titleSortKey = (
-  t: string | null | undefined,
-) => (t || "").replace(/^\s*(a|an|the)\s+/i, "")
+  title: string | null | undefined,
+) => (title || "").replace(/^\s*(a|an|the)\s+/i, "")
 
 export const byTitle = (
-  a: { title: string },
-  b: { title: string },
+  left: { title: string },
+  right: { title: string },
 ) =>
-  titleSortKey(a.title).localeCompare(
-    titleSortKey(b.title),
+  titleSortKey(left.title).localeCompare(
+    titleSortKey(right.title),
     undefined,
     {
       numeric: true,
@@ -84,19 +86,21 @@ export function withoutCollectionPrefix(
   member: string | null | undefined,
   collection: string | null | undefined,
 ): string {
-  const m = String(member || "")
-  const c = String(collection || "")
+  const memberTitle = String(member || "")
+  const collectionTitle = String(collection || "")
 
   if (
-    !c ||
-    m.length <= c.length ||
-    m.slice(0, c.length).toLowerCase() !== c.toLowerCase()
+    !collectionTitle ||
+    memberTitle.length <= collectionTitle.length ||
+    memberTitle
+      .slice(0, collectionTitle.length)
+      .toLowerCase() !== collectionTitle.toLowerCase()
   ) {
-    return m
+    return memberTitle
   }
 
-  const rest = m
-    .slice(c.length)
+  const rest = memberTitle
+    .slice(collectionTitle.length)
     .replace(/^\s*[-–—:·]?\s*/, "")
 
   // A remainder that is only a release year or sequel/season ordinal ("2", "II",
@@ -106,10 +110,10 @@ export function withoutCollectionPrefix(
     /^\(\d{4}\)$/.test(rest) ||
     /^(?:season|part|s)?\s*(?:\d+|[ivxlcdm]+)$/i.test(rest)
   ) {
-    return m
+    return memberTitle
   }
 
-  return rest || m
+  return rest || memberTitle
 }
 
 /**
@@ -153,10 +157,12 @@ function minutes(ms: number): string | null {
   if (total < 1) return null
   if (total < 60) return `${total} min`
 
-  const h = Math.floor(total / 60)
-  const m = total % 60
+  const hours = Math.floor(total / 60)
+  const minutes = total % 60
 
-  return m ? `${h} h ${m} min` : `${h} h`
+  return minutes
+    ? `${hours} h ${minutes} min`
+    : `${hours} h`
 }
 
 /**
@@ -296,7 +302,7 @@ const notYetLabel = (unit: EntryUnit) =>
  * (decision `2026-07-31-collection-tiles-are-member-first`)
  */
 export function tileFace(item: TileEntry): TileFace {
-  const n = item.nextEp
+  const nextEp = item.nextEp
   const base: TileFace = {
     edition: item.editionTitle ?? null,
     from: null,
@@ -323,18 +329,18 @@ export function tileFace(item: TileEntry): TileFace {
   if (item.type === "show") {
     const unit = item.unit ?? "episode"
 
-    if (n) {
+    if (nextEp) {
       // A single-unit entry has nothing to count, so it reports its state instead. Only
       // `play` has such a label — an episode or a chapter always sits somewhere in a run,
       // so "E1" still says which one.
       const only =
-        Number(n.of) === 1 ? notYetLabel(unit) : ""
-      const label = only || seLabel(n, unit)
+        Number(nextEp.of) === 1 ? notYetLabel(unit) : ""
+      const label = only || seLabel(nextEp, unit)
 
       base.next =
-        only || isSelfTitled(n, item.title)
+        only || isSelfTitled(nextEp, item.title)
           ? label
-          : `${label} · ${n.title}`
+          : `${label} · ${nextEp.title}`
     } else if (item.resolved && !item.isNextEpFailed) {
       base.next = allWatchedLabel(unit)
       base.nextDone = true
@@ -347,7 +353,7 @@ export function tileFace(item: TileEntry): TileFace {
 
   const orderCount = collectionOrderCount(item)
 
-  if (!n?.member) {
+  if (!nextEp?.member) {
     // No next-up member: fall back to the collection's own poster/name. A collection
     // that is simply FINISHED reads exactly like a finished show ("All watched") —
     // the two say the same thing, so they must not say it two different ways. The
@@ -376,24 +382,27 @@ export function tileFace(item: TileEntry): TileFace {
     // title is the member's. It stayed null until 2026-08-26, when the next-up payload
     // started carrying one: a collection can hold the same film three times, once per cut,
     // and without this the tile printed the same line whichever of them it had picked.
-    edition: n.memberEdition ?? null,
+    edition: nextEp.memberEdition ?? null,
     from: item.title,
-    fullTitle: n.member,
+    fullTitle: nextEp.member,
     // A series member reads exactly like a series tile (episode + episode title —
     // never the series name, which is already the title line). A movie member says
     // where in the collection it sits, since the movie itself IS the title line.
     next:
-      n.kind === "show"
-        ? n.title
-          ? `${seLabel(n)} · ${n.title}`
-          : seLabel(n)
-        : n.position && orderCount
-          ? `${n.position} of ${orderCount}`
+      nextEp.kind === "show"
+        ? nextEp.title
+          ? `${seLabel(nextEp)} · ${nextEp.title}`
+          : seLabel(nextEp)
+        : nextEp.position && orderCount
+          ? `${nextEp.position} of ${orderCount}`
           : "",
     nextDone: false,
-    ratingKey: n.memberRatingKey || item.ratingKey,
-    title: withoutCollectionPrefix(n.member, item.title),
-    year: n.memberYear ?? null,
+    ratingKey: nextEp.memberRatingKey || item.ratingKey,
+    title: withoutCollectionPrefix(
+      nextEp.member,
+      item.title,
+    ),
+    year: nextEp.memberYear ?? null,
   }
 }
 

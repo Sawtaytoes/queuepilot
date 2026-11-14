@@ -66,7 +66,7 @@ describe("a face is how you find somebody on a card", () => {
 describe("the whole house is one pool of cards", () => {
   test("offers every person and every group side by side", () => {
     const all = candidates(people, [kids])
-    expect(all.map((c) => c.id)).toEqual([
+    expect(all.map((candidate) => candidate.id)).toEqual([
       "ada",
       "grace",
       "linus",
@@ -80,7 +80,8 @@ describe("the whole house is one pool of cards", () => {
 
   test("labels a group with its own rule, in words", () => {
     const nameOf = (id: string) =>
-      people.find((p) => p.id === id)?.displayName ?? id
+      people.find((person) => person.id === id)
+        ?.displayName ?? id
     expect(describeRule(kids, nameOf)).toBe(
       "At least one of Ada or Grace Hopper. Linus may join.",
     )
@@ -145,14 +146,15 @@ describe("three trays, and Everyone else is the absence of a row", () => {
       candidates(people, [kids]),
       members,
     )
-    expect(lanes.required.map((c) => c.id)).toEqual(["ada"])
-    expect(lanes.optional.map((c) => c.id)).toEqual([
-      "grace",
-    ])
-    expect(lanes.roster.map((c) => c.id)).toEqual([
-      "linus",
-      "kids",
-    ])
+    expect(
+      lanes.required.map((candidate) => candidate.id),
+    ).toEqual(["ada"])
+    expect(
+      lanes.optional.map((candidate) => candidate.id),
+    ).toEqual(["grace"])
+    expect(
+      lanes.roster.map((candidate) => candidate.id),
+    ).toEqual(["linus", "kids"])
   })
 
   test("tells a person and a group with the same id apart", () => {
@@ -262,7 +264,11 @@ describe("moving a person is one action, and it is the whole list that is writte
       1,
     )
     expect(
-      moved.map((m) => [m.id, m.role, m.position]),
+      moved.map((member) => [
+        member.id,
+        member.role,
+        member.position,
+      ]),
     ).toEqual([
       ["ada", "required", 0],
       ["linus", "required", 1],

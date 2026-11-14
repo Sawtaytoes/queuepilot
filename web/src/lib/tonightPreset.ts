@@ -84,11 +84,13 @@ const readList = (raw: string | null): string[] =>
     .filter(Boolean)
 
 const readCount = (raw: string | null): number => {
-  const n = Number.parseInt(raw ?? "", 10)
+  const parsed = Number.parseInt(raw ?? "", 10)
 
   // A negative or unparseable count is nought seats, not an error: `guests` is the optional
   // half of "who's here" and a card that miscounts guests but names people still works.
-  return Number.isFinite(n) && n > 0 ? Math.min(n, 99) : 0
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.min(parsed, 99)
+    : 0
 }
 
 /**

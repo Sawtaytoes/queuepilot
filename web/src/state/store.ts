@@ -63,7 +63,7 @@ let snapshot: Snapshot = {
 const listeners = new Set<() => void>()
 
 const emit = () => {
-  for (const l of listeners) l()
+  for (const listener of listeners) listener()
 }
 
 function subscribe(listener: () => void) {
@@ -155,20 +155,21 @@ export const rotationChannels = (
 ) =>
   reg
     ? reg.sets.filter(
-        (s) =>
-          s.source === "rotation" && !isSupersededTier(s),
+        (set) =>
+          set.source === "rotation" &&
+          !isSupersededTier(set),
       )
     : []
 
 // --- loading ----------------------------------------------------------------- //
 export async function refreshHistoryButtons() {
   try {
-    const h = await api<{ undo: number; redo: number }>(
-      "GET",
-      "/api/history",
-    )
+    const history = await api<{
+      undo: number
+      redo: number
+    }>("GET", "/api/history")
 
-    setState({ history: h })
+    setState({ history: history })
   } catch {
     /* cosmetic */
   }
@@ -196,12 +197,12 @@ function shelvesAsQueues(
   const sets: QueuesResponse["sets"] = {}
 
   for (const id of shelves.order) {
-    const s = shelves.sets[id]
+    const shelfSet = shelves.sets[id]
 
-    if (!s) continue
+    if (!shelfSet) continue
 
     sets[id] = {
-      items: s.items.map((it) => ({
+      items: shelfSet.items.map((it) => ({
         childCount: null,
         done: it.done,
         episodes: null,
@@ -225,12 +226,14 @@ function shelvesAsQueues(
         type: null,
         year: null,
       })),
-      kind: s.kind,
+      kind: shelfSet.kind,
       // Lane default — without it every picks set looks random until /api/queues lands.
-      ...(s.add_as ? { add_as: s.add_as } : {}),
-      label: s.label,
-      sections: s.sections,
-      source: s.source,
+      ...(shelfSet.add_as
+        ? { add_as: shelfSet.add_as }
+        : {}),
+      label: shelfSet.label,
+      sections: shelfSet.sections,
+      source: shelfSet.source,
     }
   }
 
@@ -353,7 +356,7 @@ export async function load() {
    * Phase 1 is best-effort as a whole: if it throws, phase 2 still renders the page
    * exactly as it did before any of this existed.
    */
-  let havePhase1 = false
+  let hasPhase1 = false
 
   try {
     const [shelves, reg] = await Promise.all([
@@ -365,7 +368,7 @@ export async function load() {
       data: shelvesAsQueues(shelves),
       reg,
     })
-    havePhase1 = true
+    hasPhase1 = true
 
     // WP-5: who each queue is FOR. Phase 1, beside the registry and for the same reason — the
     // shelf headings paint faces, and fetching them in phase 2 would pop a row of avatars in
@@ -378,7 +381,7 @@ export async function load() {
 
   try {
     // Phase 1 already has the registry, so don't ask for it twice.
-    const [data, reg] = havePhase1
+    const [data, reg] = hasPhase1
       ? [
           await api<QueuesResponse>("GET", "/api/queues"),
           getState().reg!,
@@ -390,10 +393,16 @@ export async function load() {
     // Retained MQTT means a reload mid-session lands with the highlight already
     // correct, rather than waiting for the next playback event.
     try {
-      const n = await api<NowState>("GET", "/api/now")
+      const nowState = await api<NowState>(
+        "GET",
+        "/api/now",
+      )
 
       setState({
-        now: { now: n.now || null, set: n.set || null },
+        now: {
+          now: nowState.now || null,
+          set: nowState.set || null,
+        },
       })
     } catch {
       /* cosmetic — the `now` SSE event fills it in */
@@ -402,7 +411,7 @@ export async function load() {
     setStatus("Ready", "ok")
     void refreshHistoryButtons()
     void revalidate()
-  } catch (e) {
-    setStatus(`Failed: ${(e as Error).message}`, "err")
+  } catch (error) {
+    setStatus(`Failed: ${(error as Error).message}`, "err")
   }
 }

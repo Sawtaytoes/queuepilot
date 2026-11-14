@@ -81,7 +81,7 @@ export function useRowReorder(
     ]
 
     const orderNow = () =>
-      rows().map((r) => r.dataset.set as string)
+      rows().map((row) => row.dataset.set as string)
 
     const begin = () => {
       if (!drag) return
@@ -91,11 +91,11 @@ export function useRowReorder(
       document.body.classList.add("rowdragging")
     }
 
-    const onMove = (e: PointerEvent) => {
+    const onMove = (event: PointerEvent) => {
       if (!drag) return
 
-      const dx = e.clientX - drag.startX
-      const dy = e.clientY - drag.startY
+      const dx = event.clientX - drag.startX
+      const dy = event.clientY - drag.startY
 
       if (!drag.isDragging) {
         // Touch waits for the long-press timer; a mouse only needs to mean it. The
@@ -110,7 +110,7 @@ export function useRowReorder(
         begin()
       }
 
-      e.preventDefault()
+      event.preventDefault()
       drag.row.style.transform = `translate(${dx}px, ${dy}px)`
 
       // The card the POINTER is inside, if any. Containment rather than a midpoint
@@ -120,13 +120,13 @@ export function useRowReorder(
       const target = rows().find((other) => {
         if (other === drag?.row) return false
 
-        const r = other.getBoundingClientRect()
+        const rect = other.getBoundingClientRect()
 
         return (
-          e.clientX >= r.left &&
-          e.clientX <= r.right &&
-          e.clientY >= r.top &&
-          e.clientY <= r.bottom
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom
         )
       })
 
@@ -147,7 +147,7 @@ export function useRowReorder(
 
       drag.startX += after.left - before.left
       drag.startY += after.top - before.top
-      drag.row.style.transform = `translate(${e.clientX - drag.startX}px, ${e.clientY - drag.startY}px)`
+      drag.row.style.transform = `translate(${event.clientX - drag.startX}px, ${event.clientY - drag.startY}px)`
     }
 
     const finish = () => {
@@ -175,8 +175,8 @@ export function useRowReorder(
       commitRef.current(next)
     }
 
-    const onDown = (e: PointerEvent) => {
-      const target = e.target as HTMLElement
+    const onDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement
       const handle = target.closest(".rowdrag")
       const row =
         target.closest<HTMLElement>("li[data-set]")
@@ -191,7 +191,7 @@ export function useRowReorder(
        * finger. Only `.rowdrag` opts out of scrolling, which is why it is still rendered on
        * a coarse pointer and why touch is still required to start there.
        */
-      if (e.pointerType === "touch" && !handle) return
+      if (event.pointerType === "touch" && !handle) return
 
       /**
        * A press that lands on something you CLICK is not a drag. The card holds a link (the
@@ -209,14 +209,14 @@ export function useRowReorder(
 
       // Not on an interactive child, so nothing here wants the browser's default — and the
       // default is a text selection that would drag a highlight across the page instead.
-      e.preventDefault()
+      event.preventDefault()
       drag = {
-        isArmed: e.pointerType === "touch",
+        isArmed: event.pointerType === "touch",
         isDragging: false,
         nextSibling: row.nextSibling,
         row,
-        startX: e.clientX,
-        startY: e.clientY,
+        startX: event.clientX,
+        startY: event.clientY,
       }
 
       if (drag.isArmed) {

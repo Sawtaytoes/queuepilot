@@ -54,10 +54,13 @@ export function groupHits(
   }
   const sorted = [...hits]
     .map((hit, index) => ({ hit, index, rank: rank(hit) }))
-    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .sort(
+      (left, right) =>
+        left.rank - right.rank || left.index - right.index,
+    )
 
-  let seenInPool = false
-  let seenRest = false
+  let hasSeenInPool = false
+  let hasSeenRest = false
 
   return sorted.map(({ hit }) => {
     const isIn = sections.has(hit.sectionId)
@@ -65,15 +68,15 @@ export function groupHits(
 
     // Only label the in-pool group when there is a second group to distinguish it FROM.
     // A search that lands entirely inside the pool is the ordinary case and needs no chrome.
-    if (isIn && !seenInPool) {
-      seenInPool = true
+    if (isIn && !hasSeenInPool) {
+      hasSeenInPool = true
       separator = sorted.some(
-        (s) => !sections.has(s.hit.sectionId),
+        (ranked) => !sections.has(ranked.hit.sectionId),
       )
         ? labels.inPool
         : null
-    } else if (!isIn && !seenRest) {
-      seenRest = true
+    } else if (!isIn && !hasSeenRest) {
+      hasSeenRest = true
       separator = labels.rest
     }
 
@@ -87,8 +90,8 @@ export function libraryTitle(
   sectionId: number,
 ): string {
   return (
-    libraries.find((l) => l.id === sectionId)?.title ??
-    `Library ${sectionId}`
+    libraries.find((library) => library.id === sectionId)
+      ?.title ?? `Library ${sectionId}`
   )
 }
 

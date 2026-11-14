@@ -47,7 +47,7 @@ export function countPickerPresets(
   ) {
     nums.add(defaultValue)
   }
-  return [...nums].sort((a, b) => a - b)
+  return [...nums].sort((left, right) => left - right)
 }
 
 export function isCountPreset(

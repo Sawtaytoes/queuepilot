@@ -28,11 +28,11 @@ export const getChannelSelection = () => selection
 
 export const useChannelSelection = () =>
   useSyncExternalStore(
-    (l) => {
-      listeners.add(l)
+    (listener) => {
+      listeners.add(listener)
 
       return () => {
-        listeners.delete(l)
+        listeners.delete(listener)
       }
     },
     () => selection,
@@ -50,7 +50,7 @@ export function setChannelSelection(
 
   selection = { channelId, profile }
 
-  for (const l of listeners) l()
+  for (const listener of listeners) listener()
 }
 
 /**
@@ -65,8 +65,8 @@ export function resolveChannel(
   const all = rotationChannels(reg)
 
   return (
-    all.find((s) => s.id === routeId) ??
-    all.find((s) => s.id === lastId) ??
+    all.find((channel) => channel.id === routeId) ??
+    all.find((channel) => channel.id === lastId) ??
     all[0] ??
     null
   )

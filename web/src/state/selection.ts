@@ -21,7 +21,7 @@ function commit(next: Map<string, Selected>) {
   selected = next
   busy.selectedCount = next.size
 
-  for (const l of listeners) l()
+  for (const listener of listeners) listener()
 }
 
 export const selKey = (set: string, key: string) =>
@@ -31,11 +31,11 @@ export const getSelected = () => selected
 
 export const useSelected = () =>
   useSyncExternalStore(
-    (l) => {
-      listeners.add(l)
+    (listener) => {
+      listeners.add(listener)
 
       return () => {
-        listeners.delete(l)
+        listeners.delete(listener)
       }
     },
     () => selected,
@@ -43,10 +43,10 @@ export const useSelected = () =>
 
 export function toggleSelect(set: string, key: string) {
   const next = new Map(selected)
-  const k = selKey(set, key)
+  const selectionKey = selKey(set, key)
 
-  if (next.has(k)) next.delete(k)
-  else next.set(k, { fromSet: set, key })
+  if (next.has(selectionKey)) next.delete(selectionKey)
+  else next.set(selectionKey, { fromSet: set, key })
 
   anchor = { fromSet: set, key }
   commit(next)
@@ -98,13 +98,13 @@ export function toggleSelectThrough(
 }
 
 export function deselect(set: string, key: string) {
-  const k = selKey(set, key)
+  const selectionKey = selKey(set, key)
 
-  if (!selected.has(k)) return
+  if (!selected.has(selectionKey)) return
 
   const next = new Map(selected)
 
-  next.delete(k)
+  next.delete(selectionKey)
   commit(next)
 }
 

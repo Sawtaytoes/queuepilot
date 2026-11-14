@@ -108,7 +108,9 @@ export const ACTIVITIES: readonly Activity[] = [
   },
 ]
 
-const BY_ID = new Map(ACTIVITIES.map((a) => [a.id, a]))
+const BY_ID = new Map(
+  ACTIVITIES.map((activity) => [activity.id, activity]),
+)
 
 export const findActivity = (
   id: ActivityId | null,
@@ -506,8 +508,9 @@ export function splitByMatch<Item>(
     also: also
       .map((entry, index) => ({ ...entry, index }))
       .sort(
-        (a, b) =>
-          a.missing - b.missing || a.index - b.index,
+        (left, right) =>
+          left.missing - right.missing ||
+          left.index - right.index,
       )
       .map((entry) => entry.item),
     exact,
@@ -542,7 +545,9 @@ export function isProviderWorthNaming(
   queues: readonly TonightQueue[],
 ): boolean {
   const labels = new Set(
-    queues.map((q) => q.providerLabel).filter(Boolean),
+    queues
+      .map((queue) => queue.providerLabel)
+      .filter(Boolean),
   )
 
   return labels.size > 1
@@ -567,7 +572,9 @@ export function goLabel(
 export const rosterOrder = (
   people: readonly Person[],
 ): Person[] =>
-  [...people].sort((a, b) => a.position - b.position)
+  [...people].sort(
+    (left, right) => left.position - right.position,
+  )
 
 /**
  * ── Surprise Me is a SECOND SCREEN, not a one-tap random pick ────────────────────────
