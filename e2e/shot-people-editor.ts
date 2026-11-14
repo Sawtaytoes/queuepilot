@@ -16,110 +16,158 @@
 //
 //   PLAYWRIGHT_BROWSERS_PATH=/tmp/pw-browsers-queuepilot \
 //     server/node_modules/.bin/tsx e2e/shot-people-editor.ts --tag=before
-import type { ChildProcess } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import type { ChildProcess } from "node:child_process"
+import { promises as fs } from "node:fs"
 
-import { chromium } from './playwright.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { chromium } from "./playwright.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const PORT = 18799;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
-const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
+const PORT = 18799
+const tagArg = process.argv.find((arg) =>
+  arg.startsWith("--tag="),
+)
+const TAG = tagArg ? tagArg.slice("--tag=".length) : "after"
 
 const env = {
   ...process.env,
-  CACHE_PATH: '/tmp/cache-shotpeopleeditor.sqlite',
-  GROUPS_PATH: '/tmp/groups-shotpeopleeditor.yaml',
-  HISTORY_PATH: '/tmp/history-shotpeopleeditor.json',
-  MQTT_HOST: '',
-  MQTT_PASS: '',
-  MQTT_PORT: '',
-  MQTT_USER: '',
-  NODE_TLS_REJECT_UNAUTHORIZED: '0',
-  PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-  PLEX_TOKEN: '',
-  QUEUES_PATH: '/tmp/queues-shotpeopleeditor.yaml',
-  SETS_PATH: '/tmp/sets-shotpeopleeditor.yaml',
+  CACHE_PATH: "/tmp/cache-shotpeopleeditor.sqlite",
+  GROUPS_PATH: "/tmp/groups-shotpeopleeditor.yaml",
+  HISTORY_PATH: "/tmp/history-shotpeopleeditor.json",
+  MQTT_HOST: "",
+  MQTT_PASS: "",
+  MQTT_PORT: "",
+  MQTT_USER: "",
+  NODE_TLS_REJECT_UNAUTHORIZED: "0",
+  PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+  PLEX_TOKEN: "",
+  QUEUES_PATH: "/tmp/queues-shotpeopleeditor.yaml",
+  SETS_PATH: "/tmp/sets-shotpeopleeditor.yaml",
   WEB_PORT: String(PORT),
-};
+}
 
 for (const [src, dest] of [
-  ['e2e/fixtures/landing.sets.yaml', env.SETS_PATH],
-  ['e2e/fixtures/landing.queues.yaml', env.QUEUES_PATH],
-  ['e2e/fixtures/landing.groups.yaml', env.GROUPS_PATH],
-  ['e2e/fixtures/landing.people-mapping.yaml', '/tmp/people-mapping-proposal.yaml'],
+  ["e2e/fixtures/landing.sets.yaml", env.SETS_PATH],
+  ["e2e/fixtures/landing.queues.yaml", env.QUEUES_PATH],
+  ["e2e/fixtures/landing.groups.yaml", env.GROUPS_PATH],
+  [
+    "e2e/fixtures/landing.people-mapping.yaml",
+    "/tmp/people-mapping-proposal.yaml",
+  ],
 ] as const) {
-  await fs.copyFile(src, dest);
-  await fs.rm(`${dest}.lock`, { force: true, recursive: true });
+  await fs.copyFile(src, dest)
+  await fs.rm(`${dest}.lock`, {
+    force: true,
+    recursive: true,
+  })
 }
 for (const stale of [
-  '/tmp/queues-shotpeopleeditor.queuepilot.sqlite',
-  '/tmp/cache-shotpeopleeditor.sqlite',
+  "/tmp/queues-shotpeopleeditor.queuepilot.sqlite",
+  "/tmp/cache-shotpeopleeditor.sqlite",
 ]) {
-  await fs.rm(stale, { force: true });
+  await fs.rm(stale, { force: true })
 }
 
-await fs.mkdir('__screenshots__', { recursive: true });
+await fs.mkdir("__screenshots__", { recursive: true })
 
-let server: ChildProcess | undefined;
-const browser = await chromium.launch();
+let server: ChildProcess | undefined
+const browser = await chromium.launch()
 
 try {
-  server = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 80; i++) {
+  server = spawnServer({ env, stdio: "ignore" })
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
-      break;
+      await fetch(`http://localhost:${PORT}/api/sets`).then(
+        (response) => response.json(),
+      )
+      break
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) =>
+        setTimeout(resolve, 200),
+      )
     }
   }
 
-  const ctx = await browser.newContext({ viewport: { width: 1100, height: 900 } });
+  const ctx = await browser.newContext({
+    viewport: { width: 1100, height: 900 },
+  })
   await ctx.addInitScript(() => {
     try {
-      localStorage.setItem('charcuterie-scheme', 'dark');
+      localStorage.setItem("charcuterie-scheme", "dark")
     } catch {
       /* light then */
     }
-  });
-  const page = await ctx.newPage();
+  })
+  const page = await ctx.newPage()
 
-  await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#peoplechips', { timeout: 30000 });
-  await page.waitForTimeout(1200);
+  await page.goto(`http://localhost:${PORT}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#peoplechips", {
+    timeout: 30000,
+  })
+  await page.waitForTimeout(1200)
 
-  const bar = await page.$('#peoplechips');
-  await bar?.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-bar.png` });
+  const bar = await page.$("#peoplechips")
+  await bar?.screenshot({
+    path: `__screenshots__/peopleeditor-${TAG}-bar.png`,
+  })
 
-  const entry = await page.$('#peopleedit');
+  const entry = await page.$("#peopleedit")
   if (!entry) {
-    console.log('no "Edit people" button — the BEFORE state');
+    console.log(
+      'no "Edit people" button — the BEFORE state',
+    )
   } else {
-    await entry.click();
-    await page.waitForSelector('#peoplemodal', { timeout: 15000 });
-    await page.waitForTimeout(900);
-    await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-modal.png` });
+    await entry.click()
+    await page.waitForSelector("#peoplemodal", {
+      timeout: 15000,
+    })
+    await page.waitForTimeout(900)
+    await page.screenshot({
+      path: `__screenshots__/peopleeditor-${TAG}-modal.png`,
+    })
 
-    const rows = await page.$$eval('#peoplemodal .peoplerow', (n) => n.length);
-    const faces = await page.$$eval('#peoplemodal [data-person-face]', (n) => n.length);
-    console.log(`${rows} editable name rows, ${faces} faces — the AFTER state`);
+    const rows = await page.$$eval(
+      "#peoplemodal .peoplerow",
+      (elements) => elements.length,
+    )
+    const faces = await page.$$eval(
+      "#peoplemodal [data-person-face]",
+      (elements) => elements.length,
+    )
+    console.log(
+      `${rows} editable name rows, ${faces} faces — the AFTER state`,
+    )
 
     // THE CONFIRMATION. It is the one control here that cannot be inferred from a still of the
     // list, because it is the only place the app says what a removal takes with it.
-    const remove = await page.$('#peoplemodal .peoplerow .peoplerowmain button[aria-label^="Remove"]');
+    const remove = await page.$(
+      '#peoplemodal .peoplerow .peoplerowmain button[aria-label^="Remove"]',
+    )
     if (remove) {
-      await remove.click();
-      await page.waitForTimeout(500);
-      await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-confirm.png` });
-      const said = await page.$eval('#peoplemodal .peopleconfirm', (n) => n.textContent ?? '');
-      console.log(`the confirmation says: ${JSON.stringify(said.replace(/\s+/g, ' ').trim())}`);
+      await remove.click()
+      await page.waitForTimeout(500)
+      await page.screenshot({
+        path: `__screenshots__/peopleeditor-${TAG}-confirm.png`,
+      })
+      const said = await page.$eval(
+        "#peoplemodal .peopleconfirm",
+        (element) => element.textContent ?? "",
+      )
+      console.log(
+        `the confirmation says: ${JSON.stringify(said.replace(/\s+/g, " ").trim())}`,
+      )
       // Put it back — the next frame is the list, not a half-open confirmation.
-      const cancel = await page.$('#peoplemodal .peopleconfirm button:last-of-type');
-      await cancel?.click();
-      await page.waitForTimeout(400);
+      const cancel = await page.$(
+        "#peoplemodal .peopleconfirm button:last-of-type",
+      )
+      await cancel?.click()
+      await page.waitForTimeout(400)
     } else {
-      console.log('no remove control found');
+      console.log("no remove control found")
     }
 
     // ── the write, end to end ──────────────────────────────────────────────────────────
@@ -129,58 +177,85 @@ try {
     // server's answer rather than from the field somebody typed in.
     // Element handles rather than `Locator`s: this repo's `playwright.js` re-exports a narrowed
     // surface, and `Locator.isDisabled` is not on it.
-    const ROW = '#peoplemodal .peoplerow:first-of-type';
+    const ROW = "#peoplemodal .peoplerow:first-of-type"
     const isSaveDisabled = () =>
-      page.$eval(`${ROW} .peoplerowmain button`, (n) => (n as HTMLButtonElement).disabled);
+      page.$eval(
+        `${ROW} .peoplerowmain button`,
+        (element) =>
+          (element as HTMLButtonElement).disabled,
+      )
 
     console.log(
       (await isSaveDisabled())
-        ? 'Save is disabled on a clean row'
-        : '⚠️ Save is enabled on a clean row',
-    );
-    const field = await page.$(`${ROW} input.peoplename`);
-    await field?.fill('Ada Lovelace');
+        ? "Save is disabled on a clean row"
+        : "⚠️ Save is enabled on a clean row",
+    )
+    const field = await page.$(`${ROW} input.peoplename`)
+    await field?.fill("Ada Lovelace")
     console.log(
       (await isSaveDisabled())
-        ? '⚠️ Save is still disabled after typing'
-        : 'Save enables once the row is dirty',
-    );
-    const save = await page.$(`${ROW} .peoplerowmain button`);
-    await save?.click();
-    await page.waitForTimeout(1200);
-    const names = await page.$$eval('#peoplemodal .peoplerow input.peoplename', (n) =>
-      (n as HTMLInputElement[]).map((i) => i.value),
-    );
+        ? "⚠️ Save is still disabled after typing"
+        : "Save enables once the row is dirty",
+    )
+    const save = await page.$(
+      `${ROW} .peoplerowmain button`,
+    )
+    await save?.click()
+    await page.waitForTimeout(1200)
+    const names = await page.$$eval(
+      "#peoplemodal .peoplerow input.peoplename",
+      (elements) =>
+        (elements as HTMLInputElement[]).map(
+          (input) => input.value,
+        ),
+    )
     console.log(
-      names.includes('Ada Lovelace')
+      names.includes("Ada Lovelace")
         ? `the rename round-tripped — the list now reads ${JSON.stringify(names.slice(0, 3))}`
         : `⚠️ the rename did not stick — ${JSON.stringify(names.slice(0, 3))}`,
-    );
+    )
 
     // ── the people-group rule editor ────────────────────────────────────────────────
     // The old People modal exposed no way to edit a group's roster. The entry now opens a
     // second modal with the rule summary and one Required / May join / Not in group control
     // for every person.
-    const groupsEdit = await page.$('#groupsedit');
+    const groupsEdit = await page.$("#groupsedit")
     if (groupsEdit) {
-      await groupsEdit.click();
-      await page.waitForSelector('#groupsmodal', { timeout: 15000 });
-      await page.waitForTimeout(900);
-      await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-groups.png` });
-      const groupCount = await page.$$eval('#groupsmodal .grouppick', (n) => n.length);
-      const ruleCount = await page.$$eval('#groupsmodal .grouprulesummary', (n) => n.length);
-      const memberControls = await page.$$eval('#groupsmodal .groupmemberchoices', (n) => n.length);
-      console.log(`${groupCount} editable people groups, ${ruleCount} visible rule, ${memberControls} member controls`);
-      const savedGroup = await page.$('#groupsmodal .grouppick');
-      await savedGroup?.click();
-      await page.waitForTimeout(400);
-      await page.click('#groupsmodal .modalx');
-      await page.waitForTimeout(500);
+      await groupsEdit.click()
+      await page.waitForSelector("#groupsmodal", {
+        timeout: 15000,
+      })
+      await page.waitForTimeout(900)
+      await page.screenshot({
+        path: `__screenshots__/peopleeditor-${TAG}-groups.png`,
+      })
+      const groupCount = await page.$$eval(
+        "#groupsmodal .grouppick",
+        (elements) => elements.length,
+      )
+      const ruleCount = await page.$$eval(
+        "#groupsmodal .grouprulesummary",
+        (elements) => elements.length,
+      )
+      const memberControls = await page.$$eval(
+        "#groupsmodal .groupmemberchoices",
+        (elements) => elements.length,
+      )
+      console.log(
+        `${groupCount} editable people groups, ${ruleCount} visible rule, ${memberControls} member controls`,
+      )
+      const savedGroup = await page.$(
+        "#groupsmodal .grouppick",
+      )
+      await savedGroup?.click()
+      await page.waitForTimeout(400)
+      await page.click("#groupsmodal .modalx")
+      await page.waitForTimeout(500)
     } else {
-      console.log('no people-group editor entry found');
+      console.log("no people-group editor entry found")
     }
   }
-  await ctx.close();
+  await ctx.close()
 
   // ── the Narrow View ──────────────────────────────────────────────────────────────────
   //
@@ -191,35 +266,45 @@ try {
     hasTouch: true,
     isMobile: true,
     viewport: { height: 844, width: 390 },
-  });
+  })
   await narrowCtx.addInitScript(() => {
     try {
-      localStorage.setItem('charcuterie-scheme', 'dark');
+      localStorage.setItem("charcuterie-scheme", "dark")
     } catch {
       /* light then */
     }
-  });
-  const narrow = await narrowCtx.newPage();
-  await narrow.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
-  await narrow.waitForSelector('#peoplechips', { timeout: 30000 });
-  await narrow.waitForTimeout(1200);
-  const narrowEntry = await narrow.$('#peopleedit');
+  })
+  const narrow = await narrowCtx.newPage()
+  await narrow.goto(`http://localhost:${PORT}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await narrow.waitForSelector("#peoplechips", {
+    timeout: 30000,
+  })
+  await narrow.waitForTimeout(1200)
+  const narrowEntry = await narrow.$("#peopleedit")
   if (narrowEntry) {
-    await narrowEntry.click();
-    await narrow.waitForSelector('#peoplemodal', { timeout: 15000 });
-    await narrow.waitForTimeout(900);
+    await narrowEntry.click()
+    await narrow.waitForSelector("#peoplemodal", {
+      timeout: 15000,
+    })
+    await narrow.waitForTimeout(900)
   }
-  await narrow.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-narrow.png` });
+  await narrow.screenshot({
+    path: `__screenshots__/peopleeditor-${TAG}-narrow.png`,
+  })
   const overflow = await narrow.evaluate(
-    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
-  );
+    () =>
+      document.documentElement.scrollWidth -
+      document.documentElement.clientWidth,
+  )
   console.log(
     overflow > 1
       ? `⚠️ the Narrow View scrolls horizontally by ${overflow}px`
-      : 'the Narrow View does not scroll horizontally',
-  );
-  await narrowCtx.close();
+      : "the Narrow View does not scroll horizontally",
+  )
+  await narrowCtx.close()
 } finally {
-  await browser.close();
-  killServer(server);
+  await browser.close()
+  killServer(server)
 }

@@ -16,14 +16,14 @@
 // Public-domain films and invented shorts stand in. The scratch libraries hold encode-shaped
 // names because that is what makes "these are never Pending" read as obvious rather than as
 // a claim.
-import { createServer } from 'node:http';
+import { createServer } from "node:http"
 
-const FILMS = 1;
-const SERIALS = 5;
-const DOCS = 14;
-const CLIPS = 7;
-const DEMOS = 2;
-const CALIBRATION = 9;
+const FILMS = 1
+const SERIALS = 5
+const DOCS = 14
+const CLIPS = 7
+const DEMOS = 2
+const CALIBRATION = 9
 
 /**
  * The libraries `plex.sections()` reports.
@@ -34,76 +34,144 @@ const CALIBRATION = 9;
  * the property comes from.
  */
 const SECTIONS = [
-  { key: String(FILMS), title: 'Films', type: 'movie', agent: 'tv.plex.agents.movie' },
-  { key: String(SERIALS), title: 'Serials', type: 'show', agent: 'tv.plex.agents.series' },
-  { key: String(DOCS), title: 'Documentaries', type: 'movie', agent: 'tv.plex.agents.movie' },
-  { key: String(CLIPS), title: 'Clips', type: 'movie', agent: 'com.plexapp.agents.none' },
-  { key: String(DEMOS), title: 'Demos', type: 'movie', agent: 'com.plexapp.agents.none' },
-  { key: String(CALIBRATION), title: 'Calibration', type: 'movie', agent: 'com.plexapp.agents.none' },
-];
+  {
+    key: String(FILMS),
+    title: "Films",
+    type: "movie",
+    agent: "tv.plex.agents.movie",
+  },
+  {
+    key: String(SERIALS),
+    title: "Serials",
+    type: "show",
+    agent: "tv.plex.agents.series",
+  },
+  {
+    key: String(DOCS),
+    title: "Documentaries",
+    type: "movie",
+    agent: "tv.plex.agents.movie",
+  },
+  {
+    key: String(CLIPS),
+    title: "Clips",
+    type: "movie",
+    agent: "com.plexapp.agents.none",
+  },
+  {
+    key: String(DEMOS),
+    title: "Demos",
+    type: "movie",
+    agent: "com.plexapp.agents.none",
+  },
+  {
+    key: String(CALIBRATION),
+    title: "Calibration",
+    type: "movie",
+    agent: "com.plexapp.agents.none",
+  },
+]
 
-const ADDED = 1_755_000_000;
+const ADDED = 1_755_000_000
 
 /** Public-domain features, cycled so the grid is dense without inventing 300 titles. */
 const FILM_TITLES = [
-  'The Cabinet of Dr. Caligari', 'Nosferatu', 'The General', 'Metropolis',
-  'The Phantom Carriage', 'Sunrise', 'Battleship Potemkin', 'The Gold Rush',
-  'Sherlock Jr.', 'The Kid', 'Safety Last!', 'Steamboat Bill, Jr.',
-  'The Lodger', 'Body and Soul', 'Within Our Gates', 'The Last Laugh',
-];
+  "The Cabinet of Dr. Caligari",
+  "Nosferatu",
+  "The General",
+  "Metropolis",
+  "The Phantom Carriage",
+  "Sunrise",
+  "Battleship Potemkin",
+  "The Gold Rush",
+  "Sherlock Jr.",
+  "The Kid",
+  "Safety Last!",
+  "Steamboat Bill, Jr.",
+  "The Lodger",
+  "Body and Soul",
+  "Within Our Gates",
+  "The Last Laugh",
+]
 
 const SERIAL_TITLES = [
-  'The Perils of the Airfield', 'Rocket Squadron', 'The Copper Mask',
-  'Signal Fires', 'The Long Dispatch', 'Harbour Lights',
-];
+  "The Perils of the Airfield",
+  "Rocket Squadron",
+  "The Copper Mask",
+  "Signal Fires",
+  "The Long Dispatch",
+  "Harbour Lights",
+]
 
 const DOC_TITLES = [
-  'Rails Across the Plain', 'Harvest of the Delta', 'A Year in the Foundry',
-  'The Lighthouse Keepers', 'Bridges of the North',
-];
+  "Rails Across the Plain",
+  "Harvest of the Delta",
+  "A Year in the Foundry",
+  "The Lighthouse Keepers",
+  "Bridges of the North",
+]
 
-let nextKey = 9000;
+let nextKey = 9000
 const make = (title, section, type, extra = {}) => ({
   ratingKey: String(nextKey++),
   type,
   title,
   year: 1920 + (nextKey % 40),
   addedAt: ADDED + nextKey,
-  contentRating: type === 'show' ? 'TV-PG' : 'NR',
+  contentRating: type === "show" ? "TV-PG" : "NR",
   librarySectionID: section,
   ...extra,
-});
+})
 
 /** `count` items cycled off `titles`, numbered past the first pass so none collide. */
 const spread = (titles, count, section, type) =>
   Array.from({ length: count }, (_, i) => {
-    const base = titles[i % titles.length];
-    const pass = Math.floor(i / titles.length);
-    return make(pass === 0 ? base : `${base} (Part ${pass + 1})`, section, type);
-  });
+    const base = titles[i % titles.length]
+    const pass = Math.floor(i / titles.length)
+    return make(
+      pass === 0 ? base : `${base} (Part ${pass + 1})`,
+      section,
+      type,
+    )
+  })
 
 export const BY_SECTION = {
-  [FILMS]: spread(FILM_TITLES, 240, FILMS, 'movie'),
-  [SERIALS]: spread(SERIAL_TITLES, 90, SERIALS, 'show'),
-  [DOCS]: spread(DOC_TITLES, 30, DOCS, 'movie'),
+  [FILMS]: spread(FILM_TITLES, 240, FILMS, "movie"),
+  [SERIALS]: spread(SERIAL_TITLES, 90, SERIALS, "show"),
+  [DOCS]: spread(DOC_TITLES, 30, DOCS, "movie"),
   // The scratch libraries. Encode-shaped names, because "these are never Pending" has to be
   // obvious in the picture rather than asserted in the caption.
   [CLIPS]: Array.from({ length: 210 }, (_, i) =>
-    make(`[QC] reel-${String(i + 1).padStart(3, '0')} x265-10bit {SDR}`, CLIPS, 'movie')),
+    make(
+      `[QC] reel-${String(i + 1).padStart(3, "0")} x265-10bit {SDR}`,
+      CLIPS,
+      "movie",
+    ),
+  ),
   [DEMOS]: Array.from({ length: 110 }, (_, i) =>
-    make(`[Demo] atmos-bed-${String(i + 1).padStart(3, '0')} {TrueHD}`, DEMOS, 'movie')),
+    make(
+      `[Demo] atmos-bed-${String(i + 1).padStart(3, "0")} {TrueHD}`,
+      DEMOS,
+      "movie",
+    ),
+  ),
   [CALIBRATION]: Array.from({ length: 40 }, (_, i) =>
-    make(`[Cal] pluge-step-${String(i + 1).padStart(2, '0')}`, CALIBRATION, 'movie')),
-};
+    make(
+      `[Cal] pluge-step-${String(i + 1).padStart(2, "0")}`,
+      CALIBRATION,
+      "movie",
+    ),
+  ),
+}
 
-const ALL = Object.values(BY_SECTION).flat();
+const ALL = Object.values(BY_SECTION).flat()
 
 /**
  * Two queues, and the second one is the point: `bench` draws from the two scratch libraries,
  * which is what the OLD rule read as "somebody cares about these" — the shape that put every
  * clip and test encode on the screen.
  */
-export const QUEUES_YAML = 'features:\n- []\nbench:\n- []\n';
+export const QUEUES_YAML = "features:\n- []\nbench:\n- []\n"
 
 export const SETS_YAML = `sets:
   - id: features
@@ -121,24 +189,28 @@ export const SETS_YAML = `sets:
     kind: movies
     source: queue
     sections: [${CLIPS}, ${DEMOS}]
-`;
+`
 
 /** Watermark before every arrival, so coverage and the library choice are the only filters. */
-export const PENDING_YAML = `seen_through: ${ADDED}\ndismissed: []\n`;
+export const PENDING_YAML = `seen_through: ${ADDED}\ndismissed: []\n`
 
 /**
  * The collections one section reports. Ids are `77<section><n>` so a child lookup can read
  * the section back out of the collection id without a second table.
  */
-const COLLECTION_TITLES = ['The Restored Set', 'Serial Omnibus'];
+const COLLECTION_TITLES = [
+  "The Restored Set",
+  "Serial Omnibus",
+]
 
-const COLLECTIONS_FOR = (section) => COLLECTION_TITLES.map((title, n) => ({
-  ratingKey: `77${section}${n}`,
-  type: 'collection',
-  title: `${title} ${n + 1}`,
-  childCount: 3,
-  thumb: null,
-}));
+const COLLECTIONS_FOR = (section) =>
+  COLLECTION_TITLES.map((title, n) => ({
+    ratingKey: `77${section}${n}`,
+    type: "collection",
+    title: `${title} ${n + 1}`,
+    childCount: 3,
+    thumb: null,
+  }))
 
 /**
  * Its members: three arrivals from the section the id encodes, taken from the NEWEST end.
@@ -148,32 +220,58 @@ const COLLECTIONS_FOR = (section) => COLLECTION_TITLES.map((title, n) => ({
  * of the page, which is the row the shot needs to show.
  */
 const COLLECTION_CHILDREN = (ratingKey) => {
-  const [, section, n] = /^77(\d+)(\d)$/.exec(String(ratingKey)) || [];
-  const pool = BY_SECTION[Number(section)] || [];
-  const end = pool.length - Number(n) * 3;
+  const [, section, n] =
+    /^77(\d+)(\d)$/.exec(String(ratingKey)) || []
+  const pool = BY_SECTION[Number(section)] || []
+  const end = pool.length - Number(n) * 3
 
-  return pool.slice(Math.max(0, end - 3), end);
-};
+  return pool.slice(Math.max(0, end - 3), end)
+}
 
 /** Start the stub on `port`; `close()` stops it. */
 export function startStubPlex(port) {
   const server = createServer((req, res) => {
-    const url = new URL(req.url || '/', `http://127.0.0.1:${port}`);
+    const url = new URL(
+      req.url || "/",
+      `http://127.0.0.1:${port}`,
+    )
     const send = (body) => {
-      res.writeHead(200, { 'content-type': 'application/json' });
-      res.end(JSON.stringify(body));
-    };
-    const wrap = (rows) => send({ MediaContainer: { size: rows.length, Metadata: rows } });
-
-    if (url.pathname === '/library/sections') {
-      return send({ MediaContainer: { size: SECTIONS.length, Directory: SECTIONS } });
+      res.writeHead(200, {
+        "content-type": "application/json",
+      })
+      res.end(JSON.stringify(body))
     }
-    const all = /^\/library\/sections\/(\d+)\/all$/.exec(url.pathname);
+    const wrap = (rows) =>
+      send({
+        MediaContainer: {
+          size: rows.length,
+          Metadata: rows,
+        },
+      })
+
+    if (url.pathname === "/library/sections") {
+      return send({
+        MediaContainer: {
+          size: SECTIONS.length,
+          Directory: SECTIONS,
+        },
+      })
+    }
+    const all = /^\/library\/sections\/(\d+)\/all$/.exec(
+      url.pathname,
+    )
     if (all) {
-      const pool = BY_SECTION[Number(all[1])] || [];
-      const wanted = String(url.searchParams.get('title') || '').toLowerCase();
-      if (wanted) return wrap(pool.filter((m) => m.title.toLowerCase().includes(wanted)));
-      return wrap(pool);
+      const pool = BY_SECTION[Number(all[1])] || []
+      const wanted = String(
+        url.searchParams.get("title") || "",
+      ).toLowerCase()
+      if (wanted)
+        return wrap(
+          pool.filter((m) =>
+            m.title.toLowerCase().includes(wanted),
+          ),
+        )
+      return wrap(pool)
     }
     /*
       Collections, so the shot can show a collection row beside the films inside it.
@@ -182,33 +280,51 @@ export function startStubPlex(port) {
       the FIRST three of the section, which are also the newest — so every collection here has
       something pending in it and is offered, which is the state worth picturing.
     */
-    const cols = /^\/library\/sections\/(\d+)\/collections$/.exec(url.pathname);
+    const cols =
+      /^\/library\/sections\/(\d+)\/collections$/.exec(
+        url.pathname,
+      )
     if (cols) {
-      const section = Number(cols[1]);
-      const pool = BY_SECTION[section] || [];
-      if (!pool.length || section === CLIPS || section === DEMOS || section === CALIBRATION) {
-        return wrap([]);
+      const section = Number(cols[1])
+      const pool = BY_SECTION[section] || []
+      if (
+        !pool.length ||
+        section === CLIPS ||
+        section === DEMOS ||
+        section === CALIBRATION
+      ) {
+        return wrap([])
       }
 
-      return wrap(COLLECTIONS_FOR(section));
+      return wrap(COLLECTIONS_FOR(section))
     }
-    const kids = /^\/library\/collections\/(\d+)\/children$/.exec(url.pathname);
+    const kids =
+      /^\/library\/collections\/(\d+)\/children$/.exec(
+        url.pathname,
+      )
     if (kids) {
-      return wrap(COLLECTION_CHILDREN(Number(kids[1])));
+      return wrap(COLLECTION_CHILDREN(Number(kids[1])))
     }
-    const batch = /^\/library\/metadata\/([\d,]+)$/.exec(url.pathname);
+    const batch = /^\/library\/metadata\/([\d,]+)$/.exec(
+      url.pathname,
+    )
     if (batch) {
-      const want = new Set(String(batch[1]).split(','));
-      return wrap(ALL.filter((m) => want.has(m.ratingKey)));
+      const want = new Set(String(batch[1]).split(","))
+      return wrap(ALL.filter((m) => want.has(m.ratingKey)))
     }
     // No artwork: `/api/thumb` proxies to this stub, which answers nothing, and `Poster`
     // already renders its fallback for a cover that fails. A shot of 700 identical
     // placeholder rectangles would say less than a shot of the titles.
-    return send({ MediaContainer: { size: 0 } });
-  });
-  const listening = new Promise((resolve) => server.listen(port, '127.0.0.1', resolve));
+    return send({ MediaContainer: { size: 0 } })
+  })
+  const listening = new Promise((resolve) =>
+    server.listen(port, "127.0.0.1", resolve),
+  )
   return {
     ready: listening,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
-  };
+    close: () =>
+      new Promise((resolve) =>
+        server.close(() => resolve()),
+      ),
+  }
 }

@@ -18,17 +18,20 @@
 // back to .ts. These helpers normalise both sides anyway, so neither can drift again.
 
 // .js/.jsx/.mjs/.cjs and their TS twins — the extensions a source module can wear.
-const SOURCE_EXT = /\.[cm]?[jt]sx?$/;
+const SOURCE_EXT = /\.[cm]?[jt]sx?$/
 
 /**
  * Canonical, extension-free, query-free form of a module URL or specifier.
  * `file:///a/server/src/session.ts?bridge-case=2` -> `file:///a/server/src/session`
  */
 export function moduleId(url) {
-  if (!url) return '';
-  const s = String(url);
-  const q = s.search(/[?#]/);
-  return (q === -1 ? s : s.slice(0, q)).replace(SOURCE_EXT, '');
+  if (!url) return ""
+  const s = String(url)
+  const q = s.search(/[?#]/)
+  return (q === -1 ? s : s.slice(0, q)).replace(
+    SOURCE_EXT,
+    "",
+  )
 }
 
 /**
@@ -38,8 +41,10 @@ export function moduleId(url) {
  * Passing a path WITH an extension is fine — it is normalised the same way.
  */
 export function isModule(url, ...paths) {
-  const id = moduleId(url);
-  return id !== '' && paths.some((p) => id.endsWith(moduleId(p)));
+  const id = moduleId(url)
+  return (
+    id !== "" && paths.some((p) => id.endsWith(moduleId(p)))
+  )
 }
 
 /**
@@ -50,9 +55,12 @@ export function isModule(url, ...paths) {
  */
 export function parentIs(...paths) {
   return (ctxOrUrl) => {
-    const url = typeof ctxOrUrl === 'string' ? ctxOrUrl : ctxOrUrl?.parentURL;
-    return isModule(url, ...paths);
-  };
+    const url =
+      typeof ctxOrUrl === "string"
+        ? ctxOrUrl
+        : ctxOrUrl?.parentURL
+    return isModule(url, ...paths)
+  }
 }
 
 /**
@@ -62,6 +70,9 @@ export function parentIs(...paths) {
  * used `spec.endsWith('./adb.js')` — kept so the stub tables read the same.)
  */
 export function specifierIs(spec, ...candidates) {
-  const id = moduleId(spec);
-  return id !== '' && candidates.some((c) => id.endsWith(moduleId(c)));
+  const id = moduleId(spec)
+  return (
+    id !== "" &&
+    candidates.some((c) => id.endsWith(moduleId(c)))
+  )
 }

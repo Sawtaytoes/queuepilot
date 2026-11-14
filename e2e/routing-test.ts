@@ -18,265 +18,464 @@
 //
 // Needs no Plex token: every assertion is about URLs, the router and the header chrome,
 // all of which render on the degraded no-Plex path.
-import { chromium } from './playwright.js';
+import { chromium } from "./playwright.js"
 
-const PORT = process.env.WEB_PORT || 18768;
-const BASE = `http://localhost:${PORT}`;
-const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}`); if (!isPass) process.exitCode = 1; };
+const PORT = process.env.WEB_PORT || 18768
+const BASE = `http://localhost:${PORT}`
+const ok = (name: string, isPass: boolean) => {
+  console.log(`${isPass ? "PASS" : "FAIL"} ${name}`)
+  if (!isPass) process.exitCode = 1
+}
 
 // --- 1. The SERVER half, before a browser is involved ------------------------------- //
 // A cold GET of each route is exactly what a reload/bookmark/pasted link does.
-for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play', '/what-to-watch-play/surprise', '/picks', '/queues', '/calendar', '/settings', '/q/bob', '/channels/younger', '/channels', '/tonight', '/tonight/surprise', '/collection', '/collection/board-games', '/board-game-collection']) {
-  const res = await fetch(BASE + path);
-  const body = await res.text();
-  ok(`GET ${path} serves the app (${res.status})`, res.ok && body.includes('<div id="root">'));
+for (const path of [
+  "/",
+  "/admin",
+  "/overview",
+  "/people",
+  "/what-to-watch-play",
+  "/what-to-watch-play/surprise",
+  "/picks",
+  "/queues",
+  "/calendar",
+  "/settings",
+  "/q/bob",
+  "/channels/younger",
+  "/channels",
+  "/tonight",
+  "/tonight/surprise",
+  "/collection",
+  "/collection/board-games",
+  "/board-game-collection",
+]) {
+  const res = await fetch(BASE + path)
+  const body = await res.text()
+  ok(
+    `GET ${path} serves the app (${res.status})`,
+    res.ok && body.includes('<div id="root">'),
+  )
 }
 
 // The fallback must not have swallowed the API or the assets — those are the two ways
 // `hasSpaFallback: true` goes wrong, and both fail as a 200 of the wrong thing.
 {
-  const api = await fetch(`${BASE}/api/sets`);
-  const ctype = api.headers.get('content-type') ?? '';
-  ok(`GET /api/sets is still JSON, not index.html (${ctype})`, ctype.includes('application/json'));
+  const api = await fetch(`${BASE}/api/sets`)
+  const ctype = api.headers.get("content-type") ?? ""
+  ok(
+    `GET /api/sets is still JSON, not index.html (${ctype})`,
+    ctype.includes("application/json"),
+  )
 
-  const missing = await fetch(`${BASE}/assets/definitely-not-here.js`);
-  ok(`a missing asset still 404s rather than returning index.html (${missing.status})`, missing.status === 404);
+  const missing = await fetch(
+    `${BASE}/assets/definitely-not-here.js`,
+  )
+  ok(
+    `a missing asset still 404s rather than returning index.html (${missing.status})`,
+    missing.status === 404,
+  )
 }
 
 // --- 2. The CLIENT half ------------------------------------------------------------- //
-const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+const browser = await chromium.launch()
+const page = await browser.newPage({
+  viewport: { width: 1280, height: 800 },
+})
+page.on("pageerror", (error) =>
+  console.log("PAGEERROR", error.message),
+)
 // Rules shelves load their generated membership only when expanded. Keep this route test
 // offline and deterministic while pinning the index shape: one show is enough to prove the
 // expanded region is a poster shelf rather than the former summary card.
-await page.route('**/api/generic/*/preview*', (route) =>
+await page.route("**/api/generic/*/preview*", (route) =>
   route.fulfill({
-    contentType: 'application/json',
+    contentType: "application/json",
     body: JSON.stringify({
       buckets: [
         {
-          ratingKey: 'rules-preview-show',
-          show: 'Fixture eligible show',
+          ratingKey: "rules-preview-show",
+          show: "Fixture eligible show",
           unwatched: 3,
         },
       ],
     }),
   }),
-);
+)
 
 /** The chrome lands a render AFTER the location commits — always wait for the heading. */
 const heading = (want: string) =>
-  page.waitForFunction(
-    (w) => document.querySelector('#heading')?.textContent?.trim() === w,
-    want,
-    { timeout: 30000 },
-  ).then(() => true, () => false);
+  page
+    .waitForFunction(
+      (wanted) =>
+        document
+          .querySelector("#heading")
+          ?.textContent?.trim() === wanted,
+      want,
+      { timeout: 30000 },
+    )
+    .then(
+      () => true,
+      () => false,
+    )
 
 // Each deep link boots straight into its own view — the router agreeing with the server.
-await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/`, {
+  waitUntil: "domcontentloaded",
+})
 const modeLanding = () =>
-  page.waitForSelector('#mode-landing:not([hidden])', { timeout: 30000 });
-await modeLanding();
-const modeLinks = await page.$$eval('#mode-landing a', (els) =>
-  els.map((el) => ({
-    href: el.getAttribute('href'),
-    text: el.textContent?.replace(/\s+/g, ' ').trim(),
-  })),
-);
+  page.waitForSelector("#mode-landing:not([hidden])", {
+    timeout: 30000,
+  })
+await modeLanding()
+const modeLinks = await page.$$eval(
+  "#mode-landing a",
+  (els) =>
+    els.map((el) => ({
+      href: el.getAttribute("href"),
+      text: el.textContent?.replace(/\s+/g, " ").trim(),
+    })),
+)
 ok(
-  'the task home offers two starts and six management destinations',
+  "the task home offers two starts and six management destinations",
   modeLinks.length === 8 &&
-    modeLinks[0]?.href === '/what-to-watch-play' &&
-    modeLinks[0].text?.startsWith('What to Watch/Play') === true &&
-    modeLinks[1]?.href === '/queues' &&
-    modeLinks[1].text?.startsWith('Open a queue') === true &&
-    modeLinks.some((link) => link.href === '/people' && link.text?.startsWith('People')) &&
+    modeLinks[0]?.href === "/what-to-watch-play" &&
+    modeLinks[0].text?.startsWith("What to Watch/Play") ===
+      true &&
+    modeLinks[1]?.href === "/queues" &&
+    modeLinks[1].text?.startsWith("Open a queue") ===
+      true &&
+    modeLinks.some(
+      (link) =>
+        link.href === "/people" &&
+        link.text?.startsWith("People"),
+    ) &&
     // The calendar is reachable from the front door. A route nobody can navigate to is not the
     // "another mechanism for maintaining it" the decision record asks for.
-    modeLinks.some((link) => link.href === '/calendar' && link.text?.startsWith('Calendar')) &&
+    modeLinks.some(
+      (link) =>
+        link.href === "/calendar" &&
+        link.text?.startsWith("Calendar"),
+    ) &&
     // Settings holds the QueuePilot TV PIN, and is reachable from the front door too.
-    modeLinks.some((link) => link.href === '/settings' && link.text?.startsWith('Settings')),
-);
+    modeLinks.some(
+      (link) =>
+        link.href === "/settings" &&
+        link.text?.startsWith("Settings"),
+    ),
+)
 
 for (const [path, want] of [
-  ['/overview', 'Overview'],
-  ['/people', 'People'],
-  ['/queues', 'Queues'],
-  ['/calendar', 'Calendar'],
-  ['/settings', 'Settings'],
-  ['/q/bob', 'Bob — Movies'],
+  ["/overview", "Overview"],
+  ["/people", "People"],
+  ["/queues", "Queues"],
+  ["/calendar", "Calendar"],
+  ["/settings", "Settings"],
+  ["/q/bob", "Bob — Movies"],
   // What to Watch/Play, and its Surprise Me STEP. The step is a second path on one view, so
   // it is the case a `startsWith` router gets wrong in the direction that never fails loudly.
-  ['/what-to-watch-play', 'What to Watch/Play'],
-  ['/what-to-watch-play/surprise', 'What to Watch/Play'],
-  ['/collection', 'Collection'],
-  ['/collection/board-games', 'Board Games'],
+  ["/what-to-watch-play", "What to Watch/Play"],
+  ["/what-to-watch-play/surprise", "What to Watch/Play"],
+  ["/collection", "Collection"],
+  ["/collection/board-games", "Board Games"],
 ] as const) {
-  await page.goto(BASE + path, { waitUntil: 'domcontentloaded' });
-  ok(`deep link ${path} renders "${want}"`, await heading(want));
-  if (path === '/what-to-watch-play') {
-    const text = await page.locator('body').innerText();
-    ok('the activity picker does not use Tonight as its visible name', !/\bTonight\b/.test(text));
+  await page.goto(BASE + path, {
+    waitUntil: "domcontentloaded",
+  })
+  ok(
+    `deep link ${path} renders "${want}"`,
+    await heading(want),
+  )
+  if (path === "/what-to-watch-play") {
+    const text = await page.locator("body").innerText()
+    ok(
+      "the activity picker does not use Tonight as its visible name",
+      !/\bTonight\b/.test(text),
+    )
   }
 }
 
 // Both queue kinds use the same collapsible shelf shape. Rules posters are a read-only
 // eligibility preview, so none of the Picks mutation affordances may leak into this shelf.
-await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-const rulesShelves = page.locator('.rules-shelf');
-await rulesShelves.first().waitFor({ timeout: 30000 });
-ok('Rules queues render as collapsible shelves', (await rulesShelves.count()) > 0);
+await page.goto(`${BASE}/queues`, {
+  waitUntil: "domcontentloaded",
+})
+const rulesShelves = page.locator(".rules-shelf")
+await rulesShelves.first().waitFor({ timeout: 30000 })
 ok(
-  'Picks appear before Rules on the queue index',
-  await page.locator('.picks-queue-heading').evaluate((picks, rulesId) => {
-    const rules = document.getElementById(rulesId);
-    return Boolean(rules && (picks.compareDocumentPosition(rules) & Node.DOCUMENT_POSITION_FOLLOWING));
-  }, 'rules-queues-heading'),
-);
+  "Rules queues render as collapsible shelves",
+  (await rulesShelves.count()) > 0,
+)
+ok(
+  "Picks appear before Rules on the queue index",
+  await page
+    .locator(".picks-queue-heading")
+    .evaluate((picks, rulesId) => {
+      const rules = document.getElementById(rulesId)
+      return Boolean(
+        rules &&
+          picks.compareDocumentPosition(rules) &
+            Node.DOCUMENT_POSITION_FOLLOWING,
+      )
+    }, "rules-queues-heading"),
+)
 const anyoneCount = Number(
-  await page.locator('#peoplechips a').first().locator('.filtercount').innerText(),
-);
+  await page
+    .locator("#peoplechips a")
+    .first()
+    .locator(".filtercount")
+    .innerText(),
+)
 ok(
-  'the unfiltered count includes Picks and Rules queues',
-  anyoneCount === (await page.locator('.shelf').count()),
-);
-await rulesShelves.first().locator('.collapse-toggle').click();
-await rulesShelves.first().locator('li.tile').waitFor({ timeout: 30000 });
+  "the unfiltered count includes Picks and Rules queues",
+  anyoneCount === (await page.locator(".shelf").count()),
+)
+await rulesShelves
+  .first()
+  .locator(".collapse-toggle")
+  .click()
+await rulesShelves
+  .first()
+  .locator("li.tile")
+  .waitFor({ timeout: 30000 })
 ok(
-  'an expanded Rules shelf shows eligible poster tiles',
-  (await rulesShelves.first().locator('li.tile').count()) === 1,
-);
+  "an expanded Rules shelf shows eligible poster tiles",
+  (await rulesShelves
+    .first()
+    .locator("li.tile")
+    .count()) === 1,
+)
 ok(
-  'Rules preview posters have no Picks mutation controls',
-  (await rulesShelves.first().locator('.shelfdrag, .lanebtn, .remove').count()) === 0,
-);
+  "Rules preview posters have no Picks mutation controls",
+  (await rulesShelves
+    .first()
+    .locator(".shelfdrag, .lanebtn, .remove")
+    .count()) === 0,
+)
 
 // The people filter used to reach only Picks. A value that matches no audience is a compact
 // regression case: every Picks shelf was hidden while every Rules shelf incorrectly remained.
-await page.goto(`${BASE}/queues?people=nobody-in-this-fixture`, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('#peoplechips', { timeout: 30000 });
+await page.goto(
+  `${BASE}/queues?people=nobody-in-this-fixture`,
+  { waitUntil: "domcontentloaded" },
+)
+await page.waitForSelector("#peoplechips", {
+  timeout: 30000,
+})
 ok(
-  'the people filter applies to Rules as well as Picks',
-  (await page.locator('.shelf:visible').count()) === 0,
-);
+  "the people filter applies to Rules as well as Picks",
+  (await page.locator(".shelf:visible").count()) === 0,
+)
 
-await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
+await page.goto(`${BASE}/channels/younger`, {
+  waitUntil: "domcontentloaded",
+})
 ok(
-  'a Rules queue deep link renders one Rules detail',
+  "a Rules queue deep link renders one Rules detail",
   Boolean(
     await page
-      .waitForSelector('#channels:not([hidden])', { timeout: 30000 })
+      .waitForSelector("#channels:not([hidden])", {
+        timeout: 30000,
+      })
       .catch(() => null),
   ),
-);
+)
 
-await page.goto(`${BASE}/admin`, { waitUntil: 'domcontentloaded' });
-ok('the legacy /admin address renders the task home', Boolean(await modeLanding()));
+await page.goto(`${BASE}/admin`, {
+  waitUntil: "domcontentloaded",
+})
 ok(
-  '…and its URL is rewritten to /',
-  (await page.evaluate(() => location.pathname)) === '/',
-);
+  "the legacy /admin address renders the task home",
+  Boolean(await modeLanding()),
+)
+ok(
+  "…and its URL is rewritten to /",
+  (await page.evaluate(() => location.pathname)) === "/",
+)
 
-await page.goto(`${BASE}/picks`, { waitUntil: 'domcontentloaded' });
-ok('the legacy /picks address renders "Queues"', await heading('Queues'));
+await page.goto(`${BASE}/picks`, {
+  waitUntil: "domcontentloaded",
+})
 ok(
-  '…and its URL is rewritten to /queues',
-  (await page.evaluate(() => location.pathname)) === '/queues',
-);
+  'the legacy /picks address renders "Queues"',
+  await heading("Queues"),
+)
+ok(
+  "…and its URL is rewritten to /queues",
+  (await page.evaluate(() => location.pathname)) ===
+    "/queues",
+)
 
 // The Surprise Me step really is the STEP and not the bare route — the heading is the same
 // on both, so the heading alone cannot tell them apart.
 {
-  await page.goto(`${BASE}/what-to-watch-play/surprise`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/what-to-watch-play/surprise`, {
+    waitUntil: "domcontentloaded",
+  })
   const isStep = await page
-    .waitForSelector('#tonight-surprise', { timeout: 30000 })
-    .then(() => true, () => false);
-  ok('/what-to-watch-play/surprise renders the narrowing step, not the bare form', isStep);
+    .waitForSelector("#tonight-surprise", {
+      timeout: 30000,
+    })
+    .then(
+      () => true,
+      () => false,
+    )
+  ok(
+    "/what-to-watch-play/surprise renders the narrowing step, not the bare form",
+    isStep,
+  )
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  const survives = await page
-    .waitForSelector('#tonight-surprise', { timeout: 30000 })
-    .then(() => true, () => false);
-  ok('…and survives a reload, so the SPA fallback answers a nested path too', survives);
+  await page.reload({ waitUntil: "domcontentloaded" })
+  const hasSurvived = await page
+    .waitForSelector("#tonight-surprise", {
+      timeout: 30000,
+    })
+    .then(
+      () => true,
+      () => false,
+    )
+  ok(
+    "…and survives a reload, so the SPA fallback answers a nested path too",
+    hasSurvived,
+  )
 }
 
 // `/tonight` was the old user-facing name. It remains a live address, but the app rewrites
 // it to the new name instead of showing the old label.
 {
-  await page.goto(`${BASE}/tonight`, { waitUntil: 'domcontentloaded' });
-  ok('the legacy /tonight address opens What to Watch/Play', await heading('What to Watch/Play'));
+  await page.goto(`${BASE}/tonight`, {
+    waitUntil: "domcontentloaded",
+  })
   ok(
-    '…and its URL is rewritten to /what-to-watch-play',
-    (await page.evaluate(() => location.pathname)) === '/what-to-watch-play',
-  );
+    "the legacy /tonight address opens What to Watch/Play",
+    await heading("What to Watch/Play"),
+  )
+  ok(
+    "…and its URL is rewritten to /what-to-watch-play",
+    (await page.evaluate(() => location.pathname)) ===
+      "/what-to-watch-play",
+  )
 }
 
 // The collection picker, its Board Games detail, and the legacy shelf address.
 {
-  await page.goto(`${BASE}/collection`, { waitUntil: 'domcontentloaded' });
-  ok('deep link /collection renders the picker', await heading('Collection'));
+  await page.goto(`${BASE}/collection`, {
+    waitUntil: "domcontentloaded",
+  })
+  ok(
+    "deep link /collection renders the picker",
+    await heading("Collection"),
+  )
 
   const isPicker = await page
-    .waitForSelector('#collection-picker:not([hidden])', { timeout: 30000 })
-    .then(() => true, () => false);
-  ok('…the picker view itself, not just the chrome', isPicker);
+    .waitForSelector("#collection-picker:not([hidden])", {
+      timeout: 30000,
+    })
+    .then(
+      () => true,
+      () => false,
+    )
+  ok(
+    "…the picker view itself, not just the chrome",
+    isPicker,
+  )
 
-  await page.goto(`${BASE}/collection/board-games`, { waitUntil: 'domcontentloaded' });
-  ok('deep link /collection/board-games renders the shelf', await heading('Board Games'));
+  await page.goto(`${BASE}/collection/board-games`, {
+    waitUntil: "domcontentloaded",
+  })
+  ok(
+    "deep link /collection/board-games renders the shelf",
+    await heading("Board Games"),
+  )
 
   const isShelf = await page
-    .waitForSelector('#collection:not([hidden])', { timeout: 30000 })
-    .then(() => true, () => false);
-  ok('…the shelf view itself, not just the chrome', isShelf);
+    .waitForSelector("#collection:not([hidden])", {
+      timeout: 30000,
+    })
+    .then(
+      () => true,
+      () => false,
+    )
+  ok("…the shelf view itself, not just the chrome", isShelf)
 
-  await page.reload({ waitUntil: 'domcontentloaded' });
-  ok('…and a RELOAD on it still renders the shelf', await heading('Board Games'));
+  await page.reload({ waitUntil: "domcontentloaded" })
   ok(
-    '…still on the new path after the reload',
-    (await page.evaluate(() => location.pathname)) === '/collection/board-games',
-  );
+    "…and a RELOAD on it still renders the shelf",
+    await heading("Board Games"),
+  )
+  ok(
+    "…still on the new path after the reload",
+    (await page.evaluate(() => location.pathname)) ===
+      "/collection/board-games",
+  )
 
   // The old specific address redirects to the new detail route.
-  await page.goto(`${BASE}/`, { waitUntil: 'domcontentloaded' });
-  await modeLanding();
-  await page.goto(`${BASE}/board-game-collection`, { waitUntil: 'domcontentloaded' });
-  ok('the legacy board-game address still renders the shelf', await heading('Board Games'));
+  await page.goto(`${BASE}/`, {
+    waitUntil: "domcontentloaded",
+  })
+  await modeLanding()
+  await page.goto(`${BASE}/board-game-collection`, {
+    waitUntil: "domcontentloaded",
+  })
+  ok(
+    "the legacy board-game address still renders the shelf",
+    await heading("Board Games"),
+  )
 
-  const redirected = await page
-    .waitForFunction(() => location.pathname === '/collection/board-games', undefined, { timeout: 30000 })
-    .then(() => true, () => false);
+  const isRedirected = await page
+    .waitForFunction(
+      () => location.pathname === "/collection/board-games",
+      undefined,
+      { timeout: 30000 },
+    )
+    .then(
+      () => true,
+      () => false,
+    )
   ok(
     `…and the URL is rewritten to /collection/board-games (got ${await page.evaluate(() => location.pathname)})`,
-    redirected,
-  );
+    isRedirected,
+  )
 
   // REPLACE, not push: a redirect that pushes makes Back land on the old path, which
   // redirects forward again and the button reads as dead.
-  await page.goBack();
-  ok('…Back from the redirect returns to the mode landing, not into a loop', Boolean(await modeLanding()));
+  await page.goBack()
+  ok(
+    "…Back from the redirect returns to the mode landing, not into a loop",
+    Boolean(await modeLanding()),
+  )
 }
 
 // A reload has to survive, which is the entire point of the fallback.
-await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
-await heading('Bob — Movies');
-await page.reload({ waitUntil: 'domcontentloaded' });
-ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'));
+await page.goto(`${BASE}/q/bob`, {
+  waitUntil: "domcontentloaded",
+})
+await heading("Bob — Movies")
+await page.reload({ waitUntil: "domcontentloaded" })
+ok(
+  "reloading on /q/bob still renders the queue",
+  await heading("Bob — Movies"),
+)
 
 // A left-click routes CLIENT-side: no document load, no `#` in the URL. A regression to
 // bare `<a href="/picks">` still "works" for the user but refetches the whole app, so
 // count real page loads rather than trusting the URL alone.
 {
-  await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#goqueues');
+  await page.goto(`${BASE}/overview`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("#goqueues")
   ok(
-    'Admin no longer exposes the Groups editor',
-    (await page.locator('#groupsedit').count()) === 0 &&
-      !(await page.locator('body').innerText()).includes('Edit groups'),
-  );
+    "Admin no longer exposes the Groups editor",
+    (await page.locator("#groupsedit").count()) === 0 &&
+      !(await page.locator("body").innerText()).includes(
+        "Edit groups",
+      ),
+  )
 
-  let loads = 0;
-  page.on('load', () => { loads += 1; });
+  let loads = 0
+  page.on("load", () => {
+    loads += 1
+  })
 
   // Still a real anchor with a real href — decision 2026-08-15. `<Link>` renders one, so
   // middle-click / ⌘-click / "copy link address" survived the migration.
@@ -284,62 +483,118 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   // READ BEFORE THE CLICK, since 2026-08-27: each view mounts only on its own route now, so
   // Admin's markup is gone the moment this link is followed. Reading it here is also the
   // honest order — the claim is about the control being clicked.
-  const [tag, href] = await page.$eval('#goqueues', (e) => [e.tagName, e.getAttribute('href')]);
-  ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/picks');
-
-  await page.click('#goqueues');
-  ok('clicking "Configure ›" routes to the Queues index', await heading('Queues'));
-  ok('…and the path is /queues', (await page.evaluate(() => location.pathname)) === '/queues');
-  ok('…as a PATH with no "#"', !(await page.evaluate(() => location.href)).includes('#'));
-  ok('…client-side, with no full page load', loads === 0);
+  const [tag, href] = await page.$eval(
+    "#goqueues",
+    (element) => [
+      element.tagName,
+      element.getAttribute("href"),
+    ],
+  )
   ok(
-    'the page scrollbar uses Charcuterie styling',
-    await page.evaluate(() => document.documentElement.classList.contains('charcuterie-scrollbar')),
-  );
+    `…and is still <a href> (${tag} → ${href})`,
+    tag === "A" && href === "/picks",
+  )
+
+  await page.click("#goqueues")
+  ok(
+    'clicking "Configure ›" routes to the Queues index',
+    await heading("Queues"),
+  )
+  ok(
+    "…and the path is /queues",
+    (await page.evaluate(() => location.pathname)) ===
+      "/queues",
+  )
+  ok(
+    '…as a PATH with no "#"',
+    !(await page.evaluate(() => location.href)).includes(
+      "#",
+    ),
+  )
+  ok("…client-side, with no full page load", loads === 0)
+  ok(
+    "the page scrollbar uses Charcuterie styling",
+    await page.evaluate(() =>
+      document.documentElement.classList.contains(
+        "charcuterie-scrollbar",
+      ),
+    ),
+  )
 }
 
 // The browser's own Back must work — it did not exist as a question under the hash router.
-await page.goBack();
-ok('browser Back returns to Overview', await heading('Overview'));
+await page.goBack()
+ok(
+  "browser Back returns to Overview",
+  await heading("Overview"),
+)
 
 // A route change is a new page, so it must not inherit the scroll position of the page that
 // led to it.
 {
-  await page.goto(`${BASE}/queues`, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('a.open');
+  await page.goto(`${BASE}/queues`, {
+    waitUntil: "domcontentloaded",
+  })
+  await page.waitForSelector("a.open")
   // Picks starts collapsed. Expand it so this ROUTING check has a long page to scroll.
-  await page.click('#collapseall');
-  await page.locator('main').evaluate((main) => { main.scrollTop = main.scrollHeight; });
-  const scrollBeforeQueue = await page.locator('main').evaluate((main) => main.scrollTop);
-  ok('the Picks page can be scrolled before opening a queue', scrollBeforeQueue > 0);
-  // Rules now follow Picks, so scope this queue-detail assertion to the Picks region.
-  await page.locator('#shelves .shelf a.open').last().click();
-  await page.waitForFunction(() => location.pathname.startsWith('/q/'));
-  await page.waitForSelector('#queue:not([hidden])');
+  await page.click("#collapseall")
+  await page.locator("main").evaluate((main) => {
+    main.scrollTop = main.scrollHeight
+  })
+  const scrollBeforeQueue = await page
+    .locator("main")
+    .evaluate((main) => main.scrollTop)
   ok(
-    'opening a queue resets the page scroll to the top',
-    await page.locator('main').evaluate((main) => main.scrollTop === 0),
-  );
+    "the Picks page can be scrolled before opening a queue",
+    scrollBeforeQueue > 0,
+  )
+  // Rules now follow Picks, so scope this queue-detail assertion to the Picks region.
+  await page
+    .locator("#shelves .shelf a.open")
+    .last()
+    .click()
+  await page.waitForFunction(() =>
+    location.pathname.startsWith("/q/"),
+  )
+  await page.waitForSelector("#queue:not([hidden])")
+  ok(
+    "opening a queue resets the page scroll to the top",
+    await page
+      .locator("main")
+      .evaluate((main) => main.scrollTop === 0),
+  )
 }
 
 // Rules and Picks are configured from the unified Queues index. Back from either detail
 // page therefore returns to that index, even when the detail URL was opened directly.
 {
   for (const [path, kind] of [
-    ['/q/bob', 'Picks'],
-    ['/channels/younger', 'Rules'],
+    ["/q/bob", "Picks"],
+    ["/channels/younger", "Rules"],
   ] as const) {
-    await page.goto(`${BASE}${path}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForFunction(
-      () => document.querySelector('#back')?.getAttribute('href') === '/queues',
-      undefined,
-      { timeout: 30000 },
-    ).then(
-      () => ok(`${kind} Back targets the Queues index`, true),
-      async () => ok(`${kind} Back targets the Queues index (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false),
-    );
+    await page.goto(`${BASE}${path}`, {
+      waitUntil: "domcontentloaded",
+    })
+    await page
+      .waitForFunction(
+        () =>
+          document
+            .querySelector("#back")
+            ?.getAttribute("href") === "/queues",
+        undefined,
+        { timeout: 30000 },
+      )
+      .then(
+        () =>
+          ok(`${kind} Back targets the Queues index`, true),
+        async () =>
+          ok(
+            `${kind} Back targets the Queues index (got ${await page.$eval("#back", (element) => element.getAttribute("href"))})`,
+            false,
+          ),
+      )
   }
 }
 
-await browser.close();
-console.log('done');
+await browser.close()
+console.log("done")

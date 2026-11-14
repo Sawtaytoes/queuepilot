@@ -13,16 +13,19 @@
 //
 // Plex is an unroutable closed port; the other providers point at `.invalid` hosts, which is
 // enough to make them CONFIGURED without any of them ever being called.
-import type { ChildProcess } from 'node:child_process';
-import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
-import path from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { ChildProcess } from "node:child_process"
+import { promises as fs } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
-import { waitReady } from './fixture-server.js';
-import { killServer, spawnServer } from './stubs/server-process.mjs';
+import { waitReady } from "./fixture-server.js"
+import {
+  killServer,
+  spawnServer,
+} from "./stubs/server-process.mjs"
 
-const NOW = '2026-01-01T00:00:00.000Z';
+const NOW = "2026-01-01T00:00:00.000Z"
 
 /** The absorbed app's schema, as `PRAGMA table_xinfo` reports it on a RUNNING database. */
 const SOURCE_SCHEMA = `
@@ -80,7 +83,7 @@ CREATE TABLE player_known_games (
   player_id TEXT NOT NULL REFERENCES players(id) ON DELETE CASCADE,
   game_id TEXT NOT NULL REFERENCES games(id) ON DELETE CASCADE,
   confirmed_at TEXT NOT NULL, PRIMARY KEY (player_id, game_id));
-`;
+`
 
 /** Ada, Grace and Linus, confirmed — a harness knows the answer in advance. */
 const PEOPLE = `confirmed: true
@@ -107,7 +110,7 @@ people:
   birth_year: null
   max_weight: null
   is_beginner: false
-`;
+`
 
 /**
  * Four titles, all invented, chosen so the shelf can answer every question this gate asks.
@@ -122,8 +125,8 @@ people:
  * this finish created" and "every claim on screen".
  */
 function writeSource(file: string): void {
-  const db = new DatabaseSync(file);
-  db.exec(SOURCE_SCHEMA);
+  const db = new DatabaseSync(file)
+  db.exec(SOURCE_SCHEMA)
 
   const game = db.prepare(
     `INSERT INTO games (id, name, min_players, max_players, best_with, recommended_with, weight,
@@ -131,105 +134,234 @@ function writeSource(file: string): void {
        categories, publishers, year_published, bgg_id, rating, source, created_at, updated_at,
        image_path)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'import', ?, ?, ?)`,
-  );
-  game.run('harbour-lantern', 'Harbour Lantern', 2, 5, '[3,4]', '[2,5]', 2.4, 30, 60, 10,
-    '["competitive"]', 'derived', '["Card Game"]', '["Northwind Press"]', 2019, 100001, 7.4,
-    NOW, NOW, null);
-  game.run('quarry-duel', 'Quarry Duel', 2, 4, '[3]', '[2,4]', 1.8, 15, 20, 8,
-    '["competitive"]', 'derived', '[]', '["Northwind Press"]', 2016, 100002, 7.1, NOW, NOW,
-    null);
-  game.run('tidewright', 'Tidewright', 2, 4, '[3]', '[2,4]', 2.1, 20, 40, 10,
-    '["cooperative"]', 'owner', '[]', '["Saltmarsh Games"]', 2021, 100003, 7.8, NOW, NOW, null);
-  game.run('amber-signal', 'Amber Signal', 2, 6, '[3]', '[2,4]', 4.6, 90, 150, 14,
-    '["competitive"]', 'derived', '[]', '["Saltmarsh Games"]', 2022, 100004, 8.2, NOW, NOW,
-    null);
+  )
+  game.run(
+    "harbour-lantern",
+    "Harbour Lantern",
+    2,
+    5,
+    "[3,4]",
+    "[2,5]",
+    2.4,
+    30,
+    60,
+    10,
+    '["competitive"]',
+    "derived",
+    '["Card Game"]',
+    '["Northwind Press"]',
+    2019,
+    100001,
+    7.4,
+    NOW,
+    NOW,
+    null,
+  )
+  game.run(
+    "quarry-duel",
+    "Quarry Duel",
+    2,
+    4,
+    "[3]",
+    "[2,4]",
+    1.8,
+    15,
+    20,
+    8,
+    '["competitive"]',
+    "derived",
+    "[]",
+    '["Northwind Press"]',
+    2016,
+    100002,
+    7.1,
+    NOW,
+    NOW,
+    null,
+  )
+  game.run(
+    "tidewright",
+    "Tidewright",
+    2,
+    4,
+    "[3]",
+    "[2,4]",
+    2.1,
+    20,
+    40,
+    10,
+    '["cooperative"]',
+    "owner",
+    "[]",
+    '["Saltmarsh Games"]',
+    2021,
+    100003,
+    7.8,
+    NOW,
+    NOW,
+    null,
+  )
+  game.run(
+    "amber-signal",
+    "Amber Signal",
+    2,
+    6,
+    "[3]",
+    "[2,4]",
+    4.6,
+    90,
+    150,
+    14,
+    '["competitive"]',
+    "derived",
+    "[]",
+    '["Saltmarsh Games"]',
+    2022,
+    100004,
+    8.2,
+    NOW,
+    NOW,
+    null,
+  )
 
   const box = db.prepare(
     `INSERT INTO boxes (id, game_id, label, kind, bgg_id, homebox_entity_id, location_text,
        image_path, created_at, version_nickname, version_year, version_languages)
      VALUES (?, ?, ?, 'standalone', NULL, NULL, ?, NULL, ?, NULL, NULL, '[]')`,
-  );
-  box.run('box-1', 'harbour-lantern', 'Harbour Lantern', 'Shelf two, left', NOW);
-  box.run('box-2', 'quarry-duel', 'Quarry Duel', 'Shelf one, right', NOW);
-  box.run('box-3', 'tidewright', 'Tidewright', 'Shelf three', NOW);
-  box.run('box-4', 'amber-signal', 'Amber Signal', 'Top of the cupboard', NOW);
+  )
+  box.run(
+    "box-1",
+    "harbour-lantern",
+    "Harbour Lantern",
+    "Shelf two, left",
+    NOW,
+  )
+  box.run(
+    "box-2",
+    "quarry-duel",
+    "Quarry Duel",
+    "Shelf one, right",
+    NOW,
+  )
+  box.run(
+    "box-3",
+    "tidewright",
+    "Tidewright",
+    "Shelf three",
+    NOW,
+  )
+  box.run(
+    "box-4",
+    "amber-signal",
+    "Amber Signal",
+    "Top of the cupboard",
+    NOW,
+  )
 
   db.prepare(
     `INSERT INTO game_links (id, game_id, kind, label, url, source, created_at)
      VALUES ('link-1', 'harbour-lantern', 'rulebook', 'Rulebook', 'https://example.test/1',
              'owner', ?)`,
-  ).run(NOW);
+  ).run(NOW)
 
   const player = db.prepare(
     `INSERT INTO players (id, display_name, birth_year, max_weight, is_beginner, created_at)
      VALUES (?, ?, NULL, NULL, 0, ?)`,
-  );
-  player.run('player-ada', 'Ada', NOW);
-  player.run('player-grace', 'Grace', NOW);
-  player.run('player-linus', 'Linus', NOW);
+  )
+  player.run("player-ada", "Ada", NOW)
+  player.run("player-grace", "Grace", NOW)
+  player.run("player-linus", "Linus", NOW)
 
   // The historical play: a game id, a timestamp, and nobody. Exactly as it arrived.
   db.prepare(
     "INSERT INTO plays (id, game_id, played_at, notes) VALUES ('play-1', 'quarry-duel', ?, NULL)",
-  ).run('2026-02-01T20:00:00.000Z');
+  ).run("2026-02-01T20:00:00.000Z")
 
   db.prepare(
     `INSERT INTO player_known_games (player_id, game_id, confirmed_at)
      VALUES ('player-ada', 'quarry-duel', ?)`,
-  ).run(NOW);
+  ).run(NOW)
 
-  db.close();
+  db.close()
 }
 
 export interface BoardGameServer {
-  base: string;
-  child: ChildProcess;
-  dir: string;
-  storePath: string;
+  base: string
+  child: ChildProcess
+  dir: string
+  storePath: string
 }
 
-export async function startBoardGameServer(port: number): Promise<BoardGameServer> {
-  const dir = await fs.mkdtemp(path.join(tmpdir(), 'qp-bgplay-'));
+export async function startBoardGameServer(
+  port: number,
+): Promise<BoardGameServer> {
+  const dir = await fs.mkdtemp(
+    path.join(tmpdir(), "qp-bgplay-"),
+  )
 
-  await fs.writeFile(path.join(dir, 'sets.yaml'), 'sets: []\n');
-  await fs.writeFile(path.join(dir, 'queues.yaml'), '{}\n');
-  await fs.writeFile(path.join(dir, 'groups.yaml'), 'groups: []\n');
-  await fs.writeFile(path.join(dir, 'pending.yaml'), 'seen_through: 0\n');
+  await fs.writeFile(
+    path.join(dir, "sets.yaml"),
+    "sets: []\n",
+  )
+  await fs.writeFile(path.join(dir, "queues.yaml"), "{}\n")
+  await fs.writeFile(
+    path.join(dir, "groups.yaml"),
+    "groups: []\n",
+  )
+  await fs.writeFile(
+    path.join(dir, "pending.yaml"),
+    "seen_through: 0\n",
+  )
   // The PROPOSAL filename, not a confirmed one: the tool writes this name and confirming is
   // meant to be one edit rather than an edit plus a rename.
-  await fs.writeFile(path.join(dir, 'people-mapping-proposal.yaml'), PEOPLE);
-  writeSource(path.join(dir, 'board-game-picker-import.sqlite'));
+  await fs.writeFile(
+    path.join(dir, "people-mapping-proposal.yaml"),
+    PEOPLE,
+  )
+  writeSource(
+    path.join(dir, "board-game-picker-import.sqlite"),
+  )
 
   const child = spawnServer({
     env: {
       ...process.env,
-      CACHE_PATH: path.join(dir, 'cache.sqlite'),
-      GROUPS_PATH: path.join(dir, 'groups.yaml'),
-      HISTORY_PATH: path.join(dir, '.history.json'),
-      MQTT_HOST: '',
-      MQTT_PASS: '',
-      MQTT_PORT: '',
-      MQTT_USER: '',
-      NODE_TLS_REJECT_UNAUTHORIZED: '0',
-      PENDING_PATH: path.join(dir, 'pending.yaml'),
-      PLEX_API_SERVER_URL: 'https://127.0.0.1:1',
-      PLEX_TOKEN: '',
-      PROVIDERS_PATH: path.join(dir, 'providers.yaml'),
-      PROVIDERS_SECRETS_PATH: path.join(dir, 'providers.secrets.yaml'),
-      QUEUES_PATH: path.join(dir, 'queues.yaml'),
-      SETS_PATH: path.join(dir, 'sets.yaml'),
-      STORE_BACKEND: 'sqlite',
+      CACHE_PATH: path.join(dir, "cache.sqlite"),
+      GROUPS_PATH: path.join(dir, "groups.yaml"),
+      HISTORY_PATH: path.join(dir, ".history.json"),
+      MQTT_HOST: "",
+      MQTT_PASS: "",
+      MQTT_PORT: "",
+      MQTT_USER: "",
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
+      PENDING_PATH: path.join(dir, "pending.yaml"),
+      PLEX_API_SERVER_URL: "https://127.0.0.1:1",
+      PLEX_TOKEN: "",
+      PROVIDERS_PATH: path.join(dir, "providers.yaml"),
+      PROVIDERS_SECRETS_PATH: path.join(
+        dir,
+        "providers.secrets.yaml",
+      ),
+      QUEUES_PATH: path.join(dir, "queues.yaml"),
+      SETS_PATH: path.join(dir, "sets.yaml"),
+      STORE_BACKEND: "sqlite",
       WEB_PORT: String(port),
     },
-    stdio: 'ignore',
-  });
+    stdio: "ignore",
+  })
 
-  const base = `http://localhost:${port}`;
+  const base = `http://localhost:${port}`
 
-  await waitReady(`${base}/api/people`);
+  await waitReady(`${base}/api/people`)
 
-  return { base, child, dir, storePath: path.join(dir, 'queues.queuepilot.sqlite') };
+  return {
+    base,
+    child,
+    dir,
+    storePath: path.join(dir, "queues.queuepilot.sqlite"),
+  }
 }
 
 /** Stop the whole process GROUP — `tsx` forks the real server. */
-export const stopBoardGameServer = (server: BoardGameServer): void => killServer(server.child);
+export const stopBoardGameServer = (
+  server: BoardGameServer,
+): void => killServer(server.child)

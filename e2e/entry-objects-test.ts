@@ -20,35 +20,58 @@
 //
 // Hermetic and offline: the Plex lookup is an INJECTED resolver, which is the only reason the
 // backfill half can be tested at all without a library.
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import nodePath from 'node:path';
+import {
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs"
+import { tmpdir } from "node:os"
+import nodePath from "node:path"
 
-const SCRATCH = mkdtempSync(nodePath.join(tmpdir(), 'qp-entry-objects-'));
-const QUEUES_PATH = nodePath.join(SCRATCH, 'queues.yaml');
-const SETS_PATH = nodePath.join(SCRATCH, 'sets.yaml');
-process.env.QUEUES_PATH = QUEUES_PATH;
-process.env.SETS_PATH = SETS_PATH;
+const SCRATCH = mkdtempSync(
+  nodePath.join(tmpdir(), "qp-entry-objects-"),
+)
+const QUEUES_PATH = nodePath.join(SCRATCH, "queues.yaml")
+const SETS_PATH = nodePath.join(SCRATCH, "sets.yaml")
+process.env.QUEUES_PATH = QUEUES_PATH
+process.env.SETS_PATH = SETS_PATH
 // Section 6 drives the real undo stack, and `history.ts` reads this at import time.
-process.env.HISTORY_PATH = nodePath.join(SCRATCH, '.history.json');
+process.env.HISTORY_PATH = nodePath.join(
+  SCRATCH,
+  ".history.json",
+)
 
-let failures = 0;
-const ok = (name: string, cond: boolean, extra = ''): void => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
-};
+let failures = 0
+const ok = (
+  name: string,
+  isPassing: boolean,
+  extra = "",
+): void => {
+  console.log(
+    `${isPassing ? "PASS" : "FAIL"} ${name}${extra ? ` — ${extra}` : ""}`,
+  )
+  if (!isPassing) failures += 1
+}
 
-writeFileSync(SETS_PATH, `sets:
+writeFileSync(
+  SETS_PATH,
+  `sets:
 - id: bob
   label: Bob — Movies
   kind: movies
   source: queue
   sections: [1]
-`);
+`,
+)
 
-const { migrateText } = await import('../server/src/tools/entryObjects.js');
-const queues = await import('../server/src/queues.js');
-const resolve = await import('../server/src/engine/resolve.js');
+const { migrateText } = await import(
+  "../server/src/tools/entryObjects.js"
+)
+const queues = await import("../server/src/queues.js")
+const resolve = await import(
+  "../server/src/engine/resolve.js"
+)
 
 /**
  * The entries of a queues.yaml TEXT, parsed the way the app parses them.
@@ -57,9 +80,13 @@ const resolve = await import('../server/src/engine/resolve.js');
  * modules — so the text is written to the scratch `QUEUES_PATH` and read back through
  * `queues.listSet()`, which is the app's own reader and therefore a better witness anyway.
  */
-async function entriesOf(text: string): Promise<Record<string, unknown>[]> {
-  writeFileSync(QUEUES_PATH, text);
-  return (await queues.listSet('bob')).map((e) => e.value as Record<string, unknown>);
+async function entriesOf(
+  text: string,
+): Promise<Record<string, unknown>[]> {
+  writeFileSync(QUEUES_PATH, text)
+  return (await queues.listSet("bob")).map(
+    (entry) => entry.value as Record<string, unknown>,
+  )
 }
 
 // --- 1. the migration ---------------------------------------------------------- //
@@ -81,203 +108,465 @@ bob:
 - {ratingKey: "1001", title: "A Loud Film (2019)", start: {position_ms: 3660000}, end: {position_ms: 3960000}}
 - {ratingKey: "1002", title: "A Long Show (2024)", start: {season: 2, episode: 4, position_ms: 750000}}
 # FOOT: order is play order.
-`;
+`
 
 /** The stub library: two titles resolve, one does not. */
 const LIBRARY = new Map<string, string>([
-  ['Duel (1971)', '210338'],
-  ['12345', 'A Film With No Caption'],
-]);
+  ["Duel (1971)", "210338"],
+  ["12345", "A Film With No Caption"],
+])
 
-async function migrate(text: string, resolveOn = true) {
-  const { text: out, changes } = await migrateText(text, () => ({
-    label: 'bob',
-    resolve: resolveOn
-      // Keyed on the entry's raw TEXT, not on `describe()`'s parsed title — `describe()`
-      // peels the `(year)` off, which is exactly the sort of detail a fake library should not
-      // have an opinion about.
-      ? async (value: unknown) => LIBRARY.get(String(
-        value != null && typeof value === 'object'
-          ? (value as { title?: string; ratingKey?: string }).title
-            ?? (value as { ratingKey?: string }).ratingKey
-          : value,
-      )) ?? null
-      : null,
-    why: 'stub library',
-  }));
-  return { out, changes, unresolved: changes.filter((c) => c.verdict === 'unresolved') };
+async function migrate(text: string, isResolving = true) {
+  const { text: out, changes } = await migrateText(
+    text,
+    () => ({
+      label: "bob",
+      resolve: isResolving
+        ? // Keyed on the entry's raw TEXT, not on `describe()`'s parsed title — `describe()`
+          // peels the `(year)` off, which is exactly the sort of detail a fake library should not
+          // have an opinion about.
+          async (value: unknown) =>
+            LIBRARY.get(
+              String(
+                value != null && typeof value === "object"
+                  ? ((
+                      value as {
+                        title?: string
+                        ratingKey?: string
+                      }
+                    ).title ??
+                      (value as { ratingKey?: string })
+                        .ratingKey)
+                  : value,
+              ),
+            ) ?? null
+        : null,
+      why: "stub library",
+    }),
+  )
+  return {
+    out,
+    changes,
+    unresolved: changes.filter(
+      (change) => change.verdict === "unresolved",
+    ),
+  }
 }
 
-const first = await migrate(BEFORE);
-const migrated = first.out;
-const entries = await entriesOf(migrated);
+const first = await migrate(BEFORE)
+const migrated = first.out
+const entries = await entriesOf(migrated)
 
-ok('every entry is now a mapping', entries.every((e) => e != null && typeof e === 'object' && !Array.isArray(e)),
-  JSON.stringify(entries.filter((e) => typeof e !== 'object')));
-ok('a title gained its rating key', entries[0]?.ratingKey === '210338' && entries[0]?.title === 'Duel (1971)',
-  JSON.stringify(entries[0]));
-ok('a bare rating key gained a caption', entries[1]?.ratingKey === '12345' && entries[1]?.title === 'A Film With No Caption',
-  JSON.stringify(entries[1]));
-ok('a Collection string became {collection}', entries[2]?.collection === 'Godzilla Collection',
-  JSON.stringify(entries[2]));
-ok('a {title: "Collection: …"} mapping became {collection}', entries[3]?.collection === 'Dragon Ball',
-  JSON.stringify(entries[3]));
+ok(
+  "every entry is now a mapping",
+  entries.every(
+    (entry) =>
+      entry != null &&
+      typeof entry === "object" &&
+      !Array.isArray(entry),
+  ),
+  JSON.stringify(
+    entries.filter((entry) => typeof entry !== "object"),
+  ),
+)
+ok(
+  "a title gained its rating key",
+  entries[0]?.ratingKey === "210338" &&
+    entries[0]?.title === "Duel (1971)",
+  JSON.stringify(entries[0]),
+)
+ok(
+  "a bare rating key gained a caption",
+  entries[1]?.ratingKey === "12345" &&
+    entries[1]?.title === "A Film With No Caption",
+  JSON.stringify(entries[1]),
+)
+ok(
+  "a Collection string became {collection}",
+  entries[2]?.collection === "Godzilla Collection",
+  JSON.stringify(entries[2]),
+)
+ok(
+  'a {title: "Collection: …"} mapping became {collection}',
+  entries[3]?.collection === "Dragon Ball",
+  JSON.stringify(entries[3]),
+)
 
 // THE ASSERTION THIS FILE EXISTS FOR.
-const collectionEntry = entries[3] ?? {};
-ok('collection entry kept weight', collectionEntry.weight === 3);
-ok('collection entry kept start', JSON.stringify(collectionEntry.start) === JSON.stringify({ series: '1', season: 1, episode: 1 }));
-ok('collection entry kept episodes', collectionEntry.episodes === 2);
-ok('collection entry kept batch_stops_at', collectionEntry.batch_stops_at === 'season');
-const unresolvedEntry = entries[4] ?? {};
-ok('unresolved entry kept done', unresolvedEntry.done === true);
-ok('unresolved entry kept done_at', unresolvedEntry.done_at === 1786668576);
-ok('unresolved entry kept volumes', unresolvedEntry.volumes === 4);
-ok('unresolved entry kept queued_at', unresolvedEntry.queued_at === 1786000000);
-ok('unresolved entry kept a field this code never heard of', unresolvedEntry.mystery_field === 'keep-me');
-ok('an unresolvable title keeps its title and gains NO rating key',
-  unresolvedEntry.title === 'Never Heard Of It' && unresolvedEntry.ratingKey === undefined);
-ok('an unresolvable title is REPORTED', first.unresolved.length === 1, JSON.stringify(first.unresolved));
+const collectionEntry = entries[3] ?? {}
+ok(
+  "collection entry kept weight",
+  collectionEntry.weight === 3,
+)
+ok(
+  "collection entry kept start",
+  JSON.stringify(collectionEntry.start) ===
+    JSON.stringify({ series: "1", season: 1, episode: 1 }),
+)
+ok(
+  "collection entry kept episodes",
+  collectionEntry.episodes === 2,
+)
+ok(
+  "collection entry kept batch_stops_at",
+  collectionEntry.batch_stops_at === "season",
+)
+const unresolvedEntry = entries[4] ?? {}
+ok(
+  "unresolved entry kept done",
+  unresolvedEntry.done === true,
+)
+ok(
+  "unresolved entry kept done_at",
+  unresolvedEntry.done_at === 1786668576,
+)
+ok(
+  "unresolved entry kept volumes",
+  unresolvedEntry.volumes === 4,
+)
+ok(
+  "unresolved entry kept queued_at",
+  unresolvedEntry.queued_at === 1786000000,
+)
+ok(
+  "unresolved entry kept a field this code never heard of",
+  unresolvedEntry.mystery_field === "keep-me",
+)
+ok(
+  "an unresolvable title keeps its title and gains NO rating key",
+  unresolvedEntry.title === "Never Heard Of It" &&
+    unresolvedEntry.ratingKey === undefined,
+)
+ok(
+  "an unresolvable title is REPORTED",
+  first.unresolved.length === 1,
+  JSON.stringify(first.unresolved),
+)
 
 // THE SECTION WINDOW crosses the migration whole. It is the newest per-entry override
 // (`2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`), and `end` is a key the
 // migration tool itself has never heard of — so this is the `mystery_field` assertion aimed at
 // a field the app DOES read.
-const filmSection = entries[7] ?? {};
-const showSection = entries[8] ?? {};
-ok('a film section kept start.position_ms',
-  JSON.stringify(filmSection.start) === JSON.stringify({ position_ms: 3660000 }),
-  JSON.stringify(filmSection.start));
-ok('a film section kept end.position_ms',
-  JSON.stringify(filmSection.end) === JSON.stringify({ position_ms: 3960000 }),
-  JSON.stringify(filmSection.end));
-ok('an episode section kept its unit AND its offset together',
-  JSON.stringify(showSection.start) === JSON.stringify({ season: 2, episode: 4, position_ms: 750000 }),
-  JSON.stringify(showSection.start));
-ok('an episode section grew no end it was never given', showSection.end === undefined);
+const filmSection = entries[7] ?? {}
+const showSection = entries[8] ?? {}
+ok(
+  "a film section kept start.position_ms",
+  JSON.stringify(filmSection.start) ===
+    JSON.stringify({ position_ms: 3660000 }),
+  JSON.stringify(filmSection.start),
+)
+ok(
+  "a film section kept end.position_ms",
+  JSON.stringify(filmSection.end) ===
+    JSON.stringify({ position_ms: 3960000 }),
+  JSON.stringify(filmSection.end),
+)
+ok(
+  "an episode section kept its unit AND its offset together",
+  JSON.stringify(showSection.start) ===
+    JSON.stringify({
+      season: 2,
+      episode: 4,
+      position_ms: 750000,
+    }),
+  JSON.stringify(showSection.start),
+)
+ok(
+  "an episode section grew no end it was never given",
+  showSection.end === undefined,
+)
 
 // …and the ENGINE reads both back off the same file. `describe()` is the read side, and a
 // descriptor that dropped `end` would leave the field invisible to everything downstream while
 // the file still held it.
-const described = resolve.loadEntries('bob');
-const filmDesc = described.find((d) => d.ratingKey === '1001');
-const showDesc = described.find((d) => d.ratingKey === '1002');
-ok('describe() carries start.position_ms', filmDesc?.start?.position_ms === 3660000,
-  JSON.stringify(filmDesc?.start));
-ok('describe() carries end.position_ms', filmDesc?.end?.position_ms === 3960000,
-  JSON.stringify(filmDesc?.end));
-ok('describe() carries a unit and an offset together',
-  showDesc?.start?.season === 2 && showDesc?.start?.episode === 4
-  && showDesc?.start?.position_ms === 750000, JSON.stringify(showDesc?.start));
-ok('describe() reports NO end on an entry that has none', showDesc?.end === null,
-  JSON.stringify(showDesc?.end));
+const described = resolve.loadEntries("bob")
+const filmDesc = described.find(
+  (descriptor) => descriptor.ratingKey === "1001",
+)
+const showDesc = described.find(
+  (descriptor) => descriptor.ratingKey === "1002",
+)
+ok(
+  "describe() carries start.position_ms",
+  filmDesc?.start?.position_ms === 3660000,
+  JSON.stringify(filmDesc?.start),
+)
+ok(
+  "describe() carries end.position_ms",
+  filmDesc?.end?.position_ms === 3960000,
+  JSON.stringify(filmDesc?.end),
+)
+ok(
+  "describe() carries a unit and an offset together",
+  showDesc?.start?.season === 2 &&
+    showDesc?.start?.episode === 4 &&
+    showDesc?.start?.position_ms === 750000,
+  JSON.stringify(showDesc?.start),
+)
+ok(
+  "describe() reports NO end on an entry that has none",
+  showDesc?.end === null,
+  JSON.stringify(showDesc?.end),
+)
 
 // A WRITE lands on the same file and neither side of the window is disturbed. This is the
 // property the extras bag gives for free and the one a field-by-field rewrite would break.
-await queues.setEpisodes('bob', 'rk:1001', 2);
-const afterWrite = (await queues.listSet('bob')).find((e) => e.key === 'rk:1001')?.value as
-  Record<string, unknown> | undefined;
-ok('an unrelated write left the window alone',
-  JSON.stringify(afterWrite?.start) === JSON.stringify({ position_ms: 3660000 })
-  && JSON.stringify(afterWrite?.end) === JSON.stringify({ position_ms: 3960000 }),
-  JSON.stringify(afterWrite));
+await queues.setEpisodes("bob", "rk:1001", 2)
+const afterWrite = (await queues.listSet("bob")).find(
+  (entry) => entry.key === "rk:1001",
+)?.value as Record<string, unknown> | undefined
+ok(
+  "an unrelated write left the window alone",
+  JSON.stringify(afterWrite?.start) ===
+    JSON.stringify({ position_ms: 3660000 }) &&
+    JSON.stringify(afterWrite?.end) ===
+      JSON.stringify({ position_ms: 3960000 }),
+  JSON.stringify(afterWrite),
+)
 
-ok('kept the head comment', migrated.includes('# HEAD:'));
-ok('kept the foot comment', migrated.includes('# FOOT:'));
-ok("kept an entry's own inline comment (moved above the mapping)", migrated.includes('# INLINE:'));
+ok("kept the head comment", migrated.includes("# HEAD:"))
+ok("kept the foot comment", migrated.includes("# FOOT:"))
+ok(
+  "kept an entry's own inline comment (moved above the mapping)",
+  migrated.includes("# INLINE:"),
+)
 
 // Idempotency, byte for byte.
-const second = await migrate(migrated);
-ok('a second run rewrites nothing', second.changes.every((c) => !c.rewritten), JSON.stringify(second.changes));
-ok('a second run is byte-identical', second.out === migrated);
-ok('…and it still NAMES the unresolvable entry, every time', second.unresolved.length === 1,
-  JSON.stringify(second.unresolved));
+const second = await migrate(migrated)
+ok(
+  "a second run rewrites nothing",
+  second.changes.every((change) => !change.rewritten),
+  JSON.stringify(second.changes),
+)
+ok(
+  "a second run is byte-identical",
+  second.out === migrated,
+)
+ok(
+  "…and it still NAMES the unresolvable entry, every time",
+  second.unresolved.length === 1,
+  JSON.stringify(second.unresolved),
+)
 
 // --- 2. entryKey is unchanged by any of it ------------------------------------- //
 
-ok('entryKey: a Collection string and {collection} are the SAME line',
-  queues.entryKey('Collection: Godzilla Collection') === queues.entryKey({ collection: 'Godzilla Collection' }));
-ok('entryKey: a {title: "Collection: …"} mapping is that same line too',
-  queues.entryKey({ title: 'Collection: Godzilla Collection' }) === queues.entryKey({ collection: 'Godzilla Collection' }));
-ok('entryKey: a numeric scalar and {ratingKey} are the same line',
-  queues.entryKey(12345) === queues.entryKey({ ratingKey: '12345' }));
-ok('toEntryObject is identity-preserving', ['Duel (1971)', 12345, '999', 'Collection: X'].every(
-  (v) => queues.entryKey(v) === queues.entryKey(queues.toEntryObject(v as string | number))));
+ok(
+  "entryKey: a Collection string and {collection} are the SAME line",
+  queues.entryKey("Collection: Godzilla Collection") ===
+    queues.entryKey({ collection: "Godzilla Collection" }),
+)
+ok(
+  'entryKey: a {title: "Collection: …"} mapping is that same line too',
+  queues.entryKey({
+    title: "Collection: Godzilla Collection",
+  }) ===
+    queues.entryKey({ collection: "Godzilla Collection" }),
+)
+ok(
+  "entryKey: a numeric scalar and {ratingKey} are the same line",
+  queues.entryKey(12345) ===
+    queues.entryKey({ ratingKey: "12345" }),
+)
+ok(
+  "toEntryObject is identity-preserving",
+  ["Duel (1971)", 12345, "999", "Collection: X"].every(
+    (value) =>
+      queues.entryKey(value) ===
+      queues.entryKey(
+        queues.toEntryObject(value as string | number),
+      ),
+  ),
+)
 
 // The MIGRATED file re-keys exactly the entries that gained a rating key, and nothing else.
-const beforeKeys = (await entriesOf(BEFORE)).map((v) => queues.entryKey(v));
-const afterKeys = entries.map((v) => queues.entryKey(v));
-const rekeyed = beforeKeys.map((k, i) => [k, afterKeys[i]] as const).filter(([a, b]) => a !== b);
-ok('no entry was dropped', beforeKeys.length === afterKeys.length, `${beforeKeys.length} vs ${afterKeys.length}`);
-ok('every re-key is a title becoming a rating key — nothing else moved',
-  rekeyed.every(([a, b]) => String(a).startsWith('title:') && String(b).startsWith('rk:')),
-  JSON.stringify(rekeyed));
+const beforeKeys = (await entriesOf(BEFORE)).map((value) =>
+  queues.entryKey(value),
+)
+const afterKeys = entries.map((entry) =>
+  queues.entryKey(entry),
+)
+const rekeyed = beforeKeys
+  .map(
+    (beforeKey, index) =>
+      [beforeKey, afterKeys[index]] as const,
+  )
+  .filter(([beforeKey, afterKey]) => beforeKey !== afterKey)
+ok(
+  "no entry was dropped",
+  beforeKeys.length === afterKeys.length,
+  `${beforeKeys.length} vs ${afterKeys.length}`,
+)
+ok(
+  "every re-key is a title becoming a rating key — nothing else moved",
+  rekeyed.every(
+    ([beforeKey, afterKey]) =>
+      String(beforeKey).startsWith("title:") &&
+      String(afterKey).startsWith("rk:"),
+  ),
+  JSON.stringify(rekeyed),
+)
 
 // --- 3. the reader refuses a legacy scalar, per ENTRY --------------------------- //
 
-writeFileSync(QUEUES_PATH, `bob:
+writeFileSync(
+  QUEUES_PATH,
+  `bob:
 - {ratingKey: "1", title: Good Entry}
 - "A Bare String"
 - {ratingKey: "2", title: Another Good Entry}
-`);
-const descs = resolve.loadEntries('bob');
-ok('loadEntries drops the legacy scalar', descs.length === 2, JSON.stringify(descs.map((d) => d.key)));
-ok('…and keeps every entry either side of it',
-  descs[0]?.key === 'rk:1' && descs[1]?.key === 'rk:2', JSON.stringify(descs.map((d) => d.key)));
-const listed = await queues.listSet('bob');
-ok('listSet still returns it, so the editor can show and delete it', listed.length === 3,
-  JSON.stringify(listed.map((e) => e.key)));
-ok('…and it is still addressable by key', listed[1]?.key === 'title:A Bare String');
-ok('isLegacyScalarEntry names it', queues.isLegacyScalarEntry('A Bare String') === true
-  && queues.isLegacyScalarEntry({ title: 'x' }) === false);
-ok('the complaint names the set, the index and the fix',
-  /bob\[1\][\s\S]*"A Bare String"[\s\S]*\{"title":"A Bare String"\}/.test(queues.legacyEntryMessage('bob', 1, 'A Bare String')),
-  queues.legacyEntryMessage('bob', 1, 'A Bare String'));
+`,
+)
+const descs = resolve.loadEntries("bob")
+ok(
+  "loadEntries drops the legacy scalar",
+  descs.length === 2,
+  JSON.stringify(descs.map((desc) => desc.key)),
+)
+ok(
+  "…and keeps every entry either side of it",
+  descs[0]?.key === "rk:1" && descs[1]?.key === "rk:2",
+  JSON.stringify(descs.map((desc) => desc.key)),
+)
+const listed = await queues.listSet("bob")
+ok(
+  "listSet still returns it, so the editor can show and delete it",
+  listed.length === 3,
+  JSON.stringify(listed.map((entry) => entry.key)),
+)
+ok(
+  "…and it is still addressable by key",
+  listed[1]?.key === "title:A Bare String",
+)
+ok(
+  "isLegacyScalarEntry names it",
+  queues.isLegacyScalarEntry("A Bare String") === true &&
+    queues.isLegacyScalarEntry({ title: "x" }) === false,
+)
+ok(
+  "the complaint names the set, the index and the fix",
+  /bob\[1\][\s\S]*"A Bare String"[\s\S]*\{"title":"A Bare String"\}/.test(
+    queues.legacyEntryMessage("bob", 1, "A Bare String"),
+  ),
+  queues.legacyEntryMessage("bob", 1, "A Bare String"),
+)
 
 // --- 4. the writer never emits a scalar ---------------------------------------- //
 
-const readQueues = (): string => readFileSync(QUEUES_PATH, 'utf8');
-const hasScalarEntry = (): boolean => readQueues().split('\n').some((l) => /^\s*-\s+(?!\{)\S/.test(l) && !/^\s*-\s+\w+:/.test(l));
+const readQueues = (): string =>
+  readFileSync(QUEUES_PATH, "utf8")
+const hasScalarEntry = (): boolean =>
+  readQueues()
+    .split("\n")
+    .some(
+      (line) =>
+        /^\s*-\s+(?!\{)\S/.test(line) &&
+        !/^\s*-\s+\w+:/.test(line),
+    )
 
-writeFileSync(QUEUES_PATH, 'bob: []\n');
-rmSync(`${QUEUES_PATH}.lock`, { force: true, recursive: true });
-await queues.addItem('bob', 'A Typed Title', 'bottom');
-await queues.addItem('bob', 12345, 'bottom');
-await queues.addItem('bob', 'Collection: A Franchise', 'bottom');
-await queues.addItem('bob', { ratingKey: '77', title: 'From The UI' }, 'bottom');
-const written = (await queues.listSet('bob')).map((e) => e.value as Record<string, unknown>);
-ok('addItem(title) writes a mapping', written[0]?.title === 'A Typed Title' && typeof written[0] === 'object',
-  JSON.stringify(written[0]));
-ok('addItem(ratingKey) writes a mapping', written[1]?.ratingKey === 12345, JSON.stringify(written[1]));
-ok('addItem("Collection: …") writes {collection}', written[2]?.collection === 'A Franchise',
-  JSON.stringify(written[2]));
-ok('addItem stamps when each entry joined the queue', written.every((entry) =>
-  typeof entry.queued_at === 'number' && Number(entry.queued_at) > 0), JSON.stringify(written));
-ok('addItem(mapping) keeps its identity', written[3]?.ratingKey === '77', JSON.stringify(written[3]));
-ok('nothing written is a scalar entry', !hasScalarEntry(), readQueues());
+writeFileSync(QUEUES_PATH, "bob: []\n")
+rmSync(`${QUEUES_PATH}.lock`, {
+  force: true,
+  recursive: true,
+})
+await queues.addItem("bob", "A Typed Title", "bottom")
+await queues.addItem("bob", 12345, "bottom")
+await queues.addItem(
+  "bob",
+  "Collection: A Franchise",
+  "bottom",
+)
+await queues.addItem(
+  "bob",
+  { ratingKey: "77", title: "From The UI" },
+  "bottom",
+)
+const written = (await queues.listSet("bob")).map(
+  (entry) => entry.value as Record<string, unknown>,
+)
+ok(
+  "addItem(title) writes a mapping",
+  written[0]?.title === "A Typed Title" &&
+    typeof written[0] === "object",
+  JSON.stringify(written[0]),
+)
+ok(
+  "addItem(ratingKey) writes a mapping",
+  written[1]?.ratingKey === 12345,
+  JSON.stringify(written[1]),
+)
+ok(
+  'addItem("Collection: …") writes {collection}',
+  written[2]?.collection === "A Franchise",
+  JSON.stringify(written[2]),
+)
+ok(
+  "addItem stamps when each entry joined the queue",
+  written.every(
+    (entry) =>
+      typeof entry.queued_at === "number" &&
+      Number(entry.queued_at) > 0,
+  ),
+  JSON.stringify(written),
+)
+ok(
+  "addItem(mapping) keeps its identity",
+  written[3]?.ratingKey === "77",
+  JSON.stringify(written[3]),
+)
+ok(
+  "nothing written is a scalar entry",
+  !hasScalarEntry(),
+  readQueues(),
+)
 
 // The collapse that used to happen: clearing the LAST override turned the entry back into a
 // bare string, which would have undone the migration one edit at a time.
-await queues.setWeight('bob', 'title:A Typed Title', 3);
-ok('setWeight(3) wrote the override', /A Typed Title[\s\S]*weight: 3/.test(readQueues()));
-await queues.setWeight('bob', 'title:A Typed Title', 1);
-ok('setWeight(1) drops the key', !readQueues().includes('weight:'));
-ok('…and the entry is STILL a mapping, not a bare string', !hasScalarEntry(), readQueues());
-ok('…and it kept its identity', (await queues.listSet('bob'))[0]?.key === 'title:A Typed Title');
+await queues.setWeight("bob", "title:A Typed Title", 3)
+ok(
+  "setWeight(3) wrote the override",
+  /A Typed Title[\s\S]*weight: 3/.test(readQueues()),
+)
+await queues.setWeight("bob", "title:A Typed Title", 1)
+ok(
+  "setWeight(1) drops the key",
+  !readQueues().includes("weight:"),
+)
+ok(
+  "…and the entry is STILL a mapping, not a bare string",
+  !hasScalarEntry(),
+  readQueues(),
+)
+ok(
+  "…and it kept its identity",
+  (await queues.listSet("bob"))[0]?.key ===
+    "title:A Typed Title",
+)
 
 // --- 5. what the GRID does with each shape ------------------------------------- //
 //
 // Both of these were regressions waiting to happen the moment the file started spelling a
 // collection `{collection: …}`: the caption read "ratingKey undefined", and a legacy scalar
 // would have painted a normal poster for a line the engine refuses to play.
-const tiles = await import('../server/src/tiles.js');
-ok('a {collection} entry captions itself', tiles.displayFor({ collection: 'A Franchise' }) === 'Collection: A Franchise',
-  tiles.displayFor({ collection: 'A Franchise' }));
-ok('a {ratingKey,title} entry still captions itself', tiles.displayFor({ ratingKey: '1', title: 'A Film' }) === 'A Film');
-const legacyTile = tiles.unresolvedTile('A Bare String');
-ok('a legacy scalar gets an UNRESOLVED tile — the grid paints that red',
-  legacyTile.resolved === false && legacyTile.ratingKey === null && legacyTile.title === 'A Bare String',
-  JSON.stringify(legacyTile));
+const tiles = await import("../server/src/tiles.js")
+ok(
+  "a {collection} entry captions itself",
+  tiles.displayFor({ collection: "A Franchise" }) ===
+    "Collection: A Franchise",
+  tiles.displayFor({ collection: "A Franchise" }),
+)
+ok(
+  "a {ratingKey,title} entry still captions itself",
+  tiles.displayFor({ ratingKey: "1", title: "A Film" }) ===
+    "A Film",
+)
+const legacyTile = tiles.unresolvedTile("A Bare String")
+ok(
+  "a legacy scalar gets an UNRESOLVED tile — the grid paints that red",
+  legacyTile.resolved === false &&
+    legacyTile.ratingKey === null &&
+    legacyTile.title === "A Bare String",
+  JSON.stringify(legacyTile),
+)
 
 // --- 6. UNDO REACHES ACROSS THE MIGRATION -------------------------------------- //
 //
@@ -290,28 +579,51 @@ ok('a legacy scalar gets an UNRESOLVED tile — the grid paints that red',
 // So a restore reshapes, and the two properties that make it safe are asserted here rather
 // than assumed: the LINE KEYS do not move (`entryKey(toEntryObject(v)) === entryKey(v)`), and
 // a snapshot with nothing to repair is written back byte-for-byte.
-const history = await import('../server/src/history.js');
+const history = await import("../server/src/history.js")
 
 const LEGACY_SNAPSHOT = `bob:
 - "Duel (1971)"        # a bare title
 - 459608               # a bare rating key
 - "Collection: Godzilla Collection"
-`;
-const legacyKeys = ['Duel (1971)', 459608, 'Collection: Godzilla Collection'].map(queues.entryKey);
+`
+const legacyKeys = [
+  "Duel (1971)",
+  459608,
+  "Collection: Godzilla Collection",
+].map(queues.entryKey)
 
-writeFileSync(QUEUES_PATH, 'bob:\n- {title: "something else"}\n');
-await history.snapshot();                    // pushes the CURRENT (modern) file
-writeFileSync(QUEUES_PATH, LEGACY_SNAPSHOT); // pretend the stack's top is pre-migration
-await history.snapshot();                    // …by snapshotting it, then undoing past it
-writeFileSync(QUEUES_PATH, 'bob:\n- {title: "the live file"}\n');
-await history.undo();
+writeFileSync(
+  QUEUES_PATH,
+  'bob:\n- {title: "something else"}\n',
+)
+await history.snapshot() // pushes the CURRENT (modern) file
+writeFileSync(QUEUES_PATH, LEGACY_SNAPSHOT) // pretend the stack's top is pre-migration
+await history.snapshot() // …by snapshotting it, then undoing past it
+writeFileSync(
+  QUEUES_PATH,
+  'bob:\n- {title: "the live file"}\n',
+)
+await history.undo()
 
-ok('an undo across the migration writes no scalar entry', !hasScalarEntry(), readQueues());
-ok('…and the restored queue actually resolves',
-  resolve.loadEntries('bob').length === 3, String(resolve.loadEntries('bob').length));
-ok('…addressed by the SAME keys the legacy file used',
-  JSON.stringify(resolve.loadEntries('bob').map((d) => d.key)) === JSON.stringify(legacyKeys),
-  `${JSON.stringify(resolve.loadEntries('bob').map((d) => d.key))} vs ${JSON.stringify(legacyKeys)}`);
+ok(
+  "an undo across the migration writes no scalar entry",
+  !hasScalarEntry(),
+  readQueues(),
+)
+ok(
+  "…and the restored queue actually resolves",
+  resolve.loadEntries("bob").length === 3,
+  String(resolve.loadEntries("bob").length),
+)
+ok(
+  "…addressed by the SAME keys the legacy file used",
+  JSON.stringify(
+    resolve
+      .loadEntries("bob")
+      .map((loadEntry) => loadEntry.key),
+  ) === JSON.stringify(legacyKeys),
+  `${JSON.stringify(resolve.loadEntries("bob").map((loadEntry) => loadEntry.key))} vs ${JSON.stringify(legacyKeys)}`,
+)
 
 // …and the byte-for-byte contract survives for every snapshot that needs no repair. `changes`
 // is the WRONG test for that: with no resolver every already-object title reports `unresolved`
@@ -326,14 +638,22 @@ ok('…addressed by the SAME keys the legacy file used',
 // comment on the entry, and the FLOW form (a row records how it was written, so `- { … }` does
 // not come back as a block mapping). Measured on the live files, that is enough for both of
 // them to round-trip through the rows with `diff` reporting nothing.
-const MODERN_SNAPSHOT = '# a comment that must survive\nbob:\n- { title: "Kept Exactly" } # and this one\n';
-writeFileSync(QUEUES_PATH, MODERN_SNAPSHOT);
-await history.snapshot();
-writeFileSync(QUEUES_PATH, 'bob: []\n');
-await history.undo();
-ok('a modern snapshot restores byte-for-byte', readQueues() === MODERN_SNAPSHOT,
-  JSON.stringify(readQueues()));
+const MODERN_SNAPSHOT =
+  '# a comment that must survive\nbob:\n- { title: "Kept Exactly" } # and this one\n'
+writeFileSync(QUEUES_PATH, MODERN_SNAPSHOT)
+await history.snapshot()
+writeFileSync(QUEUES_PATH, "bob: []\n")
+await history.undo()
+ok(
+  "a modern snapshot restores byte-for-byte",
+  readQueues() === MODERN_SNAPSHOT,
+  JSON.stringify(readQueues()),
+)
 
-rmSync(SCRATCH, { recursive: true, force: true });
-console.log(failures ? `\n${failures} entry-format assertion(s) failed` : '\nall entry-format assertions passed');
-process.exit(failures ? 1 : 0);
+rmSync(SCRATCH, { recursive: true, force: true })
+console.log(
+  failures
+    ? `\n${failures} entry-format assertion(s) failed`
+    : "\nall entry-format assertions passed",
+)
+process.exit(failures ? 1 : 0)

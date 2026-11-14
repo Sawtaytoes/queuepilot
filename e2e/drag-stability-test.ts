@@ -26,31 +26,48 @@
 //
 // Run against a server on WEB_PORT:
 //   WEB_PORT=18777 server/node_modules/.bin/tsx e2e/drag-stability-test.ts
-import assert from 'node:assert/strict';
-import { chromium } from './playwright.js';
+import assert from "node:assert/strict"
+import { chromium } from "./playwright.js"
 
-const PORT = process.env.WEB_PORT || 18777;
-const BASE = `http://localhost:${PORT}`;
+const PORT = process.env.WEB_PORT || 18777
+const BASE = `http://localhost:${PORT}`
 // The queue the fixture always has, in the density the report came from.
-const QUEUE = process.env.DRAG_QUEUE || 'bob';
+const QUEUE = process.env.DRAG_QUEUE || "bob"
 
-const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
+const browser = await chromium.launch()
+const page = await browser.newPage({
+  viewport: { width: 1400, height: 1000 },
+})
 
-let failed = 0;
-const check = (name: string, ok: boolean, detail: string) => {
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
-  if (!ok) failed += 1;
-};
+let failed = 0
+const check = (
+  name: string,
+  isOk: boolean,
+  detail: string,
+) => {
+  console.log(
+    `  ${isOk ? "ok  " : "FAIL"} ${name}${isOk ? "" : ` — ${detail}`}`,
+  )
+  if (!isOk) failed += 1
+}
 
-await page.goto(`${BASE}/q/${QUEUE}`, { waitUntil: 'domcontentloaded' });
-await page.waitForSelector('#grid li.tile', { timeout: 30000 });
-await page.waitForTimeout(1800);
+await page.goto(`${BASE}/q/${QUEUE}`, {
+  waitUntil: "domcontentloaded",
+})
+await page.waitForSelector("#grid li.tile", {
+  timeout: 30000,
+})
+await page.waitForTimeout(1800)
 
 const tileCount = Number(
-  await page.evaluate(`document.querySelectorAll('#grid li.tile').length`),
-);
-assert.ok(tileCount >= 8, `need a few tiles to drag between, got ${tileCount}`);
+  await page.evaluate(
+    `document.querySelectorAll('#grid li.tile').length`,
+  ),
+)
+assert.ok(
+  tileCount >= 8,
+  `need a few tiles to drag between, got ${tileCount}`,
+)
 
 // Count what the drag actually does to the DOM, so a regression that re-introduces the churn
 // without reversing direction is still caught.
@@ -68,73 +85,99 @@ await page.evaluate(`(() => {
     if (this === g || (this instanceof Element && this.matches('ul.grid[data-lane]'))) window.__m.insert++;
     return orig.apply(this, a);
   };
-})()`);
+})()`)
 
-const start = JSON.parse(String(await page.evaluate(
-  `(() => { const el = document.querySelector('#grid li.tile .thumb'); const r = el.getBoundingClientRect();`
-  + ` return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2]); })()`,
-))) as number[];
+const start = JSON.parse(
+  String(
+    await page.evaluate(
+      `(() => { const el = document.querySelector('#grid li.tile .thumb'); const r = el.getBoundingClientRect();` +
+        ` return JSON.stringify([r.x + r.width / 2, r.y + r.height / 2]); })()`,
+    ),
+  ),
+) as number[]
 
-await page.mouse.move(start[0]!, start[1]!);
-await page.mouse.down();
+await page.mouse.move(start[0]!, start[1]!)
+await page.mouse.down()
 
 // A slow, deliberate drag down and to the right — what a person does, and the motion that
 // makes the loop worst because it crosses rows.
-const seen: number[] = [];
-for (let i = 1; i <= 50; i += 1) {
-  await page.mouse.move(start[0]! + i * 5, start[1]! + i * 4);
-  await page.waitForTimeout(16);
-  seen.push(Number(await page.evaluate(
-    `[...document.querySelectorAll('#grid li.tile')].findIndex((x) => x.classList.contains('dragging'))`,
-  )));
+const seen: number[] = []
+for (let attempt = 1; attempt <= 50; attempt += 1) {
+  await page.mouse.move(
+    start[0]! + attempt * 5,
+    start[1]! + attempt * 4,
+  )
+  await page.waitForTimeout(16)
+  seen.push(
+    Number(
+      await page.evaluate(
+        `[...document.querySelectorAll('#grid li.tile')].findIndex((x) => x.classList.contains('dragging'))`,
+      ),
+    ),
+  )
 }
 
-const counts = JSON.parse(String(await page.evaluate(`JSON.stringify(window.__m)`)));
-await page.mouse.up();
-await page.waitForTimeout(500);
+const counts = JSON.parse(
+  String(await page.evaluate(`JSON.stringify(window.__m)`)),
+)
+await page.mouse.up()
+await page.waitForTimeout(500)
 
 // Collapse runs: what matters is the SHAPE of the movement, not how many frames held a value.
-const path = seen.filter((v, i) => i === 0 || v !== seen[i - 1]);
-let reversals = 0;
-for (let i = 2; i < path.length; i += 1) {
-  const a = path[i - 2]!;
-  const m = path[i - 1]!;
-  const c = path[i]!;
-  if ((m > a && c < m) || (m < a && c > m)) reversals += 1;
+const path = seen.filter(
+  (value, index) =>
+    index === 0 || value !== seen[index - 1],
+)
+let reversals = 0
+for (let index = 2; index < path.length; index += 1) {
+  const before = path[index - 2]!
+  const middle = path[index - 1]!
+  const after = path[index]!
+  if (
+    (middle > before && after < middle) ||
+    (middle < before && after > middle)
+  )
+    reversals += 1
 }
 
-console.log(`  path: ${path.join(' ')}`);
-console.log(`  re-inserts: ${counts.insert}, style writes: ${counts.style}`);
+console.log(`  path: ${path.join(" ")}`)
+console.log(
+  `  re-inserts: ${counts.insert}, style writes: ${counts.style}`,
+)
 
 // ONE reversal is allowed: a drag really can cross a slot boundary and come back if the
 // pointer wanders. A loop produces one on almost every step.
 check(
-  'the dragged tile does not ping-pong',
+  "the dragged tile does not ping-pong",
   reversals <= 1,
-  `${reversals} direction reversals across ${Math.max(0, path.length - 2)} steps — path ${path.join(' ')}`,
-);
+  `${reversals} direction reversals across ${Math.max(0, path.length - 2)} steps — path ${path.join(" ")}`,
+)
 
 // A 50-step drag across two rows passes a handful of slots. Twenty means it is thrashing even
 // if it happens to end up monotonic.
 check(
-  're-inserts stay proportional to the distance travelled',
+  "re-inserts stay proportional to the distance travelled",
   counts.insert <= 8,
   `${counts.insert} re-inserts for one drag`,
-);
+)
 
 check(
-  'sibling restyling stays bounded',
+  "sibling restyling stays bounded",
   counts.style <= 60,
   `${counts.style} style writes for one drag`,
-);
+)
 
 // The gesture still has to WORK — a drag that never moves anything would pass everything above.
 check(
-  'the drag actually moved the tile',
+  "the drag actually moved the tile",
   path.length > 1 && path[path.length - 1] !== path[0],
-  `tile never left its slot (path ${path.join(' ')})`,
-);
+  `tile never left its slot (path ${path.join(" ")})`,
+)
 
-await browser.close();
-console.log(failed ? `\ndrag-stability: ${failed} check(s) failed` : '\ndrag stability OK');
-process.exit(failed ? 1 : 0);
+await browser.close()
+console.log(
+  failed
+    ? `\ndrag-stability: ${failed} check(s) failed`
+    : "\ndrag stability OK",
+)
+process.exit(failed ? 1 : 0)

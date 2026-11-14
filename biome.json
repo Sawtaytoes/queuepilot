@@ -11,6 +11,10 @@
       "web/**",
       "server/**",
       "shared/**",
+      "e2e/**",
+      "!e2e/fixtures",
+      "!e2e/playwright-report",
+      "!e2e/test-results",
       "!**/node_modules",
       "!**/dist",
       "!web/public",
@@ -52,6 +56,16 @@
         "rules": {
           "style": {
             "noDescendingSpecificity": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["e2e/**"],
+      "assist": {
+        "actions": {
+          "source": {
+            "organizeImports": "off"
           }
         }
       }
