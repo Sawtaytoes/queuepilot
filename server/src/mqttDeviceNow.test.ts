@@ -1,4 +1,5 @@
 import { beforeEach, expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 
 type Handler = (topic: string, buf: Buffer) => void
 const broker = vi.hoisted(() => ({
@@ -21,7 +22,7 @@ import { T_NOW_PLAYING, T_STATE } from "./env.js"
 import * as mqttc from "./mqttc.js"
 
 const message = (topic: string, value: unknown): void => {
-  broker.handlers.get("message")!(
+  defined(broker.handlers.get("message"))(
     topic,
     Buffer.from(JSON.stringify(value)),
   )

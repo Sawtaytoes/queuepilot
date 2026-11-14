@@ -253,9 +253,7 @@ export function groupPlayProfile(
   const key = String(kind ?? "")
     .trim()
     .toLowerCase()
-  const own = dedupeAccounts(
-    (groupAccounts ?? {})[key] ?? [],
-  )
+  const own = dedupeAccounts(groupAccounts?.[key] ?? [])
   if (own.length === 1)
     return {
       account: own[0] as string,

@@ -23,6 +23,7 @@
 // "Remove all completed"); `isFinished` only ever tells the grid what the next scan will
 // decide.
 import * as cache from "./cache.js"
+import { defined } from "./defined.js"
 import { liveClient } from "./engine/plex-live.js"
 import * as routing from "./engine/routing.js"
 import * as select from "./engine/select.js"
@@ -39,6 +40,7 @@ import {
   providerIdForSet,
 } from "./providers/blocks.js"
 import { providerFor } from "./providers/index.js"
+import { profileTokenOf } from "./providers/profileToken.js"
 import * as queues from "./queues.js"
 import { isSetAvailable } from "./season.js"
 import * as section from "./section.js"
@@ -128,8 +130,7 @@ export async function watchedFor(
 ): Promise<Set<string>> {
   const { binding } = await scopedBinding(cfg, profileTitle)
   const accts =
-    (binding && binding.watch_count_accounts) ||
-    WATCH_COUNT_ACCOUNTS
+    binding?.watch_count_accounts || WATCH_COUNT_ACCOUNTS
   const key = `${accts.join(",")}|${routing.setSections(cfg).join(",")}`
   const memo = _watched.get(key)
   if (memo && Date.now() - memo.at < WATCHED_TTL_MS)
@@ -210,7 +211,7 @@ export async function reconcileQueue(
   },
 ): Promise<{ isReconciled: boolean }> {
   const reg = routing.loadSets()
-  const cfg = reg && reg.sets[setName]
+  const cfg = reg?.sets[setName]
   // Only a CURATED queue has entries to mark. A rotation channel's lineup is computed, and a
   // reel writes nothing by rule.
   // `enabled` AND in season, through the one predicate. ⚠️ Skipping the reconcile is the whole
@@ -231,7 +232,7 @@ export async function reconcileQueue(
     // and is caught below rather than silently reconciling under the wrong account.
     const token =
       scope?.token ??
-      (await provider.profileToken!(binding.user_uuid))
+      (await profileTokenOf(provider, binding.user_uuid))
     const res = await provider.buckets({
       setName,
       cfg,
@@ -263,7 +264,7 @@ export async function reconcileQueue(
 
 /** True once the now-playing payload is showing a real item rather than an idle player. */
 function isOnScreen(now: NowPlaying | null): boolean {
-  if (!now || !now.ratingKey) return false
+  if (!now?.ratingKey) return false
   return (
     now.state === "playing" ||
     now.state === "paused" ||
@@ -414,7 +415,8 @@ export async function finalizeQueueProgress(
         cfg,
         profileTitle,
       )
-      token = await provider.profileToken!(
+      token = await profileTokenOf(
+        provider,
         binding.user_uuid,
       )
       const remote = item.plexServer
@@ -541,7 +543,8 @@ export async function adoptQueuePlayback(
   const provider = providerFor(
     providerIdForSet(cfg as unknown as BlockSourceCfg),
   )
-  const token = await provider.profileToken!(
+  const token = await profileTokenOf(
+    provider,
     binding.user_uuid,
   )
   const mc = await liveClient().container(
@@ -602,9 +605,8 @@ export function watchPlaybackEnd(): void {
       deviceId = nextDevice
       sittingId = SESSION.sittingId
     }
-    const nowRk = isOnScreen(now)
-      ? String(now!.ratingKey)
-      : null
+    const nowRk =
+      now && isOnScreen(now) ? String(now.ratingKey) : null
     const activeSet = SESSION.set
     const matches = nowRk
       ? SESSION.queue.filter(
@@ -626,8 +628,9 @@ export function watchPlaybackEnd(): void {
     // `savePosition` clears `is_completed`, undoing the completion that section had just
     // earned. A windowed entry has no use for a position either way: it begins at its own
     // start mark every sitting.
-    const isWindowed =
-      Boolean(nowRk) && section.isWindowed(nowRk!)
+    const isWindowed = nowRk
+      ? section.isWindowed(nowRk)
+      : false
     if (
       trackedSet &&
       tracked?.queueOwnHistory &&
@@ -639,7 +642,8 @@ export function watchPlaybackEnd(): void {
         queueEntryHistory.savePosition(
           trackedSet,
           tracked.queueEntryKey,
-          nowRk!,
+          // `tracked` is set only when an item matched `nowRk`, so it is present here.
+          defined(nowRk),
           positionMs,
           nowPlayingMs(now?.duration),
         )
@@ -661,7 +665,7 @@ export function watchPlaybackEnd(): void {
     const state = mqttc.lastState()
     const setName =
       manual?.setName ??
-      (state && state.set ? String(state.set) : null)
+      (state?.set ? String(state.set) : null)
     if (!setName) return
 
     // Did THIS APP stop it at a section's end mark, or did the play simply end? Claimed once,
@@ -689,9 +693,7 @@ export function watchPlaybackEnd(): void {
         : null)
     const profile =
       manual?.profileTitle ??
-      (state && state.profile
-        ? String(state.profile)
-        : null)
+      (state?.profile ? String(state.profile) : null)
     if (boundary) {
       // No RECONCILE_DELAY_MS: that delay exists to let Plex write a history row this then
       // reads back, and a section's verdict needs no read — we know why it stopped.

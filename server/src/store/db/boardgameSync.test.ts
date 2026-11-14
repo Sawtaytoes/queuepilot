@@ -12,6 +12,7 @@
 //
 // EVERY TITLE HERE IS INVENTED. This repo is public.
 import { describe, expect, test } from "vitest"
+import { defined } from "../../defined.js"
 import {
   openSqlite,
   type SqliteDatabase,
@@ -245,7 +246,10 @@ describe("a sync may take back its OWN removal and never the owner’s", () => {
     ).toEqual(["harbour-lantern"])
 
     // Season two leaves the collection; season one is still owned, so the TITLE is still owned.
-    const report = applyBoardGameSync([seasons[0]!], db)
+    const report = applyBoardGameSync(
+      [defined(seasons[0])],
+      db,
+    )
     expect(report.removed).toEqual([])
   })
 })

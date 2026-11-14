@@ -2,6 +2,7 @@
 // queue_builder/service.do_preview's response shape so the Channels view can consume Node
 // without a payload rewrite. Python still runs in dual-run soak for divergence logging.
 
+import { defined } from "../defined.js"
 import { errMessage } from "../errors.js"
 import type {
   Bucket,
@@ -57,6 +58,22 @@ export type RotationPreview = {
   profile?: string
 }
 
+// The first episode of a bucket, or null when it has none.
+function nextOf(
+  eps: readonly PoolItem[],
+  bucket: Bucket,
+): PreviewBucket["next"] {
+  if (!eps.length) return null
+  const first = defined(eps[0])
+  return {
+    ratingKey: first.ratingKey,
+    title: first.title,
+    season: first.season,
+    episode: first.episode,
+    multiSeason: Boolean(bucket.multi_season),
+  }
+}
+
 // Format channel_buckets into the MQTT/API preview bucket shape (service.do_preview).
 export function formatBuckets(
   buckets: readonly Bucket[] | null | undefined,
@@ -73,16 +90,7 @@ export function formatBuckets(
       // Slots per round when the channel is randomized. Always sent (1 = normal) so the pool
       // tile can render its control without a second lookup into the set registry.
       weight: toWeight(bucket.weight),
-      next: eps.length
-        ? {
-            // Guarded by `eps.length` on the line above.
-            ratingKey: eps[0]!.ratingKey,
-            title: eps[0]!.title,
-            season: eps[0]!.season,
-            episode: eps[0]!.episode,
-            multiSeason: Boolean(bucket.multi_season),
-          }
-        : null,
+      next: nextOf(eps, bucket),
       items: isLib
         ? [...eps]
             .map((episode) => ({
@@ -191,23 +199,17 @@ function pickRewatch(
   let total = 0
   for (const weight of weights) total += weight
   let roll = Math.random() * total
-  // The index reads below are all in-bounds by construction (`weights` is `candidates.map`, and
-  // the last-element fallback runs only after the empty check above).
-  for (
-    let index = 0;
-    index < candidates.length;
-    index += 1
-  ) {
-    roll -= weights[index]!
+  // The last-element fallback runs only after the empty check above.
+  for (const [index, [rk]] of candidates.entries()) {
+    roll -= defined(weights[index])
     if (roll <= 0) {
-      const rk = candidates[index]![0]
       return {
         ratingKey: rk,
         title: titles.get(rk) || null,
       }
     }
   }
-  const [rk] = candidates[candidates.length - 1]!
+  const [rk] = defined(candidates[candidates.length - 1])
   return { ratingKey: rk, title: titles.get(rk) || null }
 }
 
@@ -219,9 +221,9 @@ export async function previewRotation(
 ): Promise<RotationPreview> {
   const reg = routing.loadSets()
   // NOTE: `loadSets()` returns null for "keep current sets" (file absent/unreadable/empty) and
-  // this line has always thrown a TypeError on it — the preview endpoint reports that as a 500.
-  // Asserted rather than branched: adding a null path here would be a behaviour change.
-  const cfg = reg!.sets[setId]
+  // this line has always thrown on it — the preview endpoint reports that as an error.
+  // Thrown rather than branched: adding a null path here would be a behaviour change.
+  const cfg = defined(reg, "the sets registry").sets[setId]
   if (!cfg || cfg.source === "queue") {
     // `code` is read by the route handler; typed inline because this is a WRITE of a non-errno
     // marker, which `isNodeError` (a read-side narrowing guard) does not cover.

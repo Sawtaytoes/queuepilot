@@ -8,6 +8,7 @@ import {
   test,
   vi,
 } from "vitest"
+import { defined } from "./defined.js"
 
 type UndiciCall = {
   url: string
@@ -149,7 +150,8 @@ describe("TLS", () => {
         posterCall.url.includes("/photo/:/transcode"),
       ),
     ).toEqual([true, false])
-    const plexAgent = undiciCalls[0]!.opts.dispatcher
+    const plexAgent = defined(undiciCalls[0]).opts
+      .dispatcher
     expect(plexAgent).toBeDefined()
     for (const call of posterCalls) {
       expect(call.opts.dispatcher).toBe(plexAgent)
@@ -160,12 +162,12 @@ describe("TLS", () => {
   test("a poster redirect on PLEX_URL keeps the scoped agent", async () => {
     const poster = await thumb("8")
     expect(poster?.buffer).toEqual(Buffer.from([1, 2, 3]))
-    const hop = undiciCalls.at(-1)!
+    const hop = defined(undiciCalls.at(-1))
     expect(hop.url).toBe(
       `${new URL(PLEX_URL).origin}/redirected/poster-8.png`,
     )
     expect(hop.opts.dispatcher).toBe(
-      undiciCalls[0]!.opts.dispatcher,
+      defined(undiciCalls[0]).opts.dispatcher,
     )
     expect(hop.opts.signal).toBeInstanceOf(AbortSignal)
   })
@@ -188,7 +190,7 @@ describe("TLS", () => {
         undiciCall.url.includes("cdn.example.net"),
       ),
     ).toBe(false)
-    const [url, init] = fetchMock.mock.calls[0]!
+    const [url, init] = defined(fetchMock.mock.calls[0])
     expect(url).toBe("https://cdn.example.net/poster-9.png")
     expect(init?.signal).toBeInstanceOf(AbortSignal)
     expect(
@@ -207,7 +209,7 @@ describe("every outbound call has a deadline", () => {
     await expect(
       plextv("/api/v2/devices", "fixture-token"),
     ).resolves.toEqual({ ok: 1 })
-    const [url, init] = fetchMock.mock.calls[0]!
+    const [url, init] = defined(fetchMock.mock.calls[0])
     expect(url).toBe("https://plex.tv/api/v2/devices")
     expect(init?.signal).toBeInstanceOf(AbortSignal)
     // No custom dispatcher: plex.tv must never borrow the LAN agent's rejectUnauthorized:false.
@@ -245,7 +247,7 @@ describe("every outbound call has a deadline", () => {
       fetchImpl,
     }).search("zelda")
     expect(
-      fetchImpl.mock.calls[0]![1]?.signal,
+      defined(fetchImpl.mock.calls[0])[1]?.signal,
     ).toBeInstanceOf(AbortSignal)
   })
 
@@ -279,7 +281,7 @@ describe("every outbound call has a deadline", () => {
       fetchImpl,
     }).library()
     expect(
-      fetchImpl.mock.calls[0]![1]?.signal,
+      defined(fetchImpl.mock.calls[0])[1]?.signal,
     ).toBeInstanceOf(AbortSignal)
   })
 })

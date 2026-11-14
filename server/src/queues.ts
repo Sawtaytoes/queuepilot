@@ -760,7 +760,7 @@ async function rewriteEntry(
   // the only place two of its own fields are visible at once — `setEnd` cannot know whether an
   // `end` is legal until it has read the `start` sitting beside it, and by then it is inside
   // the lock. Every other mutator returns void and is unaffected.
-  mutate: (e: SplitEntry) => void | false,
+  mutate: (e: SplitEntry) => undefined | false,
 ): Promise<boolean> {
   // ONE resolution for every per-entry setter — a filtered queue writes on its parent's line.
   const owner = await entryOwner(setName)
@@ -972,7 +972,7 @@ async function setCountDefault(
   field: "episodes" | "volumes",
 ): Promise<number> {
   const setEntry = await sets.getSet(setName)
-  if (!setEntry || setEntry.source !== "queue") return 1
+  if (setEntry?.source !== "queue") return 1
   const stored = setEntry[field]
   return stored != null && stored >= 1 ? stored : 1
 }

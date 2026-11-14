@@ -50,20 +50,15 @@ function usesModernUi(): boolean {
 export function usesModernPlayback(
   device: Device | null = null,
 ): boolean {
-  if (
-    !ADB_ENABLED ||
-    !adbTarget() ||
-    !legacy.connect() ||
-    !usesModernUi()
-  )
+  const target = ADB_ENABLED ? adbTarget() : null
+  if (!target || !legacy.connect() || !usesModernUi())
     return false
   // ADB is configured for one physical player. Never send another player's command here.
   if (!device) return true
   if (device.mode !== "client" || !device.uri) return false
   try {
     return (
-      new URL(device.uri).hostname ===
-      adbTarget()!.split(":")[0]
+      new URL(device.uri).hostname === target.split(":")[0]
     )
   } catch {
     return false
@@ -72,7 +67,8 @@ export function usesModernPlayback(
 
 export async function playModernQueue(
   serverId: string,
-  queueId: string | number,
+  // Null when Plex built the playQueue without an id; `modernQueueLink` refuses it.
+  queueId: string | number | null,
   offsetMs: number,
   ratingKey: string,
   // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types

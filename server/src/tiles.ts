@@ -158,7 +158,7 @@ export async function resolveTile(
     duration = Number(resolved.duration) || 0
     isPartiallyWatched =
       viewOffset > 0 && !(Number(resolved.viewCount) > 0)
-  } else if (nextEp && nextEp.partiallyWatched) {
+  } else if (nextEp?.partiallyWatched) {
     isPartiallyWatched = true
     viewOffset = Number(nextEp.viewOffset) || 0
     duration = Number(nextEp.duration) || 0

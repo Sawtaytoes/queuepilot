@@ -1,3 +1,4 @@
+import { defined } from "../../defined.js"
 // COLLAPSING BOXES INTO GAMES.
 //
 // The settled rule: **a game is the TITLE, not the BOX.** Several season boxes of one franchise
@@ -465,7 +466,7 @@ export const groupBoxes = (
     )
     if (franchise?.size === 1) {
       // `size === 1` on the line above is what proves the spread is non-empty.
-      const gameId = [...franchise][0]!
+      const gameId = defined([...franchise][0])
       addGame(
         {
           gameId,

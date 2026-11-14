@@ -781,12 +781,17 @@ const USAGE = `people-mapping — propose the people mapping, and import a confi
 Both are PRINT-FIRST: nothing is written without --write / --apply. The import refuses every
 mapping file that does not carry an explicit \`confirmed: true\`.`
 
+function printUsage(): number {
+  console.log(USAGE)
+  return 2
+}
+
 const [, , subcommand = "", ...rest] = process.argv
 const code =
   subcommand === "propose"
     ? propose(rest)
     : subcommand === "import"
       ? runImport(rest)
-      : (console.log(USAGE), 2)
+      : printUsage()
 
 process.exit(code)

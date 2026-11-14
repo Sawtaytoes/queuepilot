@@ -1,4 +1,5 @@
 import * as adb from "./adb.js"
+import { defined } from "./defined.js"
 import {
   deviceOperationCancelled,
   invalidateDeviceOperations,
@@ -43,6 +44,7 @@ import {
   providerIdForSet,
 } from "./providers/blocks.js"
 import { providerFor } from "./providers/index.js"
+import { profileTokenOf } from "./providers/profileToken.js"
 import * as resume from "./resume.js"
 import {
   isSetAvailable,
@@ -267,9 +269,13 @@ async function startSessionOnDevice(
   payload: SessionStartPayload = {},
   opts: { cancel?: CancelFlag } = {},
 ): Promise<SessionResult> {
-  // `.set!` rather than `.set?.()`: a flag without `set` is a caller error and threw here
+  // `defined` rather than `.set?.()`: a flag without `set` is a caller error and threw here
   // before, and swallowing it would leave the previous start running.
-  if (_activeCancel) _activeCancel.set!()
+  if (_activeCancel)
+    defined(
+      _activeCancel.set,
+      "the cancel flag's set()",
+    ).call(_activeCancel)
   const cancel = opts.cancel || cancelFlag()
   _activeCancel = cancel
   const isSuperseded = (): boolean =>
@@ -305,7 +311,7 @@ async function startSessionOnDevice(
 
   // NOTE (found, not fixed): `loadSets()` returns null for "keep the current sets" — the file
   // was absent, unreadable or empty — and this function has never handled that; it reads
-  // `reg.sets` straight away and throws. The `!` preserves that exactly rather than inventing
+  // `reg.sets` straight away and throws. `defined` keeps that throw rather than inventing
   // an error path that mqttd would then publish differently.
   const reg = routing.loadSets()
 
@@ -341,7 +347,7 @@ async function startSessionOnDevice(
       routing.channelFor(
         payload.kind,
         title,
-        reg!,
+        defined(reg, "the sets registry"),
         isRewatchWanted,
       ) || profiles.setForProfile(title)
     if (!setName) {
@@ -358,7 +364,9 @@ async function startSessionOnDevice(
     profileTitle = cardProfile
   }
 
-  const cfg = reg!.sets[setName]
+  const cfg = defined(reg, "the sets registry").sets[
+    setName
+  ]
   // AVAILABLE, which is `enabled` AND in season — one predicate, shared with the five other
   // places that used to ask `cfg.enabled === false` on its own. The season half is evaluated
   // HERE, on this read, because a card tapped in June must be refused in June
@@ -471,12 +479,13 @@ async function startSessionOnDevice(
   // handoff succeeds — see `BucketsResult.led`.
   let ledKeys: string[] = []
 
-  // UNGUARDED on purpose, and the `!` says so: `profileToken` is OPTIONAL on the `Provider`
-  // interface (every other optional member is called behind a `typeof … === 'function'`
-  // check), but this call site has never had one. A push provider without it throws right
-  // here — a latent requirement of the push path, not of the interface. Adding a guard would
-  // change behaviour, so the assertion preserves the throw instead.
-  const tok = await provider.profileToken!(
+  // UNGUARDED on purpose, and `profileTokenOf` says so: `profileToken` is OPTIONAL on the
+  // `Provider` interface (every other optional member is called behind a `typeof … ===
+  // 'function'` check), but this call site has never had one. A push provider without it
+  // throws right here — a latent requirement of the push path, not of the interface. Adding a
+  // guard would change behaviour, so `profileTokenOf` preserves the throw instead.
+  const tok = await profileTokenOf(
+    provider,
     binding.user_uuid,
   )
   if (isSuperseded()) return { cancelled: true }

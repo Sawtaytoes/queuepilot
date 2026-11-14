@@ -11,6 +11,8 @@
  * batch cap and the shuffle taken off — so an item appears here exactly when the engine would
  * consider it, and nowhere does this file decide on its own what a queue contains.
  */
+
+import { defined } from "./defined.js"
 import * as resolve from "./engine/resolve.js"
 import * as select from "./engine/select.js"
 import {
@@ -356,8 +358,13 @@ export function assembleFullQueue(
           left - right
         )
       const pa =
-          expanded[left]!.lane === "priority" ? 0 : 1,
-        pb = expanded[right]!.lane === "priority" ? 0 : 1
+          defined(expanded[left]).lane === "priority"
+            ? 0
+            : 1,
+        pb =
+          defined(expanded[right]).lane === "priority"
+            ? 0
+            : 1
       return pa - pb || left - right
     })
   const nextKey = lineup[0] ? itemKey(lineup[0]) : null
@@ -367,7 +374,7 @@ export function assembleFullQueue(
     isNextPlaced = false
   const entries: FullQueueEntry[] = []
   for (const entryIndex of order) {
-    const entry = expanded[entryIndex]!
+    const entry = defined(expanded[entryIndex])
     const items: FullQueueItem[] = []
     entry.items.forEach((item, index) => {
       if (position >= FULL_QUEUE_MAX_ITEMS) {
@@ -615,7 +622,7 @@ export function spliceStart(
       404,
     )
   const picked = [
-    entry.items[index]!,
+    defined(entry.items[index]),
     ...(start.mode === "continue"
       ? entry.items
           .slice(index + 1)

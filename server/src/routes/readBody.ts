@@ -16,6 +16,7 @@ import type { Context } from "hono"
 
 export async function readBody(
   context: Context,
+  // biome-ignore lint/suspicious/noExplicitAny: the HTTP request body is arbitrary client JSON, and the queues and sets writers coerce each field themselves (see above)
 ): Promise<Record<string, any>> {
   const parsed = await context.req.json().catch(() => null)
   return parsed && typeof parsed === "object"

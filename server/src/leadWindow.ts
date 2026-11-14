@@ -1,3 +1,4 @@
+import { defined } from "./defined.js"
 // The lead cooldown as a pure value: how long a promoted entry stays led-out.
 //
 // It lives here rather than in `promote.ts` — where it was written and from where it is still
@@ -33,7 +34,7 @@ export function parsePromoteWindow(
   if (!match) return null
   const amount = Number(match[1])
   if (!Number.isFinite(amount) || amount <= 0) return null
-  const unit = match[2]!
+  const unit = defined(match[2])
   const mult =
     unit === "ms"
       ? 1

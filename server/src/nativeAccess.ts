@@ -106,11 +106,12 @@ export function queuePlayAs(
   cfg: RoutingSetCfg,
   users: readonly plex.HomeUser[],
 ): plex.HomeUser | null {
-  if (cfg.requires_profile)
+  const requiredProfile = cfg.requires_profile
+  if (requiredProfile)
     return (
       users.find((user) =>
         [user.name, user.username].includes(
-          cfg.requires_profile!,
+          requiredProfile,
         ),
       ) ?? null
     )
@@ -161,14 +162,20 @@ export async function authorizeQueue(
     )
   const profileName = profileNameOf(profile)
   let binding = routing.bindingFor(cfg, profileName)
-  binding = await plexProvider({
+  const profileProvider = plexProvider({
     resolveProfileUser: async (title) =>
       [profile.name, profile.username].includes(
         title || null,
       )
         ? profile
         : null,
-  }).profileBinding!(
+  })
+  // The Plex provider always defines `profileBinding`.
+  if (!profileProvider.profileBinding)
+    throw new TypeError(
+      "The Plex provider has no profileBinding",
+    )
+  binding = await profileProvider.profileBinding(
     binding,
     cfg.requires_profile || profileName,
   )

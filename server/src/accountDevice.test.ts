@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 
 vi.mock("./env.js", async (original) => ({
   ...(await original<typeof import("./env.js")>()),
@@ -31,7 +32,7 @@ test("never substitutes default identity fields into an explicitly selected seco
           title: "Default TV",
         },
       },
-      target!,
+      defined(target),
     ),
   ).toBe(false)
   expect(
@@ -42,7 +43,7 @@ test("never substitutes default identity fields into an explicitly selected seco
           title: "Den TV",
         },
       },
-      target!,
+      defined(target),
     ),
   ).toBe(true)
 })

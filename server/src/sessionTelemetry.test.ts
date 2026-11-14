@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 import type { NowPlaying } from "./types.js"
 
 const ctl = vi.hoisted(() => ({
@@ -137,7 +138,7 @@ test("does not let the old device finish or update history for a sitting held in
   expect(publish).not.toHaveBeenCalled()
   expect(history.savePosition).not.toHaveBeenCalled()
   await startSession({ set: "missing" })
-  ctl.release!("fixture")
+  defined(ctl.release)("fixture")
   expect(await pending).toEqual({ cancelled: true })
   expect(SESSION.isPreparing).toBe(false)
 })

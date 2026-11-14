@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest"
 import { parseUiNodes } from "./adbLegacy.js"
+import { defined } from "./defined.js"
 import {
   createModernPlexControl,
   isModernPlexActivity,
@@ -301,7 +302,9 @@ describe("modern Plex control adapter", () => {
         delete nodes[0]?.bounds
       },
       (nodes: Node[]) => {
-        nodes[1]!.bounds = nodes[0]!.bounds!
+        defined(nodes[1]).bounds = defined(
+          defined(nodes[0]).bounds,
+        )
       },
     ]) {
       const nodes = rail(3)

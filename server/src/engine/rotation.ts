@@ -133,8 +133,7 @@ export async function watchedAll(
   binding: EngineBinding | null | undefined,
 ): Promise<Set<string>> {
   const accts =
-    (binding && binding.watch_count_accounts) ||
-    WATCH_COUNT_ACCOUNTS
+    binding?.watch_count_accounts || WATCH_COUNT_ACCOUNTS
   const watched = new Set<string>()
   for (const acct of accts) {
     for await (const row of iterHistory(client, acct)) {
@@ -273,7 +272,7 @@ export async function memberBuckets(
           watched,
           tok,
         )
-        if (!res || !res.items.length) continue
+        if (!res?.items.length) continue
         buckets.push({
           show: res.title,
           ratingKey: res.ratingKey || res.title,
@@ -291,7 +290,7 @@ export async function memberBuckets(
       watched,
       tok,
     )
-    if (!res || !res.items.length) continue
+    if (!res?.items.length) continue
     buckets.push({
       show: res.title,
       ratingKey: res.ratingKey || res.title,
@@ -322,7 +321,7 @@ export async function channelBuckets(
     binding,
     rng,
   )
-  if (!cfg.members || !cfg.members.length) return rule
+  if (!cfg.members?.length) return rule
   const members = await memberBuckets(client, cfg, binding)
   const seen = new Set(
     members.map((member) => String(member.ratingKey)),
