@@ -275,9 +275,9 @@ async function startSessionOnDevice(
   if (ADB_ENABLED) {
     try {
       await adb.ensurePlexOpen()
-    } catch (e) {
+    } catch (error) {
       console.log(
-        `[session] ensurePlexOpen: ${errMessage(e)}`,
+        `[session] ensurePlexOpen: ${errMessage(error)}`,
       )
     }
   }
@@ -292,7 +292,7 @@ async function startSessionOnDevice(
   const only = payload.only ? String(payload.only) : null
   const isAuto =
     setName === "auto" || setName === "" || setName == null
-  const wantRewatch = isAutoRewatch({
+  const isRewatchWanted = isAutoRewatch({
     kind: payload.kind,
     behavior: payload.behavior,
     mode: payload.mode,
@@ -339,7 +339,7 @@ async function startSessionOnDevice(
         payload.kind,
         title,
         reg!,
-        wantRewatch,
+        isRewatchWanted,
       ) || profiles.setForProfile(title)
     if (!setName) {
       _publishState({
@@ -349,7 +349,7 @@ async function startSessionOnDevice(
       return { error: "no set" }
     }
     console.log(
-      `[session] '${title}' + auto(rewatch=${wantRewatch}) -> set '${setName}'`,
+      `[session] '${title}' + auto(rewatch=${isRewatchWanted}) -> set '${setName}'`,
     )
   } else {
     profileTitle = cardProfile
@@ -402,7 +402,10 @@ async function startSessionOnDevice(
     const switchP = ADB_ENABLED
       ? adb
           .switchTo(required, cancel, null)
-          .catch((e: unknown) => [false, errMessage(e)])
+          .catch((error: unknown) => [
+            false,
+            errMessage(error),
+          ])
       : Promise.resolve([false, "ADB off"])
     const title = await profiles.waitForProfile({
       cancel,
@@ -492,9 +495,9 @@ async function startSessionOnDevice(
   if (cfg.source === "queue") {
     try {
       await watchedReset.applySeasonalReset(setName, cfg)
-    } catch (e) {
+    } catch (error) {
       console.log(
-        `[session] ${setName}: seasonal reset failed (${errMessage(e)})`,
+        `[session] ${setName}: seasonal reset failed (${errMessage(error)})`,
       )
     }
   }
@@ -669,7 +672,9 @@ async function startSessionOnDevice(
   SESSION.queuedTotal = SESSION.queue.length
   SESSION.target = playbackLength(cfg)
 
-  const ratingKeys = SESSION.queue.map((q) => q.ratingKey)
+  const ratingKeys = SESSION.queue.map(
+    (queueItem) => queueItem.ratingKey,
+  )
   // LATENT BUG (types.ts `SessionStartPayload.target`): this is EITHER a resolved device (the
   // MQTT path, where mqttd.js swapped the id for the announced entry) OR a bare registry-id
   // string (any caller that skips mqttd), and playback/driver read `.uri`/`.mode`/`.name` off
@@ -683,7 +688,8 @@ async function startSessionOnDevice(
   // provider is `delivery: 'pull'`, so control leaves with the artifact. A backend that cannot
   // serve a section offers NO section rather than accepting one and playing the item in full
   // (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
-  const playsSections = provider.playsSections === true
+  const isSectionPlaybackSupported =
+    provider.playsSections === true
 
   // The head's start is FREE. Companion `playMedia` already takes an `offset` that applies to
   // the item it starts on, and that offset IS the section start — no poll, no seek, no delay.
@@ -693,7 +699,7 @@ async function startSessionOnDevice(
     ? section.asCandidate(playItems[0] as PlexPlayItem)
     : null
   resumeMs = section.headStartOffsetMs(head, resumeMs, {
-    playsSections,
+    playsSections: isSectionPlaybackSupported,
   })
 
   // Arm resume-on-advance for THIS lineup before playing: playMedia resumes only the head, so
@@ -720,7 +726,10 @@ async function startSessionOnDevice(
     playItems.map((item) =>
       section.asCandidate(item as PlexPlayItem),
     ),
-    { isHeadStartApplied: true, playsSections },
+    {
+      isHeadStartApplied: true,
+      playsSections: isSectionPlaybackSupported,
+    },
   )
   // Resolve the Companion target ONCE, here. It used to be re-derived on every poll and
   // again on every seek, and on a player advertising no connection each of those was a
@@ -749,7 +758,10 @@ async function startSessionOnDevice(
     console.log(
       `[resume] armed ${plan.size} queued episode(s) to resume on advance: ` +
         [...plan.entries()]
-          .map(([k, v]) => `${k}@${Math.round(v / 1000)}s`)
+          .map(
+            ([key, value]) =>
+              `${key}@${Math.round(value / 1000)}s`,
+          )
           .join(" "),
     )
   }
@@ -758,8 +770,8 @@ async function startSessionOnDevice(
       `[section] armed ${sections.size} window(s): ` +
         [...sections.entries()]
           .map(
-            ([i, row]) =>
-              `#${i} rk=${row.ratingKey} ` +
+            ([key, row]) =>
+              `#${key} rk=${row.ratingKey} ` +
               `${row.startMs == null ? "start" : `${Math.round(row.startMs / 1000)}s`}` +
               `->${row.endMs == null ? "end" : `${Math.round(row.endMs / 1000)}s`}`,
           )
@@ -862,9 +874,9 @@ async function startSessionOnDevice(
     if (required && ADB_ENABLED) {
       try {
         await adb.switchTo(required, cancel, null)
-      } catch (e) {
+      } catch (error) {
         console.log(
-          `[session] adb switch: ${errMessage(e)}`,
+          `[session] adb switch: ${errMessage(error)}`,
         )
       }
     }

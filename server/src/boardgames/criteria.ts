@@ -64,10 +64,10 @@ const optionalNumber = (
 ): { value: number | null } | { error: string } => {
   if (value === undefined || value === null || value === "")
     return { value: null }
-  const n = Number(value)
-  if (!Number.isFinite(n))
+  const parsed = Number(value)
+  if (!Number.isFinite(parsed))
     return { error: `${field} must be a number or null` }
-  return { value: n }
+  return { value: parsed }
 }
 
 export function parsePickCriteria(

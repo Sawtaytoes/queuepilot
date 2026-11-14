@@ -99,13 +99,13 @@ describe("Plex source discovery", () => {
       },
     ])
     expect(
-      requests.find((r) =>
-        r.url.startsWith("https://plex.tv/"),
+      requests.find((request) =>
+        request.url.startsWith("https://plex.tv/"),
       )?.token,
     ).toBe("selected-account")
     expect(
-      requests.find((r) =>
-        r.url.startsWith("https://friend.example/"),
+      requests.find((request) =>
+        request.url.startsWith("https://friend.example/"),
       )?.token,
     ).toBe("friend-grant")
     expect(JSON.stringify(sources)).not.toContain("grant")

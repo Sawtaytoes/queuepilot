@@ -104,7 +104,7 @@ export async function setLibraries(
                 .map(Number)
                 .filter((id) => Number.isFinite(id)),
             ),
-          ].sort((a, b) => a - b),
+          ].sort((left, right) => left - right),
   }
   await writeState(next)
   return next
@@ -246,9 +246,9 @@ async function curatedKeys(
   }
 
   for (const [id, cfg] of Object.entries(sets)) {
-    for (const m of (cfg as RoutingRotationCfg).members ||
-      [])
-      noteValue(m, cfg)
+    for (const member of (cfg as RoutingRotationCfg)
+      .members || [])
+      noteValue(member, cfg)
     // A curated queue's entries live in queues.yaml, not in the set.
     try {
       for (const entry of await queues.listSet(id))
@@ -349,16 +349,16 @@ function isInAnyRule(
     // ANY binding that would accept it is enough — the pool plays for all of them.
     const bindings =
       (cfg as RoutingRotationCfg).profiles || []
-    const accepts = bindings.length
+    const isAccepted = bindings.length
       ? bindings.some(
-          (b) =>
-            !b.allowed_ratings ||
-            b.allowed_ratings.has(
+          (binding) =>
+            !binding.allowed_ratings ||
+            binding.allowed_ratings.has(
               String(item.contentRating),
             ),
         )
       : true
-    if (accepts) return true
+    if (isAccepted) return true
   }
   return false
 }
@@ -439,7 +439,9 @@ export interface PendingLibrary {
 export function defaultLibraries(
   libraries: readonly PendingLibrary[],
 ): PendingLibrary[] {
-  return libraries.filter((l) => l.video && !l.other)
+  return libraries.filter(
+    (library) => library.video && !library.other,
+  )
 }
 
 /**
@@ -457,7 +459,7 @@ export function selectedLibraries(
     return defaultLibraries(libraries)
   const wanted = new Set(state.libraries)
   return libraries.filter(
-    (l) => l.video && wanted.has(l.id),
+    (library) => library.video && wanted.has(library.id),
   )
 }
 
@@ -645,7 +647,7 @@ export async function pendingItems(
         !named.has(it.ratingKey) &&
         !isInAnyRule(it, sets, blockedBySet),
     )
-    .sort((a, b) => b.addedAt - a.addedAt)
+    .sort((left, right) => right.addedAt - left.addedAt)
 
   // The collections those items sit in, as rows of their own. Skipped entirely when the
   // caller passes no lister, which is what keeps every existing test calling three arguments.
@@ -670,10 +672,10 @@ export async function pendingItems(
   // the choice the owner said he usually wants.
   const all = collections.length
     ? [...items, ...collections].sort(
-        (a, b) =>
-          b.addedAt - a.addedAt ||
-          (a.type === "collection" ? -1 : 0) -
-            (b.type === "collection" ? -1 : 0),
+        (left, right) =>
+          right.addedAt - left.addedAt ||
+          (left.type === "collection" ? -1 : 0) -
+            (right.type === "collection" ? -1 : 0),
       )
     : items
 

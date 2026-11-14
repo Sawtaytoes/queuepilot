@@ -14,8 +14,8 @@ test("invalidates an outstanding observation before replacing the global plan or
   const held = new Promise<{
     ratingKey: string
     viewOffset: number
-  }>((r) => {
-    resolve = r
+  }>((settle) => {
+    resolve = settle
   })
   const oldSeek = vi.fn(async () => ({ seeked: true }))
   resume.arm({ plan: new Map([["123", 5000]]) })

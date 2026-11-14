@@ -149,8 +149,8 @@ export interface NativeEvent {
   positionMs: number
   durationMs: number
 }
-const hash = (s: string): string =>
-  createHash("sha256").update(s).digest("hex")
+const hash = (text: string): string =>
+  createHash("sha256").update(text).digest("hex")
 
 /**
  * What a native request presents, read from its headers by the route. `proof` is the TV's Plex
@@ -169,12 +169,14 @@ export interface NativeCaller {
 export async function nativeDevice(
   caller: NativeCaller | string,
 ): Promise<NativeDevice> {
-  const c =
+  const nativeCaller =
     typeof caller === "string" ? { proof: caller } : caller
   return {
-    account: await nativeVerifiedProfile(c.proof),
-    deviceId: c.deviceId ?? "",
-    unlockToken: c.unlockToken ?? "",
+    account: await nativeVerifiedProfile(
+      nativeCaller.proof,
+    ),
+    deviceId: nativeCaller.deviceId ?? "",
+    unlockToken: nativeCaller.unlockToken ?? "",
   }
 }
 
@@ -201,7 +203,7 @@ export function audienceText(
   nameOf: (member: { kind: string; id: string }) => string,
 ): string {
   const names = members
-    .filter((m) => m.role === "required")
+    .filter((member) => member.role === "required")
     .map(nameOf)
   if (!names.length) return "Anybody"
   return names.length <= 3
@@ -228,8 +230,11 @@ export function nativeAudience(
       member.kind === "person"
         ? [member.id]
         : roster
-            .filter((r) => r.role === "required")
-            .map((r) => r.personId)
+            .filter(
+              (rosterMember) =>
+                rosterMember.role === "required",
+            )
+            .map((rosterMember) => rosterMember.personId)
     return {
       ...member,
       position: member.position ?? 0,
@@ -238,7 +243,9 @@ export function nativeAudience(
       people:
         member.kind === "person"
           ? [member.id]
-          : roster.map((r) => r.personId),
+          : roster.map(
+              (rosterMember) => rosterMember.personId,
+            ),
       requiredPeople: required,
       minPresent:
         member.kind === "person"
@@ -263,16 +270,16 @@ export async function nativeQueueTitles(): Promise<
   const numbers = queueListNumbers(
     registry.sets,
     Object.fromEntries(
-      registry.sets.map((s) => [
-        s.id,
-        audiences.get(s.filtered_from || s.id) ?? [],
+      registry.sets.map((set) => [
+        set.id,
+        audiences.get(set.filtered_from || set.id) ?? [],
       ]),
     ),
   )
   return new Map(
-    registry.sets.map((s) => [
-      s.id,
-      queueTitle(s, numbers.get(s.id) ?? null),
+    registry.sets.map((set) => [
+      set.id,
+      queueTitle(set, numbers.get(set.id) ?? null),
     ]),
   )
 }
@@ -306,24 +313,24 @@ export async function nativeQueues(
     id: string
   }): string =>
     member.kind === "group"
-      ? (groups.find((g) => g.id === member.id)?.label ??
-        member.id)
-      : (people.find((p) => p.id === member.id)
+      ? (groups.find((group) => group.id === member.id)
+          ?.label ?? member.id)
+      : (people.find((person) => person.id === member.id)
           ?.displayName ?? member.id)
   const queues = registry.sets
     // A superseded legacy tier is out of every web picker, so it is out of this one too. Its id
     // still plays through `createNativePlan` — hiding it from the catalog is not refusing it.
     .filter(
-      (s) =>
-        (s.provider_kind || providerIdForSet({ ...s })) ===
-          "plex" &&
-        isSetAvailable(s) &&
-        !isSupersededTier(s),
+      (set) =>
+        (set.provider_kind ||
+          providerIdForSet({ ...set })) === "plex" &&
+        isSetAvailable(set) &&
+        !isSupersededTier(set),
     )
-    .map((s) => ({
-      s,
+    .map((set) => ({
+      s: set,
       members: nativeAudience(
-        audiences.get(s.filtered_from || s.id) ?? [],
+        audiences.get(set.filtered_from || set.id) ?? [],
       ),
     }))
     .filter(({ members }) =>
@@ -335,7 +342,9 @@ export async function nativeQueues(
       title: titles.get(s.id) ?? s.id,
       kind: wireKindForSet(s),
       people: [
-        ...new Set(members.flatMap((m) => m.people)),
+        ...new Set(
+          members.flatMap((member) => member.people),
+        ),
       ],
       audience: audienceText(members, nameOf),
       playsAs: playsAs(s.id, s.requires_profile),
@@ -343,10 +352,10 @@ export async function nativeQueues(
     }))
   return {
     queues,
-    people: people.map((p) => ({
-      id: p.id,
-      displayName: p.displayName,
-      avatar: `/api/native/people/${encodeURIComponent(p.id)}/avatar`,
+    people: people.map((person) => ({
+      id: person.id,
+      displayName: person.displayName,
+      avatar: `/api/native/people/${encodeURIComponent(person.id)}/avatar`,
     })),
   }
 }
@@ -670,10 +679,10 @@ export function validateNativeEvent(
     throw new Error("Unknown playback event")
   if (
     ![event.positionMs, event.durationMs].every(
-      (n) =>
-        Number.isFinite(n) &&
-        n >= 0 &&
-        n <= 7 * 24 * 3600000,
+      (milliseconds) =>
+        Number.isFinite(milliseconds) &&
+        milliseconds >= 0 &&
+        milliseconds <= 7 * 24 * 3600000,
     )
   )
     throw new Error("Invalid playback position")
@@ -878,8 +887,8 @@ export async function nativeAvatar(
     accounts = person?.accounts.plex || []
   if (accounts.length !== 1) return null
   const users = await nativeHomeUsers()
-  const matches = users.filter((u) =>
-    [u.name, u.username].includes(accounts[0]!),
+  const matches = users.filter((user) =>
+    [user.name, user.username].includes(accounts[0]!),
   )
   const thumb =
     matches.length === 1 ? matches[0]?.thumb : null
@@ -890,16 +899,16 @@ export async function nativeAvatar(
 
 export function safeAvatarUrl(address: string): boolean {
   try {
-    const u = new URL(address)
+    const url = new URL(address)
     return (
-      u.protocol === "https:" &&
-      !u.username &&
-      !u.password &&
-      (!u.port || u.port === "443") &&
-      (u.hostname === "plex.tv" ||
-        u.hostname.endsWith(".plex.tv") ||
-        u.hostname === "secure.gravatar.com" ||
-        u.hostname === "www.gravatar.com")
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      (!url.port || url.port === "443") &&
+      (url.hostname === "plex.tv" ||
+        url.hostname.endsWith(".plex.tv") ||
+        url.hostname === "secure.gravatar.com" ||
+        url.hostname === "www.gravatar.com")
     )
   } catch {
     return false
@@ -1021,8 +1030,10 @@ export async function nativeWatchHistory(
   const isUnlockedHere = isUnlocked(device)
   const hidden = new Set(
     registry.sets
-      .filter((s) => isQueueLocked(s) && !isUnlockedHere)
-      .map((s) => s.id),
+      .filter(
+        (set) => isQueueLocked(set) && !isUnlockedHere,
+      )
+      .map((set) => set.id),
   )
   return historyFor(
     device.account,

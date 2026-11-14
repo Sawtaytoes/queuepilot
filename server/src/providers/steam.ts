@@ -82,10 +82,10 @@ async function mapLimit<T, R>(
     { length: Math.min(limit, items.length) },
     async () => {
       for (;;) {
-        const i = next
+        const index = next
         next += 1
-        if (i >= items.length) return
-        out[i] = await fn(items[i] as T, i)
+        if (index >= items.length) return
+        out[index] = await fn(items[index] as T, index)
       }
     },
   )
@@ -117,7 +117,8 @@ export function steamProvider({
   steamId,
   client = null,
 }: SteamProviderOptions): Provider {
-  const c = client || steamClient({ apiKey, steamId })
+  const httpClient =
+    client || steamClient({ apiKey, steamId })
 
   const playItem = (
     state: SteamEntryState,
@@ -148,7 +149,7 @@ export function steamProvider({
     id: string
     queuedAt?: number | null
   }): Promise<SteamEntryState | null> {
-    const game = await c.game(entry.id)
+    const game = await httpClient.game(entry.id)
     if (!game) return null
 
     const appid = String(game.appid ?? entry.id)
@@ -194,11 +195,13 @@ export function steamProvider({
      * so there is no scope to honour. Declaring the parameter keeps the signature the seam
      * expects rather than making the caller special-case this provider.
      */
-    async search(q: string): Promise<ProviderSearchHit[]> {
-      const games = await c.search(q)
-      return games.map((g) => ({
-        id: String(g.appid),
-        title: String(g.name ?? ""),
+    async search(
+      query: string,
+    ): Promise<ProviderSearchHit[]> {
+      const games = await httpClient.search(query)
+      return games.map((game) => ({
+        id: String(game.appid),
+        title: String(game.name ?? ""),
         libraryId: LIBRARY_ID,
         libraryTitle: "Library",
         type: "game",
@@ -207,7 +210,7 @@ export function steamProvider({
 
     /** Library art, re-served from this origin like every other provider's. */
     cover(appid: string): Promise<ProviderCover> {
-      return c.cover(appid)
+      return httpClient.cover(appid)
     },
 
     /**
@@ -222,7 +225,7 @@ export function steamProvider({
     ): Promise<(ProviderTileRow | null)[]> {
       const wanted = [...ids].map(String)
       const byId = new Map(
-        entries.map((e) => [String(e.id), e]),
+        entries.map((entry) => [String(entry.id), entry]),
       )
       return mapLimit(
         wanted,
@@ -245,9 +248,9 @@ export function steamProvider({
                   ? playItem(state, state.played + 1)
                   : null,
             }
-          } catch (e) {
+          } catch (error) {
             console.log(
-              `[steam] tile ${id}: ${errMessage(e)}`,
+              `[steam] tile ${id}: ${errMessage(error)}`,
             )
             return null
           }
@@ -270,22 +273,29 @@ export function steamProvider({
       ctx: BucketsContext,
     ): Promise<BucketsResult> {
       const entries = (ctx.entries || []).filter(
-        (e) => e && e.id,
+        (entry) => entry && entry.id,
       )
       if (!entries.length) return { play: [], buckets: [] }
 
       const states = (
-        await mapLimit(entries, PROBE_CONCURRENCY, (e) =>
-          entryState(e).catch((err: unknown) => {
-            console.log(
-              `[steam] entry ${e.id}: ${errMessage(err)}`,
-            )
-            return null
-          }),
+        await mapLimit(
+          entries,
+          PROBE_CONCURRENCY,
+          (entry) =>
+            entryState(entry).catch((err: unknown) => {
+              console.log(
+                `[steam] entry ${entry.id}: ${errMessage(err)}`,
+              )
+              return null
+            }),
         )
-      ).filter((s): s is SteamEntryState => s != null)
+      ).filter(
+        (state): state is SteamEntryState => state != null,
+      )
 
-      const head = states.find((s) => s.remaining > 0)
+      const head = states.find(
+        (state) => state.remaining > 0,
+      )
       if (!head) {
         return {
           play: [],
@@ -293,7 +303,7 @@ export function steamProvider({
           // Everything queued has been played. Reported as done ids so the caller's own
           // bookkeeping (TTL sweep, "remove all completed") still works — this provider
           // never writes queues.yaml itself.
-          newlyDone: states.map((s) => s.appid),
+          newlyDone: states.map((state) => state.appid),
         }
       }
 
@@ -303,8 +313,8 @@ export function steamProvider({
         ] as PlayItem[],
         buckets: states,
         newlyDone: states
-          .filter((s) => s.remaining === 0)
-          .map((s) => s.appid),
+          .filter((state) => state.remaining === 0)
+          .map((state) => state.appid),
       }
     },
 
@@ -318,23 +328,23 @@ export function steamProvider({
       ctx: BucketsContext,
     ): Promise<Set<string>> {
       const entries = (ctx.entries || []).filter(
-        (e) => e && e.id,
+        (entry) => entry && entry.id,
       )
       if (!entries.length) return new Set()
 
       const states = await mapLimit(
         entries,
         PROBE_CONCURRENCY,
-        (e) => entryState(e).catch(() => null),
+        (entry) => entryState(entry).catch(() => null),
       )
 
       return new Set(
         states
           .filter(
-            (s): s is SteamEntryState =>
-              s != null && s.remaining === 0,
+            (state): state is SteamEntryState =>
+              state != null && state.remaining === 0,
           )
-          .map((s) => s.appid),
+          .map((state) => state.appid),
       )
     },
 

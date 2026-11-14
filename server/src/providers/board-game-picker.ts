@@ -65,10 +65,10 @@ async function mapLimit<T, R>(
     { length: Math.min(limit, items.length) },
     async () => {
       for (;;) {
-        const i = next
+        const index = next
         next += 1
-        if (i >= items.length) return
-        out[i] = await fn(items[i] as T, i)
+        if (index >= items.length) return
+        out[index] = await fn(items[index] as T, index)
       }
     },
   )
@@ -80,9 +80,9 @@ const toCount = (
   raw: unknown,
   fallback: number,
 ): number => {
-  const n = Number(raw)
-  return Number.isFinite(n) && n > 0
-    ? Math.floor(n)
+  const parsed = Number(raw)
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.floor(parsed)
     : fallback
 }
 
@@ -106,7 +106,7 @@ export function boardGamesProvider({
   token = null,
   client = null,
 }: BoardGamesProviderOptions): Provider {
-  const c =
+  const collectionClient =
     client ||
     boardGamesClient({ baseUrl: def.base_url, token })
 
@@ -141,11 +141,11 @@ export function boardGamesProvider({
     },
     owedDefault: number,
   ): Promise<BoardGamesEntryState | null> {
-    const game = await c.game(entry.id)
+    const game = await collectionClient.game(entry.id)
     if (!game) return null
 
     const owed = toCount(entry.batch, owedDefault)
-    const plays = await c.plays(
+    const plays = await collectionClient.plays(
       entry.id,
       entry.queuedAt ?? null,
     )
@@ -184,7 +184,7 @@ export function boardGamesProvider({
      * filters on.
      */
     async libraries(): Promise<ProviderLibrary[]> {
-      const names = await c.categories()
+      const names = await collectionClient.categories()
       return names.map((name) => ({
         id: name,
         title: name,
@@ -200,21 +200,24 @@ export function boardGamesProvider({
      * the picker has never heard of.
      */
     async search(
-      q: string,
+      rawQuery: string,
       { libraries = [] }: { libraries?: string[] } = {},
     ): Promise<ProviderSearchHit[]> {
-      const query = String(q || "").trim()
+      const query = String(rawQuery || "").trim()
       if (!query) return []
 
       const named = libraries.map(String).filter(Boolean)
       const categories = named.includes(COLLECTION_LIBRARY)
         ? []
         : named
-      const games = await c.games(query, categories)
+      const games = await collectionClient.games(
+        query,
+        categories,
+      )
 
-      return games.map((g) => ({
-        id: String(g.id),
-        title: String(g.name ?? ""),
+      return games.map((game) => ({
+        id: String(game.id),
+        title: String(game.name ?? ""),
         libraryId: COLLECTION_LIBRARY,
         libraryTitle: "Collection",
         type: "game",
@@ -235,14 +238,14 @@ export function boardGamesProvider({
     async logProgress(
       gameId: string,
     ): Promise<{ ok: boolean; remaining?: number }> {
-      const play = await c.logPlay(gameId)
+      const play = await collectionClient.logPlay(gameId)
       if (!play) return { ok: false }
       return { ok: true }
     },
 
     /** Box art, re-served from this origin — the picker is a LAN host. */
     cover(gameId: string): Promise<ProviderCover> {
-      return c.cover(gameId)
+      return collectionClient.cover(gameId)
     },
 
     /**
@@ -258,7 +261,7 @@ export function boardGamesProvider({
     ): Promise<(ProviderTileRow | null)[]> {
       const wanted = [...ids].map(String)
       const byId = new Map(
-        entries.map((e) => [String(e.id), e]),
+        entries.map((entry) => [String(entry.id), entry]),
       )
       return mapLimit(
         wanted,
@@ -283,9 +286,9 @@ export function boardGamesProvider({
                   ? playItem(state, state.played + 1)
                   : null,
             }
-          } catch (e) {
+          } catch (error) {
             console.log(
-              `[board-game-picker] tile ${id}: ${errMessage(e)}`,
+              `[board-game-picker] tile ${id}: ${errMessage(error)}`,
             )
             return null
           }
@@ -309,7 +312,7 @@ export function boardGamesProvider({
       ctx: BucketsContext,
     ): Promise<BucketsResult> {
       const entries = (ctx.entries || []).filter(
-        (e) => e && e.id,
+        (entry) => entry && entry.id,
       )
       if (!entries.length) return { play: [], buckets: [] }
 
@@ -326,19 +329,27 @@ export function boardGamesProvider({
       )
 
       const states = (
-        await mapLimit(entries, PROBE_CONCURRENCY, (e) =>
-          entryState(e, PLAYS_PER_GAME_DEFAULT).catch(
-            (err: unknown) => {
-              console.log(
-                `[board-game-picker] entry ${e.id}: ${errMessage(err)}`,
-              )
-              return null
-            },
-          ),
+        await mapLimit(
+          entries,
+          PROBE_CONCURRENCY,
+          (entry) =>
+            entryState(entry, PLAYS_PER_GAME_DEFAULT).catch(
+              (err: unknown) => {
+                console.log(
+                  `[board-game-picker] entry ${entry.id}: ${errMessage(err)}`,
+                )
+                return null
+              },
+            ),
         )
-      ).filter((s): s is BoardGamesEntryState => s != null)
+      ).filter(
+        (state): state is BoardGamesEntryState =>
+          state != null,
+      )
 
-      const playable = states.filter((s) => s.remaining > 0)
+      const playable = states.filter(
+        (state) => state.remaining > 0,
+      )
       const head = playable[0]
       if (!head) {
         return {
@@ -347,22 +358,23 @@ export function boardGamesProvider({
           // Everything queued has been played out. Reported as done entry keys so the
           // caller's own bookkeeping (TTL sweep, "remove all completed") still works — this
           // provider never writes queues.yaml itself.
-          newlyDone: states.map((s) => s.gameId),
+          newlyDone: states.map((state) => state.gameId),
         }
       }
 
       const take = Math.min(head.remaining, playsPerOpen)
       const play: PlayItem[] = Array.from(
         { length: take },
-        (_, i) => playItem(head, head.played + i + 1),
+        (_, index) =>
+          playItem(head, head.played + index + 1),
       )
 
       return {
         play,
         buckets: states,
         newlyDone: states
-          .filter((s) => s.remaining === 0)
-          .map((s) => s.gameId),
+          .filter((state) => state.remaining === 0)
+          .map((state) => state.gameId),
       }
     },
 
@@ -377,15 +389,15 @@ export function boardGamesProvider({
       ctx: BucketsContext,
     ): Promise<Set<string>> {
       const entries = (ctx.entries || []).filter(
-        (e) => e && e.id,
+        (entry) => entry && entry.id,
       )
       if (!entries.length) return new Set()
 
       const states = await mapLimit(
         entries,
         PROBE_CONCURRENCY,
-        (e) =>
-          entryState(e, PLAYS_PER_GAME_DEFAULT).catch(
+        (entry) =>
+          entryState(entry, PLAYS_PER_GAME_DEFAULT).catch(
             () => null,
           ),
       )
@@ -393,10 +405,10 @@ export function boardGamesProvider({
       return new Set(
         states
           .filter(
-            (s): s is BoardGamesEntryState =>
-              s != null && s.remaining === 0,
+            (state): state is BoardGamesEntryState =>
+              state != null && state.remaining === 0,
           )
-          .map((s) => s.gameId),
+          .map((state) => state.gameId),
       )
     },
 
@@ -427,7 +439,7 @@ export function boardGamesProvider({
             : items.length,
         setName: String(opts.setName ?? ""),
         url: gameId
-          ? `${c._base}/play/${encodeURIComponent(gameId)}`
+          ? `${collectionClient._base}/play/${encodeURIComponent(gameId)}`
           : "",
       }
     },

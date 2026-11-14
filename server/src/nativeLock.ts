@@ -110,16 +110,16 @@ export function hasPin(): boolean {
 async function derive(
   pin: string,
   salt: Buffer,
-  n: number,
-  r: number,
-  p: number,
+  cost: number,
+  blockSize: number,
+  parallelism: number,
   keylen: number,
 ) {
   return scrypt(pin, salt, keylen, {
-    N: n,
-    r,
-    p,
-    maxmem: 128 * n * r * 2,
+    N: cost,
+    r: blockSize,
+    p: parallelism,
+    maxmem: 128 * cost * blockSize * 2,
   })
 }
 
@@ -168,15 +168,16 @@ async function matches(
   pin: string,
   hash: string,
 ): Promise<boolean> {
-  const [scheme, n, r, p, salt, key] = hash.split("$")
+  const [scheme, cost, blockSize, parallelism, salt, key] =
+    hash.split("$")
   if (scheme !== "scrypt" || !salt || !key) return false
   const expected = Buffer.from(key, "base64")
   const actual = await derive(
     pin,
     Buffer.from(salt, "base64"),
-    Number(n),
-    Number(r),
-    Number(p),
+    Number(cost),
+    Number(blockSize),
+    Number(parallelism),
     expected.length,
   )
   return (

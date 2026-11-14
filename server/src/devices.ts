@@ -72,7 +72,10 @@ export const known = (
 ): AnnouncedDevice | null =>
   REGISTRY.get(String(id ?? "")) ||
   (id === DEFAULT_ID ? shieldEntry() : null) ||
-  configuredPlaybackTargets().find((d) => d.id === id) ||
+  configuredPlaybackTargets().find(
+    (configuredPlaybackTarget) =>
+      configuredPlaybackTarget.id === id,
+  ) ||
   null
 
 /** Test seam: forget what we believe is retained on the broker. */
@@ -137,10 +140,13 @@ export async function announceDevices(
     const shield = shieldEntry()
     const configured = configuredPlaybackTargets()
     const next = new Map<string, AnnouncedDevice>(
-      [shield, ...configured].map((d) => [d.id, d]),
+      [shield, ...configured].map((device) => [
+        device.id,
+        device,
+      ]),
     )
 
-    let swept = false
+    let hasSwept = false
     try {
       // Resolving an already-known target must not initialize the playback stack.
       const { playerDevices } = await import(
@@ -150,11 +156,11 @@ export async function announceDevices(
         const id = row.machineIdentifier || row.name
         if (!id) continue
         const pinned = configured.find(
-          (d) =>
-            (d.machineIdentifier &&
-              d.machineIdentifier ===
+          (device) =>
+            (device.machineIdentifier &&
+              device.machineIdentifier ===
                 row.machineIdentifier) ||
-            d.name.toLowerCase() ===
+            device.name.toLowerCase() ===
               String(row.name || "").toLowerCase(),
         )
         if (pinned) continue
@@ -179,12 +185,12 @@ export async function announceDevices(
           default: false,
         })
       }
-      swept = true
-    } catch (e) {
+      hasSwept = true
+    } catch (error) {
       // A plex.tv hiccup degrades to "the Shield only" for THIS round — the Shield is
       // env-configured and needs no network to announce, so card scans keep working.
       console.log(
-        `[devices] plex.tv enumeration failed: ${errMessage(e)}`,
+        `[devices] plex.tv enumeration failed: ${errMessage(error)}`,
       )
     }
 
@@ -198,7 +204,7 @@ export async function announceDevices(
     // still works. Its entry is left retained and untouched, which means its `seen` stops
     // advancing: that is what `seen` is FOR (this is the one place we diverge from the Python
     // original, which cleared the topics on a failed enumeration and flapped the dropdown).
-    if (swept) {
+    if (hasSwept) {
       for (const gone of REGISTRY.keys()) {
         if (next.has(gone)) continue
         pub(`${T_DEVICES_BASE}/${gone}`, "", {
@@ -220,9 +226,9 @@ export async function announceDevices(
       })
       REGISTRY.set(id, payload)
     }
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[devices] announce failed: ${e instanceof Error && e.stack ? e.stack : String(e)}`,
+      `[devices] announce failed: ${error instanceof Error && error.stack ? error.stack : String(error)}`,
     )
   }
 }

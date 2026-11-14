@@ -28,10 +28,10 @@ const LEGACY_RANDOM = new Set(["anime"])
 export function isProductKind(
   raw: unknown,
 ): raw is ProductKind {
-  const k = String(raw ?? "")
+  const kind = String(raw ?? "")
     .trim()
     .toLowerCase()
-  return k === "picks" || k === "rules"
+  return kind === "picks" || kind === "rules"
 }
 
 /**
@@ -45,10 +45,10 @@ export function normalizeProductKind(
   raw: unknown,
   source?: unknown,
 ): ProductKind {
-  const k = String(raw ?? "")
+  const kind = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (k === "picks" || k === "rules") return k
+  if (kind === "picks" || kind === "rules") return kind
   const src = String(source ?? "")
     .trim()
     .toLowerCase()
@@ -56,8 +56,8 @@ export function normalizeProductKind(
     // Every rule-built set is rules, including the legacy `movies` rewatch channel.
     return "rules"
   }
-  if (LEGACY_RULES.has(k)) return "rules"
-  if (LEGACY_PICKS.has(k)) return "picks"
+  if (LEGACY_RULES.has(kind)) return "rules"
+  if (LEGACY_PICKS.has(kind)) return "picks"
   // Unknown / blank on a queue-shaped set: hand-picked is the historical default.
   if (src === "queue" || src === "") return "picks"
   return "rules"
@@ -73,10 +73,11 @@ export function normalizeAddAs(
   raw: unknown,
   opts: { kind?: unknown; source?: unknown } = {},
 ): AddAs {
-  const v = String(raw ?? "")
+  const addAs = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (v === "priority" || v === "random") return v
+  if (addAs === "priority" || addAs === "random")
+    return addAs
   const product = normalizeProductKind(
     opts.kind,
     opts.source,
@@ -151,14 +152,18 @@ export function kindForWrite(
     .trim()
     .toLowerCase()
   if (src === "rotation") return { kind: "rules" }
-  const k = String(raw ?? "")
+  const kind = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (k === "rules") return { kind: "rules" }
-  if (k === "picks") return { kind: "picks" }
-  if (k === "anime")
+  if (kind === "rules") return { kind: "rules" }
+  if (kind === "picks") return { kind: "picks" }
+  if (kind === "anime")
     return { kind: "picks", add_as: "random" }
-  if (k === "movies" || k === "movie" || k === "demo") {
+  if (
+    kind === "movies" ||
+    kind === "movie" ||
+    kind === "demo"
+  ) {
     return { kind: "picks", add_as: "priority" }
   }
   // Default create: priority picks (the old "＋ New queue" / movies path).
@@ -212,19 +217,20 @@ export function normalizePlacement(
   raw: unknown,
   addAs: AddAs,
 ): Placement {
-  const v = String(raw ?? "")
+  const placement = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (v === "priority" || v === "random") return v
+  if (placement === "priority" || placement === "random")
+    return placement
   return addAs
 }
 
 /** True when this entry NAMES its lane, rather than inheriting the set's. */
 export function isExplicitPlacement(raw: unknown): boolean {
-  const v = String(raw ?? "")
+  const placement = String(raw ?? "")
     .trim()
     .toLowerCase()
-  return v === "priority" || v === "random"
+  return placement === "priority" || placement === "random"
 }
 
 /**
@@ -264,10 +270,10 @@ export function normalizeLead(
   raw: unknown,
   opts: { isPromoted: boolean; isMovie?: boolean },
 ): Lead {
-  const v = String(raw ?? "")
+  const lead = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (v === "once" || v === "always") return v
+  if (lead === "once" || lead === "always") return lead
   if (opts.isMovie) return "always"
   return opts.isPromoted ? "once" : "always"
 }

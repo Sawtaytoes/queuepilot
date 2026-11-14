@@ -68,10 +68,10 @@ async function mapLimit<T, R>(
     { length: Math.min(limit, items.length) },
     async () => {
       for (;;) {
-        const i = next
+        const index = next
         next += 1
-        if (i >= items.length) return
-        out[i] = await fn(items[i] as T, i)
+        if (index >= items.length) return
+        out[index] = await fn(items[index] as T, index)
       }
     },
   )
@@ -119,7 +119,7 @@ export function misterProvider({
   def,
   client = null,
 }: MisterProviderOptions): Provider {
-  const c =
+  const httpClient =
     client || misterClient({ baseUrl: def.base_url })
 
   const playItem = (
@@ -153,12 +153,12 @@ export function misterProvider({
 
     /** The installed systems — SNES, NES, Arcade. A queue scopes its searches to these. */
     async libraries(): Promise<ProviderLibrary[]> {
-      const systems = await c.systems()
+      const systems = await httpClient.systems()
       return systems
-        .filter((s) => s.id)
-        .map((s) => ({
-          id: String(s.id),
-          title: String(s.name || s.id),
+        .filter((system) => system.id)
+        .map((system) => ({
+          id: String(system.id),
+          title: String(system.name || system.id),
         }))
     },
 
@@ -171,30 +171,32 @@ export function misterProvider({
      * (decision `2026-08-17-no-libraries-checked-means-every-library`).
      */
     async search(
-      q: string,
+      rawQuery: string,
       { libraries = [] }: { libraries?: string[] } = {},
     ): Promise<ProviderSearchHit[]> {
-      const query = String(q || "").trim()
+      const query = String(rawQuery || "").trim()
       if (!query) return []
 
       const named = libraries.map(String).filter(Boolean)
       if (!named.length)
-        return (await c.search(query, ALL_SYSTEMS)).map(
-          toSearchHit,
-        )
+        return (
+          await httpClient.search(query, ALL_SYSTEMS)
+        ).map(toSearchHit)
 
       const perSystem = await mapLimit(
         named,
         SEARCH_CONCURRENCY,
         (system) =>
-          c.search(query, system).catch((e: unknown) => {
-            // One dead system must not empty the whole result. A core can be installed with
-            // no index yet, which answers 404 and reads as "nothing here" rather than an error.
-            console.log(
-              `[mister] search ${system}: ${errMessage(e)}`,
-            )
-            return []
-          }),
+          httpClient
+            .search(query, system)
+            .catch((error: unknown) => {
+              // One dead system must not empty the whole result. A core can be installed with
+              // no index yet, which answers 404 and reads as "nothing here" rather than an error.
+              console.log(
+                `[mister] search ${system}: ${errMessage(error)}`,
+              )
+              return []
+            }),
       )
 
       // Merge, keeping the first hit per path: a game reachable from two named systems is
@@ -222,7 +224,7 @@ export function misterProvider({
      * while the MiSTer is powered down.
      */
     cover(path: string): Promise<ProviderCover> {
-      return c.cover(
+      return httpClient.cover(
         systemFromPath(path),
         titleFromPath(path),
       )
@@ -240,7 +242,7 @@ export function misterProvider({
       entries: CuratedEntryRef[] = [],
     ): Promise<(ProviderTileRow | null)[]> {
       const byId = new Map(
-        entries.map((e) => [String(e.id), e]),
+        entries.map((entry) => [String(entry.id), entry]),
       )
       return [...ids]
         .map(String)
@@ -276,7 +278,7 @@ export function misterProvider({
       ctx: BucketsContext,
     ): Promise<BucketsResult> {
       const entries = (ctx.entries || []).filter(
-        (e) => e && e.id,
+        (entry) => entry && entry.id,
       )
       if (!entries.length) return { play: [], buckets: [] }
 
@@ -290,10 +292,10 @@ export function misterProvider({
         play: [
           playItem(String(head.id), title),
         ] as PlayItem[],
-        buckets: entries.map((e) => ({
-          path: String(e.id),
+        buckets: entries.map((entry) => ({
+          path: String(entry.id),
           title: entryTitle(
-            e as { id: string; title?: string | null },
+            entry as { id: string; title?: string | null },
           ),
           owed: 1,
           played: 0,

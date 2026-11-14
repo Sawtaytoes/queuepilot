@@ -40,7 +40,7 @@ if (cur.length) blocks.push(cur)
 let changed = 0
 const out: string[] = []
 for (const block of blocks) {
-  if (!block.some((l) => /^- id:/.test(l))) {
+  if (!block.some((line) => /^- id:/.test(line))) {
     out.push(...block)
     continue
   }
@@ -48,16 +48,20 @@ for (const block of blocks) {
   let kind: string | null = null
   let kindI = -1
   let hasAddAs = false
-  for (let i = 0; i < block.length; i++) {
-    const l = block[i]!
-    const sm = /^ {2}source:\s*(\S+)/.exec(l)
+  for (
+    let blockIndex = 0;
+    blockIndex < block.length;
+    blockIndex++
+  ) {
+    const line = block[blockIndex]!
+    const sm = /^ {2}source:\s*(\S+)/.exec(line)
     if (sm) source = sm[1]!
-    const km = /^ {2}kind:\s*(\S+)/.exec(l)
+    const km = /^ {2}kind:\s*(\S+)/.exec(line)
     if (km) {
       kind = km[1]!
-      kindI = i
+      kindI = blockIndex
     }
-    if (/^ {2}add_as:/.test(l)) hasAddAs = true
+    if (/^ {2}add_as:/.test(line)) hasAddAs = true
   }
   if (kindI < 0 || kind == null) {
     out.push(...block)

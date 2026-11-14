@@ -29,8 +29,8 @@ const LOCK_DIR = path + ".lock"
 const LOCK_STALE_MS = 15000 // a holder older than this is presumed dead; steal the lock
 const LOCK_WAIT_MS = 10000 // give up acquiring after this
 const sleep = (ms: number) =>
-  new Promise<void>((r) => {
-    setTimeout(r, ms)
+  new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
   })
 
 async function acquireLock(): Promise<void> {
@@ -39,8 +39,9 @@ async function acquireLock(): Promise<void> {
     try {
       await fs.mkdir(LOCK_DIR)
       return
-    } catch (e) {
-      if (!isNodeError(e) || e.code !== "EEXIST") throw e
+    } catch (error) {
+      if (!isNodeError(error) || error.code !== "EEXIST")
+        throw error
       // Steal a stale lock (a crashed holder that never rmdir'd).
       try {
         const st = await fs.stat(LOCK_DIR)
@@ -79,8 +80,9 @@ export async function readDoc(): Promise<Document> {
   let text = ""
   try {
     text = await fs.readFile(path, "utf8")
-  } catch (e) {
-    if (!isNodeError(e) || e.code !== "ENOENT") throw e
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== "ENOENT")
+      throw error
   }
   const doc: Document = parseDocument(text)
   if (!doc.contents || typeof doc.get !== "function")

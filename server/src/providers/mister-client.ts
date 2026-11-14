@@ -253,13 +253,13 @@ export function misterClient({
 
 /** A game DTO as the editor's search hit. Exported so the provider and its tests agree. */
 export const toSearchHit = (
-  g: MisterGameDto,
+  game: MisterGameDto,
 ): ProviderSearchHit => ({
-  id: String(g.path ?? ""),
-  title: String(g.name ?? ""),
-  libraryId: String(g.system?.id ?? ""),
+  id: String(game.path ?? ""),
+  title: String(game.name ?? ""),
+  libraryId: String(game.system?.id ?? ""),
   libraryTitle: String(
-    g.system?.name ?? g.system?.id ?? "",
+    game.system?.name ?? game.system?.id ?? "",
   ),
   type: "game",
 })

@@ -48,10 +48,14 @@ const kids: GroupMembership = {
 describe("a group carries its own membership rule", () => {
   test("splits the roster into the people the count is over and the people who may join", () => {
     expect(
-      requiredRoster(kids).map((m) => m.personId),
+      requiredRoster(kids).map(
+        (rosterMember) => rosterMember.personId,
+      ),
     ).toEqual(["ada", "grace"])
     expect(
-      optionalRoster(kids).map((m) => m.personId),
+      optionalRoster(kids).map(
+        (rosterMember) => rosterMember.personId,
+      ),
     ).toEqual(["linus"])
   })
 

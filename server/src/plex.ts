@@ -308,25 +308,27 @@ async function withRetry<T>(
   }: { attempts?: number; baseMs?: number } = {},
 ): Promise<T> {
   let lastErr: unknown
-  for (let i = 0; i < attempts; i++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       return await fn()
-    } catch (e) {
+    } catch (error) {
       // A 4xx is surfaced by fn() as a non-retryable marker; rethrow immediately.
       if (
-        isPlexError(e) &&
-        e.plexStatus >= 400 &&
-        e.plexStatus < 500
+        isPlexError(error) &&
+        error.plexStatus >= 400 &&
+        error.plexStatus < 500
       )
-        throw e
-      lastErr = e
-      if (i === attempts - 1) break
+        throw error
+      lastErr = error
+      if (attempt === attempts - 1) break
       const jitter = Math.floor(
-        (i + 1) *
+        (attempt + 1) *
           baseMs *
-          (0.5 + Math.sin(i + 1) * 0.25 + 0.5),
+          (0.5 + Math.sin(attempt + 1) * 0.25 + 0.5),
       )
-      await new Promise((r) => setTimeout(r, jitter))
+      await new Promise((resolve) =>
+        setTimeout(resolve, jitter),
+      )
     }
   }
   throw lastErr
@@ -347,7 +349,7 @@ export async function plexGet(
   const existing = _inflight.get(key)
   if (existing) return existing
 
-  const p = withRetry(async () => {
+  const pending = withRetry(async () => {
     const res = await request(PLEX_URL + path, {
       dispatcher: agent,
       method: "GET",
@@ -367,8 +369,8 @@ export async function plexGet(
     return res.body.json()
   }).finally(() => _inflight.delete(key))
 
-  _inflight.set(key, p)
-  return p
+  _inflight.set(key, pending)
+  return pending
 }
 
 function container(json: unknown): PlexContainer {
@@ -417,14 +419,14 @@ export function isCountableEpisode(
 export function isPlayableEpisode(
   ep: EpisodeLike | null | undefined,
   {
-    includeSpecials = false,
+    includeSpecials: isIncludingSpecials = false,
   }: { includeSpecials?: boolean } = {},
 ): boolean {
   if (!ep) return false
   if (isExtraOrPromo(ep)) return false
   const season =
     ep.parentIndex != null ? ep.parentIndex : ep.season
-  if (!includeSpecials && String(season) === "0")
+  if (!isIncludingSpecials && String(season) === "0")
     return false
   if (!ep.duration) return false
   return true
@@ -438,10 +440,11 @@ export function countEpisodes(
 ): EpisodeCounts {
   let leafCount = 0
   let viewedLeafCount = 0
-  for (const e of eps || []) {
-    if (!isCountableEpisode(e)) continue
+  for (const episode of eps || []) {
+    if (!isCountableEpisode(episode)) continue
     leafCount += 1
-    if (e.viewCount && e.viewCount > 0) viewedLeafCount += 1
+    if (episode.viewCount && episode.viewCount > 0)
+      viewedLeafCount += 1
   }
   return { leafCount, viewedLeafCount }
 }
@@ -493,7 +496,7 @@ export async function accountToken(
         : resources.resources || []
       const mid = await machineIdentifier()
       const row = rows.find(
-        (r) => r.clientIdentifier === mid,
+        (row) => row.clientIdentifier === mid,
       )
       token = (row && row.accessToken) || null
     }
@@ -529,19 +532,24 @@ export async function homeUsers(): Promise<HomeUser[]> {
     ? data
     : (data && data.users) || []
   return rows
-    .map((u) => ({
-      name: u.title || u.username || u.friendlyName || "",
+    .map((row) => ({
+      name:
+        row.title || row.username || row.friendlyName || "",
       // The plex.tv username — the string the PMS log stamps for the OWNER (managed users
       // stamp their title instead). The requires_profile gate matches that stamp, so the
       // queue-profile picker uses `username` for the admin option and `name` for the rest.
-      username: u.username || null,
+      username: row.username || null,
       // Managed users: plex.tv id == server accountID. Admin: server accountID is 1.
-      id: u.admin ? 1 : u.id != null ? Number(u.id) : null,
-      uuid: u.admin ? null : u.uuid || null, // admin => no managed-user uuid (admin PLEX_TOKEN)
-      admin: Boolean(u.admin),
-      restricted: Boolean(u.restricted),
+      id: row.admin
+        ? 1
+        : row.id != null
+          ? Number(row.id)
+          : null,
+      uuid: row.admin ? null : row.uuid || null, // admin => no managed-user uuid (admin PLEX_TOKEN)
+      admin: Boolean(row.admin),
+      restricted: Boolean(row.restricted),
     }))
-    .filter((u) => u.name)
+    .filter((account) => account.name)
 }
 
 // --- a `requires_profile` STRING -> the account behind it ------------------------------ //
@@ -579,7 +587,8 @@ export async function profileUser(
   if (!users.length) return null
   const row =
     users.find(
-      (u) => u.name === title || u.username === title,
+      (user) =>
+        user.name === title || user.username === title,
     ) ?? null
   _profileUsers.set(title, row)
   return row
@@ -639,16 +648,19 @@ export async function contentRatings(
         dirs = []
       }
     }
-    for (const d of dirs) {
-      const v = d.title || d.key || d.contentRating
-      if (v == null) continue
-      const s = String(v).trim()
+    for (const directory of dirs) {
+      const value =
+        directory.title ||
+        directory.key ||
+        directory.contentRating
+      if (value == null) continue
+      const trimmed = String(value).trim()
       if (
-        s &&
-        s.toLowerCase() !== "unrated" &&
-        s.toLowerCase() !== "none"
+        trimmed &&
+        trimmed.toLowerCase() !== "unrated" &&
+        trimmed.toLowerCase() !== "none"
       )
-        out.add(s)
+        out.add(trimmed)
     }
   }
   return [...out]
@@ -658,20 +670,20 @@ export async function contentRatings(
 export function parseTitleString(
   text: unknown,
 ): ParsedTitle {
-  let s = String(text).trim()
+  let remaining = String(text).trim()
   let guid: string | null = null
-  let m = s.match(/\s*\[([^\]]+)\]\s*$/)
-  if (m) {
-    guid = (m[1] ?? "").trim()
-    s = s.slice(0, m.index).trimEnd()
+  let match = remaining.match(/\s*\[([^\]]+)\]\s*$/)
+  if (match) {
+    guid = (match[1] ?? "").trim()
+    remaining = remaining.slice(0, match.index).trimEnd()
   }
   let year: number | null = null
-  m = s.match(/\s*\((\d{4})\)\s*$/)
-  if (m) {
-    year = parseInt(m[1] ?? "", 10)
-    s = s.slice(0, m.index).trimEnd()
+  match = remaining.match(/\s*\((\d{4})\)\s*$/)
+  if (match) {
+    year = parseInt(match[1] ?? "", 10)
+    remaining = remaining.slice(0, match.index).trimEnd()
   }
-  return { title: s.trim(), year, guid }
+  return { title: remaining.trim(), year, guid }
 }
 
 // `source-id` folder hint (anidb-16172) → Plex Guid id (anidb://16172). Best-effort.
@@ -680,11 +692,13 @@ function matchGuidHint(
   guids: (string | undefined)[],
 ): boolean {
   if (!hint) return false
-  const i = hint.indexOf("-")
-  if (i <= 0) return false
+  const dashIndex = hint.indexOf("-")
+  if (dashIndex <= 0) return false
   const want =
-    `${hint.slice(0, i)}://${hint.slice(i + 1)}`.toLowerCase()
-  return guids.some((g) => (g || "").toLowerCase() === want)
+    `${hint.slice(0, dashIndex)}://${hint.slice(dashIndex + 1)}`.toLowerCase()
+  return guids.some(
+    (guid) => (guid || "").toLowerCase() === want,
+  )
 }
 
 function posterFields(md: PlexMetadata): PosterFields {
@@ -723,16 +737,18 @@ function posterFields(md: PlexMetadata): PosterFields {
 // per-queue library picker + the global-exclude editor.
 export async function sections(): Promise<SectionInfo[]> {
   const mc = container(await plexGet("/library/sections"))
-  return (mc.Directory || []).map((d) => ({
-    id: Number(d.key),
-    title: d.title,
-    type: d.type,
-    video: d.type === "movie" || d.type === "show",
+  return (mc.Directory || []).map((directory) => ({
+    id: Number(directory.key),
+    title: directory.title,
+    type: directory.type,
+    video:
+      directory.type === "movie" ||
+      directory.type === "show",
     // Plex "Other Videos" libraries (Personal Media, no metadata agent) — the UI groups
     // these apart from real Movie libraries, matching Plex's own library styles.
     other:
-      d.type === "movie" &&
-      d.agent === "com.plexapp.agents.none",
+      directory.type === "movie" &&
+      directory.agent === "com.plexapp.agents.none",
   }))
 }
 
@@ -741,21 +757,25 @@ export async function search(
   sections: SectionIds,
   query: string,
 ): Promise<PosterFields[]> {
-  const q = encodeURIComponent(query)
+  const encodedQuery = encodeURIComponent(query)
   const out: PosterFields[] = []
   const seen = new Set<string>()
   for (const section of ([] as number[]).concat(sections)) {
     let json: Awaited<ReturnType<typeof plexGet>>
     try {
       json = await plexGet(
-        `/library/sections/${section}/all?title=${q}&includeGuids=1&X-Plex-Container-Size=50`,
+        `/library/sections/${section}/all?title=${encodedQuery}&includeGuids=1&X-Plex-Container-Size=50`,
       )
     } catch {
       continue
     }
-    for (const e of container(json).Metadata || []) {
-      if (e.type !== "movie" && e.type !== "show") continue
-      const rk = String(e.ratingKey)
+    for (const metadata of container(json).Metadata || []) {
+      if (
+        metadata.type !== "movie" &&
+        metadata.type !== "show"
+      )
+        continue
+      const rk = String(metadata.ratingKey)
       if (seen.has(rk)) continue
       seen.add(rk)
       // The section is authoritative from the query itself (per-item librarySectionID is
@@ -763,7 +783,7 @@ export async function search(
       // Every real item carries a `type` ('movie'|'show') from posterFields — the frontend
       // switches its result row on it (vs. the 'collection' rows below).
       out.push({
-        ...posterFields(e),
+        ...posterFields(metadata),
         sectionId: Number(section),
       })
     }
@@ -807,18 +827,19 @@ export async function collections(
         continue
       }
       rows = []
-      for (const e of container(json).Metadata || []) {
-        if (e.type !== "collection") continue
+      for (const metadata of container(json).Metadata ||
+        []) {
+        if (metadata.type !== "collection") continue
         rows.push({
           type: "collection",
-          ratingKey: String(e.ratingKey),
-          title: e.title,
+          ratingKey: String(metadata.ratingKey),
+          title: metadata.title,
           sectionId: Number(section),
           childCount:
-            e.childCount != null
-              ? Number(e.childCount)
+            metadata.childCount != null
+              ? Number(metadata.childCount)
               : null,
-          hasThumb: Boolean(e.thumb),
+          hasThumb: Boolean(metadata.thumb),
         })
       }
       await cache.putSectionCollections(section, rows)
@@ -850,17 +871,18 @@ export async function resolveCollection(
   const list = await collections(sections, name, opts)
   if (!list.length) return null
   const nl = String(name).trim().toLowerCase()
-  const c =
+  const collectionHit =
     list.find(
-      (x) => String(x.title).trim().toLowerCase() === nl,
+      (candidate) =>
+        String(candidate.title).trim().toLowerCase() === nl,
     ) || list[0]
-  if (!c) return null // unreachable — `list.length` was checked above; index reads are unchecked
+  if (!collectionHit) return null // unreachable — `list.length` was checked above; index reads are unchecked
   return {
     type: "collection",
-    ratingKey: c.ratingKey,
-    title: c.title,
-    childCount: c.childCount,
-    hasThumb: c.hasThumb,
+    ratingKey: collectionHit.ratingKey,
+    title: collectionHit.title,
+    childCount: collectionHit.childCount,
+    hasThumb: collectionHit.hasThumb,
   }
 }
 
@@ -906,33 +928,37 @@ export async function resolveTitle(
   const tl = title.toLowerCase()
   let best: PosterFields | null = null
   let bestScore = 0
-  for (const e of mc.Metadata || []) {
-    if (e.type !== "movie" && e.type !== "show") continue
-    const candTitle = (e.title || "").toLowerCase()
+  for (const metadata of mc.Metadata || []) {
+    if (
+      metadata.type !== "movie" &&
+      metadata.type !== "show"
+    )
+      continue
+    const candTitle = (metadata.title || "").toLowerCase()
     // `Guid` is not on the shared `PlexMetadata`; it arrives only with `includeGuids=1`.
     const guids = (
-      (e.Guid as { id?: string }[] | undefined) || []
-    ).map((g) => g.id)
+      (metadata.Guid as { id?: string }[] | undefined) || []
+    ).map((guidEntry) => guidEntry.id)
     let score = 0
     if (guid && matchGuidHint(guid, guids)) score += 100
-    if (year != null && e.year === year) score += 10
+    if (year != null && metadata.year === year) score += 10
     else if (
       year != null &&
-      e.year != null &&
-      e.year !== year
+      metadata.year != null &&
+      metadata.year !== year
     )
       score -= 5
     if (candTitle === tl) score += 5
     else if (candTitle.startsWith(tl)) score += 1
-    const rk = String(e.ratingKey)
-    const better =
+    const rk = String(metadata.ratingKey)
+    const isBetter =
       best === null ||
       score > bestScore ||
       (score === bestScore &&
         /^\d+$/.test(rk) &&
         parseInt(rk, 10) < parseInt(best.ratingKey, 10))
-    if (better) {
-      best = posterFields(e)
+    if (isBetter) {
+      best = posterFields(metadata)
       bestScore = score
     }
   }
@@ -1321,53 +1347,55 @@ export async function nextEpisode(
   // A single-season show (every anime — Japan doesn't do American-style seasons) hides its
   // "S1", so the tile shows just "E5". Count DISTINCT real seasons (S0 specials don't count).
   const seasons = new Set<string>()
-  for (const e of eps) {
+  for (const episode of eps) {
     if (
-      isExtraOrPromo(e) ||
-      String(e.parentIndex) === "0" ||
-      !e.duration
+      isExtraOrPromo(episode) ||
+      String(episode.parentIndex) === "0" ||
+      !episode.duration
     )
       continue
-    if (e.parentIndex != null)
-      seasons.add(String(e.parentIndex))
+    if (episode.parentIndex != null)
+      seasons.add(String(episode.parentIndex))
   }
-  const multiSeason = seasons.size > 1
+  const isMultiSeason = seasons.size > 1
   const ordered = episodesAtOrAfterStart(
     orderedPlayableEpisodes(eps, {
       included_specials: [...includedSpecials],
     }),
     start,
   )
-  for (const e of ordered) {
+  for (const episode of ordered) {
     // viewCount is OMITTED by Plex at 0, so a missing count is unwatched here — never watched.
     if (
       completed
-        ? completed.has(String(e.ratingKey))
-        : Boolean(e.viewCount && e.viewCount > 0)
+        ? completed.has(String(episode.ratingKey))
+        : Boolean(
+            episode.viewCount && episode.viewCount > 0,
+          )
     ) {
       continue
     }
     // On the set's SKIP list. Applied here as well as in the engine, or the tile would keep
     // naming an episode the next scan is never going to play — the caption and the playback
     // disagreeing is the whole failure this guards.
-    if (skipped.has(String(e.ratingKey))) continue
+    if (skipped.has(String(episode.ratingKey))) continue
     // This next-up leaf is unwatched; a viewOffset means it was STARTED (mid-episode resume
     // point), which the tile surfaces as its "In Progress" badge (same predicate as the
     // engine's resume_offset: viewOffset > 0 AND unwatched).
     const viewOffset = queueProgress
       ? Number(
-          queueProgress.get(String(e.ratingKey))
+          queueProgress.get(String(episode.ratingKey))
             ?.positionMs,
         ) || 0
-      : Number(e.viewOffset) || 0
+      : Number(episode.viewOffset) || 0
     return {
-      ratingKey: String(e.ratingKey),
-      season: e.parentIndex ?? null,
-      episode: e.index ?? null,
-      title: e.title || "",
-      multiSeason,
+      ratingKey: String(episode.ratingKey),
+      season: episode.parentIndex ?? null,
+      episode: episode.index ?? null,
+      title: episode.title || "",
+      multiSeason: isMultiSeason,
       viewOffset,
-      duration: Number(e.duration) || 0,
+      duration: Number(episode.duration) || 0,
       partiallyWatched: viewOffset > 0,
     }
   }
@@ -1538,7 +1566,7 @@ function startMemberIndex(
 export async function showEpisodes(
   showRatingKey: string | number,
   opts: AccountScope = {},
-  includeSpecialChoices = false,
+  isIncludingSpecialChoices = false,
 ): Promise<ShowEpisodes | null> {
   // `opts` ({token, account}) scopes the `watched` marks to a specific profile — a per-profile
   // channel's start editor shows THAT profile's history, not the admin's. Empty for
@@ -1551,38 +1579,45 @@ export async function showEpisodes(
   const realSeasonCount = new Set(
     eps
       .filter(
-        (e) =>
-          isCountableEpisode(e) && episodeSeason(e) !== 0,
+        (episode) =>
+          isCountableEpisode(episode) &&
+          episodeSeason(episode) !== 0,
       )
-      .map((e) => episodeSeason(e)),
+      .map((episode) => episodeSeason(episode)),
   ).size
   const hasRealSeasons = realSeasonCount > 0
   const seasons = new Map<number, ShowEpisodeRow[]>() // season number -> [{episode, title, watched}]
-  for (const e of eps) {
-    if (includeSpecialChoices) {
-      if (!isCountableEpisode(e)) continue
+  for (const episode of eps) {
+    if (isIncludingSpecialChoices) {
+      if (!isCountableEpisode(episode)) continue
     } else if (
-      !isPlayableEpisode(e, {
+      !isPlayableEpisode(episode, {
         includeSpecials: !hasRealSeasons,
       })
     )
       continue
-    const s = Number(e.parentIndex ?? 1)
-    let rows = seasons.get(s)
+    const seasonNumber = Number(episode.parentIndex ?? 1)
+    let rows = seasons.get(seasonNumber)
     if (!rows) {
       rows = []
-      seasons.set(s, rows)
+      seasons.set(seasonNumber, rows)
     }
     rows.push({
-      ratingKey: String(e.ratingKey ?? ""),
-      episode: e.index ?? null,
-      title: e.title || "",
-      watched: Boolean(e.viewCount && e.viewCount > 0),
+      ratingKey: String(episode.ratingKey ?? ""),
+      episode: episode.index ?? null,
+      title: episode.title || "",
+      watched: Boolean(
+        episode.viewCount && episode.viewCount > 0,
+      ),
     })
   }
   const out = [...seasons.entries()]
-    .sort((a, b) =>
-      a[0] === 0 ? 1 : b[0] === 0 ? -1 : a[0] - b[0],
+    .sort((left, right) =>
+      left[0] === 0
+        ? 1
+        : right[0] === 0
+          ? -1
+          : left[0] - right[0],
     )
     .map(([season, episodes]) => ({ season, episodes }))
   return { multiSeason: realSeasonCount > 1, seasons: out }
@@ -1638,9 +1673,11 @@ export async function collectionNext(
         rank: rank.get(String(child.ratingKey)),
       }))
       .sort(
-        (a, b) =>
-          (a.rank ?? collectionOrder.length + a.plexIndex) -
-          (b.rank ?? collectionOrder.length + b.plexIndex),
+        (left, right) =>
+          (left.rank ??
+            collectionOrder.length + left.plexIndex) -
+          (right.rank ??
+            collectionOrder.length + right.plexIndex),
       )
       .map(({ child }) => child)
   }
@@ -1650,9 +1687,9 @@ export async function collectionNext(
   const startMember =
     floorAt >= 0 ? (children[floorAt]?.title ?? null) : null
   let position = 0
-  for (let i = 0; i < children.length; i++) {
-    if (floorAt >= 0 && i < floorAt) continue // member is before the manual start
-    const ch = children[i]
+  for (let index = 0; index < children.length; index++) {
+    if (floorAt >= 0 && index < floorAt) continue // member is before the manual start
+    const ch = children[index]
     if (!ch) continue // unreachable — `i < children.length`; index reads are unchecked
     // A skipped CHILD goes whole, matching `resolve.collectionItems`: the collection is the
     // member, its children are the items inside it.
@@ -1677,7 +1714,7 @@ export async function collectionNext(
         // The episode floor applies only to the member the start names, not to later ones.
         ep = await nextEpisode(
           ch.ratingKey,
-          floorAt === i ? start : null,
+          floorAt === index ? start : null,
           opts,
           skipped,
           includedSpecials,
@@ -1751,8 +1788,8 @@ export async function playingContext(
     // Collection membership comes back as name tags, and a collection tile is stored by
     // name ("Collection: <name>") — so names are the only join available here.
     collections: (md.Collection || [])
-      .map((c) => c.tag)
-      .filter((t): t is string => Boolean(t)),
+      .map((collection) => collection.tag)
+      .filter((tag): tag is string => Boolean(tag)),
   }
   _playCtx.set(key, ctx)
   return ctx

@@ -108,8 +108,8 @@ interface PressOptions {
 }
 
 const sleep = (seconds: number): Promise<void> =>
-  new Promise((r) => {
-    setTimeout(r, seconds * 1000)
+  new Promise((resolve) => {
+    setTimeout(resolve, seconds * 1000)
   })
 
 // isCancelled now comes from ./errors.js — it is the same isSet-then-is_set probe this
@@ -155,7 +155,7 @@ export function run(
   const timeoutMs =
     (timeoutSec == null ? ADB_TIMEOUT : timeoutSec) * 1000
   try {
-    const p = spawnSync(
+    const spawnResult = spawnSync(
       ADB_BIN,
       ["-s", adbTarget()!, ...args],
       {
@@ -166,25 +166,27 @@ export function run(
         maxBuffer: 8 * 1024 * 1024,
       },
     )
-    if (p.error) {
+    if (spawnResult.error) {
       // spawnSync puts TimeoutExpired-style failures on .error (ETIMEDOUT) or signal.
       console.log(
-        `[adb] ${args.join(" ")}: ${p.error.message}`,
+        `[adb] ${args.join(" ")}: ${spawnResult.error.message}`,
       )
       return null
     }
-    if (p.status !== 0) {
-      const err = String(p.stderr || "")
+    if (spawnResult.status !== 0) {
+      const err = String(spawnResult.stderr || "")
         .trim()
         .slice(0, 200)
       console.log(
-        `[adb] ${args.join(" ")}: rc=${p.status} ${err}`,
+        `[adb] ${args.join(" ")}: rc=${spawnResult.status} ${err}`,
       )
       return null
     }
-    return p.stdout ?? ""
-  } catch (e) {
-    console.log(`[adb] ${args.join(" ")}: ${errMessage(e)}`)
+    return spawnResult.stdout ?? ""
+  } catch (error) {
+    console.log(
+      `[adb] ${args.join(" ")}: ${errMessage(error)}`,
+    )
     return null
   }
 }
@@ -202,7 +204,7 @@ function deviceState(): string | null {
   if (!adbTarget() || deviceOperationCancelled())
     return null
   try {
-    const p = spawnSync(
+    const spawnResult = spawnSync(
       ADB_BIN,
       ["-s", adbTarget()!, "get-state"],
       {
@@ -211,15 +213,15 @@ function deviceState(): string | null {
         timeout: ADB_TIMEOUT * 1000,
       },
     )
-    if (p.error) return null
+    if (spawnResult.error) return null
     const text =
-      `${p.stdout ?? ""} ${p.stderr ?? ""}`.toLowerCase()
+      `${spawnResult.stdout ?? ""} ${spawnResult.stderr ?? ""}`.toLowerCase()
     if (/\bunauthorized\b/.test(text)) return "unauthorized"
     if (/\boffline\b/.test(text)) return "offline"
-    return String(p.stdout ?? "").trim() || null
-  } catch (e) {
+    return String(spawnResult.stdout ?? "").trim() || null
+  } catch (error) {
     console.log(
-      `[adb] get-state ${adbTarget()}: ${errMessage(e)}`,
+      `[adb] get-state ${adbTarget()}: ${errMessage(error)}`,
     )
     return null
   }
@@ -233,9 +235,9 @@ function connectOnce(): string | null {
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
     })
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[adb] connect ${adbTarget()}: ${errMessage(e)}`,
+      `[adb] connect ${adbTarget()}: ${errMessage(error)}`,
     )
     return null
   }
@@ -286,9 +288,9 @@ function disconnect(): void {
       env: envForAdb(),
       timeout: ADB_TIMEOUT * 1000,
     })
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[adb] disconnect ${adbTarget()}: ${errMessage(e)}`,
+      `[adb] disconnect ${adbTarget()}: ${errMessage(error)}`,
     )
   }
 }
@@ -302,8 +304,8 @@ export function foregroundActivity(): string | null {
     "dumpsys window | grep mCurrentFocus",
   ])
   if (!out) return null
-  const m = out.match(/(\S+\/\S+)\}/)
-  return m ? (m[1] ?? null) : null
+  const match = out.match(/(\S+\/\S+)\}/)
+  return match ? (match[1] ?? null) : null
 }
 
 /**
@@ -333,9 +335,9 @@ export function isAwake(): boolean | null {
     "dumpsys power | grep mWakefulness",
   ])
   if (!out) return null
-  const m = out.match(/mWakefulness=(\w+)/)
-  if (!m) return null
-  return (m[1] ?? "").trim().toLowerCase() === "awake"
+  const match = out.match(/mWakefulness=(\w+)/)
+  if (!match) return null
+  return (match[1] ?? "").trim().toLowerCase() === "awake"
 }
 
 /**
@@ -416,10 +418,10 @@ export function parseUiNodes(
   const cleaned = String(xml).replace(/\r/g, "").trim()
   const nodes: Record<string, string>[] = []
   const re = /<node\b([^>]*)\/?>/g
-  for (const m of cleaned.matchAll(re)) {
+  for (const match of cleaned.matchAll(re)) {
     const attrs: Record<string, string> = {}
     const attrRe = /([\w:.-]+)="([^"]*)"/g
-    for (const am of (m[1] ?? "").matchAll(attrRe)) {
+    for (const am of (match[1] ?? "").matchAll(attrRe)) {
       attrs[am[1] ?? ""] = am[2] ?? ""
     }
     nodes.push(attrs)
@@ -462,9 +464,9 @@ export function selectedProfile(): string | null {
   if (!xml) return null
   try {
     return selectedProfileFromXml(xml)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[adb] unparseable uiautomator dump: ${errMessage(e)}`,
+      `[adb] unparseable uiautomator dump: ${errMessage(error)}`,
     )
     return null
   }
@@ -518,12 +520,17 @@ export async function press(
     codes = keycodes.slice(0, -1)
   }
   const keys: string[] = []
-  for (const k of codes) {
-    if (Array.isArray(k)) {
-      const [code, n] = k
-      for (let i = 0; i < n; i++) keys.push(code)
-    } else if (typeof k === "string") {
-      keys.push(k)
+  for (const keySpec of codes) {
+    if (Array.isArray(keySpec)) {
+      const [code, repeatCount] = keySpec
+      for (
+        let innerIteration = 0;
+        innerIteration < repeatCount;
+        innerIteration++
+      )
+        keys.push(code)
+    } else if (typeof keySpec === "string") {
+      keys.push(keySpec)
     }
     // An options object anywhere but last was never reachable: the loop below would have
     // pushed it into an `input keyevent` argv. Dropped here rather than stringified.
@@ -555,8 +562,8 @@ export function _resetOrderCache(): void {
  * flat ["Bob Smith", ...]; both forms have to keep working.
  */
 export function asGroups(order: OrderLike): AliasGroup[] {
-  return (order || []).map((g) =>
-    typeof g === "string" ? [g] : [...g],
+  return (order || []).map((group) =>
+    typeof group === "string" ? [group] : [...group],
   )
 }
 
@@ -568,8 +575,8 @@ export function indexOfName(
   // The null guard is new but not a behaviour change: no alias group holds a null, so a
   // null/undefined `name` already fell through every `includes()` to the same null.
   if (name == null) return null
-  for (let i = 0; i < order.length; i++) {
-    if ((order[i] ?? []).includes(name)) return i
+  for (let index = 0; index < order.length; index++) {
+    if ((order[index] ?? []).includes(name)) return index
   }
   return null
 }
@@ -595,13 +602,13 @@ export function offsetBetween(
  */
 export function sameProfileInOrder(
   order: readonly AliasGroup[],
-  a: string | null | undefined,
-  b: string | null | undefined,
+  left: string | null | undefined,
+  right: string | null | undefined,
 ): boolean {
-  if (a === b) return true
-  if (!a || !b) return false
-  const ia = indexOfName(order, a)
-  const ib = indexOfName(order, b)
+  if (left === right) return true
+  if (!left || !right) return false
+  const ia = indexOfName(order, left)
+  const ib = indexOfName(order, right)
   return ia != null && ia === ib
 }
 
@@ -635,15 +642,15 @@ async function fetchHomeUserNames(): Promise<AliasGroup[]> {
   }
   const users: HomeUserRow[] = await plex.homeUsers()
   const out: AliasGroup[] = []
-  for (const u of users || []) {
+  for (const user of users || []) {
     const names: string[] = []
-    for (const n of [
-      u.name,
-      u.title,
-      u.friendlyName,
-      u.username,
+    for (const name of [
+      user.name,
+      user.title,
+      user.friendlyName,
+      user.username,
     ]) {
-      if (n && !names.includes(n)) names.push(n)
+      if (name && !names.includes(name)) names.push(name)
     }
     if (names.length) out.push(names)
   }
@@ -675,9 +682,9 @@ export async function profileOrder(): Promise<
   let names: AliasGroup[] = []
   try {
     names = await fetchHomeUserNames()
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[adb] plex.tv home users unavailable (${errMessage(e)}); using cached order`,
+      `[adb] plex.tv home users unavailable (${errMessage(error)}); using cached order`,
     )
     names = []
   }
@@ -689,9 +696,9 @@ export async function profileOrder(): Promise<
         ADB_PROFILE_ORDER_CACHE,
         JSON.stringify(names),
       )
-    } catch (e) {
+    } catch (error) {
       console.log(
-        `[adb] could not cache the picker order: ${errMessage(e)}`,
+        `[adb] could not cache the picker order: ${errMessage(error)}`,
       )
     }
     return names
@@ -721,13 +728,13 @@ export async function profileOrder(): Promise<
  * with === would leave switchTo pressing forever, never satisfied.
  */
 export async function sameProfile(
-  a: string | null | undefined,
-  b: string | null | undefined,
+  left: string | null | undefined,
+  right: string | null | undefined,
 ): Promise<boolean> {
-  if (a === b) return true
-  if (!a || !b) return false
+  if (left === right) return true
+  if (!left || !right) return false
   const order = await profileOrder()
-  return sameProfileInOrder(order, a, b)
+  return sameProfileInOrder(order, left, right)
 }
 
 async function offset(
@@ -863,25 +870,25 @@ export async function summonPicker(
 ): Promise<[string | null, boolean]> {
   const deadline =
     Date.now() + ADB_PICKER_WAIT_SECONDS * 1000
-  let woken = false
+  let hasWoken = false
   let menuTries = 0
   let homeSince: number | null = null
   let backs = 0
   let otherSince = Date.now()
   while (Date.now() < deadline) {
     if (isCancelled(cancel)) return [null, false]
-    const [ready, name] = pickerReady(knownCurrent)
-    if (ready) return [name, knownCurrent == null]
+    const [isReady, name] = pickerReady(knownCurrent)
+    if (isReady) return [name, knownCurrent == null]
     const act = foregroundActivity() || ""
     if (!act.includes(PLEX_PKG)) {
       // A dozing Shield reports the screensaver, not Plex. WAKEUP is not a navigation
       // press — it cannot select or dismiss anything — so it is safe to send blind.
-      if (!woken) {
+      if (!hasWoken) {
         console.log(
           `[adb] not on Plex (on '${act}'); waking the Shield`,
         )
         await press("KEYCODE_WAKEUP")
-        woken = true
+        hasWoken = true
       }
       await sleep(0.4)
       continue
@@ -962,8 +969,8 @@ export async function waitForPicker(
 ): Promise<string | null> {
   while (Date.now() < deadline) {
     if (isCancelled(cancel)) return null
-    const [ready, name] = pickerReady(knownCurrent)
-    if (ready) return name
+    const [isReady, name] = pickerReady(knownCurrent)
+    if (isReady) return name
     await sleep(0.4)
   }
   return null
@@ -996,7 +1003,7 @@ export async function switchTo(
     return summonPicker(cancel) // no hint: re-read for real
   }
 
-  let [current, verified] = await summonPicker(
+  let [current, isVerified] = await summonPicker(
     cancel,
     knownCurrent,
   )
@@ -1021,7 +1028,7 @@ export async function switchTo(
       ]
     }
     if (await sameProfile(current, target)) {
-      if (verified) break
+      if (isVerified) break
       // The hint said we are already there, so the press loop below — and with it every
       // read-back — would be skipped entirely, and CENTER would commit whoever is REALLY
       // highlighted. That is how a stale LAST_SEEN signed the Shield into the wrong profile
@@ -1029,7 +1036,7 @@ export async function switchTo(
       // be wrong.
       const live = selectedProfile()
       if (live == null) {
-        ;[current, verified] = await resummon(
+        ;[current, isVerified] = await resummon(
           "the picker went before the selection was confirmed",
         )
         if (current == null) {
@@ -1046,7 +1053,7 @@ export async function switchTo(
         )
       }
       current = live
-      verified = true
+      isVerified = true
       continue
     }
     if (isCancelled(cancel))
@@ -1078,9 +1085,9 @@ export async function switchTo(
 
     // Re-guard immediately before pressing: the picker may have been dismissed by a human
     // between the read-back and now.
-    const [ready, live] = pickerReady()
-    if (!ready) {
-      ;[current, verified] = await resummon(
+    const [isReady, live] = pickerReady()
+    if (!isReady) {
+      ;[current, isVerified] = await resummon(
         "the picker went away mid-switch",
       )
       if (current == null) {
@@ -1093,25 +1100,25 @@ export async function switchTo(
     }
     if (live !== current) {
       current = live
-      verified = true
+      isVerified = true
       continue
     }
 
-    const n = Math.min(
+    const pressCount = Math.min(
       Math.abs(step),
       ADB_MAX_PRESSES - presses,
     )
     const keycode =
       step > 0 ? "KEYCODE_DPAD_RIGHT" : "KEYCODE_DPAD_LEFT"
-    if (!(await press([keycode, n])))
+    if (!(await press([keycode, pressCount])))
       return [false, "a D-pad press failed"]
-    presses += n
+    presses += pressCount
 
     const moved = selectedProfile()
     if (moved == null) {
       // Presses already landed, so where the selection ended up is now unknown — re-read
       // rather than assume, and let the loop re-derive the offset.
-      ;[current, verified] = await resummon(
+      ;[current, isVerified] = await resummon(
         "the picker went away after pressing",
       )
       if (current == null) {
@@ -1126,15 +1133,15 @@ export async function switchTo(
       // Pressed, nothing moved: an end of a non-wrapping list, or a changed UI.
       return [
         false,
-        `'${current}' did not move after ${n} x ${keycode} ` +
+        `'${current}' did not move after ${pressCount} x ${keycode} ` +
           "(end of the list, or the Plex UI changed)",
       ]
     }
     console.log(
-      `[adb] ${n} x ${keycode}: '${current}' -> '${moved}'`,
+      `[adb] ${pressCount} x ${keycode}: '${current}' -> '${moved}'`,
     )
     current = moved
-    verified = true
+    isVerified = true
   }
 
   // Commit. The loop only exits on a VERIFIED read-back showing `target` moments ago, so the

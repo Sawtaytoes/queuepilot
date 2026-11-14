@@ -48,16 +48,20 @@ import { readBody } from "./readBody.js"
 /** A queue entry's manual start override ({season,episode,position_ms}); null = automatic
  *  next-unwatched. `position_ms` rides through here unchanged — this reads the stored mapping
  *  whole rather than field by field, which is why the section offset needed no new plumbing. */
-const startOf = (e: QueueEntry): Start | null =>
-  e.value && typeof e.value === "object" && e.value.start
-    ? e.value.start
+const startOf = (queueEntry: QueueEntry): Start | null =>
+  queueEntry.value &&
+  typeof queueEntry.value === "object" &&
+  queueEntry.value.start
+    ? queueEntry.value.start
     : null
 
 /** Its mirror: where the entry's first played unit STOPS ({position_ms}); null = play to the
  *  end of the unit, which is what every entry written before 2026-09-01 says. */
-const endOf = (e: QueueEntry): End | null =>
-  e.value && typeof e.value === "object" && e.value.end
-    ? e.value.end
+const endOf = (queueEntry: QueueEntry): End | null =>
+  queueEntry.value &&
+  typeof queueEntry.value === "object" &&
+  queueEntry.value.end
+    ? queueEntry.value.end
     : null
 
 /**
@@ -89,10 +93,11 @@ const endOf = (e: QueueEntry): End | null =>
  * "In Progress" badge already covers.
  */
 function isRevivedEntry(
-  e: QueueEntry,
+  queueEntry: QueueEntry,
   core: ResolvedTile | ProviderTile,
 ): boolean {
-  if (!e.done || e.doneAt == null) return false
+  if (!queueEntry.done || queueEntry.doneAt == null)
+    return false
   if (core.type !== "show" && core.type !== "collection")
     return false
   // `collectionNext` answers null (never a memberless object) once a collection is played
@@ -103,22 +108,26 @@ function isRevivedEntry(
 
 /** The entry's stored lane, or null for "follow the set". Never guesses. */
 function placementOf(
-  v: EntryObject | null,
+  entryObject: EntryObject | null,
 ): "priority" | "random" | null {
-  const p =
-    v && v.placement
-      ? String(v.placement).trim().toLowerCase()
+  const placement =
+    entryObject && entryObject.placement
+      ? String(entryObject.placement).trim().toLowerCase()
       : null
-  return p === "priority" || p === "random" ? p : null
+  return placement === "priority" || placement === "random"
+    ? placement
+    : null
 }
 
 /** The entry's stored lead mode, or null for "follow the default for how it got here". */
 function leadOf(
-  v: EntryObject | null,
+  entryObject: EntryObject | null,
 ): "once" | "always" | null {
-  const l =
-    v && v.lead ? String(v.lead).trim().toLowerCase() : null
-  return l === "once" || l === "always" ? l : null
+  const lead =
+    entryObject && entryObject.lead
+      ? String(entryObject.lead).trim().toLowerCase()
+      : null
+  return lead === "once" || lead === "always" ? lead : null
 }
 
 /**
@@ -127,7 +136,7 @@ function leadOf(
  * the entry and so are identical whatever resolved it.
  */
 function queueTile(
-  e: QueueEntry,
+  queueEntry: QueueEntry,
   core: ResolvedTile | ProviderTile,
   history: {
     effective: WatchHistorySource
@@ -136,57 +145,74 @@ function queueTile(
     > | null
   } = { effective: "provider", progress: null },
 ) {
-  const v =
-    e.value && typeof e.value === "object" ? e.value : null
+  const entryObject =
+    queueEntry.value && typeof queueEntry.value === "object"
+      ? queueEntry.value
+      : null
   const itemOrder =
-    normalizeEntryItemOrder(v?.item_order) === "shuffle"
+    normalizeEntryItemOrder(entryObject?.item_order) ===
+    "shuffle"
       ? "shuffle"
       : null
   // The entry's `batch_stops_at` override (null = follow the set): WHERE its batch may stop,
   // as opposed to `episodes` = how long it is.
   const batchStopsAt =
-    v && v.batch_stops_at
-      ? String(v.batch_stops_at).trim().toLowerCase()
+    entryObject && entryObject.batch_stops_at
+      ? String(entryObject.batch_stops_at)
+          .trim()
+          .toLowerCase()
       : null
   return {
-    key: e.key,
-    raw: tiles.displayFor(e.value),
+    key: queueEntry.key,
+    raw: tiles.displayFor(queueEntry.value),
     ...core,
-    plexServer: v?.plex_server
-      ? String(v.plex_server)
+    plexServer: entryObject?.plex_server
+      ? String(entryObject.plex_server)
       : null,
     // null = follow the set. Never coerce a missing key to 1: the set default may
     // be 2, and a stored 1 is then a real override (queues.storedCount).
-    episodes: queues.storedCount(v ? v.episodes : null),
+    episodes: queues.storedCount(
+      entryObject ? entryObject.episodes : null,
+    ),
     item_order: itemOrder,
-    volumes: queues.storedCount(v ? v.volumes : null),
+    volumes: queues.storedCount(
+      entryObject ? entryObject.volumes : null,
+    ),
     // How often this entry comes up when the set is randomized (1 = normal; the editor shows
     // a tag only above 1).
-    weight: toWeight(v ? v.weight : null),
+    weight: toWeight(
+      entryObject ? entryObject.weight : null,
+    ),
     // The LANE, as STORED — null means "follow the set's add_as", which is what every entry
     // written before promote existed says. The editor resolves the effective lane against the
     // set, so the two are never conflated: a tile has to be able to say "inherited".
-    placement: placementOf(v),
-    lead: leadOf(v),
+    placement: placementOf(entryObject),
+    lead: leadOf(entryObject),
     promote_window:
-      v && v.promote_window
-        ? String(v.promote_window).trim().toLowerCase()
+      entryObject && entryObject.promote_window
+        ? String(entryObject.promote_window)
+            .trim()
+            .toLowerCase()
         : null,
     batch_stops_at:
       batchStopsAt === "member" || batchStopsAt === "season"
         ? batchStopsAt
         : null,
     collectionOrder:
-      v && Array.isArray(v.collection_order)
-        ? v.collection_order.map(String)
+      entryObject &&
+      Array.isArray(entryObject.collection_order)
+        ? entryObject.collection_order.map(String)
         : [],
     queuedAt:
-      v && Number.isFinite(Number(v.queued_at))
-        ? Number(v.queued_at)
+      entryObject &&
+      Number.isFinite(Number(entryObject.queued_at))
+        ? Number(entryObject.queued_at)
         : null,
-    start: startOf(e),
-    end: endOf(e),
-    watch_history: storedEntryWatchHistory(e.value),
+    start: startOf(queueEntry),
+    end: endOf(queueEntry),
+    watch_history: storedEntryWatchHistory(
+      queueEntry.value,
+    ),
     effective_watch_history: history.effective,
     queue_history_completed_count: history.progress
       ? [...history.progress.values()].filter(
@@ -195,7 +221,7 @@ function queueTile(
       : 0,
     // A finished-but-kept entry (`markDone` tagged it done); the grid greys it and the
     // "Remove all completed" button targets these. False for every plain entry.
-    done: Boolean(e.done),
+    done: Boolean(queueEntry.done),
     // The same thing judged LIVE rather than read off the file — see `tagFinishedMovies`.
     // Overwritten there; false here so the field is never absent on a tile.
     isFinished:
@@ -208,7 +234,7 @@ function queueTile(
           )
         : Boolean("isFinished" in core && core.isFinished),
     // The opposite prediction — see `isRevivedEntry`.
-    isRevived: isRevivedEntry(e, core),
+    isRevived: isRevivedEntry(queueEntry, core),
   }
 }
 
@@ -250,15 +276,17 @@ async function tagFinishedMovies(
   const engineReg = routing.loadSets()
   if (!engineReg) return
   const movies = rows.filter(
-    (r) =>
-      r.tile.type === "movie" &&
-      r.tile.ratingKey &&
-      r.tile.effective_watch_history !== "queue" &&
-      !r.tile.plexServer,
+    (row) =>
+      row.tile.type === "movie" &&
+      row.tile.ratingKey &&
+      row.tile.effective_watch_history !== "queue" &&
+      !row.tile.plexServer,
   )
   if (!movies.length) return
 
-  const setIds = [...new Set(movies.map((r) => r.setId))]
+  const setIds = [
+    ...new Set(movies.map((movy) => movy.setId)),
+  ]
   const watchedBySet = new Map<string, Set<string>>()
   await Promise.all(
     setIds.map(async (id) => {
@@ -274,14 +302,14 @@ async function tagFinishedMovies(
     }),
   )
 
-  const isWatched = (r: {
+  const isWatched = (row: {
     setId: string
     tile: FinishableTile
   }): boolean =>
     Boolean(
       watchedBySet
-        .get(r.setId)
-        ?.has(String(r.tile.ratingKey)),
+        .get(row.setId)
+        ?.has(String(row.tile.ratingKey)),
     )
   const candidates = movies.filter(isWatched)
   if (!candidates.length) return
@@ -297,7 +325,7 @@ async function tagFinishedMovies(
   await Promise.all(
     [...byProfile].map(async ([profile, group]) => {
       const live = await plex.viewStates(
-        group.map((r) => String(r.tile.ratingKey)),
+        group.map((row) => String(row.tile.ratingKey)),
         scopes.get(profile)?.token ?? null,
       )
       for (const { tile } of group) {
@@ -323,8 +351,8 @@ async function tagFinishedMovies(
  * check is a plain predicate and each caller returns the (identical) 400 body.
  */
 async function isQueueSet(id: string): Promise<boolean> {
-  const s = await sets.getSet(id)
-  return Boolean(s && s.source === "queue")
+  const set = await sets.getSet(id)
+  return Boolean(set && set.source === "queue")
 }
 
 /**
@@ -340,12 +368,12 @@ async function isQueueSet(id: string): Promise<boolean> {
 async function filteredParentOf(
   id: string,
 ): Promise<{ id: string; label: string } | null> {
-  const s = await sets.getSet(id)
-  if (!s || !s.filtered_from) return null
-  const parent = await sets.getSet(s.filtered_from)
+  const set = await sets.getSet(id)
+  if (!set || !set.filtered_from) return null
+  const parent = await sets.getSet(set.filtered_from)
   return {
-    id: s.filtered_from,
-    label: parent?.label || s.filtered_from,
+    id: set.filtered_from,
+    label: parent?.label || set.filtered_from,
   }
 }
 
@@ -456,12 +484,12 @@ export function queuesRoutes(): Hono {
   // The response is deliberately a SUBSET of /api/queues' shape (same `sets`/`order` envelope,
   // same per-item `key`/`raw`/`title`/`done` fields) so the client can render one component
   // against either and the swap is a field-by-field merge, not a different code path.
-  app.get("/shelves", async (c) => {
+  app.get("/shelves", async (context) => {
     try {
       const reg = await sets.getRegistry()
       const all = await queues.listAll()
       const result: Record<string, unknown> = {}
-      for (const s of reg.sets) {
+      for (const set of reg.sets) {
         // A FILTERED queue reads its PARENT's entries — `listAll` aliases them onto its id.
         // The skeleton reports them UNFILTERED and says so with `is_filtered`: what narrows
         // them is a Kavita library id, which is the provider's answer and this endpoint makes
@@ -469,56 +497,58 @@ export function queuesRoutes(): Hono {
         // settles when /api/queues lands — a number that corrects itself, not a shelf that
         // moves, which is the shift this endpoint exists to prevent.
         const entries =
-          s.source === "queue" ? all.get(s.id) || [] : []
-        result[s.id] = {
-          label: s.label,
-          kind: s.kind,
-          filtered_from: s.filtered_from,
-          is_filtered: Boolean(s.filtered_from),
+          set.source === "queue"
+            ? all.get(set.id) || []
+            : []
+        result[set.id] = {
+          label: set.label,
+          kind: set.kind,
+          filtered_from: set.filtered_from,
+          is_filtered: Boolean(set.filtered_from),
           // Effective lane default — without it the UI sees kind:picks for every hand-picked
           // set and treats them all as random (drag off, alpha sort).
-          ...(s.source === "queue" && "add_as" in s
-            ? { add_as: s.add_as }
+          ...(set.source === "queue" && "add_as" in set
+            ? { add_as: set.add_as }
             : {}),
-          source: s.source,
-          sections: s.sections,
+          source: set.source,
+          sections: set.sections,
           count: entries.length,
-          items: entries.map((e) => ({
-            key: e.key,
-            raw: tiles.displayFor(e.value),
+          items: entries.map((entry) => ({
+            key: entry.key,
+            raw: tiles.displayFor(entry.value),
             // Unresolved: the title line shows the raw string until /api/queues supplies the
             // real Plex title. Same field the resolved response fills, so the merge is a
             // straight overwrite rather than a branch.
-            title: tiles.displayFor(e.value),
+            title: tiles.displayFor(entry.value),
             resolved: false,
-            done: Boolean(e.done),
+            done: Boolean(entry.done),
             // The LANE, for the same reason `add_as` is here and by the same zero-cost read:
             // it is written on the entry, so it costs one property access. Without it every
             // entry falls into the set's default lane on first paint, and the Picks page's
             // divider — plus the run of tiles either side of it — moves when /api/queues
             // lands. That is precisely the layout shift this endpoint exists to prevent.
             placement: placementOf(
-              e.value && typeof e.value === "object"
-                ? e.value
+              entry.value && typeof entry.value === "object"
+                ? entry.value
                 : null,
             ),
             item_order:
-              e.value &&
-              typeof e.value === "object" &&
+              entry.value &&
+              typeof entry.value === "object" &&
               normalizeEntryItemOrder(
-                e.value.item_order,
+                entry.value.item_order,
               ) === "shuffle"
                 ? "shuffle"
                 : null,
           })),
         }
       }
-      return c.json({
+      return context.json({
         sets: result,
-        order: reg.sets.map((s) => s.id),
+        order: reg.sets.map((set) => set.id),
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
@@ -531,7 +561,7 @@ export function queuesRoutes(): Hono {
   // runs through a single mapLimit(8), then regroups. Wall-clock becomes the slowest single
   // batch, not their sum. Backed by the SQLite cache in plex.js, a warm call makes zero Plex
   // requests; a watch on the Shield busts exactly the affected show (mqttc.onNowPlaying).
-  app.get("/queues", async (c) => {
+  app.get("/queues", async (context) => {
     try {
       // ETag (B7): the two config files' stat pairs + the cache generation (bumped on every
       // invalidation, so a watch on the Shield correctly busts a browser's cached copy).
@@ -550,17 +580,20 @@ export function queuesRoutes(): Hono {
       // rewrites them, and the page shows a progress line for as long as it runs
       // (decision `2026-08-26-a-provider-read-is-cached-and-the-page-revalidates-after-it-paints`).
       const isFresh = ["1", "true", "yes"].includes(
-        (c.req.query("fresh") ?? "").toLowerCase(),
+        (context.req.query("fresh") ?? "").toLowerCase(),
       )
       const tag = `W/"${store.queues.revision()}-${store.sets.revision()}-${await cache.generation()}"`
-      c.header("ETag", tag)
-      c.header("Cache-Control", "private, no-store")
+      context.header("ETag", tag)
+      context.header("Cache-Control", "private, no-store")
       // A revalidation pass must never 304. The tag is built from two file revisions and the
       // cache generation, and NONE of them move when a provider's own data changes — which is
       // the entire thing this pass exists to notice. Answering 304 here would make the refresh
       // a no-op that reported success, and the page would sit on the cached copy forever.
-      if (!isFresh && c.req.header("if-none-match") === tag)
-        return c.body(null, 304)
+      if (
+        !isFresh &&
+        context.req.header("if-none-match") === tag
+      )
+        return context.body(null, 304)
 
       const reg = await sets.getRegistry()
       const all = await queues.listAll()
@@ -589,28 +622,29 @@ export function queuesRoutes(): Hono {
         s: (typeof reg.sets)[number]
         entries: QueueEntry[]
       }[] = []
-      for (const s of reg.sets) {
-        result[s.id] = {
-          label: s.label,
-          kind: s.kind,
-          source: s.source,
-          sections: s.sections,
+      for (const set of reg.sets) {
+        result[set.id] = {
+          label: set.label,
+          kind: set.kind,
+          source: set.source,
+          sections: set.sections,
           items: [],
-          filtered_from: s.filtered_from,
-          ...(s.source === "queue" && "add_as" in s
-            ? { add_as: s.add_as }
+          filtered_from: set.filtered_from,
+          ...(set.source === "queue" && "add_as" in set
+            ? { add_as: set.add_as }
             : {}),
         }
-        if (s.source !== "queue") continue
+        if (set.source !== "queue") continue
         // A FILTERED queue: its parent's entries, aliased onto its id by `listAll`. The
         // NARROWING happens after resolution, on the pull branch below, because the library an
         // entry sits in is the provider's answer and is not in `queues.yaml`.
-        const entries = all.get(s.id) || []
-        if (s.delivery === "pull") {
-          if (entries.length) pull.push({ s, entries })
+        const entries = all.get(set.id) || []
+        if (set.delivery === "pull") {
+          if (entries.length) pull.push({ s: set, entries })
           continue
         }
-        for (const e of entries) work.push({ s, e })
+        for (const entry of entries)
+          work.push({ s: set, e: entry })
       }
       // Every next-up below is read as the profile the queue PLAYS UNDER, not as the owner.
       // This grid used to pass an empty scope unconditionally, which was invisible for as
@@ -626,11 +660,13 @@ export function queuesRoutes(): Hono {
       await Promise.all(
         [
           ...new Set(
-            reg.sets.map((s) => s.requires_profile || ""),
+            reg.sets.map(
+              (set) => set.requires_profile || "",
+            ),
           ),
-        ].map(async (p) => {
-          scopes.set(p, {
-            ...(await plex.profileScope(p)),
+        ].map(async (profile) => {
+          scopes.set(profile, {
+            ...(await plex.profileScope(profile)),
             isFresh,
           })
         }),
@@ -750,7 +786,7 @@ export function queuesRoutes(): Hono {
         pull.map(async ({ s, entries }) => {
           const cores = await providerTiles.resolveTiles(
             s,
-            entries.map((e) => e.value),
+            entries.map((entry) => entry.value),
             { isFresh },
           )
           // `?.` only because `noUncheckedIndexedAccess` cannot see that the loop above wrote
@@ -762,12 +798,12 @@ export function queuesRoutes(): Hono {
           if (row) {
             const filter = s.filter
             row.items = entries
-              .map((e, i) => ({
-                e,
+              .map((entry, index) => ({
+                e: entry,
                 // `cores` is index-aligned with `entries` by contract, which is what the `!` says.
-                core: isLegacyScalarEntry(e.value)
-                  ? tiles.unresolvedTile(e.value)
-                  : cores[i]!,
+                core: isLegacyScalarEntry(entry.value)
+                  ? tiles.unresolvedTile(entry.value)
+                  : cores[index]!,
               }))
               // THE FILTER, applied to a RESOLVED tile — the only point in this request where an
               // entry's library is known. An unresolved one is kept (see `passesFilter`), so a
@@ -788,12 +824,12 @@ export function queuesRoutes(): Hono {
         }),
       )
 
-      return c.json({
+      return context.json({
         sets: result,
-        order: reg.sets.map((s) => s.id),
+        order: reg.sets.map((set) => set.id),
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
@@ -822,16 +858,16 @@ export function queuesRoutes(): Hono {
   // for the new line, so the demo reel can hold three windows of one film while an accidental
   // second copy in a watch queue is still caught. An add that carries a section says the same
   // thing without the flag, because a window already names a line rather than an item.
-  app.post("/queues/:set/items", async (c) => {
-    const set = c.req.param("set")
+  app.post("/queues/:set/items", async (context) => {
+    const set = context.req.param("set")
     if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    const body = await readBody(c)
+      return context.json({ error: "unknown set" }, 400)
+    const body = await readBody(context)
     let value = body.value
     const type = body.type
     const position =
       body.position === "bottom" ? "bottom" : "top"
-    const allowDuplicate = body.allow_duplicate === true
+    const isDuplicateAllowed = body.allow_duplicate === true
     if (type === "collection") {
       const name =
         value && typeof value === "object"
@@ -840,7 +876,7 @@ export function queuesRoutes(): Hono {
           : value
       const nm = name == null ? "" : String(name).trim()
       if (!nm)
-        return c.json(
+        return context.json(
           { error: "empty collection name" },
           400,
         )
@@ -854,34 +890,42 @@ export function queuesRoutes(): Hono {
       }
     }
     if (value == null || value === "")
-      return c.json({ error: "empty value" }, 400)
+      return context.json({ error: "empty value" }, 400)
     try {
       // The remote-server check, the duplicate guard and the write are shared with the native
       // TV's add (`queueItemAdd.ts`), so the two routes cannot drift apart.
-      return c.json(
+      return context.json(
         await addQueueItem(set, value, position, {
-          allowDuplicate,
+          allowDuplicate: isDuplicateAllowed,
         }),
       )
-    } catch (e) {
-      if (e instanceof QueueAddError)
-        return c.json({ error: e.message }, e.status)
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      if (error instanceof QueueAddError)
+        return context.json(
+          { error: error.message },
+          error.status,
+        )
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Remove ALL done (finished-but-kept) entries from a set's queues.yaml list. The ONLY path
   // that drops done entries (never automatic) — the grid's "Remove all completed" button.
-  app.post("/queues/:set/remove-completed", async (c) => {
-    const set = c.req.param("set")
-    if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    try {
-      return c.json(await queues.removeCompleted(set))
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
-    }
-  })
+  app.post(
+    "/queues/:set/remove-completed",
+    async (context) => {
+      const set = context.req.param("set")
+      if (!(await isQueueSet(set)))
+        return context.json({ error: "unknown set" }, 400)
+      try {
+        return context.json(
+          await queues.removeCompleted(set),
+        )
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
+      }
+    },
+  )
 
   // CLEAR EVERY COMPLETION THIS QUEUE OWNS — the manual twin of the reset date.
   //
@@ -896,85 +940,102 @@ export function queuesRoutes(): Hono {
   //
   // POST and not DELETE: it is an ACTION on the queue, not the removal of a resource at this
   // address, and the same POST shape `remove-completed` above already uses.
-  app.post("/queues/:set/reset-watched", async (c) => {
-    const set = c.req.param("set")
-    if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    try {
-      return c.json(
-        await watchedReset.resetQueueWatchedState(set),
-      )
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
-    }
-  })
+  app.post(
+    "/queues/:set/reset-watched",
+    async (context) => {
+      const set = context.req.param("set")
+      if (!(await isQueueSet(set)))
+        return context.json({ error: "unknown set" }, 400)
+      try {
+        return context.json(
+          await watchedReset.resetQueueWatchedState(set),
+        )
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
+      }
+    },
+  )
 
-  app.delete("/queues/:set/items/:key", async (c) => {
-    const set = c.req.param("set")
+  app.delete("/queues/:set/items/:key", async (context) => {
+    const set = context.req.param("set")
     if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
+      return context.json({ error: "unknown set" }, 400)
     try {
-      return c.json(
+      return context.json(
         await queues.removeItem(
           set,
-          decodeURIComponent(c.req.param("key")),
+          decodeURIComponent(context.req.param("key")),
         ),
       )
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Bulk multi-select move into `toSet`. Body: {items:[{fromSet,key}], toSet}.
-  app.post("/queues/move-bulk", async (c) => {
-    const { items, toSet } = await readBody(c)
+  app.post("/queues/move-bulk", async (context) => {
+    const { items, toSet } = await readBody(context)
     if (!(await isQueueSet(String(toSet ?? ""))))
-      return c.json({ error: "unknown set" }, 400)
+      return context.json({ error: "unknown set" }, 400)
     if (!Array.isArray(items))
-      return c.json({ error: "items[] required" }, 400)
+      return context.json(
+        { error: "items[] required" },
+        400,
+      )
     const intoFiltered = await filteredParentOf(
       String(toSet ?? ""),
     )
     if (intoFiltered)
-      return c.json(REORDER_REFUSAL(intoFiltered), 409)
+      return context.json(
+        REORDER_REFUSAL(intoFiltered),
+        409,
+      )
     for (const it of items) {
       const fromFiltered = await filteredParentOf(
         String(it?.fromSet ?? ""),
       )
       if (fromFiltered)
-        return c.json(REORDER_REFUSAL(fromFiltered), 409)
+        return context.json(
+          REORDER_REFUSAL(fromFiltered),
+          409,
+        )
     }
     try {
-      return c.json(await queues.moveBulk(items, toSet))
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json(
+        await queues.moveBulk(items, toSet),
+      )
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Bulk multi-select remove. Body: {items:[{fromSet,key}]}.
-  app.post("/queues/remove-bulk", async (c) => {
-    const { items } = await readBody(c)
+  app.post("/queues/remove-bulk", async (context) => {
+    const { items } = await readBody(context)
     if (!Array.isArray(items))
-      return c.json({ error: "items[] required" }, 400)
+      return context.json(
+        { error: "items[] required" },
+        400,
+      )
     try {
-      return c.json(await queues.removeBulk(items))
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json(await queues.removeBulk(items))
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Cross-queue move (drag a card into another queue). Body: {fromSet, toSet, key, toKeys}.
-  app.patch("/queues/move", async (c) => {
+  app.patch("/queues/move", async (context) => {
     const { fromSet, toSet, key, toKeys } =
-      await readBody(c)
+      await readBody(context)
     if (
       !(await isQueueSet(String(fromSet ?? ""))) ||
       !(await isQueueSet(String(toSet ?? "")))
     ) {
-      return c.json({ error: "unknown set" }, 400)
+      return context.json({ error: "unknown set" }, 400)
     }
     if (!key || !Array.isArray(toKeys))
-      return c.json(
+      return context.json(
         { error: "key + toKeys[] required" },
         400,
       )
@@ -982,13 +1043,13 @@ export function queuesRoutes(): Hono {
       (await filteredParentOf(String(fromSet))) ??
       (await filteredParentOf(String(toSet)))
     if (filtered)
-      return c.json(REORDER_REFUSAL(filtered), 409)
+      return context.json(REORDER_REFUSAL(filtered), 409)
     try {
-      return c.json(
+      return context.json(
         await queues.moveItem(fromSet, toSet, key, toKeys),
       )
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
@@ -1002,15 +1063,18 @@ export function queuesRoutes(): Hono {
   //
   // Registered BEFORE `/queues/:set/order` so the literal wins; `bulk` is two segments and
   // `:set/order` is three, so they cannot actually collide, but the original order is kept.
-  app.patch("/queues/bulk", async (c) => {
-    const body = await readBody(c)
+  app.patch("/queues/bulk", async (context) => {
+    const body = await readBody(context)
     const items = Array.isArray(body.items)
       ? body.items
       : []
     if (!items.length)
-      return c.json({ error: "items[] required" }, 400)
-    const wants = (k: string) =>
-      k in body && body[k] != null
+      return context.json(
+        { error: "items[] required" },
+        400,
+      )
+    const wants = (key: string) =>
+      key in body && body[key] != null
     const applied: { set: string; key: string }[] = []
     const failed: {
       set: string
@@ -1031,13 +1095,15 @@ export function queuesRoutes(): Hono {
         if (body.reset) {
           // Follow THIS set's defaults, not the engine floor of 1 — a queue at
           // episodes: 2 must not grow an `episodes: 1` override on every reset.
-          const s = await sets.getSet(set)
+          const setEntry = await sets.getSet(set)
           const chapterDefault =
-            s && s.source === "queue"
-              ? (s.episodes ?? 1)
+            setEntry && setEntry.source === "queue"
+              ? (setEntry.episodes ?? 1)
               : 1
           const volumeDefault =
-            s && s.source === "queue" ? (s.volumes ?? 1) : 1
+            setEntry && setEntry.source === "queue"
+              ? (setEntry.volumes ?? 1)
+              : 1
           await queues.setEpisodes(set, key, chapterDefault)
           await queues.setVolumes(set, key, volumeDefault)
           await queues.setWeight(set, key, 1)
@@ -1082,13 +1148,13 @@ export function queuesRoutes(): Hono {
         applied.push({ set, key })
       }
       await cache.bumpGeneration()
-      return c.json({
+      return context.json({
         ok: failed.length === 0,
         applied: applied.length,
         failed,
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
@@ -1096,21 +1162,21 @@ export function queuesRoutes(): Hono {
   // Independent of `episodes` — a volume is a collection of chapters.
   app.patch(
     "/queues/:set/items/:key/volumes",
-    async (c) => {
-      const set = c.req.param("set")
+    async (context) => {
+      const set = context.req.param("set")
       if (!(await isQueueSet(set)))
-        return c.json({ error: "unknown set" }, 400)
-      const { volumes } = await readBody(c)
+        return context.json({ error: "unknown set" }, 400)
+      const { volumes } = await readBody(context)
       try {
-        return c.json(
+        return context.json(
           await queues.setVolumes(
             set,
-            decodeURIComponent(c.req.param("key")),
+            decodeURIComponent(context.req.param("key")),
             volumes,
           ),
         )
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
@@ -1118,21 +1184,21 @@ export function queuesRoutes(): Hono {
   // Set a series entry's per-show episodes-per-play. Body: {episodes}.
   app.patch(
     "/queues/:set/items/:key/episodes",
-    async (c) => {
-      const set = c.req.param("set")
+    async (context) => {
+      const set = context.req.param("set")
       if (!(await isQueueSet(set)))
-        return c.json({ error: "unknown set" }, 400)
-      const { episodes } = await readBody(c)
+        return context.json({ error: "unknown set" }, 400)
+      const { episodes } = await readBody(context)
       try {
-        return c.json(
+        return context.json(
           await queues.setEpisodes(
             set,
-            decodeURIComponent(c.req.param("key")),
+            decodeURIComponent(context.req.param("key")),
             episodes,
           ),
         )
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
@@ -1141,21 +1207,21 @@ export function queuesRoutes(): Hono {
   // Blank/unknown removes the override and restores next-unwatched, in-order play.
   app.patch(
     "/queues/:set/items/:key/item-order",
-    async (c) => {
-      const set = c.req.param("set")
+    async (context) => {
+      const set = context.req.param("set")
       if (!(await isQueueSet(set)))
-        return c.json({ error: "unknown set" }, 400)
-      const { item_order } = await readBody(c)
+        return context.json({ error: "unknown set" }, 400)
+      const { item_order } = await readBody(context)
       try {
-        return c.json(
+        return context.json(
           await queues.setItemOrder(
             set,
-            decodeURIComponent(c.req.param("key")),
+            decodeURIComponent(context.req.param("key")),
             item_order,
           ),
         )
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
@@ -1164,115 +1230,131 @@ export function queuesRoutes(): Hono {
   // opposed to how long it is). Body: {batch_stops_at}. "none"/blank clears it = follow the set.
   app.patch(
     "/queues/:set/items/:key/batch-stop",
-    async (c) => {
-      const set = c.req.param("set")
+    async (context) => {
+      const set = context.req.param("set")
       if (!(await isQueueSet(set)))
-        return c.json({ error: "unknown set" }, 400)
-      const body = await readBody(c)
+        return context.json({ error: "unknown set" }, 400)
+      const body = await readBody(context)
       try {
-        return c.json(
+        return context.json(
           await queues.setBatchStop(
             set,
-            decodeURIComponent(c.req.param("key")),
+            decodeURIComponent(context.req.param("key")),
             body.batch_stops_at,
           ),
         )
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
 
   // Set an entry's WEIGHT — how many slots it takes per round when the set is randomized.
   // Body: {weight}. 1 (or anything unusable) clears the override.
-  app.patch("/queues/:set/items/:key/weight", async (c) => {
-    const set = c.req.param("set")
-    if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    const { weight } = await readBody(c)
-    try {
-      return c.json(
-        await queues.setWeight(
-          set,
-          decodeURIComponent(c.req.param("key")),
-          weight,
-        ),
-      )
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
-    }
-  })
+  app.patch(
+    "/queues/:set/items/:key/weight",
+    async (context) => {
+      const set = context.req.param("set")
+      if (!(await isQueueSet(set)))
+        return context.json({ error: "unknown set" }, 400)
+      const { weight } = await readBody(context)
+      try {
+        return context.json(
+          await queues.setWeight(
+            set,
+            decodeURIComponent(context.req.param("key")),
+            weight,
+          ),
+        )
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
+      }
+    },
+  )
 
   // PROMOTE / DEMOTE. Body: {placement: "priority"|"random"} — anything else clears the
   // override and the entry follows the set's `add_as` again.
   app.patch(
     "/queues/:set/items/:key/placement",
-    async (c) => {
-      const set = c.req.param("set")
+    async (context) => {
+      const set = context.req.param("set")
       if (!(await isQueueSet(set)))
-        return c.json({ error: "unknown set" }, 400)
-      const { placement } = await readBody(c)
+        return context.json({ error: "unknown set" }, 400)
+      const { placement } = await readBody(context)
       try {
-        return c.json(
+        return context.json(
           await queues.setPlacement(
             set,
-            decodeURIComponent(c.req.param("key")),
+            decodeURIComponent(context.req.param("key")),
             placement,
           ),
         )
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
 
   // How often a Priority entry leads. Body: {lead: "once"|"always", promote_window?: "24h"}.
-  app.patch("/queues/:set/items/:key/lead", async (c) => {
-    const set = c.req.param("set")
-    if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    const body = await readBody(c)
-    try {
-      return c.json(
-        await queues.setLead(
-          set,
-          decodeURIComponent(c.req.param("key")),
-          body.lead,
-          body.promote_window,
-        ),
-      )
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
-    }
-  })
+  app.patch(
+    "/queues/:set/items/:key/lead",
+    async (context) => {
+      const set = context.req.param("set")
+      if (!(await isQueueSet(set)))
+        return context.json({ error: "unknown set" }, 400)
+      const body = await readBody(context)
+      try {
+        return context.json(
+          await queues.setLead(
+            set,
+            decodeURIComponent(context.req.param("key")),
+            body.lead,
+            body.promote_window,
+          ),
+        )
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
+      }
+    },
+  )
 
   // Set/clear an entry's manual START point. Body: {start: {season, episode}} for a show,
   // {start: {series, season?, episode?}} for a collection (which member to begin at), or
   // {start: null} to revert to automatic next-unwatched.
-  app.patch("/queues/:set/items/:key/start", async (c) => {
-    const set = c.req.param("set")
-    if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    // `req.body ? req.body.start : null` — and under express.json() `req.body` was always an
-    // object, so this is `body.start` (undefined when the key is absent, which
-    // queues.normalizeStart() treats as a clear, same as null).
-    const { start } = await readBody(c)
-    try {
-      const key = decodeURIComponent(c.req.param("key"))
-      const result = await queues.setStart(set, key, start)
-      if (
-        result.ok &&
-        start &&
-        typeof start === "object" &&
-        (start as { history?: unknown }).history === "queue"
-      ) {
-        queueEntryHistory.clearCompleted(set, key)
+  app.patch(
+    "/queues/:set/items/:key/start",
+    async (context) => {
+      const set = context.req.param("set")
+      if (!(await isQueueSet(set)))
+        return context.json({ error: "unknown set" }, 400)
+      // `req.body ? req.body.start : null` — and under express.json() `req.body` was always an
+      // object, so this is `body.start` (undefined when the key is absent, which
+      // queues.normalizeStart() treats as a clear, same as null).
+      const { start } = await readBody(context)
+      try {
+        const key = decodeURIComponent(
+          context.req.param("key"),
+        )
+        const result = await queues.setStart(
+          set,
+          key,
+          start,
+        )
+        if (
+          result.ok &&
+          start &&
+          typeof start === "object" &&
+          (start as { history?: unknown }).history ===
+            "queue"
+        ) {
+          queueEntryHistory.clearCompleted(set, key)
+        }
+        return context.json(result)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
-      return c.json(result)
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
-    }
-  })
+    },
+  )
 
   // Set/clear an entry's END point — where its first played unit STOPS. Body:
   // {end: {position_ms}}, or {end: null} to play to the end of the unit again.
@@ -1281,33 +1363,39 @@ export function queuesRoutes(): Hono {
   // also the only thing that can see the OTHER side of the window under the same lock. An
   // `end` that is not strictly after an existing `start` comes back `{ok: false, error}` with
   // the two offsets named.
-  app.patch("/queues/:set/items/:key/end", async (c) => {
-    const set = c.req.param("set")
-    if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    const { end } = await readBody(c)
-    try {
-      return c.json(
-        await queues.setEnd(
-          set,
-          decodeURIComponent(c.req.param("key")),
-          end,
-        ),
-      )
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
-    }
-  })
+  app.patch(
+    "/queues/:set/items/:key/end",
+    async (context) => {
+      const set = context.req.param("set")
+      if (!(await isQueueSet(set)))
+        return context.json({ error: "unknown set" }, 400)
+      const { end } = await readBody(context)
+      try {
+        return context.json(
+          await queues.setEnd(
+            set,
+            decodeURIComponent(context.req.param("key")),
+            end,
+          ),
+        )
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
+      }
+    },
+  )
 
   // The entry's watch-history source. null/blank means follow the queue default.
   app.patch(
     "/queues/:set/items/:key/watch-history",
-    async (c) => {
-      const set = c.req.param("set")
-      const key = decodeURIComponent(c.req.param("key"))
+    async (context) => {
+      const set = context.req.param("set")
+      const key = decodeURIComponent(
+        context.req.param("key"),
+      )
       if (!(await historyTarget(set, key)))
-        return c.json({ error: "unknown entry" }, 404)
-      const { watch_history: source } = await readBody(c)
+        return context.json({ error: "unknown entry" }, 404)
+      const { watch_history: source } =
+        await readBody(context)
       try {
         const result = await queues.setWatchHistory(
           set,
@@ -1321,9 +1409,9 @@ export function queuesRoutes(): Hono {
             updated.set.requires_profile || null,
           )
         await cache.bumpGeneration()
-        return c.json(result)
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+        return context.json(result)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
@@ -1332,18 +1420,20 @@ export function queuesRoutes(): Hono {
   // reconcile decide whether that completes the whole entry.
   app.post(
     "/queues/:set/items/:key/watch-history/completions",
-    async (c) => {
-      const setId = c.req.param("set")
-      const key = decodeURIComponent(c.req.param("key"))
+    async (context) => {
+      const setId = context.req.param("set")
+      const key = decodeURIComponent(
+        context.req.param("key"),
+      )
       const target = await historyTarget(setId, key)
       if (!target)
-        return c.json({ error: "unknown entry" }, 404)
+        return context.json({ error: "unknown entry" }, 404)
       if (target.source !== "queue")
-        return c.json(
+        return context.json(
           { error: "entry uses provider history" },
           400,
         )
-      const body = await readBody(c)
+      const body = await readBody(context)
       const itemKey = String(body.item_key ?? "").trim()
       if (
         !itemKey ||
@@ -1353,7 +1443,7 @@ export function queuesRoutes(): Hono {
           target.set.requires_profile || null,
         ))
       ) {
-        return c.json(
+        return context.json(
           { error: "item does not belong to this entry" },
           400,
         )
@@ -1364,20 +1454,22 @@ export function queuesRoutes(): Hono {
         target.set.requires_profile || null,
       )
       await cache.bumpGeneration()
-      return c.json({ completed: itemKey })
+      return context.json({ completed: itemKey })
     },
   )
 
   app.delete(
     "/queues/:set/items/:key/watch-history/completions/latest",
-    async (c) => {
-      const setId = c.req.param("set")
-      const key = decodeURIComponent(c.req.param("key"))
+    async (context) => {
+      const setId = context.req.param("set")
+      const key = decodeURIComponent(
+        context.req.param("key"),
+      )
       const target = await historyTarget(setId, key)
       if (!target)
-        return c.json({ error: "unknown entry" }, 404)
+        return context.json({ error: "unknown entry" }, 404)
       if (target.source !== "queue")
-        return c.json(
+        return context.json(
           { error: "entry uses provider history" },
           400,
         )
@@ -1387,7 +1479,7 @@ export function queuesRoutes(): Hono {
       )
       if (undone) await queues.clearDone(setId, [key])
       await cache.bumpGeneration()
-      return c.json({ undone })
+      return context.json({ undone })
     },
   )
 
@@ -1395,14 +1487,16 @@ export function queuesRoutes(): Hono {
   // item to this entry so its position and Plex completion verdict update the private ledger.
   app.post(
     "/queues/:set/items/:key/watch-history/track-current",
-    async (c) => {
-      const setId = c.req.param("set")
-      const key = decodeURIComponent(c.req.param("key"))
+    async (context) => {
+      const setId = context.req.param("set")
+      const key = decodeURIComponent(
+        context.req.param("key"),
+      )
       const target = await historyTarget(setId, key)
       if (!target)
-        return c.json({ error: "unknown entry" }, 404)
+        return context.json({ error: "unknown entry" }, 404)
       if (target.source !== "queue")
-        return c.json(
+        return context.json(
           { error: "entry uses provider history" },
           400,
         )
@@ -1411,7 +1505,7 @@ export function queuesRoutes(): Hono {
         typeof target.entry.value === "object" &&
         target.entry.value.plex_server
       ) {
-        return c.json(
+        return context.json(
           {
             error:
               "Tracking a shared item started outside QueuePilot is not supported",
@@ -1429,7 +1523,7 @@ export function queuesRoutes(): Hono {
           String(now?.state),
         )
       ) {
-        return c.json(
+        return context.json(
           { error: "nothing is playing in Plex" },
           400,
         )
@@ -1441,7 +1535,7 @@ export function queuesRoutes(): Hono {
           target.set.requires_profile || null,
         ))
       ) {
-        return c.json(
+        return context.json(
           {
             error:
               "the current Plex item does not belong to this entry",
@@ -1450,7 +1544,7 @@ export function queuesRoutes(): Hono {
         )
       }
       try {
-        return c.json(
+        return context.json(
           await finished.adoptQueuePlayback(
             setId,
             key,
@@ -1458,8 +1552,8 @@ export function queuesRoutes(): Hono {
             itemKey,
           ),
         )
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
@@ -1467,44 +1561,44 @@ export function queuesRoutes(): Hono {
   // Custom order for one Plex collection entry. An empty array restores Plex order.
   app.patch(
     "/queues/:set/items/:key/collection-order",
-    async (c) => {
-      const set = c.req.param("set")
+    async (context) => {
+      const set = context.req.param("set")
       if (!(await isQueueSet(set)))
-        return c.json({ error: "unknown set" }, 400)
-      const { collection_order } = await readBody(c)
+        return context.json({ error: "unknown set" }, 400)
+      const { collection_order } = await readBody(context)
       if (!Array.isArray(collection_order))
-        return c.json(
+        return context.json(
           { error: "collection_order[] required" },
           400,
         )
       try {
         const result = await queues.setCollectionOrder(
           set,
-          decodeURIComponent(c.req.param("key")),
+          decodeURIComponent(context.req.param("key")),
           collection_order,
         )
         await cache.bumpGeneration()
-        return c.json(result)
-      } catch (e) {
-        return c.json({ error: String(e) }, 500)
+        return context.json(result)
+      } catch (error) {
+        return context.json({ error: String(error) }, 500)
       }
     },
   )
 
-  app.patch("/queues/:set/order", async (c) => {
-    const set = c.req.param("set")
+  app.patch("/queues/:set/order", async (context) => {
+    const set = context.req.param("set")
     if (!(await isQueueSet(set)))
-      return c.json({ error: "unknown set" }, 400)
-    const { keys } = await readBody(c)
+      return context.json({ error: "unknown set" }, 400)
+    const { keys } = await readBody(context)
     if (!Array.isArray(keys))
-      return c.json({ error: "keys[] required" }, 400)
+      return context.json({ error: "keys[] required" }, 400)
     const filtered = await filteredParentOf(set)
     if (filtered)
-      return c.json(REORDER_REFUSAL(filtered), 409)
+      return context.json(REORDER_REFUSAL(filtered), 409)
     try {
-      return c.json(await queues.reorder(set, keys))
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+      return context.json(await queues.reorder(set, keys))
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 

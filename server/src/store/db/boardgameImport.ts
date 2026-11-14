@@ -136,7 +136,7 @@ const merge = (rows: SourceRow[]) => {
     // than any one season of it does alone.
     bestWith: [
       ...new Set(rows.flatMap((row) => row.bestWith)),
-    ].sort((a, b) => a - b),
+    ].sort((left, right) => left - right),
     maxPlayers: maxes.length > 0 ? Math.max(...maxes) : 1,
     maxPlaytime:
       maxTimes.length > 0 ? Math.max(...maxTimes) : null,
@@ -151,7 +151,7 @@ const merge = (rows: SourceRow[]) => {
       ...new Set(
         rows.flatMap((row) => row.recommendedWith),
       ),
-    ].sort((a, b) => a - b),
+    ].sort((left, right) => left - right),
     weight: average(weights),
     yearPublished:
       years.length > 0 ? Math.min(...years) : null,

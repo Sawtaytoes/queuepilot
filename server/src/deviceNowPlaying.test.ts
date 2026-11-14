@@ -67,8 +67,8 @@ test("discards a late reading after switching devices and does not turn read fai
   let resolve!: (v: null) => void
   const read = vi.fn(
     () =>
-      new Promise<null>((r) => {
-        resolve = r
+      new Promise<null>((resolveRead) => {
+        resolve = resolveRead
       }),
   )
   const publish = vi.fn()
@@ -144,8 +144,8 @@ test("discards an observation from an earlier queue on the same device", async (
       userUuid: "grace-profile",
     }),
     read: () =>
-      new Promise<null>((r) => {
-        resolve = r
+      new Promise<null>((resolveRead) => {
+        resolve = resolveRead
       }),
     publish,
   })
@@ -166,8 +166,8 @@ test("does not observe a preparing sitting or reuse an older sitting’s delayed
   let resolve!: (v: null) => void
   const read = vi.fn(
     () =>
-      new Promise<null>((r) => {
-        resolve = r
+      new Promise<null>((resolveRead) => {
+        resolve = resolveRead
       }),
   )
   const publish = vi.fn()

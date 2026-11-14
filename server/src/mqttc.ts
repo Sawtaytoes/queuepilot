@@ -96,7 +96,7 @@ if (HOST) {
   // module-level `let`, so TS discards `!== null` inside a closure. Same object, same
   // IMPORT-TIME connect — tests that set MQTT_* before importing this module still connect
   // on import, which is the behaviour they depend on.
-  const c = connect({
+  const mqttClient = connect({
     host: HOST,
     port: PORT,
     protocol: PORT === 8883 ? "mqtts" : "mqtt", // LE-certed broker; system CAs verify
@@ -104,21 +104,23 @@ if (HOST) {
     password: PASS,
     reconnectPeriod: 5000,
   })
-  client = c
-  c.on("connect", () => {
+  client = mqttClient
+  mqttClient.on("connect", () => {
     console.log(`[mqtt] web connected to ${HOST}:${PORT}`)
     // T_NOW_PLAYING is LIVE playback, bridged onto MQTT by the HA automation "Queuepilot Now
     // Playing" from the Plex integration's media_player (already push-fed by the PMS
     // websocket, so nothing here polls). T_STATE only says what a session STARTED with; this
     // says what is on screen NOW, and keeps up as the queue auto-advances.
-    c.subscribe([
+    mqttClient.subscribe([
       `${T_DEVICES_BASE}/#`,
       T_STATE,
       T_NOW_PLAYING,
     ])
   })
-  c.on("error", (e) => console.log(`[mqtt] ${e.message}`))
-  c.on("message", (topic, buf) => {
+  mqttClient.on("error", (error) =>
+    console.log(`[mqtt] ${error.message}`),
+  )
+  mqttClient.on("message", (topic, buf) => {
     const text = buf.toString()
     if (topic.startsWith(`${T_DEVICES_BASE}/`)) {
       const id = topic.slice(T_DEVICES_BASE.length + 1)
@@ -207,10 +209,10 @@ export const offNowPlaying = (
 export function devices(): AnnouncedDevice[] {
   // Default first, then by name — the dropdown's order.
   return [...DEVICES.values()].sort(
-    (a, b) =>
-      Number(Boolean(b.default)) -
-        Number(Boolean(a.default)) ||
-      String(a.name).localeCompare(String(b.name)),
+    (left, right) =>
+      Number(Boolean(right.default)) -
+        Number(Boolean(left.default)) ||
+      String(left.name).localeCompare(String(right.name)),
   )
 }
 

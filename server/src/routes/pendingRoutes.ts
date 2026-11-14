@@ -55,15 +55,17 @@ export function pendingRoutes(): Hono {
       title: row.title,
     }))
 
-  app.get("/pending", async (c) => {
+  app.get("/pending", async (context) => {
     try {
-      const libs = (await plex.sections()).map((l) => ({
-        id: Number(l.id),
-        title: String(l.title ?? ""),
-        type: String(l.type ?? ""),
-        video: Boolean(l.video),
-        other: Boolean(l.other),
-      }))
+      const libs = (await plex.sections()).map(
+        (section) => ({
+          id: Number(section.id),
+          title: String(section.title ?? ""),
+          type: String(section.type ?? ""),
+          video: Boolean(section.video),
+          other: Boolean(section.other),
+        }),
+      )
       const { items, state } = await pending.pendingItems(
         liveClient(),
         libs,
@@ -88,21 +90,23 @@ export function pendingRoutes(): Hono {
       // screen COULD draw from, and `selected` is the ids it did. Sending the resolved
       // selection — not the raw `state.libraries` — is what lets the panel show the default
       // as checked boxes instead of as an empty set the owner would read as "nothing".
-      const choosable = libs.filter((l) => l.video)
-      return c.json({
+      const choosable = libs.filter(
+        (library) => library.video,
+      )
+      return context.json({
         items: linkedItems,
         seen_through: state.seen_through,
         dismissed: state.dismissed.length,
         libraries: choosable,
         selected: pending
           .selectedLibraries(libs, state)
-          .map((l) => l.id),
+          .map((selectedLibrary) => selectedLibrary.id),
         // Whether the selection is a real choice or the fallback, so the panel can offer
         // "back to default" only when there is something to go back from.
         isDefault: state.libraries === null,
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
@@ -111,12 +115,12 @@ export function pendingRoutes(): Hono {
    * `{ libraries: [] }` is the deliberate blank page. They are different states and the
    * route keeps them apart.
    */
-  app.post("/pending/libraries", async (c) => {
-    const body = await readBody(c)
+  app.post("/pending/libraries", async (context) => {
+    const body = await readBody(context)
     const value = (body as { libraries?: unknown })
       .libraries
     if (value !== null && !Array.isArray(value)) {
-      return c.json(
+      return context.json(
         {
           error:
             "libraries must be an array of section ids, or null",
@@ -130,42 +134,45 @@ export function pendingRoutes(): Hono {
           ? null
           : (value as unknown[]).map(Number),
       )
-      return c.json({
+      return context.json({
         ok: true,
         libraries: state.libraries,
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Say no to ONE item. Per-item rather than moving the watermark, or skipping one film would
   // also hide everything added after it.
-  app.post("/pending/dismiss", async (c) => {
-    const { ratingKey } = await readBody(c)
+  app.post("/pending/dismiss", async (context) => {
+    const { ratingKey } = await readBody(context)
     if (!ratingKey)
-      return c.json({ error: "ratingKey required" }, 400)
+      return context.json(
+        { error: "ratingKey required" },
+        400,
+      )
     try {
       const state = await pending.dismiss(String(ratingKey))
-      return c.json({
+      return context.json({
         ok: true,
         dismissed: state.dismissed.length,
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 
   // Clear the whole list in one gesture by moving the watermark.
-  app.post("/pending/seen", async (c) => {
+  app.post("/pending/seen", async (context) => {
     try {
       const state = await pending.markSeen()
-      return c.json({
+      return context.json({
         ok: true,
         seen_through: state.seen_through,
       })
-    } catch (e) {
-      return c.json({ error: String(e) }, 500)
+    } catch (error) {
+      return context.json({ error: String(error) }, 500)
     }
   })
 

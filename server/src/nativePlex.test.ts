@@ -108,7 +108,7 @@ describe("native direct Plex grants", () => {
     ).rejects.toThrow("verified direct")
   })
   test("rejects relays, public HTTP, credentials and URL suffixes before probing", async () => {
-    for (const c of [
+    for (const connection of [
       {
         uri: "https://relay.example.com",
         local: false,
@@ -131,7 +131,7 @@ describe("native direct Plex grants", () => {
         relay: false,
       },
     ]) {
-      connections = [c]
+      connections = [connection]
       await expect(
         nativeGrant("fixture-child", "fixture-server"),
       ).rejects.toThrow("verified direct")

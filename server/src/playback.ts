@@ -420,10 +420,10 @@ async function playQueueHost(
  * `e.name` for a caught value, matching the original `e && e.name ? e.name : 'Error'`
  * exactly — including for a thrown non-Error object that happens to carry a `name`.
  */
-function errName(e: unknown): string {
-  if (e != null && typeof e === "object") {
-    const n = (e as { name?: unknown }).name
-    if (n) return String(n)
+function errName(error: unknown): string {
+  if (error != null && typeof error === "object") {
+    const name = (error as { name?: unknown }).name
+    if (name) return String(name)
   }
   return "Error"
 }
@@ -439,8 +439,8 @@ const agent = new Agent({
 })
 
 const sleep = (ms: number): Promise<void> =>
-  new Promise((r) => {
-    setTimeout(r, ms)
+  new Promise((resolve) => {
+    setTimeout(resolve, ms)
   })
 
 // --- Companion readiness ----------------------------------------------------- //
@@ -456,35 +456,35 @@ export async function companionReady(
   port: number | string | null = null,
   timeout: number | null = null,
 ): Promise<boolean> {
-  const h = host || SHIELD_IP
-  const p = Number(port || COMPANION_PORT)
-  const t =
+  const targetHost = host || SHIELD_IP
+  const targetPort = Number(port || COMPANION_PORT)
+  const timeoutSeconds =
     timeout == null
       ? PLAYBACK_FSM_COMPANION_TIMEOUT
       : timeout
   const timeoutMs = Math.max(
     50,
-    Math.floor(Number(t) * 1000),
+    Math.floor(Number(timeoutSeconds) * 1000),
   )
   return new Promise<boolean>((resolve) => {
     const sock = new net.Socket()
-    let settled = false
-    const done = (ok: boolean): void => {
-      if (settled) return
-      settled = true
+    let isSettled = false
+    const done = (isOk: boolean): void => {
+      if (isSettled) return
+      isSettled = true
       try {
         sock.destroy()
       } catch {
         /* ignore */
       }
-      resolve(ok)
+      resolve(isOk)
     }
     sock.setTimeout(timeoutMs)
     sock.once("connect", () => done(true))
     sock.once("timeout", () => done(false))
     sock.once("error", () => done(false))
     try {
-      sock.connect(p, h)
+      sock.connect(targetPort, targetHost)
     } catch {
       done(false)
     }
@@ -581,15 +581,15 @@ export async function playerDevices(): Promise<
     ? devices
     : devices.devices || []
   return rows
-    .filter((d) =>
-      String(d.provides || "").includes("player"),
+    .filter((row) =>
+      String(row.provides || "").includes("player"),
     )
-    .map((d) => ({
-      name: d.name || null,
-      machineIdentifier: d.clientIdentifier || null,
+    .map((row) => ({
+      name: row.name || null,
+      machineIdentifier: row.clientIdentifier || null,
       uri:
-        (d.connections || [])
-          .map((c) => c.uri)
+        (row.connections || [])
+          .map((connection) => connection.uri)
           .find(Boolean) || null,
     }))
 }
@@ -627,15 +627,15 @@ export async function companionTarget(
     // not there" are different answers, and remembering the first would extend an outage.
     return null // caller falls back
   }
-  for (const d of rows) {
-    if (machineId && d.machineIdentifier !== machineId)
+  for (const row of rows) {
+    if (machineId && row.machineIdentifier !== machineId)
       continue
-    if (!machineId && d.name !== name) continue
+    if (!machineId && row.name !== name) continue
     // This caller DOES need a direct endpoint — playMedia is sent to `uri`.
-    if (!d.uri) continue
+    if (!row.uri) continue
     _companionMiss.delete(key)
-    _companionTarget.set(key, d)
-    return d
+    _companionTarget.set(key, row)
+    return row
   }
   _companionMiss.set(key, now() + Math.max(0, missTtlMs))
   return null
@@ -777,17 +777,18 @@ export async function findClient(
     const wantName = (
       SHIELD_CLIENT_NAME || ""
     ).toLowerCase()
-    for (const c of clients) {
+    for (const client of clients) {
       if (
-        (wantId && c.machineIdentifier === wantId) ||
+        (wantId && client.machineIdentifier === wantId) ||
         (wantName &&
-          String(c.name || "")
+          String(client.name || "")
             .toLowerCase()
             .includes(wantName))
       ) {
         return {
-          name: c.name ?? null,
-          machineIdentifier: c.machineIdentifier ?? null,
+          name: client.name ?? null,
+          machineIdentifier:
+            client.machineIdentifier ?? null,
           uri: null,
         }
       }
@@ -820,16 +821,20 @@ export async function createPlayQueue(
   const mid = queueHostId || (await machineIdentifier())
   const groups = queueGroups(refs, mid)
   const first = groups[0]!
-  const q = new URLSearchParams({
+  const params = new URLSearchParams({
     type: "video",
     uri: queueSourceUri(first.server, first.ratingKeys),
     continuous: "0",
     "X-Plex-Client-Identifier": CLIENT_ID,
   })
-  const data = await plexReq("POST", `/playQueues?${q}`, {
-    token,
-    host,
-  })
+  const data = await plexReq(
+    "POST",
+    `/playQueues?${params}`,
+    {
+      token,
+      host,
+    },
+  )
   const mc: PlaybackContainer =
     (data && data.MediaContainer) || {}
   // An EMPTY queue is a hard failure, not a playable one. Plex answers 200 for a playQueue
@@ -890,14 +895,14 @@ export async function readPlayQueue(
   const remembered = playQueueHosts.get(String(pqId))
   const requestToken = remembered?.token ?? token
   const requestHost = remembered?.apiBaseUrl ?? host
-  const q = new URLSearchParams({
+  const params = new URLSearchParams({
     "X-Plex-Client-Identifier": CLIENT_ID,
   })
   let data: PlexReqJson
   try {
     data = await plexReq(
       "GET",
-      `/playQueues/${pqId}?${q}`,
+      `/playQueues/${pqId}?${params}`,
       { token: requestToken, host: requestHost },
     )
   } catch {
@@ -909,7 +914,9 @@ export async function readPlayQueue(
   const mc: PlaybackContainer =
     (data && data.MediaContainer) || {}
   const rows = mc.Metadata || []
-  const ratingKeys = rows.map((r) => String(r.ratingKey))
+  const ratingKeys = rows.map((row) =>
+    String(row.ratingKey),
+  )
   const localId = await machineIdentifier()
   const hostId = remembered?.machineIdentifier ?? localId
   const items = rows.map((row) => {
@@ -970,13 +977,13 @@ export async function extendPlayQueue(
   const requestHost = remembered?.apiBaseUrl ?? host
   let size: number | null = null
   for (const group of queueGroups(refs, mid)) {
-    const q = new URLSearchParams({
+    const params = new URLSearchParams({
       uri: queueSourceUri(group.server, group.ratingKeys),
       "X-Plex-Client-Identifier": CLIENT_ID,
     })
     const data = await plexReq(
       "PUT",
-      `/playQueues/${pqId}?${q}`,
+      `/playQueues/${pqId}?${params}`,
       {
         token: requestToken,
         host: requestHost,
@@ -1019,15 +1026,16 @@ async function applyAudioLanguage(
       for (const media of item.Media || []) {
         for (const part of media.Part || []) {
           const streams = (part.Stream || []).filter(
-            (s) =>
-              s.streamType === 2 || s.streamType === "2",
+            (stream) =>
+              stream.streamType === 2 ||
+              stream.streamType === "2",
           )
-          const match = streams.find((s) => {
+          const match = streams.find((stream) => {
             const code = String(
-              s.languageCode || "",
+              stream.languageCode || "",
             ).toLowerCase()
             const name = String(
-              s.language || "",
+              stream.language || "",
             ).toLowerCase()
             return (
               want === code ||
@@ -1093,7 +1101,7 @@ export async function castPlay(
     // Lazy import so unit tests that never touch cast don't need a live broker.
     const mqtt = await import("mqtt")
     await new Promise<void>((resolve, reject) => {
-      const c = mqtt.connect({
+      const mqttClient = mqtt.connect({
         host: MQTT_HOST,
         port: MQTT_PORT,
         protocol: MQTT_PORT === 8883 ? "mqtts" : "mqtt",
@@ -1102,30 +1110,32 @@ export async function castPlay(
         reconnectPeriod: 0,
         connectTimeout: 5000,
       })
-      const fail = (e: unknown): void => {
+      const fail = (error: unknown): void => {
         try {
-          c.end(true)
+          mqttClient.end(true)
         } catch {
           /* ignore */
         }
         reject(
-          e instanceof Error ? e : new Error(errMessage(e)),
+          error instanceof Error
+            ? error
+            : new Error(errMessage(error)),
         )
       }
       const timer = setTimeout(
         () => fail(new Error("MQTT connect timed out")),
         6000,
       )
-      c.on("error", fail)
-      c.on("connect", () => {
-        c.publish(
+      mqttClient.on("error", fail)
+      mqttClient.on("connect", () => {
+        mqttClient.publish(
           T_CMD_CAST_PLAY,
           JSON.stringify(payload),
           { qos: 1 },
           (err) => {
             clearTimeout(timer)
             try {
-              c.end(true)
+              mqttClient.end(true)
             } catch {
               /* ignore */
             }
@@ -1142,9 +1152,9 @@ export async function castPlay(
     result.delegated = true
     result.topic = T_CMD_CAST_PLAY
     return result
-  } catch (e) {
+  } catch (error) {
     result.error =
-      `cast_sidecar MQTT publish failed (${errMessage(e)}). ` +
+      `cast_sidecar MQTT publish failed (${errMessage(error)}). ` +
       `Ensure cast_sidecar is subscribed to ${T_CMD_CAST_PLAY}, or use PLAYBACK_MODE=client.`
     return result
   }
@@ -1153,8 +1163,10 @@ export async function castPlay(
 function intOffset(
   offset: number | string | null | undefined,
 ): number {
-  const n = Number(offset || 0)
-  return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0
+  const parsed = Number(offset || 0)
+  return Number.isFinite(parsed)
+    ? Math.max(0, Math.floor(parsed))
+    : 0
 }
 
 // --- playRatingKeys (client is the live path) -------------------------------- //
@@ -1181,8 +1193,8 @@ export async function currentSession({
   timeoutMs = RESUME_POLL_TIMEOUT_MS,
   playQueueID = null,
   userUuid = null,
-  includeTelemetry = false,
-  throwOnError = false,
+  includeTelemetry: isTelemetryIncluded = false,
+  throwOnError: isThrowingOnError = false,
 }: {
   device?: Device | null
   /**
@@ -1219,7 +1231,7 @@ export async function currentSession({
       timeoutMs,
     })
   } catch (error) {
-    if (throwOnError) throw error
+    if (isThrowingOnError) throw error
     return null
   }
   const md =
@@ -1239,24 +1251,24 @@ export async function currentSession({
     }
   }
   if (device && !wanted) return null
-  const mine = md.find((m) => {
+  const mine = md.find((candidate) => {
     if (!wanted) return true
-    return sessionBelongsTo(m, wanted)
+    return sessionBelongsTo(candidate, wanted)
   })
-  const m = mine || (wanted ? null : md[0])
-  if (!m) return null
-  if (!includeTelemetry)
+  const session = mine || (wanted ? null : md[0])
+  if (!session) return null
+  if (!isTelemetryIncluded)
     return {
-      ratingKey: String(m.ratingKey),
-      viewOffset: Number(m.viewOffset || 0),
+      ratingKey: String(session.ratingKey),
+      viewOffset: Number(session.viewOffset || 0),
     }
   return {
-    ratingKey: String(m.ratingKey),
-    viewOffset: Number(m.viewOffset || 0),
-    state: m.Player?.state || "playing",
-    title: m.title || "",
-    show: m.grandparentTitle || "",
-    duration: Number(m.duration || 0),
+    ratingKey: String(session.ratingKey),
+    viewOffset: Number(session.viewOffset || 0),
+    state: session.Player?.state || "playing",
+    title: session.title || "",
+    show: session.grandparentTitle || "",
+    duration: Number(session.duration || 0),
   }
 }
 
@@ -1310,10 +1322,10 @@ async function sessionTarget(
 }
 
 function sessionBelongsTo(
-  m: PlaybackMetadata,
+  session: PlaybackMetadata,
   wanted: ClientTarget,
 ): boolean {
-  const player = m.Player || {}
+  const player = session.Player || {}
   if (wanted.machineIdentifier)
     return (
       player.machineIdentifier === wanted.machineIdentifier
@@ -1337,18 +1349,18 @@ async function readAccountForTarget(
       host: source?.host ?? null,
       timeoutMs,
     })
-  } catch (e) {
+  } catch (error) {
     return {
       accountId: null,
       title: null,
       hasSession: false,
-      reason: `/status/sessions unreadable: ${errMessage(e)}`,
+      reason: `/status/sessions unreadable: ${errMessage(error)}`,
     }
   }
 
   const sessions = data.MediaContainer?.Metadata || []
-  const mine = sessions.find((m) =>
-    sessionBelongsTo(m, wanted),
+  const mine = sessions.find((session) =>
+    sessionBelongsTo(session, wanted),
   )
   if (!mine) {
     return {
@@ -1550,18 +1562,18 @@ async function playerCommandOnDevice(
       },
     )
     return { ok: true }
-  } catch (e) {
-    return { ok: false, error: errMessage(e) }
+  } catch (error) {
+    return { ok: false, error: errMessage(error) }
   }
 }
 
 export async function stopPlayback(
   device: Device | null = null,
 ): Promise<boolean> {
-  const r = await playerCommand("stop", device)
-  if (!r.ok && r.error)
-    console.log(`[playback] stop failed: ${r.error}`)
-  return r.ok
+  const outcome = await playerCommand("stop", device)
+  if (!outcome.ok && outcome.error)
+    console.log(`[playback] stop failed: ${outcome.error}`)
+  return outcome.ok
 }
 
 /**
@@ -1588,10 +1600,12 @@ export async function transport(
       : action === "next"
         ? "skipNext"
         : action
-  const r = await playerCommand(verb, device)
-  if (!r.ok)
-    console.log(`[playback] ${action} failed: ${r.error}`)
-  return r
+  const outcome = await playerCommand(verb, device)
+  if (!outcome.ok)
+    console.log(
+      `[playback] ${action} failed: ${outcome.error}`,
+    )
+  return outcome
 }
 
 // Seek the target player to `offsetMs` via Companion. Same transport as playMedia.
@@ -1698,8 +1712,8 @@ async function seekToOnDevice(
   let source: Awaited<ReturnType<typeof selectedSource>>
   try {
     source = await selectedSource(playQueueID, userUuid)
-  } catch (e) {
-    return { seeked: false, error: errMessage(e) }
+  } catch (error) {
+    return { seeked: false, error: errMessage(error) }
   }
   const token =
     source?.token ?? (await playToken(setName, userUuid))
@@ -1725,14 +1739,14 @@ async function seekToOnDevice(
   try {
     await send(target)
     return { seeked: true, offset: ms }
-  } catch (e) {
+  } catch (error) {
     // A target handed in at arm time can go stale mid-session: the player takes a new address
     // off DHCP, or plex.tv starts advertising a different connection. So a failure against a
     // CACHED target is not final — drop what is memoised, resolve again, and send once more.
     // A target we resolved ourselves in this call is already fresh, so there is nothing to
     // retry and the failure stands.
     if (!client)
-      return { seeked: false, error: errMessage(e) }
+      return { seeked: false, error: errMessage(error) }
     _resetCompanionTarget()
     let fresh: ClientTarget | null = null
     try {
@@ -1741,7 +1755,7 @@ async function seekToOnDevice(
       fresh = null
     }
     if (!fresh)
-      return { seeked: false, error: errMessage(e) }
+      return { seeked: false, error: errMessage(error) }
     try {
       await send(fresh)
       return { seeked: true, offset: ms }
@@ -1809,10 +1823,10 @@ async function playRatingKeysOnDevice(
             )
         }
       }
-    } catch (e) {
+    } catch (error) {
       // Never let audio prefs block playback.
       console.log(
-        `[audio] language '${lang}' not applied: ${errMessage(e)}`,
+        `[audio] language '${lang}' not applied: ${errMessage(error)}`,
       )
     }
   }
@@ -1849,15 +1863,15 @@ async function playRatingKeysOnDevice(
   }
 
   const tok = await playToken(setName, userUuid)
-  const modernPlayback = adb.usesModernPlayback(device)
+  const isModernPlayback = adb.usesModernPlayback(device)
   const client = await findClient(device)
   // Even an infinite sitting refills through QueuePilot, never Plex series expansion.
   let pqId: number | string | null = null
   let queueHost: PlayQueueHost
   try {
     queueHost = await playQueueHost(refs[0]!, userUuid, tok)
-  } catch (e) {
-    result.error = `${errName(e)}: ${errMessage(e)}`
+  } catch (error) {
+    result.error = `${errName(error)}: ${errMessage(error)}`
     return result
   }
   // What we are ASKING Plex for, before we ask. The head is the whole point of an ordered
@@ -1874,8 +1888,8 @@ async function playRatingKeysOnDevice(
       machineIdentifier: queueHost.machineIdentifier,
       streamBaseUrl: queueHost.streamBaseUrl,
     })
-  } catch (e) {
-    result.error = `${errName(e)}: ${errMessage(e)}`
+  } catch (error) {
+    result.error = `${errName(error)}: ${errMessage(error)}`
     return result
   }
   result.playQueueID = pqId
@@ -1894,12 +1908,12 @@ async function playRatingKeysOnDevice(
       const builtHead = built?.ratingKeys[0]
       const askedHead = refs[0]!
       const builtHeadItem = built?.items[0]
-      const sourceChanged =
+      const hasSourceChanged =
         Boolean(builtHeadItem) &&
         (builtHeadItem!.plexServer || null) !==
           (askedHead.plexServer || null)
       if (refs.some((item) => item.plexServer)) {
-        const matches =
+        const isMatching =
           built?.items.length === refs.length &&
           refs.every((item, index) => {
             const actual = built.items[index]
@@ -1908,7 +1922,7 @@ async function playRatingKeysOnDevice(
               actual.plexServer === item.plexServer
             )
           })
-        if (!matches) {
+        if (!isMatching) {
           result.error =
             "Plex did not retain the full mixed-server queue in order"
           return result
@@ -1916,7 +1930,8 @@ async function playRatingKeysOnDevice(
       }
       if (
         built &&
-        (builtHead !== askedHead.ratingKey || sourceChanged)
+        (builtHead !== askedHead.ratingKey ||
+          hasSourceChanged)
       ) {
         console.log(
           `[play] ⚠ Plex reordered the playQueue: asked for head rk=${askedHead.ratingKey}, ` +
@@ -1935,15 +1950,15 @@ async function playRatingKeysOnDevice(
           `[play] playQueue ${pqId}: ${built.ratingKeys.length} item(s), head rk=${builtHead}`,
         )
       }
-    } catch (e) {
+    } catch (error) {
       // A readback failure is never worth failing a start over — it is a log line.
       console.log(
-        `[play] playQueue ${pqId} readback failed: ${errMessage(e)}`,
+        `[play] playQueue ${pqId} readback failed: ${errMessage(error)}`,
       )
     }
   }
 
-  if (modernPlayback) {
+  if (isModernPlayback) {
     result.client =
       device?.name || SHIELD_CLIENT_NAME || null
     const sent = await adb.playModernQueue(
@@ -2015,19 +2030,20 @@ async function playRatingKeysOnDevice(
       },
     )
     result.played = true
-  } catch (e) {
-    if (isPlexError(e) && e.plexStatus) {
-      result.error = `playMedia HTTP ${e.plexStatus}`
+  } catch (error) {
+    if (isPlexError(error) && error.plexStatus) {
+      result.error = `playMedia HTTP ${error.plexStatus}`
     } else {
       // Preserve ECONNREFUSED / "connection refused" wording so driver._isConnRefused matches.
       // NOTE the two different `code`s in play here: this one is Node's STRING errno off a
       // socket failure, not the numeric HTTP mirror PlexError carries. See errors.ts.
-      const msg = errMessage(e)
-      const code = isNodeError(e)
-        ? e.code ||
-          (e.cause as { code?: string } | undefined)?.code
+      const msg = errMessage(error)
+      const code = isNodeError(error)
+        ? error.code ||
+          (error.cause as { code?: string } | undefined)
+            ?.code
         : undefined
-      const name = errName(e)
+      const name = errName(error)
       result.error = code
         ? `${name}: ${msg} (${code})`
         : `${name}: ${msg}`

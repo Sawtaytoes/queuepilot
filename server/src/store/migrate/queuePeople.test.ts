@@ -91,7 +91,9 @@ describe("the queues keep their people, recovered from the group CLAIM", () => {
     addGroup("kids", ["movies"])
     seedQueuePeople()
     expect(
-      queueMembers("movies", db).map((m) => m.id),
+      queueMembers("movies", db).map(
+        (queueMember) => queueMember.id,
+      ),
     ).toEqual(["family", "kids"])
   })
 
@@ -142,7 +144,9 @@ describe("it never undoes an edit", () => {
 
     expect(report.skippedSetIds).toEqual(["movies"])
     expect(
-      queueMembers("movies", db).map((m) => m.id),
+      queueMembers("movies", db).map(
+        (queueMember) => queueMember.id,
+      ),
     ).toEqual(["ada"])
   })
 

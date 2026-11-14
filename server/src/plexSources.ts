@@ -114,9 +114,9 @@ export async function plexServerAccessForProfile(
       : (raw as { resources?: Resource[] })?.resources || []
   ) as Resource[]
   const server = resources.find(
-    (r) =>
-      r.clientIdentifier === serverId &&
-      String(r.provides || "")
+    (resource) =>
+      resource.clientIdentifier === serverId &&
+      String(resource.provides || "")
         .split(",")
         .includes("server"),
   )
@@ -125,8 +125,9 @@ export async function plexServerAccessForProfile(
     server.accessToken || (server.owned ? token : null)
   if (!serverToken) return null
   const connections = [...(server.connections || [])].sort(
-    (a, b) =>
-      Number(Boolean(a.local)) - Number(Boolean(b.local)),
+    (left, right) =>
+      Number(Boolean(left.local)) -
+      Number(Boolean(right.local)),
   )
   for (const connection of connections) {
     if (
@@ -160,19 +161,20 @@ export async function plexServerAccessForProfile(
         )
           .filter(
             (
-              s,
-            ): s is {
+              section,
+            ): section is {
               key: string
               title: string
               type: "movie" | "show"
             } =>
-              Boolean(s.key && s.title) &&
-              (s.type === "movie" || s.type === "show"),
+              Boolean(section.key && section.title) &&
+              (section.type === "movie" ||
+                section.type === "show"),
           )
-          .map((s) => ({
-            id: s.key,
-            title: s.title,
-            type: s.type,
+          .map((section) => ({
+            id: section.key,
+            title: section.title,
+            type: section.type,
           })),
       }
     } catch {
@@ -298,7 +300,7 @@ export async function plexServerSearch(
 export async function plexServerEpisodes(
   access: PlexServerAccess,
   ratingKey: string,
-  includeSpecialChoices = false,
+  isIncludingSpecialChoices = false,
   fetchImpl: Fetch = fetch,
 ): Promise<ShowEpisodes | null> {
   if (!/^\d+$/.test(ratingKey)) return null
@@ -336,7 +338,7 @@ export async function plexServerEpisodes(
   for (const leaf of countable) {
     const season = Number(leaf.parentIndex) || 0
     if (
-      !includeSpecialChoices &&
+      !isIncludingSpecialChoices &&
       realSeasons.size &&
       season === 0
     )
@@ -354,13 +356,18 @@ export async function plexServerEpisodes(
   return {
     multiSeason: realSeasons.size > 1,
     seasons: [...seasons]
-      .sort((a, b) =>
-        a[0] === 0 ? 1 : b[0] === 0 ? -1 : a[0] - b[0],
+      .sort((left, right) =>
+        left[0] === 0
+          ? 1
+          : right[0] === 0
+            ? -1
+            : left[0] - right[0],
       )
       .map(([season, episodes]) => ({
         season,
         episodes: episodes.sort(
-          (a, b) => Number(a.episode) - Number(b.episode),
+          (left, right) =>
+            Number(left.episode) - Number(right.episode),
         ),
       })),
   }
@@ -516,10 +523,10 @@ export async function plexServerTile(
               ),
           )
           .sort(
-            (a, b) =>
-              Number(a.parentIndex) -
-                Number(b.parentIndex) ||
-              Number(a.index) - Number(b.index),
+            (left, right) =>
+              Number(left.parentIndex) -
+                Number(right.parentIndex) ||
+              Number(left.index) - Number(right.index),
           )
         skippedCount = playable.filter((leaf) =>
           skipped.has(
@@ -570,7 +577,7 @@ export async function plexServerTile(
       }
     }
     const viewOffset = Number(item.viewOffset) || 0
-    const watched = Number(item.viewCount) > 0
+    const isWatched = Number(item.viewCount) > 0
     return {
       resolved: true,
       ratingKey,
@@ -586,7 +593,7 @@ export async function plexServerTile(
       skippedCount,
       partiallyWatched:
         item.type === "movie"
-          ? viewOffset > 0 && !watched
+          ? viewOffset > 0 && !isWatched
           : Boolean(nextEp?.partiallyWatched),
       viewOffset:
         item.type === "movie"
@@ -598,7 +605,7 @@ export async function plexServerTile(
           : Number(nextEp?.duration) || 0,
       webUrl: null,
       cover,
-      isFinished: item.type === "movie" && watched,
+      isFinished: item.type === "movie" && isWatched,
     }
   } catch {
     return unresolved()
@@ -621,10 +628,11 @@ export async function plexSourcesForToken(
       : (raw as { resources?: Resource[] })?.resources || []
   ) as Resource[]
   const servers = resources.filter(
-    (r) =>
-      String(r.provides || "")
+    (resource) =>
+      String(resource.provides || "")
         .split(",")
-        .includes("server") && Boolean(r.clientIdentifier),
+        .includes("server") &&
+      Boolean(resource.clientIdentifier),
   )
 
   return Promise.all(
@@ -649,9 +657,9 @@ export async function plexSourcesForToken(
       const connections = [
         ...(server.connections || []),
       ].sort(
-        (a, b) =>
-          Number(Boolean(a.local)) -
-          Number(Boolean(b.local)),
+        (left, right) =>
+          Number(Boolean(left.local)) -
+          Number(Boolean(right.local)),
       )
       for (const connection of connections) {
         // A shared server may advertise an HTTP URL on the public internet. Do not send its

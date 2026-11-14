@@ -249,14 +249,14 @@ export function ledgerPlays(
 
 /** One item of one queue. A home-server item carries no server id, so the entry key decides. */
 const sameItem = (
-  a: HistoryPlay,
-  b: HistoryPlay,
+  left: HistoryPlay,
+  right: HistoryPlay,
 ): boolean =>
-  a.setId === b.setId &&
-  a.ratingKey === b.ratingKey &&
-  (a.entryKey == null ||
-    b.entryKey == null ||
-    a.entryKey === b.entryKey)
+  left.setId === right.setId &&
+  left.ratingKey === right.ratingKey &&
+  (left.entryKey == null ||
+    right.entryKey == null ||
+    left.entryKey === right.entryKey)
 
 /**
  * Group plays into queue → sitting. Pure.
@@ -279,8 +279,9 @@ export function groupHistory(
   const queues: HistoryQueue[] = []
   for (const [setId, list] of bySet) {
     const sorted = [...list].sort(
-      (a, b) =>
-        a.startedAt - b.startedAt || a.endedAt - b.endedAt,
+      (left, right) =>
+        left.startedAt - right.startedAt ||
+        left.endedAt - right.endedAt,
     )
     const sittings: HistorySitting[] = []
     for (const play of sorted) {
@@ -311,7 +312,8 @@ export function groupHistory(
     })
   }
   return queues.sort(
-    (a, b) => b.lastWatchedAt - a.lastWatchedAt,
+    (left, right) =>
+      right.lastWatchedAt - left.lastWatchedAt,
   )
 }
 
@@ -396,7 +398,8 @@ async function describeLedgerPlays(
           unknown
         >[]) {
           for (const play of list.filter(
-            (p) => p.ratingKey === String(md.ratingKey),
+            (candidate) =>
+              candidate.ratingKey === String(md.ratingKey),
           )) {
             play.title =
               typeof md.title === "string" ? md.title : null
@@ -471,7 +474,7 @@ export async function historyFor(
   const hiddenQueues = new Set(
     all
       .filter((play) => isHidden(play.setId))
-      .map((p) => p.setId),
+      .map((play) => play.setId),
   )
   const plays = all.filter(
     (play) => !hiddenQueues.has(play.setId),

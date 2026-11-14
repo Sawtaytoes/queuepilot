@@ -22,10 +22,12 @@ vi.mock("./env.js", async (original) => ({
 vi.mock("node:child_process", () => ({
   spawnSync: vi.fn((_bin: string, args: string[]) => ({
     status: 0,
-    stdout: args.some((a) => a.includes("dumpsys window"))
+    stdout: args.some((arg) =>
+      arg.includes("dumpsys window"),
+    )
       ? "mCurrentFocus=Window{abc u0 com.plexapp.android/tv.plex.app.MainActivity}"
-      : args.some((a) =>
-            a.includes("dumpsys media_session"),
+      : args.some((arg) =>
+            arg.includes("dumpsys media_session"),
           )
         ? "Media button session is com.plexapp.android/player"
         : args.includes("get-state")
@@ -66,8 +68,8 @@ describe("device control isolation", () => {
   })
   test("preserves the default and separates overlapping asynchronous operations", async () => {
     let release!: () => void
-    const gate = new Promise<void>((r) => {
-      release = r
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
     })
     const first = withDevice(second, async () => {
       await gate
@@ -83,7 +85,9 @@ describe("device control isolation", () => {
     expect(await first).toBe("192.0.2.31:5555")
     expect(await other).toBe("192.0.2.30:5555")
     expect(
-      vi.mocked(spawnSync).mock.calls.map((c) => c[1]?.[1]),
+      vi
+        .mocked(spawnSync)
+        .mock.calls.map((call) => call[1]?.[1]),
     ).toEqual(["192.0.2.30:5555", "192.0.2.31:5555"])
   })
   test("issues no subprocess for a foreign client without explicit ADB configuration", () => {
@@ -124,14 +128,16 @@ describe("device control isolation", () => {
     const calls = vi.mocked(spawnSync).mock.calls
     expect(calls.length).toBeGreaterThan(0)
     expect(
-      calls.every((c) => c[1]?.[1] === "192.0.2.31:5555"),
+      calls.every(
+        (call) => call[1]?.[1] === "192.0.2.31:5555",
+      ),
     ).toBe(true)
     expect(
       calls
-        .filter((c) =>
-          String(c[1]?.[3]).startsWith("input keyevent"),
+        .filter((call) =>
+          String(call[1]?.[3]).startsWith("input keyevent"),
         )
-        .map((c) => c[1]?.[3]),
+        .map((call) => call[1]?.[3]),
     ).toEqual([
       "input keyevent KEYCODE_MEDIA_PAUSE",
       "input keyevent KEYCODE_MEDIA_PLAY",

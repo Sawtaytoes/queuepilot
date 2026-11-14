@@ -19,20 +19,24 @@ import type {
 
 // Mirror of Python urllib.parse.urlencode(quote_via=quote_plus) for the exact query strings the
 // engine builds — the sha1 key is over the literal path, so an off-by-one in encoding is a miss.
-function quotePlus(s: unknown): string {
-  return encodeURIComponent(String(s))
+function quotePlus(value: unknown): string {
+  return encodeURIComponent(String(value))
     .replace(/%20/g, "+")
     .replace(
       /[!'()*~]/g,
-      (c) =>
-        "%" + c.charCodeAt(0).toString(16).toUpperCase(),
+      (match) =>
+        "%" +
+        match.charCodeAt(0).toString(16).toUpperCase(),
     )
 }
 export function urlencode(
   pairs: readonly (readonly [unknown, unknown])[],
 ): string {
   return pairs
-    .map(([k, v]) => `${quotePlus(k)}=${quotePlus(v)}`)
+    .map(
+      ([pair, paramValue]) =>
+        `${quotePlus(pair)}=${quotePlus(paramValue)}`,
+    )
     .join("&")
 }
 
@@ -49,29 +53,29 @@ const aliasFor = (
  */
 export function replayClient(dir: string): PlexClient {
   const container = (
-    p: string,
+    requestPath: string,
     token: string | null = null,
   ): PlexMediaContainer => {
-    const h = createHash("sha1")
-      .update(p, "utf8")
+    const hash = createHash("sha1")
+      .update(requestPath, "utf8")
       .digest("hex")
       .slice(0, 16)
     const file = path.join(
       dir,
       "get",
       aliasFor(token),
-      `${h}.json`,
+      `${hash}.json`,
     )
     let raw: string
     try {
       raw = readFileSync(file, "utf8")
-    } catch (e) {
-      if (isNodeError(e) && e.code === "ENOENT") {
+    } catch (error) {
+      if (isNodeError(error) && error.code === "ENOENT") {
         throw new Error(
-          `corpus miss: get ${p} (alias ${aliasFor(token)}) — regenerate the corpus`,
+          `corpus miss: get ${requestPath} (alias ${aliasFor(token)}) — regenerate the corpus`,
         )
       }
-      throw e
+      throw error
     }
     // Cast, not a guard: a corpus file that isn't `{data: {MediaContainer}}` is a broken fixture,
     // and the original threw on it. `payload.data` still TypeErrors on a literal `null` payload.

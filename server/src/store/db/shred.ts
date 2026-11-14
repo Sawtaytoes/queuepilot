@@ -137,13 +137,13 @@ type PresentationTable = Record<
 
 export const slot = (
   node: unknown,
-  withComments = true,
+  isIncludingComments = true,
 ): Presentation | undefined => {
   if (!isNode(node)) return undefined
   const stored: Presentation = {}
-  if (withComments && node.commentBefore != null)
+  if (isIncludingComments && node.commentBefore != null)
     stored.b = node.commentBefore
-  if (withComments && node.comment != null)
+  if (isIncludingComments && node.comment != null)
     stored.c = node.comment
   // A blank line above a node. It is how the household separates one queue from the next in a
   // 782-line file, and it is not a comment — the `yaml` API keeps it on its own flag.
@@ -184,10 +184,10 @@ export function collectInner(
   node: unknown,
   path: (string | number)[],
   into: PresentationTable,
-  rootComments = false,
+  isIncludingRootComments = false,
 ): void {
   if (path.length === 0) {
-    const root = slot(node, rootComments)
+    const root = slot(node, isIncludingRootComments)
     if (root) into["[]"] = { v: root }
   }
 

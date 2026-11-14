@@ -273,7 +273,9 @@ describe("GET /api/people", () => {
     const body = (await res.json()) as {
       people: { id: string; photoVersion: string | null }[]
     }
-    const byId = new Map(body.people.map((p) => [p.id, p]))
+    const byId = new Map(
+      body.people.map((person) => [person.id, person]),
+    )
     expect(byId.get("ada")?.photoVersion).toBe(
       photos.readPersonPhoto("ada")?.version,
     )

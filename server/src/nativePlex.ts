@@ -60,14 +60,19 @@ export async function nativeHomeUsers(): Promise<
       thumb?: string
     }[]
   }
-  return (data.users || []).map((u) => ({
-    id: u.admin ? 1 : Number(u.id),
-    uuid: u.admin ? null : u.uuid || null,
-    admin: !!u.admin,
-    name: u.title || u.username || "Profile",
-    username: u.username || null,
-    restricted: !!u.restricted,
-    thumb: u.thumb,
+  return (data.users || []).map((homeProfile) => ({
+    id: homeProfile.admin ? 1 : Number(homeProfile.id),
+    uuid: homeProfile.admin
+      ? null
+      : homeProfile.uuid || null,
+    admin: !!homeProfile.admin,
+    name:
+      homeProfile.title ||
+      homeProfile.username ||
+      "Profile",
+    username: homeProfile.username || null,
+    restricted: !!homeProfile.restricted,
+    thumb: homeProfile.thumb,
   }))
 }
 export async function nativeVerifiedProfile(
@@ -83,18 +88,18 @@ export async function nativeVerifiedProfile(
     nativeHomeUsers(),
   ])
   const child = users.find(
-    (u) =>
-      !u.admin &&
-      u.uuid === identity.uuid &&
-      u.id != null &&
-      String(u.id) === String(identity.id),
+    (user) =>
+      !user.admin &&
+      user.uuid === identity.uuid &&
+      user.id != null &&
+      String(user.id) === String(identity.id),
   )
   if (child) return child
   const owner = (await cloud(
     "/api/v2/user",
     PLEX_TOKEN,
   )) as { id?: number }
-  const admin = users.find((u) => u.admin)
+  const admin = users.find((user) => user.admin)
   if (
     admin &&
     identity.id &&
@@ -107,31 +112,36 @@ export async function nativeVerifiedProfile(
 }
 function directOrigin(
   uri: string,
-  local: boolean,
-  relay: boolean,
+  isLocal: boolean,
+  isRelay: boolean,
 ): boolean {
   try {
-    const u = new URL(uri)
+    const url = new URL(uri)
     if (
-      relay ||
-      u.username ||
-      u.password ||
-      u.search ||
-      u.hash ||
-      u.pathname !== "/"
+      isRelay ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      url.pathname !== "/"
     )
       return false
-    if (u.protocol === "https:") return true
-    if (u.protocol !== "http:" || !local) return false
-    const p = u.hostname.split(".").map(Number)
+    if (url.protocol === "https:") return true
+    if (url.protocol !== "http:" || !isLocal) return false
+    const octets = url.hostname.split(".").map(Number)
     return (
-      p.length === 4 &&
-      p.every(
-        (n) => Number.isInteger(n) && n >= 0 && n <= 255,
+      octets.length === 4 &&
+      octets.every(
+        (octet) =>
+          Number.isInteger(octet) &&
+          octet >= 0 &&
+          octet <= 255,
       ) &&
-      (p[0] === 10 ||
-        (p[0] === 192 && p[1] === 168) ||
-        (p[0] === 172 && p[1]! >= 16 && p[1]! <= 31))
+      (octets[0] === 10 ||
+        (octets[0] === 192 && octets[1] === 168) ||
+        (octets[0] === 172 &&
+          octets[1]! >= 16 &&
+          octets[1]! <= 31))
     )
   } catch {
     return false
@@ -156,25 +166,30 @@ export async function nativeGrant(
     }[]
   }[]
   const server = resources.find(
-    (s) =>
-      s.clientIdentifier === serverId &&
-      s.provides?.split(",").includes("server"),
+    (resource) =>
+      resource.clientIdentifier === serverId &&
+      resource.provides?.split(",").includes("server"),
   )
   if (!server?.accessToken)
     throw new Error(
       "This profile cannot access the queued server",
     )
   const connections = [...(server.connections || [])].sort(
-    (a, b) => Number(!a.local) - Number(!b.local),
+    (left, right) =>
+      Number(!left.local) - Number(!right.local),
   )
-  for (const c of connections) {
+  for (const connection of connections) {
     if (
-      !c.uri ||
-      !directOrigin(c.uri, !!c.local, !!c.relay)
+      !connection.uri ||
+      !directOrigin(
+        connection.uri,
+        !!connection.local,
+        !!connection.relay,
+      )
     )
       continue
     try {
-      const baseUrl = c.uri.replace(/\/+$/, "")
+      const baseUrl = connection.uri.replace(/\/+$/, "")
       const response = await verifiedFetch(
         baseUrl + "/identity",
         {

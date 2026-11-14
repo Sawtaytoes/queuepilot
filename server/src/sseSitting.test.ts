@@ -59,8 +59,8 @@ test("keeps retained telemetry enrichment through an unchanged startup state eve
   let release!: (value: null) => void
   hooks.context.mockImplementationOnce(
     () =>
-      new Promise<null>((r) => {
-        release = r
+      new Promise<null>((resolve) => {
+        release = resolve
       }),
   )
   const pending = hooks.now!({
@@ -103,15 +103,15 @@ test("never restores an old same-player cache through preparation and success st
   expect(lastNow()?.ratingKey).toBe("new-episode")
   hooks.cached = null
 })
-for (const replaceSitting of [false, true]) {
-  test(`rejects an older enrichment after a newer observation${replaceSitting ? " in a replacement sitting on the same player" : ""}`, async () => {
+for (const isReplacementSitting of [false, true]) {
+  test(`rejects an older enrichment after a newer observation${isReplacementSitting ? " in a replacement sitting on the same player" : ""}`, async () => {
     let release!: (value: null) => void
     hooks.context
       .mockReset()
       .mockImplementationOnce(
         () =>
-          new Promise<null>((r) => {
-            release = r
+          new Promise<null>((resolve) => {
+            release = resolve
           }),
       )
       .mockResolvedValue(null)
@@ -121,7 +121,7 @@ for (const replaceSitting of [false, true]) {
       ratingKey: "old",
       position: 10,
     })
-    if (replaceSitting) {
+    if (isReplacementSitting) {
       SESSION.sittingId += 1
       hooks.state!(null)
     }
@@ -143,8 +143,8 @@ test("drops a context lookup and cached snapshot after sitting replacement", asy
   let release!: (value: null) => void
   hooks.context.mockImplementationOnce(
     () =>
-      new Promise<null>((r) => {
-        release = r
+      new Promise<null>((resolve) => {
+        release = resolve
       }),
   )
   const pending = withContext({

@@ -36,13 +36,13 @@ export function readSync(): Record<string, unknown> {
         unknown
       > | null) || {}
     )
-  } catch (e) {
+  } catch (error) {
     // Missing is the normal cold-start case — `groups.ts seedIfMissing()` handles it. Anything else
     // is worth a line but must never crash boot: this process also serves the web UI, and
     // losing the whole app to a stray comma in an OPTIONAL config file is the worse failure.
-    if (!isNodeError(e) || e.code !== "ENOENT") {
+    if (!isNodeError(error) || error.code !== "ENOENT") {
       console.log(
-        `[groups] could not read ${path}: ${errMessage(e)}`,
+        `[groups] could not read ${path}: ${errMessage(error)}`,
       )
     }
     return {}
@@ -99,10 +99,11 @@ export async function seed(
       `[groups] seeded ${path} with ${groups.length} group(s) from the registry`,
     )
     return true
-  } catch (e) {
-    if (isNodeError(e) && e.code === "EEXIST") return false
+  } catch (error) {
+    if (isNodeError(error) && error.code === "EEXIST")
+      return false
     console.log(
-      `[groups] could not seed ${path}: ${errMessage(e)}`,
+      `[groups] could not seed ${path}: ${errMessage(error)}`,
     )
     return false
   }
@@ -112,8 +113,9 @@ export async function readDoc(): Promise<Document> {
   let text = ""
   try {
     text = await fsp.readFile(path, "utf8")
-  } catch (e) {
-    if (!isNodeError(e) || e.code !== "ENOENT") throw e
+  } catch (error) {
+    if (!isNodeError(error) || error.code !== "ENOENT")
+      throw error
     text = `${SEED_HEADER}\ngroups: []\n`
   }
   const doc = parseDocument(text)

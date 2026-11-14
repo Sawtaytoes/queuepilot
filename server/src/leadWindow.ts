@@ -25,15 +25,15 @@ export const DEFAULT_PROMOTE_WINDOW_MS = 16 * 60 * 60 * 1000 // 16h
 export function parsePromoteWindow(
   raw: unknown,
 ): number | null {
-  const s = String(raw ?? "")
+  const normalized = String(raw ?? "")
     .trim()
     .toLowerCase()
-  if (!s) return null
-  const m = /^(\d+)\s*(ms|s|m|h|d)$/.exec(s)
-  if (!m) return null
-  const n = Number(m[1])
-  if (!Number.isFinite(n) || n <= 0) return null
-  const unit = m[2]!
+  if (!normalized) return null
+  const match = /^(\d+)\s*(ms|s|m|h|d)$/.exec(normalized)
+  if (!match) return null
+  const amount = Number(match[1])
+  if (!Number.isFinite(amount) || amount <= 0) return null
+  const unit = match[2]!
   const mult =
     unit === "ms"
       ? 1
@@ -44,5 +44,5 @@ export function parsePromoteWindow(
           : unit === "h"
             ? 3_600_000
             : 86_400_000 // d
-  return n * mult
+  return amount * mult
 }

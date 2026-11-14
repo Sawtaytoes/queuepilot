@@ -39,46 +39,48 @@ import { readBody } from "./readBody.js"
 export function groupRoutes(): Hono {
   const app = new Hono()
 
-  app.get("/groups", async (c) => {
+  app.get("/groups", async (context) => {
     try {
       const reg = await sets.getRegistry()
-      return c.json({
+      return context.json({
         groups: resolveGroups(reg.sets),
         unassigned: unassignedSetIds(reg.sets),
       })
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 
   // Create. Body: {label, accounts?, sets?}. Returns the generated (immutable) id.
-  app.post("/groups", async (c) => {
+  app.post("/groups", async (context) => {
     try {
-      return c.json(await createGroup(await readBody(c)))
-    } catch (e) {
+      return context.json(
+        await createGroup(await readBody(context)),
+      )
+    } catch (error) {
       // 400, not 500: every throw in the writer is a rejected INPUT (no label, a reserved
       // id, a label with nothing to slugify), and answering 500 would tell the editor to
       // retry something that can never succeed.
-      return c.json({ error: errMessage(e) }, 400)
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
   // Edit one group. `id` is never writable — it is the URL, and a bookmark is a promise.
-  app.patch("/groups/:id", async (c) => {
+  app.patch("/groups/:id", async (context) => {
     try {
-      return c.json(
+      return context.json(
         await updateGroup(
-          c.req.param("id"),
-          await readBody(c),
+          context.req.param("id"),
+          await readBody(context),
         ),
       )
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
-  app.delete("/groups/:id", async (c) => {
-    const id = c.req.param("id")
+  app.delete("/groups/:id", async (context) => {
+    const id = context.req.param("id")
     try {
       const result = await deleteGroup(id)
       if (result.deleted) {
@@ -93,22 +95,24 @@ export function groupRoutes(): Hono {
           bumpQueuePeopleVersion(db)
         })
       }
-      return c.json(result)
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 400)
+      return context.json(result)
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 400)
     }
   })
 
   // Chip order. Body: {ids} — the new full order; anything omitted keeps its relative
   // position at the end rather than being dropped (see reorderGroups).
-  app.patch("/groups-order", async (c) => {
-    const { ids } = await readBody(c)
+  app.patch("/groups-order", async (context) => {
+    const { ids } = await readBody(context)
     if (!Array.isArray(ids))
-      return c.json({ error: "ids[] required" }, 400)
+      return context.json({ error: "ids[] required" }, 400)
     try {
-      return c.json(await reorderGroups(ids.map(String)))
-    } catch (e) {
-      return c.json({ error: errMessage(e) }, 500)
+      return context.json(
+        await reorderGroups(ids.map(String)),
+      )
+    } catch (error) {
+      return context.json({ error: errMessage(error) }, 500)
     }
   })
 

@@ -102,7 +102,7 @@ function accountDistance(
   if (stops.some((stop) => !stop)) return null
   const ordered = stops
     .filter((stop) => stop != null)
-    .sort((a, b) => a.top - b.top)
+    .sort((left, right) => left.top - right.top)
   const account = ordered.findIndex(
     ({ node }) => node["resource-id"] === ACCOUNT,
   )
@@ -113,10 +113,10 @@ function accountDistance(
   const path = ordered.slice(account, current + 1)
   if (
     path.some(
-      (stop, i) =>
+      (stop, index) =>
         stop.left !== path[0]?.left ||
         stop.right !== path[0]?.right ||
-        (i > 0 && stop.top === path[i - 1]?.top),
+        (index > 0 && stop.top === path[index - 1]?.top),
     )
   )
     return null

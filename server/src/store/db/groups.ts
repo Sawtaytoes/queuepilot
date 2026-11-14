@@ -92,9 +92,9 @@ export function readSync(): Record<string, unknown> {
         (row) => JSON.parse(row.data) as unknown,
       ),
     })
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[groups] could not read the store: ${errMessage(e)}`,
+      `[groups] could not read the store: ${errMessage(error)}`,
     )
     return {}
   }

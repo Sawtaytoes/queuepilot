@@ -125,10 +125,10 @@ function splitValue(value: unknown): {
     if (title != null) identity.title = title as string
     return { identity, extras }
   }
-  const s = String(value).trim()
-  if (/^\d+$/.test(s))
-    return { identity: { ratingKey: s }, extras: {} }
-  const coll = COLLECTION_PREFIX_RE.exec(s)?.[1]
+  const trimmed = String(value).trim()
+  if (/^\d+$/.test(trimmed))
+    return { identity: { ratingKey: trimmed }, extras: {} }
+  const coll = COLLECTION_PREFIX_RE.exec(trimmed)?.[1]
   if (coll !== undefined)
     return {
       identity: { collection: coll.trim() },
@@ -153,7 +153,8 @@ function compose(
   if (identity.ratingKey != null)
     out.ratingKey = identity.ratingKey
   if (identity.title != null) out.title = identity.title
-  for (const [k, v] of Object.entries(extras)) out[k] = v
+  for (const [key, value] of Object.entries(extras))
+    out[key] = value
   return out
 }
 
@@ -222,8 +223,12 @@ export async function migrateDocument(
     const policy = policyFor(name)
     labels.set(name, policy.label)
 
-    for (let i = 0; i < seq.items.length; i += 1) {
-      const node = seq.items[i]
+    for (
+      let itemIndex = 0;
+      itemIndex < seq.items.length;
+      itemIndex += 1
+    ) {
+      const node = seq.items[itemIndex]
       const before: unknown = isNode(node)
         ? node.toJSON()
         : node
@@ -280,17 +285,17 @@ export async function migrateDocument(
 
       // An `unresolved` MAPPING is reported without being rewritten — there is nothing to
       // change about it, and rewriting it would move its comments for no reason.
-      const rewritten =
+      const isRewritten =
         verdict !== "keep" &&
         !(verdict === "unresolved" && isMapping(before))
       const after = compose(identity, extras)
       const change: Change = {
         set: name,
-        index: i,
+        index: itemIndex,
         verdict,
         before,
         after,
-        rewritten,
+        rewritten: isRewritten,
         ...(why ? { why } : {}),
       }
       if (verdict === "keep") {
@@ -298,8 +303,8 @@ export async function migrateDocument(
         continue
       }
       changes.push(change)
-      if (rewritten)
-        seq.items[i] = rebuild(doc, node, after)
+      if (isRewritten)
+        seq.items[itemIndex] = rebuild(doc, node, after)
     }
   }
   return { changes, kept, labels }

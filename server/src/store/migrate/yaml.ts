@@ -162,12 +162,12 @@ function copyAside(): string | null {
         copyFileSync(from, join(dir, `${source}.yaml`))
     }
     return dir
-  } catch (e) {
+  } catch (error) {
     // A read-only /config is a real deployment (and several e2e harnesses point at one). The
     // import is still the right thing to do; it just cannot leave a copy behind, and saying so
     // is better than refusing to start.
     console.log(
-      `[store] could not copy the YAML aside into ${dir}: ${errMessage(e)}`,
+      `[store] could not copy the YAML aside into ${dir}: ${errMessage(error)}`,
     )
     return null
   }
@@ -388,7 +388,7 @@ const EMPTY_REPORT: Omit<
  * re-import is exactly when a copy is most wanted.
  */
 export function importYaml({
-  force = false,
+  force: isForced = false,
 }: {
   force?: boolean
 } = {}): ImportReport {
@@ -396,7 +396,7 @@ export function importYaml({
   const current = fingerprint()
   const recorded = readMeta(db, "sets", "yaml_fingerprint")
 
-  if (!force && recorded === current) {
+  if (!isForced && recorded === current) {
     return {
       imported: false,
       reason:
@@ -426,7 +426,7 @@ export function importYaml({
 
     return {
       imported: true,
-      reason: force
+      reason: isForced
         ? "forced"
         : recorded === null
           ? "first import"
@@ -453,7 +453,7 @@ export function importYaml({
   return report
 }
 
-let done = false
+let isDone = false
 let lastStamp: string | null = null
 
 /**
@@ -468,18 +468,18 @@ let lastStamp: string | null = null
  */
 export function ensureImported(): void {
   // With the mirror off the files are relics; import once and never look again.
-  if (done && !STORE_YAML_MIRROR) return
+  if (isDone && !STORE_YAML_MIRROR) return
 
   const stamp = sourceStamp()
-  if (done && stamp === lastStamp) return
-  done = true
+  if (isDone && stamp === lastStamp) return
+  isDone = true
   lastStamp = stamp
 
   try {
     importYaml()
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[store] YAML import failed: ${errMessage(e)}`,
+      `[store] YAML import failed: ${errMessage(error)}`,
     )
   }
 }
@@ -499,10 +499,10 @@ export function noteMirrorWrite(): void {
       fingerprint(),
     )
     lastStamp = sourceStamp()
-    done = true
-  } catch (e) {
+    isDone = true
+  } catch (error) {
     console.log(
-      `[store] could not record the mirror write: ${errMessage(e)}`,
+      `[store] could not record the mirror write: ${errMessage(error)}`,
     )
   }
 }

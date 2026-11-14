@@ -44,12 +44,12 @@ for (const boundary of [
   "extend",
 ] as const) {
   test(`discards a top-up replaced during ${boundary} without changing another sitting`, async () => {
-    let entered = false
+    let isEntered = false
     let release!: () => void
     const held = () => {
-      entered = true
-      return new Promise<void>((r) => {
-        release = r
+      isEntered = true
+      return new Promise<void>((resolve) => {
+        release = resolve
       })
     }
     const read = vi.fn(async () => {
@@ -83,7 +83,7 @@ for (const boundary of [
       }),
     } as unknown as TopupDeps
     const pending = topup({ deps })
-    await vi.waitFor(() => expect(entered).toBe(true))
+    await vi.waitFor(() => expect(isEntered).toBe(true))
     Object.assign(SESSION, {
       sittingId: 2,
       isPreparing: true,

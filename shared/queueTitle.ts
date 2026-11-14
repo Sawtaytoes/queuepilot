@@ -144,7 +144,10 @@ export function queueNumbers<Member extends NumberedMember>(
       set.source,
       set.activity,
       ...(membersBySet[set.id] ?? [])
-        .map((m) => `${m.role}:${m.kind}:${m.id}`)
+        .map(
+          (member) =>
+            `${member.role}:${member.kind}:${member.id}`,
+        )
         .sort(),
     ].join("|")
     const count = (seen.get(signature) ?? 0) + 1

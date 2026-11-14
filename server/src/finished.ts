@@ -136,11 +136,11 @@ export async function watchedFor(
     return memo.value
   const value = select
     .watchedForSet(liveClient(), cfg, binding)
-    .catch((e: unknown) => {
+    .catch((error: unknown) => {
       // A history read that failed must never make the grid claim things are finished, and
       // must not stick: drop it so the next request retries.
       console.log(
-        `[finished] watched history unavailable (${errMessage(e)})`,
+        `[finished] watched history unavailable (${errMessage(error)})`,
       )
       _watched.delete(key)
       return new Set<string>()
@@ -253,9 +253,9 @@ export async function reconcileQueue(
         `[finished] ${setName}: marked ${marked} finished after playback`,
       )
     return { reconciled: true }
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `[finished] reconcile of '${setName}' skipped (${errMessage(e)})`,
+      `[finished] reconcile of '${setName}' skipped (${errMessage(error)})`,
     )
     return { reconciled: false }
   }
@@ -462,11 +462,11 @@ export async function finalizeQueueProgress(
         `[progress] ${setName}: ${item.ratingKey} resumes at ${verdict.positionMs}ms`,
       )
     }
-  } catch (e) {
+  } catch (error) {
     // Keep the last position captured from the live player. A failed provider read must not
     // turn an incomplete episode into a completed one or erase a usable resume point.
     console.log(
-      `[progress] could not finalize ${setName}/${item.ratingKey} (${errMessage(e)})`,
+      `[progress] could not finalize ${setName}/${item.ratingKey} (${errMessage(error)})`,
     )
   }
 }
