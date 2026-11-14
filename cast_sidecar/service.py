@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import os
-import ssl
 import sys
 import time
 import urllib.parse
@@ -36,7 +35,6 @@ def _cast_play(rating_keys, cast_name=None, offset=0, token=None):
         result["error"] = "nothing to play"
         return result
     try:
-        from requests import Session
         from plexapi.server import PlexServer
         from plexapi.playqueue import PlayQueue
         import pychromecast
@@ -46,9 +44,9 @@ def _cast_play(rating_keys, cast_name=None, offset=0, token=None):
         return result
     tok = token or PLEX_TOKEN
     try:
-        sess = Session()
-        sess.verify = False
-        server = PlexServer(PLEX_URL, tok, session=sess)
+        # plexapi's own session checks the certificate. The Plex API URL serves a publicly
+        # trusted one; a LAN server's `*.plex.direct` address does too.
+        server = PlexServer(PLEX_URL, tok)
         items = [server.fetchItem(int(rk)) for rk in rating_keys]
         pq = PlayQueue.create(server, items)
         chromecasts, browser = pychromecast.get_listed_chromecasts(
