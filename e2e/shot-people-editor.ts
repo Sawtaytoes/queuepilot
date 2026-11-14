@@ -23,7 +23,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18799;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const env = {
@@ -66,12 +66,12 @@ const browser = await chromium.launch();
 
 try {
   server = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -101,8 +101,8 @@ try {
     await page.waitForTimeout(900);
     await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-modal.png` });
 
-    const rows = await page.$$eval('#peoplemodal .peoplerow', (n) => n.length);
-    const faces = await page.$$eval('#peoplemodal [data-person-face]', (n) => n.length);
+    const rows = await page.$$eval('#peoplemodal .peoplerow', (elements) => elements.length);
+    const faces = await page.$$eval('#peoplemodal [data-person-face]', (elements) => elements.length);
     console.log(`${rows} editable name rows, ${faces} faces — the AFTER state`);
 
     // THE CONFIRMATION. It is the one control here that cannot be inferred from a still of the
@@ -112,7 +112,7 @@ try {
       await remove.click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-confirm.png` });
-      const said = await page.$eval('#peoplemodal .peopleconfirm', (n) => n.textContent ?? '');
+      const said = await page.$eval('#peoplemodal .peopleconfirm', (element) => element.textContent ?? '');
       console.log(`the confirmation says: ${JSON.stringify(said.replace(/\s+/g, ' ').trim())}`);
       // Put it back — the next frame is the list, not a half-open confirmation.
       const cancel = await page.$('#peoplemodal .peopleconfirm button:last-of-type');
@@ -131,7 +131,7 @@ try {
     // surface, and `Locator.isDisabled` is not on it.
     const ROW = '#peoplemodal .peoplerow:first-of-type';
     const isSaveDisabled = () =>
-      page.$eval(`${ROW} .peoplerowmain button`, (n) => (n as HTMLButtonElement).disabled);
+      page.$eval(`${ROW} .peoplerowmain button`, (element) => (element as HTMLButtonElement).disabled);
 
     console.log(
       (await isSaveDisabled())
@@ -148,8 +148,8 @@ try {
     const save = await page.$(`${ROW} .peoplerowmain button`);
     await save?.click();
     await page.waitForTimeout(1200);
-    const names = await page.$$eval('#peoplemodal .peoplerow input.peoplename', (n) =>
-      (n as HTMLInputElement[]).map((i) => i.value),
+    const names = await page.$$eval('#peoplemodal .peoplerow input.peoplename', (elements) =>
+      (elements as HTMLInputElement[]).map((input) => input.value),
     );
     console.log(
       names.includes('Ada Lovelace')
@@ -167,9 +167,9 @@ try {
       await page.waitForSelector('#groupsmodal', { timeout: 15000 });
       await page.waitForTimeout(900);
       await page.screenshot({ path: `__screenshots__/peopleeditor-${TAG}-groups.png` });
-      const groupCount = await page.$$eval('#groupsmodal .grouppick', (n) => n.length);
-      const ruleCount = await page.$$eval('#groupsmodal .grouprulesummary', (n) => n.length);
-      const memberControls = await page.$$eval('#groupsmodal .groupmemberchoices', (n) => n.length);
+      const groupCount = await page.$$eval('#groupsmodal .grouppick', (elements) => elements.length);
+      const ruleCount = await page.$$eval('#groupsmodal .grouprulesummary', (elements) => elements.length);
+      const memberControls = await page.$$eval('#groupsmodal .groupmemberchoices', (elements) => elements.length);
       console.log(`${groupCount} editable people groups, ${ruleCount} visible rule, ${memberControls} member controls`);
       const savedGroup = await page.$('#groupsmodal .grouppick');
       await savedGroup?.click();

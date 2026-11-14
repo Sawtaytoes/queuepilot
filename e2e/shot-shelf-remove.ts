@@ -24,7 +24,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18798;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 const OUT = '__screenshots__';
 
@@ -43,25 +43,25 @@ const LIBRARY = [
 
 /** A flat two-tone poster with the title on it — enough to read as artwork, invented here. */
 const posterSvg = (rk: string) => {
-  const m = LIBRARY.find((x) => x.ratingKey === rk) ?? LIBRARY[0]!;
-  const words = m.title.split(' ');
+  const movie = LIBRARY.find((candidate) => candidate.ratingKey === rk) ?? LIBRARY[0]!;
+  const words = movie.title.split(' ');
   const lines: string[] = [];
   let line = '';
-  for (const w of words) {
-    if ((`${line} ${w}`).trim().length > 12) { lines.push(line.trim()); line = w; }
-    else line = `${line} ${w}`;
+  for (const word of words) {
+    if ((`${line} ${word}`).trim().length > 12) { lines.push(line.trim()); line = word; }
+    else line = `${line} ${word}`;
   }
   if (line.trim()) lines.push(line.trim());
   const text = lines
-    .map((l, i) => `<text x="240" y="${560 + i * 58}" fill="#f4f4f5" font-family="Helvetica, Arial, sans-serif" font-size="46" font-weight="600" text-anchor="middle">${l}</text>`)
+    .map((line, index) => `<text x="240" y="${560 + index * 58}" fill="#f4f4f5" font-family="Helvetica, Arial, sans-serif" font-size="46" font-weight="600" text-anchor="middle">${line}</text>`)
     .join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="480" height="720" viewBox="0 0 480 720">
     <defs><linearGradient id="g" x1="0" y1="0" x2="0.4" y2="1">
-      <stop offset="0" stop-color="hsl(${m.hue} 55% 42%)"/>
-      <stop offset="1" stop-color="hsl(${(m.hue + 40) % 360} 45% 16%)"/>
+      <stop offset="0" stop-color="hsl(${movie.hue} 55% 42%)"/>
+      <stop offset="1" stop-color="hsl(${(movie.hue + 40) % 360} 45% 16%)"/>
     </linearGradient></defs>
     <rect width="480" height="720" fill="url(#g)"/>
-    <circle cx="240" cy="300" r="120" fill="hsl(${m.hue} 60% 62%)" opacity="0.35"/>
+    <circle cx="240" cy="300" r="120" fill="hsl(${movie.hue} 60% 62%)" opacity="0.35"/>
     ${text}</svg>`;
 };
 
@@ -80,10 +80,10 @@ const plexStub = http.createServer((req, res) => {
   res.setHeader('Content-Type', 'application/json');
   if (/\/library\/sections\/\d+\/all\?/.test(url)) {
     const want = decodeURIComponent(/[?&]title=([^&]*)/.exec(url)?.[1] ?? '').toLowerCase();
-    const hits = LIBRARY.filter((m) => m.title.toLowerCase() === want);
-    return res.end(JSON.stringify({ MediaContainer: { Metadata: hits.map((m) => ({
-      ratingKey: m.ratingKey, type: 'movie', title: m.title, year: m.year,
-      thumb: `/library/metadata/${m.ratingKey}/thumb/1`, duration: 6_000_000, viewCount: 0,
+    const hits = LIBRARY.filter((movie) => movie.title.toLowerCase() === want);
+    return res.end(JSON.stringify({ MediaContainer: { Metadata: hits.map((hit) => ({
+      ratingKey: hit.ratingKey, type: 'movie', title: hit.title, year: hit.year,
+      thumb: `/library/metadata/${hit.ratingKey}/thumb/1`, duration: 6_000_000, viewCount: 0,
     })) } }));
   }
   if (/\/library\/metadata\/\d+\/allLeaves/.test(url)) {
@@ -91,10 +91,10 @@ const plexStub = http.createServer((req, res) => {
   }
   if (/\/library\/metadata\/\d+/.test(url)) {
     const rk = /\/library\/metadata\/(\d+)/.exec(url)?.[1] ?? '9001';
-    const m = LIBRARY.find((x) => x.ratingKey === rk) ?? LIBRARY[0]!;
+    const movie = LIBRARY.find((candidate) => candidate.ratingKey === rk) ?? LIBRARY[0]!;
     return res.end(JSON.stringify({ MediaContainer: { Metadata: [{
-      ratingKey: m.ratingKey, type: 'movie', title: m.title, year: m.year,
-      thumb: `/library/metadata/${m.ratingKey}/thumb/1`, duration: 6_000_000, viewCount: 0,
+      ratingKey: movie.ratingKey, type: 'movie', title: movie.title, year: movie.year,
+      thumb: `/library/metadata/${movie.ratingKey}/thumb/1`, duration: 6_000_000, viewCount: 0,
     }] } }));
   }
   if (/\/library\/sections\/\d+\/collections/.test(url)) {
@@ -105,7 +105,7 @@ const plexStub = http.createServer((req, res) => {
   }
   res.end(JSON.stringify({ MediaContainer: {} }));
 });
-await new Promise<void>((r) => plexStub.listen(0, () => r()));
+await new Promise<void>((resolve) => plexStub.listen(0, () => resolve()));
 const addr = plexStub.address();
 if (addr === null || typeof addr === 'string') throw new Error('the stub Plex did not bind a TCP port');
 
@@ -146,11 +146,11 @@ await fs.writeFile(env.SETS_PATH, `sets:
   source: queue
   sections: [ 1 ]
 `);
-for (const p of [env.QUEUES_PATH, env.SETS_PATH]) {
-  await fs.rm(`${p}.lock`, { force: true, recursive: true });
+for (const file of [env.QUEUES_PATH, env.SETS_PATH]) {
+  await fs.rm(`${file}.lock`, { force: true, recursive: true });
 }
-for (const p of [env.HISTORY_PATH, env.CACHE_PATH, `${env.CACHE_PATH}-wal`, `${env.CACHE_PATH}-shm`]) {
-  await fs.rm(p, { force: true });
+for (const file of [env.HISTORY_PATH, env.CACHE_PATH, `${env.CACHE_PATH}-wal`, `${env.CACHE_PATH}-shm`]) {
+  await fs.rm(file, { force: true });
 }
 await fs.mkdir(OUT, { recursive: true });
 
@@ -159,9 +159,9 @@ const browser = await chromium.launch();
 
 try {
   server = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 60; i++) {
-    try { await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json()); break; } catch {
-      await new Promise((r) => setTimeout(r, 200));
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json()); break; } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 

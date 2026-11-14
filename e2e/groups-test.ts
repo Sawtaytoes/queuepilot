@@ -116,9 +116,9 @@ async function check(name: string, run: () => void | Promise<void>): Promise<voi
   try {
     await run();
     console.log(`PASS ${name}`);
-  } catch (e) {
+  } catch (error) {
     failures += 1;
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
   }
 }
 
@@ -126,7 +126,7 @@ const resolve = async () => {
   // Re-read from disk every time: the registry memo is stat-keyed and the writer below
   // changes the file under it, so a cached read here would test the previous state.
   const reg = await sets.getRegistry();
-  const byId = new Map(groups.resolveGroups(reg.sets).map((g) => [g.id, g]));
+  const byId = new Map(groups.resolveGroups(reg.sets).map((resolveGroup) => [resolveGroup.id, resolveGroup]));
   return byId;
 };
 
@@ -148,7 +148,7 @@ await check('an UNnamed set falls to whichever group claims its account', async 
 
 await check('a superseded tier is in no group and in no count', async () => {
   const byId = await resolve();
-  for (const g of byId.values()) assert.ok(!g.setIds.includes('retired'), `${g.id} holds it`);
+  for (const group of byId.values()) assert.ok(!group.setIds.includes('retired'), `${group.id} holds it`);
 });
 
 await check('`all` holds everything visible and is not editable', async () => {
@@ -165,14 +165,14 @@ await check('nothing is left unfiled in this fixture', async () => {
 
 await check('a rename keeps the id — the URL is a promise', async () => {
   await groups.updateGroup('bob-alice', { label: 'Bob and Alice' });
-  const stored = groups.storedGroups().find((g) => g.id === 'bob-alice');
+  const stored = groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob-alice');
   assert.equal(stored?.label, 'Bob and Alice');
   assert.deepEqual(stored?.sets, ['bob_alice_anime']);
 });
 
 await check('a PATCH that omits a field leaves it alone', async () => {
   await groups.updateGroup('bob', { label: 'Bob' });
-  const stored = groups.storedGroups().find((g) => g.id === 'bob');
+  const stored = groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob');
   // Neither accounts nor sets were in the body, so both survive.
   assert.deepEqual(stored?.accounts.plex, ['sawtaytoes']);
   assert.deepEqual(stored?.sets, ['bob_anime']);
@@ -180,7 +180,7 @@ await check('a PATCH that omits a field leaves it alone', async () => {
 
 await check('an explicitly empty sets[] does clear it', async () => {
   await groups.updateGroup('bob', { sets: [] });
-  assert.deepEqual(groups.storedGroups().find((g) => g.id === 'bob')?.sets, []);
+  assert.deepEqual(groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets, []);
   await groups.updateGroup('bob', { sets: ['bob_anime'] });
 });
 
@@ -217,7 +217,7 @@ await check('a set created inside a group joins that group', async () => {
   const made = await sets.createSet({ label: 'Made In Bob', kind: 'movies', sections: [11] });
   const filed = await groups.fileSetIntoGroup('bob', made.id);
   assert.equal(filed, 'bob');
-  assert.ok(groups.storedGroups().find((g) => g.id === 'bob')?.sets.includes(made.id));
+  assert.ok(groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets.includes(made.id));
   const byId = await resolve();
   assert.ok(byId.get('bob')?.setIds.includes(made.id), 'not in the resolved membership');
   assert.ok(!byId.get('kids')?.setIds.includes(made.id), 'leaked into another group');
@@ -238,9 +238,9 @@ await check('filing into an ACCOUNTS-only group works and settles the set there'
 });
 
 await check('filing is idempotent — a retried save cannot double-list a set', async () => {
-  const before = groups.storedGroups().find((g) => g.id === 'bob')?.sets ?? [];
+  const before = groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets ?? [];
   assert.equal(await groups.fileSetIntoGroup('bob', 'bob_anime'), 'bob');
-  assert.deepEqual(groups.storedGroups().find((g) => g.id === 'bob')?.sets, before);
+  assert.deepEqual(groups.storedGroups().find((storedGroup) => storedGroup.id === 'bob')?.sets, before);
 });
 
 await check('`all` is not a destination — it is the absence of one, not an error', async () => {

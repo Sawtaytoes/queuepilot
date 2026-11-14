@@ -55,11 +55,11 @@ const waitReady = async (url: string, ms = 30000) => {
 
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-tilelane-gate.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-tilelane-gate.yaml');
-for (const p of [
+for (const filePath of [
   '/tmp/queues-tilelane-gate.yaml.lock', '/tmp/sets-tilelane-gate.yaml.lock',
   '/tmp/queuepilot-tilelane-gate.sqlite',
 ]) {
-  await fs.rm(p, { force: true, recursive: true });
+  await fs.rm(filePath, { force: true, recursive: true });
 }
 
 const srv = spawnServer({
@@ -77,9 +77,9 @@ const srv = spawnServer({
 });
 
 let failed = 0;
-const check = (name: string, ok: boolean, detail = '') => {
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
-  if (!ok) failed += 1;
+const check = (name: string, isOk: boolean, detail = '') => {
+  console.log(`  ${isOk ? 'ok  ' : 'FAIL'} ${name}${isOk ? '' : ` — ${detail}`}`);
+  if (!isOk) failed += 1;
 };
 
 const waitForWrite = async (
@@ -99,7 +99,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Every write this page makes, so a press can be asserted on its EFFECT. */
   const writes: { body: string; method: string; url: string }[] = [];
@@ -121,10 +121,10 @@ try {
 
   const firstTile = page.locator('#grid-pool li.tile').first();
   const controls = await firstTile.evaluate((el) =>
-    [...el.querySelectorAll('.tilechrome > *')].map((c) => c.className));
+    [...el.querySelectorAll('.tilechrome > *')].map((child) => child.className));
   check(
     'the chrome stack carries remove, check and the lane control',
-    ['remove', 'check', 'lanebtn'].every((c) => controls.includes(c)),
+    ['remove', 'check', 'lanebtn'].every((className) => controls.includes(className)),
     `got [${controls.join(', ')}]`,
   );
 
@@ -194,23 +194,23 @@ try {
   );
   await waitForWrite(writes, '/order');
 
-  const placementWrite = writes.find((w) => w.url.includes('/placement'));
+  const placementWrite = writes.find((write) => write.url.includes('/placement'));
   check(
     'the press PATCHes the placement',
     Boolean(placementWrite) && JSON.parse(placementWrite!.body).placement === 'priority',
     JSON.stringify(placementWrite ?? null),
   );
-  const orderWrite = writes.find((w) => w.url.endsWith('/order'));
+  const orderWrite = writes.find((write) => write.url.endsWith('/order'));
   check(
     '…and an order PATCH follows it, never the other way round',
     Boolean(orderWrite)
       && writes.indexOf(placementWrite!) < writes.indexOf(orderWrite!),
-    `writes: ${writes.map((w) => w.url.split('/').pop()).join(' → ')}`,
+    `writes: ${writes.map((write) => write.url.split('/').pop()).join(' → ')}`,
   );
 
   const priorityTitles = await page.$$eval(
     'ul.grid[data-lane="priority"] li.tile .title',
-    (els) => els.map((e) => (e.textContent || '').trim()),
+    (els) => els.map((el) => (el.textContent || '').trim()),
   );
   check(
     'the promoted entry is in the Priority lane',
@@ -229,7 +229,7 @@ try {
   await page.waitForTimeout(1200);
   const afterReload = await page.$$eval(
     'ul.grid[data-lane="priority"] li.tile .title',
-    (els) => els.map((e) => (e.textContent || '').trim()),
+    (els) => els.map((el) => (el.textContent || '').trim()),
   );
   check(
     'the move survives a reload — the file agrees with the screen',
@@ -260,7 +260,7 @@ try {
   );
   await waitForWrite(writes, '/order');
 
-  const demoteWrite = writes.find((w) => w.url.includes('/placement'));
+  const demoteWrite = writes.find((write) => write.url.includes('/placement'));
   check(
     'the demote PATCHes placement: random',
     Boolean(demoteWrite) && JSON.parse(demoteWrite!.body).placement === 'random',
@@ -277,11 +277,11 @@ try {
   //
   // Nothing on screen changes either way — `splitLanes` re-derives the lanes from `placement`
   // — so what this pins is the FILE, and the order the two writes go out in.
-  const demoteOrderWrite = writes.find((w) => w.url.endsWith('/order'));
+  const demoteOrderWrite = writes.find((write) => write.url.endsWith('/order'));
   check(
     'the demote writes the order too — the file is one sequence, so it must agree with the lane',
     Boolean(demoteOrderWrite),
-    `writes: ${writes.map((w) => w.url.split('/').pop()).join(' → ')}`,
+    `writes: ${writes.map((write) => write.url.split('/').pop()).join(' → ')}`,
   );
   check(
     '…and placement still goes FIRST, so the file never says a lane the order contradicts',
@@ -290,7 +290,7 @@ try {
         && demoteOrderWrite
         && writes.indexOf(demoteWrite) < writes.indexOf(demoteOrderWrite),
     ),
-    `writes: ${writes.map((w) => w.url.split('/').pop()).join(' → ')}`,
+    `writes: ${writes.map((write) => write.url.split('/').pop()).join(' → ')}`,
   );
 
   await browser.close();

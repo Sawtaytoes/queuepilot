@@ -41,7 +41,7 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -79,7 +79,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1180, height: 900 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   // The stub serves no artwork, so a poster request would only stall the shot.
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));
   // A real Plex round trip is a few hundred milliseconds; a stub on loopback answers inside
@@ -89,7 +89,7 @@ try {
   await page.route(
     /\/api\/collection\/\d+\/children\?[^?]*\bfresh=1\b/,
     async (route) => {
-      await new Promise((r) => setTimeout(r, 1400));
+      await new Promise((resolve) => setTimeout(resolve, 1400));
       await route.continue();
     },
   );

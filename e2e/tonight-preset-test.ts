@@ -41,7 +41,7 @@ const browser = await chromium.launch();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1420, height: 1100 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Open a card's address and wait for the app to finish deciding where it lands. */
   const tap = async (href: string): Promise<void> => {

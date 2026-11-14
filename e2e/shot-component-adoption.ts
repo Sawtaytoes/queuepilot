@@ -74,7 +74,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   // Plex is unroutable from the harness, so only `libraries` needs patching in; the sets
   // themselves come from the YAML fixture.

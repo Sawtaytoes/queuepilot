@@ -9,9 +9,9 @@ import { promises as fs } from 'node:fs';
 
 const PORT = 18796;
 const DB = '/tmp/leaves-revalidate.sqlite';
-for (const f of [DB, DB + '-wal', DB + '-shm']) await fs.rm(f, { force: true });
+for (const file of [DB, DB + '-wal', DB + '-shm']) await fs.rm(file, { force: true });
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 // --- fake Plex: a mutable show whose episodes + aggregate we flip mid-test -------------------
 const RK = '9001';
@@ -43,7 +43,7 @@ const state: {
   allLeavesHits: 0,
   aggregateHits: 0,
 };
-const viewed = () => state.leaves.filter((e) => (e.viewCount ?? 0) > 0).length;
+const viewed = () => state.leaves.filter((leaf) => (leaf.viewCount ?? 0) > 0).length;
 
 const srv = createServer((req, res) => {
   res.setHeader('content-type', 'application/json');
@@ -65,7 +65,7 @@ const srv = createServer((req, res) => {
   }
   res.statusCode = 404; res.end('{}');
 });
-await new Promise<void>((r) => srv.listen(PORT, () => r()));
+await new Promise<void>((resolve) => srv.listen(PORT, () => resolve()));
 
 process.env.PLEX_API_SERVER_URL = `http://127.0.0.1:${PORT}`;
 process.env.PLEX_TOKEN = 'test-token';
@@ -79,29 +79,29 @@ await cache.init();
 
 try {
   // 1) Cold read → fetches allLeaves once, next-up is the first unwatched (E3).
-  let n = await plex.nextEpisode(RK);
-  ok(`cold read picks E3 (got E${n?.episode})`, n?.episode === 3);
+  let nextEpisode = await plex.nextEpisode(RK);
+  ok(`cold read picks E3 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 3);
   ok(`cold read fetched allLeaves once (hits=${state.allLeavesHits})`, state.allLeavesHits === 1);
 
   // 2) Warm read, nothing changed → served from cache, NO second allLeaves fetch (the aggregate
   //    validator matched). The light aggregate call is allowed; the expensive one is not.
-  n = await plex.nextEpisode(RK);
-  ok(`warm read still E3 (got E${n?.episode})`, n?.episode === 3);
+  nextEpisode = await plex.nextEpisode(RK);
+  ok(`warm read still E3 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 3);
   ok(`warm unchanged did NOT refetch allLeaves (hits=${state.allLeavesHits})`, state.allLeavesHits === 1);
 
   // 3) OUT-OF-BAND completion: E3 is watched elsewhere (no MQTT drop). Aggregate viewedLeafCount
   //    goes 2→3. The next read must self-heal: refetch allLeaves and advance to E4.
   state.leaves = [ep(1, 1), ep(2, 1), ep(3, 1), ep(4, 0)];
-  n = await plex.nextEpisode(RK);
-  ok(`out-of-band watch self-heals to E4 (got E${n?.episode})`, n?.episode === 4);
+  nextEpisode = await plex.nextEpisode(RK);
+  ok(`out-of-band watch self-heals to E4 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 4);
   ok(`changed aggregate DID refetch allLeaves (hits=${state.allLeavesHits})`, state.allLeavesHits === 2);
 
   // 4) Offline fallback: the aggregate call fails → validator is null → the TTL path serves the
   //    last-known cached episodes (no throw, no refetch). Degraded behaviour is unchanged.
   state.failAggregate = true;
   const before = state.allLeavesHits;
-  n = await plex.nextEpisode(RK);
-  ok(`aggregate-down still serves cached next-up (got E${n?.episode})`, n?.episode === 4);
+  nextEpisode = await plex.nextEpisode(RK);
+  ok(`aggregate-down still serves cached next-up (got E${nextEpisode?.episode})`, nextEpisode?.episode === 4);
   ok(`aggregate-down did NOT refetch allLeaves (hits=${state.allLeavesHits})`, state.allLeavesHits === before);
 } finally {
   srv.close();

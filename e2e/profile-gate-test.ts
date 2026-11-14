@@ -23,9 +23,9 @@ process.env.PROFILE_SET_MAP = JSON.stringify({ 'Younger Kids': 'younger', 'Older
 const profiles = await import('../server/src/profiles.js');
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra = ''): void => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 const signInLine = (profile: string): string =>

@@ -55,10 +55,10 @@ const FILMS = [
   { ratingKey: '8106', title: 'The Gold Rush', year: 1925, duration: 95 * MIN },
   { ratingKey: '8107', title: 'Sherlock Jr.', year: 1924, duration: 45 * MIN },
   { ratingKey: '8108', title: 'The Kid', year: 1921, duration: 68 * MIN },
-].map((f) => ({ ...f, type: 'movie', librarySectionID: MOVIES }));
+].map((film) => ({ ...film, type: 'movie', librarySectionID: MOVIES }));
 
 const QUEUES_YAML = `bob:\n${FILMS
-  .map((f) => `- {ratingKey: "${f.ratingKey}", title: "${f.title} (${f.year})"}`)
+  .map((film) => `- {ratingKey: "${film.ratingKey}", title: "${film.title} (${film.year})"}`)
   .join('\n')}\n`;
 
 const SETS_YAML = `sets:
@@ -90,9 +90,9 @@ function slowPlex(port: number) {
     if (/^\/library\/sections\/\d+\/all$/.test(url.pathname)) return wrap(FILMS);
     const meta = /^\/library\/metadata\/([\d,]+)$/.exec(url.pathname);
     if (meta) {
-      await new Promise((r) => setTimeout(r, READ_DELAY_MS));
+      await new Promise((resolve) => setTimeout(resolve, READ_DELAY_MS));
       const want = new Set(String(meta[1]).split(','));
-      return wrap(FILMS.filter((m) => want.has(m.ratingKey)));
+      return wrap(FILMS.filter((film) => want.has(film.ratingKey)));
     }
     return send({ MediaContainer: { size: 0 } });
   });
@@ -108,7 +108,7 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -147,7 +147,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1180, height: 820 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));
 
   const started = Date.now();

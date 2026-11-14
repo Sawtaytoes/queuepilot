@@ -25,7 +25,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18794;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const env = {
@@ -79,12 +79,12 @@ const darkInit = () => {
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -103,9 +103,9 @@ try {
   // provider badge and the icon row, so `textContent` on the whole heading is a wall of
   // chrome with the one word this shot is about buried in it.
   const headings = await page.$$eval('.shelf h2 .lbl', (nodes) =>
-    nodes.map((n) => (n.textContent ?? '').trim()),
+    nodes.map((node) => (node.textContent ?? '').trim()),
   );
-  const activityNamed = headings.filter((h) => h.includes('Movies & Shows')).length;
+  const activityNamed = headings.filter((heading) => heading.includes('Movies & Shows')).length;
   console.log(`shelf headings: ${headings.join(' | ')}`);
   console.log(
     activityNamed
@@ -124,7 +124,7 @@ try {
     await page.waitForTimeout(900);
     await page.screenshot({ path: `__screenshots__/queuename-${TAG}-editor.png` });
 
-    const isRequired = await page.$eval('#set-label', (n) => n.hasAttribute('required'));
+    const isRequired = await page.$eval('#set-label', (element) => element.hasAttribute('required'));
     console.log(
       isRequired ? 'the Name field is REQUIRED — the BEFORE state' : 'the Name field is optional',
     );

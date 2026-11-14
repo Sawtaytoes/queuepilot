@@ -17,13 +17,13 @@ const OUT = `${ROOT}/__screenshots__`;
 
 async function waitReady(url: string, ms = 30000) {
   const end = Date.now() + ms;
-  for (;;) { try { if ((await fetch(url)).ok) return; } catch { /* */ } if (Date.now() > end) throw new Error('not ready'); await new Promise((r) => setTimeout(r, 300)); }
+  for (;;) { try { if ((await fetch(url)).ok) return; } catch { /* */ } if (Date.now() > end) throw new Error('not ready'); await new Promise((resolve) => setTimeout(resolve, 300)); }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-shot.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-shot.yaml');
-for (const p of ['/tmp/sets-shot.yaml.lock', '/tmp/queues-shot.yaml.lock']) await fs.rm(p, { force: true });
+for (const file of ['/tmp/sets-shot.yaml.lock', '/tmp/queues-shot.yaml.lock']) await fs.rm(file, { force: true });
 
 const fake = await startFakeMqtt({ port: FAKE });
 const srv = spawnServer({
@@ -53,7 +53,7 @@ try {
   await page.screenshot({ path: `${OUT}/dd-playmenu-width.png` });
 
   // 3 — Queue result-type picker open.
-  const qid = await page.evaluate(() => fetch('/api/queues').then((r) => r.json()).then((j) => Object.keys(j.sets)[0]));
+  const qid = await page.evaluate(() => fetch('/api/queues').then((response) => response.json()).then((body) => Object.keys(body.sets)[0]));
   await page.goto(`${BASE}/q/${qid}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.add [data-testid="searchtype"]', { timeout: 15000 }).catch(() => {});
   const searchtype = await page.$('[data-testid="searchtype"]');

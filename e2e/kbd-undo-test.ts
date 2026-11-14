@@ -2,7 +2,7 @@ import { chromium } from './playwright.js';
 const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}`); if (!isPass) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 // Hold the provider-backed response after Undo. The store-only `/api/shelves` repaint must make
 // the change visible without waiting for this slower request (several seconds against live Plex).
 let isHoldingQueues = false;
@@ -16,7 +16,7 @@ await page.waitForSelector('.shelf');
 // Keyboard add in queue view: type → ArrowDown x2 → Enter picks the 2nd result.
 await page.click('.shelf[data-set="bob"] .open');
 await page.waitForSelector('#queue:not([hidden])');
-const before = await page.$$eval('#grid li.tile', (t) => t.length);
+const before = await page.$$eval('#grid li.tile', (elements) => elements.length);
 await page.fill('#search', 'clash of the titans');
 await page.waitForSelector('#results.open li', { timeout: 15000 });
 // The SECOND row, whatever it is. This used to hardcode /2010/, which silently
@@ -28,7 +28,7 @@ await page.keyboard.press('ArrowDown');
 await page.keyboard.press('ArrowDown');
 const activeTxt = await page.textContent('#results li.active');
 await page.keyboard.press('Enter');
-await page.waitForFunction((b) => document.querySelectorAll('#grid li.tile').length === b + 1, before, { timeout: 30000 });
+await page.waitForFunction((tileCount) => document.querySelectorAll('#grid li.tile').length === tileCount + 1, before, { timeout: 30000 });
 ok(`keyboard add picked highlighted row (${(activeTxt ?? '').trim().slice(0, 30)}…)`,
   Boolean(secondRowTxt) && activeTxt === secondRowTxt);
 
@@ -59,7 +59,7 @@ await page.waitForTimeout(2500); // let the deferred refresh land
 const kcount = await page.textContent('.shelf[data-set="bob"] .sec');
 isHoldingQueues = true;
 await page.click('#undo');
-await page.waitForFunction((k) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === String(Number(k) - 1), kcount, { timeout: 1000 });
+await page.waitForFunction((countText) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === String(Number(countText) - 1), kcount, { timeout: 1000 });
 ok('undo repaints before provider resolution finishes', true);
 isHoldingQueues = false;
 await page.waitForFunction(() => {
@@ -67,7 +67,7 @@ await page.waitForFunction(() => {
   return redo !== null && !redo.disabled;
 }, undefined, { timeout: 15000 });
 await page.click('#redo');
-await page.waitForFunction((k) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === k, kcount, { timeout: 30000 });
+await page.waitForFunction((countText) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === countText, kcount, { timeout: 30000 });
 ok('redo restores it', true);
 await browser.close();
 console.log('done');

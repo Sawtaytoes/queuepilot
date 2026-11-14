@@ -53,8 +53,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -97,13 +97,13 @@ await ok('the blocks are actually WRITTEN, not silently dropped', async () => {
   assert.match(text, /provider: kavita/, 'no kavita block on disk');
   const reg = await sets.getRegistry();
   for (const id of ['reading_manga', 'reading_webtoons']) {
-    const s = reg.sets.find((x) => x.id === id);
-    assert.ok(s, `set ${id} missing from the registry`);
-    assert.equal(s.providers.length, 1);
-    assert.equal(s.providers[0]?.provider, 'kavita');
-    assert.deepEqual(s.providers[0]?.libraries, ['2', '5']);
+    const set = reg.sets.find((setRegistryEntry) => setRegistryEntry.id === id);
+    assert.ok(set, `set ${id} missing from the registry`);
+    assert.equal(set.providers.length, 1);
+    assert.equal(set.providers[0]?.provider, 'kavita');
+    assert.deepEqual(set.providers[0]?.libraries, ['2', '5']);
     // A real block, NOT the synthesized legacy one.
-    assert.notEqual(s.providers[0]?.implicit, true);
+    assert.notEqual(set.providers[0]?.implicit, true);
   }
 });
 
@@ -121,9 +121,9 @@ await ok('editing a Kavita-only set still saves with empty sections', async () =
     providers: [{ provider: 'kavita', profile: '', libraries: ['5'] }],
     sections: [],
   });
-  const s = (await sets.getRegistry()).sets.find((x) => x.id === 'reading_manga');
-  assert.ok(s, 'reading_manga missing from the registry');
-  assert.deepEqual(s.providers[0]?.libraries, ['5']);
+  const set = (await sets.getRegistry()).sets.find((setRegistryEntry) => setRegistryEntry.id === 'reading_manga');
+  assert.ok(set, 'reading_manga missing from the registry');
+  assert.deepEqual(set.providers[0]?.libraries, ['5']);
 });
 
 await ok('a set that names NO library saves — it means every library', async () => {
@@ -134,12 +134,12 @@ await ok('a set that names NO library saves — it means every library', async (
   const { id } = await sets.createSet({
     kind: 'movies', label: 'Everything', providers: [], sections: [], source: 'queue',
   });
-  const created = (await sets.getRegistry()).sets.find((x) => x.id === id);
+  const created = (await sets.getRegistry()).sets.find((set) => set.id === id);
   assert.ok(created, 'the unscoped set is missing from the registry');
   assert.deepEqual(created.sections, []);
 
   await sets.updateSet('reading_manga', { providers: [], sections: [] });
-  const updated = (await sets.getRegistry()).sets.find((x) => x.id === 'reading_manga');
+  const updated = (await sets.getRegistry()).sets.find((set) => set.id === 'reading_manga');
   assert.ok(updated, 'reading_manga missing from the registry');
   assert.deepEqual(updated.sections, []);
 });
@@ -165,13 +165,13 @@ await ok('a plain Plex set is unaffected — no providers key appears', async ()
     source: 'queue',
   });
   const reg = await sets.getRegistry();
-  const s = reg.sets.find((x) => x.id === id);
-  assert.ok(s, `set ${id} missing from the registry`);
-  assert.deepEqual(s.sections, [1, 14]);
+  const set = reg.sets.find((setRegistryEntry) => setRegistryEntry.id === id);
+  assert.ok(set, `set ${id} missing from the registry`);
+  assert.deepEqual(set.sections, [1, 14]);
   // Reported as the ONE implicit Plex block…
-  assert.equal(s.providers.length, 1);
-  assert.equal(s.providers[0]?.provider, 'plex');
-  assert.equal(s.providers[0]?.implicit, true);
+  assert.equal(set.providers.length, 1);
+  assert.equal(set.providers[0]?.provider, 'plex');
+  assert.equal(set.providers[0]?.implicit, true);
   // …but nothing was written for it, so the file stays byte-identical in shape.
   const block = readYaml().split('- id: plain_plex')[1] || '';
   assert.doesNotMatch(block.split('- id:')[0] ?? '', /providers:/);

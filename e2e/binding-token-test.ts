@@ -52,9 +52,9 @@ interface SessionCtl {
 const SESSION_CTL = RAW_SESSION_CTL as unknown as SessionCtl;
 
 const FAILS: string[] = [];
-function check(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'ok    ' : 'FAIL  ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function check(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'ok    ' : 'FAIL  ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // --------------------------------------------------------------------------- //
@@ -157,7 +157,7 @@ const playback = await import('../server/src/playback.js');
 // partial device rather than inventing an id/name/machineIdentifier no assertion looks at.
 const SHIELD = { mode: 'client', uri: 'http://shield.invalid:32500' } as unknown as Device;
 const playQueuePost = (): { headers: Record<string, string | undefined> } =>
-  CALLS.find((c) => c.url.includes('/playQueues')) || { headers: {} };
+  CALLS.find((call) => call.url.includes('/playQueues')) || { headers: {} };
 
 CALLS.length = 0;
 let res = await playback.playRatingKeys(['174376'], {
@@ -189,7 +189,7 @@ res = await playback.playRatingKeys(['174376'], {
 check('an empty playQueue does not report a play', res.played === false, JSON.stringify(res));
 check('an empty playQueue reports WHY', /EMPTY/.test(res.error || ''), String(res.error));
 check('an empty playQueue is never pushed at the client',
-  !CALLS.some((c) => c.url.includes('playMedia')), CALLS.map((c) => c.url).join(' '));
+  !CALLS.some((call) => call.url.includes('playMedia')), CALLS.map((call) => call.url).join(' '));
 PQ_SIZE = 1;
 
 console.log();

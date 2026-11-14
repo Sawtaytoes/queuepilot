@@ -29,7 +29,7 @@ import { killServer, spawnServer } from './stubs/server-process.mjs';
 // Its own port and its own temp files, so this can run beside `shot-landing-people.ts`
 // rather than after it.
 const PORT = 18799;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const env = {
@@ -88,12 +88,12 @@ const darkInit = () => {
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 

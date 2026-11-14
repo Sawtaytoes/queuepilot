@@ -69,7 +69,7 @@ const playbackStub = {
 const providerStub = {
   label: 'FakePlex',
   profileToken: async () => 'tok',
-  profileBinding: async (b: unknown) => b,
+  profileBinding: async (binding: unknown) => binding,
   buckets: async () => ({ play: ['4', '5', '6', '7', '8', '9'].map((rk) => ({ ratingKey: rk, title: `item ${rk}` })) }),
 };
 
@@ -202,7 +202,7 @@ resetSession(null);
 listCalls.length = 0;
 _resetCooldown();
 const swept = await sweep();
-check('the sweep finds the reading set on its own', swept.map((r) => r.set), ['reading']);
+check('the sweep finds the reading set on its own', swept.map((topupResult) => topupResult.set), ['reading']);
 check('  and tops it up', (swept[0]?.added ?? 0) > 0, true);
 
 // A push set is NOT swept — it has a session, and a lineup nobody is watching must not be

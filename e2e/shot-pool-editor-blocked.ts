@@ -11,7 +11,7 @@ import type { ChildProcess } from 'node:child_process';
 
 const PORT = 18785;
 const SETS = '/tmp/sets-poolblock-shot.yaml';
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 const env = {
   ...process.env,
@@ -55,9 +55,9 @@ try {
   await fs.writeFile(SETS, SETS_SEED);
   await fs.rm(`${SETS}.lock`, { force: true, recursive: true });
   server = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 60; i++) {
-    try { await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json()); break; } catch {
-      await new Promise((r) => setTimeout(r, 200));
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json()); break; } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 

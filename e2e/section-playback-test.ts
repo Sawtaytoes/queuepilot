@@ -46,9 +46,9 @@ writeFileSync(QUEUES_PATH, [
 ].join('\n'));
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const resolve = await import('../server/src/engine/resolve.js');
@@ -67,12 +67,12 @@ const client: PlexClient = {
     const leaves = path.match(/\/library\/metadata\/([^/?]+)\/allLeaves/);
     if (leaves) {
       return {
-        Metadata: [1, 2, 3].map((n) => ({
-          ratingKey: `2002-e${n}`,
-          title: `Episode ${n}`,
+        Metadata: [1, 2, 3].map((episode) => ({
+          ratingKey: `2002-e${episode}`,
+          title: `Episode ${episode}`,
           grandparentTitle: 'A Long Show',
           parentIndex: 1,
-          index: n,
+          index: episode,
           duration: EPISODE_MS,
           type: 'episode',
           viewCount: 0,
@@ -115,7 +115,7 @@ const entries = resolve.loadEntries('reelqueue');
 
 ok('the two lines of the same file key apart (an `id:` on the second)',
   entries.length === 3 && entries[0]!.key === 'rk:1001' && entries[1]!.key === 'id:8f3a2c',
-  JSON.stringify(entries.map((e) => e.key)));
+  JSON.stringify(entries.map((entry) => entry.key)));
 
 const built = await resolve.nextQueue(
   client, 'reelqueue', CFG, entries, new Set<string>(), null, null,
@@ -133,7 +133,7 @@ ok('an entry contributing two episodes windows only the FIRST',
   episodes.length === 2
   && episodes[0]!.sectionStartMs === 750_000 && episodes[0]!.sectionEndMs === 1_020_000
   && episodes[1]!.sectionStartMs == null && episodes[1]!.sectionEndMs == null,
-  JSON.stringify(episodes.map((e) => [e.ratingKey, e.sectionStartMs, e.sectionEndMs])));
+  JSON.stringify(episodes.map((episode) => [episode.ratingKey, episode.sectionStartMs, episode.sectionEndMs])));
 
 // --------------------------------------------------------------------------- //
 // 2. The HEAD's start is free, and it OUTRANKS a resume marker
@@ -163,9 +163,9 @@ ok('…and no plan is built for it at all',
 const providers = await import('../server/src/providers/config.js');
 ok('Plex is the only kind that declares the capability',
   providers.playsSectionsForKind('plex') === true
-  && ['kavita', 'board-game', 'steam', 'mister'].every((k) => providers.playsSectionsForKind(k) === false),
+  && ['kavita', 'board-game', 'steam', 'mister'].every((kind) => providers.playsSectionsForKind(kind) === false),
   ['plex', 'kavita', 'board-game', 'steam', 'mister']
-    .map((k) => `${k}=${providers.playsSectionsForKind(k)}`).join(' '));
+    .map((kind) => `${kind}=${providers.playsSectionsForKind(kind)}`).join(' '));
 
 // --------------------------------------------------------------------------- //
 // 3. The plan is keyed by INDEX, which is the whole point
@@ -219,37 +219,37 @@ const place = (index: number) => ({ index, ratingKeys: ['1001', '1001', '2002-e1
 
 section.arm({ plan: section.sectionPlan(built.play, { isHeadStartApplied: true }), setName: 'reelqueue' });
 
-let d = section.consider({ ratingKey: '1001', viewOffset: 3_670_000 }, place(0));
+let decision = section.consider({ ratingKey: '1001', viewOffset: 3_670_000 }, place(0));
 ok('the head is already at its start, so the read is a WAIT on the end mark',
-  d.action === 'wait' && d.dueInMs === 290_000, JSON.stringify(d));
+  decision.action === 'wait' && decision.dueInMs === 290_000, JSON.stringify(decision));
 
-d = section.consider({ ratingKey: '1001', viewOffset: 3_965_000 }, place(0));
-ok('past the end mark, the decision is NEXT', d.action === 'next' && d.index === 0, JSON.stringify(d));
+decision = section.consider({ ratingKey: '1001', viewOffset: 3_965_000 }, place(0));
+ok('past the end mark, the decision is NEXT', decision.action === 'next' && decision.index === 0, JSON.stringify(decision));
 
 // Now the SECOND occurrence of the same file. The whole reason the index exists.
-d = section.consider({ ratingKey: '1001', viewOffset: 1_000 }, place(1));
+decision = section.consider({ ratingKey: '1001', viewOffset: 1_000 }, place(1));
 ok('the second occurrence seeks to its OWN start, not the first one\'s',
-  d.action === 'seek' && d.ms === 5_400_000 && d.index === 1, JSON.stringify(d));
-d = section.consider({ ratingKey: '1001', viewOffset: 5_410_000 }, place(1));
+  decision.action === 'seek' && decision.ms === 5_400_000 && decision.index === 1, JSON.stringify(decision));
+decision = section.consider({ ratingKey: '1001', viewOffset: 5_410_000 }, place(1));
 ok('…then waits for its OWN end mark',
-  d.action === 'wait' && d.dueInMs === 110_000, JSON.stringify(d));
-d = section.consider({ ratingKey: '1001', viewOffset: 5_530_000 }, place(1));
-ok('…and stops there', d.action === 'next' && d.index === 1, JSON.stringify(d));
+  decision.action === 'wait' && decision.dueInMs === 110_000, JSON.stringify(decision));
+decision = section.consider({ ratingKey: '1001', viewOffset: 5_530_000 }, place(1));
+ok('…and stops there', decision.action === 'next' && decision.index === 1, JSON.stringify(decision));
 
 // Ambiguity: two pending windows for one file and no usable index.
 section.arm({ plan: section.sectionPlan(built.play, { isHeadStartApplied: true }), setName: 'reelqueue' });
-d = section.consider({ ratingKey: '1001', viewOffset: 1_000 }, null);
+decision = section.consider({ ratingKey: '1001', viewOffset: 1_000 }, null);
 ok('two windows on one file with NO index declines rather than guessing',
-  d.action === 'none' && d.retry === true, JSON.stringify(d));
-ok('…and says which item it could not place', String(d.reason).includes('1001'), d.reason);
+  decision.action === 'none' && decision.retry === true, JSON.stringify(decision));
+ok('…and says which item it could not place', String(decision.reason).includes('1001'), decision.reason);
 
 // A live playQueue that disagrees with the plan's index is not trusted.
-d = section.consider(
+decision = section.consider(
   { ratingKey: '1001', viewOffset: 1_000 },
   { index: 1, ratingKeys: ['9999', '7777', '1001'] },
 );
 ok('an index whose live playQueue holds a DIFFERENT file is refused',
-  d.action === 'none' && d.retry === true, JSON.stringify(d));
+  decision.action === 'none' && decision.retry === true, JSON.stringify(decision));
 
 // The unambiguous case never needs an index at all.
 section.arm({
@@ -260,8 +260,8 @@ section.arm({
 });
 ok('one window on one file is NOT ambiguous, so no playQueue read is needed',
   section.isAmbiguous('4004') === false);
-d = section.consider({ ratingKey: '4004', viewOffset: 0 }, null);
-ok('…and it seeks with no index at all', d.action === 'seek' && d.ms === 12_000, JSON.stringify(d));
+decision = section.consider({ ratingKey: '4004', viewOffset: 0 }, null);
+ok('…and it seeks with no index at all', decision.action === 'seek' && decision.ms === 12_000, JSON.stringify(decision));
 
 // RESUME_MIN_MS is 30 000 ms and this section starts at 0:12. A resume plan would have dropped
 // it; an authored one must not.
@@ -287,12 +287,12 @@ section.arm({
   ),
   setName: 'reelqueue',
 });
-d = section.consider({ ratingKey: '4004', viewOffset: 300_000 }, null);
+decision = section.consider({ ratingKey: '4004', viewOffset: 300_000 }, null);
 ok('a reading past the section start declines, and is RETRYABLE',
-  d.action === 'none' && d.retry === true, JSON.stringify(d));
-d = section.consider({ ratingKey: '4004', viewOffset: 500 }, null);
+  decision.action === 'none' && decision.retry === true, JSON.stringify(decision));
+decision = section.consider({ ratingKey: '4004', viewOffset: 500 }, null);
 ok('…so the settled reading on the next read still seeks',
-  d.action === 'seek' && d.ms === 12_000, JSON.stringify(d));
+  decision.action === 'seek' && decision.ms === 12_000, JSON.stringify(decision));
 
 section.arm({
   plan: section.sectionPlan(
@@ -300,7 +300,7 @@ section.arm({
   ),
   setName: 'reelqueue',
 });
-for (let i = 0; i < 20; i += 1) section.consider({ ratingKey: '4004', viewOffset: 300_000 }, null);
+for (let iteration = 0; iteration < 20; iteration += 1) section.consider({ ratingKey: '4004', viewOffset: 300_000 }, null);
 ok('a viewer who really is past the start is given up on, not fought forever',
   section.pendingCount() === 0, `${section.pendingCount()} pending`);
 
@@ -340,7 +340,7 @@ const runWatcher = async (
     retryMs: 5,
     log: (line) => run.lines.push(line),
   });
-  await new Promise((r) => { setTimeout(r, forMs); });
+  await new Promise((resolve) => { setTimeout(resolve, forMs); });
   resume.stopWatch();
   return run;
 };
@@ -380,7 +380,7 @@ ok('the playQueue index was read, because the file was ambiguous',
   two.places > 0, `${two.places} read(s)`);
 ok('the watcher stopped once every window was spent', resume.watching() === false);
 ok('the log names the section path apart from the resume path',
-  two.lines.some((l) => l.startsWith('[section]')), two.lines.slice(0, 3).join(' | '));
+  two.lines.some((line) => line.startsWith('[section]')), two.lines.slice(0, 3).join(' | '));
 
 // One watcher, two plans, with the precedence the whole feature turns on.
 section.arm({
@@ -421,10 +421,10 @@ resume.startWatch({
   intervalMs: 10,
   log: (line) => noAdvance.push(line),
 });
-await new Promise((r) => { setTimeout(r, 60); });
+await new Promise((resolve) => { setTimeout(resolve, 60); });
 resume.stopWatch();
 ok('an end mark with no advance wired says so rather than failing silently',
-  noAdvance.some((l) => l.includes('no advance was wired')), noAdvance.join(' | '));
+  noAdvance.some((line) => line.includes('no advance was wired')), noAdvance.join(' | '));
 
 // --------------------------------------------------------------------------- //
 // 6. The boundary ledger — "the section stopped it" vs "the viewer did"

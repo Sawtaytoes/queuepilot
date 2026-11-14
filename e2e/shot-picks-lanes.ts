@@ -25,7 +25,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18799;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const env = {
@@ -71,12 +71,12 @@ const browser = await chromium.launch();
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -89,7 +89,7 @@ try {
   // landed with the queue page's two lanes) and simply has nowhere on this page to show the
   // result, which is exactly what the before/after pair is claiming.
   const mixed = await fetch(`http://localhost:${PORT}/api/queues`)
-    .then((r) => r.json() as Promise<{ sets: Record<string, { items: { key: string }[] }> }>)
+    .then((response) => response.json() as Promise<{ sets: Record<string, { items: { key: string }[] }> }>)
     .catch(() => null);
   for (const [setId, lane, count] of [
     ['bob_anime', 'priority', 2],
@@ -131,10 +131,10 @@ try {
   await page.screenshot({ path: `__screenshots__/pickslanes-${TAG}-queues.png`, fullPage: true });
 
   const shelves = await page.$$eval('.shelf', (nodes) =>
-    nodes.map((n) => (n as HTMLElement).dataset.set ?? ''),
+    nodes.map((node) => (node as HTMLElement).dataset.set ?? ''),
   );
   const clauses = await page.$$eval('.shelf h2 .lanes-sec', (nodes) =>
-    nodes.map((n) => n.textContent ?? ''),
+    nodes.map((node) => node.textContent ?? ''),
   );
   console.log(`${shelves.length} shelves: ${JSON.stringify(shelves)}`);
   console.log(
@@ -152,7 +152,7 @@ try {
   await page.waitForSelector('[role="option"]', { timeout: 15000 });
   await page.waitForTimeout(600);
   const options = await page.$$eval('[role="option"]', (nodes) =>
-    nodes.map((n) => (n.textContent ?? '').trim()),
+    nodes.map((node) => (node.textContent ?? '').trim()),
   );
   console.log(`rules picker (${options.length}): ${JSON.stringify(options)}`);
   await page.screenshot({ path: `__screenshots__/pickslanes-${TAG}-rules.png` });
@@ -177,7 +177,7 @@ try {
     await page.waitForSelector('[role="option"]', { timeout: 15000 });
     await page.waitForTimeout(600);
     const rows = await page.$$eval('[role="option"]', (nodes) =>
-      nodes.map((n) => (n.textContent ?? '').trim()),
+      nodes.map((node) => (node.textContent ?? '').trim()),
     );
     console.log(`move-to rows (${rows.length}): ${JSON.stringify(rows)}`);
     await page.screenshot({ path: `__screenshots__/pickslanes-${TAG}-moveto.png` });

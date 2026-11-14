@@ -22,9 +22,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra = '') => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = '') => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 // A one-entry queue is enough to prove the mechanism, and keeps the counts legible.
@@ -42,7 +42,7 @@ const SETS_PATH = '/tmp/perf-sets.yaml';
 const CACHE_PATH = '/tmp/perf-cache.sqlite';
 writeFileSync(QUEUES_PATH, QUEUES);
 writeFileSync(SETS_PATH, SETS);
-for (const f of [CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) rmSync(f, { force: true });
+for (const file of [CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) rmSync(file, { force: true });
 
 // --- the stub Plex, counting calls by kind -------------------------------------------- //
 /** The call ledger. Fixed keys (not an index signature) so the diff arithmetic below stays
@@ -90,7 +90,7 @@ const plexStub = http.createServer((req, res) => {
   calls.other += 1;
   res.end(JSON.stringify({ MediaContainer: {} }));
 });
-await new Promise<void>((r) => plexStub.listen(0, () => r()));
+await new Promise<void>((resolve) => plexStub.listen(0, () => resolve()));
 // `address()` is `string | AddressInfo | null`; a TCP listen always yields the object form,
 // and the throw is the honest read of "the stub never bound" rather than a cast.
 const stubAddress = plexStub.address();
@@ -109,7 +109,7 @@ const mqtt = requireClient('mqtt');
 const aedes = new Aedes();
 const broker = net.createServer(aedes.handle);
 const MQTT_PORT = 21883;
-await new Promise<void>((r) => broker.listen(MQTT_PORT, () => r()));
+await new Promise<void>((resolve) => broker.listen(MQTT_PORT, () => resolve()));
 
 const WEB_PORT = 18795;
 const BASE = `http://localhost:${WEB_PORT}`;
@@ -142,7 +142,7 @@ await new Promise<void>((resolve) => {
 });
 stdout.resume(); // keep draining for the rest of the run — a full pipe would stall the server
 // Give mqttc a moment to connect + subscribe.
-await new Promise((r) => setTimeout(r, 500));
+await new Promise((resolve) => setTimeout(resolve, 500));
 
 const getQueues = (etag?: string | null) =>
   fetch(`${BASE}/api/queues`, { headers: etag ? { 'If-None-Match': etag } : {} });
@@ -162,7 +162,7 @@ try {
   const warm = await getQueues();
   await warm.json();
   const newCalls = (Object.keys(calls) as (keyof Calls)[])
-    .reduce((n, k) => n + (calls[k] - before[k]), 0);
+    .reduce((total, key) => total + (calls[key] - before[key]), 0);
   ok('warm /api/queues makes 0 Plex calls', newCalls === 0, `new=${newCalls}`);
 
   // 3. 304 — the conditional GET with the prior ETag is empty and cheap.
@@ -179,7 +179,7 @@ try {
   const beforeInval = { ...calls };
   pub.publish('queuepilot/now-playing', JSON.stringify({ ratingKey: EPISODE_RK, state: 'playing' }), { qos: 1 });
   // Let the server resolve the context (one metadata call) and invalidate.
-  await new Promise((r) => setTimeout(r, 700));
+  await new Promise((resolve) => setTimeout(resolve, 700));
 
   const after = await getQueues(coldTag);
   ok('now-playing busted the ETag (not 304)', after.status === 200, `status=${after.status}`);
@@ -197,7 +197,7 @@ finally {
   aedes.close();
   broker.close();
   plexStub.close();
-  for (const f of [QUEUES_PATH, SETS_PATH, CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) rmSync(f, { force: true });
+  for (const file of [QUEUES_PATH, SETS_PATH, CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) rmSync(file, { force: true });
 }
 
 console.log(failures ? `\n${failures} assertion(s) failed` : '\nall perf-queues assertions passed');

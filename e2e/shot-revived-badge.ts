@@ -27,8 +27,8 @@ const S_PATH = `/tmp/sets-shot-revived-${TAG}.yaml`;
 mkdirSync(OUT, { recursive: true });
 writeFileSync(S_PATH, SETS_YAML);
 writeFileSync(Q_PATH, QUEUES_YAML);
-for (const p of [`${Q_PATH}.lock`, `${S_PATH}.lock`, `/tmp/cache-shot-revived-${TAG}.sqlite`]) {
-  rmSync(p, { force: true });
+for (const file of [`${Q_PATH}.lock`, `${S_PATH}.lock`, `/tmp/cache-shot-revived-${TAG}.sqlite`]) {
+  rmSync(file, { force: true });
 }
 
 const plex = startStubPlex(PLEX_PORT);
@@ -50,14 +50,14 @@ const child = spawnServer({
 });
 
 try {
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      const r = await fetch(`http://localhost:${PORT}/api/queues`);
-      if (r.ok) break;
+      const response = await fetch(`http://localhost:${PORT}/api/queues`);
+      if (response.ok) break;
     } catch {
       /* not up yet */
     }
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   const browser = await chromium.launch();

@@ -18,7 +18,7 @@ import {
 import { chromium } from './playwright.js';
 
 const PORT = 18848;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const server = await startBoardGameServer(PORT);
@@ -37,7 +37,7 @@ try {
   });
 
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   const shot = async (name: string) => {
     await page.waitForTimeout(500);

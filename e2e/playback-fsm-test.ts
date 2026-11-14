@@ -61,15 +61,15 @@ interface DriverCtl {
 const CTL = RAW_CTL as unknown as DriverCtl;
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // A cancel flag shaped like the one session.js passes (isSet()).
 function cancelFlag(): CancelFlag & { set: () => void } {
-  let set = false;
-  return { set: () => { set = true; }, isSet: () => set };
+  let isCancelled = false;
+  return { set: () => { isCancelled = true; }, isSet: () => isCancelled };
 }
 
 /** The FSM branches on `device.mode` and nothing else here (the stubbed playback never reads
@@ -218,7 +218,7 @@ ok('(g) profile gate: announces the wait as awaiting=profile:<name>',
   JSON.stringify(PUBLISHED));
 ok('(g) profile gate: the publisher is called with EXACTLY one argument (the extra)',
   PUBLISHED.length > 0 && PUBLISHED.every((args) => args.length === 1),
-  JSON.stringify(PUBLISHED.map((a) => a.length)));
+  JSON.stringify(PUBLISHED.map((args) => args.length)));
 ok('(g) profile gate: still switches and plays', res.played === true);
 
 // The non-destructive fast path stays silent: nothing is waiting, so nothing is announced.
@@ -249,7 +249,7 @@ ok('http error: not retried (Plex answered)', nCalls('play') === 1);
 reset();
 await drive({ offset: 90_000 });
 // The preceding `drive()` always records a play, so the `!` asserts the line above it.
-ok('offset is threaded to playRatingKeys', CTL.calls.find((c) => c[0] === 'play')![2] === 90_000);
+ok('offset is threaded to playRatingKeys', CTL.calls.find((call) => call[0] === 'play')![2] === 90_000);
 
 console.log(FAILS.length ? `\nFAILURES: ${FAILS.length}` : '\ndone');
 process.exit(FAILS.length ? 1 : 0);

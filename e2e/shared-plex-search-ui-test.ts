@@ -66,7 +66,7 @@ try {
       ] }),
     }));
     const searchUrls: string[] = [];
-    let sharedChoiceSaved = false;
+    let isSharedChoiceSaved = false;
     await page.route('**/api/search?*', (route) => {
       searchUrls.push(route.request().url());
       const isSharedOnly = new URL(route.request().url()).searchParams.has('plex_server');
@@ -78,7 +78,7 @@ try {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({ results: isSharedOnly ? [shared]
-          : sharedChoiceSaved ? [home, shared] : [home] }),
+          : isSharedChoiceSaved ? [home, shared] : [home] }),
       });
     });
     await page.goto(`${base}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -117,7 +117,7 @@ try {
       if (JSON.stringify(scope) !== JSON.stringify({ 'friend-server': ['2'] })) {
         throw new Error(`Shared library choice did not persist: ${JSON.stringify(scope)}`);
       }
-      sharedChoiceSaved = true;
+      isSharedChoiceSaved = true;
 
       await page.locator('#qconfigure').click();
       await page.getByRole('button', { name: 'Friend Server — 1 selected' }).click();

@@ -7,10 +7,10 @@ await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded'
 await page.waitForSelector('.shelf[data-set="bob"]');
 const before = await page.textContent('.shelf[data-set="bob"] .sec');
 // External hand-edit: put a title at the top of the bob queue, like an SMB edit would.
-const y = readFileSync('/tmp/queues-ui.yaml', 'utf8');
-writeFileSync('/tmp/queues-ui.yaml', y.replace(/^bob:\n/m, 'bob:\n- "The Terminator (1984)"\n'));
+const queuesYaml = readFileSync('/tmp/queues-ui.yaml', 'utf8');
+writeFileSync('/tmp/queues-ui.yaml', queuesYaml.replace(/^bob:\n/m, 'bob:\n- "The Terminator (1984)"\n'));
 await page.waitForFunction(
-  (b) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === String(Number(b) + 1),
+  (beforeCount) => document.querySelector('.shelf[data-set="bob"] .sec')?.textContent === String(Number(beforeCount) + 1),
   before, { timeout: 30000 },
 );
 ok(`live update: bob ${before} -> ${Number(before) + 1} without reload`, true);

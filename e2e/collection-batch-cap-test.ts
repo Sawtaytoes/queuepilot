@@ -21,12 +21,12 @@ const { resolveMember } = await import('../server/src/engine/resolve.js');
 
 const SECTION = 11;
 // One collection, one child show, five unwatched episodes. Uncapped this yields all five.
-const EPISODES = Array.from({ length: 5 }, (_, i) => ({
-  ratingKey: String(900 + i),
-  title: `Episode ${i + 1}`,
+const EPISODES = Array.from({ length: 5 }, (_, index) => ({
+  ratingKey: String(900 + index),
+  title: `Episode ${index + 1}`,
   grandparentTitle: 'Chaika',
   parentIndex: 1,
-  index: i + 1,
+  index: index + 1,
   type: 'episode',
   duration: 1_400_000,
 }));
@@ -51,8 +51,8 @@ const cfg = { queue_sections: [SECTION], episodic_sections: [SECTION], item_sect
 // The harness builds only the fields the collection branch reads; `resolveMember` takes the
 // full descriptor, so the partial fixture is widened once here rather than at each call.
 const desc = { collection: 'Chaika: The Coffin Princess', key: 'collection' } as EntryDescriptor;
-const resolveWith = (d: EntryDescriptor, defaultBatch: number | null) =>
-  resolveMember(fakeClient, d, cfg, new Set(), null, defaultBatch, true);
+const resolveWith = (descriptor: EntryDescriptor, defaultBatch: number | null) =>
+  resolveMember(fakeClient, descriptor, cfg, new Set(), null, defaultBatch, true);
 
 let failed = 0;
 const check = (label: string, actual: unknown, expected: unknown): void => {
@@ -77,7 +77,7 @@ check('type is still collection', queued!.type, 'collection');
 // 2. A per-entry `episodes:` override wins, exactly as it does for a show entry.
 const three = await resolveWith({ ...desc, episodes: 3 }, 1);
 check('episodes: 3 override yields three', three!.items.length, 3);
-check('override keeps collection order', three!.items.map((e) => e.episode), [1, 2, 3]);
+check('override keeps collection order', three!.items.map((item) => item.episode), [1, 2, 3]);
 
 // 3. The rotation / member-bucket callers pass NO default batch and must stay uncapped — their
 //    round-robin advances a member across rounds and would regress if this capped too.

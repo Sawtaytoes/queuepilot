@@ -37,18 +37,18 @@ const SETS = '/tmp/qp-season-window.sets.yaml';
  * nothing to say it had.
  */
 function dayFromToday(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
+  const date = new Date();
+  date.setDate(date.getDate() + days);
 
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
-for (const p of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(p, { recursive: true, force: true });
+for (const file of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(file, { recursive: true, force: true });
 
-let failed = false;
+let hasFailed = false;
 const fake = await startFakeMqtt({ port: MQTT_PORT });
 const srv = spawnServer({
   env: {
@@ -70,7 +70,7 @@ const ready = async (): Promise<void> => {
   for (;;) {
     try { if ((await fetch(`${BASE}/api/sets`)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error('server never came up');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -142,12 +142,12 @@ try {
   // gates the same property for the rest of the app.
   const width = await narrow.evaluate(() => document.documentElement.scrollWidth);
   console.log(`narrow view: scrollWidth ${width} (viewport 390)`);
-  if (width > 390) { console.log('NARROW VIEW SCROLLS SIDEWAYS ✗'); failed = true; }
+  if (width > 390) { console.log('NARROW VIEW SCROLLS SIDEWAYS ✗'); hasFailed = true; }
 
   await browser.close();
-} catch (e) {
-  console.log('SHOT FAILED:', e);
-  failed = true;
+} catch (error) {
+  console.log('SHOT FAILED:', error);
+  hasFailed = true;
 } finally {
   // `process.exit` and not a fall-through: the fake broker's client keeps a live socket and
   // aedes keeps its own handles, so the event loop stays open and the script hangs after the
@@ -156,5 +156,5 @@ try {
   try { fake.client.end(true); } catch { /* already down */ }
   try { fake.server.close(); } catch { /* already down */ }
   try { fake.aedes.close(); } catch { /* already down */ }
-  process.exit(failed ? 1 : 0);
+  process.exit(hasFailed ? 1 : 0);
 }

@@ -85,9 +85,9 @@ session.setPublishers({
 });
 
 const FAILS: string[] = [];
-function check(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'ok    ' : 'FAIL  ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function check(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'ok    ' : 'FAIL  ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 async function run(payload: SessionStartPayload, signedInAs: string | null = null, activeAs: string | null = null) {
@@ -99,54 +99,54 @@ async function run(payload: SessionStartPayload, signedInAs: string | null = nul
   return {
     res,
     played: SESSION_CTL.plays.length > 0 || SESSION_CTL.drives.length > 0,
-    awaiting: STATES.map((s) => s.awaiting).filter(Boolean),
-    lastError: [...STATES].reverse().find((s) => s.error)?.error || null,
+    awaiting: STATES.map((state) => state.awaiting).filter(Boolean),
+    lastError: [...STATES].reverse().find((state) => state.error)?.error || null,
   };
 }
 
 // 1. A card naming a profile must WAIT for that profile — not just trust the payload.
-let c = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' });
-check('card profile gates: does not play on a silent log', !c.played);
-check('card profile gates: announces the wait', c.awaiting.includes('profile:Younger'),
-  JSON.stringify(c.awaiting));
+let outcome = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' });
+check('card profile gates: does not play on a silent log', !outcome.played);
+check('card profile gates: announces the wait', outcome.awaiting.includes('profile:Younger'),
+  JSON.stringify(outcome.awaiting));
 check('card profile gates: names the profile in the error',
-  Boolean(c.lastError && c.lastError.includes('Younger')), String(c.lastError));
+  Boolean(outcome.lastError && outcome.lastError.includes('Younger')), String(outcome.lastError));
 
 // 2. The WRONG profile signing in must not satisfy it (the mis-attribution case).
-c = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' }, 'Older');
-check('wrong profile does not clear the gate', !c.played, String(c.lastError));
+outcome = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' }, 'Older');
+check('wrong profile does not clear the gate', !outcome.played, String(outcome.lastError));
 
 // 3. The right profile signing in clears it and plays.
-c = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' }, 'Younger');
-check('right profile clears the gate and plays', c.played, String(c.lastError));
+outcome = await run({ set: 'shows_shorts', kind: 'cartoons', profile: 'Younger' }, 'Younger');
+check('right profile clears the gate and plays', outcome.played, String(outcome.lastError));
 
 // 4. No profile on the card => rotation set stays ungated, exactly as before.
-c = await run({ set: 'shows_shorts', kind: 'cartoons' });
-check('ungated rotation set still plays with no profile', c.played, String(c.lastError));
-check('ungated rotation set never announces a wait', c.awaiting.length === 0,
-  JSON.stringify(c.awaiting));
+outcome = await run({ set: 'shows_shorts', kind: 'cartoons' });
+check('ungated rotation set still plays with no profile', outcome.played, String(outcome.lastError));
+check('ungated rotation set never announces a wait', outcome.awaiting.length === 0,
+  JSON.stringify(outcome.awaiting));
 
 // 5. requires_profile still works on its own.
-c = await run({ set: 'demo', kind: 'movie' }, 'Demo');
-check('requires_profile clears on the required profile', c.played, String(c.lastError));
-c = await run({ set: 'demo', kind: 'movie' }, 'Older');
-check('requires_profile rejects the wrong profile', !c.played);
+outcome = await run({ set: 'demo', kind: 'movie' }, 'Demo');
+check('requires_profile clears on the required profile', outcome.played, String(outcome.lastError));
+outcome = await run({ set: 'demo', kind: 'movie' }, 'Older');
+check('requires_profile rejects the wrong profile', !outcome.played);
 
 // 6. A card contradicting the set's requires_profile errors instead of guessing.
-c = await run({ set: 'demo', kind: 'movie', profile: 'Younger' });
+outcome = await run({ set: 'demo', kind: 'movie', profile: 'Younger' });
 check('card/set profile conflict is a clear error',
-  Boolean(c.lastError && c.lastError.includes('requires')), String(c.lastError));
-check('conflict does not play', !c.played);
+  Boolean(outcome.lastError && outcome.lastError.includes('requires')), String(outcome.lastError));
+check('conflict does not play', !outcome.played);
 
 // 7. set=auto is unchanged: the first signed-in profile decides the tier.
-c = await run({ set: 'auto', kind: 'cartoons' }, 'Older');
-check('auto still resolves the tier from the log', c.played, String(c.lastError));
+outcome = await run({ set: 'auto', kind: 'cartoons' }, 'Older');
+check('auto still resolves the tier from the log', outcome.played, String(outcome.lastError));
 
 // A secondary player can report its active profile without any new PMS log line.
-c = await run({ set: 'auto', kind: 'cartoons', target: {
+outcome = await run({ set: 'auto', kind: 'cartoons', target: {
   id: 'den', name: 'Den TV', machineIdentifier: 'den-player', uri: 'http://192.0.2.31:32500', mode: 'client', default: false,
 } }, null, 'Older');
-check('auto observes the selected player rather than the default', c.played && SESSION_CTL.accountCalls[0] === 'den');
+check('auto observes the selected player rather than the default', outcome.played && SESSION_CTL.accountCalls[0] === 'den');
 check('an active-session profile does not wait on an unrelated log', SESSION_CTL.waitCalls.length === 0);
 
 console.log();

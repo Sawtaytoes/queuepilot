@@ -29,7 +29,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18797;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const env = {
@@ -80,12 +80,12 @@ const browser = await chromium.launch();
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -115,7 +115,7 @@ try {
   const faces = await page.$$eval('.shelf h2 [data-person-face]', (nodes) => nodes.length);
   const names = await page.$$eval('.shelf h2 .qpname', (nodes) => nodes.length);
   const titles = await page.$$eval('.shelf h2 .lbl', (nodes) =>
-    nodes.slice(0, 4).map((n) => n.textContent ?? ''),
+    nodes.slice(0, 4).map((node) => node.textContent ?? ''),
   );
   const unfilteredShelves = await page.$$eval('.shelf', (nodes) => nodes.length);
   const peopleChips = await page.$$eval('#peoplechips a', (nodes) => nodes.length);

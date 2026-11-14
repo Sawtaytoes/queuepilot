@@ -32,22 +32,22 @@ const OUT = `${ROOT}/__screenshots__`;
 // seconds; anything under this proves the UI did not wait for it.
 const INSTANT_MS = 600;
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 async function waitReady(url: string, ms = 30000): Promise<void> {
   const deadline = Date.now() + ms;
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-optm.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-optm.yaml');
-for (const p of ['/tmp/queues-optm.yaml.lock', '/tmp/sets-optm.yaml.lock', '/tmp/.history-optm.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-optm.yaml.lock', '/tmp/sets-optm.yaml.lock', '/tmp/.history-optm.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
@@ -74,8 +74,8 @@ async function shutdown(code: number): Promise<void> {
 }
 
 const members = async (): Promise<JsonBody[]> => {
-  const reg = await fetch(`${BASE}/api/sets`).then((r) => r.json()) as JsonBody;
-  return reg.sets.find((s: JsonBody) => s.id === 'younger').members || [];
+  const reg = await fetch(`${BASE}/api/sets`).then((response) => response.json()) as JsonBody;
+  return reg.sets.find((set: JsonBody) => set.id === 'younger').members || [];
 };
 
 try {
@@ -89,8 +89,8 @@ try {
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1200 } });
   const errors: string[] = [];
-  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-  page.on('pageerror', (e) => errors.push(String(e)));
+  page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+  page.on('pageerror', (error) => errors.push(String(error)));
   const tiles = () => page.locator('#chmembers li.tile').count();
 
   await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
@@ -110,7 +110,7 @@ try {
   const addMs = Date.now() - t0;
   ok(`add lands instantly (${addMs}ms < ${INSTANT_MS}ms)`, addMs < INSTANT_MS);
   ok('added tile is alphabetically placed', (await page.locator('#chmembers li.tile .title')
-    .allInnerTexts()).findIndex((t) => t.startsWith('Bananya')) === 0);
+    .allInnerTexts()).findIndex((allInnerText) => allInnerText.startsWith('Bananya')) === 0);
   await page.screenshot({ path: `${OUT}/member-optimistic-add.png` });
 
   // …and the server catches up on its own.
@@ -126,13 +126,13 @@ try {
   // own latency, which is the thing under test. The handler removes the tile synchronously
   // and PATCHes afterwards, so this number is the whole user-visible cost.
   const rmMs = await page.evaluate(() => {
-    const t = performance.now();
+    const startedAt = performance.now();
     // Throw rather than optional-chain on a missing control: a silent no-op here would
     // report an impossibly fast "remove" and pass.
     const btn = document.querySelector<HTMLElement>('#chmembers li.tile .remove');
     if (!btn) throw new Error('no remove control on the first member tile');
     btn.click();
-    return performance.now() - t;
+    return performance.now() - startedAt;
   });
   ok(`remove lands instantly (${Math.round(rmMs)}ms < ${INSTANT_MS}ms)`, rmMs < INSTANT_MS);
   ok('tile is gone before the PATCH resolves', (await tiles()) === 2);
@@ -162,7 +162,7 @@ try {
   await browser.close();
   console.log('done');
   await shutdown(Number(process.exitCode) || 0);
-} catch (e) {
-  console.error('verify-member-optimistic FAILED:', e);
+} catch (error) {
+  console.error('verify-member-optimistic FAILED:', error);
   await shutdown(1);
 }

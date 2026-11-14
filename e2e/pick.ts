@@ -90,7 +90,7 @@ export async function readOptions(page: Page, target: PickTarget): Promise<strin
   // that renders empty should read as "" here rather than crash the whole suite in the
   // browser — the assertion downstream is what should fail, and it will.
   const labels = await page.$$eval('[role="listbox"] [role="option"]',
-    (os) => os.map((o) => (o.textContent ?? '').replace('✓', '').trim()));
+    (os) => os.map((element) => (element.textContent ?? '').replace('✓', '').trim()));
   await closeVia(page, target);
   return labels;
 }
@@ -100,7 +100,7 @@ export async function readOptionValues(page: Page, target: PickTarget): Promise<
   await clickTarget(page, target);
   await waitOptions(page);
   const values = await page.$$eval('[role="listbox"] [role="option"] [data-value]',
-    (els) => els.map((e) => e.getAttribute('data-value')));
+    (els) => els.map((el) => el.getAttribute('data-value')));
   await closeVia(page, target);
   return values;
 }
@@ -113,9 +113,9 @@ export async function readOptionPairs(
   await clickTarget(page, target);
   await waitOptions(page);
   const pairs = await page.$$eval('[role="listbox"] [role="option"]',
-    (os) => os.map((o): [string, string | null] => [
-      (o.textContent ?? '').replace('✓', '').trim(),
-      o.querySelector('[data-value]')?.getAttribute('data-value') ?? null,
+    (os) => os.map((element): [string, string | null] => [
+      (element.textContent ?? '').replace('✓', '').trim(),
+      element.querySelector('[data-value]')?.getAttribute('data-value') ?? null,
     ]));
   await closeVia(page, target);
   return pairs;
@@ -128,7 +128,7 @@ export async function currentValue(page: Page, target: PickTarget): Promise<stri
   await clickTarget(page, target);
   await waitOptions(page);
   const value = await page.$eval('[role="listbox"] [role="option"][aria-selected="true"] [data-value]',
-    (e) => e.getAttribute('data-value')).catch(() => null);
+    (element) => element.getAttribute('data-value')).catch(() => null);
   await closeVia(page, target);
   return value;
 }

@@ -44,8 +44,8 @@ async function check(name: string, fn: () => void | Promise<void>): Promise<void
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -55,10 +55,10 @@ async function check(name: string, fn: () => void | Promise<void>): Promise<void
 // `MM-DD` for a day `days` away from today, in the SERVER's local time — which is what
 // `season.ts` reads, because a season is a household calendar fact rather than a UTC one.
 function dayFromToday(days: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
+  const date = new Date();
+  date.setDate(date.getDate() + days);
 
-  return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 /** A window that CONTAINS today, whichever day of the year this runs on. */
@@ -266,10 +266,10 @@ await check('1. Tonight offers the in-season queue and not the out-of-season one
 
 await check('1b. the registry reports the window and the answer, computed on the read', async () => {
   const registry = await sets.getRegistry();
-  const open = registry.sets.find((s) => s.id === 'season_open');
-  const closed = registry.sets.find((s) => s.id === 'season_closed');
-  const none = registry.sets.find((s) => s.id === 'season_none');
-  const off = registry.sets.find((s) => s.id === 'season_disabled');
+  const open = registry.sets.find((set) => set.id === 'season_open');
+  const closed = registry.sets.find((set) => set.id === 'season_closed');
+  const none = registry.sets.find((set) => set.id === 'season_none');
+  const off = registry.sets.find((set) => set.id === 'season_disabled');
 
   assert.equal(open?.season_start, OPEN.start);
   assert.equal(open?.is_in_season, true);
@@ -286,7 +286,7 @@ await check('1b. the registry reports the window and the answer, computed on the
 
 await check('1c. a FILTERED VIEW inherits its parent\'s window', async () => {
   const registry = await sets.getRegistry();
-  const view = registry.sets.find((s) => s.id === 'season_closed_view');
+  const view = registry.sets.find((set) => set.id === 'season_closed_view');
 
   assert.equal(view?.season_start, CLOSED.start, 'a view did not inherit the window');
   assert.equal(view?.is_in_season, false);
@@ -307,8 +307,8 @@ await check('1c. a FILTERED VIEW inherits its parent\'s window', async () => {
 
 // ── 2. session.ts — a card tap ───────────────────────────────────────────────────────────
 const STATES: SessionStateExtra[] = [];
-session.setPublishers({ lastPlayed: () => {}, state: (p) => STATES.push(p || {}) });
-const lastError = (): string => String([...STATES].reverse().find((s) => s.error)?.error ?? '');
+session.setPublishers({ lastPlayed: () => {}, state: (stateExtra) => STATES.push(stateExtra || {}) });
+const lastError = (): string => String([...STATES].reverse().find((state) => state.error)?.error ?? '');
 /** `SessionResult` is a union and its `{cancelled: true}` arm carries no `error`. Nothing here
  *  cancels, so this reads the field without claiming the arm. */
 const errorOf = (res: unknown): string => String((res as { error?: unknown }).error ?? '');
@@ -365,7 +365,7 @@ await check('4. the sweep skips an out-of-season queue and keeps the rest', asyn
     }),
     readPlayQueue: async () => null,
   } as unknown as TopupDeps;
-  const swept = (await topup.topupPullLists({ deps })).map((r) => r.set);
+  const swept = (await topup.topupPullLists({ deps })).map((topupPullList) => topupPullList.set);
 
   assert.ok(swept.includes('season_open'), `open queue not swept: ${swept.join(', ')}`);
   assert.ok(swept.includes('season_none'), `all-year queue not swept: ${swept.join(', ')}`);
@@ -398,7 +398,7 @@ await check('5. Pending counts an in-season pool as cover and an out-of-season o
     ],
     async (sectionId, type) => (type === 2 ? (ARRIVALS[sectionId] ?? []) : []),
   );
-  const keys = items.map((i) => i.ratingKey);
+  const keys = items.map((item) => item.ratingKey);
 
   assert.ok(!keys.includes('5001'), 'an in-season pool stopped covering its own arrival');
   assert.ok(!keys.includes('7001'), 'an all-year pool stopped covering its own arrival');
@@ -439,7 +439,7 @@ await check('7. a season boundary wrote NOTHING back to the registry', async () 
   // and availability only. Six reads have now happened over a closed season, and the set on
   // disk must be exactly what the fixture wrote.
   const registry = await sets.getRegistry();
-  const closed = registry.sets.find((s) => s.id === 'season_closed');
+  const closed = registry.sets.find((set) => set.id === 'season_closed');
 
   assert.equal(closed?.enabled, true);
   assert.equal(closed?.season_start, CLOSED.start);

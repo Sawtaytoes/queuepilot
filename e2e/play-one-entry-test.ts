@@ -36,9 +36,9 @@ writeFileSync(
 writeFileSync(QUEUES_PATH, 'bob:\n  - {title: alpha}\n  - {title: beta}\n  - {title: gamma}\n');
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const resolve = await import('../server/src/engine/resolve.js');
@@ -51,8 +51,8 @@ const resolve = await import('../server/src/engine/resolve.js');
 // per-tile play reports "removed or renamed".
 const entries = resolve.loadEntries('bob');
 ok('loadEntries reads the file in order',
-  JSON.stringify(entries.map((e) => e.key)) === JSON.stringify(['title:alpha', 'title:beta', 'title:gamma']),
-  JSON.stringify(entries.map((e) => e.key)));
+  JSON.stringify(entries.map((entry) => entry.key)) === JSON.stringify(['title:alpha', 'title:beta', 'title:gamma']),
+  JSON.stringify(entries.map((entry) => entry.key)));
 ok('entryKey matches the key the grid holds',
   resolve.entryKey('gamma') === 'title:gamma', String(resolve.entryKey('gamma')));
 // A ratingKey entry is the common shape once resolved — same identity on both sides.
@@ -79,12 +79,12 @@ const client: PlexClient = {
       const show = leaves[1]!;
       const rks = EPISODES[show] || [];
       return {
-        Metadata: rks.map((rk, i) => ({
+        Metadata: rks.map((rk, index) => ({
           ratingKey: rk,
           title: rk,
           grandparentTitle: show,
           parentIndex: 1,
-          index: i + 1,
+          index: index + 1,
           duration: 1000,
           type: 'episode',
           viewCount: WATCHED.has(rk) ? 1 : 0,
@@ -137,7 +137,7 @@ interface Lineup {
 const lineup = async (only: string | null): Promise<Lineup> => {
   let list = resolve.loadEntries('bob');
   if (only) {
-    list = list.filter((e) => e.key === only);
+    list = list.filter((entry) => entry.key === only);
     if (!list.length) return { play: [], unknownEntry: only };
   }
   return resolve.nextQueue(client, 'bob', CFG, list, WATCHED, null, null);
@@ -147,14 +147,14 @@ const lineup = async (only: string | null): Promise<Lineup> => {
 // being `alpha`, the narrowing assertions below prove nothing.
 let res = await lineup(null);
 ok('no `only`: the queue plays its own head',
-  JSON.stringify(res.play.map((i) => i.ratingKey)) === JSON.stringify(['alpha-e1']),
-  JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((item) => item.ratingKey)) === JSON.stringify(['alpha-e1']),
+  JSON.stringify(res.play.map((item) => item.ratingKey)));
 
 // The point of the feature: name the third entry and it plays, not the head.
 res = await lineup('title:gamma');
 ok('`only`: the named entry plays instead of the head',
   res.play.length > 0 && res.play[0]!.ratingKey === 'gamma-e1',
-  JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((item) => item.ratingKey)));
 
 // ...and it is still the entry's OWN next-unwatched episode, not blindly episode 1. This is
 // what "the same machinery, a shorter list" has to mean to be worth anything.
@@ -162,7 +162,7 @@ WATCHED.add('gamma-e1');
 res = await lineup('title:gamma');
 ok('`only`: plays the entry\'s next UNWATCHED episode, not its first',
   res.play.length > 0 && res.play[0]!.ratingKey === 'gamma-e2',
-  JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((item) => item.ratingKey)));
 WATCHED.delete('gamma-e1');
 
 // A fully-watched entry has nothing to play — and must NOT silently fall through to the
@@ -171,7 +171,7 @@ WATCHED.add('gamma-e1');
 WATCHED.add('gamma-e2');
 res = await lineup('title:gamma');
 ok('`only`: a finished entry plays nothing (never falls back to the head)',
-  res.play.length === 0, JSON.stringify(res.play.map((i) => i.ratingKey)));
+  res.play.length === 0, JSON.stringify(res.play.map((item) => item.ratingKey)));
 WATCHED.delete('gamma-e1');
 WATCHED.delete('gamma-e2');
 
@@ -199,7 +199,7 @@ res = await lineup('title:gamma');
 ok('`only`: the named entry carries its window',
   res.play.length === 2
   && res.play[0]!.sectionStartMs === 750_000 && res.play[0]!.sectionEndMs === 1_020_000,
-  JSON.stringify(res.play.map((i) => [i.ratingKey, i.sectionStartMs, i.sectionEndMs])));
+  JSON.stringify(res.play.map((item) => [item.ratingKey, item.sectionStartMs, item.sectionEndMs])));
 ok('`only`: and the SECOND episode it contributes plays in full',
   res.play[1]!.sectionStartMs == null && res.play[1]!.sectionEndMs == null,
   JSON.stringify([res.play[1]!.sectionStartMs, res.play[1]!.sectionEndMs]));
@@ -209,7 +209,7 @@ res = await lineup('title:alpha');
 ok('`only`: an entry with no window carries no window fields',
   res.play.length === 1
   && res.play[0]!.sectionStartMs === undefined && res.play[0]!.sectionEndMs === undefined,
-  JSON.stringify(res.play.map((i) => [i.ratingKey, i.sectionStartMs, i.sectionEndMs])));
+  JSON.stringify(res.play.map((item) => [item.ratingKey, item.sectionStartMs, item.sectionEndMs])));
 
 // --------------------------------------------------------------------------- //
 // The HTTP contract: which sets may be asked to play one entry
@@ -217,7 +217,7 @@ ok('`only`: an entry with no window carries no window fields',
 // A rotation channel's pool is a RULE — nothing in it has an entry key — so `only` there is a
 // request error, not a field to ignore. Asserted as the shape the server branches on, since
 // importing the server would boot a listener and an MQTT client.
-const rejects = (s: { source: string }) => Boolean(s.source !== 'queue');
+const rejects = (set: { source: string }) => Boolean(set.source !== 'queue');
 ok('a rotation channel rejects `only`', rejects({ source: 'rotation' }) === true);
 ok('a curated queue accepts `only`', rejects({ source: 'queue' }) === false);
 

@@ -50,12 +50,12 @@ let showResumeKey: string = SHOW.ratingKey;
 let movieResumeKey: string | null = null;
 
 const clientWith = (): PlexClient => ({
-  async container(p: string) {
-    const m = /^\/library\/metadata\/(\d+)$/.exec(p);
-    if (m) {
-      const show = SHOWS.find((s) => s.ratingKey === m[1]);
+  async container(pathname: string) {
+    const match = /^\/library\/metadata\/(\d+)$/.exec(pathname);
+    if (match) {
+      const show = SHOWS.find((show) => show.ratingKey === match[1]);
       if (show) return { Metadata: [{ ...show, type: 'show' }] };
-      const film = FILMS.find((f) => f.ratingKey === m[1]);
+      const film = FILMS.find((film) => film.ratingKey === match[1]);
       if (!film) return { Metadata: [] };
       return {
         Metadata: [{
@@ -66,8 +66,8 @@ const clientWith = (): PlexClient => ({
         }],
       };
     }
-    const leaves = /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(p);
-    const show = leaves ? SHOWS.find((s) => s.ratingKey === leaves[1]) : null;
+    const leaves = /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(pathname);
+    const show = leaves ? SHOWS.find((show) => show.ratingKey === leaves[1]) : null;
     if (show) {
       return {
         Metadata: [
@@ -85,19 +85,19 @@ const clientWith = (): PlexClient => ({
         ],
       };
     }
-    throw new Error(`unexpected path ${p}`);
+    throw new Error(`unexpected path ${pathname}`);
   },
 } as unknown as PlexClient);
 
 /** `describe()` on a raw entry mapping, which is the only shape queues.yaml holds. */
 const entry = (rk: string, extras: Record<string, unknown> = {}): EntryDescriptor => {
-  const title = (SHOWS.find((s) => s.ratingKey === rk)
-    ?? FILMS.find((f) => f.ratingKey === rk))!.title;
+  const title = (SHOWS.find((show) => show.ratingKey === rk)
+    ?? FILMS.find((film) => film.ratingKey === rk))!.title;
   return describeEntry({ ratingKey: rk, title, ...extras });
 };
 
 // A seeded shuffle that REVERSES, so "shuffled" is visible and repeatable in an assertion.
-const reversingRng = { shuffle: (a: unknown[]) => { a.reverse(); } };
+const reversingRng = { shuffle: (items: unknown[]) => { items.reverse(); } };
 
 let failed = 0;
 const check = (label: string, actual: unknown, expected: unknown): void => {
@@ -110,7 +110,7 @@ const check = (label: string, actual: unknown, expected: unknown): void => {
   }
 };
 
-const titles = (r: { play: { title?: string }[] }) => r.play.map((i) => i.title);
+const titles = (result: { play: { title?: string }[] }) => result.play.map((item) => item.title);
 
 const ORDERED = { source: 'queue', kind: 'picks', add_as: 'priority', length: 12 };
 const POOL = { source: 'queue', kind: 'picks', add_as: 'random', length: 12 };

@@ -21,14 +21,14 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-v.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-v.yaml');
-for (const p of ['/tmp/queues-v.yaml.lock', '/tmp/sets-v.yaml.lock', '/tmp/.history-v.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-v.yaml.lock', '/tmp/sets-v.yaml.lock', '/tmp/.history-v.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
 const srv = spawnServer({
@@ -57,15 +57,15 @@ try {
   await page.click('.shelf[data-set="bob"] .shelfedit');
   await page.waitForSelector('#setmodal[data-open]');
   await page.waitForTimeout(300);
-  const x = await page.$('#setmodal .modalx');
-  if (!x) throw new Error('no #setmodal .modalx to zoom');
-  const box = await x.boundingBox();
+  const closeButton = await page.$('#setmodal .modalx');
+  if (!closeButton) throw new Error('no #setmodal .modalx to zoom');
+  const box = await closeButton.boundingBox();
   if (!box) throw new Error('#setmodal .modalx is not laid out (no bounding box)');
   await page.screenshot({ path: `${OUT}/verify-x-button.png`,
     clip: { x: box.x - 24, y: box.y - 24, width: box.width + 48, height: box.height + 48 } });
-  console.log('wrote verify-x-button.png; ✕ visible/styled:', await x.evaluate((el) => {
-    const s = getComputedStyle(el);
-    return { color: s.color, background: s.backgroundColor, radius: s.borderRadius, text: el.textContent };
+  console.log('wrote verify-x-button.png; ✕ visible/styled:', await closeButton.evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { color: style.color, background: style.backgroundColor, radius: style.borderRadius, text: el.textContent };
   }));
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => !document.querySelector('#setmodal[data-open]'));
@@ -92,10 +92,10 @@ try {
   const state = await page.evaluate(() => ({
     dragging: !!document.querySelector('#grid li.tile.dragging'),
     gdrag: document.body.classList.contains('gdrag'),
-    liftedTransform: (() => { const t = document.querySelector('#grid li.tile.dragging .thumb');
-      return t ? getComputedStyle(t).transform : null; })(),
-    siblingTransition: (() => { const s = document.querySelector('#grid li.tile:not(.dragging)');
-      return s ? getComputedStyle(s).transitionProperty : null; })(),
+    liftedTransform: (() => { const thumb = document.querySelector('#grid li.tile.dragging .thumb');
+      return thumb ? getComputedStyle(thumb).transform : null; })(),
+    siblingTransition: (() => { const sibling = document.querySelector('#grid li.tile:not(.dragging)');
+      return sibling ? getComputedStyle(sibling).transitionProperty : null; })(),
   }));
   await page.screenshot({ path: `${OUT}/verify-drag-mid.png` });
   console.log('wrote verify-drag-mid.png; drag state:', JSON.stringify(state));
@@ -105,7 +105,7 @@ try {
   await browser.close();
   console.log('verify: done');
   await shutdown(0);
-} catch (e) {
-  console.error('verify failed:', e);
+} catch (error) {
+  console.error('verify failed:', error);
   await shutdown(1);
 }

@@ -40,8 +40,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -50,7 +50,7 @@ interface KavitaBuckets extends Omit<BucketsResult, 'play' | 'buckets'> {
   play: KavitaPlayItem[];
   buckets: { seriesId: number; title: string }[];
 }
-const asClient = (c: unknown): KavitaHttpClient => c as unknown as KavitaHttpClient;
+const asClient = (client: unknown): KavitaHttpClient => client as unknown as KavitaHttpClient;
 
 // --------------------------------------------------------------------------- //
 // The stub, shaped from the LIVE instance (kavita.example.com, 2026-08-15).
@@ -61,26 +61,26 @@ const ALICE_DETAIL = {
   chapters: [],
   specials: [],
   unreadCount: 9,
-  volumes: Array.from({ length: 9 }, (_, i) => ({
-    id: 7800 + i,
-    name: `Volume ${i + 1}`,
-    number: i + 1,
-    minNumber: i + 1,
-    pages: 300 + i,
+  volumes: Array.from({ length: 9 }, (_, index) => ({
+    id: 7800 + index,
+    name: `Volume ${index + 1}`,
+    number: index + 1,
+    minNumber: index + 1,
+    pages: 300 + index,
     pagesRead: 0,
     // Kavita's no-chapter-subdivision sentinel, verbatim off the wire.
     chapters: [{
-      id: 68270 + i, number: '-100000', minNumber: -100000, title: 'Chapter -100000',
-      titleName: '', range: '-100000', pages: 300 + i, pagesRead: 0,
+      id: 68270 + index, number: '-100000', minNumber: -100000, title: 'Chapter -100000',
+      titleName: '', range: '-100000', pages: 300 + index, pagesRead: 0,
     }],
   })),
 };
 
 /** 4577 "The Sword-Eating Swordmaster" — a WEBTOON. The SAME chapters appear twice: loose
  *  at the top level AND under volume 1. Live behaviour; the reason dedupe is required. */
-const SWORD_CHAPTERS = Array.from({ length: 4 }, (_, i) => ({
-  id: 67094 + i, number: String(i + 1), minNumber: i + 1, title: `Chapter ${i + 1}`,
-  titleName: '', range: String(i + 1), pages: 150, pagesRead: i === 0 ? 150 : 0,
+const SWORD_CHAPTERS = Array.from({ length: 4 }, (_, index) => ({
+  id: 67094 + index, number: String(index + 1), minNumber: index + 1, title: `Chapter ${index + 1}`,
+  titleName: '', range: String(index + 1), pages: 150, pagesRead: index === 0 ? 150 : 0,
 }));
 const SWORD_DETAIL = {
   chapters: SWORD_CHAPTERS,
@@ -99,9 +99,9 @@ const SWORD_DETAIL = {
  * are loose weekly releases ahead of the volumes. Without the sole-chapter + volume-wins
  * rules every volume labelled itself "Chapter 1".
  */
-const SOLO_VOL_CHAPTERS = Array.from({ length: 3 }, (_, i) => ({
-  id: 81000 + i, number: '1', minNumber: 1, title: 'Chapter 1',
-  titleName: '', range: '1', pages: 190, pagesRead: i < 1 ? 190 : 0,
+const SOLO_VOL_CHAPTERS = Array.from({ length: 3 }, (_, index) => ({
+  id: 81000 + index, number: '1', minNumber: 1, title: 'Chapter 1',
+  titleName: '', range: '1', pages: 190, pagesRead: index < 1 ? 190 : 0,
 }));
 const SOLO_LOOSE_AHEAD = [
   { id: 82001, number: '134', minNumber: 134, title: 'Chapter 134', titleName: '', range: '134', pages: 16, pagesRead: 0 },
@@ -111,8 +111,8 @@ const SOLO_DETAIL = {
   chapters: [...SOLO_VOL_CHAPTERS, ...SOLO_LOOSE_AHEAD],
   specials: [],
   unreadCount: 4,
-  volumes: SOLO_VOL_CHAPTERS.map((ch, i) => ({
-    id: 9100 + i, name: `Volume ${i + 1}`, number: i + 1, minNumber: i + 1,
+  volumes: SOLO_VOL_CHAPTERS.map((ch, index) => ({
+    id: 9100 + index, name: `Volume ${index + 1}`, number: index + 1, minNumber: index + 1,
     pages: ch.pages, pagesRead: ch.pagesRead, chapters: [ch],
   })),
 };
@@ -122,11 +122,11 @@ const SOLO_DETAIL = {
  * (Red Ranger): Volume 1 still unread, but a `batch: 3` queue opened on chapter 48.5
  * because loose chapters sorted as "volume 0" and therefore FIRST.
  */
-const MIXED_VOLUMES = Array.from({ length: 3 }, (_, i) => ({
-  id: 9300 + i, name: `Volume ${i + 1}`, number: i + 1, minNumber: i + 1,
+const MIXED_VOLUMES = Array.from({ length: 3 }, (_, index) => ({
+  id: 9300 + index, name: `Volume ${index + 1}`, number: index + 1, minNumber: index + 1,
   pages: 400, pagesRead: 0,
   chapters: [{
-    id: 83000 + i, number: '-100000', minNumber: -100000, title: 'Chapter -100000',
+    id: 83000 + index, number: '-100000', minNumber: -100000, title: 'Chapter -100000',
     titleName: '', range: '-100000', pages: 400, pagesRead: 0,
   }],
 }));
@@ -179,7 +179,7 @@ function stubClient() {
     },
     async seriesForLibrary(libraryId: number | string) {
       calls.push(['seriesForLibrary', String(libraryId)]);
-      return Object.values(SERIES).filter((s) => String(s.libraryId) === String(libraryId));
+      return Object.values(SERIES).filter((series) => String(series.libraryId) === String(libraryId));
     },
   };
 }
@@ -193,8 +193,8 @@ const DEF = { id: 'kavita', kind: 'kavita', label: 'Kavita', base_url: 'https://
 // --------------------------------------------------------------------------- //
 
 await ok('a VOLUME-based manga is not reported as fully read', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const [tile] = await p.tiles!(['4672']);
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const [tile] = await provider.tiles!(['4672']);
   assert.ok(tile, 'Alice in Borderland resolved to no tile at all');
   // The bug: `next: null` here is what the frontend renders as "All read".
   assert.ok(tile.next, 'a series with 9 unread volumes reported nothing next — the "All read" bug');
@@ -202,8 +202,8 @@ await ok('a VOLUME-based manga is not reported as fully read', async () => {
 });
 
 await ok('a whole volume is labelled as a VOLUME, never "Ch -100000"', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const [tile] = await p.tiles!(['4672']);
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const [tile] = await provider.tiles!(['4672']);
   // `ProviderTileRow.next` is a union since board games joined the seam (a play carries no
   // chapter id). This is the Kavita gate, so it asserts the Kavita shape by name.
   const next = tile!.next! as KavitaPlayItem;
@@ -215,20 +215,20 @@ await ok('a whole volume is labelled as a VOLUME, never "Ch -100000"', async () 
 });
 
 await ok('volumes are read in volume order, not wire order', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4672', volumes: 3 }], limit: 3,
   }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.number), [1, 2, 3]);
-  assert.deepEqual(play.map((i) => i.title), ['Volume 1', 'Volume 2', 'Volume 3']);
+  assert.deepEqual(play.map((playItem) => playItem.number), [1, 2, 3]);
+  assert.deepEqual(play.map((playItem) => playItem.title), ['Volume 1', 'Volume 2', 'Volume 3']);
 });
 
 await ok('a WEBTOON chapter is never queued twice (loose + volume dedupe)', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4577', batch: 10 }], limit: 10,
   }) as KavitaBuckets;
-  const ids = play.map((i) => i.chapterId);
+  const ids = play.map((playItem) => playItem.chapterId);
   assert.equal(new Set(ids).size, ids.length, `duplicate chapters queued: ${ids.join(', ')}`);
   // Chapter 1 is fully read; 2/3/4 are not. The read one must not come back.
   assert.deepEqual(ids, [67095, 67096, 67097]);
@@ -243,8 +243,8 @@ await ok('a WEBTOON chapter is never queued twice (loose + volume dedupe)', asyn
 
 await ok('curated entries ARE the lineup — the library is not consulted', async () => {
   const client = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(client) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4672' }],
     // A library is offered too. The entries must win, or a curated queue plays the shelf.
     libraries: ['5'],
@@ -252,11 +252,11 @@ await ok('curated entries ARE the lineup — the library is not consulted', asyn
   }) as KavitaBuckets;
   assert.ok(play.length > 0);
   assert.ok(
-    play.every((i) => String(i.seriesId) === '4672'),
-    `a curated queue drew from outside its entries: ${play.map((i) => i.seriesId).join(', ')}`,
+    play.every((playItem) => String(playItem.seriesId) === '4672'),
+    `a curated queue drew from outside its entries: ${play.map((playItem) => playItem.seriesId).join(', ')}`,
   );
   assert.equal(
-    client._calls.some((c) => c[0] === 'seriesForLibrary'), false,
+    client._calls.some((_call) => _call[0] === 'seriesForLibrary'), false,
     'the library shelf was enumerated even though the queue has entries',
   );
 });
@@ -276,11 +276,11 @@ await ok('priority entries lead a randomized curated reading queue', async () =>
     add_as: 'random',
     providers: [{ provider: 'kavita' }],
   } as unknown as RoutingQueueCfg;
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
   const originalRandom = Math.random;
   Math.random = () => 0;
   try {
-    const play = await pullLineup('reading', cfg, p) as KavitaPlayItem[];
+    const play = await pullLineup('reading', cfg, provider) as KavitaPlayItem[];
     assert.deepEqual(
       play.slice(0, 4).map((item) => String(item.seriesId)),
       ['4672', '4672', '4672', '4577'],
@@ -293,32 +293,32 @@ await ok('priority entries lead a randomized curated reading queue', async () =>
 
 await ok('a set with NO entries still falls back to its libraries', async () => {
   const client = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(client) });
-  const { play } = await p.buckets({ entries: [], libraries: ['5'], limit: 5 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ entries: [], libraries: ['5'], limit: 5 }) as KavitaBuckets;
   assert.ok(play.length > 0, 'a rule-based reading channel lost its pool');
-  assert.ok(client._calls.some((c) => c[0] === 'seriesForLibrary'));
+  assert.ok(client._calls.some((_call) => _call[0] === 'seriesForLibrary'));
 });
 
 await ok('a per-entry batch overrides the queue default, per series', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     // Alice takes 3 VOLUMES per round by her own override; the webtoon takes the queue's 1 chapter.
     entries: [{ id: '4672', volumes: 3 }, { id: '4577' }],
     batch: 1,
     limit: 4,
   }) as KavitaBuckets;
-  const first = play.slice(0, 3).map((i) => String(i.seriesId));
+  const first = play.slice(0, 3).map((playItem) => String(playItem.seriesId));
   assert.deepEqual(first, ['4672', '4672', '4672'], 'the entry override did not widen its own slice');
   assert.equal(String(play[3]!.seriesId), '4577', 'the next series did not get its turn after the batch');
 });
 
 await ok('an entry naming a series Kavita no longer has is skipped, not fatal', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '999999' }, { id: '4672' }], limit: 3,
   }) as KavitaBuckets;
   assert.ok(play.length > 0, 'one deleted series made the whole queue unlaunchable');
-  assert.ok(play.every((i) => String(i.seriesId) === '4672'));
+  assert.ok(play.every((playItem) => String(playItem.seriesId) === '4672'));
 });
 
 // --------------------------------------------------------------------------- //
@@ -326,50 +326,50 @@ await ok('an entry naming a series Kavita no longer has is skipped, not fatal', 
 // --------------------------------------------------------------------------- //
 
 await ok('listUnits lists a WEBTOON\'s chapters, including already-read ones', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const out = await p.listUnits!('4577');
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const out = await provider.listUnits!('4577');
   assert.ok(out, 'Swordmaster listed no chapters');
   assert.equal(out.multiSeason, false, 'a webtoon must not grow a season row');
   assert.equal(out.seasons.length, 1);
   const eps = out.seasons[0]!.episodes;
   assert.equal(eps.length, 4, 'loose+volume chapters must be deduped');
-  assert.deepEqual(eps.map((e) => e.episode), [1, 2, 3, 4]);
+  assert.deepEqual(eps.map((episode) => episode.episode), [1, 2, 3, 4]);
   assert.equal(eps[0]!.watched, true, 'chapter 1 is fully read');
   assert.equal(eps[1]!.watched, false);
   assert.equal(eps[0]!.title, 'Chapter 1');
 });
 
 await ok('listUnits lists a VOLUME-based manga as volumes, never Ch -100000', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const out = await p.listUnits!('4672');
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const out = await provider.listUnits!('4672');
   assert.ok(out, 'Alice listed no units');
   const eps = out.seasons[0]!.episodes;
   assert.equal(eps.length, 9);
-  assert.deepEqual(eps.map((e) => e.episode), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
-  assert.deepEqual(eps.map((e) => e.title), [
+  assert.deepEqual(eps.map((episode) => episode.episode), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual(eps.map((episode) => episode.title), [
     'Volume 1', 'Volume 2', 'Volume 3', 'Volume 4', 'Volume 5',
     'Volume 6', 'Volume 7', 'Volume 8', 'Volume 9',
   ]);
-  assert.ok(eps.every((e) => e.watched === false));
+  assert.ok(eps.every((episode) => episode.watched === false));
 });
 
 await ok('a start floor skips earlier unread chapters without marking them read', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4577', batch: 10, start: { season: 1, episode: 3 } }],
     limit: 10,
   }) as KavitaBuckets;
   // Chapter 1 is already read; 2 is unread but BEFORE the floor; 3 and 4 remain.
-  assert.deepEqual(play.map((i) => i.number), ['3', '4']);
+  assert.deepEqual(play.map((playItem) => playItem.number), ['3', '4']);
 });
 
 await ok('a start floor on a volume-based series starts at that volume', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4672', volumes: 3, start: { season: 1, episode: 5 } }],
     limit: 3,
   }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.number), [5, 6, 7]);
+  assert.deepEqual(play.map((playItem) => playItem.number), [5, 6, 7]);
 });
 
 // --------------------------------------------------------------------------- //
@@ -377,50 +377,50 @@ await ok('a start floor on a volume-based series starts at that volume', async (
 // --------------------------------------------------------------------------- //
 
 await ok('a chapter batch of 3 does NOT dump 3 volumes', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4672', batch: 3 }],
     batch: 3,
     limit: 5,
   }) as KavitaBuckets;
   // Alice is volume-based. The chapter count is 3; the volume count was not set, so
   // the default of 1 must win. The live bug was "3 chapters" queuing 3 volumes.
-  assert.deepEqual(play.map((i) => i.number), [1]);
+  assert.deepEqual(play.map((playItem) => playItem.number), [1]);
   assert.equal(play[0]!.unit, 'volume');
 });
 
 await ok('a volume-based series uses the volume count, not the chapter count', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4672' }],
     batch: 3,
     volumeBatch: 2,
     limit: 5,
   }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.number), [1, 2]);
+  assert.deepEqual(play.map((playItem) => playItem.number), [1, 2]);
 });
 
 await ok('a chapter-based WEBTOON still uses the chapter count', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4577' }],
     batch: 2,
     volumeBatch: 9,
     limit: 5,
   }) as KavitaBuckets;
   // Chapters 2 and 3 (1 is read). The volume count of 9 must not apply.
-  assert.deepEqual(play.map((i) => i.number), ['2', '3']);
+  assert.deepEqual(play.map((playItem) => playItem.number), ['2', '3']);
   assert.equal(play[0]!.unit, 'chapter');
 });
 
 await ok('a per-entry volumes override wins over the queue volume default', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4672', volumes: 4 }],
     volumeBatch: 2,
     limit: 5,
   }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.number), [1, 2, 3, 4]);
+  assert.deepEqual(play.map((playItem) => playItem.number), [1, 2, 3, 4]);
 });
 
 // --------------------------------------------------------------------------- //
@@ -428,8 +428,8 @@ await ok('a per-entry volumes override wins over the queue volume default', asyn
 // --------------------------------------------------------------------------- //
 
 await ok('a sole-chapter volume numbered "1" is labelled Volume N, not Chapter 1', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const [tile] = await p.tiles!(['5100']);
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const [tile] = await provider.tiles!(['5100']);
   assert.ok(tile?.next, 'Solo Chapter Volumes resolved to nothing next');
   const next = tile!.next! as KavitaPlayItem;
   // Volume 1 is fully read; next unread is Volume 2 — NEVER "Chapter 1" / "Chapter 134".
@@ -439,40 +439,40 @@ await ok('a sole-chapter volume numbered "1" is labelled Volume N, not Chapter 1
 });
 
 await ok('sole-chapter volumes keep volume labels even when they also appear loose', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const out = await p.listUnits!('5100');
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const out = await provider.listUnits!('5100');
   assert.ok(out);
   const eps = out.seasons[0]!.episodes;
   // 3 volumes + 2 loose weekly chapters. Volumes lead; the "Chapter 1" title never surfaces.
-  assert.deepEqual(eps.map((e) => e.title), [
+  assert.deepEqual(eps.map((episode) => episode.title), [
     'Volume 1', 'Volume 2', 'Volume 3', 'Chapter 134', 'Chapter 135',
   ]);
-  assert.deepEqual(eps.map((e) => e.episode), [1, 2, 3, 134, 135]);
+  assert.deepEqual(eps.map((episode) => episode.episode), [1, 2, 3, 134, 135]);
 });
 
 await ok('a MIXED series queues volumes BEFORE loose weekly chapters', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     // The live bug: chapter batch 3 drew 48.5 / 50 / 51 and never reached Volume 1.
     entries: [{ id: '5200' }],
     batch: 3,
     volumeBatch: 3,
     limit: 5,
   }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.unit), ['volume', 'volume', 'volume']);
-  assert.deepEqual(play.map((i) => i.number), [1, 2, 3]);
-  assert.deepEqual(play.map((i) => i.title), ['Volume 1', 'Volume 2', 'Volume 3']);
+  assert.deepEqual(play.map((playItem) => playItem.unit), ['volume', 'volume', 'volume']);
+  assert.deepEqual(play.map((playItem) => playItem.number), [1, 2, 3]);
+  assert.deepEqual(play.map((playItem) => playItem.title), ['Volume 1', 'Volume 2', 'Volume 3']);
 });
 
 await ok('loose chapters of a MIXED series follow after every volume', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '5200', volumes: 10 }],
     batch: 10,
     limit: 10,
   }) as KavitaBuckets;
   assert.deepEqual(
-    play.map((i) => ({ unit: i.unit, number: i.number })),
+    play.map((playItem) => ({ unit: playItem.unit, number: playItem.number })),
     [
       { unit: 'volume', number: 1 },
       { unit: 'volume', number: 2 },
@@ -486,12 +486,12 @@ await ok('loose chapters of a MIXED series follow after every volume', async () 
 
 await ok('a WEBTOON still queues as chapters after the volume-wins dedupe', async () => {
   // Preferring the volume copy must not relabel a many-chapter volume-1 webtoon as volumes.
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({
     entries: [{ id: '4577', batch: 10 }], limit: 10,
   }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.chapterId), [67095, 67096, 67097]);
-  assert.ok(play.every((i) => i.unit === 'chapter'));
+  assert.deepEqual(play.map((playItem) => playItem.chapterId), [67095, 67096, 67097]);
+  assert.ok(play.every((playItem) => playItem.unit === 'chapter'));
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall passed');

@@ -27,8 +27,8 @@ interface TestMember {
 }
 
 let failures = 0;
-const ok = (name: string, cond: boolean, detail = ''): void => {
-  if (cond) {
+const ok = (name: string, isPassing: boolean, detail = ''): void => {
+  if (isPassing) {
     console.log(`ok   ${name}`);
   } else {
     failures += 1;
@@ -44,14 +44,14 @@ ok('toWeight: numeric strings count', toWeight('3') === 3);
 ok('toWeight: capped at MAX_WEIGHT', toWeight(9999) === MAX_WEIGHT);
 
 // --- the interleave -------------------------------------------------------------------------
-const bucket = (name: string, n: number, weight?: number): TestBucket => ({
+const bucket = (name: string, episodeCount: number, weight?: number): TestBucket => ({
   name,
   weight,
-  episodes: Array.from({ length: n }, (_, i) => `${name}${i + 1}`),
+  episodes: Array.from({ length: episodeCount }, (_, index) => `${name}${index + 1}`),
 });
 const run = (buckets: readonly TestBucket[], length: number): string[] =>
-  weightedInterleave(buckets, (b) => b.episodes, length);
-const shows = (out: readonly string[]): string => out.map((x) => x[0]).join('');
+  weightedInterleave(buckets, (testBucket) => testBucket.episodes, length);
+const shows = (out: readonly string[]): string => out.map((episode) => episode[0]).join('');
 
 // 3/1/1 deals three A's in five slots and never two A's in a row — the whole reason this is a
 // scheduler and not a biased random pick.
@@ -61,7 +61,7 @@ ok('no two A in a row in the first round', !shows(a3).slice(0, 5).includes('AA')
 
 // The count is proportional, not merely "earlier": over 15 slots, 3/1/1 is 9/3/3.
 const counted = run([bucket('A', 99, 3), bucket('B', 99, 1), bucket('C', 99, 1)], 15);
-const tally = (out: readonly string[], ch: string): number => out.filter((x) => x[0] === ch).length;
+const tally = (out: readonly string[], ch: string): number => out.filter((episode) => episode[0] === ch).length;
 ok('15 slots split 9/3/3', tally(counted, 'A') === 9 && tally(counted, 'B') === 3 && tally(counted, 'C') === 3,
   `${tally(counted, 'A')}/${tally(counted, 'B')}/${tally(counted, 'C')}`);
 
@@ -80,27 +80,27 @@ ok('exhausted pool ends the queue', short.length === 2, String(short.length));
 
 // Order within a bucket is never disturbed — episode order is the show's, weights only decide
 // WHEN its turn comes.
-ok('episode order preserved', counted.filter((x) => x[0] === 'A').join(',') === 'A1,A2,A3,A4,A5,A6,A7,A8,A9');
+ok('episode order preserved', counted.filter((episode) => episode[0] === 'A').join(',') === 'A1,A2,A3,A4,A5,A6,A7,A8,A9');
 
 // --- the compatibility promise ---------------------------------------------------------------
 // The exact round-robin buildRotation ran before weights existed, kept here as the oracle.
 function legacyRoundRobin(order: readonly TestBucket[], length: number): string[] {
-  const cursors = new Map<string, number>(order.map((s) => [s.name, 0]));
+  const cursors = new Map<string, number>(order.map((testBucket) => [testBucket.name, 0]));
   const queue: string[] = [];
   while (queue.length < length) {
-    let progressed = false;
-    for (const s of order) {
+    let hasProgressed = false;
+    for (const testBucket of order) {
       // Both `!`s assert what the loop already guarantees — every bucket got a cursor above,
       // and the read is guarded by the bounds check — so the emitted JS is byte-identical.
-      const i = cursors.get(s.name)!;
-      if (i < s.episodes.length) {
-        queue.push(s.episodes[i]!);
-        cursors.set(s.name, i + 1);
-        progressed = true;
+      const cursor = cursors.get(testBucket.name)!;
+      if (cursor < testBucket.episodes.length) {
+        queue.push(testBucket.episodes[cursor]!);
+        cursors.set(testBucket.name, cursor + 1);
+        hasProgressed = true;
         if (queue.length >= length) break;
       }
     }
-    if (!progressed) break;
+    if (!hasProgressed) break;
   }
   return queue;
 }
@@ -112,7 +112,7 @@ const POOLS: [string, TestBucket[]][] = [
 ];
 for (const [label, pool] of POOLS) {
   const legacy = legacyRoundRobin(pool, 12);
-  const now = run(pool.map((b) => ({ ...b })), 12);
+  const now = run(pool.map((testBucket) => ({ ...testBucket })), 12);
   ok(`unweighted ≡ old round-robin (${label})`, legacy.join(',') === now.join(','),
     `${legacy.join(',')} vs ${now.join(',')}`);
 }
@@ -126,7 +126,7 @@ let cursor = 0;
 const seeded: Rng = { random: () => seq[cursor++ % seq.length]!, shuffle: () => {} };
 let heavyFirst = 0;
 const TRIALS = 200;
-for (let t = 0; t < TRIALS; t += 1) {
+for (let iteration = 0; iteration < TRIALS; iteration += 1) {
   const members: TestMember[] = [
     { n: 'light', weight: 1 }, { n: 'heavy', weight: 5 }, { n: 'light2', weight: 1 },
   ];
@@ -145,7 +145,7 @@ const roster: TestMember[] = [
 ];
 weightedShuffle(roster, seeded);
 ok('shuffle keeps every member exactly once',
-  roster.length === 4 && new Set(roster.map((m) => m.n)).size === 4);
+  roster.length === 4 && new Set(roster.map((member) => member.n)).size === 4);
 
 assert.equal(failures, 0, `${failures} weight assertion(s) failed`);
 console.log('\nweights: all assertions passed');

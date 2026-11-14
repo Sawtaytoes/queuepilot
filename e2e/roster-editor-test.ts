@@ -27,9 +27,9 @@ import type { ChildProcess } from 'node:child_process';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 const same = (name: string, actual: unknown, expected: unknown): void =>
   ok(name, JSON.stringify(actual) === JSON.stringify(expected), `got ${JSON.stringify(actual)}`);
@@ -179,7 +179,7 @@ try {
   const stillNamed = await get<Roster>('/api/people');
   same(
     'the refused rename changed nothing',
-    stillNamed.people.find((p) => p.id === 'ada')?.displayName,
+    stillNamed.people.find((person) => person.id === 'ada')?.displayName,
     'Ada Lovelace',
   );
 
@@ -191,11 +191,11 @@ try {
   const group = await call('PATCH', '/api/groups/kids', { label: 'Younger Kids' });
   ok('renaming a group answers 200', group.status === 200, `status ${group.status}`);
   const afterGroup = await get<Roster>('/api/people');
-  same('the group label changed', afterGroup.groups.find((g) => g.id === 'kids')?.label, 'Younger Kids');
+  same('the group label changed', afterGroup.groups.find((group) => group.id === 'kids')?.label, 'Younger Kids');
   // A group id is a URL (`/g/<id>`) and an MQTT payload, so a rename must not move it either.
   same(
     'the group keeps its roster and its id',
-    afterGroup.groups.find((g) => g.id === 'kids')?.roster.map((m) => m.personId),
+    afterGroup.groups.find((group) => group.id === 'kids')?.roster.map((member) => member.personId),
     ['ada'],
   );
 
@@ -215,10 +215,10 @@ try {
   const after = await get<Roster>('/api/people');
   same(
     'the roster is what is left, in position order',
-    after.people.map((p) => p.id),
+    after.people.map((person) => person.id),
     ['grace-hopper', 'grace-hopper-2'],
   );
-  same('the group roster no longer names her', after.groups.find((g) => g.id === 'kids')?.roster, []);
+  same('the group roster no longer names her', after.groups.find((group) => group.id === 'kids')?.roster, []);
 
   const traysAfter = await get<{ queues: Record<string, unknown[]> }>('/api/queue-people');
   same('the queue tray no longer names her', traysAfter.queues.bob_movies ?? [], []);

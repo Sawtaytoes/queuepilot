@@ -75,17 +75,17 @@ const RK_PLANNED = '106617';
 interface ClockTask { at: number; fn: () => void }
 
 class VirtualClock {
-  private t = 0;
+  private nowMs = 0;
 
   private seq = 0;
 
   private readonly tasks = new Map<number, ClockTask>();
 
-  now = (): number => this.t;
+  now = (): number => this.nowMs;
 
   setTimeout = (fn: () => void, ms?: number): number => {
     this.seq += 1;
-    this.tasks.set(this.seq, { at: this.t + Math.max(0, Number(ms) || 0), fn });
+    this.tasks.set(this.seq, { at: this.nowMs + Math.max(0, Number(ms) || 0), fn });
     return this.seq;
   };
 
@@ -95,7 +95,7 @@ class VirtualClock {
 
   /** Time spent inside an awaited call. Tasks are not run; the next `runTo` picks them up. */
   consume(ms: number): void {
-    this.t += ms;
+    this.nowMs += ms;
   }
 
   /** Run every task due on or before `limit`, in time order, settling async work between. */
@@ -112,15 +112,15 @@ class VirtualClock {
       if (nextId == null || nextAt > limit) break;
       const task = this.tasks.get(nextId)!;
       this.tasks.delete(nextId);
-      this.t = Math.max(this.t, task.at);
+      this.nowMs = Math.max(this.nowMs, task.at);
       task.fn();
       await settle();
     }
-    this.t = Math.max(this.t, limit);
+    this.nowMs = Math.max(this.nowMs, limit);
   }
 
   reset(): void {
-    this.t = 0;
+    this.nowMs = 0;
     this.seq = 0;
     this.tasks.clear();
   }
@@ -128,8 +128,8 @@ class VirtualClock {
 
 /** Let an async chain that only awaits resolved promises run to completion. */
 const settle = async (): Promise<void> => {
-  for (let i = 0; i < 8; i += 1) {
-    await new Promise<void>((r) => { setImmediate(r); });
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
   }
 };
 
@@ -177,9 +177,9 @@ async function measureOnce(
     // A poll pays for its own Companion-target resolution before it can tell whose session
     // this is, then for the /status/sessions GET itself.
     clock.consume(targetCostMs + SESSIONS_COST_MS);
-    const t = clock.now();
-    if (t < advanceAtMs) return { ratingKey: RK_PREVIOUS, viewOffset: STALE_POSITION_MS };
-    if (t < advanceAtMs + staleWindowMs) {
+    const now = clock.now();
+    if (now < advanceAtMs) return { ratingKey: RK_PREVIOUS, viewOffset: STALE_POSITION_MS };
+    if (now < advanceAtMs + staleWindowMs) {
       // The recorded artifact: the NEW ratingKey carrying the PREVIOUS item's position.
       return { ratingKey: RK_PLANNED, viewOffset: STALE_POSITION_MS };
     }
@@ -236,7 +236,7 @@ async function measure(
     assert.notEqual(latency, null, `${config.label}: no seek went out for an advance at ${advance}ms`);
     results.push(latency!);
   }
-  const total = results.reduce((a, b) => a + b, 0);
+  const total = results.reduce((left, right) => left + right, 0);
   return {
     meanMs: Math.round(total / results.length),
     worstMs: Math.max(...results),
@@ -311,8 +311,8 @@ check('DETECTION alone — with the stale-position artifact removed — is under
 check('…where it used to be over five seconds',
   rows[0]!.detectionOnly.worstMs > 5_000, `worst ${rows[0]!.detectionOnly.worstMs}ms`);
 check('every step is an improvement on the one before it',
-  rows.every((row, i) => i === 0 || row.withTarget.meanMs <= rows[i - 1]!.withTarget.meanMs),
-  rows.map((r) => `${r.withTarget.meanMs}`).join(' -> '));
+  rows.every((row, index) => index === 0 || row.withTarget.meanMs <= rows[index - 1]!.withTarget.meanMs),
+  rows.map((row) => `${row.withTarget.meanMs}`).join(' -> '));
 
 // --- the push path's own behaviour -------------------------------------------- //
 //
@@ -362,14 +362,14 @@ check('a now-playing event with no ratingKey seeks nothing',
 check('…and reads nothing — it does not even wake the poll',
   nullOnly.reads === 0, `${nullOnly.reads} read(s)`);
 check('…and says so once, so a silent do-nothing has a reason in the log',
-  nullOnly.lines.filter((l) => l.includes('carried no ratingKey')).length === 1,
+  nullOnly.lines.filter((line) => line.includes('carried no ratingKey')).length === 1,
   JSON.stringify(nullOnly.lines));
 
 const named = await runPush([RK_PLANNED]);
 check('a now-playing event that NAMES the item seeks it',
   named.seeks.length === 1 && named.seeks[0] === MARKER_MS, JSON.stringify(named.seeks));
 check('the log says which path fired',
-  named.lines.some((l) => l.includes('via push')), JSON.stringify(named.lines));
+  named.lines.some((line) => line.includes('via push')), JSON.stringify(named.lines));
 
 const repeated = await runPush([RK_PLANNED, RK_PLANNED, RK_PLANNED, RK_PLANNED]);
 check('the topic republishing the SAME ratingKey does not re-read Plex four times',
@@ -425,7 +425,7 @@ async function measureOvershoot(
   });
 
   // The item plays in real time from `SECTION_START_MS` at t=0, offset by the phase.
-  const trueAt = (t: number): number => SECTION_START_MS + t + phaseMs;
+  const trueAt = (elapsedMs: number): number => SECTION_START_MS + elapsedMs + phaseMs;
   // The mark is crossed when trueAt(t) === SECTION_END_MS.
   const crossesAtMs = SECTION_END_MS - SECTION_START_MS - phaseMs;
 
@@ -467,7 +467,7 @@ async function sweepOvershoot(
     assert.notEqual(overshoot, null, `no skipNext went out for a phase of ${phase}ms`);
     results.push(overshoot!);
   }
-  const total = results.reduce((a, b) => a + b, 0);
+  const total = results.reduce((left, right) => left + right, 0);
   return {
     meanMs: Math.round(total / results.length),
     worstMs: Math.max(...results),

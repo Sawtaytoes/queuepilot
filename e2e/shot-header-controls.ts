@@ -68,7 +68,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: WIDE });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));
 
   const shot = async (slug: string, selector: string) => {

@@ -38,9 +38,9 @@ const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 
 let failed = 0;
-const check = (name: string, ok: boolean, detail: string) => {
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
-  if (!ok) failed += 1;
+const check = (name: string, isOk: boolean, detail: string) => {
+  console.log(`  ${isOk ? 'ok  ' : 'FAIL'} ${name}${isOk ? '' : ` — ${detail}`}`);
+  if (!isOk) failed += 1;
 };
 
 await page.goto(`${BASE}/q/${QUEUE}`, { waitUntil: 'domcontentloaded' });
@@ -81,8 +81,8 @@ await page.mouse.down();
 // A slow, deliberate drag down and to the right — what a person does, and the motion that
 // makes the loop worst because it crosses rows.
 const seen: number[] = [];
-for (let i = 1; i <= 50; i += 1) {
-  await page.mouse.move(start[0]! + i * 5, start[1]! + i * 4);
+for (let attempt = 1; attempt <= 50; attempt += 1) {
+  await page.mouse.move(start[0]! + attempt * 5, start[1]! + attempt * 4);
   await page.waitForTimeout(16);
   seen.push(Number(await page.evaluate(
     `[...document.querySelectorAll('#grid li.tile')].findIndex((x) => x.classList.contains('dragging'))`,
@@ -94,13 +94,13 @@ await page.mouse.up();
 await page.waitForTimeout(500);
 
 // Collapse runs: what matters is the SHAPE of the movement, not how many frames held a value.
-const path = seen.filter((v, i) => i === 0 || v !== seen[i - 1]);
+const path = seen.filter((value, index) => index === 0 || value !== seen[index - 1]);
 let reversals = 0;
-for (let i = 2; i < path.length; i += 1) {
-  const a = path[i - 2]!;
-  const m = path[i - 1]!;
-  const c = path[i]!;
-  if ((m > a && c < m) || (m < a && c > m)) reversals += 1;
+for (let index = 2; index < path.length; index += 1) {
+  const before = path[index - 2]!;
+  const middle = path[index - 1]!;
+  const after = path[index]!;
+  if ((middle > before && after < middle) || (middle < before && after > middle)) reversals += 1;
 }
 
 console.log(`  path: ${path.join(' ')}`);

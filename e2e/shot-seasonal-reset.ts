@@ -37,10 +37,10 @@ const SETS = '/tmp/qp-seasonal-reset.sets.yaml';
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
-for (const p of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(p, { recursive: true, force: true });
+for (const file of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(file, { recursive: true, force: true });
 await fs.rm('/tmp/qp-seasonal-reset.sqlite', { force: true });
 
-let failed = false;
+let hasFailed = false;
 const fake = await startFakeMqtt({ port: MQTT_PORT });
 const srv = spawnServer({
   env: {
@@ -62,7 +62,7 @@ const ready = async (): Promise<void> => {
   for (;;) {
     try { if ((await fetch(`${BASE}/api/sets`)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error('server never came up');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -177,11 +177,11 @@ try {
   }
 
   await browser.close();
-} catch (e) {
+} catch (error) {
   // The `finally` below ends with `process.exit(0)`, which would otherwise swallow a thrown
   // shot whole: the harness prints the panels it managed and returns success.
-  console.log('SHOT FAILED:', e);
-  failed = true;
+  console.log('SHOT FAILED:', error);
+  hasFailed = true;
 } finally {
   // `process.exit` and not a fall-through: the fake broker's client keeps a live socket and
   // aedes keeps its own handles, so the event loop stays open and the script hangs after the
@@ -190,5 +190,5 @@ try {
   try { fake.client.end(true); } catch { /* already down */ }
   try { fake.server.close(); } catch { /* already down */ }
   try { fake.aedes.close(); } catch { /* already down */ }
-  process.exit(failed ? 1 : 0);
+  process.exit(hasFailed ? 1 : 0);
 }

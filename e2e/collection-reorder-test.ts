@@ -38,9 +38,9 @@ const BASE = `http://localhost:${PORT}`;
 const TMP = `/tmp/qp-reorder-${process.pid}`;
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const waitReady = async (url: string, ms = 30000) => {
@@ -48,15 +48,15 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
 /** The member titles in the order the open panel lists them, edition included. */
 const listedOrder = async (page: Page): Promise<string[]> => (
   page.$$eval('#memberlist li', (nodes) => nodes
-    .map((n) => (n.textContent || '').replace(/\s+/g, ' ').trim())
-    .filter((t) => /^\d+\./.test(t)))
+    .map((node) => (node.textContent || '').replace(/\s+/g, ' ').trim())
+    .filter((text) => /^\d+\./.test(text)))
 );
 
 /** The skipped member's ratingKey in the fixture — the "Extended Cut" of the duplicate film. */
@@ -99,9 +99,9 @@ try {
   const warm = await (await fetch(`${BASE}/api/collection/9600/children`)).json();
   ok(
     'cache warms in the collection\'s declared order',
-    (warm.children || []).map((c: { ratingKey: string }) => c.ratingKey).join(',')
-      === MEMBERS.map((m) => m.ratingKey).join(','),
-    JSON.stringify((warm.children || []).map((c: { ratingKey: string }) => c.ratingKey)),
+    (warm.children || []).map((child: { ratingKey: string }) => child.ratingKey).join(',')
+      === MEMBERS.map((member) => member.ratingKey).join(','),
+    JSON.stringify((warm.children || []).map((child: { ratingKey: string }) => child.ratingKey)),
   );
 
   // The owner re-orders the collection in Plex. Nothing tells the app.
@@ -110,15 +110,15 @@ try {
   const stale = await (await fetch(`${BASE}/api/collection/9600/children`)).json();
   ok(
     'a re-order is INVISIBLE to the cached read — the gap this fix exists for',
-    (stale.children || []).map((c: { ratingKey: string }) => c.ratingKey).join(',')
-      === MEMBERS.map((m) => m.ratingKey).join(','),
+    (stale.children || []).map((child: { ratingKey: string }) => child.ratingKey).join(',')
+      === MEMBERS.map((member) => member.ratingKey).join(','),
     'the cached read changed on its own, so this suite is no longer testing what it says',
   );
 
   // --- claims 1-4: the panel ---------------------------------------------------------- //
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1180, height: 900 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));
 
   await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -189,12 +189,12 @@ try {
   // Claim 4 — the skip rode along. It addresses ratingKey 9602 (the Extended Cut), which the
   // re-order moved from row 2 to row 3.
   const rowStates = await page.$$eval('#memberlist li', (nodes) => nodes
-    .map((n) => ({
-      text: (n.textContent || '').replace(/\s+/g, ' ').trim(),
-      isTicked: (n.querySelector('input[type=checkbox]') as HTMLInputElement | null)?.checked ?? null,
+    .map((node) => ({
+      text: (node.textContent || '').replace(/\s+/g, ' ').trim(),
+      isTicked: (node.querySelector('input[type=checkbox]') as HTMLInputElement | null)?.checked ?? null,
     }))
-    .filter((r) => /^\d+\./.test(r.text)));
-  const extended = rowStates.find((r) => r.text.includes('Extended Cut'));
+    .filter((row) => /^\d+\./.test(row.text)));
+  const extended = rowStates.find((rowState) => rowState.text.includes('Extended Cut'));
   ok(
     'the skip follows its member across the re-order',
     extended?.isTicked === false,
@@ -202,8 +202,8 @@ try {
   );
   ok(
     'nothing else was skipped by the re-order',
-    rowStates.filter((r) => r.isTicked === false).length === 1,
-    JSON.stringify(rowStates.map((r) => [r.text.slice(0, 28), r.isTicked])),
+    rowStates.filter((rowState) => rowState.isTicked === false).length === 1,
+    JSON.stringify(rowStates.map((rowState) => [rowState.text.slice(0, 28), rowState.isTicked])),
   );
 
   await browser.close();

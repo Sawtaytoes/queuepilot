@@ -49,14 +49,14 @@ const child = spawnServer({
 });
 
 try {
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      const r = await fetch(`http://localhost:${PORT}/api/queues`);
-      if (r.ok) break;
+      const response = await fetch(`http://localhost:${PORT}/api/queues`);
+      if (response.ok) break;
     } catch {
       /* not up yet */
     }
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
 
   const browser = await chromium.launch();

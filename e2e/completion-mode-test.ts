@@ -71,9 +71,9 @@ const session = await import('../server/src/session.js');
 const exhaustion = await import('../server/src/exhaustion.js');
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 /** Every fixture set here is `source: queue`, so the cfg union is narrowed once. */

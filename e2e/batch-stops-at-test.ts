@@ -68,7 +68,7 @@ const fakeClient = {
     // Fresh objects per call, exactly like the real showEpisodes — resolve tags `member_key` in
     // place, and a shared array would leak that tag between cases.
     // The capture group of the match that guards the read.
-    if (leaves) return { Metadata: (LEAVES[leaves[1]!] || []).map((e) => ({ ...e })) };
+    if (leaves) return { Metadata: (LEAVES[leaves[1]!] || []).map((leaf) => ({ ...leaf })) };
     const meta = /^\/library\/metadata\/(\d+)$/.exec(path);
     if (meta) {
       const rk = meta[1]!;
@@ -102,7 +102,7 @@ const titles = async (
   );
   // Every descriptor passed here names a member the fake client resolves; `resolveMember`
   // returns null only for one it cannot find.
-  return res!.items.map((e) => e.title);
+  return res!.items.map((item) => item.title);
 };
 
 let failed = 0;
@@ -213,7 +213,7 @@ await check('rotation path (no default batch) stays uncapped under member',
 await check('a 3-batch under season still stops at the season boundary',
   titles(SHOW, { batch_stops_at: 'season' }, 3), ['Alpha S1E1', 'Alpha S1E2']);
 await check('QUEUE_SERIES_LENGTH still clamps an absurd override',
-  titles(entry('show-big-batch'), {}, 1).then((t) => t.length), ALPHA.length);
+  titles(entry('show-big-batch'), {}, 1).then((titleList) => titleList.length), ALPHA.length);
 
 console.log(failed ? `batch-stops-at FAILED (${failed})` : 'batch-stops-at OK');
 process.exit(failed ? 1 : 0);

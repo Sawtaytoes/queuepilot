@@ -30,7 +30,7 @@ import { chromium } from './playwright.js';
 import { killServer, REPO_ROOT } from './stubs/server-process.mjs';
 
 const PORT = Number(process.env.SHOT_PORT ?? 18795);
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 const OUT = path.join(REPO_ROOT, '__screenshots__');
 const photo = (name: string) => path.join(REPO_ROOT, 'e2e', 'fixtures', 'photos', `${name}.jpg`);
@@ -72,7 +72,7 @@ try {
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(OUT, `personphotos-${TAG}-overview.png`) });
   const photoFaces = await page.$$eval('[data-person-face] img', (nodes) =>
-    nodes.filter((n) => (n as HTMLImageElement).naturalWidth > 0).length,
+    nodes.filter((node) => (node as HTMLImageElement).naturalWidth > 0).length,
   );
   console.log(`${photoFaces} faces on the Overview drew a photo`);
 

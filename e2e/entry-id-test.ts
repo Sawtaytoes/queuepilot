@@ -39,9 +39,9 @@ process.env.SETS_PATH = SETS_PATH;
 process.env.STORE_PATH = nodePath.join(SCRATCH, 'queuepilot.sqlite');
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra = ''): void => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 const same = (name: string, got: unknown, want: unknown): void => {
   ok(name, Object.is(got, want), `got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
@@ -75,7 +75,7 @@ import type { ResolveCfg } from '../server/src/engine/resolve.js';
 import type { PlexClient } from '../server/src/types.js';
 
 const keysOf = async (set: string): Promise<string[]> =>
-  (await queues.listSet(set)).map((e) => e.key);
+  (await queues.listSet(set)).map((entry) => entry.key);
 
 // --- 1. an id-less entry keys exactly as it always did -------------------------- //
 
@@ -182,16 +182,16 @@ ok('an add carrying a section mints an id without the flag', sectioned.key.start
 same('…and the four lines are four keys', new Set(await keysOf('demo')).size, 4);
 
 // Minting is CHECKED against the file, never trusted to entropy. Ten more copies, all unique.
-for (let i = 0; i < 10; i += 1) {
+for (let attempt = 0; attempt < 10; attempt += 1) {
   await queues.addItem('demo', { ...FILM }, 'bottom', { allowDuplicate: true });
 }
 const many = await keysOf('demo');
 same('ten more duplicate adds are ten more distinct keys', new Set(many).size, many.length);
-ok('…and every minted id is distinct', new Set(many.filter((k) => k.startsWith('id:'))).size === 12,
-  String(many.filter((k) => k.startsWith('id:')).length));
+ok('…and every minted id is distinct', new Set(many.filter((key) => key.startsWith('id:'))).size === 12,
+  String(many.filter((key) => key.startsWith('id:')).length));
 
 // `mintEntryId` refuses an id the caller says is taken, and grows rather than spinning.
-const crowded = new Set(Array.from({ length: 200 }, (_, i) => `taken${i}`));
+const crowded = new Set(Array.from({ length: 200 }, (_, index) => `taken${index}`));
 const fresh = entryFormat.mintEntryId(crowded);
 ok('mintEntryId avoids every id it is handed', !crowded.has(fresh), fresh);
 
@@ -207,12 +207,12 @@ const FIRST_LINE = 'rk:1001';
 const SECOND_LINE = 'id:8f3a2c';
 
 same('both lines are visible', (await keysOf('demo')).join(','), `${FIRST_LINE},${SECOND_LINE},rk:1002`);
-same('…and the resolver sees both too', resolve.loadEntries('demo').map((d) => d.key).join(','),
+same('…and the resolver sees both too', resolve.loadEntries('demo').map((loadEntry) => loadEntry.key).join(','),
   `${FIRST_LINE},${SECOND_LINE},rk:1002`);
 
 /** One line's mapping, as it is on disk right now. */
 const lineAt = async (key: string): Promise<Record<string, unknown>> => {
-  const row = (await queues.listSet('demo')).find((e) => e.key === key);
+  const row = (await queues.listSet('demo')).find((entry) => entry.key === key);
   return (row?.value ?? {}) as Record<string, unknown>;
 };
 
@@ -331,11 +331,11 @@ const played = resolve.loadEntries('handedit');
 const playedAgain = resolve.loadEntries('handedit');
 console.log = realLog;
 
-same('the duplicate entry does not play', played.map((d) => d.key).join(','), 'rk:2001,rk:2002,rk:2003');
+same('the duplicate entry does not play', played.map((descriptor) => descriptor.key).join(','), 'rk:2001,rk:2002,rk:2003');
 same('…and every other entry in the queue still does', played.length, 3);
 // `describe()` parses the trailing `(YEAR)` off a title, which is why this is the bare name.
 same('…the FIRST line is the one that survives', played[0]?.title, 'A Repeated Film');
-same('a repeated read answers the same', playedAgain.map((d) => d.key).join(','), 'rk:2001,rk:2002,rk:2003');
+same('a repeated read answers the same', playedAgain.map((descriptor) => descriptor.key).join(','), 'rk:2001,rk:2002,rk:2003');
 
 const complaints = logged.filter((line) => line.includes('repeats the key'));
 same('the refusal is logged ONCE per distinct entry per process', complaints.length, 1);
@@ -350,7 +350,7 @@ writeFileSync(QUEUES_PATH, `handedit:
 - {id: 4b7e1a, ratingKey: '2001', title: 'A Repeated Film (2018)', start: {position_ms: 5400000}}
 - {ratingKey: '2003', title: 'A Third Film (2022)'}
 `);
-same('an id repairs the file', resolve.loadEntries('handedit').map((d) => d.key).join(','),
+same('an id repairs the file', resolve.loadEntries('handedit').map((loadEntry) => loadEntry.key).join(','),
   'rk:2001,rk:2002,id:4b7e1a,rk:2003');
 
 // A legacy scalar is still refused the same way, and the two refusals do not shadow each other.
@@ -359,7 +359,7 @@ writeFileSync(QUEUES_PATH, `handedit:
 - {ratingKey: '2002', title: 'A Different Film (2020)'}
 `);
 same('a legacy scalar is still refused by entry',
-  resolve.loadEntries('handedit').map((d) => d.key).join(','), 'rk:2002');
+  resolve.loadEntries('handedit').map((loadEntry) => loadEntry.key).join(','), 'rk:2002');
 
 // --- 8. the duplicate guard keeps its refusal and gains a door ------------------ //
 //

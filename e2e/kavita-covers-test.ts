@@ -45,7 +45,7 @@ const HIST = '/tmp/history-kvcovers.json';
 const PROVIDERS = '/tmp/providers-kvcovers.yaml';
 const SECRETS = '/tmp/providers-secrets-kvcovers.yaml';
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 // --------------------------------------------------------------------------- //
 // The stub Kavita — only the endpoints these routes reach, shaped like the live ones
@@ -103,11 +103,11 @@ const kavita = createServer((req: IncomingMessage, res: ServerResponse) => {
   };
   if (url.pathname === '/api/Plugin/authenticate') return json({ token: 'stub-jwt', username: 'bob' });
   if (url.pathname === '/api/Search/search') {
-    const q = (url.searchParams.get('queryString') || '').toLowerCase();
+    const query = (url.searchParams.get('queryString') || '').toLowerCase();
     return json({
       series: Object.values(SERIES)
-        .filter((s) => s.name.toLowerCase().includes(q))
-        .map((s) => ({ seriesId: s.id, name: s.name, libraryId: s.libraryId, libraryName: 'Webtoons', format: s.format })),
+        .filter((series) => series.name.toLowerCase().includes(query))
+        .map((series) => ({ seriesId: series.id, name: series.name, libraryId: series.libraryId, libraryName: 'Webtoons', format: series.format })),
     });
   }
   if (url.pathname === '/api/Series/series-detail') {
@@ -121,17 +121,17 @@ const kavita = createServer((req: IncomingMessage, res: ServerResponse) => {
     res.setHeader('Content-Type', 'image/png');
     return res.end(PNG);
   }
-  const m = url.pathname.match(/^\/api\/Series\/(\d+)$/);
-  if (m) {
+  const match = url.pathname.match(/^\/api\/Series\/(\d+)$/);
+  if (match) {
     // The capture group is inside the `if (m)`, so `m[1]` is present here.
-    const s = SERIES[m[1]!];
-    if (!s) { res.statusCode = 404; return res.end(); }
-    return json(s);
+    const series = SERIES[match[1]!];
+    if (!series) { res.statusCode = 404; return res.end(); }
+    return json(series);
   }
   res.statusCode = 404;
   res.end();
 });
-await new Promise<void>((r) => { kavita.listen(0, '127.0.0.1', () => r()); });
+await new Promise<void>((resolve) => { kavita.listen(0, '127.0.0.1', () => resolve()); });
 // `address()` is `string | AddressInfo | null`; a TCP listen always yields the object form,
 // and the throw is the honest read of "the stub never bound" rather than a cast.
 const kavitaAddress = kavita.address();
@@ -173,7 +173,7 @@ await fs.writeFile(SETS, [
   '        libraries: ["2", "5"]',
   '',
 ].join('\n'), 'utf8');
-for (const f of [HIST, PROVIDERS, SECRETS]) await fs.rm(f, { force: true });
+for (const filePath of [HIST, PROVIDERS, SECRETS]) await fs.rm(filePath, { force: true });
 
 const env = {
   ...process.env,
@@ -193,27 +193,27 @@ const env = {
   NODE_TLS_REJECT_UNAUTHORIZED: '0',
 };
 
-const api = (p: string, opts?: RequestInit): Promise<Response> =>
-  fetch(`http://localhost:${PORT}/api${p}`, opts);
-const json = (p: string, opts?: RequestInit): Promise<JsonBody> =>
-  api(p, opts).then((r) => r.json() as Promise<JsonBody>);
+const api = (apiPath: string, opts?: RequestInit): Promise<Response> =>
+  fetch(`http://localhost:${PORT}/api${apiPath}`, opts);
+const json = (apiPath: string, opts?: RequestInit): Promise<JsonBody> =>
+  api(apiPath, opts).then((response) => response.json() as Promise<JsonBody>);
 
 // The Express entry point is gone and server/src is TypeScript — `spawnServer` is what knows
 // to run server/src/index.ts through tsx, and (with `killServer` below) what keeps the node
 // grandchild behind the tsx wrapper from outliving this run and squatting the port.
 const child = spawnServer({ env, stdio: 'ignore' });
-for (let i = 0; i < 50; i++) {
-  try { await json('/history'); break; } catch { await new Promise((r) => setTimeout(r, 200)); }
+for (let attempt = 0; attempt < 50; attempt++) {
+  try { await json('/history'); break; } catch { await new Promise((resolve) => setTimeout(resolve, 200)); }
 }
 
 try {
   // --- search ---------------------------------------------------------------- //
   const { results } = await json('/search?set=manga&q=dungeon');
   ok(`search finds both Dungeon series (${results.length})`, results.length === 2);
-  const porter = results.find((r: JsonBody) => r.title === 'Dungeon Porter');
+  const porter = results.find((result: JsonBody) => result.title === 'Dungeon Porter');
   ok(
     `every result carries a cover URL (${porter?.cover})`,
-    results.every((r: JsonBody) => r.cover === `/api/providers/kavita/cover/${r.ratingKey}`),
+    results.every((result: JsonBody) => result.cover === `/api/providers/kavita/cover/${result.ratingKey}`),
   );
   // The URL is worth nothing if it does not serve bytes — that is the whole bug.
   // `porter.cover` is a whole path, as the browser would use it — not an /api suffix.
@@ -227,7 +227,7 @@ try {
   const items = (await json('/queues')).sets.manga.items;
   ok(`the reading queue resolves its 3 entries (${items.length})`, items.length === 3);
 
-  const dp = items.find((i: JsonBody) => i.key.includes('599') || i.title === 'Dungeon Porter');
+  const dp = items.find((item: JsonBody) => item.key.includes('599') || item.title === 'Dungeon Porter');
   ok('a reading entry RESOLVES (it used to be Plex-resolved, i.e. never)', dp?.resolved === true);
   ok(`its title comes from Kavita (${dp?.title})`, dp?.title === 'Dungeon Porter');
   ok(`its poster is the provider cover (${dp?.cover})`, dp?.cover === '/api/providers/kavita/cover/599');
@@ -241,12 +241,12 @@ try {
   ok(`a reading tile links through this server (${dp?.webUrl})`,
     dp?.webUrl === '/api/providers/kavita/open/599');
 
-  const fin = items.find((i: JsonBody) => i.title === 'Finished Series');
+  const fin = items.find((item: JsonBody) => item.title === 'Finished Series');
   ok('a fully-read series resolves with nothing next', fin?.resolved === true && fin?.nextEp === null);
 
-  const gone = items.find((i: JsonBody) => i.title === 'Deleted From Kavita');
+  const gone = items.find((item: JsonBody) => item.title === 'Deleted From Kavita');
   ok('a vanished series degrades to its stored title', gone?.resolved === false && gone?.ratingKey === null);
-  ok('…and does not take the other entries with it', items.filter((i: JsonBody) => i.resolved).length === 2);
+  ok('…and does not take the other entries with it', items.filter((item: JsonBody) => item.resolved).length === 2);
 
   // --- the channel's member grid --------------------------------------------- //
   const { members } = await json('/sets/reading_channel/members');
@@ -263,6 +263,6 @@ try {
   ok('no Kavita URL escapes into a response', !bodies.includes(KAVITA_URL));
   ok('the covers were actually fetched FROM Kavita', KAVITA_HITS.includes('/api/Image/series-cover'));
 } finally {
-  await new Promise<void>((r) => { child.once('exit', () => r()); killServer(child); });
+  await new Promise<void>((resolve) => { child.once('exit', () => resolve()); killServer(child); });
   kavita.close();
 }

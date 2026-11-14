@@ -25,14 +25,14 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-dedupe.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-dedupe.yaml');
-for (const p of ['/tmp/queues-dedupe.yaml.lock', '/tmp/sets-dedupe.yaml.lock', '/tmp/.history-dedupe.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-dedupe.yaml.lock', '/tmp/sets-dedupe.yaml.lock', '/tmp/.history-dedupe.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
@@ -62,7 +62,7 @@ try {
   await waitReady(`${BASE}/api/queues`);
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   // Baseline: one load, let it settle.
   await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
@@ -90,7 +90,7 @@ try {
   await browser.close();
   console.log('done');
   await shutdown(Number(process.exitCode ?? 0));
-} catch (e) {
-  console.error('verify-preview-dedupe FAILED:', e);
+} catch (error) {
+  console.error('verify-preview-dedupe FAILED:', error);
   await shutdown(1);
 }

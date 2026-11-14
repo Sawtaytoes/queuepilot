@@ -46,7 +46,7 @@ for (const path of ['/', '/admin', '/overview', '/people', '/what-to-watch-play'
 // --- 2. The CLIENT half ------------------------------------------------------------- //
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
-page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 // Rules shelves load their generated membership only when expanded. Keep this route test
 // offline and deterministic while pinning the index shape: one show is enough to prove the
 // expanded region is a poster shelf rather than the former summary card.
@@ -68,7 +68,7 @@ await page.route('**/api/generic/*/preview*', (route) =>
 /** The chrome lands a render AFTER the location commits — always wait for the heading. */
 const heading = (want: string) =>
   page.waitForFunction(
-    (w) => document.querySelector('#heading')?.textContent?.trim() === w,
+    (wanted) => document.querySelector('#heading')?.textContent?.trim() === wanted,
     want,
     { timeout: 30000 },
   ).then(() => true, () => false);
@@ -195,10 +195,10 @@ ok(
   ok('/what-to-watch-play/surprise renders the narrowing step, not the bare form', isStep);
 
   await page.reload({ waitUntil: 'domcontentloaded' });
-  const survives = await page
+  const hasSurvived = await page
     .waitForSelector('#tonight-surprise', { timeout: 30000 })
     .then(() => true, () => false);
-  ok('…and survives a reload, so the SPA fallback answers a nested path too', survives);
+  ok('…and survives a reload, so the SPA fallback answers a nested path too', hasSurvived);
 }
 
 // `/tonight` was the old user-facing name. It remains a live address, but the app rewrites
@@ -243,12 +243,12 @@ ok(
   await page.goto(`${BASE}/board-game-collection`, { waitUntil: 'domcontentloaded' });
   ok('the legacy board-game address still renders the shelf', await heading('Board Games'));
 
-  const redirected = await page
+  const isRedirected = await page
     .waitForFunction(() => location.pathname === '/collection/board-games', undefined, { timeout: 30000 })
     .then(() => true, () => false);
   ok(
     `…and the URL is rewritten to /collection/board-games (got ${await page.evaluate(() => location.pathname)})`,
-    redirected,
+    isRedirected,
   );
 
   // REPLACE, not push: a redirect that pushes makes Back land on the old path, which
@@ -284,7 +284,7 @@ ok('reloading on /q/bob still renders the queue', await heading('Bob — Movies'
   // READ BEFORE THE CLICK, since 2026-08-27: each view mounts only on its own route now, so
   // Admin's markup is gone the moment this link is followed. Reading it here is also the
   // honest order — the claim is about the control being clicked.
-  const [tag, href] = await page.$eval('#goqueues', (e) => [e.tagName, e.getAttribute('href')]);
+  const [tag, href] = await page.$eval('#goqueues', (element) => [element.tagName, element.getAttribute('href')]);
   ok(`…and is still <a href> (${tag} → ${href})`, tag === 'A' && href === '/picks');
 
   await page.click('#goqueues');
@@ -336,7 +336,7 @@ ok('browser Back returns to Overview', await heading('Overview'));
       { timeout: 30000 },
     ).then(
       () => ok(`${kind} Back targets the Queues index`, true),
-      async () => ok(`${kind} Back targets the Queues index (got ${await page.$eval('#back', (e) => e.getAttribute('href'))})`, false),
+      async () => ok(`${kind} Back targets the Queues index (got ${await page.$eval('#back', (element) => element.getAttribute('href'))})`, false),
     );
   }
 }

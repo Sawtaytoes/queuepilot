@@ -203,8 +203,8 @@ try {
     if (open) {
       try {
         await open();
-      } catch (e) {
-        console.log(`  (${route}: could not open — ${(e as Error).message.split('\n')[0]})`);
+      } catch (error) {
+        console.log(`  (${route}: could not open — ${(error as Error).message.split('\n')[0]})`);
       }
     }
 
@@ -220,7 +220,7 @@ try {
     });
 
     const report = (await page.evaluate(AUDIT)) as Report;
-    const isProbeFlagged = report.findings.some((f) => f.classes.includes('qp-audit-probe'));
+    const isProbeFlagged = report.findings.some((finding) => finding.classes.includes('qp-audit-probe'));
 
     await page.evaluate(() => {
       document.querySelector('.qp-audit-probe')?.remove();
@@ -228,11 +228,11 @@ try {
 
     if (!isProbeFlagged) throw new Error(`self-test failed on ${route} — the auditor is broken`);
 
-    const real = report.findings.filter((f) => !f.classes.includes('qp-audit-probe'));
+    const real = report.findings.filter((finding) => !finding.classes.includes('qp-audit-probe'));
 
-    for (const f of real) {
-      const key = `${f.cls}|${f.tag}|${f.id ?? ''}|${f.classes}`;
-      const row = seen.get(key) ?? { ...f, where: new Set<string>() };
+    for (const finding of real) {
+      const key = `${finding.cls}|${finding.tag}|${finding.id ?? ''}|${finding.classes}`;
+      const row = seen.get(key) ?? { ...finding, where: new Set<string>() };
       row.where.add(route);
       seen.set(key, row);
     }
@@ -269,7 +269,7 @@ try {
     const registry = (await (await fetch('/api/sets')).json()) as {
       sets?: { id: string; source: string }[];
     };
-    const queue = (registry.sets ?? []).find((s) => s.source === 'queue');
+    const queue = (registry.sets ?? []).find((set) => set.source === 'queue');
     return queue ? `/q/${queue.id}` : null;
   });
 
@@ -286,7 +286,7 @@ try {
   killServer(srv);
 }
 
-const rows = Array.from(seen.values()).sort((a, b) => a.cls.localeCompare(b.cls));
+const rows = Array.from(seen.values()).sort((left, right) => left.cls.localeCompare(right.cls));
 
 console.log(`\n=== ${rows.length} class/element pairs match no rule for that class ===`);
 console.log(

@@ -39,9 +39,9 @@ import {
 stubSessionDeps();
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // --------------------------------------------------------------------------- //
@@ -131,16 +131,16 @@ const child = spawnServer({
 
 try {
   let items: Record<string, any>[] = [];
-  for (let i = 0; i < 50; i++) {
+  for (let attempt = 0; attempt < 50; attempt++) {
     try {
-      const body = await fetch(`http://localhost:${PORT}/api/queues`).then((r) => r.json()) as any;
+      const body = await fetch(`http://localhost:${PORT}/api/queues`).then((response) => response.json()) as any;
       items = body.sets.movies.items;
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
-  const byKey = (rk: string) => items.find((i) => String(i.ratingKey) === rk) || {};
+  const byKey = (rk: string) => items.find((item) => String(item.ratingKey) === rk) || {};
   ok(`the queue resolves its three entries (${items.length})`, items.length === 3);
 
   const watched = byKey(WATCHED_RK);
@@ -160,9 +160,9 @@ try {
     resuming.viewOffset === 1060898, JSON.stringify(resuming));
 
   ok('the live view state came from the batched metadata read',
-    plex.hits.some((p: string) => /^\/library\/metadata\/[\d,]+$/.test(p)), plex.hits.join(' '));
+    plex.hits.some((hit: string) => /^\/library\/metadata\/[\d,]+$/.test(hit)), plex.hits.join(' '));
 
-  const body = await fetch(`http://localhost:${PORT}/api/queues?fresh=1`).then((r) => r.json()) as any;
+  const body = await fetch(`http://localhost:${PORT}/api/queues?fresh=1`).then((response) => response.json()) as any;
   const kidItem = body.sets.kids.items[0] || {};
   ok('a kid queue does not inherit the owner\'s Completed state',
     kidItem.isFinished === false && kidItem.done === false, JSON.stringify(kidItem));

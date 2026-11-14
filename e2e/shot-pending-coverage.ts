@@ -32,7 +32,7 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -40,8 +40,8 @@ await fs.mkdir(OUT, { recursive: true });
 await fs.writeFile('/tmp/queues-pcov.yaml', QUEUES_YAML);
 await fs.writeFile('/tmp/sets-pcov.yaml', SETS_YAML);
 await fs.writeFile('/tmp/pending-pcov.yaml', PENDING_YAML);
-for (const p of ['/tmp/queues-pcov.yaml.lock', '/tmp/sets-pcov.yaml.lock', '/tmp/cache-pcov.sqlite']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const file of ['/tmp/queues-pcov.yaml.lock', '/tmp/sets-pcov.yaml.lock', '/tmp/cache-pcov.sqlite']) {
+  await fs.rm(file, { recursive: true, force: true });
 }
 
 const plex = startStubPlex(PLEX_PORT);
@@ -69,7 +69,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1300, height: 760 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   // No poster fetches: the stub serves no artwork and a pending thumb request would just
   // stall the shot. The tiles render their placeholder, identically in both stages.
   await page.route('**/api/thumb/**', (route) => route.fulfill({ status: 404, body: '' }));
@@ -84,7 +84,7 @@ try {
   await page.waitForTimeout(800);
 
   const titles = await page.$$eval('#pendinggrid li .ptitle', (els) =>
-    els.map((e) => (e.textContent || '').trim()));
+    els.map((el) => (el.textContent || '').trim()));
   console.log(`${STAGE}: ${titles.length} tiles`, titles);
 
   await page.screenshot({ path: `${OUT}/pending-coverage-${STAGE}.png` });

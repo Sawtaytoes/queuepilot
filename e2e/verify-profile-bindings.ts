@@ -40,15 +40,15 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-2b.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-2b.yaml');
-for (const p of ['/tmp/queues-2b.yaml.lock', '/tmp/sets-2b.yaml.lock', '/tmp/.history-2b.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-2b.yaml.lock', '/tmp/sets-2b.yaml.lock', '/tmp/.history-2b.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
@@ -78,7 +78,7 @@ try {
   await waitReady(`${BASE}/api/queues`);
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1200 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}`, fullPage: true }); console.log('wrote', name); };
   const cards = () => page.$$eval('#dyn-bindings .binding', (els) => els.length);
 
@@ -93,7 +93,7 @@ try {
   ok('behavior select replaces mode (progress+rewatch)', behaviorOpts.join(',') === 'progress,rewatch');
   ok('no legacy #dyn-mode / #dyn-ratings left', !(await page.$('#dyn-mode')) && !(await page.$('#dyn-ratings')));
   ok('new channel opens with exactly one binding card', (await cards()) === 1);
-  ok('single binding hides its Remove button', await page.$eval('#dyn-bindings .binding .b-remove', (b) => Boolean(b.hidden)));
+  ok('single binding hides its Remove button', await page.$eval('#dyn-bindings .binding .b-remove', (element) => Boolean(element.hidden)));
   ok('new channel does not offer Add profile', !(await page.$('#dyn-addprofile')));
   await shot('pr2b-dyn-new.png');
 
@@ -108,8 +108,8 @@ try {
   // "closed" = the element is detached, not `.open === false`.
   await page.waitForSelector('#dynmodal', { state: 'detached', timeout: 15000 });
   const created = await page.evaluate(async () => {
-    const r: SetsResponse = await fetch('/api/sets').then((x) => x.json());
-    return r.sets.find((set) => set.label === 'Verify Fn Channel') ?? null;
+    const registry: SetsResponse = await fetch('/api/sets').then((response) => response.json());
+    return registry.sets.find((set) => set.label === 'Verify Fn Channel') ?? null;
   });
   ok('created channel stored', Boolean(created));
   ok('created channel has behavior', created?.behavior === 'progress');
@@ -123,10 +123,10 @@ try {
   await page.waitForSelector('#dynmodal[data-open]');
   await page.waitForTimeout(500);
   ok('legacy set edits as one binding card', (await cards()) === 1);
-  const legUser = await page.$eval<string, HTMLInputElement>('#dyn-bindings .binding .b-plexuser', (i) => i.value);
+  const legUser = await page.$eval<string, HTMLInputElement>('#dyn-bindings .binding .b-plexuser', (element) => element.value);
   ok('legacy binding prefilled (Younger Kids)', legUser === 'Younger Kids');
   const legRatings = await page.$$eval<string[], HTMLInputElement>('#dyn-bindings .binding .b-ratings input',
-    (is) => is.filter((i) => i.checked).map((i) => i.value));
+    (is) => is.filter((input) => input.checked).map((input) => input.value));
   ok('legacy binding ratings prefilled (G, no PG)', legRatings.includes('G') && !legRatings.includes('PG'));
   await shot('pr2b-dyn-edit-legacy.png');
 
@@ -150,10 +150,10 @@ try {
           allowed_ratings: ['PG', 'TV-PG'], movie_ratings: ['PG', 'TV-PG'], watch_count_accounts: [22222222] },
       ],
     }),
-  }).then((r) => r.json()));
+  }).then((response) => response.json()));
   const newId = await page.evaluate(async () => {
-    const r: SetsResponse = await fetch('/api/sets').then((x) => x.json());
-    return r.sets.find((set) => set.label === 'Verify Rewatch')?.id;
+    const registry: SetsResponse = await fetch('/api/sets').then((response) => response.json());
+    return registry.sets.find((set) => set.label === 'Verify Rewatch')?.id;
   });
   await page.goto(`${BASE}/channels/${newId}`, { waitUntil: 'domcontentloaded' });
   await page.reload({ waitUntil: 'domcontentloaded' }); // REG was loaded before the POST — refetch it
@@ -163,12 +163,12 @@ try {
   await page.waitForSelector('#dynmodal[data-open]');
   await page.waitForTimeout(2500); // let every card's scopeBindingRatings settle
   ok('two-binding channel edits as two cards', (await cards()) === 2);
-  const perCard = await page.$$eval('#dyn-bindings .binding', (els) => els.map((c) => ({
-    user: c.querySelector<HTMLInputElement>('.b-plexuser')?.value ?? '',
-    mr: [...c.querySelectorAll<HTMLInputElement>('.b-mratings input:checked')].map((i) => i.value),
+  const perCard = await page.$$eval('#dyn-bindings .binding', (els) => els.map((el) => ({
+    user: el.querySelector<HTMLInputElement>('.b-plexuser')?.value ?? '',
+    mr: [...el.querySelectorAll<HTMLInputElement>('.b-mratings input:checked')].map((input) => input.value),
   })));
-  const younger = perCard.find((c) => c.user === 'Younger Kids');
-  const older = perCard.find((c) => c.user === 'Older Kids');
+  const younger = perCard.find((card) => card.user === 'Younger Kids');
+  const older = perCard.find((card) => card.user === 'Older Kids');
   ok('Younger card keeps its own movie ratings (G, not PG)',
     younger !== undefined && younger.mr.includes('G') && !younger.mr.includes('PG'));
   ok('Older card keeps its own movie ratings (PG+TV-PG, not blank)',
@@ -178,7 +178,7 @@ try {
   await browser.close();
   console.log('done');
   await shutdown(Number(process.exitCode ?? 0));
-} catch (e) {
-  console.error('verify-profile-bindings FAILED:', e);
+} catch (error) {
+  console.error('verify-profile-bindings FAILED:', error);
   await shutdown(1);
 }

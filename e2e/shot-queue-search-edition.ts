@@ -23,7 +23,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18796;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const SECTION = 1;
@@ -58,7 +58,7 @@ const MOVIES = [
 ];
 
 /** A 1x1 RGB PNG, so a poster is a flat colour rather than the browser's broken-image glyph. */
-function onePixelPng(r: number, g: number, b: number): Buffer {
+function onePixelPng(red: number, green: number, blue: number): Buffer {
   const chunk = (type: string, body: Buffer): Buffer => {
     const head = Buffer.alloc(4);
     head.writeUInt32BE(body.length);
@@ -75,7 +75,7 @@ function onePixelPng(r: number, g: number, b: number): Buffer {
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     chunk('IHDR', ihdr),
-    chunk('IDAT', zlib.deflateSync(Buffer.from([0x00, r, g, b]))),
+    chunk('IDAT', zlib.deflateSync(Buffer.from([0x00, red, green, blue]))),
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
@@ -116,7 +116,7 @@ const plexStub = http.createServer((req, res) => {
   const all = /\/library\/sections\/(\d+)\/all\?(.*)$/.exec(url);
   if (all) {
     const title = decodeURIComponent(new URLSearchParams(all[2]).get('title') || '').toLowerCase();
-    const hits = MOVIES.filter((m) => !title || m.title.toLowerCase().includes(title));
+    const hits = MOVIES.filter((movy) => !title || movy.title.toLowerCase().includes(title));
     return res.end(JSON.stringify({ MediaContainer: { Metadata: hits } }));
   }
 
@@ -128,8 +128,8 @@ const plexStub = http.createServer((req, res) => {
     return res.end(
       JSON.stringify({
         MediaContainer: {
-          Metadata: MOVIES.filter((m) => want.has(m.ratingKey)).map((m) => ({
-            ...m,
+          Metadata: MOVIES.filter((movy) => want.has(movy.ratingKey)).map((movy) => ({
+            ...movy,
             librarySectionID: SECTION,
           })),
         },
@@ -140,7 +140,7 @@ const plexStub = http.createServer((req, res) => {
   res.end(JSON.stringify({ MediaContainer: {} }));
 });
 
-await new Promise<void>((r) => plexStub.listen(0, () => r()));
+await new Promise<void>((resolve) => plexStub.listen(0, () => resolve()));
 
 const addr = plexStub.address();
 
@@ -203,12 +203,12 @@ const browser = await chromium.launch();
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -222,7 +222,7 @@ try {
   await page.waitForTimeout(1200);
 
   const rows = await page.locator('#results li').allInnerTexts();
-  console.log(`rows:\n${rows.map((r) => `  ${r.replace(/\n/g, ' · ')}`).join('\n')}`);
+  console.log(`rows:\n${rows.map((row) => `  ${row.replace(/\n/g, ' · ')}`).join('\n')}`);
 
   const path = `__screenshots__/queue-search-edition-${TAG}.png`;
   await page.screenshot({ path });
@@ -238,7 +238,7 @@ try {
   await page.waitForTimeout(1200);
 
   const homeRows = await page.locator('#gresults li').allInnerTexts();
-  console.log(`home rows:\n${homeRows.map((r) => `  ${r.replace(/\n/g, ' · ')}`).join('\n')}`);
+  console.log(`home rows:\n${homeRows.map((homeRow) => `  ${homeRow.replace(/\n/g, ' · ')}`).join('\n')}`);
 
   const homePath = `__screenshots__/home-search-edition-${TAG}.png`;
   await page.screenshot({ path: homePath });
@@ -258,7 +258,7 @@ try {
   await page.waitForTimeout(1200);
 
   const blockRows = await page.locator('#ch-blockresults li').allInnerTexts();
-  console.log(`blocked rows:\n${blockRows.map((r) => `  ${r.replace(/\n/g, ' · ')}`).join('\n')}`);
+  console.log(`blocked rows:\n${blockRows.map((blockRow) => `  ${blockRow.replace(/\n/g, ' · ')}`).join('\n')}`);
 
   const blockPath = `__screenshots__/blocked-search-edition-${TAG}.png`;
   await page.screenshot({ path: blockPath });

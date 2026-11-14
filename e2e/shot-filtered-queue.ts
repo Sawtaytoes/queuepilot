@@ -83,7 +83,7 @@ const waitFor = async (url: string, timeoutMs = 30000) => {
       return;
     } catch {
       if (Date.now() > deadline) throw new Error(`timed out waiting for ${url}`);
-      await new Promise((r) => { setTimeout(r, 200); });
+      await new Promise((resolve) => { setTimeout(resolve, 200); });
     }
   }
 };

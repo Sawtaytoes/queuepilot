@@ -22,9 +22,9 @@ process.env.ADB_PROFILE_ORDER = JSON.stringify([
 const adb = await import('../server/src/adb.js');
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra: unknown = ''): void => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra: unknown = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 // --- asGroups ---------------------------------------------------------------- //
@@ -81,10 +81,10 @@ ok('sameProfileInOrder empty/null is false', adb.sameProfileInOrder(order, '', '
 ok('sameProfileInOrder both null-ish equal', adb.sameProfileInOrder(order, null, null) === true);
 
 // Async sameProfile uses the env-overridden ADB_PROFILE_ORDER.
-const sameAsync = await adb.sameProfile('sawtaytoes', 'Bob Smith');
-ok('sameProfile (async, env order) resolves owner aliases', sameAsync === true);
-const diffAsync = await adb.sameProfile('Younger Kids', 'Older Kids');
-ok('sameProfile (async) different slots', diffAsync === false);
+const isSameProfile = await adb.sameProfile('sawtaytoes', 'Bob Smith');
+ok('sameProfile (async, env order) resolves owner aliases', isSameProfile === true);
+const isSlotPairSame = await adb.sameProfile('Younger Kids', 'Older Kids');
+ok('sameProfile (async) different slots', isSlotPairSame === false);
 
 const orderLive = await adb.profileOrder();
 ok(
@@ -200,8 +200,8 @@ for (const name of [
 }
 
 // switchTo with ADB_ENABLED=false is a safe no-device call.
-const [okSwitch, detail] = await adb.switchTo('Younger Kids');
-ok('switchTo short-circuits when ADB_ENABLED is off', okSwitch === false, detail);
+const [isSwitched, detail] = await adb.switchTo('Younger Kids');
+ok('switchTo short-circuits when ADB_ENABLED is off', isSwitched === false, detail);
 ok(
   'switchTo detail mentions ADB_ENABLED',
   String(detail).includes('ADB_ENABLED'),

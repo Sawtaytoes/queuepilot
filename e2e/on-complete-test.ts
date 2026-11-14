@@ -57,7 +57,7 @@ const WATCHED = new Set(['d1', 'd2', 'f1']);
 // the watched-state the ONE variable, so a change in what counts as "finished" shows up here.
 // `client.container()` returns the MediaContainer ITSELF, not a `{MediaContainer: …}` wrapper
 // — the shape select.ts reads as `mc.Metadata`.
-let historyServed = false;
+let isHistoryServed = false;
 const client = {
   container: async (pathname: string) => {
     if (pathname.includes('/library/sections/5/all')) {
@@ -68,15 +68,15 @@ const client = {
         ],
       };
     }
-    const m = /metadata\/(\w+)\/allLeaves/.exec(pathname);
-    if (m) {
-      return { Metadata: (EPISODES[m[1]!] || []).map((e) => ({ ...e, type: 'episode', grandparentTitle: m[1] === 'show_done' ? 'Done' : 'Fresh' })) };
+    const match = /metadata\/(\w+)\/allLeaves/.exec(pathname);
+    if (match) {
+      return { Metadata: (EPISODES[match[1]!] || []).map((episode) => ({ ...episode, type: 'episode', grandparentTitle: match[1] === 'show_done' ? 'Done' : 'Fresh' })) };
     }
     if (pathname.startsWith('/status/sessions/history/all')) {
       // `iterHistory` pages until a short page comes back, so the second call must be empty
       // or this loops forever.
-      if (historyServed) return { Metadata: [] };
-      historyServed = true;
+      if (isHistoryServed) return { Metadata: [] };
+      isHistoryServed = true;
       return { Metadata: [...WATCHED].map((rk) => ({ ratingKey: rk })) };
     }
     return { Metadata: [] };
@@ -89,9 +89,9 @@ const binding = {
   allowed_ratings: null, movie_ratings: null, watch_count_accounts: [1],
 };
 
-const resetHistory = () => { historyServed = false; };
+const resetHistory = () => { isHistoryServed = false; };
 const base = { episodic_sections: [5], item_sections: [], blocklist: [], starts: {}, weights: {} };
-const names = (bs: { show: string }[]) => bs.map((b) => b.show).sort();
+const names = (bs: { show: string }[]) => bs.map((bucket) => bucket.show).sort();
 
 console.log('=== the default is DROP (unchanged behaviour) ===');
 resetHistory();
@@ -100,18 +100,18 @@ const dropped = await unwatchedBuckets(client, { ...base }, binding as never);
 // it is why a rotation withers as the kids finish shows — the thing `restart` exists to fix.
 check('a finished show is absent', names(dropped), ['Fresh']);
 check('  and the unfinished one keeps only its unwatched episode',
-  dropped.find((b) => b.show === 'Fresh')?.episodes.map((e) => e.ratingKey), ['f2']);
+  dropped.find((bucket) => bucket.show === 'Fresh')?.episodes.map((episode) => episode.ratingKey), ['f2']);
 
 console.log('=== on_complete: restart brings a finished show back at ep1 ===');
 resetHistory();
 const restarted = await unwatchedBuckets(client, { ...base, on_complete: 'restart' }, binding as never);
 check('the finished show is back', names(restarted), ['Done', 'Fresh']);
 check('  and it restarts at episode 1, whole show',
-  restarted.find((b) => b.show === 'Done')?.episodes.map((e) => e.ratingKey), ['d1', 'd2']);
+  restarted.find((bucket) => bucket.show === 'Done')?.episodes.map((episode) => episode.ratingKey), ['d1', 'd2']);
 // The subtle half: a show that still has unwatched episodes is NOT restarted just because the
 // channel refills. Restart is about being finished, not about the channel's appetite.
 check('  an UNFINISHED show is untouched by restart',
-  restarted.find((b) => b.show === 'Fresh')?.episodes.map((e) => e.ratingKey), ['f2']);
+  restarted.find((bucket) => bucket.show === 'Fresh')?.episodes.map((episode) => episode.ratingKey), ['f2']);
 
 console.log('=== anything that is not "restart" means drop ===');
 for (const value of ['drop', '', 'RESTART_LATER', 'true']) {
@@ -144,7 +144,7 @@ const reviveOne = await unwatchedBuckets(
 );
 check('pool drops, this show is told to restart => back', names(reviveOne), ['Done', 'Fresh']);
 check('  and it restarts at episode 1, whole show',
-  reviveOne.find((b) => b.show === 'Done')?.episodes.map((e) => e.ratingKey), ['d1', 'd2']);
+  reviveOne.find((bucket) => bucket.show === 'Done')?.episodes.map((episode) => episode.ratingKey), ['d1', 'd2']);
 
 // An override names ONE show. Its neighbour is unaffected either way, or this is just a
 // second way of spelling the pool-level setting.

@@ -31,14 +31,14 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-shorts.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-shorts.yaml');
-for (const p of ['/tmp/queues-shorts.yaml.lock', '/tmp/sets-shorts.yaml.lock', '/tmp/.history-shorts.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-shorts.yaml.lock', '/tmp/sets-shorts.yaml.lock', '/tmp/.history-shorts.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
@@ -68,14 +68,14 @@ try {
   await waitReady(`${BASE}/api/queues`);
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 });
   await page.waitForTimeout(500);
 
   // The canned preview = 5 show buckets + one library bucket of 5 shorts.
-  const titles = await page.$$eval('#chpool li.tile .title', (ts) => ts.map((t) => t.textContent));
+  const titles = await page.$$eval('#chpool li.tile .title', (ts) => ts.map((element) => element.textContent));
   ok(`every short is its own tile (${titles.length} tiles)`, titles.length === 10);
   ok('short titles rendered, not a collapsed "Shorts" tile',
     titles.includes('8 Ball Bunny') && titles.includes('Tummy Trouble') && !titles.includes('Shorts'));
@@ -85,24 +85,24 @@ try {
   // Exclude on a short blocks THAT short (blocklist is by ratingKey, so the rule pool
   // filters standalone items exactly like it filters shows).
   const idx = titles.indexOf('8 Ball Bunny');
-  await page.$$eval('#chpool li.tile', (lis, i: number) => {
+  await page.$$eval('#chpool li.tile', (lis, tileIndex: number) => {
     // Inside the browser: a missing tile or a missing ✕ must throw here (the `$$eval`
     // rejects and the suite reports it) rather than no-op into a blocklist wait that
     // only ever times out.
-    const exclude = lis[i]?.querySelector<HTMLElement>('.exclude');
-    if (!exclude) throw new Error(`no .exclude on #chpool tile ${i}`);
+    const exclude = lis[tileIndex]?.querySelector<HTMLElement>('.exclude');
+    if (!exclude) throw new Error(`no .exclude on #chpool tile ${tileIndex}`);
     exclude.click();
   }, idx);
   await page.waitForFunction(async () => {
-    const r: SetsResponse = await fetch('/api/sets').then((x) => x.json());
-    return r.sets.find((set) => set.id === 'younger')?.blocklist.includes('269283');
+    const registry: SetsResponse = await fetch('/api/sets').then((response) => response.json());
+    return registry.sets.find((set) => set.id === 'younger')?.blocklist.includes('269283');
   }, undefined, { timeout: 15000 });
   ok('per-short Exclude writes that ratingKey to the blocklist', true);
 
   await browser.close();
   console.log('done');
   await shutdown(Number(process.exitCode ?? 0));
-} catch (e) {
-  console.error('verify-shorts-pool FAILED:', e);
+} catch (error) {
+  console.error('verify-shorts-pool FAILED:', error);
   await shutdown(1);
 }

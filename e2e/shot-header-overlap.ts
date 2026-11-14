@@ -21,7 +21,7 @@ import {
 import { chromium } from './playwright.js';
 
 const PORT = 18871;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const server = await startBoardGameServer(PORT);
@@ -38,7 +38,7 @@ try {
   });
 
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   await page.goto(`${server.base}/board-game-collection`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#collection:not([hidden]) #collection-grid', { timeout: 30000 });

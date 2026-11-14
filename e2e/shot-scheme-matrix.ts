@@ -32,15 +32,15 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-matrix.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-matrix.yaml');
-for (const p of ['/tmp/queues-matrix.yaml.lock', '/tmp/sets-matrix.yaml.lock', '/tmp/.history-matrix.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const file of ['/tmp/queues-matrix.yaml.lock', '/tmp/sets-matrix.yaml.lock', '/tmp/.history-matrix.json']) {
+  await fs.rm(file, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE });
@@ -84,8 +84,8 @@ try {
 
   for (const scheme of ['light', 'dark']) {
     const context = await browser.newContext({ viewport: DESKTOP });
-    await context.addInitScript((s) => {
-      try { localStorage.setItem('charcuterie-scheme', s); } catch { /* */ }
+    await context.addInitScript((schemeName) => {
+      try { localStorage.setItem('charcuterie-scheme', schemeName); } catch { /* */ }
     }, scheme);
     const page = await context.newPage();
     const shot = async (name: string, opts: ScreenshotOptions = {}) => {
@@ -177,7 +177,7 @@ try {
   }
   console.log('scheme matrix: done ->', OUT);
   await shutdown(0);
-} catch (e) {
-  console.error('shot-scheme-matrix failed:', e);
+} catch (error) {
+  console.error('shot-scheme-matrix failed:', error);
   await shutdown(1);
 }

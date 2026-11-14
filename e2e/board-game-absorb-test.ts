@@ -44,9 +44,9 @@ import type { ChildProcess } from 'node:child_process';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 /** Compare by value. ARRAY order is a contract here and is compared strictly — it is shelf
@@ -56,7 +56,7 @@ const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
     item && typeof item === 'object' && !Array.isArray(item)
       ? Object.fromEntries(
-          Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
+          Object.entries(item as Record<string, unknown>).sort(([key], [rightKey]) => (key < rightKey ? -1 : 1)),
         )
       : item,
   );
@@ -321,7 +321,7 @@ interface Capture {
   importPath: string;
 }
 
-async function boot(label: string, port: number, withCollection: boolean): Promise<Capture> {
+async function boot(label: string, port: number, hasCollection: boolean): Promise<Capture> {
   const dir = await fs.mkdtemp(path.join(tmpdir(), `qp-bg-${label}-`));
   await fs.writeFile(path.join(dir, 'sets.yaml'), SETS);
   await fs.writeFile(path.join(dir, 'queues.yaml'), QUEUES);
@@ -337,7 +337,7 @@ async function boot(label: string, port: number, withCollection: boolean): Promi
   // lifecycle it does not own — and that is the weaker test anyway. Every reference answer
   // below is computed from bytes THIS FILE wrote and nothing else ever touches.
   const sourcePath = path.join(dir, 'reference-collection.sqlite');
-  if (withCollection) {
+  if (hasCollection) {
     writeSource(importPath);
     writeSource(sourcePath);
     await fs.writeFile(path.join(dir, 'board-game-grouping-seed.yaml'), SEED);

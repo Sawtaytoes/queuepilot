@@ -58,9 +58,9 @@ const server = spawnServer({
 });
 
 let failures = 0;
-function check(label: string, condition: boolean, detail = ''): void {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${label}${condition ? '' : ` — ${detail}`}`);
-  if (!condition) failures += 1;
+function check(label: string, isPassing: boolean, detail = ''): void {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${label}${isPassing ? '' : ` — ${detail}`}`);
+  if (!isPassing) failures += 1;
 }
 
 async function waitReady(): Promise<void> {
@@ -112,7 +112,7 @@ const film = (
 try {
   await waitReady();
 
-  const shelves = await fetch(`${BASE}/api/shelves`).then((r) => r.json()) as {
+  const shelves = await fetch(`${BASE}/api/shelves`).then((response) => response.json()) as {
     sets: Record<string, { items: { key: string }[] }>;
   };
   const keys = (shelves.sets.bob?.items ?? []).map((entry) => entry.key);
@@ -121,7 +121,7 @@ try {
     string, string, string, string, string,
   ];
 
-  const queuePayload = await fetch(`${BASE}/api/queues`).then((r) => r.json()) as {
+  const queuePayload = await fetch(`${BASE}/api/queues`).then((response) => response.json()) as {
     sets?: Record<string, { items: unknown[] }>;
   };
 
@@ -204,7 +204,7 @@ try {
       await route.continue();
       return;
     }
-    if (queuePayload.sets?.bob) queuePayload.sets.bob.items = items.map((i) => ({ ...i }));
+    if (queuePayload.sets?.bob) queuePayload.sets.bob.items = items.map((item) => ({ ...item }));
     await route.fulfill({
       body: JSON.stringify(queuePayload),
       contentType: 'application/json',
@@ -216,7 +216,7 @@ try {
       await route.continue();
       return;
     }
-    if (queuePayload.sets?.bob) queuePayload.sets.bob.items = items.map((i) => ({ ...i }));
+    if (queuePayload.sets?.bob) queuePayload.sets.bob.items = items.map((item) => ({ ...item }));
     await route.fulfill({
       body: JSON.stringify(queuePayload),
       contentType: 'application/json',

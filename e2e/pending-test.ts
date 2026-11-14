@@ -178,7 +178,7 @@ const fakeClient = {
       titleLookups.push(wanted);
       if (!wanted || UNANSWERED.has(wanted)) return { Metadata: [] };
       const pool = sec[1] === '5' ? SHOWS : sec[1] === '1' ? MOVIES : [];
-      return { Metadata: pool.filter((m) => String(m.title).toLowerCase().includes(wanted)) };
+      return { Metadata: pool.filter((metadata) => String(metadata.title).toLowerCase().includes(wanted)) };
     }
     return { Metadata: [] };
   },
@@ -208,7 +208,7 @@ const check = (label: string, actual: unknown, expected: unknown): void => {
 };
 
 const keysNow = async () =>
-  (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items.map((i) => i.ratingKey);
+  (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items.map((item) => item.ratingKey);
 
 /**
  * The collections each library holds, as the route's own lister answers.
@@ -284,7 +284,7 @@ check('a dismissed item leaves the list', (await keysNow()).includes('900'), fal
 check('…and its neighbours stay', (await keysNow()).sort(), ['701', '708', '710', COPY_NEW, '906']);
 await pending.dismiss('900');
 check('dismissing twice is a double-click, not an error',
-  (await pending.readState()).dismissed.filter((k) => k === '900').length, 1);
+  (await pending.readState()).dismissed.filter((key) => key === '900').length, 1);
 
 // --- mark all seen ------------------------------------------------------------- //
 await pending.markSeen(NOW);
@@ -329,12 +329,12 @@ const beforeAdd = await queues.listSet('anime');
 if (!dup) await queues.addItem('anime', asAdded, 'bottom');
 const afterAdd = await queues.listSet('anime');
 check('the queue still holds ONE copy of the show', afterAdd.length, beforeAdd.length);
-check('…and it is still the original title line', afterAdd.map((e) => e.key).includes('title:Detective Days'), true);
+check('…and it is still the original title line', afterAdd.map((entry) => entry.key).includes('title:Detective Days'), true);
 
 // A genuinely new item still lands.
 await queues.addItem('anime', { ratingKey: '710', title: 'One Episode Left' }, 'bottom');
 check('a show the queue did not hold is still added',
-  (await queues.listSet('anime')).map((e) => e.key).includes('rk:710'), true);
+  (await queues.listSet('anime')).map((entry) => entry.key).includes('rk:710'), true);
 
 // A COLLECTION is not an item, and adding one is never reported as a duplicate: whether a
 // queued collection should block adding one of its films is a coverage question, not an
@@ -354,34 +354,34 @@ check('a collection add is never an item duplicate', collDup, null);
 
 // The default, as a fold — no state, no Plex.
 check('the default is every video library that is not Other Videos',
-  pending.defaultLibraries(LIBRARIES).map((l) => l.id).sort(), [1, 5]);
+  pending.defaultLibraries(LIBRARIES).map((defaultLibrary) => defaultLibrary.id).sort(), [1, 5]);
 
 // An explicit choice OVERRIDES the default in both directions. Naming the clips library is
 // allowed: the default is a default, and a household that wants it says so.
 check('an explicit list wins, Other Videos included',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1, 8] }).map((l) => l.id).sort(), [1, 8]);
+  pending.selectedLibraries(LIBRARIES, { libraries: [1, 8] }).map((selectedLibrary) => selectedLibrary.id).sort(), [1, 8]);
 check('an explicit list can also NARROW past the default',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1] }).map((l) => l.id), [1]);
+  pending.selectedLibraries(LIBRARIES, { libraries: [1] }).map((selectedLibrary) => selectedLibrary.id), [1]);
 
 // `[]` and `null` are different answers and must stay different: one is "I said none", the
 // other is "I have not said". Collapsing them would make the reset button clear the screen.
 check('an EMPTY list is a real answer — no libraries',
-  pending.selectedLibraries(LIBRARIES, { libraries: [] }).map((l) => l.id), []);
+  pending.selectedLibraries(LIBRARIES, { libraries: [] }).map((selectedLibrary) => selectedLibrary.id), []);
 check('null is not an empty list — it means unconfigured, so the default',
-  pending.selectedLibraries(LIBRARIES, { libraries: null }).map((l) => l.id).sort(), [1, 5]);
+  pending.selectedLibraries(LIBRARIES, { libraries: null }).map((selectedLibrary) => selectedLibrary.id).sort(), [1, 5]);
 
 // `video` is enforced even against an explicit choice. Nothing this app builds can queue a
 // photo or music section, so naming one is a mistake and not a preference.
 check('a non-video library named explicitly is still refused',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1, 7] }).map((l) => l.id), [1]);
+  pending.selectedLibraries(LIBRARIES, { libraries: [1, 7] }).map((selectedLibrary) => selectedLibrary.id), [1]);
 check('an id matching no library is dropped rather than throwing',
-  pending.selectedLibraries(LIBRARIES, { libraries: [1, 4242] }).map((l) => l.id), [1]);
+  pending.selectedLibraries(LIBRARIES, { libraries: [1, 4242] }).map((selectedLibrary) => selectedLibrary.id), [1]);
 
 // End to end, through the state file: only the chosen library's items are on the screen.
 await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 1 ]\n`);
 const moviesOnly = await keysNow();
 check('choosing Movies alone leaves the shows off the screen',
-  moviesOnly.some((k) => k.startsWith('7')), false);
+  moviesOnly.some((key) => key.startsWith('7')), false);
 check('…and keeps the movies that nothing plays', moviesOnly.includes('900'), true);
 
 // Naming the clips library puts its test encode on the screen, which is the point of the
@@ -422,31 +422,31 @@ check('clearing the libraries leaves the watermark alone',
 await fs.writeFile(STATE, `seen_through: 0\ndismissed: []\nlibraries: [ 5, 1 ]\n`);
 
 const withCols = await withCollections();
-const colKeys = withCols.filter((i) => i.type === 'collection').map((i) => i.ratingKey);
+const colKeys = withCols.filter((withCol) => withCol.type === 'collection').map((withCol) => withCol.ratingKey);
 
 check('a collection holding something pending is offered', colKeys.includes('5501'), true);
 check('a collection a queue already names is NOT', colKeys.includes('5500'), false);
 check('a collection whose every film is covered is NOT', colKeys.includes('5502'), false);
 check('the collection carries its size',
-  withCols.find((i) => i.ratingKey === '5501')?.childCount, 2);
+  withCols.find((withCol) => withCol.ratingKey === '5501')?.childCount, 2);
 check('…and the pending child stays on the list beside it',
-  withCols.some((i) => i.ratingKey === '900' && i.type === 'movie'), true);
+  withCols.some((withCol) => withCol.ratingKey === '900' && withCol.type === 'movie'), true);
 check('…sorted among the items by the newest pending child',
-  withCols.find((i) => i.ratingKey === '5501')?.addedAt,
-  withCols.find((i) => i.ratingKey === '900')?.addedAt);
+  withCols.find((withCol) => withCol.ratingKey === '5501')?.addedAt,
+  withCols.find((withCol) => withCol.ratingKey === '900')?.addedAt);
 
 // The lister is optional, and without it the page is exactly what it was.
 check('no lister means no collections at all',
   (await pending.pendingItems(fakeClient, LIBRARIES, listSection)).items
-    .some((i) => i.type === 'collection'),
+    .some((item) => item.type === 'collection'),
   false);
 
 // Dismiss addresses a collection by its ratingKey, like everything else on the screen.
 await pending.dismiss('5501');
 check('a dismissed collection leaves the screen',
-  (await withCollections()).some((i) => i.ratingKey === '5501'), false);
+  (await withCollections()).some((withCollection) => withCollection.ratingKey === '5501'), false);
 check('…and its pending film stays',
-  (await withCollections()).some((i) => i.ratingKey === '900'), true);
+  (await withCollections()).some((withCollection) => withCollection.ratingKey === '900'), true);
 
 console.log(failed ? `pending FAILED (${failed})` : 'pending OK');
 process.exit(failed ? 1 : 0);

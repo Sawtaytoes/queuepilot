@@ -41,9 +41,9 @@ writeFileSync(
 writeFileSync(QUEUES_PATH, 'bob: []\n');
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = '') {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = '') {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // --------------------------------------------------------------------------- //
@@ -78,12 +78,12 @@ const leafClient: PlexClient = {
     if (leaves) {
       const rks = RESOLVE[leaves[1] ?? ''] || [];
       return {
-        Metadata: rks.map((rk, i) => ({
+        Metadata: rks.map((rk, index) => ({
           ratingKey: rk,
           title: rk,
           grandparentTitle: leaves[1],
           parentIndex: 1,
-          index: i + 1,
+          index: index + 1,
           duration: 1000,
           type: 'episode',
           viewCount: VIEW_STATE[rk]?.[1] ?? 0,
@@ -112,15 +112,15 @@ const CFG = { kind: 'movie', source: 'queue', queue_sections: [1] }; // != anime
 // rest (year/guid/weight/raw) is deliberately absent — as it was before the conversion, so
 // the resolver is exercised on exactly the same input.
 const entriesFor = (keys: string[], episodes: number | null = null): EntryDescriptor[] =>
-  keys.map((k) => ({
-    key: k, done: false, title: null, ratingKey: k, collection: null, start: null, episodes,
+  keys.map((key) => ({
+    key: key, done: false, title: null, ratingKey: key, collection: null, start: null, episodes,
   } as EntryDescriptor));
 
 // 1. In-progress MOVIE lead: chosen, and its offset reported.
 RESOLVE = {};
 let res = await resolve.nextQueue(leafClient, 'bob', CFG, entriesFor(['inprog']), new Set<string>(), null);
 ok('in-progress movie is the play head',
-  JSON.stringify(res.play.map((i) => i.ratingKey)) === JSON.stringify(['inprog']), JSON.stringify(res.play));
+  JSON.stringify(res.play.map((item) => item.ratingKey)) === JSON.stringify(['inprog']), JSON.stringify(res.play));
 ok('in-progress movie reports its viewOffset', res.offset === 45000, String(res.offset));
 
 // 2. In-progress SERIES: the started episode leads and its offset is reported (later episodes
@@ -129,16 +129,16 @@ ok('in-progress movie reports its viewOffset', res.offset === 45000, String(res.
 RESOLVE = { showX: ['inprog', 'fresh'] };
 res = await resolve.nextQueue(leafClient, 'bob', CFG, entriesFor(['showX'], 2), new Set<string>(), null);
 ok('in-progress episode leads the series batch',
-  JSON.stringify(res.play.map((i) => i.ratingKey)) === JSON.stringify(['inprog', 'fresh']),
-  JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((item) => item.ratingKey)) === JSON.stringify(['inprog', 'fresh']),
+  JSON.stringify(res.play.map((item) => item.ratingKey)));
 ok('series resume reports the episode\'s viewOffset', res.offset === 45000, String(res.offset));
 
 // The default batch is ONE episode, so an unwidened series entry queues just the resumable head.
 RESOLVE = { showX: ['inprog', 'fresh'] };
 res = await resolve.nextQueue(leafClient, 'bob', CFG, entriesFor(['showX']), new Set<string>(), null);
 ok('default series batch is the in-progress episode alone',
-  JSON.stringify(res.play.map((i) => i.ratingKey)) === JSON.stringify(['inprog'])
-  && res.offset === 45000, JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((item) => item.ratingKey)) === JSON.stringify(['inprog'])
+  && res.offset === 45000, JSON.stringify(res.play.map((item) => item.ratingKey)));
 
 // 3. Finished lead still ADVANCES: entry 1 is fully watched (no unwatched items -> done), so
 //    the next entry leads and, being fresh, starts at 0.
@@ -147,8 +147,8 @@ res = await resolve.nextQueue(
   leafClient, 'bob', CFG, entriesFor(['showDone', 'fresh']), new Set(['rewound']), null,
 );
 ok('finished entry advances to the next entry',
-  JSON.stringify(res.play.map((i) => i.ratingKey)) === JSON.stringify(['fresh']),
-  JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((item) => item.ratingKey)) === JSON.stringify(['fresh']),
+  JSON.stringify(res.play.map((item) => item.ratingKey)));
 ok('finished entry is reported newly done', JSON.stringify(res.newlyDone) === JSON.stringify(['showDone']),
   JSON.stringify(res.newlyDone));
 ok('advanced-to fresh item starts at 0', res.offset === 0, String(res.offset));
@@ -204,9 +204,9 @@ registerHooks({
 const playback = await import('../server/src/playback.js');
 
 const playMediaQuery = (): Record<string, string> => {
-  const call = CALLS.find((c) => c.includes('playMedia')) || '';
-  const q = call.includes('?') ? call.slice(call.indexOf('?') + 1) : '';
-  return Object.fromEntries(new URLSearchParams(q));
+  const call = CALLS.find((call) => call.includes('playMedia')) || '';
+  const query = call.includes('?') ? call.slice(call.indexOf('?') + 1) : '';
+  return Object.fromEntries(new URLSearchParams(query));
 };
 
 // The two fields playback.js reads off a device on the client path. The rest of `Device`

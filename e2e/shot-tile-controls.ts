@@ -41,12 +41,12 @@ const shot = async (name: string) => {
 const DENSITIES: [string, ...string[]][] = [['posters', 'Posters'], ['cards', 'Cards'], ['list', 'List', 'Rows']];
 for (const [label, ...names] of DENSITIES) {
   // The density control is a radiogroup; its options are labelled by their visible text.
-  let clicked = false;
+  let hasClicked = false;
   for (const name of names) {
     const opt = page.getByRole('radio', { name, exact: true });
-    if (await opt.count()) { await opt.first().click(); clicked = true; break; }
+    if (await opt.count()) { await opt.first().click(); hasClicked = true; break; }
   }
-  if (!clicked) throw new Error(`no density control matching ${names.join('/')}`);
+  if (!hasClicked) throw new Error(`no density control matching ${names.join('/')}`);
 
   await page.mouse.move(0, 0);
   await shot(`${label}-rest`);

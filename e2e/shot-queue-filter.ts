@@ -37,7 +37,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18797;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 const API = `http://localhost:${PORT}/api`;
 
@@ -92,7 +92,7 @@ const send = async (method: string, path: string, body: unknown) =>
     body: JSON.stringify(body),
     headers: { 'content-type': 'application/json' },
     method,
-  }).then((r) => r.json() as Promise<Record<string, unknown>>);
+  }).then((response) => response.json() as Promise<Record<string, unknown>>);
 
 let server: ChildProcess | undefined;
 const browser = await chromium.launch();
@@ -108,12 +108,12 @@ const darkInit = () => {
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`${API}/sets`).then((r) => r.json());
+      await fetch(`${API}/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -121,10 +121,10 @@ try {
 
   for (const displayName of EXTENDED_CAST) await send('POST', '/people', { displayName });
 
-  const roster = (await fetch(`${API}/people`).then((r) => r.json())) as {
+  const roster = (await fetch(`${API}/people`).then((response) => response.json())) as {
     people: { displayName: string; id: string }[];
   };
-  const idOf = new Map(roster.people.map((p) => [p.displayName, p.id]));
+  const idOf = new Map(roster.people.map((person) => [person.displayName, person.id]));
   /**
    * THROWS on a name the roster does not carry, rather than writing an `undefined` id.
    *
@@ -215,7 +215,7 @@ try {
     await page.waitForSelector('[role="option"]', { timeout: 10000 });
     await page.waitForTimeout(600);
     const rows = await page.$$eval('[role="option"]', (nodes) =>
-      nodes.map((n) => `${n.textContent?.replace('✓', '').trim()}${(n as HTMLButtonElement).disabled ? ' [disabled]' : ''}`),
+      nodes.map((node) => `${node.textContent?.replace('✓', '').trim()}${(node as HTMLButtonElement).disabled ? ' [disabled]' : ''}`),
     );
     console.log(`?people=omar — the +N more panel: ${rows.join(', ')}`);
   } else {

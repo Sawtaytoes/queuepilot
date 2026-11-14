@@ -42,13 +42,13 @@ const QUEUE = 'bob';
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
-for (const p of [`${QUEUES}.lock`, `${SETS}.lock`]) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const file of [`${QUEUES}.lock`, `${SETS}.lock`]) {
+  await fs.rm(file, { recursive: true, force: true });
 }
 await fs.rm('/tmp/qp-shot-actions-menu.sqlite', { force: true });
 await fs.rm('/tmp/qp-shot-actions-menu.history.json', { force: true });
 
-let failed = false;
+let hasFailed = false;
 const srv = spawnServer({
   env: {
     ...process.env,
@@ -68,7 +68,7 @@ const ready = async (): Promise<void> => {
   for (;;) {
     try { if ((await fetch(`${BASE}/api/queues`)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error('server never came up');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -100,7 +100,7 @@ try {
   console.log(`wrote ${OUT}/actions-menu-toolbar-${TAG}.png`);
 
   const labels = await page.locator('#queue .add button').allInnerTexts();
-  console.log(`toolbar buttons: ${JSON.stringify(labels.map((l) => l.trim()))}`);
+  console.log(`toolbar buttons: ${JSON.stringify(labels.map((label) => label.trim()))}`);
 
   const hasMenu = Boolean(await page.locator('#qactions').count());
   console.log(`Actions menu ${hasMenu ? 'PRESENT ✓' : 'absent ✗'} on this build`);
@@ -116,7 +116,7 @@ try {
     console.log(`wrote ${OUT}/actions-menu-open-${TAG}.png`);
     console.log(
       `rows: ${JSON.stringify(
-        (await page.locator('.qactionsmenu [role="menuitem"]').allInnerTexts()).map((r) => r.trim()),
+        (await page.locator('.qactionsmenu [role="menuitem"]').allInnerTexts()).map((allInnerText) => allInnerText.trim()),
       )}`,
     );
 
@@ -168,10 +168,10 @@ try {
   }
 
   await browser.close();
-} catch (e) {
-  console.log('SHOT FAILED:', e);
-  failed = true;
+} catch (error) {
+  console.log('SHOT FAILED:', error);
+  hasFailed = true;
 } finally {
   killServer(srv);
-  process.exit(failed ? 1 : 0);
+  process.exit(hasFailed ? 1 : 0);
 }

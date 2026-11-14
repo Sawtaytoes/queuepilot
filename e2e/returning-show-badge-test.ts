@@ -32,9 +32,9 @@ import {
 } from './stubs/plex-returning-show.mjs';
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const PORT = Number(process.env.WEB_PORT || 18797);
@@ -44,8 +44,8 @@ const S_PATH = '/tmp/sets-returning-show.yaml';
 
 writeFileSync(Q_PATH, QUEUES_YAML);
 writeFileSync(S_PATH, SETS_YAML);
-for (const p of [`${Q_PATH}.lock`, `${S_PATH}.lock`, '/tmp/cache-returning-show.sqlite']) {
-  rmSync(p, { force: true });
+for (const file of [`${Q_PATH}.lock`, `${S_PATH}.lock`, '/tmp/cache-returning-show.sqlite']) {
+  rmSync(file, { force: true });
 }
 
 const plex = startStubPlex(PLEX_PORT);
@@ -77,9 +77,9 @@ interface Tile {
 
 try {
   let items: Tile[] = [];
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      const body = await fetch(`http://localhost:${PORT}/api/queues`).then((r) => r.json()) as {
+      const body = await fetch(`http://localhost:${PORT}/api/queues`).then((response) => response.json()) as {
         sets: Record<string, { items: Tile[] }>;
       };
       items = body.sets.anime?.items ?? [];
@@ -87,9 +87,9 @@ try {
     } catch {
       /* not up yet */
     }
-    await new Promise((r) => setTimeout(r, 250));
+    await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  const byKey = (rk: string): Tile => items.find((i) => String(i.ratingKey) === rk) || {};
+  const byKey = (rk: string): Tile => items.find((item) => String(item.ratingKey) === rk) || {};
   ok(`the queue resolves its three entries (${items.length})`, items.length === 3);
 
   const returning = byKey(RETURNING_RK);

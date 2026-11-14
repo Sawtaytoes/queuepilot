@@ -48,18 +48,18 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.writeFile('/tmp/queues-tilelane.yaml', QUEUES_YAML);
 await fs.writeFile('/tmp/sets-tilelane.yaml', SETS_YAML);
-for (const p of [
+for (const file of [
   '/tmp/queues-tilelane.yaml.lock', '/tmp/sets-tilelane.yaml.lock',
   '/tmp/cache-tilelane.sqlite', '/tmp/queuepilot-tilelane.sqlite',
 ]) {
-  await fs.rm(p, { force: true, recursive: true });
+  await fs.rm(file, { force: true, recursive: true });
 }
 
 const plex = startStubPlex(PLEX_PORT);
@@ -90,7 +90,7 @@ try {
     colorScheme: 'dark',
     viewport: { width: 1180, height: 820 },
   });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));
 
   await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -118,7 +118,7 @@ try {
   await page.waitForTimeout(400);
   await lanes.screenshot({ path: `${OUT}/tile-lane-${STAGE}-2-hover.png` });
   console.log(`${STAGE} controls:`, await poolTile.evaluate((el) =>
-    [...el.querySelectorAll('.tilechrome > *')].map((c) => c.className).join(', ')));
+    [...el.querySelectorAll('.tilechrome > *')].map((child) => child.className).join(', ')));
 
   // 3 — CHECKED. The frame the report is about: before the change this is indistinguishable
   // from frame 2.
@@ -128,10 +128,10 @@ try {
   console.log(`${STAGE} checked classes:`, await poolTile.getAttribute('class'));
   console.log(`${STAGE} mark paints:`, await poolTile.locator('.check').evaluate((el) => {
     const svg = el.querySelector('svg');
-    const s = getComputedStyle(el);
+    const style = getComputedStyle(el);
     return svg
-      ? { fill: s.backgroundColor, markOpacity: getComputedStyle(svg).opacity }
-      : { fill: s.backgroundColor, text: el.textContent, color: s.color };
+      ? { fill: style.backgroundColor, markOpacity: getComputedStyle(svg).opacity }
+      : { fill: style.backgroundColor, text: el.textContent, color: style.color };
   }));
 
   // 4 — PROMOTED. Only the after stage has the control; before it, the pool tile stays put
@@ -152,7 +152,7 @@ try {
     await lanes.screenshot({ path: `${OUT}/tile-lane-${STAGE}-4-promoted.png` });
     const order = await page.$$eval(
       'ul.grid[data-lane="priority"] li.tile .title',
-      (els) => els.map((e) => (e.textContent || '').trim()),
+      (els) => els.map((el) => (el.textContent || '').trim()),
     );
     console.log(`${STAGE} priority lane after the press:`, order);
   } else {

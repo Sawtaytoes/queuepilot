@@ -54,14 +54,14 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-addto.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-addto.yaml');
-for (const p of ['/tmp/sets-addto.yaml.lock', '/tmp/queues-addto.yaml.lock']) await fs.rm(p, { force: true });
+for (const file of ['/tmp/sets-addto.yaml.lock', '/tmp/queues-addto.yaml.lock']) await fs.rm(file, { force: true });
 
 const srv = spawnServer({
   env: {
@@ -81,7 +81,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1300, height: 900 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   // Plex is unroutable from the harness, so the server answers these with an error or an
   // empty list. Fixtures stand in — see the header.

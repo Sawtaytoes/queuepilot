@@ -87,7 +87,7 @@ await sets.createSet({ kind: 'anime', label: 'Legacy Pool', sections: [1] });
 
 const lanes = async () => {
   const reg = await sets.getRegistry();
-  return new Map(reg.sets.map((s) => [s.id, s]));
+  return new Map(reg.sets.map((set) => [set.id, set]));
 };
 
 let byId = await lanes();
@@ -100,7 +100,7 @@ assert.equal(byId.get('legacy_ordered')?.add_as, 'priority');
 assert.equal(byId.get('legacy_pool')?.add_as, 'random');
 
 // Every created set stores the product kind, never a legacy spelling.
-for (const s of byId.values()) assert.equal(s.kind, 'picks');
+for (const set of byId.values()) assert.equal(set.kind, 'picks');
 
 // Edit path: switching the Type control rewrites the lane in place.
 await sets.updateSet('random_q', { kind: 'picks', add_as: 'priority', label: 'Random Q' });

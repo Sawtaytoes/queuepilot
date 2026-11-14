@@ -3,8 +3,8 @@
 import { chromium } from './playwright.js';
 const BASE = `http://localhost:${process.env.WEB_PORT || 18775}`;
 const TAG = process.env.SHOT_TAG || 'after';
-const b = await chromium.launch();
-const page = await b.newPage({ viewport: { width: 1150, height: 1250 } });
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1150, height: 1250 } });
 
 // 1. A filtered pool carrying the LEGACY refill shape — it must read Infinite.
 await page.goto(`${BASE}/channels/younger`, { waitUntil: 'domcontentloaded' });
@@ -37,4 +37,4 @@ if (cfg) { await cfg.click(); await page.waitForSelector('#setmodal[data-open]',
 const flags = await page.$('#set-flags');
 if (flags) await flags.screenshot({ path: `__screenshots__/playback-queue-${TAG}.png` });
 console.log('wrote queue');
-await b.close();
+await browser.close();

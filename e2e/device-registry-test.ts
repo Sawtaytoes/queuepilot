@@ -22,7 +22,7 @@ process.env.SHIELD_CLIENT_URI = '';
 
 import assert from 'node:assert/strict';
 
-const T = 'queuepilot/devices';
+const DEVICES_TOPIC = 'queuepilot/devices';
 
 // --- the plex.tv stub -------------------------------------------------------------- //
 // One knob: what /api/v2/devices does this round. Rows are shaped like the real plex.tv
@@ -73,13 +73,13 @@ let published: PublishedMessage[] = [];
 const pub = (topic: string, payload: unknown, opts: { retain?: boolean } = {}) =>
   published.push({ topic, payload, opts });
 const round = async () => { published = []; await devices.announceDevices(pub); return published; };
-const topics = () => published.map((p) => p.topic);
-const sent = (id: string) => published.find((p) => p.topic === `${T}/${id}`);
+const topics = () => published.map((message) => message.topic);
+const sent = (id: string) => published.find((message) => message.topic === `${DEVICES_TOPIC}/${id}`);
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const SHIELD_ROW: PlexTvRow = {
@@ -109,7 +109,7 @@ const SERVER_ROW: PlexTvRow = { name: 'nas', clientIdentifier: 'pms-machine-id',
 
   ok('asks plex.tv for the device list', fetched.at(-1) === 'https://plex.tv/api/v2/devices', fetched.at(-1));
   ok('announces the Shield + both players, nothing else', topics().length === 3, topics().join(' '));
-  ok('every announcement is retained', published.every((p) => p.opts.retain === true));
+  ok('every announcement is retained', published.every((message) => message.opts.retain === true));
 
   // The payload shape is the contract with the web UI and with whatever HA does with it —
   // byte-for-byte what the deleted Python service published (observed on the broker).
@@ -176,7 +176,7 @@ const SERVER_ROW: PlexTvRow = { name: 'nas', clientIdentifier: 'pms-machine-id',
     + 'evidence of absence, and it stays playable over its own uri',
     devices.known('606c3173-polly')?.name === 'Pollycracker');
   ok('...and its retained payload is left untouched, so its `seen` stops advancing',
-    !published.some((p) => p.topic.endsWith('606c3173-polly')));
+    !published.some((message) => message.topic.endsWith('606c3173-polly')));
 
   // (b) plex.tv answering 401 (an expired token) is the same class of failure
   plextv = () => ({ __status: 401 });
@@ -202,7 +202,7 @@ const SERVER_ROW: PlexTvRow = { name: 'nas', clientIdentifier: 'pms-machine-id',
 
   // And it recovers on the next round rather than staying wedged.
   const after = await round();
-  ok('the next round announces normally', after.some((p) => p.topic === `${T}/606c3173-polly`));
+  ok('the next round announces normally', after.some((message) => message.topic === `${DEVICES_TOPIC}/606c3173-polly`));
 }
 
 console.log(FAILS.length ? `\nFAILED: ${FAILS.length} (${FAILS.join(', ')})` : '\nOK: device registry announce + de-registration');

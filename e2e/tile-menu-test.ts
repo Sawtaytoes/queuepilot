@@ -76,9 +76,9 @@ const srv = spawnServer({
 });
 
 let failed = 0;
-const check = (name: string, ok: boolean, detail = '') => {
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
-  if (!ok) failed += 1;
+const check = (name: string, isOk: boolean, detail = '') => {
+  console.log(`  ${isOk ? 'ok  ' : 'FAIL'} ${name}${isOk ? '' : ` — ${detail}`}`);
+  if (!isOk) failed += 1;
 };
 
 try {
@@ -92,7 +92,7 @@ try {
     isMobile: true,
     viewport: { width: 500, height: 900 },
   });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Every write this page makes, in order, so a menu row can be asserted on its EFFECT. */
   const writes: { body: string; method: string; url: string }[] = [];
@@ -108,21 +108,21 @@ try {
    * with `keepNames`, and the `__name` it emits does not exist in the page (see
    * `playwright.ts`).
    */
-  const pointer = (type: string, x: number, y: number, selector = '') => page.evaluate(
+  const pointer = (type: string, clientX: number, clientY: number, selector = '') => page.evaluate(
     `(() => {`
     + ` const target = ${selector ? `document.querySelector(${JSON.stringify(selector)})` : 'window'};`
     + ` if (!target) return false;`
     + ` target.dispatchEvent(new PointerEvent(${JSON.stringify(type)}, {`
-    + `   bubbles: true, cancelable: true, clientX: ${x}, clientY: ${y},`
+    + `   bubbles: true, cancelable: true, clientX: ${clientX}, clientY: ${clientY},`
     + `   button: 0, buttons: 1, isPrimary: true, pointerId: 1, pointerType: 'touch' }));`
     + ` return true; })()`,
   );
 
-  const dispatchContextMenu = (x: number, y: number, selector: string) => page.evaluate(
+  const dispatchContextMenu = (clientX: number, clientY: number, selector: string) => page.evaluate(
     `(() => { const el = document.querySelector(${JSON.stringify(selector)});`
     + ` if (!el) return false;`
     + ` el.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true,`
-    + `   clientX: ${x}, clientY: ${y} })); return true; })()`,
+    + `   clientX: ${clientX}, clientY: ${clientY} })); return true; })()`,
   );
 
   const state = async () => JSON.parse(String(await page.evaluate(
@@ -197,7 +197,7 @@ try {
   );
   check(
     'and NOT Remove — the ✕ on the card is the remove',
-    !open.rows.some((r) => r.toLowerCase().includes('remove')),
+    !open.rows.some((row) => row.toLowerCase().includes('remove')),
     `rows: ${JSON.stringify(open.rows)}`,
   );
 
@@ -210,12 +210,12 @@ try {
   await page.locator('#tilemenu button', { hasText: 'Move to the Random pool' }).click();
   await page.waitForTimeout(1200);
 
-  const placementWrite = writes.find((w) => w.url.includes('/placement'));
-  const orderWrite = writes.find((w) => w.url.endsWith('/order'));
+  const placementWrite = writes.find((write) => write.url.includes('/placement'));
+  const orderWrite = writes.find((write) => write.url.endsWith('/order'));
   check(
     '"Move to the Random pool" PATCHes placement: random',
     Boolean(placementWrite && JSON.parse(placementWrite.body).placement === 'random'),
-    `writes: ${JSON.stringify(writes.map((w) => `${w.url.split('/api')[1]} ${w.body}`))}`,
+    `writes: ${JSON.stringify(writes.map((write) => `${write.url.split('/api')[1]} ${write.body}`))}`,
   );
   check(
     'placement is written BEFORE the order, as the drag does',
@@ -224,10 +224,10 @@ try {
     'a scan landing between the two would read a half-written file',
   );
 
-  const landedInPool = Boolean(await page.evaluate(
+  const hasLandedInPool = Boolean(await page.evaluate(
     `!!document.querySelector('#grid-pool li.tile[data-key=${JSON.stringify(demotedKey)}]')`,
   ));
-  check('and the tile is in the pool on screen', landedInPool, 'it stayed put');
+  check('and the tile is in the pool on screen', hasLandedInPool, 'it stayed put');
 
   // ── "Play this next" puts it at the HEAD of the Priority queue ──────────────────────────
   writes.length = 0;
@@ -243,7 +243,7 @@ try {
   await page.locator('#tilemenu button', { hasText: 'Play this next' }).click();
   await page.waitForTimeout(1200);
 
-  const headOrder = writes.find((w) => w.url.endsWith('/order'));
+  const headOrder = writes.find((write) => write.url.endsWith('/order'));
   check(
     '"Play this next" writes an order that LEADS with the entry',
     Boolean(headOrder && JSON.parse(headOrder.body).keys?.[0] === demotedKey),
@@ -260,8 +260,8 @@ try {
 
   await pointer('pointerdown', grab2[0], grab2[1], '#grid-priority li.tile .thumb');
   await page.waitForTimeout(350);
-  for (let i = 1; i <= 6; i += 1) {
-    await pointer('pointermove', grab2[0], grab2[1] + i * 25);
+  for (let attempt = 1; attempt <= 6; attempt += 1) {
+    await pointer('pointermove', grab2[0], grab2[1] + attempt * 25);
     await page.waitForTimeout(30);
   }
 
@@ -316,15 +316,15 @@ try {
   // promote paints from the bulk apply's own `load()`, and `settleLanes` PATCHes the order
   // after that — so breaking on the tile count alone reads the writes list one turn early and
   // reports a missing settle that is still in flight. Same fix `lane-drag-test` took.
-  for (let i = 0; i < 60; i += 1) {
-    const n = Number(await page.evaluate(
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const tileCount = Number(await page.evaluate(
       `document.querySelectorAll('#grid-priority li.tile').length`,
     ));
-    if (n === 2 && writes.some((w) => w.url.endsWith('/order'))) break;
+    if (tileCount === 2 && writes.some((write) => write.url.endsWith('/order'))) break;
     await page.waitForTimeout(500);
   }
 
-  const bulk = writes.find((w) => w.url.endsWith('/bulk'));
+  const bulk = writes.find((write) => write.url.endsWith('/bulk'));
   check(
     'the direct action sends placement: priority for the whole selection',
     Boolean(bulk && JSON.parse(bulk.body).placement === 'priority'
@@ -333,7 +333,7 @@ try {
   );
   check(
     'and settles the ORDER behind it, so a promote is not left at its old file position',
-    Boolean(writes.find((w) => w.url.endsWith('/order'))),
+    Boolean(writes.find((write) => write.url.endsWith('/order'))),
     'the entries would join the Priority queue wherever they happened to sit in the file',
   );
 
@@ -360,7 +360,7 @@ try {
   const secondPosition = page.locator('#grid-priority .priority-position').nth(1);
   await secondPosition.fill('1');
   await page.keyboard.press('Enter');
-  for (let i = 0; i < 30 && !writes.some((w) => w.url.endsWith('/order')); i += 1) {
+  for (let attempt = 0; attempt < 30 && !writes.some((write) => write.url.endsWith('/order')); attempt += 1) {
     await page.waitForTimeout(200);
   }
   const afterPositionMove = await page.$$eval<(string | undefined)[], HTMLElement>(

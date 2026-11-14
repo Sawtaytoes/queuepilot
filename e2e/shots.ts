@@ -25,15 +25,15 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 // --- boot the stack --------------------------------------------------------- //
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-harness.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-harness.yaml');
-for (const p of ['/tmp/queues-harness.yaml.lock', '/tmp/sets-harness.yaml.lock', '/tmp/.history-harness.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const file of ['/tmp/queues-harness.yaml.lock', '/tmp/sets-harness.yaml.lock', '/tmp/.history-harness.json']) {
+  await fs.rm(file, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
@@ -127,7 +127,7 @@ try {
   await browser.close();
   console.log('shots: done');
   await shutdown(0);
-} catch (e) {
-  console.error('shots failed:', e);
+} catch (error) {
+  console.error('shots failed:', error);
   await shutdown(1);
 }

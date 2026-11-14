@@ -77,7 +77,7 @@ test('a person photo is chosen, previewed, saved, pasted and removed', async ({
     // An image on the clipboard lands in the same preview a picked file does.
     const pasted = (await import('node:fs')).readFileSync(photo('grace')).toString('base64');
     await page.evaluate((bytes) => {
-      const binary = Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0));
+      const binary = Uint8Array.from(atob(bytes), (char) => char.charCodeAt(0));
       const data = new DataTransfer();
       data.items.add(new File([binary], 'pasted.jpg', { type: 'image/jpeg' }));
       document.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, clipboardData: data }));

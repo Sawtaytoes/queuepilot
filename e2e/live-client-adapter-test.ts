@@ -22,14 +22,14 @@ const preview = await import('../server/src/engine/preview.js');
 function asyncReplayClient(dir: string): PlexClient {
   const base = replayClient(dir);
   return {
-    container: async (p, t) => base.container(p, t),
-    accountToken: async (u) => base.accountToken(u),
+    container: async (pathname, token) => base.container(pathname, token),
+    accountToken: async (uuid) => base.accountToken(uuid),
   };
 }
 
 let failures = 0;
-function ok(label: string, cond: boolean, detail = ''): void {
-  if (cond) console.log(`  ✓ ${label}`);
+function ok(label: string, isPassing: boolean, detail = ''): void {
+  if (isPassing) console.log(`  ✓ ${label}`);
   else {
     failures += 1;
     console.log(`  ✗ ${label}${detail ? ` — ${detail}` : ''}`);
@@ -47,26 +47,26 @@ const binding = routing.bindingFor(cfg, 'Younger');
 console.log('=== live-client adapter (async surface over corpus) ===');
 const buckets = await rotation.channelBuckets(client, cfg, binding);
 ok('channelBuckets returns rows', Array.isArray(buckets) && buckets.length > 0, `got ${buckets?.length}`);
-ok('member Alpha wins (dedup)', buckets.some((b) => b.show === 'Alpha' && b.episodes.length === 2));
+ok('member Alpha wins (dedup)', buckets.some((bucket) => bucket.show === 'Alpha' && bucket.episodes.length === 2));
 
 const formatted = preview.formatBuckets(buckets);
-ok('formatBuckets has unwatched + next', formatted.every((b) => 'unwatched' in b && 'next' in b));
+ok('formatBuckets has unwatched + next', formatted.every((bucket) => 'unwatched' in bucket && 'next' in bucket));
 ok('signature is stable', preview.bucketsSignature(formatted) === preview.bucketsSignature(formatted));
 ok('signature changes if emptied', preview.bucketsSignature(formatted) !== preview.bucketsSignature([]));
 
 // Library buckets: next is non-deterministic at preview time; item set is the signal.
 {
-  const a = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 2,
+  const original = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 2,
     next: { ratingKey: '1', title: 'A', season: null, episode: null },
     items: [{ ratingKey: '1', title: 'A' }, { ratingKey: '2', title: 'B' }] }];
-  const b = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 2,
+  const reordered = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 2,
     next: { ratingKey: '2', title: 'B', season: null, episode: null },
     items: [{ ratingKey: '2', title: 'B' }, { ratingKey: '1', title: 'A' }] }];
-  ok('library bucket ignores next for signature', preview.bucketsSignature(a) === preview.bucketsSignature(b));
-  const c = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 1,
+  ok('library bucket ignores next for signature', preview.bucketsSignature(original) === preview.bucketsSignature(reordered));
+  const shrunk = [{ show: 'Shorts', ratingKey: 'section-15', unwatched: 1,
     next: { ratingKey: '1', title: 'A', season: null, episode: null },
     items: [{ ratingKey: '1', title: 'A' }] }];
-  ok('library bucket still sees item-set change', preview.bucketsSignature(a) !== preview.bucketsSignature(c));
+  ok('library bucket still sees item-set change', preview.bucketsSignature(original) !== preview.bucketsSignature(shrunk));
 }
 
 // liveClient factory exists and exposes the contract (don't call Plex — no token in CI).

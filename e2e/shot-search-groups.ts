@@ -4,7 +4,7 @@ import { chromium } from './playwright.js';
 
 const PORT = process.env.WEB_PORT || 18768;
 const BASE = `http://localhost:${PORT}`;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const browser = await chromium.launch();

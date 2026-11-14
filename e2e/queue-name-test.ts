@@ -30,9 +30,9 @@ import path from 'node:path';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 const same = (name: string, actual: unknown, expected: unknown): void =>
   ok(name, JSON.stringify(actual) === JSON.stringify(expected), `got ${JSON.stringify(actual)}`);
@@ -66,7 +66,7 @@ const send = async (
 interface Registry {
   sets: { id: string; label: string; has_explicit_label: boolean; activity: string }[];
 }
-const setById = async (id: string) => (await get<Registry>('/api/sets')).sets.find((s) => s.id === id);
+const setById = async (id: string) => (await get<Registry>('/api/sets')).sets.find((set) => set.id === id);
 
 const dir = await fs.mkdtemp(path.join(tmpdir(), 'qp-queue-name-'));
 const SETS_PATH = path.join(dir, 'sets.yaml');

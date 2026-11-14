@@ -33,7 +33,7 @@ const browser = await chromium.launch();
 
 try {
   const page = await browser.newPage({ viewport: { width: 1420, height: 1100 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   const open = async (path = '/what-to-watch-play') => {
     await page.goto(`${server.base}${path}`, { waitUntil: 'domcontentloaded' });
@@ -67,8 +67,8 @@ try {
     };
     ok(
       'GET /api/people answers the roster in position order',
-      JSON.stringify(body.people.map((p) => p.id)) === JSON.stringify(['ada', 'grace', 'linus']),
-      JSON.stringify(body.people.map((p) => p.id)),
+      JSON.stringify(body.people.map((person) => person.id)) === JSON.stringify(['ada', 'grace', 'linus']),
+      JSON.stringify(body.people.map((person) => person.id)),
     );
     // It PROJECTS: a birth year and a provider account paint no checklist and this repo is
     // public. A widening is a deliberate act, so it gets to fail here first. `photoVersion` was
@@ -77,8 +77,8 @@ try {
     ok(
       '…and carries only id / displayName / photoVersion / position',
       body.people.every(
-        (p) =>
-          JSON.stringify(Object.keys(p).sort()) === '["displayName","id","photoVersion","position"]',
+        (person) =>
+          JSON.stringify(Object.keys(person).sort()) === '["displayName","id","photoVersion","position"]',
       ),
       JSON.stringify(Object.keys(body.people[0] ?? {})),
     );

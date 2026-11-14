@@ -38,8 +38,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -55,7 +55,7 @@ const GAMES: MisterGameDto[] = [
 ];
 
 let CALLS: string[] = [];
-const asClient = (c: unknown) => c as unknown as MisterHttpClient;
+const asClient = (stub: unknown) => stub as unknown as MisterHttpClient;
 
 function stubClient() {
   return {
@@ -68,8 +68,8 @@ function stubClient() {
       CALLS.push(`/games/search?q=${query}&system=${system}`);
       const term = query.toLowerCase();
       return Promise.resolve(
-        GAMES.filter((g) => String(g.name).toLowerCase().includes(term))
-          .filter((g) => system === 'all' || g.system?.id === system),
+        GAMES.filter((game) => String(game.name).toLowerCase().includes(term))
+          .filter((game) => system === 'all' || game.system?.id === system),
       );
     },
     playing() {
@@ -91,29 +91,29 @@ const provider = () => misterProvider({ def: DEF, client: asClient(stubClient())
 // --- the load-bearing ones ------------------------------------------------------ //
 
 await ok('never claims progress — mrext keeps no history', async () => {
-  const p = provider();
-  const done = await p.progressState({
+  const instance = provider();
+  const done = await instance.progressState({
     cfg: {},
     entries: [{ id: SMW, queuedAt: 1 }, { id: ZELDA, queuedAt: 1 }],
   });
   assert.equal((done as Set<string>).size, 0, 'progress was invented from somewhere');
 
-  const res = await p.buckets({ cfg: {}, entries: [{ id: SMW }, { id: ZELDA }] });
+  const res = await instance.buckets({ cfg: {}, entries: [{ id: SMW }, { id: ZELDA }] });
   assert.deepEqual(res.newlyDone, [], 'an entry was retired without HA saying so');
 });
 
 await ok('never launches — /games/launch is not among the calls', async () => {
   CALLS = [];
-  const p = provider();
-  await p.libraries?.();
-  await p.search?.('mario', { libraries: [] });
-  const res = await p.buckets({ cfg: {}, entries: [{ id: SMW }] });
-  const artifact = await p.materialize(res.play, { setName: 'retro' });
-  await p.handoff(artifact as never);
+  const instance = provider();
+  await instance.libraries?.();
+  await instance.search?.('mario', { libraries: [] });
+  const res = await instance.buckets({ cfg: {}, entries: [{ id: SMW }] });
+  const artifact = await instance.materialize(res.play, { setName: 'retro' });
+  await instance.handoff(artifact as never);
 
   assert.ok(CALLS.length > 0, 'the stub saw no calls at all');
   assert.ok(
-    !CALLS.some((c) => c.includes('/games/launch') || c.includes('/launch')),
+    !CALLS.some((call) => call.includes('/games/launch') || call.includes('/launch')),
     `a call reached a launch endpoint: ${CALLS.join(', ')}`,
   );
 });
@@ -134,7 +134,7 @@ await ok('a tile needs no network call, so a sleeping MiSTer still renders its q
 await ok('no systems named searches everything, in ONE request', async () => {
   CALLS = [];
   const hits = await provider().search?.('mario', { libraries: [] });
-  assert.deepEqual(hits?.map((h) => h.id), [SMW]);
+  assert.deepEqual(hits?.map((hit) => hit.id), [SMW]);
   assert.deepEqual(CALLS, ['/games/search?q=mario&system=all']);
 });
 
@@ -143,7 +143,7 @@ await ok('several named systems fan out and merge', async () => {
   CALLS = [];
   const hits = await provider().search?.('e', { libraries: ['SNES', 'NES'] });
   assert.equal(CALLS.length, 2, `expected one request per system, got ${CALLS.length}`);
-  assert.deepEqual(hits?.map((h) => h.id).sort(), [ZELDA, SMW].sort());
+  assert.deepEqual(hits?.map((hit) => hit.id).sort(), [ZELDA, SMW].sort());
 });
 
 await ok('an empty term asks nothing', async () => {
@@ -238,12 +238,12 @@ await ok('a miss is remembered, so it costs three requests once rather than ever
 await ok('two games never collide, however awkward their names', async () => {
   // A No-Intro name carries `:` and `/`-hostile characters and runs long, which is why the
   // key is hashed rather than sanitized: every sanitizer eventually maps two titles to one.
-  const a = Buffer.from('A');
-  const b = Buffer.from('B');
-  await writeCachedArt('SNES', 'Sonic 3: Knuckles & Co. (World) (Rev A)', a);
-  await writeCachedArt('Genesis', 'Sonic 3: Knuckles & Co. (World) (Rev A)', b);
-  assert.ok((await readCachedArt('SNES', 'Sonic 3: Knuckles & Co. (World) (Rev A)'))?.equals(a));
-  assert.ok((await readCachedArt('Genesis', 'Sonic 3: Knuckles & Co. (World) (Rev A)'))?.equals(b));
+  const snesArt = Buffer.from('A');
+  const genesisArt = Buffer.from('B');
+  await writeCachedArt('SNES', 'Sonic 3: Knuckles & Co. (World) (Rev A)', snesArt);
+  await writeCachedArt('Genesis', 'Sonic 3: Knuckles & Co. (World) (Rev A)', genesisArt);
+  assert.ok((await readCachedArt('SNES', 'Sonic 3: Knuckles & Co. (World) (Rev A)'))?.equals(snesArt));
+  assert.ok((await readCachedArt('Genesis', 'Sonic 3: Knuckles & Co. (World) (Rev A)'))?.equals(genesisArt));
 });
 
 await ok('the cache sits beside the sqlite cache, not somewhere surprising', async () => {
@@ -254,22 +254,22 @@ await ok('the cache sits beside the sqlite cache, not somewhere surprising', asy
 // --- lineup + handoff -------------------------------------------------------------- //
 
 await ok('the head is the first entry left, and entries beat libraries', async () => {
-  const p = provider();
-  assert.deepEqual((await p.buckets({ cfg: {}, entries: [], libraries: ['SNES'] })).play, []);
+  const instance = provider();
+  assert.deepEqual((await instance.buckets({ cfg: {}, entries: [], libraries: ['SNES'] })).play, []);
 
-  const res = await p.buckets({ cfg: {}, entries: [{ id: SMW }, { id: ZELDA }] });
+  const res = await instance.buckets({ cfg: {}, entries: [{ id: SMW }, { id: ZELDA }] });
   assert.equal(res.play.length, 1);
   assert.equal((res.play[0] as { path: string }).path, SMW);
 });
 
 await ok('handoff names what is next and hands back NO url', async () => {
-  const p = provider();
-  const res = await p.buckets({ cfg: {}, entries: [{ id: SMW }] });
-  const artifact = await p.materialize(res.play, { setName: 'retro' }) as MisterArtifact;
+  const instance = provider();
+  const res = await instance.buckets({ cfg: {}, entries: [{ id: SMW }] });
+  const artifact = await instance.materialize(res.play, { setName: 'retro' }) as MisterArtifact;
   assert.equal(artifact.path, SMW);
   assert.equal(artifact.system, 'SNES');
 
-  const out = await p.handoff(artifact as never);
+  const out = await instance.handoff(artifact as never);
   // No URL: there is no `steam://` equivalent, and a browser cannot start a MiSTer game.
   assert.equal((out as { url: string | null }).url, null);
   assert.match((out as { error: string }).error, /Super Mario World/);

@@ -40,20 +40,20 @@ const pyCli = (...args: string[]): any => {
 };
 
 // Canonical JSON (recursively sorted keys) so key-order/whitespace never causes a false mismatch.
-function canon(v: unknown): string {
-  if (Array.isArray(v)) return `[${v.map(canon).join(',')}]`;
-  if (v && typeof v === 'object') {
-    const rec = v as Record<string, unknown>;
-    return `{${Object.keys(rec).sort().map((k) => `${JSON.stringify(k)}:${canon(rec[k])}`).join(',')}}`;
+function canon(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canon).join(',')}]`;
+  if (value && typeof value === 'object') {
+    const rec = value as Record<string, unknown>;
+    return `{${Object.keys(rec).sort().map((key) => `${JSON.stringify(key)}:${canon(rec[key])}`).join(',')}}`;
   }
-  return JSON.stringify(v);
+  return JSON.stringify(value);
 }
 
 /** The `last` field as BOTH oracles spell it once normalised — ratingKey stringified. */
 interface LastItem { title: string; type: string; ratingKey: string }
-const normLast = (l: { title?: unknown; type?: unknown; ratingKey?: unknown } | null | undefined):
+const normLast = (lastItem: { title?: unknown; type?: unknown; ratingKey?: unknown } | null | undefined):
 LastItem | null => (
-  l ? { title: l.title as string, type: l.type as string, ratingKey: String(l.ratingKey) } : null
+  lastItem ? { title: lastItem.title as string, type: lastItem.type as string, ratingKey: String(lastItem.ratingKey) } : null
 );
 
 const client = replayClient(CORPUS);
@@ -70,7 +70,7 @@ async function nodeNextQueue(setName: string) {
   const res = await resolve.nextQueue(client, setName, cfg, resolve.loadEntries(setName), watched, token);
   return {
     set: res.set,
-    play: res.play.map((e) => String(e.ratingKey)),
+    play: res.play.map((item) => String(item.ratingKey)),
     last: normLast(res.last),
     done: res.done,
     unresolved: res.unresolved,
@@ -86,7 +86,7 @@ async function nodeReel(setName: string) {
   const res = await resolve.buildReel(client, setName, cfg, resolve.loadEntries(setName), token);
   return {
     set: res.set,
-    play: res.play.map((e) => ({ ratingKey: String(e.ratingKey), title: e.title ?? null })),
+    play: res.play.map((item) => ({ ratingKey: String(item.ratingKey), title: item.title ?? null })),
     last: normLast(res.last),
     unresolved: res.unresolved,
     remaining: res.remaining,
@@ -107,18 +107,18 @@ console.log('=== curated parity: next_queue (Node resolve.js ↔ recorded cli ne
 const wantQ = pyCli('next-queue-json', 'bobq');
 wantQ.last = normLast(wantQ.last);
 wantQ.play = wantQ.play.map(String);
-check('bobq', wantQ, await nodeNextQueue('bobq'), (r) =>
-  `play=[${r.play.join(',')}] last=${r.last ? r.last.title : '∅'} done=[${r.done.join(', ')}] `
-  + `unresolved=[${r.unresolved.join(', ')}] remaining=${r.remaining} offset=${r.offset}`);
+check('bobq', wantQ, await nodeNextQueue('bobq'), (queueResult) =>
+  `play=[${queueResult.play.join(',')}] last=${queueResult.last ? queueResult.last.title : '∅'} done=[${queueResult.done.join(', ')}] `
+  + `unresolved=[${queueResult.unresolved.join(', ')}] remaining=${queueResult.remaining} offset=${queueResult.offset}`);
 
 console.log('=== curated parity: build_reel (Node resolve.js ↔ recorded cli reel-json) ===');
 const wantR = pyCli('reel-json', 'demo');
 wantR.last = normLast(wantR.last);
-wantR.play = wantR.play.map((e: { ratingKey: unknown; title?: unknown }) =>
-  ({ ratingKey: String(e.ratingKey), title: e.title ?? null }));
-check('demo', wantR, await nodeReel('demo'), (r) =>
-  `play=[${r.play.map((e) => e.ratingKey).join(',')}] (${r.play.length} items) `
-  + `unresolved=[${r.unresolved.join(', ')}]`);
+wantR.play = wantR.play.map((item: { ratingKey: unknown; title?: unknown }) =>
+  ({ ratingKey: String(item.ratingKey), title: item.title ?? null }));
+check('demo', wantR, await nodeReel('demo'), (reelResult) =>
+  `play=[${reelResult.play.map((item) => item.ratingKey).join(',')}] (${reelResult.play.length} items) `
+  + `unresolved=[${reelResult.unresolved.join(', ')}]`);
 
 console.log(failures ? `\nFAILED: ${failures} mismatch(es)` : '\nOK: Node curated resolver matches the recorded Python oracle');
 process.exit(failures ? 1 : 0);

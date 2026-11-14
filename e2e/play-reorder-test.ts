@@ -74,7 +74,7 @@ const SETS_SEED = `sets:
 `;
 
 const fileOrder = async (): Promise<string[]> =>
-  [...(await fs.readFile(SETS, 'utf8')).matchAll(/^- id: (\S+)$/gm)].map((m) => m[1] as string);
+  [...(await fs.readFile(SETS, 'utf8')).matchAll(/^- id: (\S+)$/gm)].map((match) => match[1] as string);
 
 let server: ChildProcess | undefined;
 const browser = await chromium.launch();
@@ -84,9 +84,9 @@ try {
   await fs.writeFile(SETS, SETS_SEED);
   await fs.rm(`${SETS}.lock`, { force: true, recursive: true });
   server = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 60; i++) {
-    try { await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json()); break; } catch {
-      await new Promise((r) => setTimeout(r, 200));
+  for (let attempt = 0; attempt < 60; attempt++) {
+    try { await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json()); break; } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -96,13 +96,13 @@ try {
   // The navigation rail owns 16rem now. Use a genuinely wide view so all four cards still
   // share one row and this remains the sideways-drag case it claims to cover.
   const page = await browser.newPage({ viewport: { width: 1800, height: 950 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
 
   const gridOrder = () =>
     page.$$eval('#playgrid li[data-set]', (els) =>
-      els.map((e) => (e as HTMLElement).dataset.set as string));
+      els.map((el) => (el as HTMLElement).dataset.set as string));
 
   ok('the grid renders every kind in file order',
     (await gridOrder()).join(',') === 'q_alpha,pool_mid,q_beta,q_gamma');
@@ -111,16 +111,16 @@ try {
   // It is still in the DOM (CSS decides, not React), so assert the COMPUTED style, which is
   // the thing that actually stopped indenting every name.
   ok('no drag gutter on a fine pointer', (await page.$$eval('#playgrid .rowdrag',
-    (els) => els.every((e) => getComputedStyle(e).display === 'none'))));
+    (els) => els.every((el) => getComputedStyle(el).display === 'none'))));
   ok('every card says which kind it is',
     (await page.$$eval('#playgrid li[data-set]', (els) =>
-      els.map((e) => (e as HTMLElement).dataset.kind))).join(',') === 'picks,rules,picks,picks');
+      els.map((el) => (el as HTMLElement).dataset.kind))).join(',') === 'picks,rules,picks,picks');
 
   // All four cards share one grid row at this width — so this is the SIDEWAYS drag, and the
   // one a Y-midpoint test cannot resolve: alpha, pool_mid, beta and gamma all have the same
   // Y midpoint, so the old hook would have swapped with whichever came first in the DOM.
   const rowTops = await page.$$eval('#playgrid li[data-set]', (els) =>
-    els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    els.map((el) => Math.round(el.getBoundingClientRect().top)));
   ok('the first two cards really share one grid row (else this tests nothing)',
     rowTops[0] === rowTops[1]);
 
@@ -140,10 +140,10 @@ try {
     await page.mouse.down();
     // Several small steps, not one jump: the hook re-tests containment on every move, and a
     // single leap would prove nothing about the crossing.
-    for (let i = 1; i <= 12; i++) {
+    for (let attempt = 1; attempt <= 12; attempt++) {
       await page.mouse.move(
-        startX + ((target.x - startX) * i) / 12,
-        startY + ((target.y - startY) * i) / 12);
+        startX + ((target.x - startX) * attempt) / 12,
+        startY + ((target.y - startY) * attempt) / 12);
       await page.waitForTimeout(20);
     }
     await page.mouse.up();
@@ -171,7 +171,7 @@ try {
   await page.setViewportSize({ width: 390, height: 900 });
   await page.waitForTimeout(400);
   const colTops = await page.$$eval('#playgrid li[data-set]', (els) =>
-    els.map((e) => Math.round(e.getBoundingClientRect().top)));
+    els.map((el) => Math.round(el.getBoundingClientRect().top)));
   ok('the Narrow View really is one column (else this tests nothing)',
     new Set(colTops).size === 4);
 
@@ -220,7 +220,7 @@ try {
   await tp.waitForSelector('#playgrid li[data-set]', { timeout: 20000 });
   ok('a coarse pointer still gets a handle to grab',
     await tp.$$eval('#playgrid .rowdrag', (els) =>
-      els.length > 0 && els.every((e) => getComputedStyle(e).display !== 'none')));
+      els.length > 0 && els.every((el) => getComputedStyle(el).display !== 'none')));
   await touch.close();
 
 } finally {

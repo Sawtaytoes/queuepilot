@@ -80,15 +80,15 @@ q_other:
  */
 const fileEntries = async (setId: string): Promise<string[]> => {
   const lines = (await fs.readFile(QUEUES, 'utf8')).split('\n');
-  const start = lines.findIndex((l) => l.startsWith(`${setId}:`));
+  const start = lines.findIndex((line) => line.startsWith(`${setId}:`));
   if (start < 0) return [];
   const out: string[] = [];
   for (const line of lines.slice(start + 1)) {
     // A list item is at column 0 too, so "next top-level key" is a non-space that is not
     // the `- ` bullet — not simply a non-space.
     if (/^[^\s-]/.test(line)) break;
-    const m = /^- (.+)$/.exec(line);
-    if (m) out.push((m[1] as string).trim());
+    const match = /^- (.+)$/.exec(line);
+    if (match) out.push((match[1] as string).trim());
   }
   return out;
 };
@@ -99,22 +99,22 @@ const browser = await chromium.launch();
 try {
   await fs.writeFile(QUEUES, QUEUES_SEED);
   await fs.writeFile(env.SETS_PATH, SETS_SEED);
-  for (const p of [QUEUES, env.SETS_PATH, env.HISTORY_PATH]) {
-    await fs.rm(`${p}.lock`, { force: true, recursive: true });
+  for (const file of [QUEUES, env.SETS_PATH, env.HISTORY_PATH]) {
+    await fs.rm(`${file}.lock`, { force: true, recursive: true });
   }
   await fs.rm(env.HISTORY_PATH, { force: true });
   server = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   const shelf = '.shelf[data-set="q_shelf"]';
   const tiles = () => page.$$eval(`${shelf} li.tile`, (els) => els.length);
@@ -139,10 +139,10 @@ try {
   // in the one case where there is no button at all.
   ok('the ✕ is not display:none on the shelf',
     await page.$$eval(`${shelf} li.tile .remove`,
-      (els) => els.length === 3 && els.every((e) => getComputedStyle(e).display !== 'none')));
+      (els) => els.length === 3 && els.every((el) => getComputedStyle(el).display !== 'none')));
   ok('the ✕ has a real hit box',
     await page.$$eval(`${shelf} li.tile .remove`, (els) =>
-      els.length === 3 && els.every((e) => e.getBoundingClientRect().width >= 20)));
+      els.length === 3 && els.every((el) => el.getBoundingClientRect().width >= 20)));
 
   // Quiet until asked for — the same rule the queue grid follows. A wall of posters must not
   // become a wall of buttons (decision 2026-08-15-tile-controls-are-quiet-and-sit-beside-the-poster).
@@ -150,11 +150,11 @@ try {
   await page.waitForTimeout(400);
   const firstRemove = page.locator(`${shelf} li.tile .remove`).first();
   ok('the ✕ is invisible at rest',
-    (await firstRemove.evaluate((e) => getComputedStyle(e).opacity)) === '0');
+    (await firstRemove.evaluate((element) => getComputedStyle(element).opacity)) === '0');
   await page.locator(`${shelf} li.tile`).first().hover();
   await page.waitForTimeout(400);
   ok('the ✕ appears on hover',
-    (await firstRemove.evaluate((e) => getComputedStyle(e).opacity)) === '1');
+    (await firstRemove.evaluate((element) => getComputedStyle(element).opacity)) === '1');
 
   // What must NOT have been switched on with it. The shelf has no multi-select and no
   // per-tile ▶ — turning the whole `.editable` chrome on here would have brought both, and
@@ -174,13 +174,13 @@ try {
   ok('the shelf header re-counts', (await count()) === '2');
 
   let onDisk: string[] = [];
-  for (let i = 0; i < 40; i++) {
+  for (let attempt = 0; attempt < 40; attempt++) {
     onDisk = await fileEntries('q_shelf');
     if (onDisk.length === 2) break;
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   ok('queues.yaml lost exactly that entry',
-    onDisk.length === 2 && !onDisk.some((e) => e.includes('Duel')));
+    onDisk.length === 2 && !onDisk.some((entry) => entry.includes('Duel')));
   ok('the OTHER queue is untouched', (await fileEntries('q_other')).length === 1);
   ok('the removed tile was the one clicked', (removedTitle ?? '').includes('Duel'));
 
@@ -220,9 +220,9 @@ try {
   // read BY NAME, not by class: `.danger` was the app's own colour and stopped existing when
   // the row became a Charcuterie `Button` with an `intent` prop, and a skin is not a handle.
   const rows = () => page.$$eval('#tilemenu button',
-    (els) => els.map((e) => (e.textContent ?? '').trim()));
+    (els) => els.map((el) => (el.textContent ?? '').trim()));
   ok('the menu offers no Remove row',
-    !(await rows()).some((r) => /remove/i.test(r)));
+    !(await rows()).some((row) => /remove/i.test(row)));
   // `q_shelf` declares no random order, so every entry starts in the Priority queue and the
   // lane row is the DEMOTE. This is the shelf's half of the claim: the page that could not
   // remove a title also could not change its lane, because a lane was a drag across a
@@ -240,14 +240,14 @@ try {
   // (decision `2026-08-27-a-lane-change-writes-the-order-too-because-the-file-is-one-sequence`).
   const shelfYaml = async () => {
     const lines = (await fs.readFile(QUEUES, 'utf8')).split('\n');
-    const rest = lines.slice(lines.findIndex((l) => l.startsWith('q_shelf:')) + 1);
-    const end = rest.findIndex((l) => /^[^\s-]/.test(l));
+    const rest = lines.slice(lines.findIndex((line) => line.startsWith('q_shelf:')) + 1);
+    const end = rest.findIndex((line) => /^[^\s-]/.test(line));
     return (end < 0 ? rest : rest.slice(0, end)).join('\n').trimEnd();
   };
   const demoted = async () =>
     /- title: Duel \(1971\)\s*\n\s+placement: random$/.test(await shelfYaml());
-  for (let i = 0; i < 75 && !(await demoted()); i++) {
-    await new Promise((r) => setTimeout(r, 200));
+  for (let attempt = 0; attempt < 75 && !(await demoted()); attempt++) {
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   ok('the lane row writes the placement, and the demote lands at the end', await demoted());
   ok('and the entry is still on the shelf', (await tiles()) === 3);
@@ -261,7 +261,7 @@ try {
   const gridBefore = await page.$$eval('#grid li.tile', (els) => els.length);
   await page.locator('#grid li.tile .remove').first().click();
   await page.waitForFunction(
-    (n) => document.querySelectorAll('#grid li.tile').length === n - 1,
+    (tileCount) => document.querySelectorAll('#grid li.tile').length === tileCount - 1,
     gridBefore, { timeout: 15000 });
   ok('the queue grid still removes after the lift', true);
 } finally {

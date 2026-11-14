@@ -21,7 +21,7 @@ import { chromium } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18793;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 
 const env = {
@@ -75,12 +75,12 @@ const darkInit = () => {
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 80; i++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -99,7 +99,7 @@ try {
 
   // ── the audience list, asserted ────────────────────────────────────────────────────── //
   const rows = await page.$$eval('#dyn-people .audiencerow', (nodes) => nodes.length);
-  const width = await page.$eval('#dynmodal', (n) => Math.round(n.getBoundingClientRect().width));
+  const width = await page.$eval('#dynmodal', (element) => Math.round(element.getBoundingClientRect().width));
   console.log(
     rows > 0
       ? `the ${width}px modal shows ${rows} audience rows`
@@ -142,12 +142,12 @@ try {
   const narrowRows = await narrow.$$eval('#dyn-people .audiencerow', (nodes) => nodes.length);
   const narrowActionWidth = await narrow.$eval(
     '#dyn-people .audiencechoices',
-    (n) => Math.round(n.getBoundingClientRect().width),
+    (element) => Math.round(element.getBoundingClientRect().width),
   );
   console.log(`the Narrow View shows ${narrowRows} rows and ${narrowActionWidth}px audience controls`);
 
-  const narrowWidth = await narrow.$eval('#dynmodal', (n) =>
-    Math.round(n.getBoundingClientRect().width),
+  const narrowWidth = await narrow.$eval('#dynmodal', (element) =>
+    Math.round(element.getBoundingClientRect().width),
   );
   const overflow = await narrow.evaluate(
     () => document.documentElement.scrollWidth - document.documentElement.clientWidth,

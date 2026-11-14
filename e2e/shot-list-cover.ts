@@ -41,13 +41,13 @@ const STACKED_LABEL = SET_LABEL.includes(' & ')
 mkdirSync(OUT, { recursive: true });
 mkdirSync(ART, { recursive: true });
 
-for (const f of ['baloo2-1.woff2', 'outfit-1.woff2']) {
-  if (existsSync(`${FONTS}/${f}`)) copyFileSync(`${FONTS}/${f}`, `${OUT}/${f}`);
+for (const fontFile of ['baloo2-1.woff2', 'outfit-1.woff2']) {
+  if (existsSync(`${FONTS}/${fontFile}`)) copyFileSync(`${FONTS}/${fontFile}`, `${OUT}/${fontFile}`);
 }
 
 // The mosaic wants nine 2:3 tiles for a 3x3 that lands on 640x960 exactly. Take whatever
 // real covers were downloaded, in a stable order, so a re-run is deterministic.
-const art = readdirSync(ART).filter((f) => f.endsWith('.png') && f !== 'current-153.png');
+const art = readdirSync(ART).filter((artFile) => artFile.endsWith('.png') && artFile !== 'current-153.png');
 const mosaic = art.slice(0, 9);
 
 /** The app icon, recoloured for the provider. Dark ink on the green solid is what
@@ -182,7 +182,7 @@ const covers: { id: string; name: string; note: string; html: string }[] = [
       + 'but it is a SNAPSHOT: the lineup is rebuilt every launch, so the art dates.',
     html: `
 <div class="cover c-mosaic">
-  <div class="grid">${mosaic.map((f) => `<img src="./art/${f}" alt="">`).join('')}</div>
+  <div class="grid">${mosaic.map((artFile) => `<img src="./art/${artFile}" alt="">`).join('')}</div>
   <div class="veil"></div>
   <div class="foot">
     <div class="row">${mark(46, '#4AC694', '#111111', 6.5)}<span class="kicker">QueuePilot</span></div>
@@ -215,7 +215,7 @@ const covers: { id: string; name: string; note: string; html: string }[] = [
       + 'any title — so a lineup that changes next launch does not date it.',
     html: `
 <div class="cover c-blur">
-  <div class="grid">${mosaic.slice(0, 4).map((f) => `<img src="./art/${f}" alt="">`).join('')}</div>
+  <div class="grid">${mosaic.slice(0, 4).map((artFile) => `<img src="./art/${artFile}" alt="">`).join('')}</div>
   <div class="veil"></div>
   <div class="body">
     <div class="mark">${mark(180, '#4AC694', '#111111', 5.0)}</div>
@@ -229,18 +229,18 @@ const covers: { id: string; name: string; note: string; html: string }[] = [
 
 const page = `<!doctype html><meta charset="utf-8"><title>cover render</title>
 <style>${CSS} body { margin: 0; background: #222; display: flex; gap: 40px; padding: 40px; }</style>
-${covers.map((c) => `<div id="${c.id}">${c.html}</div>`).join('\n')}`;
+${covers.map((cover) => `<div id="${cover.id}">${cover.html}</div>`).join('\n')}`;
 
 writeFileSync(`${OUT}/render.html`, page);
 
 const browser = await chromium.launch();
-const p = await browser.newPage({ viewport: { width: 3200, height: 1100 }, deviceScaleFactor: 1 });
-await p.goto(`file://${process.cwd()}/${OUT}/render.html`, { waitUntil: 'load' });
-await p.evaluate(() => (document as unknown as { fonts: { ready: Promise<unknown> } }).fonts.ready);
-await p.waitForTimeout(400);
-for (const c of covers) {
-  await p.locator(`#${c.id} .cover`).screenshot({ path: `${OUT}/cover-${c.id}.png` });
-  console.log('wrote', `${OUT}/cover-${c.id}.png`);
+const browserPage = await browser.newPage({ viewport: { width: 3200, height: 1100 }, deviceScaleFactor: 1 });
+await browserPage.goto(`file://${process.cwd()}/${OUT}/render.html`, { waitUntil: 'load' });
+await browserPage.evaluate(() => (document as unknown as { fonts: { ready: Promise<unknown> } }).fonts.ready);
+await browserPage.waitForTimeout(400);
+for (const cover of covers) {
+  await browserPage.locator(`#${cover.id} .cover`).screenshot({ path: `${OUT}/cover-${cover.id}.png` });
+  console.log('wrote', `${OUT}/cover-${cover.id}.png`);
 }
 await browser.close();
 
@@ -284,13 +284,13 @@ every launch and is usually an interior page. Pick one — or say what to change
 <p class="lede">This is the size that decides it: the list grid at <code>/lists</code>.</p>
 <div class="shelf">
 ${hasCurrent ? card('./art/current-153.png', 'Today', 'auto-generated') : ''}
-${covers.map((c) => card(`./cover-${c.id}.png`, c.name, `${c.id}`)).join('')}
+${covers.map((cover) => card(`./cover-${cover.id}.png`, cover.name, `${cover.id}`)).join('')}
 </div>
 
 <h2>Full size</h2>
 <div class="big">
-${covers.map((c) => `<figure><img src="./cover-${c.id}.png" alt="">
-  <figcaption><b>${c.name}</b>${c.note}</figcaption></figure>`).join('')}
+${covers.map((cover) => `<figure><img src="./cover-${cover.id}.png" alt="">
+  <figcaption><b>${cover.name}</b>${cover.note}</figcaption></figure>`).join('')}
 </div>
 `;
 writeFileSync(`${OUT}/index.html`, gallery);

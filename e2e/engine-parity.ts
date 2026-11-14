@@ -42,10 +42,10 @@ const cfg = reg.sets.kids!;
 
 // Node channel_buckets (rule pool + curated members, deduped), normalized to the _buckets shape.
 async function nodeChannelBuckets(set: string, profile: string) {
-  const c = reg.sets[set]!;
-  const binding = routing.bindingFor(c, profile);
-  return (await rotation.channelBuckets(client, c, binding)).map((bk) => {
-    let eps = bk.episodes.map((e) => String(e.ratingKey));
+  const setCfg = reg.sets[set]!;
+  const binding = routing.bindingFor(setCfg, profile);
+  return (await rotation.channelBuckets(client, setCfg, binding)).map((bk) => {
+    let eps = bk.episodes.map((episode) => String(episode.ratingKey));
     if (String(bk.ratingKey).startsWith('section-')) eps = [...eps].sort();
     return {
       show: bk.show, ratingKey: String(bk.ratingKey),
@@ -58,7 +58,7 @@ async function nodeChannelBuckets(set: string, profile: string) {
 async function nodeBuckets(profile: string) {
   const binding = routing.bindingFor(cfg, profile);
   return (await select.unwatchedBuckets(client, cfg, binding)).map((bk) => {
-    let eps = bk.episodes.map((e) => e.ratingKey);
+    let eps = bk.episodes.map((episode) => episode.ratingKey);
     if (String(bk.ratingKey).startsWith('section-')) eps = [...eps].sort();
     return { show: bk.show, ratingKey: bk.ratingKey, multi_season: Boolean(bk.multi_season), episodes: eps };
   });
@@ -79,7 +79,7 @@ for (const profile of ['Younger', 'Older']) {
   const want = pyBuckets(profile);
   const got = await nodeBuckets(profile);
   if (JSON.stringify(want) === JSON.stringify(got)) {
-    console.log(`  ✓ ${profile}: ${got.map((b) => `${b.show}[${b.episodes.join(',')}]`).join('  ')}`);
+    console.log(`  ✓ ${profile}: ${got.map((bucket) => `${bucket.show}[${bucket.episodes.join(',')}]`).join('  ')}`);
   } else {
     failures += 1;
     console.log(`  ✗ ${profile}\n      golden: ${JSON.stringify(want)}\n      node:   ${JSON.stringify(got)}`);
@@ -91,7 +91,7 @@ for (const profile of ['Younger', 'Older']) {
   const want = pyRewatch(profile);
   const got = await nodeRewatch(profile);
   if (JSON.stringify(want) === JSON.stringify(got)) {
-    console.log(`  ✓ ${profile}: ${got.map((c) => `${c.title}×${c.count}`).join('  ') || '(none)'}`);
+    console.log(`  ✓ ${profile}: ${got.map((rewatch) => `${rewatch.title}×${rewatch.count}`).join('  ') || '(none)'}`);
   } else {
     failures += 1;
     console.log(`  ✗ ${profile}\n      golden: ${JSON.stringify(want)}\n      node:   ${JSON.stringify(got)}`);
@@ -102,7 +102,7 @@ console.log('=== engine parity: channel_buckets (Node rotation.js ↔ recorded c
   const want = pyChannelBuckets('kidsplus', 'Younger');
   const got = await nodeChannelBuckets('kidsplus', 'Younger');
   if (JSON.stringify(want) === JSON.stringify(got)) {
-    console.log(`  ✓ kidsplus × Younger: ${got.map((b) => `${b.show}[${b.episodes.join(',')}]`).join('  ')}`);
+    console.log(`  ✓ kidsplus × Younger: ${got.map((bucket) => `${bucket.show}[${bucket.episodes.join(',')}]`).join('  ')}`);
   } else {
     failures += 1;
     console.log(`  ✗ kidsplus × Younger\n      golden: ${JSON.stringify(want)}\n      node:   ${JSON.stringify(got)}`);

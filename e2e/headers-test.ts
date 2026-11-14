@@ -20,16 +20,16 @@ const PORT = process.env.WEB_PORT || 18790;
 const BASE = `http://localhost:${PORT}`;
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra = '') => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = '') => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 // The hashed asset filenames change every build, so discover one .js from the build output
 // rather than hardcoding it. (dist must exist — see the header comment.)
 function findHashedAsset(ext: string): string {
   const dir = path.join(ROOT, 'web', 'dist', 'assets');
-  const hit = readdirSync(dir).find((f) => f.endsWith(ext) && !f.endsWith('.br') && !f.endsWith('.gz'));
+  const hit = readdirSync(dir).find((fileName) => fileName.endsWith(ext) && !fileName.endsWith('.br') && !fileName.endsWith('.gz'));
   if (!hit) throw new Error(`no ${ext} asset in web/dist/assets — run the web build first`);
   return `/assets/${hit}`;
 }

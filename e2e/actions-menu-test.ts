@@ -64,7 +64,7 @@ const waitReady = async (url: string, ms = 30000) => {
 
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
-for (const p of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(p, { recursive: true, force: true });
+for (const lockPath of [`${QUEUES}.lock`, `${SETS}.lock`]) await fs.rm(lockPath, { recursive: true, force: true });
 await fs.rm('/tmp/qp-actions-menu.sqlite', { force: true });
 await fs.rm('/tmp/qp-actions-menu.history.json', { force: true });
 
@@ -83,9 +83,9 @@ const srv = spawnServer({
 });
 
 let failed = 0;
-const check = (name: string, ok: boolean, detail = '') => {
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
-  if (!ok) failed += 1;
+const check = (name: string, isOk: boolean, detail = '') => {
+  console.log(`  ${isOk ? 'ok  ' : 'FAIL'} ${name}${isOk ? '' : ` — ${detail}`}`);
+  if (!isOk) failed += 1;
 };
 
 try {
@@ -93,7 +93,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Every non-GET this page makes, so a menu row can be asserted on what it did NOT do. */
   const writes: { method: string; url: string }[] = [];
@@ -205,7 +205,7 @@ try {
 
   check(
     'confirming POSTs /api/queues/bob/reset-watched — the one implementation, not a second clear',
-    writes.some((w) => w.method === 'POST' && w.url.endsWith(`/api/queues/${TWO_DONE}/reset-watched`)),
+    writes.some((write) => write.method === 'POST' && write.url.endsWith(`/api/queues/${TWO_DONE}/reset-watched`)),
     `wrote: ${JSON.stringify(writes)}`,
   );
 
@@ -247,7 +247,7 @@ try {
 
   check(
     'confirming POSTs /api/queues/bob_anime/remove-completed',
-    writes.some((w) => w.method === 'POST' && w.url.endsWith(`/api/queues/${ONE_DONE}/remove-completed`)),
+    writes.some((write) => write.method === 'POST' && write.url.endsWith(`/api/queues/${ONE_DONE}/remove-completed`)),
     `wrote: ${JSON.stringify(writes)}`,
   );
 
@@ -313,7 +313,7 @@ for (const file of webFiles) {
 check(
   'exactly one place in the web app calls the reset route',
   resetCallers.length === 1 && resetCallers[0]!.endsWith('QueueActionsMenu.tsx'),
-  `callers: ${JSON.stringify(resetCallers.map((f) => path.relative(ROOT, f)))}`,
+  `callers: ${JSON.stringify(resetCallers.map((resetCaller) => path.relative(ROOT, resetCaller)))}`,
 );
 
 console.log(failed ? `\n${failed} FAILURE(S)` : '\nALL PASS');

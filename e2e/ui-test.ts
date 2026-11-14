@@ -21,22 +21,22 @@ interface QueuesResponse {
 
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
-page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
-page.on('request', (r) => { if (r.url().includes('/api/') && r.method() !== 'GET') console.log('  >>', r.method(), r.url().replace(BASE, ''), (r.postData() || '').slice(0, 200)); });
+page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
+page.on('request', (request) => { if (request.url().includes('/api/') && request.method() !== 'GET') console.log('  >>', request.method(), request.url().replace(BASE, ''), (request.postData() || '').slice(0, 200)); });
 
 await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
 
 // 0. Landing = the Play list: Rules (2 generic) + Picks (3 anime + 3 movie wishlists).
 // no posters. (decision `2026-08-23-kind-is-picks-or-rules` — Ordered and Curated share Picks.)
 await page.waitForSelector('.playcard', { timeout: 30000 });
-const rulesRows = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
-const picksRows = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));
+const rulesRows = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((el) => el.textContent));
+const picksRows = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((el) => el.textContent));
 ok('landing: 2 rules rows (Shows & Shorts + Movies)',
   rulesRows.length === 2 && rulesRows[0] === 'Shows & Shorts' && rulesRows[1] === 'Movies');
 ok('landing: 6 picks rows (anime + movie wishlists)', picksRows.length === 6);
 ok('landing: no posters', !(await page.$('#play .tile')));
 const kindWords0 = await page.$$eval('#playgrid .cardkind', (els) =>
-  [...new Set(els.map((e) => (e.textContent ?? '').trim()))]);
+  [...new Set(els.map((el) => (el.textContent ?? '').trim()))]);
 ok('landing: cards named Picks + Rules only',
   kindWords0.includes('Picks') && kindWords0.includes('Rules')
   && !kindWords0.includes('Ordered Queue') && !kindWords0.includes('Curated Pool')
@@ -51,7 +51,7 @@ ok('landing: cards named Picks + Rules only',
 // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
 await page.click('#goqueues');
 await page.waitForSelector('.shelf', { timeout: 30000 });
-const shelves = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
+const shelves = await page.$$eval('.shelf', (els) => els.map((el) => el.dataset.set));
 ok(`every Picks queue has a shelf, both lanes (${shelves.length})`,
   shelves.length === picksRows.length && shelves.includes('bob_anime'));
 ok('no rules queue on the Picks page', !shelves.includes('younger') && !shelves.includes('older'));
@@ -67,8 +67,8 @@ const laneClauses = await page.$$eval('.shelf', (els) =>
     text: (el.querySelector('h2 .lanes-sec')?.textContent ?? '').trim(),
   })));
 ok(`every non-empty shelf names its lane (${JSON.stringify(laneClauses)})`,
-  laneClauses.some((c) => c.hasItems)
-  && laneClauses.every((c) => (c.hasItems ? /priority|pool/.test(c.text) : c.text === '')));
+  laneClauses.some((laneClause) => laneClause.hasItems)
+  && laneClauses.every((laneClause) => (laneClause.hasItems ? /priority|pool/.test(laneClause.text) : laneClause.text === '')));
 const shelfHeadingBranding = await page.$$eval('.shelf h2', (els) =>
   els.map((el) => ({
     hasFaceMarker: Boolean(el.querySelector('[data-person-face]')),
@@ -140,7 +140,7 @@ await page.fill('#gsearch', 'toy tinkers');
 await page.waitForSelector('#gresults.open li', { timeout: 15000 });
 await page.click('#gresults li [data-testid="results-addto"]');
 await page.waitForSelector('.addtomenu [role="menuitem"]');
-const menuLabels = await page.$$eval('.addtomenu [role="menuitem"]', (bs) => bs.map((b) => b.textContent));
+const menuLabels = await page.$$eval('.addtomenu [role="menuitem"]', (bs) => bs.map((element) => element.textContent));
 // `startsWith`, not equality: a row is "<queue><people>" since 2026-08-26 — the chip that
 // tells two "Movies & Shows" rows apart is part of the menu item's text.
 ok(`menu offers Bob — Shorts (${JSON.stringify(menuLabels)})`,
@@ -148,7 +148,7 @@ ok(`menu offers Bob — Shorts (${JSON.stringify(menuLabels)})`,
 await page.click('.addtomenu [role="menuitem"]:has-text("Bob — Shorts")');
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Added'), undefined, { timeout: 20000 });
 ok('added via header search', true);
-ok('results stay open after add', await page.$eval('#gresults', (e) => e.classList.contains('open')));
+ok('results stay open after add', await page.$eval('#gresults', (element) => element.classList.contains('open')));
 await page.keyboard.press('Escape');
 
 // 6. Filter hides non-matching shelves.
@@ -160,7 +160,7 @@ await page.keyboard.press('Escape');
 // filter that matched nothing would both slip past "> 0".
 await page.fill('#qfilter', 'anime');
 const shown = await page.$$eval('.shelf', (els) =>
-  els.filter((e) => !(e as HTMLElement).hidden).map((e) => (e as HTMLElement).dataset.set));
+  els.filter((el) => !(el as HTMLElement).hidden).map((el) => (el as HTMLElement).dataset.set));
 ok(`filter "anime" → the anime queues, and only those (${JSON.stringify(shown)})`,
   shown.length > 0 && shown.every((id) => id?.includes('anime')));
 const queueFilterClear = page.locator('.queue-filter').getByRole('button', { name: 'Clear search' });
@@ -174,16 +174,16 @@ ok('queue filter clear button empties and refocuses the field',
 await page.$$eval('.shelf', (els) => els.forEach(() => {}));
 
 // 7. Collapse all / expand all.
-let collapsed = await page.$$eval('.shelf', (els) => els.every((e) => e.classList.contains('collapsed')));
-ok('shelves start collapsed', collapsed);
+let isCollapsed = await page.$$eval('.shelf', (els) => els.every((el) => el.classList.contains('collapsed')));
+ok('shelves start collapsed', isCollapsed);
 ok('the default action is Expand all', (await page.textContent('#collapseall')) === 'Expand all');
 await page.click('#collapseall');
-collapsed = await page.$$eval('.shelf', (els) => els.some((e) => e.classList.contains('collapsed')));
-ok('expand all', !collapsed);
+isCollapsed = await page.$$eval('.shelf', (els) => els.some((el) => el.classList.contains('collapsed')));
+ok('expand all', !isCollapsed);
 ok('button flips to Collapse all', (await page.textContent('#collapseall')) === 'Collapse all');
 await page.click('#collapseall');
-collapsed = await page.$$eval('.shelf', (els) => els.every((e) => e.classList.contains('collapsed')));
-ok('collapse all', collapsed);
+isCollapsed = await page.$$eval('.shelf', (els) => els.every((el) => el.classList.contains('collapsed')));
+ok('collapse all', isCollapsed);
 
 // 8. Shelf reorder: keep all collapsed (long-list flow), then drag the last shelf's handle to
 // the top. Everything must be inside the viewport for real mouse events to hit.
@@ -204,15 +204,15 @@ await page.mouse.down();
 await page.mouse.move(fb.x + 300, fb.y + 10, { steps: 12 });
 await page.mouse.up();
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('order saved'), undefined, { timeout: 20000 });
-const orderNow = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
+const orderNow = await page.$$eval('.shelf', (els) => els.map((el) => el.dataset.set));
 ok('shelf drag reorders (new queue first)', orderNow[0] === 'bob_shorts');
-const apiOrder = await page.evaluate(() => fetch('/api/sets').then((r) => r.json()).then((j: SetsResponse) => j.sets.map((s) => s.id)));
+const apiOrder = await page.evaluate(() => fetch('/api/sets').then((response) => response.json()).then((setsResponse: SetsResponse) => setsResponse.sets.map((set) => set.id)));
 console.log('  api order after drag:', apiOrder.join(','));
 
 // 9. Reload — order persisted server-side.
 await page.reload({ waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf');
-const orderAfter = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));
+const orderAfter = await page.$$eval('.shelf', (els) => els.map((el) => el.dataset.set));
 ok('order survives reload', orderAfter[0] === 'bob_shorts');
 
 // 10. Edit modal: rename the queue; id stays.
@@ -227,17 +227,17 @@ await page.click('#set-save');
 // it is actually about is that the rename persisted and the ID did not move, which is a
 // question for `/api/sets`.
 await page.waitForFunction(async () => {
-  const r = await fetch('/api/sets').then((x) => x.json());
-  return r.sets.some(
-    (s: { id: string; label: string }) =>
-      s.id === 'bob_shorts' && s.label === 'Bob — Short Films',
+  const registry = await fetch('/api/sets').then((response) => response.json());
+  return registry.sets.some(
+    (set: { id: string; label: string }) =>
+      set.id === 'bob_shorts' && set.label === 'Bob — Short Films',
   );
 }, undefined, { timeout: 20000 });
 const sameId = await page.$('.shelf[data-set="bob_shorts"]');
 ok('rename keeps id', Boolean(sameId));
 
 // 11. Delete it (accept confirm).
-page.on('dialog', (d) => d.accept());
+page.on('dialog', (dialog) => dialog.accept());
 await page.hover('.shelf[data-set="bob_shorts"] h2');
 await page.click('.shelf[data-set="bob_shorts"] .shelfedit');
 await page.click('#set-delete');
@@ -254,13 +254,13 @@ await page.setViewportSize({ width: 1400, height: 900 });
 await page.click('.shelf .open');
 await page.waitForSelector('#queue:not([hidden]) li.tile', { timeout: 20000 });
 ok('queue view opens', true);
-ok('tools hidden in queue view', await page.$eval('#tools', (e) => getComputedStyle(e).display === 'none'));
+ok('tools hidden in queue view', await page.$eval('#tools', (element) => getComputedStyle(element).display === 'none'));
 
 // ============================ v2 feedback batch ============================= //
 
 // A. Inline pen-rename from the grid view. We're in a queue view (step 13). The pen shows,
 // clicking it turns the heading into an input; Enter saves PATCH /api/sets/:id {label}.
-ok('A: pen icon visible in grid view', await page.$eval('#editname', (e) => !e.hidden));
+ok('A: pen icon visible in grid view', await page.$eval('#editname', (element) => !element.hidden));
 ok('A: Configure button in grid header', Boolean(await page.$('#qconfigure')));
 const openSetId = await page.evaluate(() => location.pathname.replace('/q/', ''));
 const newLabel = 'Renamed By Test';
@@ -270,7 +270,7 @@ await page.fill('#heading input', newLabel);
 await page.keyboard.press('Enter');
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Renamed'), undefined, { timeout: 20000 });
 const persisted = await page.evaluate(async (id) =>
-  fetch('/api/sets').then((r) => r.json()).then((j: SetsResponse) => j.sets.find((s) => s.id === id)?.label), openSetId);
+  fetch('/api/sets').then((response) => response.json()).then((setsResponse: SetsResponse) => setsResponse.sets.find((set) => set.id === id)?.label), openSetId);
 ok('A: rename persisted server-side (label PATCH)', persisted === newLabel);
 ok('A: heading shows the new label', (await page.textContent('#heading') ?? '').trim() === newLabel);
 
@@ -285,12 +285,12 @@ ok('K: toast auto-dismissed', (await page.textContent('#status')) === '');
 // below is re-fetched from the server, and the rename above already persisted.
 await page.goto(`${BASE}/overview`, { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('#playgrid li[data-kind="rules"]', { timeout: 20000 });
-const dyn = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
-const picks = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));
+const dyn = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((el) => el.textContent));
+const picks = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((el) => el.textContent));
 ok('F: Rules = Shows & Shorts + Movies', dyn.length === 2 && dyn[0] === 'Shows & Shorts' && dyn[1] === 'Movies');
 ok('F: Picks holds the hand-picked sets', picks.length >= 1);
 const kindWords = await page.$$eval('#playgrid .cardkind', (els) =>
-  [...new Set(els.map((e) => (e.textContent ?? '').trim()))]);
+  [...new Set(els.map((el) => (el.textContent ?? '').trim()))]);
 ok('F: cards named Picks + Rules',
   kindWords.includes('Picks') && kindWords.includes('Rules')
   && !kindWords.includes('Ordered Queue') && !kindWords.includes('Curated Pool')
@@ -312,7 +312,7 @@ ok(`F: rules picker lists rules queues alone (${JSON.stringify(chanOpts)})`,
 // Stated as its own claim rather than left implicit in the count: the defect was a Picks
 // queue APPEARING here, and a length check alone would pass a list that swapped one in.
 ok('F: no Picks queue in the rules picker',
-  chanOpts.every((label) => !picks.some((p) => p && label.startsWith(p))));
+  chanOpts.every((label) => !picks.some((pick) => pick && label.startsWith(pick))));
 // WHOSE pool each row is. "Shows" and "Shows & Shorts" are the same words until you know one
 // is Younger Kids and the other Older Kids, which the landing card has said since 2026-08-17
 // and this picker did not say at all (owner, 2026-08-26). Every fixture pool names an account,
@@ -326,14 +326,14 @@ ok(`F: every rules row names its account (${JSON.stringify(chanOpts)})`,
 // the 2026-08-16 Pools rename landed ("Add — search this pool's libraries…"). It had been
 // unreachable rather than passing: the `#set-libs` check above it crashed the whole suite
 // on every run, so nothing here executed. Fixing that selector exposed this one.
-const animeLabel = picks.find((l) => /anime/i.test(l ?? '')) ?? picks[0];
+const animeLabel = picks.find((pick) => /anime/i.test(pick ?? '')) ?? picks[0];
 const animeId = animeLabel ? await page.evaluate((label) =>
-  fetch('/api/queues').then((r) => r.json()).then((j: QueuesResponse) => Object.keys(j.sets).find((id) => j.sets[id]?.label === label)),
+  fetch('/api/queues').then((response) => response.json()).then((queuesResponse: QueuesResponse) => Object.keys(queuesResponse.sets).find((id) => queuesResponse.sets[id]?.label === label)),
 animeLabel) : null;
 if (animeId) {
   await page.goto(`${BASE}/q/${animeId}`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#queue:not([hidden])', { timeout: 20000 });
-  const ph = await page.$eval<string, HTMLInputElement>('#search', (e) => e.placeholder);
+  const ph = await page.$eval<string, HTMLInputElement>('#search', (element) => element.placeholder);
   ok(`F: picks add box says "pool" not "queue" (${ph})`, /pool/.test(ph) && !/queue/.test(ph));
 } else {
   ok('F: curated-pool add box says "pool" not "queue"', true); // no anime set in fixture
@@ -349,8 +349,8 @@ const pool = await page.evaluate(() => {
   const tiles = [...document.querySelectorAll('#chpool .tile')];
   return {
     n: tiles.length,
-    seenX: tiles.some((t) => /Seen\s+\d+×/.test(t.textContent ?? '')),
-    eye: tiles.some((t) => t.querySelector('.badge.watches svg')),
+    seenX: tiles.some((tile) => /Seen\s+\d+×/.test(tile.textContent ?? '')),
+    eye: tiles.some((tile) => tile.querySelector('.badge.watches svg')),
   };
 });
 ok('H: no old "Seen N×" badge in movie pool', !pool.seenX);

@@ -53,8 +53,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -83,7 +83,7 @@ const GAMES: StubGame[] = [
  * With `episodes: 3` that is two plays left — and zero if anything ever counts `playCount`.
  */
 const PLAYS: StubPlay[] = [
-  ...Array.from({ length: 20 }, (_, i) => ({ id: `old-${i}`, gameId: 'harbour-lantern', playedAt: YEARS_AGO })),
+  ...Array.from({ length: 20 }, (_, index) => ({ id: `old-${index}`, gameId: 'harbour-lantern', playedAt: YEARS_AGO })),
   { id: 'recent', gameId: 'harbour-lantern', playedAt: YESTERDAY },
 ];
 
@@ -91,7 +91,7 @@ const PLAYS: StubPlay[] = [
 let CALLS: string[] = [];
 let POSTED: string[] = [];
 
-const asClient = (c: unknown) => c as unknown as BoardGamesHttpClient;
+const asClient = (client: unknown) => client as unknown as BoardGamesHttpClient;
 
 function stubClient({ plays = PLAYS }: { plays?: StubPlay[] } = {}) {
   return {
@@ -100,19 +100,19 @@ function stubClient({ plays = PLAYS }: { plays?: StubPlay[] } = {}) {
       CALLS.push(`/api/games?q=${query}&categories=${categories.join(',')}`);
       const term = query.toLowerCase();
       return Promise.resolve(
-        GAMES.filter((g) => g.name.toLowerCase().includes(term))
-          .filter((g) => !categories.length || (g.ownerCategories || []).some((cat) => categories.includes(cat))),
+        GAMES.filter((game) => game.name.toLowerCase().includes(term))
+          .filter((game) => !categories.length || (game.ownerCategories || []).some((cat) => categories.includes(cat))),
       );
     },
     game(id: string) {
       CALLS.push(`/api/games/${id}`);
-      return Promise.resolve(GAMES.find((g) => g.id === id) || null);
+      return Promise.resolve(GAMES.find((game) => game.id === id) || null);
     },
     plays(gameId: string, since: number | null = null) {
       CALLS.push(`/api/plays?gameId=${gameId}&since=${since ?? ''}`);
       return Promise.resolve(
-        plays.filter((p) => p.gameId === gameId)
-          .filter((p) => since == null || Date.parse(p.playedAt) >= since * 1000),
+        plays.filter((play) => play.gameId === gameId)
+          .filter((play) => since == null || Date.parse(play.playedAt) >= since * 1000),
       );
     },
     categories() {
@@ -138,16 +138,16 @@ const provider = () => boardGamesProvider({ def: DEF, client: asClient(stubClien
 
 await ok('never asks the picker for /api/collection', async () => {
   CALLS = [];
-  const p = provider();
-  await p.libraries?.();
-  await p.search?.('lantern', { libraries: [] });
-  await p.buckets({
+  const gameProvider = provider();
+  await gameProvider.libraries?.();
+  await gameProvider.search?.('lantern', { libraries: [] });
+  await gameProvider.buckets({
     cfg: {},
     entries: [{ id: 'harbour-lantern', batch: 3, queuedAt: NOW - 86400 * 2 }],
   });
   assert.ok(CALLS.length > 0, 'the stub saw no calls at all');
   assert.ok(
-    !CALLS.some((c) => c.includes('/api/collection')),
+    !CALLS.some((call) => call.includes('/api/collection')),
     `a call reached /api/collection: ${CALLS.join(', ')}`,
   );
 });
@@ -172,12 +172,12 @@ await ok('is configured by URL alone — the picker issues no token', async () =
 
 await ok('search scopes to categories, and an empty term asks nothing', async () => {
   CALLS = [];
-  const p = provider();
-  assert.deepEqual(await p.search?.('', { libraries: [] }), []);
+  const gameProvider = provider();
+  assert.deepEqual(await gameProvider.search?.('', { libraries: [] }), []);
   assert.equal(CALLS.length, 0, 'an empty term still hit the picker');
 
-  const hits = await p.search?.('lantern', { libraries: ["Roll 'n Write"] });
-  assert.deepEqual(hits?.map((h) => h.id), ['harbour-lantern']);
+  const hits = await gameProvider.search?.('lantern', { libraries: ["Roll 'n Write"] });
+  assert.deepEqual(hits?.map((hit) => hit.id), ['harbour-lantern']);
 });
 
 await ok('no categories named searches the whole shelf', async () => {
@@ -186,9 +186,9 @@ await ok('no categories named searches the whole shelf', async () => {
   // that belong to no category at all, which is most of the shelf.
   CALLS = [];
   const hits = await provider().search?.('a', { libraries: [] });
-  assert.deepEqual(hits?.map((h) => h.id).sort(), ['harbour-lantern', 'orchard']);
+  assert.deepEqual(hits?.map((hit) => hit.id).sort(), ['harbour-lantern', 'orchard']);
   assert.ok(
-    CALLS.every((c) => !c.includes('/api/games?q=a&categories=') || c.endsWith('categories=')),
+    CALLS.every((call) => !call.includes('/api/games?q=a&categories=') || call.endsWith('categories=')),
     `an empty scope still sent a category filter: ${CALLS.join(', ')}`,
   );
 });
@@ -200,9 +200,9 @@ await ok('a stored `collection` id still means the whole shelf, never a category
   // to everything rather than being dropped or sent as a category the picker never had.
   CALLS = [];
   const hits = await provider().search?.('a', { libraries: ['collection', "Roll 'n Write"] });
-  assert.deepEqual(hits?.map((h) => h.id).sort(), ['harbour-lantern', 'orchard']);
+  assert.deepEqual(hits?.map((hit) => hit.id).sort(), ['harbour-lantern', 'orchard']);
   assert.ok(
-    CALLS.every((c) => !c.includes('categories=collection')),
+    CALLS.every((call) => !call.includes('categories=collection')),
     `collection leaked into the category filter: ${CALLS.join(', ')}`,
   );
 });
@@ -271,7 +271,7 @@ await ok('a queue batch of 3 takes three plays of the head, and never spills int
   });
   assert.equal(res.play.length, 3);
   assert.ok(
-    (res.play as { gameId: string }[]).every((i) => i.gameId === 'harbour-lantern'),
+    (res.play as { gameId: string }[]).every((play) => play.gameId === 'harbour-lantern'),
     'a night crossed into the next game',
   );
 });
@@ -297,22 +297,22 @@ await ok('logProgress posts a play and attaches no people', async () => {
 // --- handoff ------------------------------------------------------------------- //
 
 await ok('materialize is a descriptor and handoff opens /play/<game>', async () => {
-  const p = provider();
-  const res = await p.buckets({ cfg: {}, entries: [{ id: 'orchard', batch: 1, queuedAt: NOW }] });
-  const artifact = await p.materialize(res.play, { setName: 'games' }) as BoardGamesArtifact;
+  const gameProvider = provider();
+  const res = await gameProvider.buckets({ cfg: {}, entries: [{ id: 'orchard', batch: 1, queuedAt: NOW }] });
+  const artifact = await gameProvider.materialize(res.play, { setName: 'games' }) as BoardGamesArtifact;
   assert.equal(artifact.kind, 'board-game-picker');
   assert.equal(artifact.gameId, 'orchard');
   assert.equal(artifact.url, 'https://board-game-picker.invalid/play/orchard');
 
-  const handoff = await p.handoff(artifact) as PullResult;
+  const handoff = await gameProvider.handoff(artifact) as PullResult;
   assert.equal(handoff.mode, 'pull');
   assert.equal(handoff.url, 'https://board-game-picker.invalid/play/orchard');
 });
 
 await ok('an empty lineup hands off an error rather than a URL', async () => {
-  const p = provider();
-  const artifact = await p.materialize([], { setName: 'games' }) as BoardGamesArtifact;
-  const handoff = await p.handoff(artifact) as PullResult;
+  const gameProvider = provider();
+  const artifact = await gameProvider.materialize([], { setName: 'games' }) as BoardGamesArtifact;
+  const handoff = await gameProvider.handoff(artifact) as PullResult;
   assert.equal(handoff.url, null);
   assert.ok(handoff.error, 'no error sentence on an empty handoff');
 });
@@ -322,11 +322,11 @@ await ok('an empty lineup hands off an error rather than a URL', async () => {
 const { launchDescriptor } = await import('../server/src/providers/launcher.js');
 
 await ok('/go/<set> 302s into the picker, and stamps queued_at on the way', async () => {
-  const d = await launchDescriptor('games', { client: asClient(stubClient()) as never });
-  assert.equal(d.status, 302);
+  const descriptor = await launchDescriptor('games', { client: asClient(stubClient()) as never });
+  assert.equal(descriptor.status, 302);
   assert.ok(
-    /^https:\/\/board-game-picker\.invalid\/play\/[a-z-]+$/.test(String(d.url)),
-    `not a /play deep link: ${String(d.url)}`,
+    /^https:\/\/board-game-picker\.invalid\/play\/[a-z-]+$/.test(String(descriptor.url)),
+    `not a /play deep link: ${String(descriptor.url)}`,
   );
   // The stamp is the whole reason a lifetime play log does not finish a queue on day one.
   const yaml = readFileSync(QUEUES_PATH, 'utf8');
@@ -340,17 +340,17 @@ await ok('a played-out queue answers 409, never the next library game', async ()
   const justNow = new Date().toISOString();
   const spent = [
     ...PLAYS,
-    ...Array.from({ length: 5 }, (_, i) => ({ id: `spent-${i}`, gameId: 'harbour-lantern', playedAt: justNow })),
-    ...Array.from({ length: 5 }, (_, i) => ({ id: `spent-o-${i}`, gameId: 'orchard', playedAt: justNow })),
+    ...Array.from({ length: 5 }, (_, index) => ({ id: `spent-${index}`, gameId: 'harbour-lantern', playedAt: justNow })),
+    ...Array.from({ length: 5 }, (_, index) => ({ id: `spent-o-${index}`, gameId: 'orchard', playedAt: justNow })),
   ];
-  const d = await launchDescriptor('games', { client: asClient(stubClient({ plays: spent })) as never });
-  assert.equal(d.status, 409);
-  assert.equal(d.url, undefined);
+  const descriptor = await launchDescriptor('games', { client: asClient(stubClient({ plays: spent })) as never });
+  assert.equal(descriptor.status, 409);
+  assert.equal(descriptor.url, undefined);
 });
 
 await ok('a Plex queue still refuses to be opened by a link', async () => {
-  const d = await launchDescriptor('tv');
-  assert.equal(d.status, 409);
+  const descriptor = await launchDescriptor('tv');
+  assert.equal(descriptor.status, 409);
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED: ${FAILS.join(', ')}` : '\nall green');

@@ -23,7 +23,7 @@ import { chromium, type Page } from './playwright.js';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 const PORT = 18791;
-const tagArg = process.argv.find((a) => a.startsWith('--tag='));
+const tagArg = process.argv.find((arg) => arg.startsWith('--tag='));
 const TAG = tagArg ? tagArg.slice('--tag='.length) : 'after';
 const NARROW = { width: 390, height: 844 }; // iPhone 14/15 CSS width — the reported viewport
 
@@ -61,7 +61,7 @@ const plexStub = http.createServer((req, res) => {
   res.end(JSON.stringify({ MediaContainer: {} }));
 });
 
-await new Promise<void>((r) => plexStub.listen(0, () => r()));
+await new Promise<void>((resolve) => plexStub.listen(0, () => resolve()));
 
 const addr = plexStub.address();
 
@@ -104,21 +104,21 @@ async function scene(page: Page, name: string, drive: () => Promise<void>) {
     await page.screenshot({ path: `__screenshots__/narrow-${TAG}-${name}.png` });
     got.push(name);
     console.log(`shot  ${name}`);
-  } catch (e) {
+  } catch (error) {
     missed.push(name);
-    console.log(`SKIP  ${name} — ${(e as Error).message.split('\n')[0]}`);
+    console.log(`SKIP  ${name} — ${(error as Error).message.split('\n')[0]}`);
   }
 }
 
 /** Click the first selector that exists, or throw naming all of them. */
 async function clickAny(page: Page, selectors: string[]) {
-  for (const s of selectors) {
-    const el = await page.$(s);
+  for (const selector of selectors) {
+    const el = await page.$(selector);
 
     if (el) {
       await el.click();
 
-      return s;
+      return selector;
     }
   }
 
@@ -128,12 +128,12 @@ async function clickAny(page: Page, selectors: string[]) {
 try {
   server = spawnServer({ env, stdio: 'ignore' });
 
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       break;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 

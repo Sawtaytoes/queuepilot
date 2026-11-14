@@ -56,8 +56,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -78,14 +78,14 @@ const GAMES: SteamGameDto[] = [
   { appid: 61730, name: 'Critter Crunch', playtime_forever: 0 },
 ];
 
-const asClient = (c: unknown) => c as unknown as SteamHttpClient;
+const asClient = (stub: unknown) => stub as unknown as SteamHttpClient;
 
 function stubClient(games: SteamGameDto[] = GAMES) {
   return {
     library: () => Promise.resolve(games),
-    game: (appid: string) => Promise.resolve(games.find((g) => String(g.appid) === String(appid)) || null),
-    search: (q: string) => Promise.resolve(
-      games.filter((g) => String(g.name).toLowerCase().includes(q.toLowerCase())),
+    game: (appid: string) => Promise.resolve(games.find((game) => String(game.appid) === String(appid)) || null),
+    search: (query: string) => Promise.resolve(
+      games.filter((game) => String(game.name).toLowerCase().includes(query.toLowerCase())),
     ),
     cover: () => Promise.resolve({ buffer: Buffer.from('jpg'), contentType: 'image/jpeg' }),
   };
@@ -183,19 +183,19 @@ await ok('a played tile reads as finished, an unplayed one has a next-up', async
 // --- handoff ------------------------------------------------------------------- //
 
 await ok('handoff is a steam:// url for the head', async () => {
-  const p = provider();
-  const res = await p.buckets({ cfg: {}, entries: [{ id: '1245620', queuedAt: QUEUED }] });
-  const artifact = await p.materialize(res.play, { setName: 'pc' }) as SteamArtifact;
+  const steamProvider = provider();
+  const res = await steamProvider.buckets({ cfg: {}, entries: [{ id: '1245620', queuedAt: QUEUED }] });
+  const artifact = await steamProvider.materialize(res.play, { setName: 'pc' }) as SteamArtifact;
   assert.equal(artifact.appid, '1245620');
   assert.equal(artifact.url, 'steam://rungameid/1245620');
-  const out = await p.handoff(artifact);
+  const out = await steamProvider.handoff(artifact);
   assert.equal((out as { url: string }).url, 'steam://rungameid/1245620');
 });
 
 await ok('an empty lineup hands off an error, never a bare steam:// url', async () => {
-  const p = provider();
-  const artifact = await p.materialize([], { setName: 'pc' }) as SteamArtifact;
-  const out = await p.handoff(artifact);
+  const steamProvider = provider();
+  const artifact = await steamProvider.materialize([], { setName: 'pc' }) as SteamArtifact;
+  const out = await steamProvider.handoff(artifact);
   assert.equal((out as { url: string | null }).url, null);
 });
 
@@ -241,19 +241,19 @@ function fetchStub(body: unknown, { status = 200 }: { status?: number } = {}) {
 
 await ok('the client asks Valve for ONE endpoint, and never for people', async () => {
   const { calls, impl } = fetchStub({ response: { games: GAMES } });
-  const c = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
-  await c.library();
-  await c.search('drop');
-  await c.game('251470');
+  const client = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
+  await client.library();
+  await client.search('drop');
+  await client.game('251470');
 
   assert.ok(calls.length > 0, 'the stub saw no calls at all');
   assert.ok(
-    calls.every((u) => u.includes('/IPlayerService/GetOwnedGames/')),
+    calls.every((call) => call.includes('/IPlayerService/GetOwnedGames/')),
     `something other than GetOwnedGames was fetched: ${calls.join(', ')}`,
   );
   for (const forbidden of ['GetFriendList', 'GetPlayerSummaries', 'ISteamUser/']) {
     assert.ok(
-      !calls.some((u) => u.includes(forbidden)),
+      !calls.some((call) => call.includes(forbidden)),
       `a call reached ${forbidden}: ${calls.join(', ')}`,
     );
   }
@@ -261,10 +261,10 @@ await ok('the client asks Valve for ONE endpoint, and never for people', async (
 
 await ok('the library is fetched once for many questions', async () => {
   const { calls, impl } = fetchStub({ response: { games: GAMES } });
-  const c = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
+  const client = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
   // What typing "drop" into the editor actually does.
-  await Promise.all(['d', 'dr', 'dro', 'drop'].map((q) => c.search(q)));
-  await c.game('251470');
+  await Promise.all(['d', 'dr', 'dro', 'drop'].map((query) => client.search(query)));
+  await client.game('251470');
   assert.equal(calls.length, 1, `the library was downloaded ${calls.length} times`);
 });
 
@@ -272,8 +272,8 @@ await ok('a PRIVATE profile fails loudly, and is not read as an empty library', 
   // Steam answers 200 with `{"response":{}}` when game details are private. Read as an empty
   // library, that is a queue that silently renders as "you own nothing".
   const { impl } = fetchStub({ response: {} });
-  const c = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
-  await assert.rejects(() => c.library(), /PRIVATE profile/);
+  const client = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
+  await assert.rejects(() => client.library(), /PRIVATE profile/);
 });
 
 await ok('search ranks a prefix match above a mid-string one', async () => {
@@ -285,8 +285,8 @@ await ok('search ranks a prefix match above a mid-string one', async () => {
       ],
     },
   });
-  const c = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
-  const hits = await c.search('portal');
+  const client = steamClient({ apiKey: 'k', steamId: 's', fetchImpl: impl as never });
+  const hits = await client.search('portal');
   assert.equal(hits[0]?.name, 'Portal', 'playtime outranked the prefix match');
 });
 

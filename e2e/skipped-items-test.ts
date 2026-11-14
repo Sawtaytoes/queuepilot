@@ -40,9 +40,9 @@ interface Leaf {
 }
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // --- fixtures ---------------------------------------------------------------------- //
@@ -95,15 +95,15 @@ const client: PlexClient = {
     if (leaves) {
       // Both `!`s assert the match that guards this branch and the fixture it keys into.
       return {
-        Metadata: (LEAVES[leaves[1]!] || []).map((e) => ({
-          ratingKey: e.ratingKey,
-          title: e.title,
-          grandparentTitle: e.show,
-          parentIndex: e.season,
-          index: e.episode,
-          duration: e.duration,
+        Metadata: (LEAVES[leaves[1]!] || []).map((leaf) => ({
+          ratingKey: leaf.ratingKey,
+          title: leaf.title,
+          grandparentTitle: leaf.show,
+          parentIndex: leaf.season,
+          index: leaf.episode,
+          duration: leaf.duration,
           type: 'episode',
-          viewCount: e.viewCount,
+          viewCount: leaf.viewCount,
         })),
       };
     }
@@ -112,7 +112,7 @@ const client: PlexClient = {
       const rk = meta[1]!; // the capture group of the match that guards this branch
       if (LEAVES[rk]) return { Metadata: [{ ratingKey: rk, type: 'show', title: TITLES[rk] }] };
       if (rk === '420000') return { Metadata: [{ ratingKey: rk, type: 'movie', title: 'Member Film' }] };
-      const leaf = Object.values(LEAVES).flat().find((e) => e.ratingKey === rk);
+      const leaf = Object.values(LEAVES).flat().find((leaf) => leaf.ratingKey === rk);
       return {
         Metadata: [{
           ratingKey: rk, type: 'episode', title: leaf ? leaf.title : rk, viewCount: leaf ? leaf.viewCount : 0,
@@ -137,10 +137,10 @@ const cfg = (skipped: string[], episodes?: number) => ({
 const entry = (
   rk: string | number,
   episodes: number | null = null,
-  done = false,
+  isDone = false,
 ): EntryDescriptor => ({
   key: `rk:${rk}`, ratingKey: String(rk), title: null, year: null, guid: null,
-  collection: null, episodes, start: null, done, doneAt: done ? 1786668576 : null,
+  collection: null, episodes, start: null, done: isDone, doneAt: isDone ? 1786668576 : null,
 } as EntryDescriptor);
 
 const collectionEntry = (name: string): EntryDescriptor => ({
@@ -148,7 +148,7 @@ const collectionEntry = (name: string): EntryDescriptor => ({
   collection: name, episodes: null, start: null, done: false, doneAt: null,
 } as EntryDescriptor);
 
-const keys = (items: readonly ResolvedItem[]) => items.map((i) => i.ratingKey);
+const keys = (items: readonly ResolvedItem[]) => items.map((item) => item.ratingKey);
 // WATCHED state is the resolver's own parameter, not a field on the leaf: `resolveMember`
 // filters on `watched.has(ratingKey)` and never reads `viewCount` (only the tile's
 // `plex.nextEpisode` does). The fixture leaves carry `viewCount` to match what Plex sends;
@@ -156,22 +156,22 @@ const keys = (items: readonly ResolvedItem[]) => items.map((i) => i.ratingKey);
 const WATCHED = new Set(['100001', '200001', '300001']);
 
 // 1. A skipped episode is dropped and the entry moves on to the next one.
-let r = await resolve.resolveMember(client, entry('100000'), cfg(['100002']), WATCHED, null, 1);
+let member = await resolve.resolveMember(client, entry('100000'), cfg(['100002']), WATCHED, null, 1);
 // `resolveMember` returns null only for a member it cannot resolve; every entry below names
 // one the fake client always answers, so each `!` fails exactly where the original did.
-ok('skipped episode is dropped; next one plays', JSON.stringify(keys(r!.items)) === '["100003"]',
-  JSON.stringify(keys(r!.items)));
+ok('skipped episode is dropped; next one plays', JSON.stringify(keys(member!.items)) === '["100003"]',
+  JSON.stringify(keys(member!.items)));
 
 // The control: with nothing skipped, the very same entry plays E2.
-r = await resolve.resolveMember(client, entry('100000'), cfg([]), WATCHED, null, 1);
-ok('control — unskipped, the same entry plays E2', JSON.stringify(keys(r!.items)) === '["100002"]',
-  JSON.stringify(keys(r!.items)));
+member = await resolve.resolveMember(client, entry('100000'), cfg([]), WATCHED, null, 1);
+ok('control — unskipped, the same entry plays E2', JSON.stringify(keys(member!.items)) === '["100002"]',
+  JSON.stringify(keys(member!.items)));
 
 // 2. The batch cap counts what SURVIVES the skip. This is the assertion that pins the filter
 //    BEFORE `applyBatch`: filtering after it would queue E3 alone, one item short.
-r = await resolve.resolveMember(client, entry('100000', 2), cfg(['100002']), WATCHED, null, 1);
-ok('batch of 2 fills past the skip (E3 + E4)', JSON.stringify(keys(r!.items)) === '["100003","100004"]',
-  JSON.stringify(keys(r!.items)));
+member = await resolve.resolveMember(client, entry('100000', 2), cfg(['100002']), WATCHED, null, 1);
+ok('batch of 2 fills past the skip (E3 + E4)', JSON.stringify(keys(member!.items)) === '["100003","100004"]',
+  JSON.stringify(keys(member!.items)));
 
 // 3. The write side. `newlyDone` is what `queues.markDone` persists as `done: true`.
 //    Show B has one unwatched episode left and it is skipped: the show is OVER.
@@ -200,8 +200,8 @@ res = await resolve.nextQueue(
 ok('restoring the skip REVIVES the completed entry',
   (res.revived || []).includes('rk:200000'), JSON.stringify(res.revived));
 ok('…and it plays the episode that was skipped',
-  JSON.stringify(res.play.map((i) => i.ratingKey)) === '["200002"]',
-  JSON.stringify(res.play.map((i) => i.ratingKey)));
+  JSON.stringify(res.play.map((resolvedItem) => resolvedItem.ratingKey)) === '["200002"]',
+  JSON.stringify(res.play.map((resolvedItem) => resolvedItem.ratingKey)));
 // Still skipped => still complete, and NOT revived. The control for the pair above.
 res = await resolve.nextQueue(
   client, 'q', cfg(['200002']), [entry('200000', null, true)], WATCHED, null,
@@ -210,28 +210,28 @@ ok('while it stays skipped the entry stays complete',
   !(res.revived || []).length, JSON.stringify(res.revived));
 
 // 5. A skipped collection CHILD goes whole — first the film, then the child show.
-r = await resolve.resolveMember(client, collectionEntry(COLLECTION_NAME), cfg([]), WATCHED, null, 9);
+member = await resolve.resolveMember(client, collectionEntry(COLLECTION_NAME), cfg([]), WATCHED, null, 9);
 ok('control — the collection plays both children',
-  JSON.stringify(keys(r!.items)) === '["410001","420000"]', JSON.stringify(keys(r!.items)));
+  JSON.stringify(keys(member!.items)) === '["410001","420000"]', JSON.stringify(keys(member!.items)));
 
-r = await resolve.resolveMember(
+member = await resolve.resolveMember(
   client, collectionEntry(COLLECTION_NAME), cfg(['420000']), WATCHED, null, 9,
 );
 ok('a skipped collection film is dropped from the collection',
-  JSON.stringify(keys(r!.items)) === '["410001"]', JSON.stringify(keys(r!.items)));
+  JSON.stringify(keys(member!.items)) === '["410001"]', JSON.stringify(keys(member!.items)));
 
-r = await resolve.resolveMember(
+member = await resolve.resolveMember(
   client, collectionEntry(COLLECTION_NAME), cfg(['410000']), WATCHED, null, 9,
 );
 ok('a skipped collection child SHOW goes whole',
-  JSON.stringify(keys(r!.items)) === '["420000"]', JSON.stringify(keys(r!.items)));
+  JSON.stringify(keys(member!.items)) === '["420000"]', JSON.stringify(keys(member!.items)));
 
 // …and one of that child show's episodes is skippable on its own.
-r = await resolve.resolveMember(
+member = await resolve.resolveMember(
   client, collectionEntry(COLLECTION_NAME), cfg(['410001']), WATCHED, null, 9,
 );
 ok('a skipped episode INSIDE a collection child is dropped',
-  JSON.stringify(keys(r!.items)) === '["420000"]', JSON.stringify(keys(r!.items)));
+  JSON.stringify(keys(member!.items)) === '["420000"]', JSON.stringify(keys(member!.items)));
 
 // A three-film collection with the middle film skipped and the other two watched is OVER —
 // the owner's second example, and the collection twin of claim 3.
@@ -245,9 +245,9 @@ ok('a collection whose children are all watched or skipped completes',
 
 // 6. A MOVIE entry is not skippable — the entry IS the leaf, and Remove is the answer there.
 //    Asserted so the rule is a decision the suite defends, not an omission nobody noticed.
-r = await resolve.resolveMember(client, entry('420000'), cfg(['420000']), WATCHED, null, 1);
+member = await resolve.resolveMember(client, entry('420000'), cfg(['420000']), WATCHED, null, 1);
 ok('a movie ENTRY ignores the skip list (Remove is its answer)',
-  JSON.stringify(keys(r!.items)) === '["420000"]', JSON.stringify(keys(r!.items)));
+  JSON.stringify(keys(member!.items)) === '["420000"]', JSON.stringify(keys(member!.items)));
 
 console.log(FAILS.length ? `\nFAILED: ${FAILS.join(', ')}` : '\nAll skipped-items checks passed.');
 process.exit(FAILS.length ? 1 : 0);

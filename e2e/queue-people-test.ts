@@ -33,16 +33,16 @@ import type { ChildProcess } from 'node:child_process';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
     item && typeof item === 'object' && !Array.isArray(item)
       ? Object.fromEntries(
-          Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
+          Object.entries(item as Record<string, unknown>).sort(([key], [right]) => (key < right ? -1 : 1)),
         )
       : item,
   );
@@ -222,7 +222,7 @@ try {
   const registry = await get<{
     sets: { id: string; activity: string; activity_default: string; provider_kind: string }[];
   }>('/api/sets');
-  same('the set ids are exactly the registry, in file order', registry.sets.map((s) => s.id), [
+  same('the set ids are exactly the registry, in file order', registry.sets.map((set) => set.id), [
     ...SET_IDS,
   ]);
 
@@ -230,7 +230,7 @@ try {
 
   same(
     'every queue has an activity, derived from its provider',
-    Object.fromEntries(registry.sets.map((s) => [s.id, s.activity])),
+    Object.fromEntries(registry.sets.map((set) => [set.id, set.activity])),
     {
       bob_alice_anime: 'watching',
       bob_movies: 'watching',
@@ -243,8 +243,8 @@ try {
   );
   same(
     'the derivation is reported as the default too, so the editor can chip it',
-    Object.fromEntries(registry.sets.map((s) => [s.id, s.activity_default])),
-    Object.fromEntries(registry.sets.map((s) => [s.id, s.activity])),
+    Object.fromEntries(registry.sets.map((set) => [set.id, set.activity_default])),
+    Object.fromEntries(registry.sets.map((set) => [set.id, set.activity])),
   );
   ok(
     'migration day wrote NO bytes to sets.yaml',
@@ -258,7 +258,7 @@ try {
     groups: { id: string; minPresent: number | null; roster: { personId: string; role: string }[] }[];
   }>('/api/people');
 
-  same('the roster is the people the mapping named', people.people.map((p) => p.id), [
+  same('the roster is the people the mapping named', people.people.map((person) => person.id), [
     'ada',
     'grace',
     'linus',
@@ -376,9 +376,9 @@ try {
   // ── 7. the ids are still the ids ────────────────────────────────────────────────────── //
 
   const after = await get<{ sets: { id: string }[] }>('/api/sets');
-  same('every wire id survived the whole session', after.sets.map((s) => s.id), [...SET_IDS]);
+  same('every wire id survived the whole session', after.sets.map((set) => set.id), [...SET_IDS]);
   const groups = await get<{ groups: { id: string }[] }>('/api/groups');
-  same('…and every group id, `all` first', groups.groups.map((g) => g.id), [
+  same('…and every group id, `all` first', groups.groups.map((group) => group.id), [
     'all',
     'bob',
     'kids',

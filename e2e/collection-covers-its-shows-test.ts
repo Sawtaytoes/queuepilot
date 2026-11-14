@@ -33,12 +33,12 @@ const SHOWS = [
 const IN_COLLECTION = ['600', '601'];
 
 const leaves = (showRk: string, showTitle: string) =>
-  Array.from({ length: 3 }, (_, i) => ({
-    ratingKey: `${showRk}${i + 1}`,
-    title: `${showTitle} E${i + 1}`,
+  Array.from({ length: 3 }, (_, index) => ({
+    ratingKey: `${showRk}${index + 1}`,
+    title: `${showTitle} E${index + 1}`,
     grandparentTitle: showTitle,
     parentIndex: 1,
-    index: i + 1,
+    index: index + 1,
     type: 'episode',
     duration: 1_400_000,
   }));
@@ -51,19 +51,19 @@ const fakeClient = {
       return { Metadata: [{ ratingKey: '5000', title: COLLECTION, type: 'collection' }] };
     }
     if (path === '/library/collections/5000/children') {
-      return { Metadata: SHOWS.filter((s) => IN_COLLECTION.includes(s.ratingKey)) };
+      return { Metadata: SHOWS.filter((show) => IN_COLLECTION.includes(show.ratingKey)) };
     }
     if (path.startsWith(`/library/sections/${SECTION}/all?type=2`)) return { Metadata: SHOWS };
     // A SPLIT child is resolved as a plain show member, which asks Plex what the ratingKey
     // IS before reading its leaves — the collection branch never takes this path.
     const meta = /^\/library\/metadata\/(\d+)$/.exec(path);
     if (meta) {
-      const show = SHOWS.find((s) => s.ratingKey === meta[1]);
+      const show = SHOWS.find((show) => show.ratingKey === meta[1]);
       if (show) return { Metadata: [show] };
     }
     const leaf = /^\/library\/metadata\/(\d+)\/allLeaves$/.exec(path);
     if (leaf) {
-      const show = SHOWS.find((s) => s.ratingKey === leaf[1]);
+      const show = SHOWS.find((show) => show.ratingKey === leaf[1]);
       if (show) return { Metadata: leaves(show.ratingKey, show.title) };
     }
     if (path === '/library/sections') return { Directory: [{ key: String(SECTION), type: 'show' }] };
@@ -102,8 +102,8 @@ const check = (label: string, actual: unknown, expected: unknown): void => {
     failed++;
   }
 };
-const titles = (bs: Bucket[]) => bs.map((b) => b.show).sort();
-const keys = (bs: Bucket[]) => bs.map((b) => String(b.ratingKey)).sort();
+const titles = (bs: Bucket[]) => bs.map((bucket) => bucket.show).sort();
+const keys = (bs: Bucket[]) => bs.map((bucket) => String(bucket.ratingKey)).sort();
 
 // --- default (absent = whole) ------------------------------------------------- //
 // THE REGRESSION ASSERTION. Pre-fix this is 4 buckets: the collection PLUS all three shows.
@@ -111,9 +111,9 @@ const whole = await channelBuckets(fakeClient, cfgFor(), binding);
 check('whole: the collection and the show it does not cover — nothing else',
   titles(whole), ['Beast Wars', `Collection: ${COLLECTION}`]);
 check('whole: neither Batman show is a bucket of its own',
-  whole.some((b) => IN_COLLECTION.includes(String(b.ratingKey))), false);
+  whole.some((bucket) => IN_COLLECTION.includes(String(bucket.ratingKey))), false);
 check('whole: the collection is ONE member holding both shows in collection order',
-  whole.find((b) => b.show.startsWith('Collection:'))!.episodes.map((e) => e.title),
+  whole.find((bucket) => bucket.show.startsWith('Collection:'))!.episodes.map((episode) => episode.title),
   ['Batman: The Animated Series E1', 'Batman: The Animated Series E2',
     'Batman: The Animated Series E3', 'Batman Beyond E1', 'Batman Beyond E2', 'Batman Beyond E3']);
 
@@ -131,7 +131,7 @@ check('split: one bucket per show, and no collection bucket',
   titles(split), ['Batman Beyond', 'Batman: The Animated Series', 'Beast Wars']);
 check('split: the children are keyed by their OWN ratingKeys', keys(split), ['600', '601', '602']);
 check('split: each child carries only its own episodes',
-  split.find((b) => b.show === 'Batman Beyond')!.episodes.map((e) => e.title),
+  split.find((bucket) => bucket.show === 'Batman Beyond')!.episodes.map((episode) => episode.title),
   ['Batman Beyond E1', 'Batman Beyond E2', 'Batman Beyond E3']);
 check('split: no show is listed twice', split.length, new Set(keys(split)).size);
 

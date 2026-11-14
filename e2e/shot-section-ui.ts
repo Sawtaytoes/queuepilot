@@ -114,7 +114,7 @@ try {
     'rk:900101', 'rk:900102', 'rk:900103', 'rk:900104', 'rk:900105',
   ];
 
-  const queuePayload = (await fetch(`${BASE}/api/queues`).then((r) => r.json())) as {
+  const queuePayload = (await fetch(`${BASE}/api/queues`).then((response) => response.json())) as {
     sets?: Record<string, { items: unknown[] }>;
   };
 
@@ -219,7 +219,7 @@ try {
         await route.continue();
         return;
       }
-      if (queuePayload.sets?.bob) queuePayload.sets.bob.items = items.map((i) => ({ ...i }));
+      if (queuePayload.sets?.bob) queuePayload.sets.bob.items = items.map((item) => ({ ...item }));
       await route.fulfill({
         body: JSON.stringify(queuePayload),
         contentType: 'application/json',

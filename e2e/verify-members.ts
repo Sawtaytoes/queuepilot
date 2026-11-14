@@ -38,22 +38,22 @@ const MEMBERS: (string | { ratingKey: string; title: string })[] = [
   '269283', // short: 8 Ball Bunny
 ];
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 async function waitReady(url: string, ms = 30000): Promise<void> {
   const deadline = Date.now() + ms;
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-pr3ui.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-pr3ui.yaml');
-for (const p of ['/tmp/queues-pr3ui.yaml.lock', '/tmp/sets-pr3ui.yaml.lock', '/tmp/.history-pr3ui.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-pr3ui.yaml.lock', '/tmp/sets-pr3ui.yaml.lock', '/tmp/.history-pr3ui.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 
 const fake = await startFakeMqtt({ port: FAKE_MQTT_PORT });
@@ -83,26 +83,26 @@ try {
   await waitReady(`${BASE}/api/queues`);
 
   // --- 1. API round-trip: PATCH members[] → registry + resolved endpoint ------ //
-  let r = await fetch(`${BASE}/api/sets/younger`, {
+  let response = await fetch(`${BASE}/api/sets/younger`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ members: MEMBERS }),
   });
-  ok('PATCH members accepted', r.ok);
-  const reg = await fetch(`${BASE}/api/sets`).then((x) => x.json()) as JsonBody;
-  const younger = reg.sets.find((s: JsonBody) => s.id === 'younger');
+  ok('PATCH members accepted', response.ok);
+  const reg = await fetch(`${BASE}/api/sets`).then((httpResponse) => httpResponse.json()) as JsonBody;
+  const younger = reg.sets.find((set: JsonBody) => set.id === 'younger');
   ok('registry round-trips members (4)', Boolean(younger) && Array.isArray(younger.members) && younger.members.length === 4);
-  const resolved = await fetch(`${BASE}/api/sets/younger/members`).then((x) => x.json()) as JsonBody;
-  const types = ((resolved.members || []) as JsonBody[]).map((m) => m.type).sort().join(',');
+  const resolved = await fetch(`${BASE}/api/sets/younger/members`).then((httpResponse) => httpResponse.json()) as JsonBody;
+  const types = ((resolved.members || []) as JsonBody[]).map((member) => member.type).sort().join(',');
   ok('members resolve heterogeneously (collection+movie x2+show)', types === 'collection,movie,movie,show');
-  ok('every member resolved', ((resolved.members || []) as JsonBody[]).every((m) => m.resolved));
-  const show = ((resolved.members || []) as JsonBody[]).find((m) => m.type === 'show');
+  ok('every member resolved', ((resolved.members || []) as JsonBody[]).every((member) => member.resolved));
+  const show = ((resolved.members || []) as JsonBody[]).find((member) => member.type === 'show');
   ok('show member carries next-episode', Boolean(show && show.nextEp));
 
   // --- 2. The grid renders alphabetically with typed badges ------------------- //
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1400 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}`, fullPage: true }); console.log('wrote', name); };
 
   await page.goto(`${BASE}/channels/shows`, { waitUntil: 'domcontentloaded' });
@@ -110,18 +110,18 @@ try {
   await pickValueMaybe(page, '[data-testid="chprofile"]', 'younger');
   await page.waitForSelector('#chmembers li.tile', { timeout: 30000 });
   ok('members box visible on the shows view', await page.$eval('#chmembers-box', (el) => !el.hidden));
-  const titles = await page.$$eval('#chmembers li.tile .title', (els) => els.map((e) => e.textContent ?? ''));
+  const titles = await page.$$eval('#chmembers li.tile .title', (els) => els.map((el) => el.textContent ?? ''));
   ok('grid shows all 4 members', titles.length === 4);
-  const sorted = [...titles].sort((a, b) => a.localeCompare(b));
+  const sorted = [...titles].sort((left, right) => left.localeCompare(right));
   ok('members listed alphabetically', JSON.stringify(titles) === JSON.stringify(sorted));
   // A collection badge is two-part ("Collection" + the collection's NAME) since the tile's
   // title line shows the member that plays next — decision
   // 2026-07-31-collection-tiles-are-member-first. Compare the kind, not the whole label.
   const badges = await page.$$eval('#chmembers li.tile .badge', (els) => els
-    .map((e) => e.querySelector('.badgekind')?.textContent || e.textContent).sort().join(','));
+    .map((el) => el.querySelector('.badgekind')?.textContent || el.textContent).sort().join(','));
   ok('typed badges (Collection/Movie x2/Series)', badges === 'Collection,Movie,Movie,Series');
   const collTile = await page.$$eval('#chmembers li.tile', (els) => {
-    const li = els.find((e) => e.querySelector('.badge.collection'));
+    const li = els.find((el) => el.querySelector('.badge.collection'));
     return li
       ? { name: li.querySelector('.badgename')?.textContent, title: li.querySelector('.title')?.textContent }
       : null;
@@ -144,11 +144,11 @@ try {
   const addedOnServer = async (ms = 15000): Promise<boolean> => {
     const deadline = Date.now() + ms;
     for (;;) {
-      const reg = await fetch(`${BASE}/api/sets`).then((x) => x.json()) as JsonBody;
-      if (reg.sets.find((s: JsonBody) => s.id === 'younger').members
-        .some((m: unknown) => m && typeof m === 'object' && (m as JsonBody).ratingKey === '360420')) return true;
+      const reg = await fetch(`${BASE}/api/sets`).then((httpResponse) => httpResponse.json()) as JsonBody;
+      if (reg.sets.find((set: JsonBody) => set.id === 'younger').members
+        .some((member: unknown) => member && typeof member === 'object' && (member as JsonBody).ratingKey === '360420')) return true;
       if (Date.now() > deadline) return false;
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
   };
   ok('added member persisted by ratingKey', await addedOnServer());
@@ -164,13 +164,13 @@ try {
   ok('tile × removes a member', true);
   // The grid removes OPTIMISTICALLY (the PATCH runs in the background), so poll the server
   // rather than assuming it already agrees the instant the tile is gone.
-  const persisted = async (n: number, ms = 15000): Promise<boolean> => {
+  const persisted = async (expectedCount: number, ms = 15000): Promise<boolean> => {
     const deadline = Date.now() + ms;
     for (;;) {
-      const reg = await fetch(`${BASE}/api/sets`).then((x) => x.json()) as JsonBody;
-      if (reg.sets.find((s: JsonBody) => s.id === 'younger').members.length === n) return true;
+      const reg = await fetch(`${BASE}/api/sets`).then((httpResponse) => httpResponse.json()) as JsonBody;
+      if (reg.sets.find((set: JsonBody) => set.id === 'younger').members.length === expectedCount) return true;
       if (Date.now() > deadline) return false;
-      await new Promise((r) => setTimeout(r, 300));
+      await new Promise((resolve) => setTimeout(resolve, 300));
     }
   };
   ok('remove persisted (4 on disk)', await persisted(4));
@@ -193,21 +193,21 @@ try {
   await shot('pr3-members-empty.png');
 
   // --- 6. Clearing members drops the key (back to the pure dynamic rule) ------- //
-  r = await fetch(`${BASE}/api/sets/younger`, {
+  response = await fetch(`${BASE}/api/sets/younger`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ members: [] }),
   });
-  ok('PATCH members: [] accepted', r.ok);
-  const cleared = await fetch(`${BASE}/api/sets`).then((x) => x.json()) as JsonBody;
-  ok('cleared members leave an empty list', cleared.sets.find((s: JsonBody) => s.id === 'younger').members.length === 0);
+  ok('PATCH members: [] accepted', response.ok);
+  const cleared = await fetch(`${BASE}/api/sets`).then((httpResponse) => httpResponse.json()) as JsonBody;
+  ok('cleared members leave an empty list', cleared.sets.find((set: JsonBody) => set.id === 'younger').members.length === 0);
   const raw = await fs.readFile('/tmp/sets-pr3ui.yaml', 'utf8');
   ok('members key dropped from sets.yaml', !raw.includes('members:'));
 
   await browser.close();
   console.log('done');
   await shutdown(Number(process.exitCode) || 0);
-} catch (e) {
-  console.error('verify-members FAILED:', e);
+} catch (error) {
+  console.error('verify-members FAILED:', error);
   await shutdown(1);
 }

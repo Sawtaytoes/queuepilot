@@ -34,9 +34,9 @@ import type { ChildProcess } from 'node:child_process';
 import { killServer, spawnServer } from './stubs/server-process.mjs';
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 /** Compare by value. ARRAY order is a contract here and is compared strictly — it is shelf
@@ -45,7 +45,7 @@ const ok = (name: string, condition: boolean, extra = ''): void => {
 const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
     item && typeof item === 'object' && !Array.isArray(item)
-      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)))
+      ? Object.fromEntries(Object.entries(item as Record<string, unknown>).sort(([key], [right]) => (key < right ? -1 : 1)))
       : item,
   );
 
@@ -151,7 +151,7 @@ interface Capture {
   storePath: string;
 }
 
-async function boot(label: string, port: number, confirmed: boolean): Promise<Capture> {
+async function boot(label: string, port: number, isConfirmed: boolean): Promise<Capture> {
   const dir = await fs.mkdtemp(path.join(tmpdir(), `qp-people-${label}-`));
   await fs.writeFile(path.join(dir, 'sets.yaml'), SETS);
   await fs.writeFile(path.join(dir, 'queues.yaml'), QUEUES);
@@ -161,7 +161,7 @@ async function boot(label: string, port: number, confirmed: boolean): Promise<Ca
   // meant to be ONE edit rather than an edit plus a rename.
   await fs.writeFile(
     path.join(dir, 'people-mapping-proposal.yaml'),
-    `${confirmed ? 'confirmed: true\n' : '# confirmed: true\n'}${MAPPING}`,
+    `${isConfirmed ? 'confirmed: true\n' : '# confirmed: true\n'}${MAPPING}`,
   );
 
   const child: ChildProcess = spawnServer({

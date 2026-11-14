@@ -162,9 +162,9 @@ const CARDS: readonly { set: string; kind: 'picks' | 'rules'; profile: string }[
 const WIRE_FAILURES = [/not enabled/i, /profile mismatch/i, /has no set mapped/i, /no profile/i];
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -185,7 +185,7 @@ async function main(): Promise<void> {
   const subscribed = new Set<string>();
   /* eslint-disable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
   aedes.on('subscribe', (subs: { topic: string }[]) => {
-    for (const s of subs) subscribed.add(s.topic);
+    for (const sub of subs) subscribed.add(sub.topic);
   });
   /* eslint-enable @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call */
   await new Promise<void>((resolve) => broker.listen(BROKER_PORT, resolve));
@@ -249,7 +249,7 @@ async function main(): Promise<void> {
     const setsBody = (await (await fetch(`${base}/api/sets`)).json()) as {
       sets?: { id: string }[];
     };
-    const setIds = (setsBody.sets ?? []).map((s) => s.id);
+    const setIds = (setsBody.sets ?? []).map((set) => set.id);
     ok(
       'twenty set ids, none missing',
       EXPECTED_SETS.every((id) => setIds.includes(id)),
@@ -393,9 +393,9 @@ async function main(): Promise<void> {
         via: 'ha',
       });
       const errors = seen
-        .map((s) => (typeof s.error === 'string' ? s.error : ''))
+        .map((message) => (typeof message.error === 'string' ? message.error : ''))
         .filter(Boolean);
-      const wireFailure = errors.find((e) => WIRE_FAILURES.some((rx) => rx.test(e)));
+      const wireFailure = errors.find((error) => WIRE_FAILURES.some((rx) => rx.test(error)));
       ok(
         `card {"set": "${card.set}"${card.profile ? `, "profile": "${card.profile}"` : ''}} resolves`,
         seen.length > 0 && !wireFailure,
@@ -409,9 +409,9 @@ async function main(): Promise<void> {
     for (const id of EXPECTED_SETS) {
       const seen = await startAndRead({ kind: 'picks', profile: '', set: id, via: 'ha' });
       const errors = seen
-        .map((s) => (typeof s.error === 'string' ? s.error : ''))
+        .map((message) => (typeof message.error === 'string' ? message.error : ''))
         .filter(Boolean);
-      const notEnabled = errors.find((e) => /not enabled/i.test(e));
+      const notEnabled = errors.find((error) => /not enabled/i.test(error));
       ok(`{"set": "${id}"} is a live address`, seen.length > 0 && !notEnabled, notEnabled ?? '');
     }
 
@@ -424,16 +424,16 @@ async function main(): Promise<void> {
     });
     ok(
       'an unknown id is refused BY NAME (so a green run means something)',
-      bogus.some((s) => typeof s.error === 'string' && /no_such_set_id.*not enabled/i.test(s.error)),
-      JSON.stringify(bogus.map((s) => s.error)),
+      bogus.some((message) => typeof message.error === 'string' && /no_such_set_id.*not enabled/i.test(message.error)),
+      JSON.stringify(bogus.map((message) => message.error)),
     );
 
     // ---- 7: `set: "auto"` still routes ---------------------------------------------- //
     const auto = await startAndRead({ kind: 'rules', profile: '', set: 'auto', via: 'ha' });
     ok(
       'set "auto" reaches the profile-driven router',
-      auto.some((s) => s.awaiting === 'profile'),
-      JSON.stringify(auto.map((s) => s.awaiting ?? s.error)),
+      auto.some((message) => message.awaiting === 'profile'),
+      JSON.stringify(auto.map((message) => message.awaiting ?? message.error)),
     );
 
     // ---- 8: a top-up tick is answered ----------------------------------------------- //
@@ -452,11 +452,11 @@ async function main(): Promise<void> {
     // "switch it up" card and the voice sentence both send.
     client.publish(T_CMD_ADVANCE, '{}', { qos: 1 });
     await sleep(500);
-    const stillUp = await fetch(`${base}/api/sets`).then(
-      (r) => r.ok,
+    const isStillUp = await fetch(`${base}/api/sets`).then(
+      (response) => response.ok,
       () => false,
     );
-    ok('an empty advance leaves the service running', stillUp);
+    ok('an empty advance leaves the service running', isStillUp);
   } finally {
     client?.end(true);
     if (child) killServer(child);
@@ -470,7 +470,7 @@ async function main(): Promise<void> {
   process.exit(failures ? 1 : 0);
 }
 
-main().catch((e: unknown) => {
-  console.error(e);
+main().catch((error: unknown) => {
+  console.error(error);
   process.exit(1);
 });

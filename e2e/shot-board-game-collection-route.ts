@@ -37,16 +37,16 @@ try {
   });
 
   const page = await ctx.newPage();
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Stamp the LIVE address onto the page, then shoot it. */
   const shot = async (name: string, note: string) => {
     await page.waitForTimeout(600);
-    await page.evaluate((n) => {
+    await page.evaluate((noteText) => {
       document.getElementById('shot-url-strip')?.remove();
       const strip = document.createElement('div');
       strip.id = 'shot-url-strip';
-      strip.textContent = `${location.href}          ${n}`;
+      strip.textContent = `${location.href}          ${noteText}`;
       strip.style.cssText = [
         'position:fixed', 'inset:auto 0 0 0', 'z-index:99999',
         'font:600 16px/2.4 ui-monospace,SFMono-Regular,Menlo,monospace',

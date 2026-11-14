@@ -109,11 +109,11 @@ resume.startWatch({
   intervalMs: 10,
   log: () => {},
 });
-await new Promise((r) => setTimeout(r, 60));
+await new Promise((resolve) => setTimeout(resolve, 60));
 check('the watcher seeks the planned episode it observes', seeks, [189_000]);
 
 feed = { ratingKey: '269103', viewOffset: 1_000 };
-await new Promise((r) => setTimeout(r, 60));
+await new Promise((resolve) => setTimeout(resolve, 60));
 check('…and the next one as the player advances', seeks, [189_000, 876_000]);
 check('the watcher stops once every planned episode is handled', resume.watching(), false);
 
@@ -126,7 +126,7 @@ resume.startWatch({
   intervalMs: 10,
   log: () => {},
 });
-await new Promise((r) => setTimeout(r, 120));
+await new Promise((resolve) => setTimeout(resolve, 120));
 check('a transient Plex failure does not kill the watcher', calls >= 3, true);
 resume.disarm();
 check('disarm empties the plan and stops watching',
@@ -161,7 +161,7 @@ resume.startWatch({
   retryMs: 5,
   log: () => {},
 });
-await new Promise((r) => setTimeout(r, 80));
+await new Promise((resolve) => setTimeout(resolve, 80));
 resume.stopWatch();
 check('through the watcher, the AUTHORED section start wins and the marker never fires',
   bothSeeks, [12_000]);
@@ -180,7 +180,7 @@ resume.startWatch({
   retryMs: 5,
   log: () => {},
 });
-await new Promise((r) => setTimeout(r, 80));
+await new Promise((resolve) => setTimeout(resolve, 80));
 resume.stopWatch();
 check('a spent window keeps its item away from the resume plan', spentSeeks, []);
 
@@ -194,7 +194,7 @@ resume.startWatch({
   intervalMs: 10,
   log: () => {},
 });
-await new Promise((r) => setTimeout(r, 60));
+await new Promise((resolve) => setTimeout(resolve, 60));
 resume.stopWatch();
 check('an unwindowed item resumes exactly as it always did', plainSeeks, [189_000]);
 section.disarm();

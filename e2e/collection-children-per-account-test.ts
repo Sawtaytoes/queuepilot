@@ -21,9 +21,9 @@ import { promises as fs } from 'node:fs';
 
 const PORT = 18799;
 const DB = '/tmp/collection-children-per-account.sqlite';
-for (const f of [DB, DB + '-wal', DB + '-shm']) await fs.rm(f, { force: true });
+for (const filePath of [DB, DB + '-wal', DB + '-shm']) await fs.rm(filePath, { force: true });
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 // --- fake Plex ------------------------------------------------------------------------- //
 // A collection shaped like the live one that reported this: a SHOW first, then a MOVIE.
@@ -42,9 +42,9 @@ interface FakeLeaf {
   type: string; ratingKey: string; parentIndex: number; index: number;
   title: string; duration: number; viewCount?: number;
 }
-const ep = (index: number, watched: boolean | undefined): FakeLeaf => ({
+const ep = (index: number, isWatched: boolean | undefined): FakeLeaf => ({
   type: 'episode', ratingKey: `${SHOW}${index}`, parentIndex: 1, index,
-  title: `Ep ${index}`, duration: 1_400_000, ...(watched ? { viewCount: 1 } : {}),
+  title: `Ep ${index}`, duration: 1_400_000, ...(isWatched ? { viewCount: 1 } : {}),
 });
 
 const childrenHits: Record<string, number> = { 'admin-token': 0, 'kid-token': 0 };
@@ -72,7 +72,7 @@ const srv = createServer((req, res) => {
     return;
   }
   if (url === `/library/metadata/${SHOW}/allLeaves`) {
-    const leaves = [1, 2, 3].map((i) => ep(i, seenEps.has(i)));
+    const leaves = [1, 2, 3].map((index) => ep(index, seenEps.has(index)));
     res.end(JSON.stringify({ MediaContainer: { size: leaves.length, Metadata: leaves } }));
     return;
   }
@@ -84,7 +84,7 @@ const srv = createServer((req, res) => {
   }
   res.statusCode = 404; res.end('{}');
 });
-await new Promise<void>((r) => srv.listen(PORT, () => r()));
+await new Promise<void>((resolve) => srv.listen(PORT, () => resolve()));
 
 process.env.PLEX_API_SERVER_URL = `http://127.0.0.1:${PORT}`;
 process.env.PLEX_TOKEN = 'admin-token'; // the default (no-account) token

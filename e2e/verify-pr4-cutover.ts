@@ -29,22 +29,22 @@ const BASE = `http://localhost:${PORT}`;
 const OUT = `${ROOT}/__screenshots__`;
 const SETS = '/tmp/sets-pr4.yaml';
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 async function waitReady(url: string, ms = 30000): Promise<void> {
   const deadline = Date.now() + ms;
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error(`server not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-pr4.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, SETS);
-for (const p of [`${SETS}.lock`, '/tmp/queues-pr4.yaml.lock', '/tmp/.history-pr4.json']) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const filePath of [`${SETS}.lock`, '/tmp/queues-pr4.yaml.lock', '/tmp/.history-pr4.json']) {
+  await fs.rm(filePath, { recursive: true, force: true });
 }
 
 // --- 1. The migration itself (same code path the deploy runbook runs) ---------- //
@@ -57,9 +57,9 @@ ok('migration is idempotent', again.migrated === false);
 // The registry entries carry the migrated rotation fields (`behavior`, `profiles`,
 // `superseded_by`) that `SetRegistryEntry` does not name; read loosely, like the API bodies.
 const reg0 = await sets.getRegistry();
-const ss = reg0.sets.find((s) => s.id === 'shows_shorts') as JsonBody | undefined;
-const mv = reg0.sets.find((s) => s.id === 'movies') as JsonBody | undefined;
-const younger = reg0.sets.find((s) => s.id === 'younger') as JsonBody | undefined;
+const ss = reg0.sets.find((set) => set.id === 'shows_shorts') as JsonBody | undefined;
+const mv = reg0.sets.find((set) => set.id === 'movies') as JsonBody | undefined;
+const younger = reg0.sets.find((set) => set.id === 'younger') as JsonBody | undefined;
 ok('shows_shorts: progress channel with 2 explicit bindings',
   Boolean(ss && ss.behavior === 'progress' && ss.has_explicit_profiles && ss.profiles.length === 2
     && ss.profiles[0].plex_user === 'Younger Kids' && ss.profiles[1].plex_user === 'Older Kids'));
@@ -97,7 +97,7 @@ try {
   await waitReady(`${BASE}/api/queues`);
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1200 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   const shot = async (name: string) => { await page.screenshot({ path: `${OUT}/${name}`, fullPage: true }); console.log('wrote', name); };
 
   // --- 3. /channels/shows: binding selector on the ONE function channel ------- //
@@ -106,12 +106,12 @@ try {
   await page.waitForSelector('#chpool li.tile', { timeout: 30000 });
   const profOpts = await readOptionPairs(page, '[data-testid="chprofile"]');
   ok('profile picker = the two bindings of shows_shorts',
-    profOpts.map((o) => o[0]).join(',') === 'Younger Kids,Older Kids'
-    && profOpts.every((o) => String(o[1]).startsWith('shows_shorts::')));
+    profOpts.map((profOption) => profOption[0]).join(',') === 'Younger Kids,Older Kids'
+    && profOpts.every((profOption) => String(profOption[1]).startsWith('shows_shorts::')));
   ok('preview request carried the Younger binding',
-    fake.received.previews.some((p) => p.set === 'shows_shorts' && p.profile === 'Younger Kids'));
+    fake.received.previews.some((preview) => preview.set === 'shows_shorts' && preview.profile === 'Younger Kids'));
   const yRatings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input',
-    (is) => is.filter((i) => i.checked).map((i) => i.value));
+    (is) => is.filter((input) => input.checked).map((input) => input.value));
   ok('ratings prefilled from the Younger binding', yRatings.includes('TV-Y') && !yRatings.includes('PG'));
   await shot('pr4-channels-shows-younger.png');
 
@@ -119,15 +119,15 @@ try {
   await pickValue(page, '[data-testid="chprofile"]', 'shows_shorts::Older Kids');
   await page.waitForFunction(
     () => [...document.querySelectorAll<HTMLInputElement>('#ch-ratings input')]
-      .some((i) => i.checked && i.value === 'PG'),
+      .some((input) => input.checked && input.value === 'PG'),
     undefined, { timeout: 15000 },
   );
   const oRatings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input',
-    (is) => is.filter((i) => i.checked).map((i) => i.value));
+    (is) => is.filter((input) => input.checked).map((input) => input.value));
   ok('Older binding ratings shown (PG, no TV-Y)', oRatings.includes('PG') && !oRatings.includes('TV-Y'));
   await page.waitForFunction(() => document.querySelectorAll('#chpool li.tile').length > 0, undefined, { timeout: 15000 });
   ok('preview re-requested for the Older binding',
-    fake.received.previews.some((p) => p.set === 'shows_shorts' && p.profile === 'Older Kids'));
+    fake.received.previews.some((preview) => preview.set === 'shows_shorts' && preview.profile === 'Older Kids'));
   await shot('pr4-channels-shows-older.png');
 
   // --- 5. Save writes INSIDE profiles[], not the top level ---------------------- //
@@ -136,13 +136,13 @@ try {
   if (hasTV14) {
     await page.click('#ch-save');
     await page.waitForFunction(async () => {
-      const r = await fetch('/api/sets').then((x) => x.json()) as JsonBody;
-      const s = r.sets.find((x: JsonBody) => x.id === 'shows_shorts');
-      return s.profiles[1].allowed_ratings.includes('TV-14') as boolean;
+      const registry = await fetch('/api/sets').then((response) => response.json()) as JsonBody;
+      const set = registry.sets.find((jsonBody: JsonBody) => jsonBody.id === 'shows_shorts');
+      return set.profiles[1].allowed_ratings.includes('TV-14') as boolean;
     }, undefined, { timeout: 15000 });
     ok('save landed on the Older binding inside profiles[]', true);
-    const regNow = await fetch(`${BASE}/api/sets`).then((x) => x.json()) as JsonBody;
-    const ssNow = regNow.sets.find((s: JsonBody) => s.id === 'shows_shorts');
+    const regNow = await fetch(`${BASE}/api/sets`).then((response) => response.json()) as JsonBody;
+    const ssNow = regNow.sets.find((set: JsonBody) => set.id === 'shows_shorts');
     ok('Younger binding untouched by the Older save', !ssNow.profiles[0].allowed_ratings.includes('TV-14'));
     const rawNow = await fs.readFile(SETS, 'utf8');
     const ssBlock = rawNow.slice(rawNow.indexOf('id: shows_shorts'), rawNow.indexOf('id: movies'));  // one channel's block
@@ -155,7 +155,7 @@ try {
   await pickValue(page, '[data-testid="chchannel"]', 'movies');
   await page.waitForFunction(() => document.body.classList.contains('movies-channel'), undefined, { timeout: 15000 });
   const mProfOpts = await readOptionValues(page, '[data-testid="chprofile"]');
-  ok('movies view lists the movies channel bindings', mProfOpts.every((v) => String(v).startsWith('movies::')));
+  ok('movies view lists the movies channel bindings', mProfOpts.every((mProfOption) => String(mProfOption).startsWith('movies::')));
   // Movie-pool tiles carry the watches badge — waiting on it avoids clicking a stale
   // shows-pool tile while the switched view is still loading.
   // The active binding on the movies view carries over from step 5 (Older Kids), so the
@@ -165,13 +165,13 @@ try {
   await page.waitForSelector('#chpool .watches + .exclude', { timeout: 30000 });
   await page.click('#chpool .watches + .exclude'); // first excludable pool tile
   await page.waitForFunction(async () => {
-    const r = await fetch('/api/sets').then((x) => x.json()) as JsonBody;
-    const s = r.sets.find((x: JsonBody) => x.id === 'movies');
-    return s.profiles.reduce((n: number, p: JsonBody) => n + ((p.movie_excludes || []).length ? 1 : 0), 0) === 1;
+    const registry = await fetch('/api/sets').then((response) => response.json()) as JsonBody;
+    const set = registry.sets.find((jsonBody: JsonBody) => jsonBody.id === 'movies');
+    return set.profiles.reduce((total: number, profile: JsonBody) => total + ((profile.movie_excludes || []).length ? 1 : 0), 0) === 1;
   }, undefined, { timeout: 15000 });
-  const regEx = await fetch(`${BASE}/api/sets`).then((x) => x.json()) as JsonBody;
-  const mvEx = regEx.sets.find((s: JsonBody) => s.id === 'movies');
-  const withEx = (mvEx.profiles as JsonBody[]).filter((p) => (p.movie_excludes || []).length);
+  const regEx = await fetch(`${BASE}/api/sets`).then((response) => response.json()) as JsonBody;
+  const mvEx = regEx.sets.find((set: JsonBody) => set.id === 'movies');
+  const withEx = (mvEx.profiles as JsonBody[]).filter((profile) => (profile.movie_excludes || []).length);
   ok('movie exclude written into exactly the ACTIVE binding',
     withEx.length === 1 && withEx[0]?.plex_user === activeUser);
   await shot('pr4-channels-movies.png');
@@ -185,7 +185,7 @@ try {
   await page.locator('#playgrid li[data-kind="rules"]:first-child .rowtier').click();
   await page.waitForSelector('[role="listbox"] [role="option"]');
   const tierOpts = await page.$$eval('[role="listbox"] [role="option"]',
-    (os) => os.map((o) => (o.textContent ?? '').replace('✓', '').trim()));
+    (os) => os.map((element) => (element.textContent ?? '').replace('✓', '').trim()));
   await page.keyboard.press('Escape');
   // "Shield pick" (set:auto) was dropped from the UI 2026-07-29 — every play is explicit,
   // so the tier picker is just the channel's own bindings.
@@ -193,7 +193,7 @@ try {
     tierOpts.join(',') === 'Younger Kids,Older Kids');
   // The two migrated function channels are the ONLY rows; the superseded legacy tiers
   // never surface as their own rows.
-  const rowNames = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent ?? ''));
+  const rowNames = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((el) => el.textContent ?? ''));
   ok('landing dynamic rows = the two function channels', rowNames.join(',') === 'Shows & Shorts,Movies');
   // Locators (auto-retrying) instead of stale element handles — the list can re-render.
   const movieRow = page.locator('#playgrid li[data-kind="rules"]').nth(1);
@@ -203,15 +203,15 @@ try {
   await page.locator('.playmenu button').first().click(); // the default Shield
   await page.waitForFunction(
     () => (document.querySelector('#status')?.textContent || '').length > 0, undefined, { timeout: 15000 });
-  await new Promise((r) => setTimeout(r, 500));
+  await new Promise((resolve) => setTimeout(resolve, 500));
   ok('play publish carries set=movies kind=rules profile=Older Kids',
-    fake.received.starts.some((p) => p.set === 'movies' && p.kind === 'rules' && p.profile === 'Older Kids'));
+    fake.received.starts.some((start) => start.set === 'movies' && start.kind === 'rules' && start.profile === 'Older Kids'));
   await shot('pr4-play-landing.png');
 
   await browser.close();
   console.log('done');
   await shutdown(Number(process.exitCode) || 0);
-} catch (e) {
-  console.error('verify-pr4-cutover FAILED:', e);
+} catch (error) {
+  console.error('verify-pr4-cutover FAILED:', error);
   await shutdown(1);
 }

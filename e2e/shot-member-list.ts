@@ -36,18 +36,18 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.writeFile('/tmp/queues-memberlist.yaml', QUEUES_YAML);
 await fs.writeFile('/tmp/sets-memberlist.yaml', setsYamlWithSkips(SKIPPED_BEFORE));
-for (const p of [
+for (const file of [
   '/tmp/queues-memberlist.yaml.lock', '/tmp/sets-memberlist.yaml.lock',
   '/tmp/cache-memberlist.sqlite', '/tmp/queuepilot-memberlist.sqlite',
 ]) {
-  await fs.rm(p, { recursive: true, force: true });
+  await fs.rm(file, { recursive: true, force: true });
 }
 
 const plex = startStubPlex(PLEX_PORT);
@@ -75,7 +75,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1180, height: 900 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   // The stub serves no artwork, so a poster request would only stall the shot. Both stages
   // render the same placeholder.
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));

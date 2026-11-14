@@ -35,12 +35,12 @@ const SETS = '/tmp/qp-calendar-shot.sets.yaml';
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/queues.harness.yaml`, QUEUES);
 await fs.copyFile(`${REPO_ROOT}/e2e/fixtures/calendar.sets.yaml`, SETS);
-for (const p of [`${QUEUES}.lock`, `${SETS}.lock`]) {
-  await fs.rm(p, { force: true, recursive: true });
+for (const file of [`${QUEUES}.lock`, `${SETS}.lock`]) {
+  await fs.rm(file, { force: true, recursive: true });
 }
 await fs.rm('/tmp/qp-calendar-shot.sqlite', { force: true });
 
-let failed = false;
+let hasFailed = false;
 const srv = spawnServer({
   env: {
     ...process.env,
@@ -64,7 +64,7 @@ const ready = async (): Promise<void> => {
       /* not up yet */
     }
     if (Date.now() > deadline) throw new Error('server never came up');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -182,10 +182,10 @@ try {
   }
 
   await browser.close();
-} catch (e) {
-  console.log('SHOT FAILED:', e);
-  failed = true;
+} catch (error) {
+  console.log('SHOT FAILED:', error);
+  hasFailed = true;
 } finally {
   killServer(srv);
-  process.exit(failed ? 1 : 0);
+  process.exit(hasFailed ? 1 : 0);
 }

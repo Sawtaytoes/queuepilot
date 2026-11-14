@@ -48,7 +48,7 @@ const rows = <T>(sql: string): T[] => {
 
 try {
   const page = await browser.newPage({ viewport: { width: 1440, height: 1100 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   const openCollection = async () => {
     await page.goto(`${server.base}/board-game-collection`, { waitUntil: 'domcontentloaded' });
@@ -97,7 +97,7 @@ try {
   // names, and a `fullPage` screenshot unsticks everything and shows the bug gone.
   {
     const stuck = await page.$$eval('#collection-grid header', (heads) =>
-      heads.filter((h) => getComputedStyle(h).position === 'sticky').length,
+      heads.filter((head) => getComputedStyle(head).position === 'sticky').length,
     );
     ok('no card heading is sticky', stuck === 0, `sticky headings=${stuck}`);
 
@@ -185,13 +185,13 @@ try {
     );
     ok(
       'finishing marked the table as knowing the rules',
-      claims.filter((c) => c.game_id === 'harbour-lantern').map((c) => c.person_id).join(',') ===
+      claims.filter((claim) => claim.game_id === 'harbour-lantern').map((claim) => claim.person_id).join(',') ===
         'ada,grace',
       JSON.stringify(claims),
     );
     ok(
       'and the claim that predates all of this is untouched',
-      claims.some((c) => c.game_id === 'quarry-duel' && c.person_id === 'ada'),
+      claims.some((claim) => claim.game_id === 'quarry-duel' && claim.person_id === 'ada'),
     );
 
     const line = await page.$eval('#bg-harbour-lantern-known-line', (el) =>
@@ -211,12 +211,12 @@ try {
     );
     ok(
       'UNDO takes back exactly the claims this finish created',
-      !after.some((c) => c.game_id === 'harbour-lantern'),
+      !after.some((claim) => claim.game_id === 'harbour-lantern'),
       JSON.stringify(after),
     );
     ok(
       'and never a claim somebody stated months ago',
-      after.some((c) => c.game_id === 'quarry-duel' && c.person_id === 'ada'),
+      after.some((claim) => claim.game_id === 'quarry-duel' && claim.person_id === 'ada'),
       JSON.stringify(after),
     );
 
@@ -239,10 +239,10 @@ try {
     await page.click('#tonight-activity [role="radio"]:has-text("Board Games")');
     await page.waitForTimeout(400);
 
-    const blocked = await page.$eval('#tonight-go', (el) =>
+    const isBlocked = await page.$eval('#tonight-go', (el) =>
       (el as HTMLButtonElement).disabled,
     );
-    ok('Go is refused until somebody is at the table', blocked === true);
+    ok('Go is refused until somebody is at the table', isBlocked === true);
 
     await page.click('#tonight-roster input[value="ada"]');
     await page.click('#tonight-roster input[value="grace"]');
@@ -274,7 +274,7 @@ try {
 
     await page.click('#result-shortlist-toggle');
     await page.waitForSelector('#result-shortlist', { timeout: 10000 });
-    const shortlist = await page.$$eval('#result-shortlist > ul > li', (l) => l.length);
+    const shortlist = await page.$$eval('#result-shortlist > ul > li', (elements) => elements.length);
     ok('the control reveals the other two', shortlist === 2, `revealed=${shortlist}`);
   }
 

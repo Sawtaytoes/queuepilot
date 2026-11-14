@@ -57,9 +57,9 @@ const FIXTURES = path.join(HERE, 'fixtures');
  * this comment. An unexplained mask is how a real regression hides.
  */
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 const ROUTES = ['/api/queues', '/api/sets', '/api/groups', '/api/pending'] as const;

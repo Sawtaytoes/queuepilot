@@ -33,9 +33,9 @@ process.env.SETS_PATH = SETS_PATH;
 process.env.HISTORY_PATH = nodePath.join(SCRATCH, '.history.json');
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra = ''): void => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 writeFileSync(SETS_PATH, `sets:
@@ -59,7 +59,7 @@ const resolve = await import('../server/src/engine/resolve.js');
  */
 async function entriesOf(text: string): Promise<Record<string, unknown>[]> {
   writeFileSync(QUEUES_PATH, text);
-  return (await queues.listSet('bob')).map((e) => e.value as Record<string, unknown>);
+  return (await queues.listSet('bob')).map((entry) => entry.value as Record<string, unknown>);
 }
 
 // --- 1. the migration ---------------------------------------------------------- //
@@ -89,10 +89,10 @@ const LIBRARY = new Map<string, string>([
   ['12345', 'A Film With No Caption'],
 ]);
 
-async function migrate(text: string, resolveOn = true) {
+async function migrate(text: string, isResolving = true) {
   const { text: out, changes } = await migrateText(text, () => ({
     label: 'bob',
-    resolve: resolveOn
+    resolve: isResolving
       // Keyed on the entry's raw TEXT, not on `describe()`'s parsed title — `describe()`
       // peels the `(year)` off, which is exactly the sort of detail a fake library should not
       // have an opinion about.
@@ -105,15 +105,15 @@ async function migrate(text: string, resolveOn = true) {
       : null,
     why: 'stub library',
   }));
-  return { out, changes, unresolved: changes.filter((c) => c.verdict === 'unresolved') };
+  return { out, changes, unresolved: changes.filter((change) => change.verdict === 'unresolved') };
 }
 
 const first = await migrate(BEFORE);
 const migrated = first.out;
 const entries = await entriesOf(migrated);
 
-ok('every entry is now a mapping', entries.every((e) => e != null && typeof e === 'object' && !Array.isArray(e)),
-  JSON.stringify(entries.filter((e) => typeof e !== 'object')));
+ok('every entry is now a mapping', entries.every((entry) => entry != null && typeof entry === 'object' && !Array.isArray(entry)),
+  JSON.stringify(entries.filter((entry) => typeof entry !== 'object')));
 ok('a title gained its rating key', entries[0]?.ratingKey === '210338' && entries[0]?.title === 'Duel (1971)',
   JSON.stringify(entries[0]));
 ok('a bare rating key gained a caption', entries[1]?.ratingKey === '12345' && entries[1]?.title === 'A Film With No Caption',
@@ -160,8 +160,8 @@ ok('an episode section grew no end it was never given', showSection.end === unde
 // descriptor that dropped `end` would leave the field invisible to everything downstream while
 // the file still held it.
 const described = resolve.loadEntries('bob');
-const filmDesc = described.find((d) => d.ratingKey === '1001');
-const showDesc = described.find((d) => d.ratingKey === '1002');
+const filmDesc = described.find((descriptor) => descriptor.ratingKey === '1001');
+const showDesc = described.find((descriptor) => descriptor.ratingKey === '1002');
 ok('describe() carries start.position_ms', filmDesc?.start?.position_ms === 3660000,
   JSON.stringify(filmDesc?.start));
 ok('describe() carries end.position_ms', filmDesc?.end?.position_ms === 3960000,
@@ -175,7 +175,7 @@ ok('describe() reports NO end on an entry that has none', showDesc?.end === null
 // A WRITE lands on the same file and neither side of the window is disturbed. This is the
 // property the extras bag gives for free and the one a field-by-field rewrite would break.
 await queues.setEpisodes('bob', 'rk:1001', 2);
-const afterWrite = (await queues.listSet('bob')).find((e) => e.key === 'rk:1001')?.value as
+const afterWrite = (await queues.listSet('bob')).find((entry) => entry.key === 'rk:1001')?.value as
   Record<string, unknown> | undefined;
 ok('an unrelated write left the window alone',
   JSON.stringify(afterWrite?.start) === JSON.stringify({ position_ms: 3660000 })
@@ -188,7 +188,7 @@ ok("kept an entry's own inline comment (moved above the mapping)", migrated.incl
 
 // Idempotency, byte for byte.
 const second = await migrate(migrated);
-ok('a second run rewrites nothing', second.changes.every((c) => !c.rewritten), JSON.stringify(second.changes));
+ok('a second run rewrites nothing', second.changes.every((change) => !change.rewritten), JSON.stringify(second.changes));
 ok('a second run is byte-identical', second.out === migrated);
 ok('…and it still NAMES the unresolvable entry, every time', second.unresolved.length === 1,
   JSON.stringify(second.unresolved));
@@ -202,15 +202,15 @@ ok('entryKey: a {title: "Collection: …"} mapping is that same line too',
 ok('entryKey: a numeric scalar and {ratingKey} are the same line',
   queues.entryKey(12345) === queues.entryKey({ ratingKey: '12345' }));
 ok('toEntryObject is identity-preserving', ['Duel (1971)', 12345, '999', 'Collection: X'].every(
-  (v) => queues.entryKey(v) === queues.entryKey(queues.toEntryObject(v as string | number))));
+  (value) => queues.entryKey(value) === queues.entryKey(queues.toEntryObject(value as string | number))));
 
 // The MIGRATED file re-keys exactly the entries that gained a rating key, and nothing else.
-const beforeKeys = (await entriesOf(BEFORE)).map((v) => queues.entryKey(v));
-const afterKeys = entries.map((v) => queues.entryKey(v));
-const rekeyed = beforeKeys.map((k, i) => [k, afterKeys[i]] as const).filter(([a, b]) => a !== b);
+const beforeKeys = (await entriesOf(BEFORE)).map((value) => queues.entryKey(value));
+const afterKeys = entries.map((entry) => queues.entryKey(entry));
+const rekeyed = beforeKeys.map((beforeKey, index) => [beforeKey, afterKeys[index]] as const).filter(([beforeKey, afterKey]) => beforeKey !== afterKey);
 ok('no entry was dropped', beforeKeys.length === afterKeys.length, `${beforeKeys.length} vs ${afterKeys.length}`);
 ok('every re-key is a title becoming a rating key — nothing else moved',
-  rekeyed.every(([a, b]) => String(a).startsWith('title:') && String(b).startsWith('rk:')),
+  rekeyed.every(([beforeKey, afterKey]) => String(beforeKey).startsWith('title:') && String(afterKey).startsWith('rk:')),
   JSON.stringify(rekeyed));
 
 // --- 3. the reader refuses a legacy scalar, per ENTRY --------------------------- //
@@ -221,12 +221,12 @@ writeFileSync(QUEUES_PATH, `bob:
 - {ratingKey: "2", title: Another Good Entry}
 `);
 const descs = resolve.loadEntries('bob');
-ok('loadEntries drops the legacy scalar', descs.length === 2, JSON.stringify(descs.map((d) => d.key)));
+ok('loadEntries drops the legacy scalar', descs.length === 2, JSON.stringify(descs.map((desc) => desc.key)));
 ok('…and keeps every entry either side of it',
-  descs[0]?.key === 'rk:1' && descs[1]?.key === 'rk:2', JSON.stringify(descs.map((d) => d.key)));
+  descs[0]?.key === 'rk:1' && descs[1]?.key === 'rk:2', JSON.stringify(descs.map((desc) => desc.key)));
 const listed = await queues.listSet('bob');
 ok('listSet still returns it, so the editor can show and delete it', listed.length === 3,
-  JSON.stringify(listed.map((e) => e.key)));
+  JSON.stringify(listed.map((entry) => entry.key)));
 ok('…and it is still addressable by key', listed[1]?.key === 'title:A Bare String');
 ok('isLegacyScalarEntry names it', queues.isLegacyScalarEntry('A Bare String') === true
   && queues.isLegacyScalarEntry({ title: 'x' }) === false);
@@ -237,7 +237,7 @@ ok('the complaint names the set, the index and the fix',
 // --- 4. the writer never emits a scalar ---------------------------------------- //
 
 const readQueues = (): string => readFileSync(QUEUES_PATH, 'utf8');
-const hasScalarEntry = (): boolean => readQueues().split('\n').some((l) => /^\s*-\s+(?!\{)\S/.test(l) && !/^\s*-\s+\w+:/.test(l));
+const hasScalarEntry = (): boolean => readQueues().split('\n').some((line) => /^\s*-\s+(?!\{)\S/.test(line) && !/^\s*-\s+\w+:/.test(line));
 
 writeFileSync(QUEUES_PATH, 'bob: []\n');
 rmSync(`${QUEUES_PATH}.lock`, { force: true, recursive: true });
@@ -245,7 +245,7 @@ await queues.addItem('bob', 'A Typed Title', 'bottom');
 await queues.addItem('bob', 12345, 'bottom');
 await queues.addItem('bob', 'Collection: A Franchise', 'bottom');
 await queues.addItem('bob', { ratingKey: '77', title: 'From The UI' }, 'bottom');
-const written = (await queues.listSet('bob')).map((e) => e.value as Record<string, unknown>);
+const written = (await queues.listSet('bob')).map((entry) => entry.value as Record<string, unknown>);
 ok('addItem(title) writes a mapping', written[0]?.title === 'A Typed Title' && typeof written[0] === 'object',
   JSON.stringify(written[0]));
 ok('addItem(ratingKey) writes a mapping', written[1]?.ratingKey === 12345, JSON.stringify(written[1]));
@@ -310,8 +310,8 @@ ok('an undo across the migration writes no scalar entry', !hasScalarEntry(), rea
 ok('…and the restored queue actually resolves',
   resolve.loadEntries('bob').length === 3, String(resolve.loadEntries('bob').length));
 ok('…addressed by the SAME keys the legacy file used',
-  JSON.stringify(resolve.loadEntries('bob').map((d) => d.key)) === JSON.stringify(legacyKeys),
-  `${JSON.stringify(resolve.loadEntries('bob').map((d) => d.key))} vs ${JSON.stringify(legacyKeys)}`);
+  JSON.stringify(resolve.loadEntries('bob').map((loadEntry) => loadEntry.key)) === JSON.stringify(legacyKeys),
+  `${JSON.stringify(resolve.loadEntries('bob').map((loadEntry) => loadEntry.key))} vs ${JSON.stringify(legacyKeys)}`);
 
 // …and the byte-for-byte contract survives for every snapshot that needs no repair. `changes`
 // is the WRONG test for that: with no resolver every already-object title reports `unresolved`

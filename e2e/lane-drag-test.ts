@@ -73,9 +73,9 @@ const srv = spawnServer({
 });
 
 let failed = 0;
-const check = (name: string, ok: boolean, detail = '') => {
-  console.log(`  ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : ` — ${detail}`}`);
-  if (!ok) failed += 1;
+const check = (name: string, isPassing: boolean, detail = '') => {
+  console.log(`  ${isPassing ? 'ok  ' : 'FAIL'} ${name}${isPassing ? '' : ` — ${detail}`}`);
+  if (!isPassing) failed += 1;
 };
 
 try {
@@ -83,7 +83,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Every write this page makes, in order, so a gesture can be asserted on its EFFECT. */
   const writes: { body: string; method: string; url: string }[] = [];
@@ -106,10 +106,10 @@ try {
   const dragTo = async (from: [number, number], to: [number, number]) => {
     await page.mouse.move(from[0], from[1]);
     await page.mouse.down();
-    for (let i = 1; i <= 24; i += 1) {
+    for (let attempt = 1; attempt <= 24; attempt += 1) {
       await page.mouse.move(
-        from[0] + ((to[0] - from[0]) * i) / 24,
-        from[1] + ((to[1] - from[1]) * i) / 24,
+        from[0] + ((to[0] - from[0]) * attempt) / 24,
+        from[1] + ((to[1] - from[1]) * attempt) / 24,
       );
       await page.waitForTimeout(16);
     }
@@ -147,14 +147,14 @@ try {
   writes.length = 0;
   await dragTo(firstPoolTile, stripBox);
 
-  const placementWrite = writes.find((w) => w.url.includes('/placement'));
+  const placementWrite = writes.find((write) => write.url.includes('/placement'));
   check(
     'a drag into the Priority lane PATCHes placement: priority',
     Boolean(placementWrite && JSON.parse(placementWrite.body).placement === 'priority'),
-    `writes: ${JSON.stringify(writes.map((w) => w.url.split('/api')[1]))}`,
+    `writes: ${JSON.stringify(writes.map((write) => write.url.split('/api')[1]))}`,
   );
 
-  const orderWrite = writes.find((w) => w.url.endsWith('/order'));
+  const orderWrite = writes.find((write) => write.url.endsWith('/order'));
   check(
     'and the order that follows leads with the promoted entry',
     Boolean(orderWrite && JSON.parse(orderWrite.body).keys?.[0] === promotedKey),
@@ -187,7 +187,7 @@ try {
   // because anything is wrong, it is late because the machine is busy. Waiting longer costs a
   // green run nothing — it returns the moment the tile arrives — and costs a genuine
   // snap-back only the extra seconds before it reports.
-  const landed = await page
+  const hasLanded = await page
     .waitForFunction(
       (key) =>
         !!document.querySelector(
@@ -198,7 +198,7 @@ try {
     )
     .then(() => true)
     .catch(() => false);
-  check('the tile is now in the Priority lane on screen', landed, 'it snapped back');
+  check('the tile is now in the Priority lane on screen', hasLanded, 'it snapped back');
 
   // ── A drag that stays in the POOL writes nothing ────────────────────────────────────────
   const poolA = await centreOf('#grid-pool li.tile .thumb');
@@ -210,7 +210,7 @@ try {
   check(
     'a drag inside the pool saves nothing',
     writes.length === 0,
-    `wrote ${JSON.stringify(writes.map((w) => w.url.split('/api')[1]))} — the pool is shuffled at playback, so its order is not a thing to save`,
+    `wrote ${JSON.stringify(writes.map((write) => write.url.split('/api')[1]))} — the pool is shuffled at playback, so its order is not a thing to save`,
   );
 
   // ── An ORDERED queue: the pool is the empty lane, and the drag down is a demote ─────────
@@ -229,11 +229,11 @@ try {
   writes.length = 0;
   await dragTo(firstOrdered, poolStrip);
 
-  const demote = writes.find((w) => w.url.includes('/placement'));
+  const demote = writes.find((write) => write.url.includes('/placement'));
   check(
     'a drag into the pool PATCHes placement: random',
     Boolean(demote && JSON.parse(demote.body).placement === 'random'),
-    `writes: ${JSON.stringify(writes.map((w) => `${w.url.split('/api')[1]} ${w.body}`))}`,
+    `writes: ${JSON.stringify(writes.map((write) => `${write.url.split('/api')[1]} ${write.body}`))}`,
   );
   check(
     'and it names the entry that was dragged',

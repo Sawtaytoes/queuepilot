@@ -32,14 +32,14 @@ async function waitReady(url: string, ms = 30000) {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* */ }
     if (Date.now() > end) throw new Error('not ready');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 }
 
 await fs.mkdir(OUT, { recursive: true });
 await fs.copyFile(`${ROOT}/e2e/fixtures/queues.harness.yaml`, '/tmp/queues-chip.yaml');
 await fs.copyFile(`${ROOT}/e2e/fixtures/sets.fixture.yaml`, '/tmp/sets-chip.yaml');
-for (const p of ['/tmp/sets-chip.yaml.lock', '/tmp/queues-chip.yaml.lock']) await fs.rm(p, { force: true });
+for (const file of ['/tmp/sets-chip.yaml.lock', '/tmp/queues-chip.yaml.lock']) await fs.rm(file, { force: true });
 
 const fake = await startFakeMqtt({ port: FAKE });
 const srv = spawnServer({
@@ -71,12 +71,12 @@ try {
   // …and specifically the one deepest into its run, so the list actually HAS watched
   // rows to mark (a show sitting on E1 shows nothing worth screenshotting).
   const sets = await page.evaluate(() =>
-    fetch('/api/queues').then((r) => r.json()).then((j: QueuesResponse) =>
-      Object.entries(j.sets)
+    fetch('/api/queues').then((response) => response.json()).then((queuesResponse: QueuesResponse) =>
+      Object.entries(queuesResponse.sets)
         .flatMap(([id, set]) => set.items
-          .filter((i) => i.resolved && i.type === 'show' && i.nextEp)
-          .map((i) => ({ id, show: i.key, at: i.nextEp?.episode || 0 })))
-        .sort((a, b) => b.at - a.at)));
+          .filter((item) => item.resolved && item.type === 'show' && item.nextEp)
+          .map((item) => ({ id, show: item.key, at: item.nextEp?.episode || 0 })))
+        .sort((left, right) => right.at - left.at)));
   // Read the head BEFORE asserting on it: `sets.length` does not narrow `sets[0]` under
   // noUncheckedIndexedAccess, and the throw is the same either way.
   const deepest = sets[0];
@@ -106,8 +106,8 @@ try {
   // A COLLECTION's Series row carries the other chip shape: "<seen>/<total> watched",
   // success-green only when the member is finished.
   const coll = await page.evaluate((id: string) =>
-    fetch('/api/queues').then((r) => r.json()).then((j: QueuesResponse) =>
-      j.sets[id]?.items.find((i) => i.resolved && i.type === 'collection')?.key ?? null), setId);
+    fetch('/api/queues').then((response) => response.json()).then((queuesResponse: QueuesResponse) =>
+      queuesResponse.sets[id]?.items.find((item) => item.resolved && item.type === 'collection')?.key ?? null), setId);
   if (coll) {
     const cTile = page.locator(`#queue .tile[data-key="${coll}"]`);
     await cTile.click({ button: 'right' });

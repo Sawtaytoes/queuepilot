@@ -94,8 +94,8 @@ const inlineScrollers = (page: Page, root?: string) => page.evaluate((rootSelect
 const modalBox = (page: Page, id: string) => page.evaluate((boxId) => {
   const el = document.getElementById(boxId);
   if (!el) return null;
-  const r = el.getBoundingClientRect();
-  return { left: Math.round(r.left), right: Math.round(r.right), viewport: window.innerWidth };
+  const rect = el.getBoundingClientRect();
+  return { left: Math.round(rect.left), right: Math.round(rect.right), viewport: window.innerWidth };
 }, id);
 
 /** Names the boxes that stick out, so a failure says WHICH element regressed. */
@@ -115,7 +115,7 @@ const offenders = (page: Page) => page.evaluate(() => {
 
 for (const width of WIDTHS) {
   const page = await browser.newPage({ viewport: { width, height: 844 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400); // let the header's ResizeObserver settle --header-h
@@ -156,7 +156,7 @@ for (const width of WIDTHS) {
   //    shared queues.yaml the other suites in the loop assert against — the CSS under
   //    test is identical either way.
   {
-    const applied = await page.evaluate(() => {
+    const isApplied = await page.evaluate(() => {
       const LONG = 'Supercalifragilisticexpialidocious'.repeat(3); // 99 chars, zero break opportunities
       const name = document.querySelector('.playcard .rowname');
       const meta = document.querySelector('.playcard .rowmeta');
@@ -165,7 +165,7 @@ for (const width of WIDTHS) {
       if (meta) meta.textContent = `${LONG}-meta`;
       return true;
     });
-    ok(`${width}px: found a .rowname to stress`, applied);
+    ok(`${width}px: found a .rowname to stress`, isApplied);
     await page.waitForTimeout(200);
     const { scrollWidth, clientWidth } = await measure(page);
     ok(`${width}px: a long unbroken channel name does not widen the page (${scrollWidth} <= ${clientWidth})`,
@@ -346,7 +346,7 @@ for (const width of WIDTHS) {
     isMobile: true,
     viewport: { width, height: 844 },
   });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.goto(`http://localhost:${PORT}/overview`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.playcard', { timeout: 30000 });
   await page.waitForTimeout(400);

@@ -14,7 +14,7 @@ interface SetsResponse {
 const ok = (name: string, isPass: boolean) => { console.log(`${isPass ? 'PASS' : 'FAIL'} ${name}`); if (!isPass) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 await page.goto('http://localhost:18768/queues', { waitUntil: 'domcontentloaded' });
 await page.waitForSelector('.shelf');
 ok('no Refresh button', !(await page.$('#refresh')));
@@ -41,19 +41,19 @@ const profiles = await readOptions(page, '[data-testid="chprofile"]');
 ok('tier dropdown has both tiers, once each', profiles.join(',') === 'Younger Kids,Older Kids');
 await page.waitForFunction(() => document.querySelector('#status')?.textContent?.includes('Preview failed'), undefined, { timeout: 15000 });
 ok('preview fails gracefully without MQTT', true);
-const ratings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input', (is) => is.filter((i) => i.checked).map((i) => i.value));
+const ratings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input', (is) => is.filter((input) => input.checked).map((input) => input.value));
 ok('younger ratings prefilled', ratings.includes('G') && ratings.includes('TV-Y') && !ratings.includes('PG'));
-const showlibs = await page.$$eval<string[], HTMLInputElement>('#ch-showlibs input', (is) => is.filter((i) => i.checked).map((i) => i.value));
+const showlibs = await page.$$eval<string[], HTMLInputElement>('#ch-showlibs input', (is) => is.filter((input) => input.checked).map((input) => input.value));
 ok('show libs prefilled (Shows=5)', showlibs.join(',') === '5');
 
 // Item libraries split the way Plex styles them: Movie libraries vs Other videos.
 // Shorts (15) is a REAL movie library — it must sit in the Movie group, checked.
-const movieLabels = await page.$$eval('#ch-movielibs label', (ls) => ls.map((l) => (l.textContent ?? '').trim()));
-const otherLabels = await page.$$eval('#ch-otherlibs label', (ls) => ls.map((l) => (l.textContent ?? '').trim()));
+const movieLabels = await page.$$eval('#ch-movielibs label', (ls) => ls.map((element) => (element.textContent ?? '').trim()));
+const otherLabels = await page.$$eval('#ch-otherlibs label', (ls) => ls.map((element) => (element.textContent ?? '').trim()));
 ok('Shorts under Movie libraries, not Other', movieLabels.includes('Shorts') && !otherLabels.includes('Shorts'));
 ok('Other videos holds the Personal-Media libs', otherLabels.includes('Demos') && !movieLabels.includes('Demos'));
-const shortsChecked = await page.$eval<boolean, HTMLInputElement>('#ch-movielibs input[value="15"]', (i) => i.checked);
-ok('Shorts prefilled in Movie group', shortsChecked);
+const isShortsChecked = await page.$eval<boolean, HTMLInputElement>('#ch-movielibs input[value="15"]', (element) => element.checked);
+ok('Shorts prefilled in Movie group', isShortsChecked);
 
 // Edit filters: add PG to the Younger binding of Shows & Shorts, save. It must land on
 // that channel's Younger profile binding (not a legacy set), and the binding's
@@ -61,14 +61,14 @@ ok('Shorts prefilled in Movie group', shortsChecked);
 await page.check('#ch-ratings input[value="PG"]');
 await page.click('#ch-save');
 await page.waitForFunction(async () => {
-  const r: SetsResponse = await fetch('/api/sets').then((x) => x.json());
-  const b = r.sets.find((s) => s.id === 'shows_shorts')?.profiles?.find((p) => p.plex_user === 'Younger Kids');
-  return b?.allowed_ratings.includes('PG');
+  const setsResponse: SetsResponse = await fetch('/api/sets').then((response) => response.json());
+  const binding = setsResponse.sets.find((set) => set.id === 'shows_shorts')?.profiles?.find((profile) => profile.plex_user === 'Younger Kids');
+  return binding?.allowed_ratings.includes('PG');
 }, undefined, { timeout: 15000 });
 ok('filters saved to the Younger binding (persisted to sets.yaml)', true);
 const movieRatings = await page.evaluate(() =>
-  fetch('/api/sets').then((x) => x.json()).then((r: SetsResponse) =>
-    r.sets.find((s) => s.id === 'shows_shorts')?.profiles?.find((p) => p.plex_user === 'Younger Kids')?.movie_ratings ?? null));
+  fetch('/api/sets').then((response) => response.json()).then((setsResponse: SetsResponse) =>
+    setsResponse.sets.find((set) => set.id === 'shows_shorts')?.profiles?.find((profile) => profile.plex_user === 'Younger Kids')?.movie_ratings ?? null));
 // `!== null` and not `?? []`: a binding that went MISSING must fail this assertion, not
 // sail through it on an empty list.
 ok('movie_ratings NOT dragged along by the shows save', movieRatings !== null && !movieRatings.includes('PG'));
@@ -78,16 +78,16 @@ ok('movie_ratings NOT dragged along by the shows save', movieRatings !== null &&
 await pickValue(page, '[data-testid="chchannel"]', 'movies');
 await page.waitForFunction(() => document.body.classList.contains('movies-channel'), undefined, { timeout: 15000 });
 ok('movies channel hides the shows-only blocklist',
-  await page.$eval('#chfilters .showsonly', (e) => getComputedStyle(e).display === 'none'));
+  await page.$eval('#chfilters .showsonly', (element) => getComputedStyle(element).display === 'none'));
 ok('movies channel shows the library pickers',
-  await page.$eval('#ch-movielibs', (e) => getComputedStyle(e).display !== 'none'));
+  await page.$eval('#ch-movielibs', (element) => getComputedStyle(element).display !== 'none'));
 ok('movies channel has a search box for rewatch exclusions',
-  await page.$eval('#ch-movieexclude-search', (e) => getComputedStyle(e).display !== 'none'));
+  await page.$eval('#ch-movieexclude-search', (element) => getComputedStyle(element).display !== 'none'));
 ok('movies channel has the same manual Members editor as shows',
-  await page.$eval('#chmembers-box', (e) => getComputedStyle(e).display !== 'none'));
+  await page.$eval('#chmembers-box', (element) => getComputedStyle(element).display !== 'none'));
 ok('movies channel prefills its own library (Movies=1)',
-  await page.$eval<boolean, HTMLInputElement>('#ch-movielibs input[value="1"]', (i) => i.checked));
-const mratings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input', (is) => is.filter((i) => i.checked).map((i) => i.value));
+  await page.$eval<boolean, HTMLInputElement>('#ch-movielibs input[value="1"]', (element) => element.checked));
+const mratings = await page.$$eval<string[], HTMLInputElement>('#ch-ratings input', (is) => is.filter((input) => input.checked).map((input) => input.value));
 ok('movies ratings prefilled from movie_ratings (no PG)', mratings.includes('G') && !mratings.includes('PG'));
 
 // A random-lane Picks queue still opens the grid editor in channel mode: no ordering UI.
@@ -97,7 +97,7 @@ await page.waitForSelector('#queue:not([hidden])');
 ok('a random-lane Picks queue opens the grid editor in channel mode',
   await page.evaluate(() => document.body.classList.contains('channel-mode')));
 ok('channel mode: queue-search filters stay hidden',
-  await page.$eval('#queue .addpos', (e) => getComputedStyle(e).display === 'none'));
+  await page.$eval('#queue .addpos', (element) => getComputedStyle(element).display === 'none'));
 ok('channel mode: random-order note shown', /random order/.test(await page.textContent('#sub') ?? ''));
 
 // …and it is a SHELF on the Picks page, which is where it lives now.

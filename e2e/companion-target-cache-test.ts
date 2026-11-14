@@ -169,7 +169,7 @@ await playback.transport('next');
 check('four Companion commands carry four DIFFERENT command ids',
   new Set(seenIds).size === 4, JSON.stringify(seenIds));
 check('…and they increase monotonically, which is what Companion asks for',
-  seenIds.every((id, i) => i === 0 || Number(id) > Number(seenIds[i - 1])),
+  seenIds.every((id, index) => index === 0 || Number(id) > Number(seenIds[index - 1])),
   JSON.stringify(seenIds));
 
 // --- (4) a target handed in at arm time can go stale -------------------------- //

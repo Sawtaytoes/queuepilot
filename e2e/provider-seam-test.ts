@@ -46,8 +46,8 @@ function ok(name: string, fn: () => void): void {
   try {
     fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -55,8 +55,8 @@ async function okAsync(name: string, fn: () => Promise<void>): Promise<void> {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -79,8 +79,8 @@ ok('an unset token resolves to null, NEVER an empty string', () => {
 });
 
 ok('requireToken throws, names the provider AND how to fix it', () => {
-  assert.throws(() => config.requireToken('kavita', 'kavita'), (e: unknown) => {
-    const message = errMessage(e);
+  assert.throws(() => config.requireToken('kavita', 'kavita'), (error: unknown) => {
+    const message = errMessage(error);
     assert.match(message, /NOT CONFIGURED/);
     assert.match(message, /kavita/);
     // Actionable: it must say which env var, and which file.
@@ -127,9 +127,9 @@ ok('the token is then readable through the resolution order', () => {
 
 ok('env BEATS the secrets file', () => {
   process.env.KAVITA_API_KEY = 'from-env';
-  const r = config.tokenFor('kavita', 'kavita');
-  assert.equal(r.token, 'from-env');
-  assert.equal(r.source, 'env:KAVITA_API_KEY');
+  const resolution = config.tokenFor('kavita', 'kavita');
+  assert.equal(resolution.token, 'from-env');
+  assert.equal(resolution.source, 'env:KAVITA_API_KEY');
   delete process.env.KAVITA_API_KEY;
 });
 
@@ -144,7 +144,7 @@ ok('a generic PROVIDER_TOKEN_<ID> works for a runtime-added provider', () => {
 // --------------------------------------------------------------------------- //
 ok('the public view exposes `configured` as a BOOLEAN and no token at all', () => {
   // The fixture defines `kavita`, so the lookup is non-null by construction.
-  const view = config.publicList().find((p) => p.id === 'kavita')!;
+  const view = config.publicList().find((provider) => provider.id === 'kavita')!;
   assert.equal(view.configured, true);
   const serialized = JSON.stringify(config.publicList());
   // Not the value, and not a masked prefix either — a masked token is still a leak when the
@@ -167,13 +167,13 @@ ok('the secrets file is NOT one of the history-managed config files', async () =
 // --------------------------------------------------------------------------- //
 ok('a pre-blocks set reads as exactly ONE implicit Plex block', () => {
   const cfg = { source: 'queue', sections: [5, 15], requires_profile: 'Younger Kids' };
-  const b = blocks.blocksForSet(cfg);
+  const providerBlocks = blocks.blocksForSet(cfg);
   // Every `b[0]!` below asserts the `b.length` check on the line above it.
-  assert.equal(b.length, 1);
-  assert.equal(b[0]!.provider, 'plex');
-  assert.equal(b[0]!.profile, 'Younger Kids');
-  assert.deepEqual(b[0]!.libraries, ['5', '15']);
-  assert.equal(b[0]!.implicit, true);
+  assert.equal(providerBlocks.length, 1);
+  assert.equal(providerBlocks[0]!.provider, 'plex');
+  assert.equal(providerBlocks[0]!.profile, 'Younger Kids');
+  assert.deepEqual(providerBlocks[0]!.libraries, ['5', '15']);
+  assert.equal(providerBlocks[0]!.implicit, true);
 });
 
 ok('reading a legacy set does NOT mutate it — no migration on read', () => {
@@ -186,10 +186,10 @@ ok('reading a legacy set does NOT mutate it — no migration on read', () => {
 
 ok('an explicit single block round-trips', () => {
   const cfg = { providers: [{ provider: 'kavita', profile: 'Sawtaytoes', libraries: [5, 2] }] };
-  const b = blocks.blocksForSet(cfg);
-  assert.equal(b.length, 1);
-  assert.equal(b[0]!.provider, 'kavita');
-  assert.deepEqual(b[0]!.libraries, ['5', '2']);
+  const providerBlocks = blocks.blocksForSet(cfg);
+  assert.equal(providerBlocks.length, 1);
+  assert.equal(providerBlocks[0]!.provider, 'kavita');
+  assert.deepEqual(providerBlocks[0]!.libraries, ['5', '2']);
   assert.equal(blocks.providerIdForSet(cfg), 'kavita');
 });
 
@@ -201,18 +201,18 @@ ok('N blocks are stored faithfully — the whole block repeats', () => {
       { provider: 'plex', profile: 'Older Kids', libraries: [15] },
     ],
   };
-  const b = blocks.blocksForSet(cfg);
-  assert.equal(b.length, 3);
-  assert.deepEqual(b.map((x) => x.provider), ['plex', 'kavita', 'plex']);
+  const providerBlocks = blocks.blocksForSet(cfg);
+  assert.equal(providerBlocks.length, 3);
+  assert.deepEqual(providerBlocks.map((block) => block.provider), ['plex', 'kavita', 'plex']);
   // Each block carries its OWN profile: the profile field is provider-scoped, and means a
   // different thing per provider (a Plex Home profile vs which Kavita user owns the list).
-  assert.deepEqual(b.map((x) => x.profile), ['Younger Kids', 'Sawtaytoes', 'Older Kids']);
+  assert.deepEqual(providerBlocks.map((block) => block.profile), ['Younger Kids', 'Sawtaytoes', 'Older Kids']);
 });
 
 ok('library ids stay bare — provider identity is NEVER encoded into them', () => {
   const cfg = { providers: [{ provider: 'kavita', libraries: [5, 2] }] };
-  const b = blocks.blocksForSet(cfg);
-  for (const id of b[0]!.libraries) {
+  const providerBlocks = blocks.blocksForSet(cfg);
+  for (const id of providerBlocks[0]!.libraries) {
     assert.doesNotMatch(id, /:/, `library id '${id}' carries a provider prefix`);
   }
 });
@@ -249,27 +249,27 @@ ok('validateBlocks REFUSES a mixed queue on the way in', () => {
   // Not merely unplayable: a stored mixed queue reports delivery `push` and then behaves as
   // Plex everywhere, silently ignoring the other provider's libraries. The live
   // "Manga & Webtoons" channel held a Kavita block nothing ever read because of this.
-  const r = blocks.validateBlocks([
+  const validation = blocks.validateBlocks([
     { provider: 'plex', libraries: ['11'] },
     { provider: 'kavita', libraries: ['2', '5'] },
   ]);
-  assert.equal(r.ok, false);
-  assert.match(r.errors.join(' '), /one app/);
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors.join(' '), /one app/);
 });
 
 ok('N blocks on the SAME provider are still accepted', () => {
   // Two profiles of one app is not mixing, and is the reason blocks stay a list at all.
-  const r = blocks.validateBlocks([
+  const validation = blocks.validateBlocks([
     { provider: 'plex', profile: 'A', libraries: ['1'] },
     { provider: 'plex', profile: 'B', libraries: ['5'] },
   ]);
-  assert.equal(r.ok, true, r.errors.join('; '));
+  assert.equal(validation.ok, true, validation.errors.join('; '));
 });
 
 ok('validateBlocks rejects an unknown provider by name', () => {
-  const r = blocks.validateBlocks([{ provider: 'ghost', libraries: [1] }]);
-  assert.equal(r.ok, false);
-  assert.match(r.errors[0]!, /unknown provider 'ghost'/);
+  const validation = blocks.validateBlocks([{ provider: 'ghost', libraries: [1] }]);
+  assert.equal(validation.ok, false);
+  assert.match(validation.errors[0]!, /unknown provider 'ghost'/);
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED` : '\nprovider seam OK');

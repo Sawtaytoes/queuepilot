@@ -46,18 +46,18 @@ const SERIES: Series[] = [
   { format: 1, hue: 340, id: 108, libraryId: 5, name: 'The Quiet Tenant', unread: 5 },
 ];
 
-const byId = new Map(SERIES.map((s) => [s.id, s]));
+const byId = new Map(SERIES.map((series) => [series.id, series]));
 
 /** This series' chapters, oldest first. Chapter ids are `<seriesId><nn>` so a log line names
  *  the series without a lookup. */
-const chaptersOf = (s: Series) =>
-  Array.from({ length: s.unread }, (_, i) => ({
-    id: s.id * 100 + i + 1,
-    minNumber: i + 1,
-    number: String(i + 1),
+const chaptersOf = (series: Series) =>
+  Array.from({ length: series.unread }, (_, index) => ({
+    id: series.id * 100 + index + 1,
+    minNumber: index + 1,
+    number: String(index + 1),
     pages: 40,
     pagesRead: 0,
-    title: `Chapter ${i + 1}`,
+    title: `Chapter ${index + 1}`,
   }));
 
 // The reading lists this instance holds — created and rebuilt by the app, exactly as the real
@@ -75,20 +75,20 @@ let nextItemId = 9000;
  * re-serves these bytes through its own `/api/providers/:id/cover/:id` route, which is a byte
  * pipe and does not care which image format it is carrying.
  */
-const coverSvg = (s: Series) => {
-  const initials = s.name
+const coverSvg = (series: Series) => {
+  const initials = series.name
     .split(/\s+/)
-    .filter((w) => /^[A-Za-z]/.test(w))
+    .filter((word) => /^[A-Za-z]/.test(word))
     .slice(0, 2)
-    .map((w) => w[0]!.toUpperCase())
+    .map((word) => word[0]!.toUpperCase())
     .join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="480" viewBox="0 0 320 480">`
-    + `<rect width="320" height="480" fill="hsl(${s.hue} 42% 26%)"/>`
-    + `<rect x="0" y="380" width="320" height="100" fill="hsl(${s.hue} 42% 18%)"/>`
+    + `<rect width="320" height="480" fill="hsl(${series.hue} 42% 26%)"/>`
+    + `<rect x="0" y="380" width="320" height="100" fill="hsl(${series.hue} 42% 18%)"/>`
     + `<text x="160" y="230" font-family="system-ui, sans-serif" font-size="120" font-weight="700"`
-    + ` fill="hsl(${s.hue} 60% 78%)" text-anchor="middle">${initials}</text>`
+    + ` fill="hsl(${series.hue} 60% 78%)" text-anchor="middle">${initials}</text>`
     + `<text x="160" y="430" font-family="system-ui, sans-serif" font-size="22"`
-    + ` fill="hsl(${s.hue} 30% 82%)" text-anchor="middle">${s.libraryId === 5 ? 'Strips' : 'Volumes'}</text>`
+    + ` fill="hsl(${series.hue} 30% 82%)" text-anchor="middle">${series.libraryId === 5 ? 'Strips' : 'Volumes'}</text>`
     + `</svg>`;
 };
 
@@ -126,33 +126,33 @@ const server = createServer(async (req, res) => {
     const wanted = statements.find((st) => st.field === 19)?.value;
     const rows = wanted == null
       ? SERIES
-      : SERIES.filter((s) => String(s.libraryId) === String(wanted));
-    return send(rows.map((s) => ({ ...s, pages: s.unread * 40, pagesRead: 0 })));
+      : SERIES.filter((series) => String(series.libraryId) === String(wanted));
+    return send(rows.map((row) => ({ ...row, pages: row.unread * 40, pagesRead: 0 })));
   }
   if (url.pathname.startsWith('/api/Series/series-detail')) {
-    const s = byId.get(Number(url.searchParams.get('seriesId')));
-    if (!s) return send({ chapters: [], specials: [], volumes: [] });
-    return send({ chapters: chaptersOf(s), specials: [], unreadCount: s.unread, volumes: [] });
+    const series = byId.get(Number(url.searchParams.get('seriesId')));
+    if (!series) return send({ chapters: [], specials: [], volumes: [] });
+    return send({ chapters: chaptersOf(series), specials: [], unreadCount: series.unread, volumes: [] });
   }
   if (url.pathname.startsWith('/api/Series/')) {
-    const s = byId.get(Number(url.pathname.split('/').pop()));
-    return s ? send(s) : send(null, 404);
+    const series = byId.get(Number(url.pathname.split('/').pop()));
+    return series ? send(series) : send(null, 404);
   }
   if (url.pathname === '/api/Reader/continue-point') {
-    const s = byId.get(Number(url.searchParams.get('seriesId')));
+    const series = byId.get(Number(url.searchParams.get('seriesId')));
     // seriesId NULL, exactly as the live endpoint answers — the client threads it back in.
-    return s ? send({ ...chaptersOf(s)[0], seriesId: null }) : send(null, 404);
+    return series ? send({ ...chaptersOf(series)[0], seriesId: null }) : send(null, 404);
   }
   if (url.pathname === '/api/Image/series-cover') {
-    const s = byId.get(Number(url.searchParams.get('seriesId')));
-    if (!s) return send(null, 404);
+    const series = byId.get(Number(url.searchParams.get('seriesId')));
+    if (!series) return send(null, 404);
     res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
-    return res.end(coverSvg(s));
+    return res.end(coverSvg(series));
   }
   if (url.pathname === '/api/Search/search') {
-    const q = (url.searchParams.get('queryString') || '').toLowerCase();
+    const query = (url.searchParams.get('queryString') || '').toLowerCase();
     return send({
-      series: SERIES.filter((s) => s.name.toLowerCase().includes(q)),
+      series: SERIES.filter((series) => series.name.toLowerCase().includes(query)),
     });
   }
 
@@ -197,13 +197,13 @@ const server = createServer(async (req, res) => {
     const listId = Number(body.readingListId);
     listItems.set(
       listId,
-      (listItems.get(listId) ?? []).filter((r) => r.id !== Number(body.readingListItemId)),
+      (listItems.get(listId) ?? []).filter((listItem) => listItem.id !== Number(body.readingListItemId)),
     );
     return send({ ok: true });
   }
   if (url.pathname === '/api/ReadingList/update') {
     const body = await readBody();
-    const row = lists.find((l) => l.id === Number(body.readingListId));
+    const row = lists.find((list) => list.id === Number(body.readingListId));
     if (row) {
       row.title = String(body.title ?? row.title);
       row.coverImageLocked = Boolean(body.coverImageLocked);
@@ -212,7 +212,7 @@ const server = createServer(async (req, res) => {
   }
   if (url.pathname === '/api/Upload/reading-list') {
     const body = await readBody();
-    const row = lists.find((l) => l.id === Number(body.readingListId));
+    const row = lists.find((list) => list.id === Number(body.readingListId));
     if (row) row.coverImageLocked = true;
     return send({ ok: true });
   }

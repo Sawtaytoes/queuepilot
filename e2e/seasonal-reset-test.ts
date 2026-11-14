@@ -79,9 +79,9 @@ const queueEntryHistory = await import('../server/src/store/db/queueEntryHistory
 const queueWatchedReset = await import('../server/src/store/db/queueWatchedReset.js');
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const sessionOk = (res: SessionResult): boolean => (res as { ok?: unknown }).ok === true;

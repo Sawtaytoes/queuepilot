@@ -52,7 +52,7 @@ const resolve = (env: NodeJS.ProcessEnv): HostValues =>
   JSON.parse(
     execFileSync(TSX_BIN, ['--input-type=module', '-e', READ], {
       cwd: import.meta.dirname,
-      env: { ...process.env, ...Object.fromEntries(HOST_KEYS.map((k) => [k, ''])), ...env },
+      env: { ...process.env, ...Object.fromEntries(HOST_KEYS.map((host_key) => [host_key, ''])), ...env },
       encoding: 'utf8',
     }),
   ) as HostValues;

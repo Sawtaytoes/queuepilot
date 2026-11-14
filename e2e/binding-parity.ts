@@ -53,11 +53,11 @@ const goldenRoute = (kind: string, title: string): string => {
 //   route[cartoons × 'Guest'] -> NO MAPPING (would error, as today)
 function parseRoute(line: string): RouteRecord {
   if (/-> NO MAPPING/.test(line)) return { sid: null, via: null, plex_user: null, account_id: null };
-  const m = line.match(/-> set '([^']*)' \(via (\w+)\), binding plex_user=(.+) account_id=(.+)$/);
-  if (!m) throw new Error(`unparseable route line: ${line}`);
+  const match = line.match(/-> set '([^']*)' \(via (\w+)\), binding plex_user=(.+) account_id=(.+)$/);
+  if (!match) throw new Error(`unparseable route line: ${line}`);
   // Four capture groups, and the match above already succeeded — the `!`s assert exactly the
   // guard on the previous line.
-  const [, sid, via, userRepr, acct] = m;
+  const [, sid, via, userRepr, acct] = match;
   return {
     sid: sid!,
     via: via!,
@@ -68,12 +68,12 @@ function parseRoute(line: string): RouteRecord {
 
 // Node route() → the same comparable record (account_id stringified like Python's f-string).
 function nodeRoute(kind: string, title: string): RouteRecord {
-  const r = routing.route(kind, title);
+  const route = routing.route(kind, title);
   return {
-    sid: r.sid,
-    via: r.sid == null ? null : r.via,
-    plex_user: r.binding ? r.binding.plex_user ?? null : null,
-    account_id: r.binding && r.binding.account_id != null ? String(r.binding.account_id) : null,
+    sid: route.sid,
+    via: route.sid == null ? null : route.via,
+    plex_user: route.binding ? route.binding.plex_user ?? null : null,
+    account_id: route.binding && route.binding.account_id != null ? String(route.binding.account_id) : null,
   };
 }
 
@@ -100,8 +100,8 @@ console.log('=== route parity (Node engine vs the recorded queue_builder.cli rou
 for (const [kind, title] of INPUTS) {
   const want = parseRoute(goldenRoute(kind, title));
   const got = nodeRoute(kind, title);
-  const same = JSON.stringify(want) === JSON.stringify(got);
-  if (same) {
+  const isSame = JSON.stringify(want) === JSON.stringify(got);
+  if (isSame) {
     console.log(`  ✓ ${kind} × ${title} → ${want.sid ?? 'NO MAPPING'}${want.via ? ` (${want.via})` : ''}`);
   } else {
     fail(`${kind} × ${title}\n      golden: ${JSON.stringify(want)}\n      node:   ${JSON.stringify(got)}`);
@@ -121,13 +121,13 @@ for (const sid of reg.order) {
   const wantRe = pySections[sid].rewatch_sections;
   const gotSet = routing.setSections(cfg);
   const gotRe = routing.rewatchSections(cfg);
-  const okSet = JSON.stringify(wantSet) === JSON.stringify(gotSet);
-  const okRe = JSON.stringify(wantRe) === JSON.stringify(gotRe);
-  if (okSet && okRe) {
+  const isSetMatch = JSON.stringify(wantSet) === JSON.stringify(gotSet);
+  const isRewatchMatch = JSON.stringify(wantRe) === JSON.stringify(gotRe);
+  if (isSetMatch && isRewatchMatch) {
     console.log(`  ✓ ${sid}: set=${JSON.stringify(gotSet)} rewatch=${JSON.stringify(gotRe)}`);
   } else {
-    if (!okSet) fail(`${sid} set_sections — golden ${JSON.stringify(wantSet)} vs node ${JSON.stringify(gotSet)}`);
-    if (!okRe) fail(`${sid} rewatch_sections — golden ${JSON.stringify(wantRe)} vs node ${JSON.stringify(gotRe)}`);
+    if (!isSetMatch) fail(`${sid} set_sections — golden ${JSON.stringify(wantSet)} vs node ${JSON.stringify(gotSet)}`);
+    if (!isRewatchMatch) fail(`${sid} rewatch_sections — golden ${JSON.stringify(wantRe)} vs node ${JSON.stringify(gotRe)}`);
   }
 }
 // Guard: the two engines must even see the SAME set of ids (a parse divergence would else hide).

@@ -87,20 +87,20 @@ type SetRow = {
 };
 
 const readSet = async (): Promise<SetRow | undefined> => {
-  const reg = (await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json())) as {
+  const reg = (await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json())) as {
     sets: SetRow[];
   };
-  return reg.sets.find((s) => s.id === 'blockpool');
+  return reg.sets.find((set) => set.id === 'blockpool');
 };
 
 async function startServer(): Promise<ChildProcess> {
   const child = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 60; i++) {
+  for (let attempt = 0; attempt < 60; attempt++) {
     try {
-      await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json());
+      await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json());
       return child;
     } catch {
-      await new Promise((r) => setTimeout(r, 200));
+      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
   throw new Error('server did not come up');
@@ -116,14 +116,14 @@ try {
   server = await startServer();
 
   const excludesOf = (row: SetRow | undefined) =>
-    (row?.profiles || []).find((p) => p.plex_user === 'Older Kids')?.movie_excludes || [];
+    (row?.profiles || []).find((profile) => profile.plex_user === 'Older Kids')?.movie_excludes || [];
 
   const before = await readSet();
   ok('seed: the pool starts with 2 blocked + 1 rewatch exclude',
     before?.blocklist?.length === 2 && excludesOf(before).length === 1);
 
   const page = await browser.newPage({ viewport: { width: 1400, height: 950 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.goto(`http://localhost:${PORT}/channels/blockpool`, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#channels:not([hidden])');
   // The pool editor, opened on the seeded pool — the exact gesture that used to wipe both.
@@ -159,11 +159,11 @@ try {
     body: JSON.stringify({
       label: 'Fresh Pool', source: 'rotation', kind: 'cartoons', sections: [5], item_sections: [],
     }),
-  }).then((r) => r.json())) as { id?: string };
-  const reg = (await fetch(`http://localhost:${PORT}/api/sets`).then((r) => r.json())) as {
+  }).then((response) => response.json())) as { id?: string };
+  const reg = (await fetch(`http://localhost:${PORT}/api/sets`).then((response) => response.json())) as {
     sets: SetRow[];
   };
-  const fresh = reg.sets.find((s) => s.id === created.id);
+  const fresh = reg.sets.find((set) => set.id === created.id);
   ok('a newly created pool blocks nothing', fresh?.blocklist?.length === 0);
 
   // Shows and Movies are both Rules queues. Their exclude storage differs, but both screens

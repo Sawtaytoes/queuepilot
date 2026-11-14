@@ -44,7 +44,7 @@ const QUEUE = 'bob';
  * `web/dist` from the superseded rule first (`if (doneCount === 0) return null`), run this
  * with the flag, then restore the component and rebuild before running it without the flag.
  */
-const IS_BEFORE = process.env.QP_SHOT_BEFORE === '1';
+const isBeforeShot = process.env.QP_SHOT_BEFORE === '1';
 // A line that is NOT done and never becomes done here. `entryKey()` answers `title:<title>`
 // for an entry that carries neither an id nor a ratingKey.
 const ENTRY = 'title:Jin-Roh: The Wolf Brigade (1999)';
@@ -63,8 +63,8 @@ const sets = (await fs.readFile(`${REPO_ROOT}/e2e/fixtures/sets.fixture.yaml`, '
   .replace('  - id: bob\n    label: Bob — Movies\n', '  - id: bob\n    label: Bob — Movies\n    watch_history: queue\n');
 await fs.writeFile(SETS, sets);
 
-for (const p of [`${QUEUES}.lock`, `${SETS}.lock`, STORE, `${SCRATCH}.history.json`]) {
-  await fs.rm(p, { recursive: true, force: true });
+for (const file of [`${QUEUES}.lock`, `${SETS}.lock`, STORE, `${SCRATCH}.history.json`]) {
+  await fs.rm(file, { recursive: true, force: true });
 }
 
 // 2. The ledger rows, written before anything else opens the store.
@@ -79,7 +79,7 @@ const seeded = queueEntryHistory.completedFor(QUEUE, ENTRY).size;
 console.log(`seeded ${seeded} completions on ${ENTRY} — and NOTHING is flagged done`);
 if (seeded !== 3) throw new Error(`expected 3 seeded completions, got ${seeded}`);
 
-let failed = false;
+let hasFailed = false;
 const srv = spawnServer({
   env: {
     ...process.env,
@@ -103,7 +103,7 @@ const ready = async (): Promise<void> => {
       if (res.ok && (await res.clone().json())?.sets?.[QUEUE]) return;
     } catch { /* not up yet */ }
     if (Date.now() > deadline) throw new Error('server never came up');
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -114,8 +114,8 @@ try {
   const items = (await (await fetch(`${BASE}/api/queues`)).json()).sets[QUEUE].items as Array<{
     done?: boolean; queue_history_completed_count?: number; title?: string;
   }>;
-  const doneCount = items.filter((i) => i.done).length;
-  const historyCount = items.reduce((s, i) => s + (i.queue_history_completed_count ?? 0), 0);
+  const doneCount = items.filter((item) => item.done).length;
+  const historyCount = items.reduce((total, item) => total + (item.queue_history_completed_count ?? 0), 0);
   console.log(`done entries: ${doneCount}   ledger completions: ${historyCount}`);
   if (doneCount !== 0) throw new Error(`fixture is wrong: ${doneCount} entries are flagged done`);
   if (historyCount < 1) throw new Error('the ledger did not reach the API payload');
@@ -145,7 +145,7 @@ try {
     .catch(() => false);
   console.log(`Actions menu ${hasMenu ? 'PRESENT' : 'ABSENT'}`);
 
-  if (IS_BEFORE) {
+  if (isBeforeShot) {
     // The BEFORE side stops here: there is no menu to open, and its absence IS the picture.
     if (hasMenu) throw new Error('the BEFORE build still shows the menu — is `web/dist` the superseded one?');
     await page.screenshot({ path: `${OUT}/actions-menu-history-toolbar-before.png` });
@@ -170,8 +170,8 @@ try {
   const rows = page.locator('.qactionsmenu [role="menuitem"]');
   const rowCount = await rows.count();
   const states = new Map<string, boolean>();
-  for (let i = 0; i < rowCount; i += 1) {
-    const row = rows.nth(i);
+  for (let attempt = 0; attempt < rowCount; attempt += 1) {
+    const row = rows.nth(attempt);
     const text = (await row.innerText()).trim();
     // `MenuAction` renders the NATIVE `disabled` attribute, not `aria-disabled` — a disabled
     // row stays in the DOM and stays announced, it just never registers with `RovingFocus`.
@@ -180,8 +180,8 @@ try {
     console.log(`  ${isDisabled ? 'DISABLED' : 'enabled '}  ${text}`);
   }
 
-  const resetRow = [...states].find(([t]) => t.startsWith('Mark all unwatched'));
-  const removeRow = [...states].find(([t]) => t.startsWith('Remove all completed'));
+  const resetRow = [...states].find(([state]) => state.startsWith('Mark all unwatched'));
+  const removeRow = [...states].find(([state]) => state.startsWith('Remove all completed'));
   if (!resetRow || resetRow[1]) throw new Error('the reset row must be ENABLED: the ledger holds completions');
   if (!removeRow || !removeRow[1]) throw new Error('the remove row must be DISABLED: no entry carries `done`');
 
@@ -203,11 +203,11 @@ try {
   await page.click('#qactionscancel');
   await page.waitForTimeout(300);
   await browser.close();
-} catch (e) {
-  failed = true;
-  console.error(e);
+} catch (error) {
+  hasFailed = true;
+  console.error(error);
 } finally {
   killServer(srv);
 }
 
-process.exit(failed ? 1 : 0);
+process.exit(hasFailed ? 1 : 0);

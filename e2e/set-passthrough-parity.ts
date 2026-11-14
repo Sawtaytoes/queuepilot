@@ -113,7 +113,7 @@ if (!reg) {
 
 // Python's absent key and JS's undefined both mean "not set" — normalise to null so the two
 // spellings compare equal, while a real value difference still shows up.
-const norm = (v: unknown): unknown => (v === undefined ? null : v);
+const norm = (value: unknown): unknown => (value === undefined ? null : value);
 
 let failed = 0;
 const ids = Object.keys(expected).sort();
@@ -129,16 +129,16 @@ for (const sid of ids) {
     failed++;
     continue;
   }
-  for (const f of FIELDS) {
-    const want = norm(expected[sid][f]);
+  for (const field of FIELDS) {
+    const want = norm(expected[sid][field]);
     // FIELDS is a runtime list of passthrough names, so this is a dynamic read by design —
     // the gate exists precisely to catch a field the loader never copied. Indexing the cfg as
     // a record is the whole point; a keyof-typed lookup would only check the ones we listed.
-    const have = norm((got as unknown as Record<string, unknown>)[f]);
+    const have = norm((got as unknown as Record<string, unknown>)[field]);
     if (JSON.stringify(want) === JSON.stringify(have)) {
-      console.log(`PASS ${sid}.${f} = ${JSON.stringify(have)}`);
+      console.log(`PASS ${sid}.${field} = ${JSON.stringify(have)}`);
     } else {
-      console.log(`FAIL ${sid}.${f} — node ${JSON.stringify(have)}, golden ${JSON.stringify(want)}`);
+      console.log(`FAIL ${sid}.${field} — node ${JSON.stringify(have)}, golden ${JSON.stringify(want)}`);
       failed++;
     }
   }
@@ -151,14 +151,14 @@ for (const [sid, want] of Object.entries(POST_PYTHON)) {
     failed++;
     continue;
   }
-  for (const [f, expect] of Object.entries(want)) {
+  for (const [field, expect] of Object.entries(want)) {
     // Same dynamic read as the loop above, and for the same reason: the gate exists to catch
     // a field the loader never copied, so it must index by NAME.
-    const have = norm((got as unknown as Record<string, unknown>)[f]);
+    const have = norm((got as unknown as Record<string, unknown>)[field]);
     if (JSON.stringify(norm(expect)) === JSON.stringify(have)) {
-      console.log(`PASS ${sid}.${f} = ${JSON.stringify(have)}`);
+      console.log(`PASS ${sid}.${field} = ${JSON.stringify(have)}`);
     } else {
-      console.log(`FAIL ${sid}.${f} — node ${JSON.stringify(have)}, expected ${JSON.stringify(expect)}`);
+      console.log(`FAIL ${sid}.${field} — node ${JSON.stringify(have)}, expected ${JSON.stringify(expect)}`);
       failed++;
     }
   }

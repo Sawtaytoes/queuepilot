@@ -123,7 +123,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1100 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 
   /** Every write the page makes, so "it sent nothing" is assertable rather than assumed. */
   const writes: { body: string; method: string; url: string }[] = [];
@@ -285,11 +285,11 @@ try {
   // a save that never reported could not be told from a value that was wrong.
   const isYoungerPatched = await Promise.all([
     page.waitForResponse(
-      (r) => r.url().includes('/api/sets/younger') && r.request().method() === 'PATCH',
+      (response) => response.url().includes('/api/sets/younger') && response.request().method() === 'PATCH',
       { timeout: 90000 },
-    ).then((r) => r.ok(), () => false),
+    ).then((response) => response.ok(), () => false),
     page.click('#calendar-younger-save'),
-  ]).then(([ok]) => ok);
+  ]).then(([isPatched]) => isPatched);
   check('the rotation pool save reached the server', isYoungerPatched);
 
   const younger = await setById('younger');
@@ -324,7 +324,7 @@ try {
 
   // ── 7. The Narrow View does not scroll sideways ──────────────────────────────────────── //
   const narrow = await browser.newPage({ viewport: { width: 390, height: 844 } });
-  narrow.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  narrow.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await narrow.goto(`${BASE}/calendar`, { waitUntil: 'domcontentloaded' });
   await narrow.waitForSelector('#calendar-rows', { timeout: 30000 });
   await settle(narrow);

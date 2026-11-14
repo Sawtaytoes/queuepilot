@@ -83,7 +83,7 @@ const ok = (name: string, isPass: boolean, extra = ''): void => {
   if (!isPass) process.exitCode = 1;
 };
 
-const same = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+const same = (left: unknown, right: unknown): boolean => JSON.stringify(left) === JSON.stringify(right);
 
 interface PickWire {
   setId: string;

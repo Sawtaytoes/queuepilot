@@ -4,8 +4,8 @@
 import { chromium } from './playwright.js';
 const BASE = `http://localhost:${process.env.WEB_PORT || 18776}`;
 const TAG = process.env.SHOT_TAG || 'after';
-const b = await chromium.launch();
-const page = await b.newPage({ viewport: { width: 1280, height: 1100 } });
+const browser = await chromium.launch();
+const page = await browser.newPage({ viewport: { width: 1280, height: 1100 } });
 
 // 1. A queue's settings: the playback flags, where "Locked on TV" sits.
 await page.goto(`${BASE}/q/bob`, { waitUntil: 'domcontentloaded' });
@@ -37,4 +37,4 @@ if (await page.$('#settings')) {
   await page.screenshot({ path: `__screenshots__/tv-lock-settings-set-${TAG}.png` });
   console.log('wrote settings');
 } else console.log('no settings page', response?.status());
-await b.close();
+await browser.close();

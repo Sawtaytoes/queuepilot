@@ -19,8 +19,8 @@ import {
 // everywhere it is read back, and the paths below are the same string by construction.
 const CACHE_PATH = '/tmp/specials-count-cache.sqlite';
 process.env.CACHE_PATH = CACHE_PATH;
-for (const f of [CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) {
-  await fs.rm(f, { force: true });
+for (const file of [CACHE_PATH, `${CACHE_PATH}-wal`, `${CACHE_PATH}-shm`]) {
+  await fs.rm(file, { force: true });
 }
 
 const plex = await import('../server/src/plex.js');
@@ -35,17 +35,17 @@ const {
   showEpisodes,
 } = plex;
 
-const ok = (n: string, c: boolean) => {
-  console.log(`${c ? 'PASS' : 'FAIL'} ${n}`);
-  if (!c) process.exitCode = 1;
+const ok = (name: string, isPassing: boolean) => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`);
+  if (!isPassing) process.exitCode = 1;
 };
 
 const DUR = 1_000; // any positive duration — classification is by INDEX, never by length
-const s1 = (rk: string, i: number, watched: boolean): EpisodeLike =>
-  ({ ratingKey: rk, parentIndex: 1, index: i, title: `Ep ${i}`, duration: DUR, viewCount: watched ? 1 : 0 });
+const s1 = (rk: string, index: number, isWatched: boolean): EpisodeLike =>
+  ({ ratingKey: rk, parentIndex: 1, index: index, title: `Ep ${index}`, duration: DUR, viewCount: isWatched ? 1 : 0 });
 // Season-0 items, classified by index range: 1–99 special, 200–299 trailer, 300–399 OP/ED, 400+ other.
-const s0 = (rk: string, index: number, title: string, watched = false): EpisodeLike =>
-  ({ ratingKey: rk, parentIndex: 0, index, title, duration: DUR, viewCount: watched ? 1 : 0 });
+const s0 = (rk: string, index: number, title: string, isWatched = false): EpisodeLike =>
+  ({ ratingKey: rk, parentIndex: 0, index, title, duration: DUR, viewCount: isWatched ? 1 : 0 });
 
 // ---------------------------------------------------------------------------------------- //
 // Part A — the predicate + counts (pure)
@@ -81,9 +81,9 @@ ok('viewedLeafCount counts only watched real episodes (2)', counts.viewedLeafCou
 ok('missing viewCount is unwatched', countEpisodes([{ parentIndex: 1, index: 9, title: 'x', duration: DUR }]).viewedLeafCount === 0);
 
 // Playback: Season 0 excluded entirely by default (open-point rule) → only the 3 S1 episodes.
-ok('default playable list is the 3 S1 episodes', showEps.filter((e) => isPlayableEpisode(e)).map((e) => e.ratingKey).join(',') === '11,12,13');
+ok('default playable list is the 3 S1 episodes', showEps.filter((showEpisode) => isPlayableEpisode(showEpisode)).map((showEpisode) => showEpisode.ratingKey).join(',') === '11,12,13');
 // include_specials adds the regular special AND the "other", but never the trailer/OP/ED.
-ok('include_specials adds special + other, not trailer/OP-ED', showEps.filter((e) => isPlayableEpisode(e, { includeSpecials: true })).map((e) => e.ratingKey).join(',') === '11,12,13,20,40');
+ok('include_specials adds special + other, not trailer/OP-ED', showEps.filter((showEpisode) => isPlayableEpisode(showEpisode, { includeSpecials: true })).map((showEpisode) => showEpisode.ratingKey).join(',') === '11,12,13,20,40');
 
 const dated = [
   { ...s0('special', 1, 'Between'), originallyAvailableAt: '2020-01-15' },
@@ -94,24 +94,24 @@ const dated = [
 ];
 ok(
   'regular specials are skipped by default',
-  orderedPlayableEpisodes(dated).map((e) => e.ratingKey).join(',') === 'ep1,ep2',
+  orderedPlayableEpisodes(dated).map((orderedPlayableEpisode) => orderedPlayableEpisode.ratingKey).join(',') === 'ep1,ep2',
 );
 ok(
   'selected dated specials use air-date order and undated specials follow the run',
   orderedPlayableEpisodes(dated, { included_specials: ['special', 'undated'] })
-    .map((e) => e.ratingKey).join(',') === 'ep1,special,ep2,undated',
+    .map((orderedPlayableEpisode) => orderedPlayableEpisode.ratingKey).join(',') === 'ep1,special,ep2,undated',
 );
 ok(
   'an extra cannot be selected as a special',
   !orderedPlayableEpisodes(dated, { included_specials: ['trailer'] })
-    .some((e) => e.ratingKey === 'trailer'),
+    .some((orderedPlayableEpisode) => orderedPlayableEpisode.ratingKey === 'trailer'),
 );
 ok(
   'a manual start floor applies after viewing-order placement',
   episodesAtOrAfterStart(
     orderedPlayableEpisodes(dated, { included_specials: ['special', 'undated'] }),
     { season: 1, episode: 2 },
-  ).map((e) => e.ratingKey).join(',') === 'ep2,undated',
+  ).map((episode) => episode.ratingKey).join(',') === 'ep2,undated',
 );
 
 // ---------------------------------------------------------------------------------------- //
@@ -156,8 +156,8 @@ ok(
     === 'select-me',
 );
 
-const normalEps = (rk: string, n: number, { watched }: { watched: boolean }): EpisodeLike[] =>
-  Array.from({ length: n }, (_, k) => s1(`${rk}${k + 1}`, k + 1, watched));
+const normalEps = (rk: string, count: number, { watched: isWatched }: { watched: boolean }): EpisodeLike[] =>
+  Array.from({ length: count }, (_, index) => s1(`${rk}${index + 1}`, index + 1, isWatched));
 
 // S1: 24 watched real episodes + 4 song-named ED theme songs at index 301–304 (unwatched). Those
 // four Season-0 ED leaves are what made Plex report 25/29 (inflated); filtered, S1 is 24/24.
@@ -174,12 +174,12 @@ const SEEDS: [string, EpisodeLike[]][] = [
   ['100', s1Leaves], ['200', s2Leaves], ['300', s3Leaves], ['400', s4Leaves],
 ];
 for (const [rk, eps] of SEEDS) {
-  const c = countEpisodes(eps);
-  await cache.putLeaves(rk, { updatedAt: 1, leafCount: c.leafCount, viewedLeafCount: c.viewedLeafCount, payload: eps });
+  const tally = countEpisodes(eps);
+  await cache.putLeaves(rk, { updatedAt: 1, leafCount: tally.leafCount, viewedLeafCount: tally.viewedLeafCount, payload: eps });
 }
 
-ok('S1 counts as 24/24 (index-301+ ED songs excluded, not 24/28)', (() => { const c = countEpisodes(s1Leaves); return c.viewedLeafCount === 24 && c.leafCount === 24; })());
-ok('S4 counts as 0/6 real episodes', (() => { const c = countEpisodes(s4Leaves); return c.viewedLeafCount === 0 && c.leafCount === 6; })());
+ok('S1 counts as 24/24 (index-301+ ED songs excluded, not 24/28)', (() => { const tally = countEpisodes(s1Leaves); return tally.viewedLeafCount === 24 && tally.leafCount === 24; })());
+ok('S4 counts as 0/6 real episodes', (() => { const tally = countEpisodes(s4Leaves); return tally.viewedLeafCount === 0 && tally.leafCount === 6; })());
 
 const members = [
   { ratingKey: '100', type: 'show', title: 'The Disastrous Life of Saiki K.', year: 2016, watched: false, viewedLeafCount: 24, leafCount: 24 },

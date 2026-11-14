@@ -36,8 +36,8 @@ const ok = async (name: string, fn: () => Promise<void> | void) => {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 };
@@ -155,7 +155,7 @@ await ok('`infinite` is written as the NAMED value', async () => {
   const { id } = await sets.createSet(rotation('Infinite Pool', { length: INFINITE }));
   assert.match(blockFor(id), /length: infinite/);
   const reg = await sets.getRegistry();
-  assert.equal(reg.sets.find((x) => x.id === id)?.length, INFINITE);
+  assert.equal(reg.sets.find((set) => set.id === id)?.length, INFINITE);
 });
 
 await ok('saving `infinite` RETIRES the legacy refill key', async () => {
@@ -163,7 +163,7 @@ await ok('saving `infinite` RETIRES the legacy refill key', async () => {
   assert.match(blockFor(id), /refill: true/);
   // The registry already reads it as infinite, before anything is rewritten…
   const before = await sets.getRegistry();
-  assert.equal(before.sets.find((x) => x.id === id)?.length, INFINITE);
+  assert.equal(before.sets.find((set) => set.id === id)?.length, INFINITE);
   // …and the first save through the editor writes the new spelling and drops the old one.
   await sets.updateSet(id, { length: INFINITE });
   const yaml = blockFor(id);
@@ -185,7 +185,7 @@ await ok('the sparse rule follows the KIND, not one env constant', async () => {
 await ok('power-off is opt-in and stored by absence', async () => {
   const { id } = await sets.createSet(rotation('Lights Out', { power_off_when_done: true }));
   assert.match(blockFor(id), /power_off_when_done: true/);
-  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === id)?.power_off_when_done, true);
+  assert.equal((await sets.getRegistry()).sets.find((set) => set.id === id)?.power_off_when_done, true);
   await sets.updateSet(id, { power_off_when_done: false });
   assert.doesNotMatch(blockFor(id), /power_off_when_done/);
 });
@@ -193,7 +193,7 @@ await ok('power-off is opt-in and stored by absence', async () => {
 await ok('an untouched pool gains no keys when something unrelated is saved', async () => {
   const { id } = await sets.createSet(rotation('Untouched'));
   const reg = await sets.getRegistry();
-  const entry = reg.sets.find((x) => x.id === id)!;
+  const entry = reg.sets.find((set) => set.id === id)!;
   // The editor posts the EFFECTIVE length on every save — here, the kind's own default.
   await sets.updateSet(id, {
     label: 'Untouched Renamed',
@@ -215,7 +215,7 @@ await ok('a CURATED queue can save its playback length — createSet already cou
   });
   await sets.updateSet(id, { length: INFINITE });
   assert.match(blockFor(id), /length: infinite/);
-  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === id)?.length, INFINITE);
+  assert.equal((await sets.getRegistry()).sets.find((set) => set.id === id)?.length, INFINITE);
 
   // …and the sparse rule still applies on this path: a curated anime pool defaults to 12, so
   // saving 12 stores nothing rather than freezing the set against a future env change.
@@ -238,10 +238,10 @@ await ok('"Locked on TV" is opt-in, stored by absence, on both kinds of set', as
     kind: 'movies', label: 'Late Films', sections: [1], source: 'queue', is_locked_on_tv: true,
   });
   assert.match(blockFor(curated.id), /is_locked_on_tv: true/);
-  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === curated.id)?.is_locked_on_tv, true);
+  assert.equal((await sets.getRegistry()).sets.find((set) => set.id === curated.id)?.is_locked_on_tv, true);
   await sets.updateSet(curated.id, { is_locked_on_tv: false });
   assert.doesNotMatch(blockFor(curated.id), /is_locked_on_tv/);
-  assert.equal((await sets.getRegistry()).sets.find((x) => x.id === curated.id)?.is_locked_on_tv, false);
+  assert.equal((await sets.getRegistry()).sets.find((set) => set.id === curated.id)?.is_locked_on_tv, false);
   const pool = await sets.createSet(rotation('Locked Pool'));
   await sets.updateSet(pool.id, { is_locked_on_tv: true });
   assert.match(blockFor(pool.id), /is_locked_on_tv: true/);
@@ -251,10 +251,10 @@ await ok('the registry tells the editor what null resolves to', async () => {
   const rw = await sets.createSet(rotation('Default Rewatch', { behavior: 'rewatch' }));
   const pg = await sets.createSet(rotation('Default Progress'));
   const reg = await sets.getRegistry();
-  assert.equal(reg.sets.find((x) => x.id === rw.id)?.length_default, 1);
-  assert.equal(reg.sets.find((x) => x.id === pg.id)?.length_default, 12);
+  assert.equal(reg.sets.find((set) => set.id === rw.id)?.length_default, 1);
+  assert.equal(reg.sets.find((set) => set.id === pg.id)?.length_default, 12);
   // Both still report `length: null` — they have never said.
-  assert.equal(reg.sets.find((x) => x.id === rw.id)?.length, null);
+  assert.equal(reg.sets.find((set) => set.id === rw.id)?.length, null);
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED` : '\nplayback length OK');

@@ -53,8 +53,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -76,10 +76,10 @@ const blockFor = (id: string): string => {
  *  and a curated queue's length is however many entries it has. */
 const entry = async (id: string) => {
   const reg = await sets.getRegistry();
-  const s = reg.sets.find((x) => x.id === id);
-  assert.ok(s, `set ${id} missing from the registry`);
-  assert.equal(s.source, 'rotation', `set ${id} did not normalize as a rotation channel`);
-  return s as RotationSet;
+  const set = reg.sets.find((setRegistryEntry) => setRegistryEntry.id === id);
+  assert.ok(set, `set ${id} missing from the registry`);
+  assert.equal(set.source, 'rotation', `set ${id} did not normalize as a rotation channel`);
+  return set as RotationSet;
 };
 
 /** What the pool editor posts: the full knob set, every time. */
@@ -109,15 +109,15 @@ await ok('create carries all three knobs onto the file', async () => {
   assert.match(yaml, /length: 60/);
   assert.match(yaml, /refill: true/);
   assert.match(yaml, /on_complete: restart/);
-  const s = await entry(id);
-  assert.equal(s.source, 'rotation');
+  const set = await entry(id);
+  assert.equal(set.source, 'rotation');
   // SUPERSEDED by playback length (2026-08-17, same day): `refill: true` was the old spelling
   // of infinite, so a set carrying it now REPORTS as infinite whatever number sits beside it.
   // Both keys are still on the file untouched — the migration happens on the next save — which
   // is exactly what keeps the owner's live Shorts card working without anyone editing it.
-  assert.equal(s.length, 'infinite');
-  assert.equal(s.refill, true);
-  assert.equal(s.on_complete, 'restart');
+  assert.equal(set.length, 'infinite');
+  assert.equal(set.refill, true);
+  assert.equal(set.on_complete, 'restart');
 });
 
 await ok('create at the defaults writes NONE of them', async () => {
@@ -129,11 +129,11 @@ await ok('create at the defaults writes NONE of them', async () => {
   assert.doesNotMatch(yaml, /length:/);
   assert.doesNotMatch(yaml, /refill:/);
   assert.doesNotMatch(yaml, /on_complete:/);
-  const s = await entry(id);
+  const set = await entry(id);
   // …and it reads back as the channel it has always been: follow env, no refill, drop.
-  assert.equal(s.length, null);
-  assert.equal(s.refill, false);
-  assert.equal(s.on_complete, null);
+  assert.equal(set.length, null);
+  assert.equal(set.refill, false);
+  assert.equal(set.on_complete, null);
 });
 
 // --------------------------------------------------------------------------- //

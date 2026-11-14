@@ -33,9 +33,9 @@ interface Leaf {
 }
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // --- fixtures: per-leaf view state, keyed by show ratingKey ----------------------- //
@@ -75,16 +75,16 @@ const client: PlexClient = {
       // Both `!`s assert the match that guards this branch and the fixture it keys into —
       // every allLeaves path the resolver builds here names a show that LEAVES carries.
       return {
-        Metadata: LEAVES[leaves[1]!]!.map((e) => ({
-          ratingKey: e.ratingKey,
-          title: e.title,
-          grandparentTitle: e.show,
-          parentIndex: e.season,
-          index: e.episode,
-          duration: e.duration,
+        Metadata: LEAVES[leaves[1]!]!.map((leaf) => ({
+          ratingKey: leaf.ratingKey,
+          title: leaf.title,
+          grandparentTitle: leaf.show,
+          parentIndex: leaf.season,
+          index: leaf.episode,
+          duration: leaf.duration,
           type: 'episode',
-          viewCount: e.viewCount,
-          viewOffset: e.viewOffset,
+          viewCount: leaf.viewCount,
+          viewOffset: leaf.viewOffset,
         })),
       };
     }
@@ -92,7 +92,7 @@ const client: PlexClient = {
     if (meta) {
       const rk = meta[1]!; // the capture group of the match that guards this branch
       if (LEAVES[rk]) return { Metadata: [{ ratingKey: rk, type: 'show', title: TITLES[rk] }] };
-      const leaf = Object.values(LEAVES).flat().find((e) => e.ratingKey === rk);
+      const leaf = Object.values(LEAVES).flat().find((leaf) => leaf.ratingKey === rk);
       return {
         Metadata: [{
           ratingKey: rk, type: 'episode', title: leaf ? leaf.title : rk,
@@ -111,28 +111,28 @@ const CFG = { source: 'queue', queue_sections: [1] }; // kind != anime -> ordere
 // `doneAt` set = markDone wrote the flag; null = the owner hand-tagged it (a deliberate skip).
 const entry = (
   rk: string | number,
-  done = false,
-  doneAt: number | null = done ? 1786668576 : null,
+  isDone = false,
+  doneAt: number | null = isDone ? 1786668576 : null,
 ): EntryDescriptor => ({
   key: `rk:${rk}`, ratingKey: String(rk), title: null, year: null, guid: null,
-  collection: null, episodes: null, start: null, done, doneAt,
+  collection: null, episodes: null, start: null, done: isDone, doneAt,
 } as EntryDescriptor);
-const keys = (items: readonly ResolvedItem[]) => items.map((i) => i.ratingKey);
+const keys = (items: readonly ResolvedItem[]) => items.map((item) => item.ratingKey);
 
 // 1. resolveMember keeps a specials-only show's Season-0 leaf on the resume path.
-let r = await resolve.resolveMember(client, entry('363480'), CFG, new Set(), null, 1, true);
+let member = await resolve.resolveMember(client, entry('363480'), CFG, new Set(), null, 1, true);
 // `resolveMember` returns null only for a member it cannot resolve; every entry below names
 // one the fake client always answers, so each `!` fails exactly where the original did.
 ok('specials-only show keeps its Season-0 OAD leaf',
-  JSON.stringify(keys(r!.items)) === JSON.stringify(['363482']), JSON.stringify(r));
+  JSON.stringify(keys(member!.items)) === JSON.stringify(['363482']), JSON.stringify(member));
 // ...and WITHOUT resume (rotation path) the Season-0-only leaf is still dropped, unchanged.
 const r0 = await resolve.resolveMember(client, entry('363480'), CFG, new Set(), null, 1, false);
 ok('rotation path still drops the Season-0 special', r0!.items.length === 0, JSON.stringify(r0));
 
 // 2. An in-progress leaf is kept even when history counts the whole show watched.
-r = await resolve.resolveMember(client, entry('363480'), CFG, new Set(['363482']), null, 1, true);
+member = await resolve.resolveMember(client, entry('363480'), CFG, new Set(['363482']), null, 1, true);
 ok('in-progress leaf survives a watched-history hit',
-  JSON.stringify(keys(r!.items)) === JSON.stringify(['363482']), JSON.stringify(r));
+  JSON.stringify(keys(member!.items)) === JSON.stringify(['363482']), JSON.stringify(member));
 
 // 3. nextQueue REVIVES a done-flagged OAD that is actually in-progress: it plays, resumes at the
 //    leaf's viewOffset, is reported for clearing the stale flag, and is not reported finished.

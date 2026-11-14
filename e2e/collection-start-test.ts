@@ -13,9 +13,9 @@ import type { ResolvedItem } from '../server/src/engine/resolve.js';
 import type { PlexClient, Start } from '../server/src/types.js';
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const CHILDREN = [
@@ -25,12 +25,12 @@ const CHILDREN = [
 ];
 
 // 3 episodes per series, ratingKeys <rk><ep> — enough to see a floor bite.
-const episodes = (rk: string) => [1, 2, 3].map((i) => ({
-  ratingKey: `${rk}${i}`,
-  title: `ep${i}`,
+const episodes = (rk: string) => [1, 2, 3].map((episodeNumber) => ({
+  ratingKey: `${rk}${episodeNumber}`,
+  title: `ep${episodeNumber}`,
   grandparentTitle: `Show ${rk}`,
   parentIndex: 1,
-  index: i,
+  index: episodeNumber,
   duration: 1000,
   type: 'episode',
 }));
@@ -40,9 +40,9 @@ const client: PlexClient = {
   async container(path) {
     if (path.includes('/collections?')) return { Metadata: [{ ratingKey: '999', title: 'Anything' }] };
     if (path.startsWith('/library/collections/999/children')) return { Metadata: CHILDREN };
-    const m = path.match(/\/library\/metadata\/(\d+)\/allLeaves/);
+    const match = path.match(/\/library\/metadata\/(\d+)\/allLeaves/);
     // The capture group is inside the `if (m)`, so `m[1]` is present whenever we get here.
-    if (m) return { Metadata: episodes(m[1]!) };
+    if (match) return { Metadata: episodes(match[1]!) };
     throw new Error(`unexpected path ${path}`);
   },
   async accountToken() { return null; },
@@ -51,7 +51,7 @@ const client: PlexClient = {
 const CFG = { queue_sections: [11] };
 // `collectionItems` returns null only for a collection it cannot FIND, and every call below
 // names the one the fake client always answers — so the reads are non-null by construction.
-const keys = (items: readonly ResolvedItem[] | null) => items!.map((i) => i.ratingKey);
+const keys = (items: readonly ResolvedItem[] | null) => items!.map((item) => item.ratingKey);
 const items = (start: Start | null) =>
   resolve.collectionItems(client, CFG, 'Anything', new Set(), null, start);
 

@@ -33,9 +33,9 @@ const BASE = `http://localhost:${PORT}`;
 const TMP = `/tmp/qp-pcache-${process.pid}`;
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const MIN = 60_000;
@@ -100,7 +100,7 @@ function countingPlex(port: number) {
     if (meta) {
       counts.metadata++;
       const want = new Set(String(meta[1]).split(','));
-      return wrap(Object.values(ITEMS).filter((m) => want.has(String(m.ratingKey))));
+      return wrap(Object.values(ITEMS).filter((item) => want.has(String(item.ratingKey))));
     }
     return send({ MediaContainer: { size: 0 } });
   });
@@ -117,7 +117,7 @@ const waitReady = async (url: string, ms = 30000) => {
   for (;;) {
     try { if ((await fetch(url)).ok) return; } catch { /* not up yet */ }
     if (Date.now() > end) throw new Error(`not ready: ${url}`);
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
 };
 
@@ -125,7 +125,7 @@ const waitReady = async (url: string, ms = 30000) => {
 type QueuesBody = { sets: Record<string, { items: { title?: string }[] }> };
 const titles = (body: QueuesBody): string[] => Object
   .values(body.sets)
-  .flatMap((s) => s.items.map((i) => String(i.title ?? '')));
+  .flatMap((set) => set.items.map((item) => String(item.title ?? '')));
 
 await fs.mkdir(TMP, { recursive: true });
 await fs.writeFile(`${TMP}/queues.yaml`, QUEUES_YAML);

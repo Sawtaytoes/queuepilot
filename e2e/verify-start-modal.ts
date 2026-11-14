@@ -21,8 +21,8 @@ const ok = (name: string, isPass: boolean) => { console.log(isPass ? `PASS ${nam
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
 const errors: string[] = [];
-page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-page.on('pageerror', (e) => errors.push(String(e)));
+page.on('console', (message) => { if (message.type() === 'error') errors.push(message.text()); });
+page.on('pageerror', (error) => errors.push(String(error)));
 
 const tileByTitle = (title: string) => page.locator('#grid li.tile', { hasText: title }).first();
 

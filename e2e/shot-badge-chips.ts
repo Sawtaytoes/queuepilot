@@ -90,7 +90,7 @@ try {
 
   const browser = await chromium.launch();
   const page = await browser.newPage({ viewport: { width: 1400, height: 1000 } });
-  page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+  page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
   await page.route('**/api/thumb/**', (route) => route.fulfill({ body: '', status: 404 }));
   await page.route('**/api/queues*', async (route) => {
     const res = await route.fetch();

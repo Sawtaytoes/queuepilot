@@ -16,7 +16,7 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
   try {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(String(error)));
-    const revalidated = page.waitForResponse(r => r.url().includes('/api/queues?fresh=1'));
+    const revalidated = page.waitForResponse(candidate => candidate.url().includes('/api/queues?fresh=1'));
     await page.goto(`${server.base}/queues`);
     await (await revalidated).finished();
     const cards = page.locator('#shelves .shelf');
@@ -71,7 +71,7 @@ test('queue cards keep previews, filtering, navigation, and grid reorder', async
     const start = await handle.boundingBox();
     const target = await families.nth(1).boundingBox();
     if (!start || !target) throw new Error('missing visible drag geometry');
-    const saved = page.waitForResponse(r => r.url().endsWith('/api/sets-order') && r.request().method() === 'PATCH');
+    const saved = page.waitForResponse(candidate => candidate.url().endsWith('/api/sets-order') && candidate.request().method() === 'PATCH');
     await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
     await page.mouse.down();
     await page.mouse.move(target.x + target.width * .8, target.y + target.height / 2, { steps: 8 });
@@ -99,7 +99,7 @@ test('poster drops target the adjacent column in either direction', async ({ pag
     queues: 'landing.queues.yaml', sets: 'queue-cards.sets.yaml',
   });
   try {
-    const ready = page.waitForResponse(r => r.url().includes('/api/queues?fresh=1'));
+    const ready = page.waitForResponse(candidate => candidate.url().includes('/api/queues?fresh=1'));
     await page.goto(`${server.base}/queues`);
     await (await ready).finished();
     const left = page.locator('#shelves .queue-family').nth(0).locator('.shelf').first();
@@ -117,7 +117,7 @@ test('poster drops target the adjacent column in either direction', async ({ pag
       const start = await moved.locator('.thumb').boundingBox();
       const end = await target.locator('.strip-wrap').boundingBox();
       if (!start || !end) throw new Error('missing poster geometry');
-      const response = page.waitForResponse(r => r.url().endsWith('/api/queues/move') && r.request().method() === 'PATCH');
+      const response = page.waitForResponse(candidate => candidate.url().endsWith('/api/queues/move') && candidate.request().method() === 'PATCH');
       await page.mouse.move(start.x + 15, start.y + start.height * .75);
       await page.mouse.down();
       await page.mouse.move(end.x + end.width / 2, end.y + end.height / 2, { steps: 10 });

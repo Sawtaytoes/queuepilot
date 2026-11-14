@@ -79,9 +79,9 @@ writeFileSync(process.env.QUEUES_PATH, '');
 writeFileSync(process.env.SETS_PATH, 'sets: []\n');
 
 let failures = 0;
-const ok = (name: string, condition: boolean, extra = ''): void => {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!condition) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = ''): void => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
 /** Compare by value. ARRAY order is a contract — shelf order, box order, link order, play
@@ -90,15 +90,15 @@ const stable = (value: unknown): string =>
   JSON.stringify(value, (_key, item: unknown) =>
     item && typeof item === 'object' && !Array.isArray(item)
       ? Object.fromEntries(
-          Object.entries(item as Record<string, unknown>).sort(([a], [b]) => (a < b ? -1 : 1)),
+          Object.entries(item as Record<string, unknown>).sort(([key], [rightKey]) => (key < rightKey ? -1 : 1)),
         )
       : item,
   ) ?? 'undefined';
 
 const same = (name: string, http: unknown, repo: unknown): void => {
-  const a = stable(http);
-  const b = stable(repo);
-  ok(name, a === b, a === b ? '' : `http ${a}\n     repo ${b}`);
+  const httpJson = stable(http);
+  const repoJson = stable(repo);
+  ok(name, httpJson === repoJson, httpJson === repoJson ? '' : `http ${httpJson}\n     repo ${repoJson}`);
 };
 
 // ── the shelf, written once as rows ─────────────────────────────────────────────────────── //
@@ -167,10 +167,10 @@ CREATE TABLE player_known_games (
 const NOW = '2026-01-01T00:00:00.000Z';
 /** Twenty plays years ago, each at its OWN minute. Ties on `played_at` have no defined order
  * and the two sides sort them separately, so identical stamps would fail for the wrong reason. */
-const OLD_PLAYS = Array.from({ length: 20 }, (_, i) => ({
-  id: `play-old-${i}`,
+const OLD_PLAYS = Array.from({ length: 20 }, (_, index) => ({
+  id: `play-old-${index}`,
   gameId: 'harbour-lantern',
-  playedAt: `2019-01-01T20:${String(i).padStart(2, '0')}:00.000Z`,
+  playedAt: `2019-01-01T20:${String(index).padStart(2, '0')}:00.000Z`,
 }));
 const RECENT_PLAY = {
   id: 'play-recent',
@@ -185,8 +185,8 @@ const ORCHARD_PLAY = {
 const ALL_PLAYS = [...OLD_PLAYS, RECENT_PLAY, ORCHARD_PLAY];
 
 /** Newest first, the ordering the read layer guarantees and the endpoint inherited. */
-const PLAYS_NEWEST_FIRST = [...ALL_PLAYS].sort((a, b) =>
-  a.playedAt < b.playedAt ? 1 : a.playedAt > b.playedAt ? -1 : 0,
+const PLAYS_NEWEST_FIRST = [...ALL_PLAYS].sort((left, right) =>
+  left.playedAt < right.playedAt ? 1 : left.playedAt > right.playedAt ? -1 : 0,
 );
 
 const IMAGE_BYTES: Record<string, Buffer> = {

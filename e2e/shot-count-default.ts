@@ -38,7 +38,7 @@ const waitForServer = async () => {
     try {
       if ((await fetch(HARNESS_URL)).ok) return;
     } catch { /* not up */ }
-    await new Promise((r) => setTimeout(r, 300));
+    await new Promise((resolve) => setTimeout(resolve, 300));
   }
   throw new Error(`vite never served ${HARNESS_URL}`);
 };

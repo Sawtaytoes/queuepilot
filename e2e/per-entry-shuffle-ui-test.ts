@@ -35,9 +35,9 @@ const server = spawnServer({
 });
 
 let failures = 0;
-function check(label: string, condition: boolean, detail = ''): void {
-  console.log(`${condition ? 'PASS' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`);
-  if (!condition) failures += 1;
+function check(label: string, isPassing: boolean, detail = ''): void {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${label}${detail ? ` — ${detail}` : ''}`);
+  if (!isPassing) failures += 1;
 }
 
 async function waitReady(): Promise<void> {

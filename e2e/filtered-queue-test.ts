@@ -75,13 +75,13 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
 
-const asClient = (c: unknown): KavitaHttpClient => c as unknown as KavitaHttpClient;
+const asClient = (client: unknown): KavitaHttpClient => client as unknown as KavitaHttpClient;
 
 interface StubList { id: number; title: string; ownerUserName?: string; coverImageLocked?: boolean }
 
@@ -95,7 +95,7 @@ const SERIES: Record<string, { id: number; name: string; libraryId: number | nul
 };
 
 function stubClient({ existingLists = [] }: { existingLists?: StubList[] } = {}) {
-  const lists: StubList[] = existingLists.map((l) => ({ ...l }));
+  const lists: StubList[] = existingLists.map((existingList) => ({ ...existingList }));
   const added: { readingListId: number | string; seriesId: number; chapterId: number }[] = [];
   let nextListId = 500;
   return {
@@ -108,23 +108,23 @@ function stubClient({ existingLists = [] }: { existingLists?: StubList[] } = {})
     },
     async series(id: number | string) { return SERIES[String(id)] ?? null; },
     async seriesForLibrary(libraryId: number | string) {
-      return Object.values(SERIES).filter((s) => String(s.libraryId) === String(libraryId));
+      return Object.values(SERIES).filter((series) => String(series.libraryId) === String(libraryId));
     },
     async seriesDetail(seriesId: number | string) {
       // One unread chapter per series, numbered from its id so the assertions can name it.
-      const n = Number(seriesId);
+      const seriesNumber = Number(seriesId);
       return {
-        chapters: [{ id: n * 10, number: '1', minNumber: 1, pages: 100, pagesRead: 0 }],
+        chapters: [{ id: seriesNumber * 10, number: '1', minNumber: 1, pages: 100, pagesRead: 0 }],
         specials: [],
         volumes: [],
       };
     },
     async readingLists() { return lists; },
     async createList(title: string) {
-      const l = { id: nextListId, title, ownerUserName: 'Reader' };
+      const list = { id: nextListId, title, ownerUserName: 'Reader' };
       nextListId += 1;
-      lists.push(l);
-      return l;
+      lists.push(list);
+      return list;
     },
     async addChapter(readingListId: number, seriesId: number, chapterId: number) {
       added.push({ readingListId, seriesId, chapterId });
@@ -172,7 +172,7 @@ await ok('the view keeps its own name, parent and filter', async () => {
 await ok('the view’s provider block is NARROWED to what it shows', async () => {
   const view = await sets.getSet('strips');
   assert.deepEqual(
-    view?.providers.map((b) => b.libraries),
+    view?.providers.map((provider) => provider.libraries),
     [['5']],
     'the view still claimed the library it filters out — its own search would offer it',
   );
@@ -195,8 +195,8 @@ await ok('the ENGINE’s separate parse of sets.yaml inherits identically', asyn
 await ok('the view reads the parent’s entries, not its own empty list', async () => {
   const rows = await queues.listSet('strips');
   assert.deepEqual(
-    rows.map((r) => r.key),
-    (await queues.listSet('reading')).map((r) => r.key),
+    rows.map((row) => row.key),
+    (await queues.listSet('reading')).map((row) => row.key),
   );
   assert.equal(rows.length, 4);
 });
@@ -215,8 +215,8 @@ await ok('adding from the view writes on the PARENT’s line', async () => {
 
 await ok('finishing from the view is finished in BOTH', async () => {
   await queues.markDone('strips', ['rk:747']);
-  const inParent = (await queues.listSet('reading')).find((r) => r.key === 'rk:747');
-  const inView = (await queues.listSet('strips')).find((r) => r.key === 'rk:747');
+  const inParent = (await queues.listSet('reading')).find((entry) => entry.key === 'rk:747');
+  const inView = (await queues.listSet('strips')).find((entry) => entry.key === 'rk:747');
   assert.equal(inParent?.done, true, 'the parent did not see the finish');
   assert.equal(inView?.done, true);
   await queues.clearDone('strips', ['rk:747']);
@@ -282,9 +282,9 @@ await ok('the two lists are separate, and neither rebuild touches the other', as
   assert.equal(parentList.count, 4);
   assert.equal(viewList.count, 3);
   // And the chapters really went to different lists.
-  const toView = client._added.filter((a) => String(a.readingListId) === String(viewList.readingListId));
+  const toView = client._added.filter((addition) => String(addition.readingListId) === String(viewList.readingListId));
   assert.ok(
-    !toView.some((a) => a.seriesId === 500),
+    !toView.some((addition) => addition.seriesId === 500),
     'the filtered-out series reached the view’s reading list',
   );
 });

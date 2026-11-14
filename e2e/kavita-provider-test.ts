@@ -62,8 +62,8 @@ async function ok(name: string, fn: () => Promise<void>) {
   try {
     await fn();
     console.log(`PASS ${name}`);
-  } catch (e) {
-    console.log(`FAIL ${name}  -- ${errMessage(e)}`);
+  } catch (error) {
+    console.log(`FAIL ${name}  -- ${errMessage(error)}`);
     FAILS.push(name);
   }
 }
@@ -108,7 +108,7 @@ type Call = (string | number)[];
  * the partial — including for the `{...stubClient(), async seriesForLibrary() {…}}` overrides,
  * whose spread would otherwise have to restate every method.
  */
-const asClient = (c: unknown): KavitaHttpClient => c as unknown as KavitaHttpClient;
+const asClient = (client: unknown): KavitaHttpClient => client as unknown as KavitaHttpClient;
 
 // --------------------------------------------------------------------------- //
 // The stub Kavita. Records every call so the test can assert on the WIRE, not just
@@ -136,10 +136,10 @@ interface UploadedCover { readingListId: number | string; imageBase64: string }
 interface ListPatch { title: string; summary: string; promoted: boolean; coverImageLocked: boolean }
 
 function stubClient(
-  { existingLists = [], coverFails = false, renameFails = false }:
+  { existingLists = [], coverFails: isCoverFailing = false, renameFails: isRenameFailing = false }:
   { existingLists?: StubList[]; coverFails?: boolean; renameFails?: boolean } = {},
 ) {
-  const lists: StubList[] = existingLists.map((l) => ({ ...l }));
+  const lists: StubList[] = existingLists.map((existingList) => ({ ...existingList }));
   let nextListId = 500;
   const added: AddedChapter[] = [];
   const deleted: { readingListId: number | string; readingListItemId: number | string }[] = [];
@@ -160,7 +160,7 @@ function stubClient(
     },
     async seriesForLibrary(libraryId: number | string) {
       CALLS.push(['seriesForLibrary', String(libraryId)]);
-      return SERIES.filter((s) => String(s.libraryId) === String(libraryId));
+      return SERIES.filter((series) => String(series.libraryId) === String(libraryId));
     },
     async continuePoint(seriesId: number | string) {
       CALLS.push(['continuePoint', String(seriesId)]);
@@ -179,10 +179,10 @@ function stubClient(
     async readingLists() { CALLS.push(['readingLists', 'POST']); return lists; },
     async createList(title: string) {
       CALLS.push(['createList', title]);
-      const l = { id: nextListId, title, ownerUserName: 'Sawtaytoes' };
+      const list = { id: nextListId, title, ownerUserName: 'Sawtaytoes' };
       nextListId += 1;
-      lists.push(l);
-      return l;
+      lists.push(list);
+      return list;
     },
     async addChapter(readingListId: number, seriesId: number, chapterId: number) {
       CALLS.push(['addChapter', readingListId, seriesId, chapterId]);
@@ -203,9 +203,9 @@ function stubClient(
     },
     async updateList(readingListId: number | string, patch: ListPatch) {
       CALLS.push(['updateList', readingListId, patch.title]);
-      if (renameFails) throw new Error('kavita POST /api/ReadingList/update -> HTTP 500');
+      if (isRenameFailing) throw new Error('kavita POST /api/ReadingList/update -> HTTP 500');
       renames.push({ readingListId, patch });
-      const row = lists.find((l) => String(l.id) === String(readingListId));
+      const row = lists.find((list) => String(list.id) === String(readingListId));
       // Apply it the way the live endpoint does — the WHOLE DTO, no patch semantics. That is
       // what makes `coverImageLocked: false` here destructive, and the stub must not be kinder
       // than Kavita or the gate below would prove nothing.
@@ -218,7 +218,7 @@ function stubClient(
       CALLS.push(['uploadListCover', readingListId]);
       // The live endpoint's own failure mode, as a switch: it answers 400 for a payload it
       // cannot decode, and the provider must survive that.
-      if (coverFails) throw new Error('kavita POST /api/Upload/reading-list -> HTTP 400');
+      if (isCoverFailing) throw new Error('kavita POST /api/Upload/reading-list -> HTTP 400');
       covers.push({ readingListId, imageBase64 });
     },
   };
@@ -233,16 +233,16 @@ const DEF = { id: 'kavita', kind: 'kavita', label: 'Kavita', base_url: 'https://
 // --------------------------------------------------------------------------- //
 await ok('buckets skips a series with nothing unread', async () => {
   CALLS.length = 0;
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play, buckets } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const ids = buckets.map((b) => b.seriesId);
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play, buckets } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const ids = buckets.map((bucket) => bucket.seriesId);
   assert.ok(!ids.includes(900), 'the finished series produced a bucket');
   assert.equal(play.length, 2);
 });
 
 await ok('continue-point returning a NULL seriesId is repaired, not propagated', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
   for (const it of play) {
     assert.notEqual(it.seriesId, null, 'a null seriesId reached the lineup');
     assert.equal(typeof it.seriesId, 'number');
@@ -253,7 +253,7 @@ await ok('a FULLY READ series never enters a lineup — page counters are the do
   // Kavita's read state IS the done store. A finished series whose every chapter is fully
   // read must not produce a bucket — even when a continue-point wrap would have handed
   // chapter 1 back already-read (verified live on six Webtoons series).
-  const c = {
+  const client = {
     ...stubClient(),
     async seriesForLibrary() {
       return [
@@ -268,30 +268,30 @@ await ok('a FULLY READ series never enters a lineup — page counters are the do
         : { chapters: [{ id: 1101, number: '42', minNumber: 42, pages: 20, pagesRead: 0 }], specials: [], volumes: [] };
     },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play, buckets } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
-  assert.deepEqual(buckets.map((b) => b.seriesId), [11], 'a finished series entered the lineup');
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play, buckets } = await provider.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
+  assert.deepEqual(buckets.map((bucket) => bucket.seriesId), [11], 'a finished series entered the lineup');
   assert.equal(play.length, 1);
 });
 
 await ok('a chapter of UNKNOWN length is kept, not silently dropped', async () => {
   // pages: 0 means Kavita does not know the length. Treating that as "read" would make a
   // whole series vanish from the rotation for a metadata gap.
-  const c = {
+  const client = {
     ...stubClient(),
     async seriesForLibrary() { return [{ id: 12, name: 'Unknown', libraryId: 9, format: 1 }]; },
     async seriesDetail() {
       return { chapters: [{ id: 1200, number: '1', minNumber: 1, pages: 0, pagesRead: 0 }], specials: [], volumes: [] };
     },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
   assert.equal(play.length, 1);
 });
 
 await ok('a batch of 1 still caps at what exists (no invented items)', async () => {
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({ libraries: ['5'], batch: 3 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({ libraries: ['5'], batch: 3 }) as KavitaBuckets;
   // This stub exposes ONE unread chapter per series, so 3 must not become 3.
   assert.equal(play.length, 2);
 });
@@ -310,10 +310,10 @@ function runStub() {
     { id: 1, name: 'Series A', libraryId: 9, format: 1 },
     { id: 2, name: 'Series B', libraryId: 9, format: 1 },
   ];
-  const chapters = (sid: number): StubChapter[] => Array.from({ length: 6 }, (_, i) => ({
-    id: sid * 1000 + i, number: String(i + 1), minNumber: i + 1,
+  const chapters = (sid: number): StubChapter[] => Array.from({ length: 6 }, (_, index) => ({
+    id: sid * 1000 + index, number: String(index + 1), minNumber: index + 1,
     // First two of each series are fully read, so the unread run starts at chapter 3.
-    pages: 20, pagesRead: i < 2 ? 20 : 0,
+    pages: 20, pagesRead: index < 2 ? 20 : 0,
   }));
   const calls: Call[] = [];
   return {
@@ -332,19 +332,19 @@ function runStub() {
 }
 
 await ok('batch: 3 queues THREE chapters of A, then three of B', async () => {
-  const c = runStub();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['9'], batch: 3, limit: 12 }) as KavitaBuckets;
+  const client = runStub();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['9'], batch: 3, limit: 12 }) as KavitaBuckets;
   assert.equal(play.length, 6, `got ${play.length} items`);
-  assert.deepEqual(play.map((i) => i.seriesId), [1, 1, 1, 2, 2, 2]);
+  assert.deepEqual(play.map((playItem) => playItem.seriesId), [1, 1, 1, 2, 2, 2]);
   // …and they are consecutive UNREAD chapters, starting after the two already read.
-  assert.deepEqual(play.slice(0, 3).map((i) => i.number), ['3', '4', '5']);
+  assert.deepEqual(play.slice(0, 3).map((playItem) => playItem.number), ['3', '4', '5']);
 });
 
 await ok('already-read chapters are skipped, not queued', async () => {
-  const c = runStub();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['9'], batch: 6, limit: 12 }) as KavitaBuckets;
+  const client = runStub();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['9'], batch: 6, limit: 12 }) as KavitaBuckets;
   for (const it of play) {
     assert.notEqual(it.number, '1', 'a fully-read chapter was queued');
     assert.notEqual(it.number, '2', 'a fully-read chapter was queued');
@@ -355,20 +355,20 @@ await ok('batch: 1 still walks series-detail (volume context is load-bearing)', 
   // The old continue-point shortcut named a chapter without its volume, so a whole-volume
   // item lost its label and a mixed series could not apply volumes-first order. Launch now
   // always pays for series-detail — the same call tiles/pool already make.
-  const c = runStub();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
-  assert.ok(c._calls.some((x) => x[0] === 'seriesDetail'), 'series-detail was not used');
+  const client = runStub();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['9'], batch: 1, limit: 12 }) as KavitaBuckets;
+  assert.ok(client._calls.some((_call) => _call[0] === 'seriesDetail'), 'series-detail was not used');
   assert.equal(play.length, 2, 'batch 1 should still draw one chapter per series');
 });
 
 await ok('a fully-read series yields no bucket even with a batch', async () => {
-  const c = {
+  const client = {
     ...runStub(),
     async seriesDetail() { return { chapters: [{ id: 1, number: '1', minNumber: 1, pages: 20, pagesRead: 20 }] }; },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['9'], batch: 3, limit: 12 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['9'], batch: 3, limit: 12 }) as KavitaBuckets;
   assert.equal(play.length, 0);
 });
 
@@ -378,8 +378,8 @@ await ok('no libraries selected reads EVERY library, not none', async () => {
   // all of them, and the editor now says so. A rule-based queue with no scope therefore
   // asks Kavita what its libraries are and draws from the lot.
   CALLS.length = 0;
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({ libraries: [] }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({ libraries: [] }) as KavitaBuckets;
   assert.ok(play.length > 0, 'an unscoped queue drew nothing');
   assert.ok(
     CALLS.some(([fn]) => fn === 'libraries'),
@@ -397,8 +397,8 @@ await ok('a CURATED queue never widens: entries beat libraries', async () => {
   // enumerate a shelf — that is the 93-entry reading-list bug, and asking for the library
   // list here would be a request per launch that nothing reads.
   CALLS.length = 0;
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  await p.buckets({ entries: [{ id: '1' }], libraries: [] }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  await provider.buckets({ entries: [{ id: '1' }], libraries: [] }) as KavitaBuckets;
   assert.ok(
     CALLS.every(([fn]) => fn !== 'libraries' && fn !== 'seriesForLibrary'),
     `a curated queue enumerated libraries: ${JSON.stringify(CALLS)}`,
@@ -409,31 +409,31 @@ await ok('the lineup is CAPPED — a big library does not queue its whole backlo
   // Measured against the live instance: Webtoons alone has 103 series with something
   // unread. Uncapped that is 103 sequential writes per launch, for a reading list nobody
   // reaches the end of. The Plex rotation has always capped; so does this.
-  const many: StubSeries[] = Array.from({ length: 50 }, (_, i) => ({
-    id: 1000 + i, name: `S${i}`, libraryId: 9, format: 1,
+  const many: StubSeries[] = Array.from({ length: 50 }, (_, index) => ({
+    id: 1000 + index, name: `S${index}`, libraryId: 9, format: 1,
   }));
-  const c = {
+  const client = {
     ...stubClient(),
     async seriesForLibrary() { return many; },
     async seriesDetail(id: number | string) {
       CALLS.push(['seriesDetail', String(id)]);
-      const n = Number(id);
+      const seriesNumber = Number(id);
       return {
-        chapters: [{ id: n * 10, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }],
+        chapters: [{ id: seriesNumber * 10, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }],
         specials: [], volumes: [],
       };
     },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play, buckets } = await p.buckets({ libraries: ['9'], limit: 12 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play, buckets } = await provider.buckets({ libraries: ['9'], limit: 12 }) as KavitaBuckets;
   assert.equal(buckets.length, 50, 'every series should still be surveyed');
   assert.equal(play.length, 12, `capped lineup was ${play.length}`);
 });
 
 await ok('the cap never loops forever when buckets run dry early', async () => {
   // A library with fewer unread chapters than the cap must terminate, not spin.
-  const p = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
-  const { play } = await p.buckets({ libraries: ['5'], limit: 100 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(stubClient()) });
+  const { play } = await provider.buckets({ libraries: ['5'], limit: 100 }) as KavitaBuckets;
   assert.equal(play.length, 2);
 });
 
@@ -444,21 +444,21 @@ await ok('the lineup INTERLEAVES series rather than draining one', async () => {
     { id: 1, name: 'A', libraryId: 9, format: 1 },
     { id: 2, name: 'B', libraryId: 9, format: 1 },
   ];
-  const c = {
+  const client = {
     ...stubClient(),
     async seriesForLibrary() { return many; },
     async seriesDetail(id: number | string) {
       CALLS.push(['seriesDetail', String(id)]);
-      const n = Number(id);
+      const seriesNumber = Number(id);
       return {
-        chapters: [{ id: n * 100, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }],
+        chapters: [{ id: seriesNumber * 100, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }],
         specials: [], volumes: [],
       };
     },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['9'], limit: 2 }) as KavitaBuckets;
-  assert.deepEqual(play.map((i) => i.seriesId), [1, 2], 'series were not interleaved');
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['9'], limit: 2 }) as KavitaBuckets;
+  assert.deepEqual(play.map((playItem) => playItem.seriesId), [1, 2], 'series were not interleaved');
 });
 
 // --------------------------------------------------------------------------- //
@@ -466,24 +466,24 @@ await ok('the lineup INTERLEAVES series rather than draining one', async () => {
 // --------------------------------------------------------------------------- //
 await ok('materialize creates one list per set and adds chapters IN ORDER', async () => {
   CALLS.length = 0;
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading' }) as KavitaArtifact;
   assert.equal(art.kind, 'kavita');
   assert.match(art.title, /QueuePilot/);
   assert.match(art.title, /reading/);
-  assert.equal(c._added.length, 2);
-  assert.deepEqual(c._added.map((a) => a.chapterId), play.map((i) => i.chapterId));
+  assert.equal(client._added.length, 2);
+  assert.deepEqual(client._added.map((addedChapter) => addedChapter.chapterId), play.map((playItem) => playItem.chapterId));
 });
 
 await ok('materialize REUSES the set\'s existing list instead of littering new ones', async () => {
-  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
+  const client = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading' }) as KavitaArtifact;
   assert.equal(art.readingListId, 42);
-  assert.equal(c._lists.length, 1, 'a duplicate list was created');
+  assert.equal(client._lists.length, 1, 'a duplicate list was created');
 });
 
 /**
@@ -497,32 +497,32 @@ await ok('materialize REUSES the set\'s existing list instead of littering new o
  */
 await ok('materialize REBUILDS the list — last launch\'s items are removed first', async () => {
   CALLS.length = 0;
-  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  await p.materialize(play, { setName: 'reading' });
+  const client = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await provider.materialize(play, { setName: 'reading' });
 
   // Both pre-existing rows are addressed by their ITEM id (9001/9002), never by chapterId.
   assert.deepEqual(
-    c._deleted.map((d) => d.readingListItemId).sort(),
+    client._deleted.map((deletion) => deletion.readingListItemId).sort(),
     [9001, 9002],
     'the stale items were not cleared — the list accumulates',
   );
-  assert.ok(c._deleted.every((d) => d.readingListId === 42), 'cleared the wrong list');
+  assert.ok(client._deleted.every((deletion) => deletion.readingListId === 42), 'cleared the wrong list');
 
   // ORDER is the invariant, not just the presence of both calls: clearing AFTER adding would
   // delete this launch's own lineup and hand the reader an empty list.
-  const lastDelete = CALLS.map((x) => x[0]).lastIndexOf('deleteItem');
-  const firstAdd = CALLS.map((x) => x[0]).indexOf('addChapter');
+  const lastDelete = CALLS.map((call) => call[0]).lastIndexOf('deleteItem');
+  const firstAdd = CALLS.map((call) => call[0]).indexOf('addChapter');
   assert.ok(lastDelete < firstAdd, 'the clear ran after the rebuild, emptying the new lineup');
 });
 
 await ok('a BRAND-NEW list is not cleared — there is nothing to clear', async () => {
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  await p.materialize(play, { setName: 'reading' });
-  assert.equal(c._deleted.length, 0, 'a freshly created list was pointlessly enumerated + cleared');
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await provider.materialize(play, { setName: 'reading' });
+  assert.equal(client._deleted.length, 0, 'a freshly created list was pointlessly enumerated + cleared');
 });
 
 // ---------------------------------------------------------------------------
@@ -533,13 +533,13 @@ await ok('a BRAND-NEW list is not cleared — there is nothing to clear', async 
 // These gates are about the artwork's LIFECYCLE, not its looks: written once, then left alone.
 
 await ok('a brand-new list gets QueuePilot artwork, as RAW base64 SVG', async () => {
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Reading' }) as KavitaArtifact;
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading', setLabel: 'Reading' }) as KavitaArtifact;
 
-  assert.equal(c._covers.length, 1, 'a new list was left with Kavita\'s auto-generated cover');
-  const [cover] = c._covers;
+  assert.equal(client._covers.length, 1, 'a new list was left with Kavita\'s auto-generated cover');
+  const [cover] = client._covers;
   assert.ok(cover, 'no cover was uploaded');
   assert.equal(cover.readingListId, art.readingListId, 'the cover went to another list');
   // The `data:image/png;base64,` spelling is a 400 from the live endpoint. Asserting the
@@ -560,11 +560,11 @@ await ok('a brand-new list gets QueuePilot artwork, as RAW base64 SVG', async ()
  */
 await ok('the cover is drawn from the set LABEL, not its id', async () => {
   const draw = async (setLabel: string) => {
-    const c = stubClient();
-    const p = kavitaProvider({ def: DEF, client: asClient(c) });
-    const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-    await p.materialize(play, { setName: 'reading', setLabel });
-    return c._covers[0]?.imageBase64 ?? '';
+    const client = stubClient();
+    const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+    const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+    await provider.materialize(play, { setName: 'reading', setLabel });
+    return client._covers[0]?.imageBase64 ?? '';
   };
   assert.notEqual(
     await draw('Manga & Webtoons'),
@@ -574,13 +574,13 @@ await ok('the cover is drawn from the set LABEL, not its id', async () => {
 });
 
 await ok('a list whose cover is already ours is left alone', async () => {
-  const c = stubClient({
+  const client = stubClient({
     existingLists: [{ id: 42, title: 'QueuePilot — reading', coverImageLocked: true }],
   });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  await p.materialize(play, { setName: 'reading', setLabel: 'Reading' });
-  assert.equal(c._covers.length, 0, 'the cover was re-uploaded on a launch that did not need it');
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await provider.materialize(play, { setName: 'reading', setLabel: 'Reading' });
+  assert.equal(client._covers.length, 0, 'the cover was re-uploaded on a launch that did not need it');
 });
 
 /**
@@ -589,14 +589,14 @@ await ok('a list whose cover is already ours is left alone', async () => {
  * launch instead of requiring the owner to delete the list.
  */
 await ok('an existing list still wearing Kavita\'s art gets ours', async () => {
-  const c = stubClient({
+  const client = stubClient({
     existingLists: [{ id: 42, title: 'QueuePilot — reading', coverImageLocked: false }],
   });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  await p.materialize(play, { setName: 'reading', setLabel: 'Reading' });
-  assert.equal(c._covers.length, 1, 'an unlocked list kept Kavita\'s per-launch cover');
-  assert.equal(c._covers[0]?.readingListId, 42);
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await provider.materialize(play, { setName: 'reading', setLabel: 'Reading' });
+  assert.equal(client._covers.length, 1, 'an unlocked list kept Kavita\'s per-launch cover');
+  assert.equal(client._covers[0]?.readingListId, 42);
 });
 
 /**
@@ -605,15 +605,15 @@ await ok('an existing list still wearing Kavita\'s art gets ours', async () => {
  */
 await ok('a cover that fails to upload does not cost the reader their lineup', async () => {
   CALLS.length = 0;
-  const c = stubClient({ coverFails: true });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Reading' }) as KavitaArtifact;
+  const client = stubClient({ coverFails: true });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading', setLabel: 'Reading' }) as KavitaArtifact;
   assert.ok(art.readingListId != null, 'materialize did not return a usable artifact');
-  assert.ok(c._added.length > 0, 'the chapters never went on the list');
+  assert.ok(client._added.length > 0, 'the chapters never went on the list');
   // And it was TRIED — a green test here must not be "the upload was quietly skipped".
   assert.ok(
-    CALLS.some((x) => x[0] === 'uploadListCover'),
+    CALLS.some((call) => call[0] === 'uploadListCover'),
     'no cover upload was attempted at all',
   );
 });
@@ -626,26 +626,26 @@ await ok('a cover that fails to upload does not cost the reader their lineup', a
 // `/lists/153` the owner has open and every link Kavita's own UI renders points at it.
 
 await ok('a new list is titled with the set LABEL, not its id', async () => {
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
   assert.equal(art.title, 'QueuePilot — Manga & Webtoons');
-  assert.equal(c._lists[0]?.title, 'QueuePilot — Manga & Webtoons');
+  assert.equal(client._lists[0]?.title, 'QueuePilot — Manga & Webtoons');
 });
 
 await ok('a list under the OLD id-title is renamed in place, keeping its id', async () => {
   CALLS.length = 0;
-  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
+  const client = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — reading' }] });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
 
   assert.equal(art.readingListId, 42, 'the list id changed — every bookmark to it is now wrong');
-  assert.ok(!CALLS.some((x) => x[0] === 'createList'), 'a second list was minted under the new title');
-  assert.equal(c._lists.length, 1, 'the old list was left behind as a duplicate');
-  assert.equal(c._renames.length, 1, 'the list kept its old id-title');
-  assert.equal(c._renames[0]?.patch.title, 'QueuePilot — Manga & Webtoons');
+  assert.ok(!CALLS.some((call) => call[0] === 'createList'), 'a second list was minted under the new title');
+  assert.equal(client._lists.length, 1, 'the old list was left behind as a duplicate');
+  assert.equal(client._renames.length, 1, 'the list kept its old id-title');
+  assert.equal(client._renames[0]?.patch.title, 'QueuePilot — Manga & Webtoons');
 });
 
 /**
@@ -655,41 +655,41 @@ await ok('a list under the OLD id-title is renamed in place, keeping its id', as
  * artwork and starts generating one from the items again. Probed live, 2026-08-17.
  */
 await ok('the rename ECHOES coverImageLocked — it does not wipe the artwork', async () => {
-  const c = stubClient({
+  const client = stubClient({
     existingLists: [{ id: 42, title: 'QueuePilot — reading', coverImageLocked: true }],
   });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await provider.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' });
 
   assert.equal(
-    c._renames[0]?.patch.coverImageLocked,
+    client._renames[0]?.patch.coverImageLocked,
     true,
     'the rename sent coverImageLocked: false, which unlocks AND clears the cover',
   );
   // And the end state agrees: still locked, and no cover was re-uploaded to paper over it.
-  assert.equal(c._lists[0]?.coverImageLocked, true, 'the list came out of the rename unlocked');
-  assert.equal(c._covers.length, 0, 'the artwork was re-uploaded, hiding a destructive rename');
+  assert.equal(client._lists[0]?.coverImageLocked, true, 'the list came out of the rename unlocked');
+  assert.equal(client._covers.length, 0, 'the artwork was re-uploaded, hiding a destructive rename');
 });
 
 await ok('a list already titled with the label is not renamed', async () => {
-  const c = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — Reading' }] });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  await p.materialize(play, { setName: 'reading', setLabel: 'Reading' });
-  assert.equal(c._renames.length, 0, 'a list already correctly titled was renamed anyway');
+  const client = stubClient({ existingLists: [{ id: 42, title: 'QueuePilot — Reading' }] });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  await provider.materialize(play, { setName: 'reading', setLabel: 'Reading' });
+  assert.equal(client._renames.length, 0, 'a list already correctly titled was renamed anyway');
 });
 
 await ok('a rename that fails does not cost the reader their lineup', async () => {
-  const c = stubClient({
+  const client = stubClient({
     existingLists: [{ id: 42, title: 'QueuePilot — reading' }],
     renameFails: true,
   });
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading', setLabel: 'Manga & Webtoons' }) as KavitaArtifact;
   assert.equal(art.readingListId, 42);
-  assert.ok(c._added.length > 0, 'the chapters never went on the list');
+  assert.ok(client._added.length > 0, 'the chapters never went on the list');
 });
 
 /**
@@ -704,9 +704,9 @@ await ok('topupList finds the list under EITHER title', async () => {
     ['Manga & Webtoons', 'QueuePilot — reading'],            // not renamed yet
     ['Manga & Webtoons', 'QueuePilot — Manga & Webtoons'],   // renamed
   ] as const) {
-    const c = stubClient({ existingLists: [{ id: 42, title }] });
-    const p = kavitaProvider({ def: DEF, client: asClient(c) });
-    const res = await p.topupList!({ setName: 'reading', setLabel: label, window: 3, at: 1, build });
+    const client = stubClient({ existingLists: [{ id: 42, title }] });
+    const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+    const res = await provider.topupList!({ setName: 'reading', setLabel: label, window: 3, at: 1, build });
     assert.notEqual(
       res.reason,
       'no reading list for this set yet',
@@ -722,28 +722,28 @@ await ok('materialize writes the WHOLE lineup, libraries and all', async () => {
   // 12, because the lineup interleaves series and a random-order pool alternates libraries.
   // The owner backs out of the reader and reopens instead
   // (decision `2026-08-17-the-reading-list-crosses-libraries-again`).
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
   const play: KavitaPlayItem[] = [
     { chapterId: 11, seriesId: 1, title: 'webtoon 1', libraryId: 5 },
     { chapterId: 12, seriesId: 1, title: 'webtoon 2', libraryId: 5 },
     { chapterId: 21, seriesId: 2, title: 'manga vol 1', libraryId: 6 },
     { chapterId: 13, seriesId: 3, title: 'webtoon 3', libraryId: 5 },
   ];
-  const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
-  assert.deepEqual(c._added.map((a) => a.chapterId), [11, 12, 21, 13]);
+  const art = await provider.materialize(play, { setName: 'reading' }) as KavitaArtifact;
+  assert.deepEqual(client._added.map((addedChapter) => addedChapter.chapterId), [11, 12, 21, 13]);
   assert.equal(art.count, 4);
   assert.equal(art.head?.chapterId, 11);
 });
 
 await ok('reading lists are enumerated with a POST, not a GET', async () => {
   CALLS.length = 0;
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
   // The two fields materialize() reads. `as KavitaPlayItem` documents that `title` is
   // deliberately absent — the same one-field item the suite has always passed.
-  await p.materialize([{ seriesId: 747, chapterId: 1 } as KavitaPlayItem], { setName: 'reading' });
-  const call = CALLS.find((x) => x[0] === 'readingLists');
+  await provider.materialize([{ seriesId: 747, chapterId: 1 } as KavitaPlayItem], { setName: 'reading' });
+  const call = CALLS.find((call) => call[0] === 'readingLists');
   assert.ok(call, 'reading lists were never enumerated');
   assert.equal(call[1], 'POST');  // the method, recorded alongside the call
 });
@@ -752,15 +752,15 @@ await ok('reading lists are enumerated with a POST, not a GET', async () => {
 // handoff — a URL, never a push
 // --------------------------------------------------------------------------- //
 await ok('handoff returns a pull URL and no device push', async () => {
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  assert.equal(p.delivery, 'pull');
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  assert.equal(provider.delivery, 'pull');
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading' }) as KavitaArtifact;
   // `handoff()` is declared `HandoffResult | Promise<HandoffResult>` because Plex's is
   // async; Kavita's is sync and always the PULL half — the one narrowing, stated once here
   // and reused by the URL assertions below.
-  const out = await p.handoff(art) as PullResult;
+  const out = await provider.handoff(art) as PullResult;
   assert.equal(out.mode, 'pull');
   assert.ok(out.url);
   assert.equal(out.awaiting, null);
@@ -768,11 +768,11 @@ await ok('handoff returns a pull URL and no device push', async () => {
 });
 
 await ok('the deep link matches the shape read out of the live reader bundle', async () => {
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
-  const { url } = await p.handoff(art) as PullResult;
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading' }) as KavitaArtifact;
+  const { url } = await provider.handoff(art) as PullResult;
   const head = play[0];
   assert.ok(head, 'the lineup was empty');
   assert.equal(
@@ -785,11 +785,11 @@ await ok('the deep link matches the shape read out of the live reader bundle', a
 await ok('?readingListId= is present — it is what makes next/prev cross series', async () => {
   // Without it the reader resolves next/prev through the SERIES, and the queue stops being
   // a queue: you would read series A forever instead of rolling into series B.
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['5'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'reading' }) as KavitaArtifact;
-  assert.match(String((await p.handoff(art) as PullResult).url), /[?&]readingListId=\d+/);
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['5'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'reading' }) as KavitaArtifact;
+  assert.match(String((await provider.handoff(art) as PullResult).url), /[?&]readingListId=\d+/);
 });
 
 await ok('the reader variant follows seriesFormat: manga / book / pdf', async () => {
@@ -798,18 +798,18 @@ await ok('the reader variant follows seriesFormat: manga / book / pdf', async ()
   assert.equal(readerSegment(FORMAT.ARCHIVE), 'manga');
   assert.equal(readerSegment(FORMAT.IMAGE), 'manga');
   // An EPUB library routes to the book reader, per feasibility §3/§7.
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { play } = await p.buckets({ libraries: ['6'] }) as KavitaBuckets;
-  const art = await p.materialize(play, { setName: 'books' }) as KavitaArtifact;
-  assert.match(String((await p.handoff(art) as PullResult).url), /\/book\//);
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { play } = await provider.buckets({ libraries: ['6'] }) as KavitaBuckets;
+  const art = await provider.materialize(play, { setName: 'books' }) as KavitaArtifact;
+  assert.match(String((await provider.handoff(art) as PullResult).url), /\/book\//);
 });
 
 await ok('an empty artifact reports an error instead of a broken URL', async () => {
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const art = await p.materialize([], { setName: 'reading' }) as KavitaArtifact;
-  const out = await p.handoff(art) as PullResult;
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const art = await provider.materialize([], { setName: 'reading' }) as KavitaArtifact;
+  const out = await provider.handoff(art) as PullResult;
   assert.equal(out.url, null);
   assert.match(String(out.error), /empty/);
 });
@@ -819,15 +819,15 @@ await ok('an empty artifact reports an error instead of a broken URL', async () 
 // --------------------------------------------------------------------------- //
 await ok('progressState reports completion for the whole queue in ONE call', async () => {
   CALLS.length = 0;
-  const c = stubClient();
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
+  const client = stubClient();
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
   // `progressState` is declared as a union (Plex answers a watched-ratingKey Set); Kavita's
   // half is the per-item read state.
-  const st = await p.progressState({ artifactId: 42 }) as KavitaProgressState;
+  const st = await provider.progressState({ artifactId: 42 }) as KavitaProgressState;
   assert.equal(st.items.length, 2);
   assert.equal(st.items[0]?.done, true);
   assert.equal(st.items[1]?.done, false);
-  assert.equal(CALLS.filter((x) => x[0] === 'readingListItems').length, 1);
+  assert.equal(CALLS.filter((call) => call[0] === 'readingListItems').length, 1);
 });
 
 await ok('the POOL and a LAUNCH agree on which series are eligible', async () => {
@@ -850,42 +850,42 @@ await ok('the POOL and a LAUNCH agree on which series are eligible', async () =>
     ] },
     22: { unreadCount: 1, chapters: [{ id: 2201, number: '1', minNumber: 1, pages: 10, pagesRead: 0 }] },
   };
-  const c = {
+  const client = {
     ...stubClient(),
     async seriesForLibrary() { return series; },
     async seriesDetail(id: number | string) { return detail[String(id)]; },
     async continuePoint(id: number | string) {
       // The wrap: a finished series still answers, with an already-read chapter.
       const chs = detail[String(id)]?.chapters ?? [];
-      const next = chs.find((x) => x.pagesRead < x.pages) || chs[0];
+      const next = chs.find((ch) => ch.pagesRead < ch.pages) || chs[0];
       return { ...next, seriesId: Number(id) };
     },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  const { buckets } = await p.buckets({ libraries: ['9'], batch: 1, limit: 99 }) as KavitaBuckets;
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  const { buckets } = await provider.buckets({ libraries: ['9'], batch: 1, limit: 99 }) as KavitaBuckets;
   // `pool` is optional on the Provider seam (only the pull path reaches it), so it is
   // asserted present rather than assumed.
-  assert.ok(p.pool, 'the Kavita provider lost its pool()');
-  const pool = await p.pool({ libraries: ['9'] });
+  assert.ok(provider.pool, 'the Kavita provider lost its pool()');
+  const pool = await provider.pool({ libraries: ['9'] });
   assert.deepEqual(
-    buckets.map((b) => b.seriesId).sort(),
-    pool.map((x) => Number(x.ratingKey)).sort(),
+    buckets.map((bucket) => bucket.seriesId).sort(),
+    pool.map((poolBucket) => Number(poolBucket.ratingKey)).sort(),
     'the pool and a launch disagree about which series are eligible',
   );
-  assert.deepEqual(pool.map((x) => x.show).sort(), ['Partly read', 'Untouched']);
+  assert.deepEqual(pool.map((poolBucket) => poolBucket.show).sort(), ['Partly read', 'Untouched']);
 });
 
 await ok('the pool reports CHAPTERS left, not series or pages', async () => {
-  const c = {
+  const client = {
     ...stubClient(),
     async seriesForLibrary() { return [{ id: 30, name: 'S', libraryId: 9, format: 1 }]; },
     async seriesDetail() {
       return { unreadCount: 38, chapters: [{ id: 3001, number: '49', minNumber: 49, pages: 10, pagesRead: 0 }] };
     },
   };
-  const p = kavitaProvider({ def: DEF, client: asClient(c) });
-  assert.ok(p.pool, 'the Kavita provider lost its pool()');
-  const pool = await p.pool({ libraries: ['9'] });
+  const provider = kavitaProvider({ def: DEF, client: asClient(client) });
+  assert.ok(provider.pool, 'the Kavita provider lost its pool()');
+  const pool = await provider.pool({ libraries: ['9'] });
   assert.equal(pool[0]?.unwatched, 38);
 });
 
@@ -898,34 +898,34 @@ await ok('the launcher 302s a reading queue to its deep link', async () => {
   // `launchDescriptor`'s injected client is declared `PlexClient` — the seam names one
   // client type — and what it forwards to a Kavita queue is a Kavita client. The cast is
   // that (pre-existing) mismatch, not a stub shortcut.
-  const d = await launchDescriptor('reading', { client: stubClient() as unknown as PlexClient });
-  assert.equal(d.status, 302);
-  assert.match(String(d.url), /^https:\/\/kavita\.invalid\/library\/5\/series\/747\/manga\/86090\?/);
-  assert.match(String(d.url), /readingListId=/);
+  const descriptor = await launchDescriptor('reading', { client: stubClient() as unknown as PlexClient });
+  assert.equal(descriptor.status, 302);
+  assert.match(String(descriptor.url), /^https:\/\/kavita\.invalid\/library\/5\/series\/747\/manga\/86090\?/);
+  assert.match(String(descriptor.url), /readingListId=/);
 });
 
 await ok('the launcher refuses a PUSH provider rather than redirecting nowhere', async () => {
-  const d = await launchDescriptor('tv');
-  assert.equal(d.status, 409);
-  assert.match(String(d.error), /pushed to a device/);
+  const descriptor = await launchDescriptor('tv');
+  assert.equal(descriptor.status, 409);
+  assert.match(String(descriptor.error), /pushed to a device/);
 });
 
 await ok('the launcher refuses a MIXED queue with 501, not a guess', async () => {
-  const d = await launchDescriptor('mixed');
-  assert.equal(d.status, 501);
-  assert.match(String(d.error), /more than one provider/);
+  const descriptor = await launchDescriptor('mixed');
+  assert.equal(descriptor.status, 501);
+  assert.match(String(descriptor.error), /more than one provider/);
 });
 
 await ok('the launcher surfaces NOT CONFIGURED as 503, by name', async () => {
   // No stub client and no token: the real instantiation path must refuse loudly.
-  const d = await launchDescriptor('reading');
-  assert.equal(d.status, 503);
-  assert.match(String(d.error), /NOT CONFIGURED/);
+  const descriptor = await launchDescriptor('reading');
+  assert.equal(descriptor.status, 503);
+  assert.match(String(descriptor.error), /NOT CONFIGURED/);
 });
 
 await ok('an unknown queue is a 404', async () => {
-  const d = await launchDescriptor('nope');
-  assert.equal(d.status, 404);
+  const descriptor = await launchDescriptor('nope');
+  assert.equal(descriptor.status, 404);
 });
 
 console.log(FAILS.length ? `\n${FAILS.length} FAILED` : '\nkavita provider OK');

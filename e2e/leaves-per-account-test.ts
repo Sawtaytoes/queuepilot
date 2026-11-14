@@ -9,9 +9,9 @@ import { promises as fs } from 'node:fs';
 
 const PORT = 18797;
 const DB = '/tmp/leaves-per-account.sqlite';
-for (const f of [DB, DB + '-wal', DB + '-shm']) await fs.rm(f, { force: true });
+for (const file of [DB, DB + '-wal', DB + '-shm']) await fs.rm(file, { force: true });
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 // --- fake Plex: one show, but watched state depends on WHICH account (token) asks -------------
 const RK = '9001';
@@ -27,11 +27,11 @@ interface FakeLeaf {
 }
 // Admin (Bob) watched E1+E2 → next is E3. The Kid profile watched nothing → next is E1.
 const WATCHED: Record<string, Set<number>> = { 'admin-token': new Set([1, 2]), 'kid-token': new Set() };
-const ep = (index: number, watched: boolean | undefined): FakeLeaf => ({
+const ep = (index: number, isWatched: boolean | undefined): FakeLeaf => ({
   type: 'episode', ratingKey: `${RK}${index}`, parentIndex: 1, index,
-  title: `Ep ${index}`, duration: 1_400_000, ...(watched ? { viewCount: 1 } : {}),
+  title: `Ep ${index}`, duration: 1_400_000, ...(isWatched ? { viewCount: 1 } : {}),
 });
-const leavesFor = (tok: string) => [1, 2, 3].map((i) => ep(i, WATCHED[tok]?.has(i)));
+const leavesFor = (tok: string) => [1, 2, 3].map((index) => ep(index, WATCHED[tok]?.has(index)));
 const hits: Record<string, number> = { 'admin-token': 0, 'kid-token': 0 };
 
 const srv = createServer((req, res) => {
@@ -55,7 +55,7 @@ const srv = createServer((req, res) => {
   }
   res.statusCode = 404; res.end('{}');
 });
-await new Promise<void>((r) => srv.listen(PORT, () => r()));
+await new Promise<void>((resolve) => srv.listen(PORT, () => resolve()));
 
 process.env.PLEX_API_SERVER_URL = `http://127.0.0.1:${PORT}`;
 process.env.PLEX_TOKEN = 'admin-token'; // the default (no-account) token
@@ -69,24 +69,24 @@ await cache.init();
 
 try {
   // 1) Admin read (no opts) → Bob's view: E1/E2 watched, next is E3. One allLeaves fetch.
-  let n = await plex.nextEpisode(RK);
-  ok(`admin sees next = E3 (got E${n?.episode})`, n?.episode === 3);
+  let nextEpisode = await plex.nextEpisode(RK);
+  ok(`admin sees next = E3 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 3);
   ok(`admin fetched allLeaves once (hits=${hits['admin-token']})`, hits['admin-token'] === 1);
 
   // 2) Kid read (its own token + account) → nothing watched, next is E1. It must NOT reuse the
   //    admin row — a separate cache key, so its own allLeaves fetch.
-  n = await plex.nextEpisode(RK, null, { token: 'kid-token', account: 'kid-uuid' });
-  ok(`kid sees next = E1 (got E${n?.episode})`, n?.episode === 1);
+  nextEpisode = await plex.nextEpisode(RK, null, { token: 'kid-token', account: 'kid-uuid' });
+  ok(`kid sees next = E1 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 1);
   ok(`kid fetched its OWN allLeaves (hits=${hits['kid-token']})`, hits['kid-token'] === 1);
 
   // 3) Kid warm read → still E1, served from the kid-keyed row (no refetch).
-  n = await plex.nextEpisode(RK, null, { token: 'kid-token', account: 'kid-uuid' });
-  ok(`kid warm still E1 (got E${n?.episode})`, n?.episode === 1);
+  nextEpisode = await plex.nextEpisode(RK, null, { token: 'kid-token', account: 'kid-uuid' });
+  ok(`kid warm still E1 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 1);
   ok(`kid warm did NOT refetch (hits=${hits['kid-token']})`, hits['kid-token'] === 1);
 
   // 4) Admin warm read → still E3, its row was NOT clobbered by the kid read (no refetch).
-  n = await plex.nextEpisode(RK);
-  ok(`admin warm still E3 (got E${n?.episode})`, n?.episode === 3);
+  nextEpisode = await plex.nextEpisode(RK);
+  ok(`admin warm still E3 (got E${nextEpisode?.episode})`, nextEpisode?.episode === 3);
   ok(`admin row intact, no refetch (hits=${hits['admin-token']})`, hits['admin-token'] === 1);
 } finally {
   srv.close();

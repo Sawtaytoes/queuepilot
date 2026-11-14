@@ -1,16 +1,16 @@
 import { chromium } from './playwright.js';
 import { pickValue } from './pick.js';
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1400, height: 950 }, ignoreHTTPSErrors: true });
-page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+page.on('pageerror', (error) => console.log('PAGEERROR', error.message));
 await page.goto('https://plex-channels.example.com/overview', { waitUntil: 'domcontentloaded' });
 
 // Landing = the Play list.
 await page.waitForSelector('.playcard', { timeout: 60000 });
 // Post-v2 IA: Rules (rule-derived) + Picks (hand-picked; was Curated + Ordered).
-const dynRows = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((e) => e.textContent));
-const picksRows = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((e) => e.textContent));
+const dynRows = await page.$$eval('#playgrid li[data-kind="rules"] .rowname', (els) => els.map((el) => el.textContent));
+const picksRows = await page.$$eval('#playgrid li[data-kind="picks"] .rowname', (els) => els.map((el) => el.textContent));
 // Structural, not exact counts: since first-class channels (2026-07-29) each rotation
 // channel is its own row (Shows & Shorts, Shows, Shorts, Movies, …) and Bob adds/removes
 // channels + queues over time, so all three groups are lower-bounded. The Movies rewatch
@@ -39,8 +39,8 @@ await page.waitForSelector('#channels:not([hidden])');
 // (default merged with its plex.tv listing).
 await page.click('#chplay');
 await page.waitForFunction(() => document.querySelectorAll('.playmenu button').length > 0, undefined, { timeout: 20000 });
-const devs = await page.$$eval('.playmenu button', (bs) => bs.map((b) => b.textContent ?? ''));
-const shields = devs.filter((d) => /SHIELD/i.test(d));
+const devs = await page.$$eval('.playmenu button', (bs) => bs.map((element) => element.textContent ?? ''));
+const shields = devs.filter((dev) => /SHIELD/i.test(dev));
 ok(`device menu lists devices (${devs.length}): ${devs.slice(0, 4).join(', ')}`, shields.length >= 1);
 ok('no duplicate Shield entry', shields.length === 1);
 await page.keyboard.press('Escape');
@@ -50,7 +50,7 @@ await page.waitForSelector('#play:not([hidden]) .playcard');
 // Queues configurator + header search keyboard on live data (no add — navigate + close).
 await page.click('#goqueues');
 await page.waitForSelector('#home:not([hidden]) .shelf li.tile', { timeout: 60000 });
-const shelves = await page.$$eval('.shelf', (els) => els.map((e) => e.dataset.set));  // HTMLElement -> dataset
+const shelves = await page.$$eval('.shelf', (els) => els.map((el) => el.dataset.set));  // HTMLElement -> dataset
 ok(`live queue shelves render (${shelves.length})`, shelves.length >= 1);
 await page.fill('#gsearch', 'duel');
 await page.waitForSelector('#gresults.open li', { timeout: 30000 });

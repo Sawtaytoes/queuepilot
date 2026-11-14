@@ -20,29 +20,29 @@ const env = {
  */
 type JsonBody = Record<string, any>;
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
-const api = (p: string, opts?: RequestInit): Promise<JsonBody> =>
-  fetch(`http://localhost:${PORT}/api${p}`, opts).then((r) => r.json() as Promise<JsonBody>);
-const patch = (p: string, body: unknown) =>
-  api(p, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
+const api = (apiPath: string, opts?: RequestInit): Promise<JsonBody> =>
+  fetch(`http://localhost:${PORT}/api${apiPath}`, opts).then((response) => response.json() as Promise<JsonBody>);
+const patch = (apiPath: string, body: unknown) =>
+  api(apiPath, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 
-for (const f of ['/tmp/queues-hist.yaml', '/tmp/sets-hist.yaml', '/tmp/history-hist.json']) {
-  await fs.rm(f, { force: true });
-  await fs.rm(f + '.lock', { recursive: true, force: true });
+for (const filePath of ['/tmp/queues-hist.yaml', '/tmp/sets-hist.yaml', '/tmp/history-hist.json']) {
+  await fs.rm(filePath, { force: true });
+  await fs.rm(filePath + '.lock', { recursive: true, force: true });
 }
 await fs.copyFile(new URL('./fixtures/queues.fixture.yaml', import.meta.url), '/tmp/queues-hist.yaml');
 
 async function startServer(): Promise<ChildProcess> {
   const child = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 50; i++) {
-    try { await api('/history'); return child; } catch { await new Promise((r) => setTimeout(r, 200)); }
+  for (let attempt = 0; attempt < 50; attempt++) {
+    try { await api('/history'); return child; } catch { await new Promise((resolve) => setTimeout(resolve, 200)); }
   }
   throw new Error('server did not come up');
 }
-const stop = (child: ChildProcess) => new Promise((r) => { child.once('exit', r); killServer(child); });
+const stop = (child: ChildProcess) => new Promise((resolve) => { child.once('exit', resolve); killServer(child); });
 
 let srv = await startServer();
-const ids = (await api('/sets')).sets.map((s: JsonBody) => s.id);
+const ids = (await api('/sets')).sets.map((set: JsonBody) => set.id);
 await patch('/sets-order', { ids }); // any mutation — the middleware snapshots first
 const h1 = await api('/history');
 ok(`mutation snapshots (undo=${h1.undo})`, h1.undo === 1);
@@ -51,8 +51,8 @@ await stop(srv);
 srv = await startServer();
 const h2 = await api('/history');
 ok(`history survives restart (undo=${h2.undo} redo=${h2.redo})`, h2.undo === 1 && h2.redo === 0);
-const u = await api('/undo', { method: 'POST' });
-ok('undo works from the reloaded stack', u.ok === true);
+const undoResult = await api('/undo', { method: 'POST' });
+ok('undo works from the reloaded stack', undoResult.ok === true);
 const h3 = await api('/history');
 ok(`undo moved it to redo (undo=${h3.undo} redo=${h3.redo})`, h3.undo === 0 && h3.redo === 1);
 await stop(srv);
@@ -60,7 +60,7 @@ await stop(srv);
 srv = await startServer();
 const h4 = await api('/history');
 ok(`redo stack survives too (redo=${h4.redo})`, h4.redo === 1);
-const r = await api('/redo', { method: 'POST' });
-ok('redo works from the reloaded stack', r.ok === true);
+const redoResult = await api('/redo', { method: 'POST' });
+ok('redo works from the reloaded stack', redoResult.ok === true);
 await stop(srv);
 console.log('done');

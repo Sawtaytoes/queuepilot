@@ -78,9 +78,9 @@ interface DriverCtl {
 const CTL = RAW_CTL as unknown as DriverCtl;
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 const asDevice = (mode: string): Device =>
@@ -281,7 +281,7 @@ CTL.accountVerdicts = [
 ];
 res = await drive();
 ok('(h) no session after play: pushes play a SECOND time', nCalls('play') === 2,
-  JSON.stringify(CTL.calls.filter((c) => c[0] === 'play')));
+  JSON.stringify(CTL.calls.filter((call) => call[0] === 'play')));
 ok('(h) no session after play: re-opens Plex before the second push',
   nCalls('ensure_plex_open') >= 1, JSON.stringify(CTL.calls));
 ok('(h) no session after play: waits for a session after each push',

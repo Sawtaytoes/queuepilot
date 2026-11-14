@@ -17,7 +17,7 @@ import { promises as fs } from 'node:fs';
 import type { ChildProcess } from 'node:child_process';
 import type { FakeMqtt } from './fake-mqtt.js';
 
-const ok = (n: string, c: boolean) => { console.log(`${c ? 'PASS' : 'FAIL'} ${n}`); if (!c) process.exitCode = 1; };
+const ok = (name: string, isPassing: boolean) => { console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}`); if (!isPassing) process.exitCode = 1; };
 
 /**
  * The `now` frame's payload. `JSON.parse` is `any` at the boundary and this is a wire
@@ -48,7 +48,7 @@ async function readEvents(port: number, ms: number): Promise<string> {
       const timeLeft = deadline - Date.now();
       const step = await Promise.race<Step>([
         reader.read(),
-        new Promise<Step>((r) => setTimeout(() => r({ timeout: true }), timeLeft)),
+        new Promise<Step>((resolve) => setTimeout(() => resolve({ timeout: true }), timeLeft)),
       ]);
       if (step.timeout) break;
       if (step.done) break;
@@ -65,8 +65,8 @@ async function readEvents(port: number, ms: number): Promise<string> {
 function firstNowFrame(text: string): NowFrame | null {
   for (const block of text.split('\n\n')) {
     const lines = block.split('\n');
-    if (!lines.some((l) => l === 'event: now')) continue;
-    const data = lines.find((l) => l.startsWith('data:'));
+    if (!lines.some((line) => line === 'event: now')) continue;
+    const data = lines.find((line) => line.startsWith('data:'));
     if (!data) continue;
     try { return JSON.parse(data.slice(5).trim()) as NowFrame; } catch { return null; }
   }
@@ -75,18 +75,18 @@ function firstNowFrame(text: string): NowFrame | null {
 
 async function startServer(env: NodeJS.ProcessEnv, port: number): Promise<ChildProcess> {
   const child = spawnServer({ env, stdio: 'ignore' });
-  for (let i = 0; i < 50; i++) {
+  for (let attempt = 0; attempt < 50; attempt++) {
     try {
-      const r = await fetch(`http://localhost:${port}/api/history`);
-      if (r.ok) return child;
+      const response = await fetch(`http://localhost:${port}/api/history`);
+      if (response.ok) return child;
     } catch { /* not up yet */ }
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((resolve) => setTimeout(resolve, 200));
   }
   throw new Error('server did not come up');
 }
-const stop = (child: ChildProcess | null) => new Promise<void>((r) => {
-  if (!child) return r();
-  child.once('exit', () => r());
+const stop = (child: ChildProcess | null) => new Promise<void>((resolve) => {
+  if (!child) return resolve();
+  child.once('exit', () => resolve());
   killServer(child);
 });
 
@@ -96,9 +96,9 @@ const stop = (child: ChildProcess | null) => new Promise<void>((r) => {
   const QUEUES = '/tmp/queues-sse-resync.yaml';
   const SETS = '/tmp/sets-sse-resync.yaml';
   const HIST = '/tmp/history-sse-resync.json';
-  for (const f of [QUEUES, SETS, HIST]) {
-    await fs.rm(f, { force: true });
-    await fs.rm(f + '.lock', { recursive: true, force: true });
+  for (const filePath of [QUEUES, SETS, HIST]) {
+    await fs.rm(filePath, { force: true });
+    await fs.rm(filePath + '.lock', { recursive: true, force: true });
   }
   await fs.writeFile(QUEUES, 'bob:\n- {title: "Plain Movie A (2020)"}\n', 'utf8');
   const env = {
@@ -151,9 +151,9 @@ if (startFakeMqtt) {
   const QUEUES = '/tmp/queues-sse-resync2.yaml';
   const SETS = '/tmp/sets-sse-resync2.yaml';
   const HIST = '/tmp/history-sse-resync2.json';
-  for (const f of [QUEUES, SETS, HIST]) {
-    await fs.rm(f, { force: true });
-    await fs.rm(f + '.lock', { recursive: true, force: true });
+  for (const filePath of [QUEUES, SETS, HIST]) {
+    await fs.rm(filePath, { force: true });
+    await fs.rm(filePath + '.lock', { recursive: true, force: true });
   }
   await fs.writeFile(QUEUES, 'bob:\n- {title: "Plain Movie A (2020)"}\n', 'utf8');
 
@@ -181,7 +181,7 @@ if (startFakeMqtt) {
   const srv = await startServer(env, PORT);
   try {
     // Give the server a moment to connect to the broker and receive the retained now-playing.
-    await new Promise((r) => setTimeout(r, 800));
+    await new Promise((resolve) => setTimeout(resolve, 800));
     const now = firstNowFrame(await readEvents(PORT, 1500));
     ok('freshly-connected client receives the retained now-playing on connect',
       now !== null && now.now !== null);

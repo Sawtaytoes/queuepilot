@@ -17,16 +17,16 @@ process.env.QUEUES_PATH = QUEUES_PATH;
 process.env.SETS_PATH = SETS_PATH;
 // Queue removal now clears durable lead rows. Keep that write in this harness's scratch store.
 process.env.STORE_PATH = STORE_PATH;
-for (const f of [STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`]) rmSync(f, { force: true });
+for (const filePath of [STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`]) rmSync(filePath, { force: true });
 
 let failures = 0;
-const ok = (name: string, cond: boolean, extra = '') => {
-  console.log(`${cond ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
-  if (!cond) failures += 1;
+const ok = (name: string, isPassing: boolean, extra = '') => {
+  console.log(`${isPassing ? 'PASS' : 'FAIL'} ${name}${extra ? ` — ${extra}` : ''}`);
+  if (!isPassing) failures += 1;
 };
 
-const read = (p: string) => readFileSync(p, 'utf8');
-const has = (p: string, s: string) => read(p).includes(s);
+const read = (filePath: string) => readFileSync(filePath, 'utf8');
+const has = (filePath: string, needle: string) => read(filePath).includes(needle);
 
 // A fixture with EVERY comment shape the round-trip must preserve: a head comment, a
 // blank-line grouping, an inline comment on an entry, a foot comment, and a long title that
@@ -68,8 +68,8 @@ sets:
 
 // Fresh fixtures + no stale locks before each module's suite.
 function seed() {
-  for (const f of [QUEUES_PATH, SETS_PATH, `${QUEUES_PATH}.lock`, `${SETS_PATH}.lock`, `${QUEUES_PATH}.tmp`, `${SETS_PATH}.tmp`]) {
-    rmSync(f, { force: true, recursive: true });
+  for (const filePath of [QUEUES_PATH, SETS_PATH, `${QUEUES_PATH}.lock`, `${SETS_PATH}.lock`, `${QUEUES_PATH}.tmp`, `${SETS_PATH}.tmp`]) {
+    rmSync(filePath, { force: true, recursive: true });
   }
   writeFileSync(QUEUES_PATH, QUEUES_FIXTURE);
   writeFileSync(SETS_PATH, SETS_FIXTURE);
@@ -77,7 +77,7 @@ function seed() {
 
 const COMMENTS = ['# HEAD:', '# INLINE:', '# FOOT:'];
 const assertCommentsSurvive = (label: string, path: string) => {
-  for (const c of COMMENTS) ok(`${label}: kept ${c}`, has(path, c));
+  for (const comment of COMMENTS) ok(`${label}: kept ${comment}`, has(path, comment));
 };
 
 const queues = await import('../server/src/queues.js');
@@ -348,7 +348,7 @@ assertCommentsSurvive('createSet', SETS_PATH);
 ok('createSet: new set present', has(SETS_PATH, 'label: New Queue'));
 
 // Cleanup.
-for (const f of [QUEUES_PATH, SETS_PATH, STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`, `${QUEUES_PATH}.lock`, `${SETS_PATH}.lock`]) rmSync(f, { force: true, recursive: true });
+for (const filePath of [QUEUES_PATH, SETS_PATH, STORE_PATH, `${STORE_PATH}-shm`, `${STORE_PATH}-wal`, `${QUEUES_PATH}.lock`, `${SETS_PATH}.lock`]) rmSync(filePath, { force: true, recursive: true });
 
 console.log(failures ? `\n${failures} round-trip assertion(s) failed` : '\nall yaml round-trip assertions passed');
 process.exit(failures ? 1 : 0);

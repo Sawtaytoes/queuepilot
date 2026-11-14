@@ -25,9 +25,9 @@ import * as routing from '../server/src/engine/routing.js';
 import type { EngineBinding, PlexClient } from '../server/src/types.js';
 
 const FAILS: string[] = [];
-function ok(name: string, cond: boolean, detail = ''): void {
-  console.log((cond ? 'PASS ' : 'FAIL ') + name + (!cond && detail ? `  -- ${detail}` : ''));
-  if (!cond) FAILS.push(name);
+function ok(name: string, isPassing: boolean, detail = ''): void {
+  console.log((isPassing ? 'PASS ' : 'FAIL ') + name + (!isPassing && detail ? `  -- ${detail}` : ''));
+  if (!isPassing) FAILS.push(name);
 }
 
 // --------------------------------------------------------------------------- //
@@ -51,7 +51,7 @@ const recordingClient: PlexClient = {
   async accountToken() { return null; },
 };
 const accountsIn = (calls: readonly string[]): string[] => [
-  ...new Set(calls.map((p) => new URL('http://x/' + p).searchParams.get('accountID') ?? '')),
+  ...new Set(calls.map((call) => new URL('http://x/' + call).searchParams.get('accountID') ?? '')),
 ];
 
 // `episodic_sections`/`item_sections` are what routing's `setSections()` reads — the loaded
@@ -133,7 +133,7 @@ const { plexProvider } = await import('../server/src/providers/plex.js');
 const provider = plexProvider({ client: recordingClient });
 // Non-null: this suite exists because the method is what fixes the bug — an absent one is a
 // failure to report, not a case to tolerate.
-const fill = (b: EngineBinding, profile: string | null) => provider.profileBinding!(b, profile);
+const fill = (binding: EngineBinding, profile: string | null) => provider.profileBinding!(binding, profile);
 
 const older = await fill(bindingWith(null), 'Older Kids');
 ok('a queue gated to a kid binds THAT kid\'s account',

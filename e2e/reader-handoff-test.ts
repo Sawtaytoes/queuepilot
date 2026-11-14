@@ -31,9 +31,9 @@ try {
     await page.screenshot({ path: `${output}/before-${name}.png` });
     await page.goto(`http://127.0.0.1:${port}/`);
     await page.waitForSelector('h1');
-    assert.equal(await page.$eval('h1', e => e.textContent), 'Your reading list is ready');
+    assert.equal(await page.$eval('h1', element => element.textContent), 'Your reading list is ready');
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true);
-    const links = await page.$$eval('a', elements => elements.map(e => ({ href: e.getAttribute('href'), rel: e.getAttribute('rel') })));
+    const links = await page.$$eval('a', elements => elements.map(element => ({ href: element.getAttribute('href'), rel: element.getAttribute('rel') })));
     const primary = links[0];
     assert(primary && primary.href);
     assert(primary.href.startsWith('intent://'));
