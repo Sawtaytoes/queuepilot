@@ -28,9 +28,10 @@ export interface FixtureServer {
   dir: string;
 }
 
-/** Poll until the URL answers 2xx — 30 s, then throw rather than hand back a dead server. */
+/** Poll until the URL answers 2xx — 60 s, then throw rather than hand back a dead server.
+ *  A busy CI host can take longer than 20 s to boot `tsx` and the server. */
 export async function waitReady(url: string): Promise<void> {
-  for (let attempt = 0; attempt < 150; attempt += 1) {
+  for (let attempt = 0; attempt < 300; attempt += 1) {
     try {
       if ((await fetch(url)).ok) return;
     } catch {

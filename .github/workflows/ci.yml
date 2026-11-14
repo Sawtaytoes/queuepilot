@@ -51,9 +51,12 @@ jobs:
   # guard lives inside the shared workflow: this repo is public, and a fork's pull request
   # must never execute on the LAN.
   #
-  # The shared installer bootstraps pinned pnpm before the capture commands.
+  # The shared installer bootstraps pinned pnpm before the capture commands. The install
+  # uses the shared workflow's pnpm store (`$VRT_PNPM_STORE_DIR`, in the runner's tool cache
+  # on the same volume as the checkout), so pnpm links packages instead of copying each one.
   # The capture installs its OWN pinned Playwright's chromium; the workflow points
-  # PLAYWRIGHT_BROWSERS_PATH at a directory the job can write.
+  # PLAYWRIGHT_BROWSERS_PATH at a directory the job can write. The capture keeps Chromium's
+  # shared memory in the runner's `/dev/shm` when it has room (`e2e/sharedMemory.ts`).
   #
   # A push build never fails on a picture change, so a merge to main cannot hold up the
   # deploy that keys on this workflow's conclusion.
@@ -63,7 +66,7 @@ jobs:
     permissions: { contents: read, statuses: write, pull-requests: write }
     uses: Sawtaytoes/charcuterie/.github/workflows/shared-vrt.yml@workflows-v1
     with:
-      setupCommand: pnpm install --frozen-lockfile --store-dir ~/.local/share/pnpm/store
+      setupCommand: pnpm install --frozen-lockfile --store-dir "$VRT_PNPM_STORE_DIR"
       buildCommand: pnpm --filter queuepilot-web run build
       captureCommand: |
         e2e/node_modules/.bin/playwright install chromium
