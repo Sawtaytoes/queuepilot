@@ -6,6 +6,7 @@ import {
   test,
   vi,
 } from "vitest"
+import { defined } from "./defined.js"
 import { SCHEMA_SQL } from "./store/schema.generated.js"
 
 const fixture = vi.hoisted(() => ({
@@ -235,7 +236,7 @@ describe("native TV watch history", () => {
       "grace_films",
       "family_shows",
     ])
-    const family = queues[1]!
+    const family = defined(queues[1])
     expect(family.title).toBe("Title of family_shows")
     // Newest sitting first; items stay in watch order inside a sitting.
     expect(

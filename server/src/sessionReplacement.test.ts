@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 
 const ctl = vi.hoisted(() => ({
   resolve: null as ((binding: object) => void) | null,
@@ -53,7 +54,7 @@ test("does not let a replaced profile lookup overwrite the active device or sitt
     error: "disabled",
   })
   const replacementDevice = SESSION.device
-  ctl.resolve!({})
+  defined(ctl.resolve)({})
   expect(await pending).toEqual({ cancelled: true })
   expect(SESSION.device).toBe(replacementDevice)
 })

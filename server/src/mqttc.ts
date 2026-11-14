@@ -4,6 +4,7 @@
 // session-start commands ("Play on <device>") back to it. Rotation previews are NOT here:
 // they are computed in-process by the engine (server.js /api/generic/:id/preview).
 import { connect, type MqttClient } from "mqtt"
+import { defined } from "./defined.js"
 // These come from env.js rather than process.env: this module used to re-declare the same
 // four knobs with its own copies of the defaults, which is the exact drift env.js exists to
 // prevent — during the queuepilot rename those copies would have kept this half of the
@@ -67,7 +68,7 @@ type StateListener = (
 type NowPlayingListener = (now: NowPlaying | null) => void
 
 export const connected = (): boolean =>
-  Boolean(client && client.connected)
+  Boolean(client?.connected)
 
 const DEVICES = new Map<string, AnnouncedDevice>() // id -> announcement payload (retained registry)
 let LAST_STATE: PublishedSessionState | null = null // last retained queuepilot/state payload
@@ -246,9 +247,13 @@ export function play(
   if (only) payload.only = only
   if (behavior) payload.behavior = behavior
   // `connected()` just proved client is non-null; it is a module-level `let`, so say so.
-  client!.publish(T_CMD_START, JSON.stringify(payload), {
-    qos: 1,
-  })
+  defined(client, "the MQTT client").publish(
+    T_CMD_START,
+    JSON.stringify(payload),
+    {
+      qos: 1,
+    },
+  )
   return payload
 }
 
@@ -270,7 +275,7 @@ export function endActivity({
   const payload: EndActivityCommand = { reason: "manual" }
   if (set) payload.set = set
   if (target) payload.target = target
-  client!.publish(
+  defined(client, "the MQTT client").publish(
     T_CMD_ACTIVITY_OFF,
     JSON.stringify(payload),
     { qos: 1 },

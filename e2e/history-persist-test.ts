@@ -21,6 +21,7 @@ const env = {
  * into payloads the server itself produces (`{undo, redo}`, `sets[].id`) — so the cast
  * lives HERE, once and documented, rather than at every read below.
  */
+// biome-ignore lint/suspicious/noExplicitAny: the app's HTTP JSON response, whose shape server/src/routes fixes; read unchecked, as documented above
 type JsonBody = Record<string, any>
 
 const ok = (name: string, isPassing: boolean) => {

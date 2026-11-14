@@ -29,6 +29,7 @@
  * a gated-push row says what was SENT to a screen, not what was watched.
  */
 
+import { defined } from "./defined.js"
 import { liveClient } from "./engine/plex-live.js"
 import * as resolve from "./engine/resolve.js"
 import * as routing from "./engine/routing.js"
@@ -175,7 +176,7 @@ export function nativePlays(since: number): OwnedPlay[] {
         ? createdAt
         : Math.max(...times)
       if (endedAt < since) continue
-      const last = events.at(-1)!.event
+      const last = defined(events.at(-1)).event
       plays.push({
         setId: plan.setId,
         entryKey: item.queueEntryKey ?? null,
@@ -307,7 +308,7 @@ export function groupHistory(
     queues.push({
       setId,
       title: titleOf(setId),
-      lastWatchedAt: sittings[0]!.endedAt,
+      lastWatchedAt: defined(sittings[0]).endedAt,
       sittings,
     })
   }

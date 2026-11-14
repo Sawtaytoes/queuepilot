@@ -272,7 +272,7 @@ export function playbackRoutes(): Hono {
   app.get("/generic/:id/preview", async (context) => {
     try {
       const set = await sets.getSet(context.req.param("id"))
-      if (!set || set.source !== "rotation")
+      if (set?.source !== "rotation")
         return context.json(
           { error: "not a rotation channel" },
           400,

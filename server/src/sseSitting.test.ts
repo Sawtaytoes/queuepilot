@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 import type {
   NowPlaying,
   PublishedSessionState,
@@ -63,13 +64,13 @@ test("keeps retained telemetry enrichment through an unchanged startup state eve
         release = resolve
       }),
   )
-  const pending = hooks.now!({
+  const pending = defined(hooks.now)({
     deviceId: "test-player",
     state: "playing",
     ratingKey: "retained",
     position: 10,
   })
-  hooks.state!({
+  defined(hooks.state)({
     deviceId: "test-player",
     set: "sample",
   } as PublishedSessionState)
@@ -85,16 +86,16 @@ test("never restores an old same-player cache through preparation and success st
     position: 10,
   }
   hooks.context.mockResolvedValue(null)
-  await hooks.now!(hooks.cached)
+  await defined(hooks.now)(hooks.cached)
   expect(lastNow()?.ratingKey).toBe("old-episode")
   SESSION.sittingId += 1
   SESSION.isPreparing = true
-  hooks.state!(null)
+  defined(hooks.state)(null)
   expect(lastNow()).toBeNull()
   SESSION.isPreparing = false
-  hooks.state!(null)
+  defined(hooks.state)(null)
   expect(lastNow()).toBeNull()
-  await hooks.now!({
+  await defined(hooks.now)({
     deviceId: "test-player",
     state: "playing",
     ratingKey: "new-episode",
@@ -115,7 +116,7 @@ for (const isReplacementSitting of [false, true]) {
           }),
       )
       .mockResolvedValue(null)
-    const old = hooks.now!({
+    const old = defined(hooks.now)({
       deviceId: "test-player",
       state: "playing",
       ratingKey: "old",
@@ -123,9 +124,9 @@ for (const isReplacementSitting of [false, true]) {
     })
     if (isReplacementSitting) {
       SESSION.sittingId += 1
-      hooks.state!(null)
+      defined(hooks.state)(null)
     }
-    await hooks.now!({
+    await defined(hooks.now)({
       deviceId: "test-player",
       state: "playing",
       ratingKey: "new",

@@ -29,6 +29,7 @@ import { createRequire } from "node:module"
 import { createServer } from "node:net"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import type { AedesBroker } from "./fake-mqtt.js"
 
 // aedes and mqtt live in node_modules `e2e/` does not own, so there is no package for tsc to
 // read types from — the same problem `fake-mqtt.ts` solves, resolved the same way and for the
@@ -43,7 +44,9 @@ const requireClient = createRequire(
     .pathname,
 )
 
-const Aedes = requireBroker("aedes") as new () => any
+const Aedes = requireBroker(
+  "aedes",
+) as new () => AedesBroker
 const mqtt = requireClient("mqtt") as {
   connect(url: string): {
     on(event: "connect", handler: () => void): void

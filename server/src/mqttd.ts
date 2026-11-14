@@ -322,7 +322,7 @@ async function handleResetWatched(
     // and read as a success. `sets.updateSet` refuses `reset_watched_on` on one for the same
     // reason.
     const set = await sets.getSet(setId)
-    if (!set || set.source !== "queue") {
+    if (set?.source !== "queue") {
       pub(T_RESP_RESET_WATCHED, {
         ok: false,
         set: setId,

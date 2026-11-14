@@ -28,6 +28,7 @@ import {
   PLEX_TOKEN,
   PLEX_URL,
 } from "./config.js"
+import { defined } from "./defined.js"
 import {
   COMPANION_MISS_TTL_MS,
   COMPANION_PORT,
@@ -535,10 +536,7 @@ export async function machineIdentifier(): Promise<string> {
       MediaContainer?: { machineIdentifier?: string }
     } | null
     _machineId =
-      (data &&
-        data.MediaContainer &&
-        data.MediaContainer.machineIdentifier) ||
-      ""
+      data?.MediaContainer?.machineIdentifier || ""
   } catch {
     _machineId = ""
   }
@@ -675,7 +673,7 @@ async function playToken(
   if (setName) {
     try {
       const cfg = await getSet(setName)
-      if (cfg && cfg.user_uuid) {
+      if (cfg?.user_uuid) {
         const tok = await accountToken(cfg.user_uuid)
         if (tok) return tok
       }
@@ -822,7 +820,7 @@ export async function createPlayQueue(
   if (!refs.length) return null
   const mid = queueHostId || (await machineIdentifier())
   const groups = queueGroups(refs, mid)
-  const first = groups[0]!
+  const first = defined(groups[0])
   const params = new URLSearchParams({
     type: "video",
     uri: queueSourceUri(first.server, first.ratingKeys),
@@ -837,8 +835,7 @@ export async function createPlayQueue(
       host,
     },
   )
-  const mc: PlaybackContainer =
-    (data && data.MediaContainer) || {}
+  const mc: PlaybackContainer = data?.MediaContainer || {}
   // An EMPTY queue is a hard failure, not a playable one. Plex answers 200 for a playQueue
   // built from ratingKeys this token cannot see (a managed account whose library filter hides
   // them), and drops them silently — size 0. Pushing that at the Shield "succeeds": Companion
@@ -913,8 +910,7 @@ export async function readPlayQueue(
     // normal no-op path.
     return null
   }
-  const mc: PlaybackContainer =
-    (data && data.MediaContainer) || {}
+  const mc: PlaybackContainer = data?.MediaContainer || {}
   const rows = mc.Metadata || []
   const ratingKeys = rows.map((row) =>
     String(row.ratingKey),
@@ -991,8 +987,7 @@ export async function extendPlayQueue(
         host: requestHost,
       },
     )
-    const mc: PlaybackContainer =
-      (data && data.MediaContainer) || {}
+    const mc: PlaybackContainer = data?.MediaContainer || {}
     size = mc.size ?? size
   }
   // Plex answers 200 with the queue's new size. Reported so the caller can log what actually
@@ -1013,7 +1008,7 @@ async function applyAudioLanguage(
   lang: string | null | undefined,
   host: string | null = null,
 ): Promise<void> {
-  if (!lang || !ratingKeys || !ratingKeys.length) return
+  if (!lang || !ratingKeys?.length) return
   const want = String(lang).trim().toLowerCase()
   for (const rk of ratingKeys) {
     try {
@@ -1022,8 +1017,7 @@ async function applyAudioLanguage(
         `/library/metadata/${rk}?includeBandwidths=1`,
         { token, host },
       )
-      const item = ((data.MediaContainer || {}).Metadata ||
-        [])[0]
+      const item = (data.MediaContainer?.Metadata || [])[0]
       if (!item) continue
       for (const media of item.Media || []) {
         for (const part of media.Part || []) {
@@ -1080,7 +1074,7 @@ export async function castPlay(
     mode: "cast",
     client: castName || SHIELD_CAST_NAME || null,
   }
-  if (!ratingKeys || !ratingKeys.length) {
+  if (!ratingKeys?.length) {
     result.error = "nothing to play"
     return result
   }
@@ -1236,11 +1230,7 @@ export async function currentSession({
     if (isThrowingOnError) throw error
     return null
   }
-  const md =
-    (data &&
-      data.MediaContainer &&
-      data.MediaContainer.Metadata) ||
-    []
+  const md = data?.MediaContainer?.Metadata || []
   if (!md.length) return null
   // Prefer the session on OUR player — the house has other clients, and seeking off the back of
   // someone else's playback would be a genuinely bad bug.
@@ -1835,7 +1825,7 @@ async function playRatingKeysOnDevice(
     }
   }
 
-  const mode = (device && device.mode) || PLAYBACK_MODE
+  const mode = device?.mode || PLAYBACK_MODE
   if (mode === "cast") {
     if (refs.some((item) => item.plexServer)) {
       return {
@@ -1850,7 +1840,7 @@ async function playRatingKeysOnDevice(
     return castPlay(
       ratingKeys,
       setName,
-      device && device.name,
+      device?.name,
       offset,
     )
   }
@@ -1861,7 +1851,7 @@ async function playRatingKeysOnDevice(
     mode: "client",
     client: null,
   }
-  if (!ratingKeys || !ratingKeys.length) {
+  if (!ratingKeys?.length) {
     result.error = "nothing to play"
     return result
   }
@@ -1873,7 +1863,11 @@ async function playRatingKeysOnDevice(
   let pqId: number | string | null = null
   let queueHost: PlayQueueHost
   try {
-    queueHost = await playQueueHost(refs[0]!, userUuid, tok)
+    queueHost = await playQueueHost(
+      defined(refs[0]),
+      userUuid,
+      tok,
+    )
   } catch (error) {
     result.error = `${errName(error)}: ${errMessage(error)}`
     return result
@@ -1910,12 +1904,12 @@ async function playRatingKeysOnDevice(
         token: tok,
       })
       const builtHead = built?.ratingKeys[0]
-      const askedHead = refs[0]!
+      const askedHead = defined(refs[0])
       const builtHeadItem = built?.items[0]
-      const hasSourceChanged =
-        Boolean(builtHeadItem) &&
-        (builtHeadItem!.plexServer || null) !==
+      const hasSourceChanged = builtHeadItem
+        ? (builtHeadItem.plexServer || null) !==
           (askedHead.plexServer || null)
+        : false
       if (refs.some((item) => item.plexServer)) {
         const isMatching =
           built?.items.length === refs.length &&
@@ -1967,9 +1961,9 @@ async function playRatingKeysOnDevice(
       device?.name || SHIELD_CLIENT_NAME || null
     const sent = await adb.playModernQueue(
       queueHost.machineIdentifier,
-      pqId!,
+      pqId,
       intOffset(offset),
-      refs[0]!.ratingKey,
+      defined(refs[0]).ratingKey,
     )
     result.played = sent.ok
     result.error = sent.error
@@ -1992,7 +1986,7 @@ async function playRatingKeysOnDevice(
     result.error = `invalid Plex source URL: ${queueHost.streamBaseUrl}`
     return result
   }
-  const first = refs[0]!.ratingKey
+  const first = defined(refs[0]).ratingKey
   const params = new URLSearchParams({
     key: `/library/metadata/${first}`,
     // Resume point (ms) for the first item — 0 plays from the top.

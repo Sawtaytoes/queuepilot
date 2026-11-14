@@ -1,4 +1,5 @@
 import { describe, expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 import type { PlexClient } from "./types.js"
 
 const calls = vi.hoisted(() => [] as URL[])
@@ -7,11 +8,11 @@ vi.mock("undici", async (original) => ({
   request: vi.fn(async (url: string) => {
     const parsed = new URL(url)
     calls.push(parsed)
-    const keys = parsed.searchParams
-      .get("uri")!
-      .split("/")
-      .at(-1)!
-      .split(",")
+    const keys = defined(
+      defined(parsed.searchParams.get("uri"))
+        .split("/")
+        .at(-1),
+    ).split(",")
     // Plex's continuous mode expands even an episode key into the rest of its show.
     const expanded =
       parsed.searchParams.get("continuous") === "1"
@@ -64,7 +65,7 @@ const client: PlexClient = {
           },
         ],
       }
-    const ratingKey = path.split("/").at(-1)!
+    const ratingKey = defined(path.split("/").at(-1))
     return {
       Metadata: [
         {
@@ -87,9 +88,11 @@ describe("QueuePilot owns Plex queue selection", () => {
   test("does not ask Plex to expand a single selected episode into its series", async () => {
     await createPlayQueue(["101"], options)
     expect(
-      calls.at(-1)!.searchParams.get("continuous"),
+      defined(calls.at(-1)).searchParams.get("continuous"),
     ).toBe("0")
-    expect(calls.at(-1)!.searchParams.get("uri")).toBe(
+    expect(
+      defined(calls.at(-1)).searchParams.get("uri"),
+    ).toBe(
       "server://fixture-server/com.plexapp.plugins.library/library/metadata/101",
     )
   })
@@ -117,12 +120,10 @@ describe("QueuePilot owns Plex queue selection", () => {
     expect(keys).not.toContain("102")
     await createPlayQueue(keys, options)
     expect(
-      calls.at(-1)!.searchParams.get("continuous"),
+      defined(calls.at(-1)).searchParams.get("continuous"),
     ).toBe("0")
     expect(
-      calls
-        .at(-1)!
-        .searchParams.get("uri")!
+      defined(defined(calls.at(-1)).searchParams.get("uri"))
         .split("/")
         .at(-1),
     ).toBe(keys.join(","))

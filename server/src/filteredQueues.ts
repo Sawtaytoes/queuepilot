@@ -87,8 +87,7 @@ export function filterOf(
 ): QueueFilter | null {
   if (!parentIdOf(ent)) return null
   const raw =
-    ent &&
-    ent.filter &&
+    ent?.filter &&
     typeof ent.filter === "object" &&
     !Array.isArray(ent.filter)
       ? (ent.filter as { libraries?: unknown })
@@ -111,7 +110,7 @@ export function passesFilter(
     libraryId = null,
   }: { libraryId?: string | number | null | undefined },
 ): boolean {
-  if (!filter || !filter.libraries.length) return true
+  if (!filter?.libraries.length) return true
   if (libraryId == null || String(libraryId) === "")
     return true
   return filter.libraries.includes(String(libraryId))

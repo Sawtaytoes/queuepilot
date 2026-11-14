@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect } from "react"
 import { Outlet, useLocation, useMatch } from "react-router"
 import { PlayMenu } from "../components/PlayMenu"
 import { SelectionBar } from "../components/SelectionBar"
+import { useEffectOnChange } from "../hooks/useEffectOnChange"
 import { ROUTE_PATHS } from "../lib/routePaths"
 import { startLiveUpdates } from "../state/live"
 import {
@@ -82,7 +83,7 @@ export function AppFrame() {
   }, [])
 
   // A route change closes any floating device menu, as the vanilla `route()` did.
-  useEffect(closePlayMenus, [path])
+  useEffectOnChange(path, () => closePlayMenus())
 
   // The bulk-edit bar acts on the OPEN queue, which only `/q/<id>` has. `useMatch` is
   // react-router asking the same question the route table does, one level above it.

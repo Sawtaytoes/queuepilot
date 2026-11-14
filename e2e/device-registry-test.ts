@@ -21,6 +21,7 @@ process.env.SHIELD_CLIENT_MACHINE_ID = ""
 process.env.SHIELD_CLIENT_URI = ""
 
 import assert from "node:assert/strict"
+import { defined } from "../server/src/defined.js"
 
 const DEVICES_TOPIC = "queuepilot/devices"
 
@@ -69,6 +70,7 @@ const devices = await import("../server/src/devices.js")
  */
 interface PublishedMessage {
   topic: string
+  // biome-ignore lint/suspicious/noExplicitAny: the retained MQTT device payload (an object, or "" to erase it), read as the wire, as documented above
   payload: any
   // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
   opts: { retain?: boolean }
@@ -165,8 +167,8 @@ const SERVER_ROW: PlexTvRow = {
     "a player is announced under its machine id",
     Boolean(polly),
   )
-  // The assertion on the line above is the guard; `!` keeps the next line throwing where it did.
-  const { seen, ...shape } = polly!.payload
+  // The assertion on the line above is the guard; `defined()` keeps the next line throwing.
+  const { seen, ...shape } = defined(polly).payload
   assert.deepEqual(shape, {
     id: "606c3173-polly",
     name: "Pollycracker",

@@ -91,8 +91,12 @@ export function SectionModal() {
   // Open: seed the draft from what the entry stores. `entry` identity changes exactly once
   // per open, which is what makes this the open hook rather than a value watcher.
   useEffect(() => {
-    setStartMs(stored?.startMs ?? null)
-    setEndMs(stored?.endMs ?? null)
+    const opened = sectionOf(
+      (entry?.item ?? null) as QueueItem | null,
+    )
+
+    setStartMs(opened?.startMs ?? null)
+    setEndMs(opened?.endMs ?? null)
     setSeed((previousSeed) => previousSeed + 1)
   }, [entry])
 

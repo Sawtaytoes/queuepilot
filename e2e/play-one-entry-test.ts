@@ -19,6 +19,7 @@ import { tmpdir } from "node:os"
 import nodePath from "node:path"
 import type { ResolvedItem } from "../server/src/engine/resolve.js"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const SCRATCH = mkdtempSync(
   nodePath.join(tmpdir(), "playone-"),
@@ -110,7 +111,7 @@ const client: PlexClient = {
     )
     if (leaves) {
       // The capture group is inside the `if (leaves)`, so `leaves[1]` is present here.
-      const show = leaves[1]!
+      const show = defined(leaves[1])
       const rks = EPISODES[show] || []
       return {
         Metadata: rks.map((rk, index) => ({
@@ -134,10 +135,11 @@ const client: PlexClient = {
       // Same as above for `search[1]`; the inner `[1]` is the query's `title=` capture, whose
       // `[undefined, '']` fallback makes the read a string in the no-match case too.
       const title = decodeURIComponent(
-        (search[1]!.match(/(?:^|&)title=([^&]*)/) || [
-          undefined,
-          "",
-        ])[1]!,
+        defined(
+          (defined(search[1]).match(
+            /(?:^|&)title=([^&]*)/,
+          ) || [undefined, ""])[1],
+        ),
       ).replace(/\+/g, " ")
       if (!EPISODES[title]) return { Metadata: [] }
       return {
@@ -150,7 +152,7 @@ const client: PlexClient = {
       /\/library\/metadata\/([^/?]+)$/,
     )
     if (meta) {
-      const rk = meta[1]!
+      const rk = defined(meta[1])
       return {
         Metadata: [
           {
@@ -223,7 +225,7 @@ res = await lineup("title:gamma")
 ok(
   "`only`: the named entry plays instead of the head",
   res.play.length > 0 &&
-    res.play[0]!.ratingKey === "gamma-e1",
+    defined(res.play[0]).ratingKey === "gamma-e1",
   JSON.stringify(res.play.map((item) => item.ratingKey)),
 )
 
@@ -234,7 +236,7 @@ res = await lineup("title:gamma")
 ok(
   "`only`: plays the entry's next UNWATCHED episode, not its first",
   res.play.length > 0 &&
-    res.play[0]!.ratingKey === "gamma-e2",
+    defined(res.play[0]).ratingKey === "gamma-e2",
   JSON.stringify(res.play.map((item) => item.ratingKey)),
 )
 WATCHED.delete("gamma-e1")
@@ -279,8 +281,8 @@ res = await lineup("title:gamma")
 ok(
   "`only`: the named entry carries its window",
   res.play.length === 2 &&
-    res.play[0]!.sectionStartMs === 750_000 &&
-    res.play[0]!.sectionEndMs === 1_020_000,
+    defined(res.play[0]).sectionStartMs === 750_000 &&
+    defined(res.play[0]).sectionEndMs === 1_020_000,
   JSON.stringify(
     res.play.map((item) => [
       item.ratingKey,
@@ -291,11 +293,11 @@ ok(
 )
 ok(
   "`only`: and the SECOND episode it contributes plays in full",
-  res.play[1]!.sectionStartMs == null &&
-    res.play[1]!.sectionEndMs == null,
+  defined(res.play[1]).sectionStartMs == null &&
+    defined(res.play[1]).sectionEndMs == null,
   JSON.stringify([
-    res.play[1]!.sectionStartMs,
-    res.play[1]!.sectionEndMs,
+    defined(res.play[1]).sectionStartMs,
+    defined(res.play[1]).sectionEndMs,
   ]),
 )
 
@@ -304,8 +306,8 @@ res = await lineup("title:alpha")
 ok(
   "`only`: an entry with no window carries no window fields",
   res.play.length === 1 &&
-    res.play[0]!.sectionStartMs === undefined &&
-    res.play[0]!.sectionEndMs === undefined,
+    defined(res.play[0]).sectionStartMs === undefined &&
+    defined(res.play[0]).sectionEndMs === undefined,
   JSON.stringify(
     res.play.map((item) => [
       item.ratingKey,

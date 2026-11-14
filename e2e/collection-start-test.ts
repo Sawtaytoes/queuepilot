@@ -14,6 +14,7 @@ import type {
   PlexClient,
   Start,
 } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const FAILS: string[] = []
 function ok(
@@ -62,7 +63,8 @@ const client: PlexClient = {
       /\/library\/metadata\/(\d+)\/allLeaves/,
     )
     // The capture group is inside the `if (m)`, so `m[1]` is present whenever we get here.
-    if (match) return { Metadata: episodes(match[1]!) }
+    if (match)
+      return { Metadata: episodes(defined(match[1])) }
     throw new Error(`unexpected path ${path}`)
   },
   async accountToken() {
@@ -74,7 +76,7 @@ const CFG = { queue_sections: [11] }
 // `collectionItems` returns null only for a collection it cannot FIND, and every call below
 // names the one the fake client always answers — so the reads are non-null by construction.
 const keys = (items: readonly ResolvedItem[] | null) =>
-  items!.map((item) => item.ratingKey)
+  defined(items).map((item) => item.ratingKey)
 const items = (start: Start | null) =>
   resolve.collectionItems(
     client,

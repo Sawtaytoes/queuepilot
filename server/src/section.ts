@@ -29,6 +29,8 @@
 // inserts after the currently-playing item. So a located row is checked against the LIVE
 // playQueue before it is used, and an ambiguous reading declines rather than guessing — a
 // section seek on the wrong occurrence is a worse outcome than no section at all.
+
+import { defined } from "./defined.js"
 import type { PlexPlayItem } from "./types.js"
 
 /** How long a recorded boundary stays claimable by `takeBoundary()`. */
@@ -335,7 +337,7 @@ function locate(
     ([, row]) => !row.isDone && row.ratingKey === ratingKey,
   )
   if (candidates.length === 1) {
-    const [index, row] = candidates[0]!
+    const [index, row] = defined(candidates[0])
     return { index, row }
   }
   if (candidates.length > 1) {

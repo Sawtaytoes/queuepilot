@@ -26,9 +26,6 @@
       "includes": ["web/**"],
       "linter": {
         "rules": {
-          "correctness": {
-            "useExhaustiveDependencies": "warn"
-          },
           "style": {
             "noNonNullAssertion": "off"
           },

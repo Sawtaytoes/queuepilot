@@ -52,6 +52,7 @@ import {
   WATCHED_RK,
   startStubPlex,
 } from "./stubs/plex-watch-state.mjs"
+import { defined } from "../server/src/defined.js"
 
 stubSessionDeps()
 
@@ -188,13 +189,20 @@ const child = spawnServer({
 })
 
 try {
-  let items: Record<string, any>[] = []
+  /** A queue item off `/api/queues`; the checks below read its fields loosely. */
+  type QueueItem = Record<string, unknown>
+  /** The part of the `/api/queues` answer this suite reads. */
+  interface QueuesBody {
+    sets: Record<string, { items: QueueItem[] }>
+  }
+  let items: QueueItem[] = []
   for (let attempt = 0; attempt < 50; attempt++) {
     try {
       const body = (await fetch(
         `http://localhost:${PORT}/api/queues`,
-      ).then((response) => response.json())) as any
-      items = body.sets.movies.items
+      ).then((response) => response.json())) as QueuesBody
+      // A missing `movies` queue throws, and the loop retries, as it always has.
+      items = defined(body.sets.movies).items
       break
     } catch {
       await new Promise((resolve) =>
@@ -202,7 +210,7 @@ try {
       )
     }
   }
-  const byKey = (rk: string) =>
+  const byKey = (rk: string): QueueItem =>
     items.find((item) => String(item.ratingKey) === rk) ||
     {}
   ok(
@@ -252,8 +260,9 @@ try {
 
   const body = (await fetch(
     `http://localhost:${PORT}/api/queues?fresh=1`,
-  ).then((response) => response.json())) as any
-  const kidItem = body.sets.kids.items[0] || {}
+  ).then((response) => response.json())) as QueuesBody
+  const kidItem: QueueItem =
+    defined(body.sets.kids).items[0] || {}
   ok(
     "a kid queue does not inherit the owner's Completed state",
     kidItem.isFinished === false && kidItem.done === false,

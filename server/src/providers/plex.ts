@@ -569,8 +569,8 @@ export function plexProvider({
         // The account this lineup was SELECTED as must also be the account it is PLAYED as —
         // carry the resolved binding's uuid on the artifact rather than letting playback
         // re-derive it from the set (which only knows the default binding).
-        userUuid: (binding && binding.user_uuid) || null,
-        accountId: (binding && binding.account_id) ?? null,
+        userUuid: binding?.user_uuid || null,
+        accountId: binding?.account_id ?? null,
       }
     },
 

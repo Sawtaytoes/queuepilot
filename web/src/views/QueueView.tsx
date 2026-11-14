@@ -215,15 +215,21 @@ export function QueueView({
   const [plexSources, setPlexSources] = useState<
     PlexSource[]
   >([])
+  // Keyed on the registry row's three fields, not its identity: a store refresh hands a new
+  // row object with the same values, and that must not reset the add box's filters.
+  const regSetId = regSet?.id
+  const regProviderKind = regSet?.provider_kind
+  const regRequiresProfile = regSet?.requires_profile
   useEffect(() => {
     let isCancelled = false
     setSearchSource("")
     setSearchLibrary("")
     setPlexSources([])
-    if (!regSet || regSet.provider_kind !== "plex") return
+    // A registry row always has an id, so `!regSetId` is "no registry row".
+    if (!regSetId || regProviderKind !== "plex") return
     void api<{ sources: PlexSource[] }>(
       "GET",
-      `/api/plex-sources?profile=${encodeURIComponent(regSet.requires_profile ?? "")}`,
+      `/api/plex-sources?profile=${encodeURIComponent(regRequiresProfile ?? "")}`,
     )
       .then((result) => {
         if (!isCancelled)
@@ -235,11 +241,7 @@ export function QueueView({
     return () => {
       isCancelled = true
     }
-  }, [
-    regSet?.id,
-    regSet?.provider_kind,
-    regSet?.requires_profile,
-  ])
+  }, [regSetId, regProviderKind, regRequiresProfile])
   // Prefer the registry row when present — it always carries effective add_as.
   // The queues payload may still be the shelves skeleton for a beat.
   // The queue's OWN default lane — what an entry with no `placement` of its own means.

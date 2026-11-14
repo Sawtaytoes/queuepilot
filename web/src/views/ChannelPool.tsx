@@ -4,7 +4,12 @@ import {
   Skeleton,
   Spinner,
 } from "@charcuterie/ui"
-import { useEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useEffectEvent,
+  useRef,
+  useState,
+} from "react"
 import { CountPicker } from "../components/CountPicker"
 import { WEIGHT_MAX } from "../components/EntrySettings"
 import { PosterTile } from "../components/PosterTile"
@@ -96,107 +101,128 @@ export function ChannelPool({
 
   const isRewatch = channel.behavior === "rewatch"
 
-  useEffect(() => {
-    const req = ++reqRef.current
-    const chId = channel.id
+  // One load per channel, profile, resample, and re-read (`reloadToken`). The rest of the
+  // channel row is read when a load starts, and a change to it alone does not reload.
+  const loadPreview = useEffectEvent(
+    (request: {
+      channelId: string
+      currentProfile: string | null
+      reloadToken: number
+      resampleToken: number
+    }) => {
+      const req = ++reqRef.current
+      const chId = request.channelId
 
-    setPreview(null)
-    setIsLoading(true)
-    setShowSlowHint(false)
-    setHeading("Eligible titles")
-    const slowTimer = setTimeout(() => {
-      if (req === reqRef.current) setShowSlowHint(true)
-    }, 3000)
+      setPreview(null)
+      setIsLoading(true)
+      setShowSlowHint(false)
+      setHeading("Eligible titles")
+      const slowTimer = setTimeout(() => {
+        if (req === reqRef.current) setShowSlowHint(true)
+      }, 3000)
 
-    const run = async () => {
-      try {
-        const qs = new URLSearchParams()
+      const run = async () => {
+        try {
+          const qs = new URLSearchParams()
 
-        const isResample =
-          resampleToken !== prevResampleRef.current
+          const isResample =
+            request.resampleToken !==
+            prevResampleRef.current
 
-        prevResampleRef.current = resampleToken
+          prevResampleRef.current = request.resampleToken
 
-        if (isResample) qs.set("fresh", "1")
+          if (isResample) qs.set("fresh", "1")
 
-        // A `profiles[]` channel's pool is per-binding — thread the selected
-        // profile through so the Python side previews that binding (legacy sets
-        // omit it → default binding).
-        const profile = channel.has_explicit_profiles
-          ? activeBinding(channel, currentProfile)
-              .plex_user || ""
-          : ""
+          // A `profiles[]` channel's pool is per-binding — thread the selected
+          // profile through so the Python side previews that binding (legacy sets
+          // omit it → default binding).
+          const profile = channel.has_explicit_profiles
+            ? activeBinding(channel, request.currentProfile)
+                .plex_user || ""
+            : ""
 
-        if (profile) qs.set("profile", profile)
+          if (profile) qs.set("profile", profile)
 
-        const queryString = qs.toString()
-        const data = await api<PreviewResponse>(
-          "GET",
-          `/api/generic/${chId}/preview${queryString ? `?${queryString}` : ""}`,
-        )
-
-        // Stale-response guard: two same-target loads in flight would both render.
-        if (req !== reqRef.current) return
-        if (data.error) throw new Error(data.error)
-
-        setPreview(data)
-        setIsLoading(false)
-
-        if (isRewatch) {
-          const movies = data.movie_pool || []
-
-          setHeading(
-            movies.length
-              ? `Eligible titles — ${movies.length} movies (least-watched first)`
-              : "Eligible titles — empty (this queue has no watched movies in its allowed ratings)",
+          const queryString = qs.toString()
+          const data = await api<PreviewResponse>(
+            "GET",
+            `/api/generic/${chId}/preview${queryString ? `?${queryString}` : ""}`,
           )
 
-          return
+          // Stale-response guard: two same-target loads in flight would both render.
+          if (req !== reqRef.current) return
+          if (data.error) throw new Error(data.error)
+
+          setPreview(data)
+          setIsLoading(false)
+
+          if (isRewatch) {
+            const movies = data.movie_pool || []
+
+            setHeading(
+              movies.length
+                ? `Eligible titles — ${movies.length} movies (least-watched first)`
+                : "Eligible titles — empty (this queue has no watched movies in its allowed ratings)",
+            )
+
+            return
+          }
+
+          const buckets = data.buckets || []
+          const shows = buckets.filter(
+            (bucket) =>
+              !String(bucket.ratingKey).startsWith(
+                "section-",
+              ),
+          )
+          const itemBuckets = buckets.filter((bucket) =>
+            String(bucket.ratingKey).startsWith("section-"),
+          )
+          const itemCount = itemBuckets.reduce(
+            (total, itemBucket) =>
+              total + itemBucket.unwatched,
+            0,
+          )
+
+          setHeading(
+            `Eligible titles — ${shows.length} shows` +
+              (itemBuckets.length
+                ? ` + ${itemCount} shorts`
+                : ""),
+          )
+        } catch (error) {
+          if (req !== reqRef.current) return // a newer load owns the pool now
+
+          setHeading("Eligible titles")
+          setIsLoading(false)
+          setStatus(
+            `Preview failed: ${(error as Error).message}`,
+            "err",
+          )
         }
-
-        const buckets = data.buckets || []
-        const shows = buckets.filter(
-          (bucket) =>
-            !String(bucket.ratingKey).startsWith(
-              "section-",
-            ),
-        )
-        const itemBuckets = buckets.filter((bucket) =>
-          String(bucket.ratingKey).startsWith("section-"),
-        )
-        const itemCount = itemBuckets.reduce(
-          (total, itemBucket) =>
-            total + itemBucket.unwatched,
-          0,
-        )
-
-        setHeading(
-          `Eligible titles — ${shows.length} shows` +
-            (itemBuckets.length
-              ? ` + ${itemCount} shorts`
-              : ""),
-        )
-      } catch (error) {
-        if (req !== reqRef.current) return // a newer load owns the pool now
-
-        setHeading("Eligible titles")
-        setIsLoading(false)
-        setStatus(
-          `Preview failed: ${(error as Error).message}`,
-          "err",
-        )
       }
-    }
 
-    void run()
+      void run()
 
-    return () => clearTimeout(slowTimer)
-  }, [
-    channel.id,
-    currentProfile,
-    resampleToken,
-    reloadToken,
-  ])
+      return () => clearTimeout(slowTimer)
+    },
+  )
+
+  useEffect(
+    () =>
+      loadPreview({
+        channelId: channel.id,
+        currentProfile,
+        reloadToken,
+        resampleToken,
+      }),
+    [
+      channel.id,
+      currentProfile,
+      reloadToken,
+      resampleToken,
+    ],
+  )
 
   // The skeleton count: enough to fill the visible pool row so nothing shifts when the real
   // tiles land. A fixed dozen at tile geometry (`--tile` wide, aspect-ratio 2/3 via `.tile`).

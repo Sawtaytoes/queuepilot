@@ -30,6 +30,7 @@ import type {
   ResolvedItem,
 } from "../server/src/engine/resolve.js"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 /** One recorded leaf in the per-show fixtures below. */
 interface Leaf {
@@ -196,9 +197,9 @@ const client: PlexClient = {
       /\/library\/metadata\/(\d+)\/allLeaves/,
     )
     if (leaves) {
-      // Both `!`s assert the match that guards this branch and the fixture it keys into.
+      // `defined()` asserts the match that guards this branch.
       return {
-        Metadata: (LEAVES[leaves[1]!] || []).map(
+        Metadata: (LEAVES[defined(leaves[1])] || []).map(
           (leaf) => ({
             ratingKey: leaf.ratingKey,
             title: leaf.title,
@@ -214,7 +215,7 @@ const client: PlexClient = {
     }
     const meta = path.match(/\/library\/metadata\/(\d+)$/)
     if (meta) {
-      const rk = meta[1]! // the capture group of the match that guards this branch
+      const rk = defined(meta[1]) // the capture group of the match that guards this branch
       if (LEAVES[rk])
         return {
           Metadata: [
@@ -319,11 +320,12 @@ let member = await resolve.resolveMember(
   1,
 )
 // `resolveMember` returns null only for a member it cannot resolve; every entry below names
-// one the fake client always answers, so each `!` fails exactly where the original did.
+// one the fake client always answers, so each `defined()` throws only on a broken fixture.
 ok(
   "skipped episode is dropped; next one plays",
-  JSON.stringify(keys(member!.items)) === '["100003"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)) ===
+    '["100003"]',
+  JSON.stringify(keys(defined(member).items)),
 )
 
 // The control: with nothing skipped, the very same entry plays E2.
@@ -337,8 +339,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "control — unskipped, the same entry plays E2",
-  JSON.stringify(keys(member!.items)) === '["100002"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)) ===
+    '["100002"]',
+  JSON.stringify(keys(defined(member).items)),
 )
 
 // 2. The batch cap counts what SURVIVES the skip. This is the assertion that pins the filter
@@ -353,9 +356,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "batch of 2 fills past the skip (E3 + E4)",
-  JSON.stringify(keys(member!.items)) ===
+  JSON.stringify(keys(defined(member).items)) ===
     '["100003","100004"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)),
 )
 
 // 3. The write side. `newlyDone` is what `queues.markDone` persists as `done: true`.
@@ -451,9 +454,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "control — the collection plays both children",
-  JSON.stringify(keys(member!.items)) ===
+  JSON.stringify(keys(defined(member).items)) ===
     '["410001","420000"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)),
 )
 
 member = await resolve.resolveMember(
@@ -466,8 +469,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "a skipped collection film is dropped from the collection",
-  JSON.stringify(keys(member!.items)) === '["410001"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)) ===
+    '["410001"]',
+  JSON.stringify(keys(defined(member).items)),
 )
 
 member = await resolve.resolveMember(
@@ -480,8 +484,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "a skipped collection child SHOW goes whole",
-  JSON.stringify(keys(member!.items)) === '["420000"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)) ===
+    '["420000"]',
+  JSON.stringify(keys(defined(member).items)),
 )
 
 // …and one of that child show's episodes is skippable on its own.
@@ -495,8 +500,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "a skipped episode INSIDE a collection child is dropped",
-  JSON.stringify(keys(member!.items)) === '["420000"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)) ===
+    '["420000"]',
+  JSON.stringify(keys(defined(member).items)),
 )
 
 // A three-film collection with the middle film skipped and the other two watched is OVER —
@@ -529,8 +535,9 @@ member = await resolve.resolveMember(
 )
 ok(
   "a movie ENTRY ignores the skip list (Remove is its answer)",
-  JSON.stringify(keys(member!.items)) === '["420000"]',
-  JSON.stringify(keys(member!.items)),
+  JSON.stringify(keys(defined(member).items)) ===
+    '["420000"]',
+  JSON.stringify(keys(defined(member).items)),
 )
 
 console.log(

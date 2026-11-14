@@ -22,6 +22,7 @@ import { mkdtempSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import nodePath from "node:path"
 import type { PlexClient } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 const SCRATCH = mkdtempSync(
   nodePath.join(tmpdir(), "section-playback-"),
@@ -105,7 +106,7 @@ const client: PlexClient = {
       /\/library\/metadata\/([^/?]+)$/,
     )
     if (meta) {
-      const rk = meta[1]!
+      const rk = defined(meta[1])
       return {
         Metadata: [
           {
@@ -144,8 +145,8 @@ const entries = resolve.loadEntries("reelqueue")
 ok(
   "the two lines of the same file key apart (an `id:` on the second)",
   entries.length === 3 &&
-    entries[0]!.key === "rk:1001" &&
-    entries[1]!.key === "id:8f3a2c",
+    defined(entries[0]).key === "rk:1001" &&
+    defined(entries[1]).key === "id:8f3a2c",
   JSON.stringify(entries.map((entry) => entry.key)),
 )
 
@@ -181,10 +182,10 @@ const episodes = built.play.filter((it) =>
 ok(
   "an entry contributing two episodes windows only the FIRST",
   episodes.length === 2 &&
-    episodes[0]!.sectionStartMs === 750_000 &&
-    episodes[0]!.sectionEndMs === 1_020_000 &&
-    episodes[1]!.sectionStartMs == null &&
-    episodes[1]!.sectionEndMs == null,
+    defined(episodes[0]).sectionStartMs === 750_000 &&
+    defined(episodes[0]).sectionEndMs === 1_020_000 &&
+    defined(episodes[1]).sectionStartMs == null &&
+    defined(episodes[1]).sectionEndMs == null,
   JSON.stringify(
     episodes.map((episode) => [
       episode.ratingKey,
@@ -691,7 +692,9 @@ const script: {
 ]
 const two = await runWatcher(
   () => {
-    const step = script[Math.min(stage, script.length - 1)]!
+    const step = defined(
+      script[Math.min(stage, script.length - 1)],
+    )
     stage += 1
     return {
       ratingKey: step.ratingKey,
@@ -700,8 +703,9 @@ const two = await runWatcher(
   },
   {
     placeAt: () => {
-      const step =
-        script[Math.min(stage - 1, script.length - 1)]!
+      const step = defined(
+        script[Math.min(stage - 1, script.length - 1)],
+      )
       return {
         index: step.index,
         ratingKeys: ["1001", "1001", "2002-e1", "2002-e2"],

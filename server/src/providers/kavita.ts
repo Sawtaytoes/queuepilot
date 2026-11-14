@@ -251,22 +251,28 @@ function chapterItem(
       : { chapter: entry as KavitaChapterDto, volume: null }
   // A whole-volume chapter is presented AS the volume: that is what the reader opens, what
   // Kavita's own UI calls it, and the only number that means anything to a person.
-  const isPresentedAsVolume = isWholeVolume(ch, volume)
+  // `isWholeVolume` is false for a null volume, so `presentedVolume` is set exactly when the
+  // chapter is presented as its volume.
+  const presentedVolume = isWholeVolume(ch, volume)
+    ? volume
+    : null
+  const isPresentedAsVolume = presentedVolume != null
   return {
     // `id` is optional on the DTO and every caller has already proved it non-null
     // (orderedUnread rejects a chapter without one), so this asserts rather than defaults —
     // a `?? 0` here would mint a chapter id that does not exist.
     chapterId: ch.id as number,
     seriesId: seriesId as number | string,
-    title: isPresentedAsVolume
-      ? volume!.name ||
-        `Volume ${volume!.number ?? volume!.minNumber ?? "?"}`
+    title: presentedVolume
+      ? presentedVolume.name ||
+        `Volume ${presentedVolume.number ?? presentedVolume.minNumber ?? "?"}`
       : ch.titleName ||
         ch.title ||
         ch.range ||
         String(ch.number),
-    number: isPresentedAsVolume
-      ? (volume!.number ?? volume!.minNumber)
+    number: presentedVolume
+      ? (presentedVolume.number ??
+        presentedVolume.minNumber)
       : ch.number,
     // What this item IS, for the tile's wording. Per ITEM and not per provider: one Kavita
     // library holds volume-based manga beside chapter-based webtoons, so `provider.unit` is
@@ -347,15 +353,17 @@ function orderedAll(
   }
 
   return merged.sort((left, right) => {
-    const hasLeftVolume = left.volume != null
-    const hasRightVolume = right.volume != null
+    const leftVolume = left.volume
+    const rightVolume = right.volume
+    const hasLeftVolume = leftVolume != null
+    const hasRightVolume = rightVolume != null
     // Volumes before loose chapters — the catch-up read leads; weekly releases trail.
     if (hasLeftVolume !== hasRightVolume)
       return hasLeftVolume ? -1 : 1
     if (hasLeftVolume && hasRightVolume) {
       return (
-        (left.volume!.minNumber ?? 0) -
-          (right.volume!.minNumber ?? 0) ||
+        (leftVolume.minNumber ?? 0) -
+          (rightVolume.minNumber ?? 0) ||
         (left.chapter.minNumber ?? 0) -
           (right.chapter.minNumber ?? 0)
       )
@@ -925,9 +933,7 @@ export function kavitaProvider({
           ? libraries
           : (cfgAny.libraries as string[] | undefined) || []
       ).map(String)
-      const curated = entries.filter(
-        (entry) => entry && entry.id,
-      )
+      const curated = entries.filter((entry) => entry?.id)
       const addAs = normalizeAddAs(cfgAny.add_as, {
         kind: cfgAny.kind,
         source: cfgAny.source,

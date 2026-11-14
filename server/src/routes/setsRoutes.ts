@@ -1,5 +1,6 @@
 import { Hono } from "hono"
 import * as cache from "../cache.js"
+import { defined } from "../defined.js"
 import { toWeight } from "../engine/weight.js"
 import {
   ROTATION_LENGTH,
@@ -238,14 +239,14 @@ export function setsRoutes(): Hono {
         const shared =
           /^server:([a-zA-Z0-9-]+):rk:(\d+)$/.exec(rk)
         if (shared) {
-          const bareKey = shared[2]!
+          const bareKey = defined(shared[2])
           try {
             const scope = await plex.profileScope(
               set.requires_profile || null,
             )
             const access = await plexServerAccessForProfile(
               scope.account ?? null,
-              shared[1]!,
+              defined(shared[1]),
             )
             if (access) {
               const md = (
@@ -309,7 +310,7 @@ export function setsRoutes(): Hono {
   app.get("/sets/:id/members", async (context) => {
     try {
       const set = await sets.getSet(context.req.param("id"))
-      if (!set || set.source !== "rotation")
+      if (set?.source !== "rotation")
         return context.json(
           { error: "not a rotation channel" },
           400,
@@ -348,9 +349,9 @@ export function setsRoutes(): Hono {
           members: values.map((value, index) => ({
             index,
             raw: value,
-            // `cores` is index-aligned with `values` by contract, which is what the `!` says —
-            // `noUncheckedIndexedAccess` is the only reason it is written.
-            ...cores[index]!,
+            // `cores` is index-aligned with `values` by contract. Spreading a missing one adds
+            // no fields, so the spread needs no check.
+            ...cores[index],
             start:
               value &&
               typeof value === "object" &&

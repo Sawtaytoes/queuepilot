@@ -1,5 +1,10 @@
 import { Button } from "@charcuterie/ui"
-import { useCallback, useEffect, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useState,
+} from "react"
 import { api } from "../lib/api"
 import { startNamesUnit, withUnit } from "../lib/section"
 import {
@@ -15,10 +20,12 @@ import type {
   ProviderVocabulary,
   ShowEpisodes,
   StartPoint,
+  TileEntry,
 } from "../lib/types"
 import { applyVocab, vocabForSet } from "../lib/vocab"
 import {
   closeStartModal,
+  type EntryActions,
   useOverlays,
 } from "../state/overlays"
 import { useStore } from "../state/store"
@@ -209,111 +216,118 @@ export function StartModal() {
     [loadEpisodes],
   )
 
-  // Open: reset, then fetch whatever this entry kind needs.
-  useEffect(() => {
-    if (!entry || !item) return
+  // Open: reset, then fetch whatever this entry kind needs. `entry` identity changes exactly
+  // once per open, and only that runs it: the vocabulary and the loaders are read when it does.
+  const openEntry = useEffectEvent(
+    (opened: EntryActions, openItem: TileEntry) => {
+      let isStale = false
 
-    let isStale = false
+      setNote("")
+      setChildren([])
+      setSeriesValue("")
+      setEpisodeData(null)
+      setSeasonValue("")
+      setEpisodeValue("")
+      setIsEpisodeShown(false)
 
-    setNote("")
-    setChildren([])
-    setSeriesValue("")
-    setEpisodeData(null)
-    setSeasonValue("")
-    setEpisodeValue("")
-    setIsEpisodeShown(false)
-
-    const run = async () => {
-      if (item.type !== "collection") {
-        // A show entry: the start is {season, episode} of this series. Preselect
-        // the override if there is one, else where it would play next anyway.
-        await loadEpisodes(
-          String(item.ratingKey),
-          item.start ?? (item.nextEp as StartPoint | null),
-        )
-
-        return
-      }
-
-      // A collection entry: pick WHICH member to begin at first — members before it
-      // are skipped.
-      let kids: CollectionChild[] = []
-
-      // Same scoping the episode list gets, and for the same reason: every member's
-      // "N/M watched" is one account's. A channel knows its binding's uuid; a queue sends
-      // only its `set` and the server reads the profile off `requires_profile`.
-      const kidsQs = [
-        entry?.setId
-          ? `set=${encodeURIComponent(entry.setId)}`
-          : "",
-        entry?.accountUuid
-          ? `uuid=${encodeURIComponent(entry.accountUuid)}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("&")
-
-      try {
-        ;({ children: kids } = await api<{
-          children: CollectionChild[]
-        }>(
-          "GET",
-          `/api/collection/${item.ratingKey}/children${kidsQs ? `?${kidsQs}` : ""}`,
-        ))
-      } catch {
-        if (!isStale) {
-          setNote(
-            translate(
-              "Could not read this collection’s members from Plex.",
-            ),
+      const run = async () => {
+        if (openItem.type !== "collection") {
+          // A show entry: the start is {season, episode} of this series. Preselect
+          // the override if there is one, else where it would play next anyway.
+          await loadEpisodes(
+            String(openItem.ratingKey),
+            openItem.start ??
+              (openItem.nextEp as StartPoint | null),
           )
+
+          return
         }
 
-        return
+        // A collection entry: pick WHICH member to begin at first — members before it
+        // are skipped.
+        let kids: CollectionChild[] = []
+
+        // Same scoping the episode list gets, and for the same reason: every member's
+        // "N/M watched" is one account's. A channel knows its binding's uuid; a queue sends
+        // only its `set` and the server reads the profile off `requires_profile`.
+        const kidsQs = [
+          opened.setId
+            ? `set=${encodeURIComponent(opened.setId)}`
+            : "",
+          opened.accountUuid
+            ? `uuid=${encodeURIComponent(opened.accountUuid)}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("&")
+
+        try {
+          ;({ children: kids } = await api<{
+            children: CollectionChild[]
+          }>(
+            "GET",
+            `/api/collection/${openItem.ratingKey}/children${kidsQs ? `?${kidsQs}` : ""}`,
+          ))
+        } catch {
+          if (!isStale) {
+            setNote(
+              translate(
+                "Could not read this collection’s members from Plex.",
+              ),
+            )
+          }
+
+          return
+        }
+
+        if (isStale) return
+
+        setChildren(kids)
+
+        const want =
+          openItem.start && openItem.start.series != null
+            ? String(openItem.start.series)
+            : openItem.nextEp?.memberRatingKey || null
+        // A hand-written YAML entry may name the member by title rather than
+        // ratingKey — the engine matches either, so the picker must too.
+        const byRatingKey = kids.some(
+          (kid) => String(kid.ratingKey) === String(want),
+        )
+          ? want
+          : kids.find(
+              (kid) =>
+                kid.title.toLowerCase() ===
+                String(want || "").toLowerCase(),
+            )?.ratingKey
+        const chosen = pick(
+          kids.map((kid) => ({
+            label: kid.title,
+            value: String(kid.ratingKey),
+          })),
+          byRatingKey,
+        )
+
+        setSeriesValue(chosen)
+        await paintMember(
+          chosen,
+          kids,
+          openItem.start,
+          openItem.nextEp,
+        )
       }
 
-      if (isStale) return
+      void run()
 
-      setChildren(kids)
+      return () => {
+        isStale = true
+      }
+    },
+  )
 
-      const want =
-        item.start && item.start.series != null
-          ? String(item.start.series)
-          : item.nextEp?.memberRatingKey || null
-      // A hand-written YAML entry may name the member by title rather than
-      // ratingKey — the engine matches either, so the picker must too.
-      const byRatingKey = kids.some(
-        (kid) => String(kid.ratingKey) === String(want),
-      )
-        ? want
-        : kids.find(
-            (kid) =>
-              kid.title.toLowerCase() ===
-              String(want || "").toLowerCase(),
-          )?.ratingKey
-      const chosen = pick(
-        kids.map((kid) => ({
-          label: kid.title,
-          value: String(kid.ratingKey),
-        })),
-        byRatingKey,
-      )
+  useEffect(() => {
+    if (!entry?.item) return
 
-      setSeriesValue(chosen)
-      await paintMember(
-        chosen,
-        kids,
-        item.start,
-        item.nextEp,
-      )
-    }
-
-    void run()
-
-    return () => {
-      isStale = true
-    }
-    // `entry` identity changes exactly once per open.
+    return openEntry(entry, entry.item)
   }, [entry])
 
   if (!entry || !item) {

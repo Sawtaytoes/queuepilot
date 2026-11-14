@@ -1,8 +1,10 @@
 import { IconButton } from "@charcuterie/ui"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 
 import {
   countPickerPresets,
+  countPresetKey,
+  countPresetsFromKey,
   isCountPreset,
 } from "../lib/countPicker"
 import { SelectListbox } from "./SelectListbox"
@@ -127,7 +129,12 @@ export function CountPicker({
   // The preset list is depended on by its CONTENTS, not by its identity: a caller passing an
   // inline `[12, 24, 60]` hands a fresh array every render, and this effect resets the draft —
   // it would wipe what you are typing on every keystroke.
-  const commonKey = presets.join()
+  const commonKey = countPresetKey(presets)
+  // The same list, rebuilt from its key, so its identity changes only when its contents do.
+  const stablePresets = useMemo(
+    () => countPresetsFromKey(commonKey),
+    [commonKey],
+  )
 
   useEffect(() => {
     if (value === INFINITE) {
@@ -137,10 +144,10 @@ export function CountPicker({
     }
 
     setDraft(String(value))
-    if (!isCountPreset(value, defaultValue, common))
+    // `stablePresets` already holds the default, so this is `presets.includes(value)`.
+    if (!isCountPreset(value, defaultValue, stablePresets))
       setIsCustom(true)
-    // `common` is read through `commonKey`, which is what makes the dep stable.
-  }, [commonKey, defaultValue, value])
+  }, [stablePresets, defaultValue, value])
 
   const commit = (raw: string) => {
     const parsed = parseInt(raw, 10)

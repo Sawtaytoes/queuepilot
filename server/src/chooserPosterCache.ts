@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
 import { chooserPoster } from "./chooserPoster.js"
+import { defined } from "./defined.js"
 import { providerIdForSet } from "./providers/blocks.js"
 import { isSetAvailable } from "./season.js"
 import * as sets from "./sets.js"
@@ -78,7 +79,10 @@ export async function cachedChooserPoster(
   }
   return cached && !isRefresh
     ? cached.image
-    : pending.get(key)!
+    : defined(
+        pending.get(key),
+        "the pending poster request",
+      )
 }
 /** Both configuration and image generations invalidate display and browser caches. */
 export function chooserPosterPath(set: SetRegistryEntry) {

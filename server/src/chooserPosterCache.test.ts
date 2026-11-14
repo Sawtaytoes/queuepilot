@@ -1,4 +1,5 @@
 import { expect, test, vi } from "vitest"
+import { defined } from "./defined.js"
 
 const mocks = vi.hoisted(() => ({
   poster: vi.fn(),
@@ -115,7 +116,7 @@ test("confirmed unavailable images are cached briefly without provider work on e
 })
 
 test("an obsolete provider request cannot overwrite a newer configuration generation", async () => {
-  const set = (await getSet("generation"))!
+  const set = defined(await getSet("generation"))
   const before = chooserPosterPath(set)
   const deferred = Promise.withResolvers<{
     buffer: Buffer
@@ -148,7 +149,7 @@ test("an obsolete provider request cannot overwrite a newer configuration genera
 })
 
 test("a null refresh removes previous artwork and negative results expire", async () => {
-  const set = (await getSet("removed"))!
+  const set = defined(await getSet("removed"))
   mocks.poster.mockResolvedValue({
     buffer: Buffer.from("old"),
     contentType: "image/jpeg",

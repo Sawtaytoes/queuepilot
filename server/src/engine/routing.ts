@@ -8,6 +8,8 @@
 // onto it. `e2e/binding-parity.mjs` diffs every function against the Python oracle
 // (`python -m queue_builder.cli route` + `… sections`) over `e2e/fixtures/routing.sets.yaml`,
 // and CI runs that gate — so a drift from Python is a red build, not a wrong play on the TV.
+
+import { defined } from "../defined.js"
 import { SEC_MOVIES } from "../env.js"
 import { errMessage, isNodeError } from "../errors.js"
 import type { FilterableEntry } from "../filteredQueues.js"
@@ -139,9 +141,7 @@ function bindingFrom(
     value: unknown,
   ): Set<string> | null => {
     const list = value as unknown[] | null | undefined
-    return list && list.length
-      ? new Set(list.map(String))
-      : null
+    return list?.length ? new Set(list.map(String)) : null
   }
   const wca = (
     (src.watch_count_accounts as
@@ -234,9 +234,9 @@ export function loadSets(
               bindingFrom(profile as BindingSource),
             )
         : [bindingFrom(ent)]
-      // Non-null: `hasExplicitProfiles` is true only when at least one item passed isBinding,
+      // Present: `hasExplicitProfiles` is true only when at least one item passed isBinding,
       // and the else-branch synthesizes exactly one. Never empty.
-      const def = profiles[0]!
+      const def = defined(profiles[0])
       cfg = {
         source: "rotation",
         episodic_sections: sections,
@@ -519,13 +519,12 @@ export function bindingFor(
   // built-in/ultra-legacy shapes this deliberately still accepts).
   const profiles =
     cfg && (cfg as { profiles?: EngineBinding[] }).profiles
-  if (!profiles || !profiles.length)
-    return bindingFrom(cfg || {})
+  if (!profiles?.length) return bindingFrom(cfg || {})
   if (profileTitle) {
     for (const profile of profiles)
       if (profile.plex_user === profileTitle) return profile
   }
-  return profiles[0]! // non-empty per the guard above
+  return defined(profiles[0]) // non-empty per the guard above
 }
 
 // Port of config.channel_for: route a set:"auto" scan to a function-channel id, or null to
@@ -550,8 +549,7 @@ export function channelFor(
     // `!cfg` replaces the original `|| {}`: an id in `order` with no entry in `sets` failed the
     // `source !== 'rotation'` test there and is skipped here — same walk, same result.
     const cfg = reg.sets[sid]
-    if (!cfg || cfg.source !== "rotation" || !cfg.enabled)
-      continue
+    if (cfg?.source !== "rotation" || !cfg.enabled) continue
     if (!cfg.has_explicit_profiles || cfg.superseded_by)
       continue
     const isRewatch =
@@ -632,8 +630,8 @@ export function forSet(
   profileTitle: string | null = "",
   reg: RoutingRegistry | null = loadSets(),
 ): ForSetResult | null {
-  const cfg = reg && reg.sets[sid]
-  if (!cfg || cfg.source !== "rotation") return null
+  const cfg = reg?.sets[sid]
+  if (cfg?.source !== "rotation") return null
   const binding = bindingFor(cfg, profileTitle || null)
   return {
     via: "engine-node",

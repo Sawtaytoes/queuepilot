@@ -130,26 +130,28 @@ ok(
 const shelfHeadingBranding = await page.$$eval(
   ".shelf h2",
   (els) =>
-    els.map((el) => ({
-      hasFaceMarker: Boolean(
-        el.querySelector("[data-person-face]"),
-      ),
-      hasProviderLabel: Boolean(
-        el.querySelector(".qprovider"),
-      ),
-      hasAudienceChevron: Boolean(
-        el.querySelector(".chev"),
-      ),
-      headingAlignment: getComputedStyle(el).alignItems,
-      peopleAlignment: el.querySelector(".qpeople")
-        ? getComputedStyle(el.querySelector(".qpeople")!)
-            .alignItems
-        : "",
-      openAlignment: el.querySelector(".open")
-        ? getComputedStyle(el.querySelector(".open")!)
-            .alignItems
-        : "",
-    })),
+    els.map((el) => {
+      const people = el.querySelector(".qpeople")
+      const open = el.querySelector(".open")
+      return {
+        hasFaceMarker: Boolean(
+          el.querySelector("[data-person-face]"),
+        ),
+        hasProviderLabel: Boolean(
+          el.querySelector(".qprovider"),
+        ),
+        hasAudienceChevron: Boolean(
+          el.querySelector(".chev"),
+        ),
+        headingAlignment: getComputedStyle(el).alignItems,
+        peopleAlignment: people
+          ? getComputedStyle(people).alignItems
+          : "",
+        openAlignment: open
+          ? getComputedStyle(open).alignItems
+          : "",
+      }
+    }),
 )
 ok(
   "queue shelf headings use avatar badges and omit repeated labels",

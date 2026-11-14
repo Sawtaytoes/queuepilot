@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test"
 import { smokeServers } from "./ports.js"
+import { defined } from "../../server/src/defined.js"
 
 test("queue shelves retain their colors after reload and use the shared categorical palette", async ({
   page,
@@ -13,7 +14,7 @@ test("queue shelves retain their colors after reload and use the shared categori
   await page.waitForFunction(() => {
     const status = document.querySelector("#status")
     return (
-      (!status || !status.textContent) &&
+      !status?.textContent &&
       !document.querySelector("#revalidating")
     )
   })
@@ -25,7 +26,7 @@ test("queue shelves retain their colors after reload and use the shared categori
   if (!countBounds) throw new Error("Missing queue count")
   expect(
     countBounds.x + countBounds.width,
-  ).toBeLessThanOrEqual(page.viewportSize()!.width)
+  ).toBeLessThanOrEqual(defined(page.viewportSize()).width)
   const colors = await shelves.evaluateAll((elements) =>
     elements.map((element) => ({
       id: element.getAttribute("data-set"),

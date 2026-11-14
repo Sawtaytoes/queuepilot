@@ -17,6 +17,7 @@ import type { ChildProcess } from "node:child_process"
  * copy of server/src/routes that rots on its own; so the cast lives HERE, once, and every
  * read below is deliberately unchecked.
  */
+// biome-ignore lint/suspicious/noExplicitAny: the app's HTTP JSON response, whose shape server/src/routes fixes; read unchecked, as documented above
 type JsonBody = Record<string, any>
 
 const PORT = 18772
@@ -550,9 +551,7 @@ try {
   ns = reg.sets.find((set: JsonBody) => set.id === rid)
   ok(
     "updateSet persists starts keyed by ratingKey",
-    ns.starts &&
-      ns.starts["777"] &&
-      ns.starts["777"].season === 2 &&
+    ns.starts?.["777"]?.season === 2 &&
       ns.starts["777"].episode === 5,
   )
   ok(

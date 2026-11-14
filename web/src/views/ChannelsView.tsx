@@ -1,5 +1,5 @@
 import { Button } from "@charcuterie/ui"
-import { useEffect, useState } from "react"
+import { useEffect, useEffectEvent, useState } from "react"
 import {
   isPullSet,
   OpenQueueButton,
@@ -80,17 +80,25 @@ export function ChannelsView({
   )
   const isMovies = channel?.behavior === "rewatch"
 
-  useEffect(() => {
-    if (!channel) return
+  // Re-derive only when the selected channel changes. The channel row and the profile are
+  // read when it does, and a change to either alone does not re-derive.
+  const selectChannel = useEffectEvent(
+    (selectedId: string | undefined) => {
+      if (!channel || selectedId === undefined) return
 
-    setChannelSelection(
-      channel.id,
-      channel.has_explicit_profiles
-        ? resolveInitialProfile(channel, currentProfile)
-        : null,
-    )
-    // Re-derive only when the selected channel changes.
-  }, [channel?.id])
+      setChannelSelection(
+        selectedId,
+        channel.has_explicit_profiles
+          ? resolveInitialProfile(channel, currentProfile)
+          : null,
+      )
+    },
+  )
+  const channelId = channel?.id
+
+  useEffect(() => {
+    selectChannel(channelId)
+  }, [channelId])
 
   if (!channel) {
     return <div className="view" id="channels" />

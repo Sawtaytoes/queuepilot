@@ -369,8 +369,17 @@ The older single-baseline shelf-heading guidance below is superseded by that rec
   runs `biome check` and then `eslint .` in check mode, and CI runs the same script; `pnpm run
   lint:fix` writes. Both configs are adopted whole from Charcuterie, and a house rule that
   belongs to the fleet is changed there, never turned off here. `.mjs`, because the root
-  declares no module `type`. Every rule is at the preset's level, `lint` passes no
-  `--max-warnings`, and an unused `eslint-disable` comment is an error. A name that something
+  declares no module `type`. Every ESLint rule is at the preset's level. `biome.json` still
+  turns off five Biome rules that still have findings: `style/noNonNullAssertion` (54),
+  `a11y/noNoninteractiveTabindex` (1), `a11y/noStaticElementInteractions` (1) and
+  `a11y/useKeyWithClickEvents` (2) in `web/`, and `style/noDescendingSpecificity` (43) in
+  `web/src/styles/app.css`. **A warning fails the run like an error**: `lint` is `biome check --error-on-warnings && eslint . --max-warnings 0`
+  ([decision](docs/decisions/2026-11-14-lint-warnings-fail-ci.md)). An unused `eslint-disable`
+  comment is an error. Fix a finding in the code: `defined()` (`server/src/defined.ts`) or a
+  guard instead of a `!`, an Effect Event (`useEffectEvent`, or
+  `web/src/hooks/useEffectOnChange.ts`) instead of a hook dependency that would make an
+  effect run at new times. A `biome-ignore` is for the same boundary shapes as below, with
+  the contract in its reason. A name that something
   outside TypeScript fixes (an HTTP, YAML, SQLite, MQTT, Plex or Kavita field, or one an
   untyped e2e stub reads) keeps its name, with an `eslint-disable-next-line` and a reason on
   that line; never rename one of those to satisfy the linter. Biome does not sort imports in `e2e/`, because there the import order is the
@@ -1545,7 +1554,7 @@ the source of truth. The fast loop, from the repo root (pnpm 12.9.1, frozen work
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm run lint   # Biome + ESLint over web/, server/ and shared/
+pnpm run lint   # Biome + ESLint over web/, server/, shared/ and e2e/; a warning fails it
 pnpm --filter queuepilot-web run typecheck && pnpm --filter queuepilot-web run test
 pnpm --filter queuepilot-server run typecheck && pnpm --filter queuepilot-e2e run typecheck
 pnpm --filter queuepilot-web run build && pnpm --filter queuepilot-server run build

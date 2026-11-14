@@ -134,7 +134,7 @@ async function ensurePlex(attempts = 2): Promise<boolean> {
 export function companionAddr(
   device: Device | null | undefined,
 ): [string, number] {
-  const uri = (device && device.uri) || SHIELD_CLIENT_URI
+  const uri = device?.uri || SHIELD_CLIENT_URI
   if (uri) {
     try {
       const withScheme = String(uri).includes("://")
@@ -160,9 +160,7 @@ export function companionAddr(
 export function isConnRefused(
   result: { error?: string } | null | undefined,
 ): boolean {
-  const err = String(
-    (result && result.error) || "",
-  ).toLowerCase()
+  const err = String(result?.error || "").toLowerCase()
   return (
     err.includes("connection refused") ||
     err.includes("econnrefused") ||
@@ -406,7 +404,7 @@ async function drivePlay(
   cancel: CancelFlag | null,
   userUuid: string | null = null,
 ): Promise<PlaybackResult | PushResult> {
-  const mode = (device && device.mode) || PLAYBACK_MODE
+  const mode = device?.mode || PLAYBACK_MODE
   if (mode !== "client") {
     return playback.playRatingKeys(items, {
       setName,
@@ -444,10 +442,10 @@ async function drivePlay(
       offset,
       userUuid,
     })
-    if (result && result.played) return result
+    if (result?.played) return result
     if (isConnRefused(result)) {
       console.log(
-        `[driver] play attempt ${attempt + 1}/${attempts} refused: ${result && result.error}; ` +
+        `[driver] play attempt ${attempt + 1}/${attempts} refused: ${result?.error}; ` +
           "re-opening Plex and retrying",
       )
       if (ADB_ENABLED) await ensurePlex()
@@ -459,7 +457,7 @@ async function drivePlay(
     return result
   }
   console.log(
-    `[driver] play still refused after ${attempts} attempts: ${result && result.error}`,
+    `[driver] play still refused after ${attempts} attempts: ${result?.error}`,
   )
   return { error: PLAY_ERROR, _diag: result }
 }
@@ -564,7 +562,7 @@ async function driveToPlayingOnDevice({
   // Only a POSITIVE mismatch is terminal. The account comparison abstains when it cannot
   // tell (a session with no user stamp, Plex unreachable), because failing a play that is
   // probably fine is worse than an audit that occasionally has no opinion.
-  const mode = (device && device.mode) || PLAYBACK_MODE
+  const mode = device?.mode || PLAYBACK_MODE
   if (
     result &&
     (result as PlaybackResult).played &&

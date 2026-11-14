@@ -416,7 +416,7 @@ export function isExtraOrPromo(
 export function isCountableEpisode(
   ep: EpisodeLike | null | undefined,
 ): boolean {
-  if (!ep || !ep.duration) return false
+  if (!ep?.duration) return false
   return !isExtraOrPromo(ep)
 }
 
@@ -486,7 +486,7 @@ export async function accountToken(
       PLEX_TOKEN,
       "POST",
     )
-    const auth = sw && sw.authToken
+    const auth = sw?.authToken
     if (auth) {
       const resources = await plextv<
         | {
@@ -507,7 +507,7 @@ export async function accountToken(
       const row = rows.find(
         (row) => row.clientIdentifier === mid,
       )
-      token = (row && row.accessToken) || null
+      token = row?.accessToken || null
     }
   } catch {
     token = null // network/plex.tv hiccup: fall back to admin token
@@ -539,7 +539,7 @@ export async function homeUsers(): Promise<HomeUser[]> {
   }
   const rows = Array.isArray(data)
     ? data
-    : (data && data.users) || []
+    : data?.users || []
   return rows
     .map((row) => ({
       name:
@@ -613,7 +613,7 @@ export async function profileScope(
   profileTitle: string | null | undefined,
 ): Promise<AccountScope> {
   const user = await profileUser(profileTitle)
-  if (!user || !user.uuid) return {}
+  if (!user?.uuid) return {}
   const token = await accountToken(user.uuid)
   return token ? { token, account: user.uuid } : {}
 }
@@ -1820,7 +1820,7 @@ export async function thumb(
     const md = (container(
       await plexGet(`/library/metadata/${ratingKey}`),
     ).Metadata || [])[0]
-    tp = md && md.thumb ? md.thumb : null
+    tp = md?.thumb ? md.thumb : null
     if (tp) _thumbPath.set(ratingKey, tp)
   }
   if (!tp) return null

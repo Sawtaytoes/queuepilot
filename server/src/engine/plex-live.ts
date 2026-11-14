@@ -23,7 +23,7 @@ export function liveClient(): PlexClient {
       const data = (await plexGet(path, token)) as {
         MediaContainer?: PlexMediaContainer
       } | null
-      return (data && data.MediaContainer) || {}
+      return data?.MediaContainer || {}
     },
     // null uuid => admin token path (engine treats null as "use default X-Plex-Token").
     async accountToken(

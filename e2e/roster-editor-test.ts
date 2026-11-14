@@ -90,7 +90,16 @@ groups:
 const PORT = 18812
 const base = `http://localhost:${PORT}`
 
-type Answer = { status: number; body: Record<string, any> }
+/** The fields of a `/api/people` answer that the checks below read. */
+interface AnswerBody {
+  person?: {
+    id?: unknown
+    displayName?: unknown
+    position?: unknown
+  }
+  unfiled?: { queues?: unknown; groups?: unknown }
+}
+type Answer = { status: number; body: AnswerBody }
 
 const call = async (
   method: string,
@@ -107,7 +116,7 @@ const call = async (
     method,
   })
   return {
-    body: (await res.json()) as Record<string, any>,
+    body: (await res.json()) as AnswerBody,
     status: res.status,
   }
 }

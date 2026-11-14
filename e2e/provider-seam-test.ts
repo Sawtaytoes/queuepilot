@@ -27,6 +27,7 @@ import {
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { errMessage } from "../server/src/errors.js"
+import { defined } from "../server/src/defined.js"
 
 const SCRATCH = mkdtempSync(
   path.join(tmpdir(), "providers-"),
@@ -218,9 +219,11 @@ ok(
   "the public view exposes `configured` as a BOOLEAN and no token at all",
   () => {
     // The fixture defines `kavita`, so the lookup is non-null by construction.
-    const view = config
-      .publicList()
-      .find((provider) => provider.id === "kavita")!
+    const view = defined(
+      config
+        .publicList()
+        .find((provider) => provider.id === "kavita"),
+    )
     assert.equal(view.configured, true)
     const serialized = JSON.stringify(config.publicList())
     // Not the value, and not a masked prefix either — a masked token is still a leak when the
@@ -256,15 +259,21 @@ ok(
       requires_profile: "Younger Kids",
     }
     const providerBlocks = blocks.blocksForSet(cfg)
-    // Every `b[0]!` below asserts the `b.length` check on the line above it.
+    // Every `defined(providerBlocks[0])` below asserts the length check on the line above it.
     assert.equal(providerBlocks.length, 1)
-    assert.equal(providerBlocks[0]!.provider, "plex")
-    assert.equal(providerBlocks[0]!.profile, "Younger Kids")
-    assert.deepEqual(providerBlocks[0]!.libraries, [
+    assert.equal(
+      defined(providerBlocks[0]).provider,
+      "plex",
+    )
+    assert.equal(
+      defined(providerBlocks[0]).profile,
+      "Younger Kids",
+    )
+    assert.deepEqual(defined(providerBlocks[0]).libraries, [
       "5",
       "15",
     ])
-    assert.equal(providerBlocks[0]!.implicit, true)
+    assert.equal(defined(providerBlocks[0]).implicit, true)
   },
 )
 
@@ -291,8 +300,14 @@ ok("an explicit single block round-trips", () => {
   }
   const providerBlocks = blocks.blocksForSet(cfg)
   assert.equal(providerBlocks.length, 1)
-  assert.equal(providerBlocks[0]!.provider, "kavita")
-  assert.deepEqual(providerBlocks[0]!.libraries, ["5", "2"])
+  assert.equal(
+    defined(providerBlocks[0]).provider,
+    "kavita",
+  )
+  assert.deepEqual(defined(providerBlocks[0]).libraries, [
+    "5",
+    "2",
+  ])
   assert.equal(blocks.providerIdForSet(cfg), "kavita")
 })
 
@@ -342,7 +357,7 @@ ok(
       ],
     }
     const providerBlocks = blocks.blocksForSet(cfg)
-    for (const id of providerBlocks[0]!.libraries) {
+    for (const id of defined(providerBlocks[0]).libraries) {
       assert.doesNotMatch(
         id,
         /:/,
@@ -434,7 +449,7 @@ ok(
     ])
     assert.equal(validation.isOk, false)
     assert.match(
-      validation.errors[0]!,
+      defined(validation.errors[0]),
       /unknown provider 'ghost'/,
     )
   },

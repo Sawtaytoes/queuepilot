@@ -27,6 +27,7 @@ import { startFakeMqtt } from "./fake-mqtt.js"
  * the sets registry the server itself wrote (`profiles[1].allowed_ratings`), so the cast
  * lives here once instead of at each of them.
  */
+// biome-ignore lint/suspicious/noExplicitAny: the app's HTTP JSON response, whose shape server/src/routes fixes; read unchecked, as documented above
 type JsonBody = Record<string, any>
 
 const ROOT = path.resolve(
@@ -122,7 +123,7 @@ ok(
 )
 ok(
   "legacy tiers kept + marked superseded",
-  Boolean(younger && younger.superseded_by),
+  Boolean(younger?.superseded_by),
 )
 const yamlText = await fs.readFile(SETS, "utf8")
 ok(

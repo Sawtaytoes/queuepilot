@@ -22,6 +22,7 @@ import type {
 } from "../server/src/engine/resolve.js"
 import type { PlexClient } from "../server/src/types.js"
 import type { Rng } from "../server/src/engine/weight.js"
+import { defined } from "../server/src/defined.js"
 
 /** One recorded leaf in the per-show view-state fixtures below. */
 interface Leaf {
@@ -163,25 +164,27 @@ const client: PlexClient = {
       /\/library\/metadata\/(\d+)\/allLeaves/,
     )
     if (leaves) {
-      // Both `!`s assert the match that guards this branch and the fixture it keys into —
+      // Both `defined()`s assert the match that guards this branch and the fixture it keys into —
       // every allLeaves path the resolver builds here names a show that LEAVES carries.
       return {
-        Metadata: LEAVES[leaves[1]!]!.map((leaf) => ({
-          ratingKey: leaf.ratingKey,
-          title: leaf.title,
-          grandparentTitle: leaf.show,
-          parentIndex: leaf.season,
-          index: leaf.episode,
-          duration: leaf.duration,
-          type: "episode",
-          viewCount: leaf.viewCount,
-          viewOffset: leaf.viewOffset,
-        })),
+        Metadata: defined(LEAVES[defined(leaves[1])]).map(
+          (leaf) => ({
+            ratingKey: leaf.ratingKey,
+            title: leaf.title,
+            grandparentTitle: leaf.show,
+            parentIndex: leaf.season,
+            index: leaf.episode,
+            duration: leaf.duration,
+            type: "episode",
+            viewCount: leaf.viewCount,
+            viewOffset: leaf.viewOffset,
+          }),
+        ),
       }
     }
     const meta = path.match(/\/library\/metadata\/(\d+)$/)
     if (meta) {
-      const rk = meta[1]! // the capture group of the match that guards this branch
+      const rk = defined(meta[1]) // the capture group of the match that guards this branch
       if (LEAVES[rk])
         return {
           Metadata: [
@@ -249,10 +252,10 @@ let member = await resolve.resolveMember(
   true,
 )
 // `resolveMember` returns null only for a member it cannot resolve; every entry below names
-// one the fake client always answers, so each `!` fails exactly where the original did.
+// one the fake client always answers, so each `defined()` throws only on a broken fixture.
 ok(
   "specials-only show keeps its Season-0 OAD leaf",
-  JSON.stringify(keys(member!.items)) ===
+  JSON.stringify(keys(defined(member).items)) ===
     JSON.stringify(["363482"]),
   JSON.stringify(member),
 )
@@ -268,7 +271,7 @@ const r0 = await resolve.resolveMember(
 )
 ok(
   "rotation path still drops the Season-0 special",
-  r0!.items.length === 0,
+  defined(r0).items.length === 0,
   JSON.stringify(r0),
 )
 
@@ -284,7 +287,7 @@ member = await resolve.resolveMember(
 )
 ok(
   "in-progress leaf survives a watched-history hit",
-  JSON.stringify(keys(member!.items)) ===
+  JSON.stringify(keys(defined(member).items)) ===
     JSON.stringify(["363482"]),
   JSON.stringify(member),
 )
@@ -341,7 +344,7 @@ ok(
 )
 ok(
   "watched special is not revived",
-  res.revived!.length === 0,
+  defined(res.revived).length === 0,
   JSON.stringify(res.revived),
 )
 
@@ -398,10 +401,11 @@ ok(
   JSON.stringify(keys(res.play)),
 )
 // `revived` is optional on `QueueResult` (buildReel omits it); `nextQueue` always sets it —
-// the same `!` line 153 already writes.
+// the same `defined()` the first `revived` read above uses.
 ok(
   "hand-marked skip stays done",
-  res.revived!.length === 0 && res.done.length === 1,
+  defined(res.revived).length === 0 &&
+    res.done.length === 1,
   JSON.stringify({ revived: res.revived, done: res.done }),
 )
 
@@ -454,7 +458,7 @@ res = await resolve.nextQueue(
 ok(
   "anime channel leads with the in-progress OAD",
   res.play.length > 0 &&
-    res.play[0]!.ratingKey === "363482",
+    defined(res.play[0]).ratingKey === "363482",
   JSON.stringify(keys(res.play).slice(0, 2)),
 )
 ok(

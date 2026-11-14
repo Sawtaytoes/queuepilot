@@ -7,6 +7,7 @@ import {
   test,
   vi,
 } from "vitest"
+import { defined } from "./defined.js"
 import { SCHEMA_SQL } from "./store/schema.generated.js"
 
 const fixture = vi.hoisted(() => ({
@@ -550,7 +551,9 @@ describe("native TV sessions", () => {
       cursor: 0,
     })
     expect(fixture.timeline).toHaveBeenCalledOnce()
-    const [url, options] = fixture.timeline.mock.calls[0]!
+    const [url, options] = defined(
+      fixture.timeline.mock.calls[0],
+    )
     expect(url).toContain("state=playing")
     expect(options.headers["X-Plex-Token"]).toBe(
       "fixture-server-token",

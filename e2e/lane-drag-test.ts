@@ -241,9 +241,10 @@ try {
 
   check(
     "placement is written BEFORE the order",
-    Boolean(placementWrite && orderWrite) &&
-      writes.indexOf(placementWrite!) <
-        writes.indexOf(orderWrite!),
+    placementWrite !== undefined &&
+      orderWrite !== undefined &&
+      writes.indexOf(placementWrite) <
+        writes.indexOf(orderWrite),
     "a scan landing between the two would read a half-written file",
   )
 

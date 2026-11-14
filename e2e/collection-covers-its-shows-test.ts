@@ -19,6 +19,7 @@ import type {
   EngineBinding,
   PlexClient,
 } from "../server/src/types.js"
+import { defined } from "../server/src/defined.js"
 
 process.env.SETS_PATH =
   "/nonexistent-so-loadSets-is-never-consulted.yaml"
@@ -186,11 +187,11 @@ check(
 )
 check(
   "whole: the collection is ONE member holding both shows in collection order",
-  whole
-    .find((bucket) =>
+  defined(
+    whole.find((bucket) =>
       bucket.show.startsWith("Collection:"),
-    )!
-    .episodes.map((episode) => episode.title),
+    ),
+  ).episodes.map((episode) => episode.title),
   [
     "Batman: The Animated Series E1",
     "Batman: The Animated Series E2",
@@ -247,9 +248,9 @@ check(
 )
 check(
   "split: each child carries only its own episodes",
-  split
-    .find((bucket) => bucket.show === "Batman Beyond")!
-    .episodes.map((episode) => episode.title),
+  defined(
+    split.find((bucket) => bucket.show === "Batman Beyond"),
+  ).episodes.map((episode) => episode.title),
   [
     "Batman Beyond E1",
     "Batman Beyond E2",

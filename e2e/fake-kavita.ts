@@ -15,6 +15,7 @@
 // The cast is invented and stays invented. Two libraries — Volumes (2) and Strips (5) — so a
 // FILTERED queue over one of them has something to narrow.
 import { createServer } from "node:http"
+import { defined } from "../server/src/defined.js"
 
 const PORT = Number(process.env.FAKE_KAVITA_PORT || 18795)
 
@@ -157,7 +158,7 @@ const coverSvg = (series: Series) => {
     .split(/\s+/)
     .filter((word) => /^[A-Za-z]/.test(word))
     .slice(0, 2)
-    .map((word) => word[0]!.toUpperCase())
+    .map((word) => defined(word[0]).toUpperCase())
     .join("")
   return (
     `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="480" viewBox="0 0 320 480">` +
