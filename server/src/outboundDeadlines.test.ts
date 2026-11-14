@@ -112,6 +112,30 @@ describe("TLS", () => {
     )
   })
 
+  test("the cast sidecar checks the Plex certificate", () => {
+    const sidecar = readFileSync(
+      new URL(
+        "../../cast_sidecar/service.py",
+        import.meta.url,
+      ),
+      "utf8",
+    )
+    const code = sidecar
+      .split("\n")
+      .filter((line) => !line.trimStart().startsWith("#"))
+      .join("\n")
+    // CI has no Python, so this reads the source. It refuses every way the
+    // sidecar could turn the check off: any line that pairs `verify` with
+    // `False` (`verify=False`, `.verify = False`, `setattr(s, "verify",
+    // False)`), an unverified SSL context, and a session handed to PlexServer
+    // in place of plexapi's own verifying one.
+    expect(code).not.toMatch(/verify[^\n]*False/)
+    expect(code).not.toMatch(
+      /CERT_NONE|_create_unverified_context/,
+    )
+    expect(code).not.toMatch(/PlexServer\([^)]*session\s*=/)
+  })
+
   test("poster reads from PLEX_URL go through the scoped Plex agent, with a deadline", async () => {
     const poster = await thumb("7")
     expect(poster?.contentType).toBe("image/png")
