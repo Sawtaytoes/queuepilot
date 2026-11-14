@@ -167,7 +167,7 @@ export function boardGamesProvider({
     delivery: "pull",
     unit: "play",
     // The picker's play log is lifetime; a queue entry's progress is not. See the header.
-    stampsQueuedAt: true,
+    isStampingQueuedAt: true,
 
     /**
      * The owner's own categories, and ONLY those.
@@ -237,6 +237,7 @@ export function boardGamesProvider({
      */
     async logProgress(
       gameId: string,
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
     ): Promise<{ ok: boolean; remaining?: number }> {
       const play = await collectionClient.logPlay(gameId)
       if (!play) return { ok: false }

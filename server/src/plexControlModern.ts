@@ -182,7 +182,9 @@ export function createModernPlexControl(
   }
 
   function profileScreen(): {
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- returned as `adb.profileScreen()`, which an e2e stub writes by name
     onboarding: boolean
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- returned as `adb.profileScreen()`, which an e2e stub writes by name
     picker: boolean
   } {
     const nodes = read()

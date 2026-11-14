@@ -491,6 +491,7 @@ export function QueueView({
 
     try {
       const added = await api<{
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
         added?: boolean
         key?: string
       }>("POST", `/api/queues/${setId}/items`, {
@@ -630,7 +631,7 @@ export function QueueView({
         }
         className={[
           // See QueuesView: a pending tile has not claimed to be missing.
-          item.resolved || item.pending
+          item.resolved || item.isPending
             ? null
             : "unresolved",
           isCompleted(item) ? "done" : null,
@@ -643,10 +644,10 @@ export function QueueView({
           .join(" ")}
         dataKey={item.key}
         dataSet={setId ?? undefined}
-        isPending={item.pending}
+        isPending={item.isPending}
         key={item.key}
         next={{
-          isDone: face.nextDone,
+          isDone: face.isNextDone,
           onStart: isStartable(item)
             ? () => openStartModal(entry)
             : undefined,

@@ -128,6 +128,7 @@ export interface ProviderVocabulary {
  * `multiSeason: false` hides the season row.
  */
 export interface UnitList {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   multiSeason: boolean
   seasons: {
     season: number
@@ -141,6 +142,7 @@ export interface UnitList {
       ratingKey?: string | null
       episode: number | null
       title: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
       watched: boolean
     }[]
   }[]
@@ -267,6 +269,7 @@ export interface ProviderBlock {
    * before blocks existed. It must never be written back to disk, or a re-read would
    * treat a synthesized block as a real one. `sets.js writableBlocks()` drops it.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   implicit?: boolean
 }
 
@@ -323,6 +326,7 @@ interface SetRegistryCommon {
    * request — who is still in the room, what time it is — is exactly the judgement that
    * belongs in an automation rather than in a queue builder.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   power_off_when_done: boolean
   /**
    * "Locked on TV": the QueuePilot TV asks for the household TV PIN before it opens or plays
@@ -443,6 +447,7 @@ interface SetRegistryCommon {
    *  is set, though its lists may be empty on a half-configured one. */
   filter: QueueFilter | null
   /** `enabled: false` is the only falsy form — absent reads as enabled. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   enabled: boolean
   /**
    * THE SEASON WINDOW — `MM-DD` / `MM-DD`, repeating every year, or null for a queue that is
@@ -469,8 +474,10 @@ export interface QueueSet extends SetRegistryCommon {
   watch_history: "provider" | "queue"
   /** Never mark entries done (a non-consuming / playlist queue). `reel` implies it, and
    * normalize() reports both so the UI prefill matches the engine. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   keep_completed: boolean
   /** Play the whole lineup every scan. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   reel: boolean
   /**
    * Mark entries done as usual, and clear the whole queue's watched state once the LAST one
@@ -483,6 +490,7 @@ export interface QueueSet extends SetRegistryCommon {
    * this reads back false. That is the existing precedence rule applied, not a refusal — a
    * hand-written contradiction still parses.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   restart_when_exhausted: boolean
   /** TTL string ("24h"/"7d"/…) or null = keep finished entries forever (the default). */
   remove_completed_after: string | null
@@ -539,6 +547,7 @@ export interface RotationSet extends SetRegistryCommon {
    */
   /** DEPRECATED — the 2026-08-17 spelling of `length: 'infinite'`, still reported (and still
    *  read by the engine) so a file written before the rename keeps working. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   refill: boolean
   /** What a FINISHED series does: `'restart'` (back to its start floor) or null = drop. */
   on_complete: "restart" | null
@@ -620,6 +629,7 @@ export interface MemberObject {
 interface RoutingSetCfgCommon {
   label: string
   kind: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   enabled: boolean
   mode: string | null
   behavior: string | null
@@ -671,6 +681,7 @@ interface RoutingSetCfgCommon {
    */
   season_start?: string
   season_end?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   include_specials?: true
   /** Selective replacement for the legacy all-specials switch. */
   included_specials?: string[]
@@ -720,6 +731,7 @@ interface RoutingSetCfgCommon {
    * exactly the window shape: "it'd load up X number in the queue, and then add more as you
    * started getting close to the end of the queue" (2026-08-17).
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   refill?: true
   /**
    * What happens to a SERIES that has no unwatched episodes left, on a refilling channel:
@@ -745,13 +757,16 @@ export interface RoutingQueueCfg
   queue_sections: number[]
   queue_section: number | undefined
   item_sections: []
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   reel: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   keep_completed: boolean
   /**
    * Clear this queue's watched state when the last entry finishes, so a new round starts.
    * Effective: false whenever `keep_completed`/`reel` is on, because those never mark
    * anything done and so can never exhaust. Read by `finished.applyQueueWriteSide`.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
   restart_when_exhausted: boolean
   /** Effective queue default. Absent on disk is normalized to provider. */
   watch_history: "provider" | "queue"
@@ -855,6 +870,7 @@ export interface EntryExtras {
   /** Written only for 'member'/'season'; "none" DROPS the key. */
   batch_stops_at?: string
   /** The Python service's keep-and-tag marker for a finished entry. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a YAML config key users already have
   done?: boolean
   /** Epoch SECONDS, stamped alongside `done: true`. A hand-marked done with no timestamp
    * reads as null and is never auto-swept. */
@@ -923,6 +939,7 @@ export interface QueueEntry {
    */
   key: string
   value: EntryValue
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the HTTP `done` field
   done: boolean
   /** null when absent or non-numeric. */
   doneAt: number | null
@@ -1062,6 +1079,7 @@ export interface Bucket {
   /** A ratingKey, or the synthetic `section-<id>` for an item-section bucket. */
   ratingKey: string
   episodes: PoolItem[]
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML-style `multi_season` field, which an e2e golden file records
   multi_season?: boolean
   weight?: number
 }
@@ -1194,7 +1212,7 @@ export interface BucketsResult {
   /** Priority-lane entry keys held back this scan by an unexpired lead window. */
   suppressed?: string[]
   /** Set by the rewatch branch, which returns a single pick rather than a lineup. */
-  rewatch?: boolean
+  isRewatch?: boolean
   /** Kavita returns its buckets alongside `play` so the caller can render the pool. */
   buckets?: unknown[]
   /**
@@ -1396,10 +1414,12 @@ export type ProviderArtifact =
  * driveToPlaying, which returns the same object or its own error/cancel form). */
 export interface PushResult {
   queued?: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   played?: boolean
   mode?: "client" | "cast"
   client?: string | null
   error?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   cancelled?: boolean
   /** driver.js internals, surfaced for the log/state payload only. */
   _profile?: string | null
@@ -1502,7 +1522,7 @@ export interface BucketsContext {
 
 /** Options for `handoff()`. Plex reads all of them; Kavita ignores them entirely. */
 export interface HandoffOptions {
-  useFsm?: boolean
+  isFsmUsed?: boolean
   requiredProfile?: string | null
   device?: Device | null
   cancel?: CancelFlag | null
@@ -1542,7 +1562,7 @@ export interface Provider {
    * Board Game Picker needs it because its play log is the household's book of record and
    * goes back years.
    */
-  stampsQueuedAt?: boolean
+  isStampingQueuedAt?: boolean
   /**
    * Can this provider play a SECTION of an item — begin at an offset and stop at one?
    *
@@ -1559,7 +1579,7 @@ export interface Provider {
    * reading queue whose token is not configured
    * (decision `2026-09-01-a-start-point-carries-a-position-and-end-is-its-mirror`).
    */
-  playsSections?: boolean
+  hasSectionPlayback?: boolean
 
   // --- required -------------------------------------------------------------- //
   buckets(ctx: BucketsContext): Promise<BucketsResult>
@@ -1607,6 +1627,7 @@ export interface Provider {
    */
   logProgress?(
     itemId: string,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   ): Promise<{ ok: boolean; remaining?: number }>
   pool?(opts: {
     libraries?: string[]
@@ -1635,6 +1656,7 @@ export interface Provider {
     at: number
     build: () => Promise<PlayItem[]>
   }): Promise<{
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- copied into the MQTT `resp/topup` answer
     ok: boolean
     reason?: string
     added?: number
@@ -1674,7 +1696,7 @@ export interface Provider {
     itemId: string,
     opts?: {
       uuid?: string | null
-      includeSpecialChoices?: boolean
+      isIncludingSpecialChoices?: boolean
     },
   ): Promise<UnitList | null>
   /**
@@ -1711,6 +1733,7 @@ export interface KavitaProgressState {
     order: number
     pagesRead: number
     pagesTotal: number
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- an e2e harness reads it through a cast that TypeScript does not link
     done: boolean
     lastReadAt: string | null
   }[]
@@ -1737,6 +1760,7 @@ export interface NextEp {
   /** The total this next-up counts towards: "Play 2 OF 3". Only a provider that counts a
    * finite per-entry batch sets it; absent everywhere else. */
   of?: number | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   multiSeason?: boolean
   member?: string
   memberRatingKey?: string
@@ -1754,6 +1778,7 @@ export interface NextEp {
    * whichever it picked. Null for a show member and for a member with no edition.
    */
   memberEdition?: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched?: boolean
   viewOffset?: number
   duration?: number
@@ -1768,6 +1793,7 @@ export interface NextEp {
  * fields that only one route emits. See `QueueTile` / `MemberTile`.
  */
 export interface Tile {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   resolved: boolean
   ratingKey: string | null
   type: string | null
@@ -1805,6 +1831,7 @@ export interface Tile {
   skippedCount: number
   /** Mid-playback and unwatched — the exact state the engine resumes from. Per-EPISODE:
    * a movie reads its own viewOffset, a show/collection reads the next-up leaf's. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched: boolean
   /** ms; 0 when not started / unknown. */
   viewOffset: number
@@ -1838,6 +1865,7 @@ export interface QueueTile extends Tile {
   batch_stops_at: BatchStop
   start: Start | null
   /** A finished-but-kept entry; the grid greys it. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   done: boolean
 }
 
@@ -1872,6 +1900,7 @@ export interface Device {
   /** 'cast' is the Shield's own sidecar path and cannot be inferred for a foreign device,
    * so every plex.tv row is announced as 'client'. */
   mode: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   default: boolean
   /** Epoch seconds, one value per announce round. */
   seen?: number
@@ -1961,6 +1990,7 @@ export interface PublishedSessionState
  */
 export type PublishedStateExtra = Partial<
   Omit<PublishedSessionState, "engine">
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
 > & { boot?: boolean }
 
 /**

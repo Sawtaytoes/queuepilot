@@ -365,18 +365,17 @@ The older single-baseline shelf-heading guidance below is superseded by that rec
   the entire house style — 60 columns, no semicolons, the Tailwind CSS parser — to Biome's
   stock defaults, with no error at all.
 
-- **Lint covers `web/`, `server/` and `shared/`, from the root: `pnpm run lint`.** It runs
-  `biome check` and then `eslint .` in check mode, and CI runs the same script; `pnpm run
+- **Lint covers `web/`, `server/`, `shared/` and `e2e/`, from the root: `pnpm run lint`.** It
+  runs `biome check` and then `eslint .` in check mode, and CI runs the same script; `pnpm run
   lint:fix` writes. Both configs are adopted whole from Charcuterie, and a house rule that
   belongs to the fleet is changed there, never turned off here. `.mjs`, because the root
-  declares no module `type`. ESLint arrived on 2026-11-13, after the code, and three house
-  rules found 2,198 renames that each need a decision — many are wire and YAML fields such
-  as `ok`, `done` and `keep_completed`, which a rename would break. `id-length`,
-  `@typescript-eslint/naming-convention` and `react/no-multi-comp` are therefore staged at
-  `warn` in `eslint.config.mjs`, with the counts, and the root script passes
-  `--max-warnings 2198`: a new finding fails the run. Lower that number as the sweep removes
-  findings; do not raise it. `e2e/` is not linted yet
-  ([decision](docs/decisions/2026-11-13-eslint-joins-biome-and-three-house-rules-are-staged.md)).
+  declares no module `type`. Every rule is at the preset's level, `lint` passes no
+  `--max-warnings`, and an unused `eslint-disable` comment is an error. A name that something
+  outside TypeScript fixes (an HTTP, YAML, SQLite, MQTT, Plex or Kavita field, or one an
+  untyped e2e stub reads) keeps its name, with an `eslint-disable-next-line` and a reason on
+  that line; never rename one of those to satisfy the linter. Biome does not sort imports in `e2e/`, because there the import order is the
+  order modules run
+  ([decision](docs/decisions/2026-11-14-every-lint-rule-is-at-the-preset-level.md)).
 
 ## Routing
 

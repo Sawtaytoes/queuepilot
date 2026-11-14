@@ -60,6 +60,7 @@ export type NextEp = {
   of?: number | null
   /** False for every anime (Japan doesn't do American-style seasons), so the tile
    * drops the "S1". */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   multiSeason?: boolean
   // --- collection only ---
   member?: string
@@ -73,6 +74,7 @@ export type NextEp = {
    *  show member. It is how a tile says which of three cuts of one film plays next. */
   memberEdition?: string | null
   /** This next-up leaf has a Plex viewOffset (started, unwatched) — mid-episode resume. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched?: boolean
   /** The leaf's resume offset in ms (0 when not started). */
   viewOffset?: number
@@ -107,6 +109,7 @@ export type QueueItem = {
   /** Plex server id for an item supplied by a shared server. Absent for the home server. */
   plexServer?: string | null
   raw?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   resolved: boolean
   ratingKey: string | null
   /**
@@ -202,6 +205,7 @@ export type QueueItem = {
   queue_history_completed_count?: number
   /** Custom collection member ratingKeys. Empty means follow Plex order. */
   collectionOrder?: string[]
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   done: boolean
   /**
    * The same thing `done` records, judged LIVE instead of read off `queues.yaml`: the next
@@ -226,6 +230,7 @@ export type QueueItem = {
    * unwatched, the same in-progress state the engine resumes from. Drives the tile's
    * "In Progress" badge, which reads over a stale "Completed".
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched?: boolean
   /**
    * The in-progress leaf/movie's resume offset and runtime, both in ms (0 when unknown).
@@ -250,7 +255,7 @@ export type QueueItem = {
    * owner. The tile then renders its title as plain text — a dead link is worse than none.
    */
   webUrl?: string | null
-  pending?: boolean
+  isPending?: boolean
 }
 
 /** One resolved member of a rotation channel (`GET /api/sets/:id/members`). */
@@ -259,6 +264,7 @@ export type ChannelMember = {
    * only, so this is what a write must address. */
   index: number
   raw?: unknown
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   resolved: boolean
   ratingKey: string | null
   /** A non-Plex member's artwork URL — see `QueueItem["cover"]`. */
@@ -365,7 +371,9 @@ export type ShelfItem = {
   key: string
   raw: string
   title: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   resolved: false
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   done: boolean
   /** The entry's stored lane, or null for "follow the set's `add_as`" — see `QueueItem`.
    *  Carried by the skeleton so the shelf draws its two lanes at final geometry. */
@@ -527,11 +535,13 @@ export type RegistrySet = {
    * done, so the lineup stays re-showable. `reel: true` implies this (normalize reports
    * both). Absent/false on rotation channels.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   keep_completed?: boolean
   /**
    * Curated queues only. Demo-reel mode: play the whole lineup every scan (and implies
    * `keep_completed`). Orthogonal to the TTL sweep.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   reel?: boolean
   /**
    * Curated queues only. Start over when exhausted: mark entries done as usual, then clear
@@ -541,6 +551,7 @@ export type RegistrySet = {
    * The editor reads all three as ONE picker
    * (decision `2026-09-08-completion-behaviour-is-one-picker-not-two-checkboxes`).
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   restart_when_exhausted?: boolean
   /**
    * Curated queues only. Opt-in TTL for auto-removing finished entries
@@ -613,6 +624,7 @@ export type RegistrySet = {
    * Announce, when this sitting finishes, that the room should be shut down. The app only
    * publishes it on MQTT; HA owns anything with a power cable.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   power_off_when_done?: boolean
   /**
    * "Locked on TV": the QueuePilot TV asks for the household TV PIN (Settings) before it opens
@@ -628,6 +640,7 @@ export type RegistrySet = {
    */
   on_complete_by_show?: Record<string, "restart" | "drop">
   /** DEPRECATED — the older spelling of `length: "infinite"`. Read `length` instead. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   refill?: boolean
   /**
    * Rotation channels only. What a FINISHED series does: `"restart"` puts it back at its
@@ -645,10 +658,12 @@ export type RegistrySet = {
 export type Library = {
   id: number
   title: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   video: boolean
   type: "show" | "movie" | string
   /** Plex "Other Videos" (Personal Media) — a movie-type section that is not a
    * real Movies library. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   other?: boolean
 }
 
@@ -712,8 +727,11 @@ export type SearchHit = {
 export type PlexSource = {
   id: string
   name: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   owned: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   local: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   available: boolean
   libraries: {
     id: string
@@ -728,12 +746,14 @@ export type Profile = {
   name: string
   /** plex.tv username — the PMS-log stamp for the owner (managed users stamp their title). */
   username?: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   admin?: boolean
 }
 
 export type Device = {
   id: string
   name: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   default?: boolean
 }
 
@@ -787,6 +807,7 @@ export type PreviewBucket = {
     season?: number | null
     episode?: number | null
     title?: string
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
     multiSeason?: boolean
   } | null
   /** Present since 2026-07-29: a library bucket lists each standalone item, so a
@@ -817,6 +838,7 @@ export type Placement = "priority" | "random"
 export type Lead = "once" | "always"
 
 export type ShowEpisodes = {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   multiSeason: boolean
   seasons: {
     season: number
@@ -826,6 +848,7 @@ export type ShowEpisodes = {
       ratingKey?: string | null
       episode: number
       title?: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
       watched?: boolean
     }[]
   }[]
@@ -843,6 +866,7 @@ export type CollectionChild = {
   duration?: number
   leafCount?: number
   viewedLeafCount?: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   watched?: boolean
 }
 
@@ -858,7 +882,9 @@ export type ProviderInfo = {
   kind: string
   label: string
   base_url: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   supported: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   configured: boolean
   /**
    * How a queue on this provider STARTS. `push` sends a lineup at a device (Plex → the
@@ -875,6 +901,7 @@ export type ProviderInfo = {
    * Optional because a stale registry response may predate the field; absent reads as false,
    * which is the safe direction — no control beats a control nothing serves.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   plays_sections?: boolean
   vocabulary: ProviderVocabulary
 }

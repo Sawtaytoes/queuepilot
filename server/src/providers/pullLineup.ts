@@ -46,8 +46,8 @@ export async function curatedEntries(
   setId: string,
   only: string | null = null,
   {
-    stampQueued: isStampingQueued = false,
-  }: { stampQueued?: boolean } = {},
+    isStampingQueued = false,
+  }: { isStampingQueued?: boolean } = {},
 ): Promise<CuratedEntryRef[]> {
   let rows: Awaited<ReturnType<typeof queues.listSet>>
   try {
@@ -129,7 +129,8 @@ export async function pullLineup(
     // What the owner actually put in this queue. Without it a curated reading queue plays
     // the library shelf instead of its own ninety-three entries.
     entries: await curatedEntries(setId, only, {
-      stampQueued: provider.stampsQueuedAt === true,
+      isStampingQueued:
+        provider.isStampingQueuedAt === true,
     }),
     // Same rule the engine uses for the curated shuffle: Random-pool Picks
     // (legacy kind: anime still reads as random via kind.isRandomOrder).

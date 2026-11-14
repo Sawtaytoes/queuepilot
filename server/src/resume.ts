@@ -81,7 +81,7 @@ export interface ResumeDecision {
   reason: string
   rk?: string
   /** Set when the decline is provisional and the next poll should reconsider this ratingKey. */
-  retry?: boolean
+  isRetryNeeded?: boolean
   position?: number
 }
 
@@ -238,7 +238,7 @@ export function considerSession(
     return {
       ms: null,
       rk,
-      retry: true,
+      isRetryNeeded: true,
       reason: `${Math.round(position / 1000)}s in, past the ${Math.round(startWindowMs / 1000)}s window`,
     }
   }
@@ -324,11 +324,13 @@ export function startWatch({
     | ObservedSession
     | null
     | Promise<ObservedSession | null>
+  /* eslint-disable @typescript-eslint/naming-convention -- matches the seek result that test mocks build without types */
   seek: (
     ms: number,
   ) =>
     | { seeked?: boolean; error?: string }
     | Promise<{ seeked?: boolean; error?: string }>
+  /* eslint-enable @typescript-eslint/naming-convention */
   /**
    * Where the player is in the LIVE playQueue — `playback.readPlayQueue()`.
    *
@@ -350,11 +352,13 @@ export function startWatch({
    * `topup.ts` names that as the thing to avoid, and it would be a hiccup on screen where a
    * section wants a cut.
    */
+  /* eslint-disable @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types */
   advance?:
     | (() =>
         | { ok?: boolean; error?: string }
         | Promise<{ ok?: boolean; error?: string }>)
     | null
+  /* eslint-enable @typescript-eslint/naming-convention */
   subscribePush?: PushSubscriber | null
   intervalMs?: number
   retryMs?: number
@@ -466,7 +470,7 @@ export function startWatch({
         //     viewer straight back out of the section that was just set up.
         const isOwned =
           sec.index != null ||
-          sec.retry === true ||
+          sec.isRetryNeeded === true ||
           sec.isSpent === true
         if (isOwned) {
           if (sec.action !== "wait" && !sec.isSpent) {
@@ -516,10 +520,10 @@ export function startWatch({
               }
             }
           }
-          if (sec.retry && retriesLeft > 0) {
+          if (sec.isRetryNeeded && retriesLeft > 0) {
             retriesLeft -= 1
             nextDelayMs = retryDelayMs
-          } else if (!sec.retry) {
+          } else if (!sec.isRetryNeeded) {
             retriesLeft = retryBurst
             if (
               sec.action === "wait" &&
@@ -547,10 +551,10 @@ export function startWatch({
       } catch {
         return
       }
-      if (decision.retry && retriesLeft > 0) {
+      if (decision.isRetryNeeded && retriesLeft > 0) {
         retriesLeft -= 1
         nextDelayMs = retryDelayMs
-      } else if (!decision.retry) {
+      } else if (!decision.isRetryNeeded) {
         retriesLeft = retryBurst // a settled read re-arms the burst for the NEXT transition
       }
       // Log EVERY decision, not just the seeks: when this silently does nothing, the reason it
@@ -561,9 +565,13 @@ export function startWatch({
         decision.reason === "nothing playing"
       if (
         !isQuiet &&
-        !(decision.retry && LOGGED.has(decision.rk ?? ""))
+        !(
+          decision.isRetryNeeded &&
+          LOGGED.has(decision.rk ?? "")
+        )
       ) {
-        if (decision.retry) LOGGED.add(decision.rk ?? "")
+        if (decision.isRetryNeeded)
+          LOGGED.add(decision.rk ?? "")
         // `session!`: every non-quiet reason is produced from a non-null session (a null one
         // yields 'nothing playing', which IS quiet), so this is the original's exact reach —
         // including its throw, if that invariant ever breaks.

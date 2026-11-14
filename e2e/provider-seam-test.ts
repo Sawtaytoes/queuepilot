@@ -405,7 +405,7 @@ ok(
       { provider: "plex", libraries: ["11"] },
       { provider: "kavita", libraries: ["2", "5"] },
     ])
-    assert.equal(validation.ok, false)
+    assert.equal(validation.isOk, false)
     assert.match(validation.errors.join(" "), /one app/)
   },
 )
@@ -419,7 +419,7 @@ ok(
       { provider: "plex", profile: "B", libraries: ["5"] },
     ])
     assert.equal(
-      validation.ok,
+      validation.isOk,
       true,
       validation.errors.join("; "),
     )
@@ -432,7 +432,7 @@ ok(
     const validation = blocks.validateBlocks([
       { provider: "ghost", libraries: [1] },
     ])
-    assert.equal(validation.ok, false)
+    assert.equal(validation.isOk, false)
     assert.match(
       validation.errors[0]!,
       /unknown provider 'ghost'/,

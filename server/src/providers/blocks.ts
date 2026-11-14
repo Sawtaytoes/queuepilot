@@ -41,7 +41,7 @@ export interface BlockSourceCfg {
 
 /** The return of `validateBlocks()` — the editor's save gate. */
 export interface BlockValidation {
-  ok: boolean
+  isOk: boolean
   errors: string[]
   blocks: ProviderBlock[]
 }
@@ -185,7 +185,7 @@ export function validateBlocks(
   const errors: string[] = []
   if (raw != null && !Array.isArray(raw)) {
     return {
-      ok: false,
+      isOk: false,
       errors: ["providers must be a list of blocks"],
       blocks: [],
     }
@@ -217,5 +217,5 @@ export function validateBlocks(
         "split them into one queue per app",
     )
   }
-  return { ok: errors.length === 0, errors, blocks }
+  return { isOk: errors.length === 0, errors, blocks }
 }

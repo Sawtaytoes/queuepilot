@@ -135,13 +135,13 @@ ok(
 ok(
   "specials-only: S0 special (idx 1) IS playable when includeSpecials",
   isPlayableEpisode(s0("oad", 1, "OAD"), {
-    includeSpecials: true,
+    isIncludingSpecials: true,
   }) === true,
 )
 ok(
   "specials-only: S0 OP/ED (idx 301) still dropped even with includeSpecials",
   isPlayableEpisode(s0("ed", 301, "Kokoro"), {
-    includeSpecials: true,
+    isIncludingSpecials: true,
   }) === false,
 )
 ok(
@@ -189,7 +189,7 @@ ok(
   showEps
     .filter((showEpisode) =>
       isPlayableEpisode(showEpisode, {
-        includeSpecials: true,
+        isIncludingSpecials: true,
       }),
     )
     .map((showEpisode) => showEpisode.ratingKey)

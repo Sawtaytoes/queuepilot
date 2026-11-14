@@ -838,7 +838,7 @@ export function SetModal() {
         {blocks.map((block, index) => (
           <ProviderBlock
             block={block}
-            canRemove={blocks.length > 1}
+            isRemovable={blocks.length > 1}
             index={index}
             key={block.uid}
             onChange={(next) => {

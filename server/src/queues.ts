@@ -378,8 +378,8 @@ export async function removeCompleted(
 
 /** `sweepCompleted()`'s options — the set's own consumption knobs, plus a clock for tests. */
 export interface SweepOptions {
-  keepCompleted?: boolean
-  reel?: boolean
+  isKeepingCompleted?: boolean
+  isReel?: boolean
   removeCompletedAfter?: string | null
   /** Epoch SECONDS; defaults to the wall clock. */
   now?: number
@@ -396,8 +396,8 @@ export async function sweepCompleted(
   opts: SweepOptions = {},
 ): Promise<{ removed: number }> {
   const {
-    keepCompleted: isKeepingCompleted = false,
-    reel: isReel = false,
+    isKeepingCompleted = false,
+    isReel = false,
     removeCompletedAfter = DEFAULT_REMOVE_COMPLETED_AFTER,
     now,
   } = opts
@@ -473,7 +473,7 @@ export interface AddItemOptions {
    * three windows of one film at three positions. Saying yes mints an `id` for the new line,
    * which is what makes the two independently addressable.
    */
-  allowDuplicate?: boolean
+  isDuplicateAllowed?: boolean
 }
 
 // Add a new entry. `value` is a string (title), a number (ratingKey), or a mapping — the API
@@ -488,9 +488,8 @@ export async function addItem(
   setName: string,
   value: EntryValue,
   position: "top" | "bottom" = "top",
-  {
-    allowDuplicate: isDuplicateAllowed = false,
-  }: AddItemOptions = {},
+  { isDuplicateAllowed = false }: AddItemOptions = {},
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ added: boolean; key: string }> {
   const owner = await entryOwner(setName)
   return withLock(async () => {
@@ -534,6 +533,7 @@ export async function addItem(
 export async function removeItem(
   setName: string,
   key: string,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ removed: boolean }> {
   const owner = await entryOwner(setName)
   const result = await withLock(async () => {
@@ -582,6 +582,7 @@ export async function moveItem(
   toSet: string,
   key: string,
   toKeys: string[],
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ moved: boolean } | { reordered: boolean }> {
   if (fromSet === toSet) return reorder(toSet, toKeys)
   const result = await withLock(async () => {
@@ -863,7 +864,7 @@ export async function stampQueuedAt(
 // Tag the given entry keys **done** in place — kept in the file, excluded from play.
 // Scalar entries become mappings so they can carry `done` + `done_at` (epoch seconds). Match is
 // by entryKey, which names ONE line, so "every match" here is the same single line a
-// `rewriteEntry` setter's first match would find. Returns { changed: bool }.
+// `rewriteEntry` setter's first match would find. Returns { hasChanged: bool }.
 export async function markDone(
   setName: string,
   keepKeys:
@@ -871,9 +872,9 @@ export async function markDone(
     | null
     | undefined,
   nowSec: number | null = null,
-): Promise<{ changed: boolean }> {
+): Promise<{ hasChanged: boolean }> {
   const want = new Set((keepKeys || []).filter(Boolean))
-  if (!want.size) return { changed: false }
+  if (!want.size) return { hasChanged: false }
   const now =
     nowSec == null
       ? Math.floor(Date.now() / 1000)
@@ -882,7 +883,8 @@ export async function markDone(
   return withLock(async () => {
     const doc = await readDoc()
     const seq = doc.get(owner)
-    if (!(seq instanceof YAMLSeq)) return { changed: false }
+    if (!(seq instanceof YAMLSeq))
+      return { hasChanged: false }
     let hasChanged = false
     for (
       let index = 0;
@@ -917,26 +919,27 @@ export async function markDone(
       seq.flow = false
       await writeDoc(doc)
     }
-    return { changed: hasChanged }
+    return { hasChanged }
   })
 }
 
 // Un-mark the given entry keys — strip `done` + `done_at` (stale-done recovery). Match is by
-// entryKey, one key one line, exactly as `markDone`. Returns { changed: bool }.
+// entryKey, one key one line, exactly as `markDone`. Returns { hasChanged: bool }.
 export async function clearDone(
   setName: string,
   keepKeys:
     | (string | null | undefined)[]
     | null
     | undefined,
-): Promise<{ changed: boolean }> {
+): Promise<{ hasChanged: boolean }> {
   const want = new Set((keepKeys || []).filter(Boolean))
-  if (!want.size) return { changed: false }
+  if (!want.size) return { hasChanged: false }
   const owner = await entryOwner(setName)
   return withLock(async () => {
     const doc = await readDoc()
     const seq = doc.get(owner)
-    if (!(seq instanceof YAMLSeq)) return { changed: false }
+    if (!(seq instanceof YAMLSeq))
+      return { hasChanged: false }
     let hasChanged = false
     for (
       let index = 0;
@@ -959,7 +962,7 @@ export async function clearDone(
       seq.flow = false
       await writeDoc(doc)
     }
-    return { changed: hasChanged }
+    return { hasChanged }
   })
 }
 
@@ -995,6 +998,7 @@ export async function setEpisodes(
   setName: string,
   key: string,
   episodes: unknown,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; episodes: number } | { ok: false }> {
   // Capped at the ENGINE's own hard cap rather than a second, smaller magic number: the editor
   // offers a free-typed count, and a value this accepted but resolve.js then clamped would have
@@ -1029,6 +1033,7 @@ export async function setItemOrder(
   key: string,
   value: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   { ok: true; item_order: "shuffle" | null } | { ok: false }
 > {
   const order = normalizeEntryItemOrder(value)
@@ -1052,6 +1057,7 @@ export async function setVolumes(
   setName: string,
   key: string,
   volumes: unknown,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; volumes: number } | { ok: false }> {
   const volumeCount = Math.max(
     1,
@@ -1081,6 +1087,7 @@ export async function setWeight(
   setName: string,
   key: string,
   weight: unknown,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ ok: true; weight: number } | { ok: false }> {
   const normalizedWeight = toWeight(weight)
   const isOk = await rewriteEntry(setName, key, (split) => {
@@ -1108,6 +1115,7 @@ export async function setPlacement(
   key: string,
   value: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   { ok: true; placement: string | null } | { ok: false }
 > {
   const normalized =
@@ -1145,10 +1153,12 @@ export async function setLead(
   window?: unknown,
 ): Promise<
   | {
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
       ok: true
       lead: string | null
       promote_window: string | null
     }
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: false }
 > {
   const normalizedLead =
@@ -1194,7 +1204,9 @@ export async function setBatchStop(
   key: string,
   value: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: true; batch_stops_at: string | null }
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: false }
 > {
   const normalized =
@@ -1325,6 +1337,7 @@ function sectionRefusal(
 
 /** `{ok: false}` plus the named reason, when a write was located but refused. */
 export interface EntryWriteRefusal {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   ok: false
   /** Absent when the entry itself was not found; present when the value was refused. */
   error?: string
@@ -1342,6 +1355,7 @@ export async function setStart(
   key: string,
   start: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   { ok: true; start: Start | null } | EntryWriteRefusal
 > {
   const normalized = normalizeStart(start)
@@ -1386,6 +1400,7 @@ export async function setEnd(
   key: string,
   end: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   { ok: true; end: End | null } | EntryWriteRefusal
 > {
   const normalizedEnd = normalizeEnd(end)
@@ -1412,7 +1427,9 @@ export async function setWatchHistory(
   key: string,
   value: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: true; watch_history: "provider" | "queue" | null }
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: false }
 > {
   const source = normalizeWatchHistory(value)
@@ -1438,7 +1455,9 @@ export async function setCollectionOrder(
   key: string,
   value: unknown,
 ): Promise<
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: true; collection_order: string[] | null }
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   | { ok: false }
 > {
   const order = Array.isArray(value)
@@ -1474,13 +1493,13 @@ export async function setCollectionOrder(
  */
 export async function deleteSetKey(
   setName: string,
-): Promise<{ deleted: boolean }> {
+): Promise<{ isDeleted: boolean }> {
   return withLock(async () => {
     const doc = await readDoc()
-    if (!doc.has(setName)) return { deleted: false }
+    if (!doc.has(setName)) return { isDeleted: false }
     doc.delete(setName)
     await writeDoc(doc)
-    return { deleted: true }
+    return { isDeleted: true }
   })
 }
 
@@ -1489,6 +1508,7 @@ export async function deleteSetKey(
 export async function reorder(
   setName: string,
   keys: string[],
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ reordered: boolean }> {
   return withLock(async () => {
     const doc = await readDoc()

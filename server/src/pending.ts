@@ -410,9 +410,11 @@ function isWatched(md: PlexMetadata, kind: 1 | 2): boolean {
 export interface PendingLibrary {
   id: number
   title: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the same object is the HTTP `libraries` list
   video: boolean
   type: string
   /** Plex "Other Videos" — a Personal Media library with no metadata agent. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the same object is the HTTP `libraries` list
   other?: boolean
 }
 

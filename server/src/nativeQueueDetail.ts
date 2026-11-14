@@ -78,6 +78,7 @@ export interface FullQueueItem {
   /** The item a plain "play this queue" starts with. */
   isNext: boolean
   /** True when `POST …/watched` can change this item (queue-owned history only). */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   canMarkWatched: boolean
   artwork: NativeArtwork
 }

@@ -15,12 +15,14 @@ type Fetch = typeof fetch
 
 interface ResourceConnection {
   uri?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
   local?: boolean
 }
 interface Resource {
   name?: string
   clientIdentifier?: string
   provides?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
   owned?: boolean
   accessToken?: string
   connections?: ResourceConnection[]
@@ -29,7 +31,9 @@ interface Resource {
 export interface PlexSource {
   id: string
   name: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   owned: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   available: boolean
   libraries: {
     id: string
@@ -425,6 +429,7 @@ export async function plexServerTile(
   > | null,
   setId: string,
 ): Promise<{
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   resolved: boolean
   ratingKey: string | null
   type: string | null
@@ -435,6 +440,7 @@ export async function plexServerTile(
   nextEp: NextEp | null
   isNextEpFailed: boolean
   skippedCount: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched: boolean
   viewOffset: number
   duration: number

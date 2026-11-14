@@ -44,10 +44,10 @@ import { migrateDocument } from "./entryObjects.js"
 interface Options {
   file: string
   sets: string
-  apply: boolean
+  isApplying: boolean
   backup: string
-  plex: boolean
-  verbose: boolean
+  isUsingPlex: boolean
+  isVerbose: boolean
 }
 
 function argFor(
@@ -71,10 +71,10 @@ function parseArgs(argv: readonly string[]): Options {
       argFor(argv, "--sets") ||
       process.env.SETS_PATH ||
       path.join(path.dirname(file), "sets.yaml"),
-    apply: argv.includes("--apply"),
+    isApplying: argv.includes("--apply"),
     backup: argFor(argv, "--backup") || "objectform",
-    plex: !argv.includes("--no-plex"),
-    verbose: argv.includes("--verbose"),
+    isUsingPlex: !argv.includes("--no-plex"),
+    isVerbose: argv.includes("--verbose"),
   }
 }
 
@@ -105,7 +105,7 @@ async function main(): Promise<number> {
   const text = await fs.readFile(opts.file, "utf8")
   const doc: Document = parseDocument(text)
   const registry = routing.loadSets(opts.sets)
-  const client = opts.plex ? liveClient() : null
+  const client = opts.isUsingPlex ? liveClient() : null
 
   console.log(
     "queuepilot — queue entries to the object form",
@@ -113,10 +113,10 @@ async function main(): Promise<number> {
   console.log(`  file    ${opts.file}`)
   console.log(`  sets    ${opts.sets}`)
   console.log(
-    `  mode    ${opts.apply ? "APPLY (the file is written)" : "DRY RUN (nothing is written)"}`,
+    `  mode    ${opts.isApplying ? "APPLY (the file is written)" : "DRY RUN (nothing is written)"}`,
   )
   console.log(
-    `  plex    ${opts.plex ? "yes — titles are resolved" : "no (--no-plex) — reshape only"}`,
+    `  plex    ${opts.isUsingPlex ? "yes — titles are resolved" : "no (--no-plex) — reshape only"}`,
   )
   console.log("")
 
@@ -169,7 +169,7 @@ async function main(): Promise<number> {
 
   for (const [name, label] of labels) {
     console.log(label)
-    if (opts.verbose) {
+    if (opts.isVerbose) {
       for (const change of kept) {
         if (change.set === name)
           console.log(
@@ -229,7 +229,7 @@ async function main(): Promise<number> {
     )
     return 0
   }
-  if (!opts.apply) {
+  if (!opts.isApplying) {
     console.log(
       `DRY RUN — ${rewrites.length} entries would change. Re-run with --apply to write.`,
     )

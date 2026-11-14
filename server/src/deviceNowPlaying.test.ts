@@ -119,7 +119,7 @@ test("passes the active queue and profile to source-aware session reads", async 
       device,
       playQueueID: 42,
       userUuid: "grace-profile",
-      throwOnError: true,
+      isThrowingOnError: true,
     }),
   )
   expect(publish).toHaveBeenCalledWith(

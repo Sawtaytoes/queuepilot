@@ -101,26 +101,26 @@ const STAGED_NAME = "board-game-picker-import.sqlite"
  * new directory cannot be added without saying how it is skipped. */
 const DIRECTORIES: readonly {
   from: string
-  switch: "cache" | "images"
+  switch: "isCopyingCache" | "isCopyingImages"
   to: string
 }[] = [
   {
     from: "images",
-    switch: "images",
+    switch: "isCopyingImages",
     to: "board-game-images",
   },
   {
     from: "cache",
-    switch: "cache",
+    switch: "isCopyingCache",
     to: "board-game-cache",
   },
 ]
 
 interface Options {
-  apply: boolean
-  cache: boolean
+  isApplying: boolean
+  isCopyingCache: boolean
   from: string
-  images: boolean
+  isCopyingImages: boolean
   to: string
 }
 
@@ -138,13 +138,13 @@ function parseArgs(argv: readonly string[]): Options {
   const queues =
     process.env.QUEUES_PATH || "/config/queues.yaml"
   return {
-    apply: argv.includes("--apply"),
-    cache: !argv.includes("--no-cache"),
+    isApplying: argv.includes("--apply"),
+    isCopyingCache: !argv.includes("--no-cache"),
     from:
       argFor(argv, "--from") ||
       process.env.BOARD_GAME_PICKER_CONFIG ||
       "/config/board-game-picker",
-    images: !argv.includes("--no-images"),
+    isCopyingImages: !argv.includes("--no-images"),
     to: argFor(argv, "--to") || path.dirname(queues),
   }
 }
@@ -356,7 +356,7 @@ function main(): number {
     }
 
     const staged = path.join(options.to, STAGED_NAME)
-    if (options.apply) {
+    if (options.isApplying) {
       const pending = `${staged}.staging`
       copyFileSync(copy, pending)
       adoptGroup(pending, options.to)
@@ -380,10 +380,14 @@ function main(): number {
         continue
       }
       const target = path.join(options.to, directory.to)
-      const result = copyTree(source, target, options.apply)
+      const result = copyTree(
+        source,
+        target,
+        options.isApplying,
+      )
       console.log(
         `${directory.from}/ → ${directory.to}/ — ` +
-          `${result.written} file(s) ${options.apply ? "copied" : "would be copied"}, ` +
+          `${result.written} file(s) ${options.isApplying ? "copied" : "would be copied"}, ` +
           `${result.kept} already there`,
       )
     }

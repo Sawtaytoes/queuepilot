@@ -25,6 +25,7 @@ export interface PreviewBucket {
     title: string | undefined
     season: number | null | undefined
     episode: number | null | undefined
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
     multiSeason: boolean
   } | null
   /** Only an item/library bucket (Shorts) lists its items; a show bucket sends null. */

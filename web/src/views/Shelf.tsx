@@ -278,7 +278,7 @@ export function Shelf({
           // `pending` is not `unresolved`: the red border means "this
           // entry names something Plex does not have", and a tile that
           // simply hasn't been resolved YET has made no such claim.
-          item.resolved || item.pending
+          item.resolved || item.isPending
             ? null
             : "unresolved",
           isCompleted(item) ? "done" : null,
@@ -288,7 +288,7 @@ export function Shelf({
           .join(" ")}
         dataKey={item.key}
         dataSet={setId}
-        isPending={item.pending}
+        isPending={item.isPending}
         isPriority={lane === "priority"}
         key={item.key}
         // The third control in the tile's chrome stack: into the Priority queue, or
@@ -300,7 +300,7 @@ export function Shelf({
           void moveEntryLane(setId, item, setLane)
         }
         next={{
-          isDone: face.nextDone,
+          isDone: face.isNextDone,
           text: face.next,
           tooltip:
             face.from && collectionOrderCount(item) != null

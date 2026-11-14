@@ -174,7 +174,7 @@ type Overlays = {
    */
   entryEditor: { setId: string; key: string } | null
   /** The roster editor. No payload — it always opens on the whole household. */
-  peopleModal: boolean
+  isPeopleModalOpen: boolean
   /** The saved people-group rule editor. Null when closed; null selection means a new group. */
   groupsModal: { selectedId: string | null } | null
 }
@@ -183,7 +183,7 @@ let overlays: Overlays = {
   dynModal: null,
   entryEditor: null,
   groupsModal: null,
-  peopleModal: false,
+  isPeopleModalOpen: false,
   membersModal: null,
   playMenu: null,
   sectionModal: null,
@@ -306,17 +306,17 @@ export const openDynModal = (setId: string | null) =>
 export const closeDynModal = () => set({ dynModal: null })
 
 export const openPeopleModal = () =>
-  set({ groupsModal: null, peopleModal: true })
+  set({ groupsModal: null, isPeopleModalOpen: true })
 
 export const closePeopleModal = () =>
-  set({ peopleModal: false })
+  set({ isPeopleModalOpen: false })
 
 export const openGroupsModal = (
   selectedId: string | null = null,
 ) =>
   set({
     groupsModal: { selectedId },
-    peopleModal: false,
+    isPeopleModalOpen: false,
   })
 
 export const selectGroupInModal = (

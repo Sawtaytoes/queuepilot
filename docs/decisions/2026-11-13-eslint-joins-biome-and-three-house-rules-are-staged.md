@@ -5,7 +5,7 @@
 - **Type:** Tooling / CI
 - **Supersedes:** The "no second linter" note in `AGENTS.md`, which said Biome over `web/` was
   the whole lint setup.
-- **Superseded by:** —
+- **Superseded by:** [Every lint rule is at the preset's level](2026-11-14-every-lint-rule-is-at-the-preset-level.md), for the staging and for `e2e/`.
 
 ## Decision
 

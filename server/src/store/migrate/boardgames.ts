@@ -134,7 +134,7 @@ export interface GroupingSeed {
 }
 
 export interface BoardGameImportReport {
-  imported: boolean
+  isImported: boolean
   reason: string
   /** Where the collection was read from, or null when there was none. */
   source: string | null
@@ -162,7 +162,7 @@ const report = (
   extra: Partial<BoardGameImportReport> = {},
 ): BoardGameImportReport => ({
   counts: EMPTY_COUNTS,
-  imported: isImported,
+  isImported,
   problems: [],
   reason,
   seed: null,
@@ -243,9 +243,9 @@ export const isBoardGameSourceRetired = (
  */
 export function retireBoardGameSource(
   db: SqliteDatabase = bookOfRecord(),
-): { retired: boolean; movedTo: string | null } {
+): { isRetired: boolean; movedTo: string | null } {
   if (isBoardGameSourceRetired(db))
-    return { movedTo: null, retired: false }
+    return { movedTo: null, isRetired: false }
 
   const at = new Date().toISOString()
   writeMeta(db, "boardgames", RETIRED_KEY, at)
@@ -253,19 +253,19 @@ export function retireBoardGameSource(
 
   const source = sourcePath()
   if (!existsSync(source))
-    return { movedTo: null, retired: true }
+    return { movedTo: null, isRetired: true }
 
   // Colons are legal in a POSIX filename but make the name miserable to type in a shell.
   const movedTo = `${source}.retired-${at.replace(/[:.]/g, "")}`
   try {
     renameSync(source, movedTo)
-    return { movedTo, retired: true }
+    return { movedTo, isRetired: true }
   } catch (error) {
     console.log(
       `[boardgames] the collection is retired, but ${source} could not be moved aside: ` +
         `${errMessage(error)} — the latch is set, so it will not be read again`,
     )
-    return { movedTo: null, retired: true }
+    return { movedTo: null, isRetired: true }
   }
 }
 
@@ -444,9 +444,9 @@ const countOf = (
  * `force` skips the fingerprint check — a deliberate re-run — but never the assertions.
  */
 export function importBoardGames({
-  force: isForced = false,
+  isForced = false,
 }: {
-  force?: boolean
+  isForced?: boolean
 } = {}): BoardGameImportReport {
   const source = sourcePath()
   if (!existsSync(source))
@@ -1427,7 +1427,7 @@ export function ensureBoardGamesImported(): BoardGameImportReport {
 
   const result = importBoardGames()
 
-  if (result.imported) {
+  if (result.isImported) {
     console.log(
       `[boardgames] absorbed ${result.counts.board_games} title(s) in ` +
         `${result.counts.board_game_boxes} box(es), ${result.counts.board_game_groupings} grouping ` +

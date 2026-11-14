@@ -740,7 +740,7 @@ function runImport(argv: readonly string[]): number {
   }
 
   const result = importPeople({
-    force: argv.includes("--force"),
+    isForced: argv.includes("--force"),
   })
   console.log(`file:   ${result.file}`)
   console.log(`reason: ${result.reason}`)
@@ -749,7 +749,7 @@ function runImport(argv: readonly string[]): number {
       console.log(`  - ${problem}`)
     return 1
   }
-  if (!result.imported) return 1
+  if (!result.isImported) return 1
   console.log(
     `imported ${result.personIds.length} person(s), ${result.accountCount} account(s), ` +
       `${result.rosterCount} roster place(s) across ${result.groupIds.length} group(s)`,

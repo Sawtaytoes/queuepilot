@@ -148,7 +148,7 @@ ok(
 const unknown = await finished.reconcileQueue("no-such-set")
 ok(
   "an unknown set reconciles to nothing rather than throwing",
-  unknown.reconciled === false,
+  unknown.isReconciled === false,
 )
 
 // --------------------------------------------------------------------------- //

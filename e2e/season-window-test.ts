@@ -647,7 +647,7 @@ await check(
     const res =
       await finished.reconcileQueue("season_closed")
 
-    assert.equal(res.reconciled, false)
+    assert.equal(res.isReconciled, false)
     // The discriminator: it never reached the provider. ⚠️ Reaching it is what would MARK
     // entries done, and a season boundary marks nothing.
     assert.equal(
@@ -680,7 +680,7 @@ await check(
       "season_disabled",
     )
 
-    assert.equal(res.reconciled, false)
+    assert.equal(res.isReconciled, false)
     assert.equal(providerCalls.length, 0)
   },
 )
