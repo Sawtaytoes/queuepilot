@@ -346,7 +346,7 @@ async function withUpNext(
     const display = firstUnfinishedEntry(
       entries.map((entry) => ({
         display: displayFor(entry.value),
-        done: Boolean(entry.done),
+        isDone: Boolean(entry.done),
       })),
     )
     if (!display) {

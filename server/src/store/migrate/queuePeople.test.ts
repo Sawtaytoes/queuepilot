@@ -62,7 +62,7 @@ describe("the queues keep their people, recovered from the group CLAIM", () => {
 
     const report = seedQueuePeople()
 
-    expect(report.seeded).toBe(true)
+    expect(report.isSeeded).toBe(true)
     expect(report.seededSets).toEqual([
       { memberCount: 1, setId: "movies" },
     ])

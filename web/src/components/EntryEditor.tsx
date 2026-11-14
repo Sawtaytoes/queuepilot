@@ -224,7 +224,7 @@ export function EntryEditor({
         {/* What plays next, beside the artwork. Empty for a one-off movie — `:empty`
             collapses it rather than reserving a blank column. */}
         <p
-          className={`entrynext${face.nextDone ? " done" : ""}`}
+          className={`entrynext${face.isNextDone ? " done" : ""}`}
         >
           {face.next}
         </p>

@@ -53,9 +53,11 @@ export async function nativeHomeUsers(): Promise<
     users?: {
       id: number
       uuid?: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
       admin?: boolean
       title?: string
       username?: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
       restricted?: boolean
       thumb?: string
     }[]
@@ -161,7 +163,9 @@ export async function nativeGrant(
     accessToken?: string
     connections?: {
       uri?: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
       local?: boolean
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
       relay?: boolean
     }[]
   }[]

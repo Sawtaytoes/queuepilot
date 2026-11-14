@@ -107,7 +107,7 @@ describe("the confirmation gate", () => {
     writeMapping(ONE_PERSON)
     const result = importPeople()
 
-    expect(result.imported).toBe(false)
+    expect(result.isImported).toBe(false)
     expect(result.reason).toMatch(
       /waiting for `confirmed: true`/,
     )
@@ -120,7 +120,7 @@ describe("the confirmation gate", () => {
         MAPPING,
         `confirmed: ${value}\n${ONE_PERSON}`,
       )
-      expect(importPeople().imported).toBe(false)
+      expect(importPeople().isImported).toBe(false)
     }
     expect(listPeople()).toEqual([])
   })
@@ -129,7 +129,7 @@ describe("the confirmation gate", () => {
     writeMapping(ONE_PERSON, { confirmed: true })
     const result = importPeople()
 
-    expect(result.imported).toBe(true)
+    expect(result.isImported).toBe(true)
     expect(result.personIds).toEqual(["ada"])
     expect(result.groupIds).toEqual(["ada"])
     expect(result.accountCount).toBe(2)
@@ -150,17 +150,17 @@ describe("the confirmation gate", () => {
 
   test("is IDEMPOTENT — a second run over the same file writes nothing new", () => {
     writeMapping(ONE_PERSON, { confirmed: true })
-    expect(importPeople().imported).toBe(true)
+    expect(importPeople().isImported).toBe(true)
 
     const again = importPeople()
-    expect(again.imported).toBe(false)
+    expect(again.isImported).toBe(false)
     expect(again.reason).toMatch(/has not changed/)
     expect(listPeople()).toHaveLength(1)
 
     // …and forcing it through lands on the same single row rather than a twin.
-    expect(importPeople({ force: true }).imported).toBe(
-      true,
-    )
+    expect(
+      importPeople({ isForced: true }).isImported,
+    ).toBe(true)
     expect(listPeople()).toHaveLength(1)
   })
 
@@ -175,7 +175,7 @@ describe("the confirmation gate", () => {
       "INSERT INTO people (id, display_name) VALUES ('linus', 'Linus')",
     ).run()
 
-    importPeople({ force: true })
+    importPeople({ isForced: true })
     expect(
       listPeople()
         .map((person) => person.id)
@@ -188,7 +188,7 @@ describe("a confirmed file that does not validate", () => {
   const refuses = (body: string, pattern: RegExp): void => {
     writeMapping(body, { confirmed: true })
     const result = importPeople()
-    expect(result.imported).toBe(false)
+    expect(result.isImported).toBe(false)
     expect(result.problems.join("\n")).toMatch(pattern)
     // NOTHING is written. A file that is half right is a file to look at, not half a household.
     expect(listPeople()).toEqual([])

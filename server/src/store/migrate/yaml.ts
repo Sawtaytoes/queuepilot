@@ -81,7 +81,7 @@ import type { SqliteDatabase } from "../sqlite.js"
 /** What one import did. Every count and every id, so the migration can be PROVEN rather than
  * asserted. */
 export interface ImportReport {
-  imported: boolean
+  isImported: boolean
   reason: string
   backupDir: string | null
   setIds: string[]
@@ -371,7 +371,7 @@ function importPending(db: SqliteDatabase): {
 
 const EMPTY_REPORT: Omit<
   ImportReport,
-  "imported" | "reason" | "backupDir"
+  "isImported" | "reason" | "backupDir"
 > = {
   setIds: [],
   queueIds: [],
@@ -388,9 +388,9 @@ const EMPTY_REPORT: Omit<
  * re-import is exactly when a copy is most wanted.
  */
 export function importYaml({
-  force: isForced = false,
+  isForced = false,
 }: {
-  force?: boolean
+  isForced?: boolean
 } = {}): ImportReport {
   const db = bookOfRecord()
   const current = fingerprint()
@@ -398,7 +398,7 @@ export function importYaml({
 
   if (!isForced && recorded === current) {
     return {
-      imported: false,
+      isImported: false,
       reason:
         "the YAML has not changed since the last import",
       backupDir: null,
@@ -425,7 +425,7 @@ export function importYaml({
     )
 
     return {
-      imported: true,
+      isImported: true,
       reason: isForced
         ? "forced"
         : recorded === null

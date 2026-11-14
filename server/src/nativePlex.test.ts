@@ -19,7 +19,9 @@ import {
 
 let connections: {
   uri: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
   local: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
   relay: boolean
 }[]
 let actualIdentity = "fixture-server"

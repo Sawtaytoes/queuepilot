@@ -517,7 +517,7 @@ describe("the board-game absorb", () => {
   test("does nothing at all when there is no collection to absorb", () => {
     rmSync(SOURCE, { force: true })
     const result = importBoardGames()
-    expect(result.imported).toBe(false)
+    expect(result.isImported).toBe(false)
     expect(result.source).toBeNull()
     expect(boardGameCounts()).toMatchObject({
       board_games: 0,
@@ -527,7 +527,7 @@ describe("the board-game absorb", () => {
   test("copies every table, and the counts match the source either side", () => {
     const result = importBoardGames()
     expect(result.problems).toEqual([])
-    expect(result.imported).toBe(true)
+    expect(result.isImported).toBe(true)
     expect(boardGameCounts()).toEqual({
       board_game_boxes: 4,
       board_game_categories: 1,
@@ -570,7 +570,7 @@ describe("the board-game absorb", () => {
     // a partial copy can never be mistaken for an authoritative one.
     writeSource({ excludedSource: "somebody-else" })
     const result = importBoardGames()
-    expect(result.imported).toBe(false)
+    expect(result.isImported).toBe(false)
     expect(result.problems.length).toBeGreaterThan(0)
     expect(boardGameCounts()).toMatchObject({
       board_game_overrides: 0,
@@ -678,11 +678,11 @@ describe("the board-game absorb", () => {
   })
 
   test("is a no-op on a second run, and re-runs when the source changes", () => {
-    expect(importBoardGames().imported).toBe(true)
-    expect(importBoardGames().imported).toBe(false)
-    expect(importBoardGames({ force: true }).imported).toBe(
-      true,
-    )
+    expect(importBoardGames().isImported).toBe(true)
+    expect(importBoardGames().isImported).toBe(false)
+    expect(
+      importBoardGames({ isForced: true }).isImported,
+    ).toBe(true)
   })
 })
 
@@ -788,7 +788,7 @@ describe("the grouping-rule seed", () => {
   test("does not double the rules on a re-run", () => {
     writeFileSync(SEED, SEED_YAML)
     importBoardGames()
-    importBoardGames({ force: true })
+    importBoardGames({ isForced: true })
     expect(boardGameCounts().board_game_groupings).toBe(6)
     expect(
       boardGameCounts().board_game_grouping_reviews,
@@ -801,7 +801,7 @@ describe("the grouping-rule seed", () => {
       `version: 1\ngroupings:\n- prefix: "^quarry duel.*"\n  game_id: q\n  game_name: Q\n`,
     )
     const result = importBoardGames()
-    expect(result.imported).toBe(false)
+    expect(result.isImported).toBe(false)
     expect(result.problems.join(" ")).toContain("LITERAL")
     expect(boardGameCounts().board_games).toBe(0)
   })
@@ -809,7 +809,7 @@ describe("the grouping-rule seed", () => {
   test("refuses a seed with no version, and writes NOTHING", () => {
     writeFileSync(SEED, "groupings: []\n")
     const result = importBoardGames()
-    expect(result.imported).toBe(false)
+    expect(result.isImported).toBe(false)
     expect(boardGameCounts().board_games).toBe(0)
   })
 })
@@ -834,8 +834,8 @@ describe("the two tables keyed on a person", () => {
     )
     source.close()
 
-    const result = importBoardGames({ force: true })
-    expect(result.imported).toBe(true)
+    const result = importBoardGames({ isForced: true })
+    expect(result.isImported).toBe(true)
 
     // Three plays in, three plays out — and not one participant row invented for any of them.
     expect(boardGameCounts().board_game_plays).toBe(3)
@@ -980,8 +980,8 @@ describe("the retirement of the source file", () => {
 
     // `force` exists to re-run an absorb that a fingerprint check would skip. It must not be a
     // way to re-run a whole-table REPLACE over a collection this app now writes.
-    const forced = importBoardGames({ force: true })
-    expect(forced.imported).toBe(false)
+    const forced = importBoardGames({ isForced: true })
+    expect(forced.isImported).toBe(false)
     expect(forced.reason).toContain("retired")
   })
 
@@ -1081,7 +1081,7 @@ describe("the retirement of the source file", () => {
     // leave the door open and let the next start REPLACE a collection this app is writing.
     rmSync(SOURCE, { force: true })
     const outcome = retireBoardGameSource()
-    expect(outcome.retired).toBe(true)
+    expect(outcome.isRetired).toBe(true)
     expect(outcome.movedTo).toBeNull()
     expect(isBoardGameSourceRetired()).toBe(true)
   })

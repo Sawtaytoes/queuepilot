@@ -29,8 +29,11 @@ export type CompletionMode =
 
 /** The three booleans as the wire carries them — and as `PATCH /api/sets/:id` takes them. */
 export interface CompletionFlags {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   keep_completed: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   reel: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   restart_when_exhausted: boolean
 }
 

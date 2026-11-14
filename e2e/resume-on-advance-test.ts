@@ -220,7 +220,7 @@ check(
   resume.considerSession({
     ratingKey: "106617",
     viewOffset: 600_000,
-  }).retry,
+  }).isRetryNeeded,
   true,
 )
 check(

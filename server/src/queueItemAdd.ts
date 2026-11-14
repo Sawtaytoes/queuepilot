@@ -27,6 +27,7 @@ export class QueueAddError extends Error {
 }
 
 export interface QueueAddResult {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   added: boolean
   key: string
   duplicateOf?: string
@@ -37,8 +38,8 @@ export async function addQueueItem(
   value: EntryValue,
   position: "top" | "bottom",
   {
-    allowDuplicate: isDuplicateAllowed = false,
-  }: { allowDuplicate?: boolean } = {},
+    isDuplicateAllowed = false,
+  }: { isDuplicateAllowed?: boolean } = {},
 ): Promise<QueueAddResult> {
   // `added: false` is what `addItem` already answers for an exact key repeat, so the wire
   // shape is unchanged; `duplicateOf` names the line that made it a repeat. The cfg is the
@@ -108,6 +109,6 @@ export async function addQueueItem(
       }
   }
   return queues.addItem(set, value, position, {
-    allowDuplicate: isDuplicateAllowed,
+    isDuplicateAllowed,
   })
 }

@@ -74,7 +74,7 @@ describe("addQueueItem", () => {
       "watch",
       { ratingKey: "401", title: "Glass City" },
       "top",
-      { allowDuplicate: false },
+      { isDuplicateAllowed: false },
     )
     expect(mocks.plexServerGet).not.toHaveBeenCalled()
   })
@@ -100,14 +100,14 @@ describe("addQueueItem", () => {
       { ratingKey: "401", title: "Glass City" },
       "bottom",
       {
-        allowDuplicate: true,
+        isDuplicateAllowed: true,
       },
     )
     expect(mocks.addItem).toHaveBeenCalledWith(
       "watch",
       { ratingKey: "401", title: "Glass City" },
       "bottom",
-      { allowDuplicate: true },
+      { isDuplicateAllowed: true },
     )
   })
 

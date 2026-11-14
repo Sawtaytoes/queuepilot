@@ -203,7 +203,7 @@ ok(
   section.headStartOffsetMs(
     { sectionStartMs: 3_660_000 },
     900_000,
-    { playsSections: true },
+    { hasSectionPlayback: true },
   ) === 3_660_000,
 )
 ok(
@@ -211,7 +211,7 @@ ok(
   section.headStartOffsetMs(
     { sectionStartMs: 12_000 },
     2_600_000,
-    { playsSections: true },
+    { hasSectionPlayback: true },
   ) === 12_000,
 )
 ok(
@@ -219,19 +219,19 @@ ok(
   section.headStartOffsetMs(
     { sectionEndMs: 90_000 },
     900_000,
-    { playsSections: true },
+    { hasSectionPlayback: true },
   ) === 0,
 )
 ok(
   "no window at all leaves the resume marker exactly as it was",
   section.headStartOffsetMs({}, 900_000, {
-    playsSections: true,
+    hasSectionPlayback: true,
   }) === 900_000,
 )
 ok(
   "an empty head is the resume marker",
   section.headStartOffsetMs(null, 900_000, {
-    playsSections: true,
+    hasSectionPlayback: true,
   }) === 900_000,
 )
 
@@ -242,13 +242,14 @@ ok(
   section.headStartOffsetMs(
     { sectionStartMs: 3_660_000 },
     900_000,
-    { playsSections: false },
+    { hasSectionPlayback: false },
   ) === 900_000,
 )
 ok(
   "…and no plan is built for it at all",
-  section.sectionPlan(built.play, { playsSections: false })
-    .size === 0,
+  section.sectionPlan(built.play, {
+    hasSectionPlayback: false,
+  }).size === 0,
 )
 
 const providers = await import(
@@ -442,7 +443,8 @@ decision = section.consider(
 )
 ok(
   "two windows on one file with NO index declines rather than guessing",
-  decision.action === "none" && decision.retry === true,
+  decision.action === "none" &&
+    decision.isRetryNeeded === true,
   JSON.stringify(decision),
 )
 ok(
@@ -458,7 +460,8 @@ decision = section.consider(
 )
 ok(
   "an index whose live playQueue holds a DIFFERENT file is refused",
-  decision.action === "none" && decision.retry === true,
+  decision.action === "none" &&
+    decision.isRetryNeeded === true,
   JSON.stringify(decision),
 )
 
@@ -549,7 +552,8 @@ decision = section.consider(
 )
 ok(
   "a reading past the section start declines, and is RETRYABLE",
-  decision.action === "none" && decision.retry === true,
+  decision.action === "none" &&
+    decision.isRetryNeeded === true,
   JSON.stringify(decision),
 )
 decision = section.consider(

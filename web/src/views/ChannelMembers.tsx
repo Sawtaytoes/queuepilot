@@ -561,7 +561,7 @@ export function ChannelMembers({
               )}
               key={String(member.ratingKey || member.title)}
               next={{
-                isDone: face.nextDone,
+                isDone: face.isNextDone,
                 onStart: isStartable(member)
                   ? () => openStartModal(entry)
                   : undefined,

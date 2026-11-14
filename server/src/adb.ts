@@ -75,6 +75,7 @@ export async function playModernQueue(
   queueId: string | number,
   offsetMs: number,
   ratingKey: string,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types
 ): Promise<{ ok: boolean; error?: string }> {
   if (deviceOperationCancelled())
     return {
@@ -136,6 +137,7 @@ export async function playModernQueue(
 
 export function modernPlayerCommand(
   verb: "stop" | "pause" | "play" | "skipNext",
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types
 ): { ok: boolean; error?: string } {
   if (deviceOperationCancelled())
     return {
@@ -183,7 +185,9 @@ export function isOnboardingForeground(): boolean {
 }
 
 export function profileScreen(): {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- an e2e stub writes this field by name
   onboarding: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- an e2e stub writes this field by name
   picker: boolean
 } {
   return usesModernUi()

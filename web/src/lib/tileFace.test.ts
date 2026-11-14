@@ -169,7 +169,7 @@ describe("tileFace", () => {
     )
 
     expect(face.next).toBe("Any episode")
-    expect(face.nextDone).toBe(false)
+    expect(face.isNextDone).toBe(false)
   })
 
   test("a hand-finished shuffled show still reports that it is finished", () => {
@@ -182,7 +182,7 @@ describe("tileFace", () => {
     )
 
     expect(face.next).toBe("All watched")
-    expect(face.nextDone).toBe(true)
+    expect(face.isNextDone).toBe(true)
   })
 
   test("a shuffled Collection keeps its own face and names any item", () => {
@@ -289,7 +289,7 @@ describe("tileFace", () => {
     const face = tileFace(item({ nextEp: null }))
 
     expect(face.next).toBe("All watched")
-    expect(face.nextDone).toBe(true)
+    expect(face.isNextDone).toBe(true)
   })
 
   /**
@@ -355,7 +355,7 @@ describe("tileFace", () => {
     )
 
     expect(face.next).toBe("All read")
-    expect(face.nextDone).toBe(true)
+    expect(face.isNextDone).toBe(true)
   })
 
   /**
@@ -403,7 +403,7 @@ describe("tileFace", () => {
     )
 
     expect(face.next).toBe("All read")
-    expect(face.nextDone).toBe(true)
+    expect(face.isNextDone).toBe(true)
   })
 
   test("a collection borrows the member's poster, name and episode line", () => {
@@ -470,7 +470,7 @@ describe("tileFace", () => {
 
     expect(face.title).toBe("Ghibli")
     expect(face.next).toBe("All watched")
-    expect(face.nextDone).toBe(true)
+    expect(face.isNextDone).toBe(true)
     expect(face.from).toBeNull()
   })
 
@@ -503,7 +503,7 @@ describe("tileFace", () => {
 
     expect(face.title).toBe("Ghibli")
     expect(face.next).toBe("8 in order")
-    expect(face.nextDone).toBe(false)
+    expect(face.isNextDone).toBe(false)
   })
 
   test("a collection position and total exclude skipped members", () => {

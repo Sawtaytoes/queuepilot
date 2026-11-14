@@ -81,6 +81,7 @@ const CLIENT_ID = PLEX_CLIENT_IDENTIFIER
  */
 export type PlaybackResult = PushResult & {
   /** Cast only: the play was handed to cast_sidecar, which owns played/scrobble from here. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   delegated?: boolean
   /** Cast only: the MQTT topic the handoff went out on. */
   topic?: string
@@ -90,6 +91,7 @@ export type PlaybackResult = PushResult & {
 
 /** `seekTo()`'s result. Deliberately not a `PushResult` — nothing published reads it. */
 export interface SeekResult {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the seek result that test mocks build without types
   seeked: boolean
   error?: string
   offset?: number
@@ -1193,8 +1195,8 @@ export async function currentSession({
   timeoutMs = RESUME_POLL_TIMEOUT_MS,
   playQueueID = null,
   userUuid = null,
-  includeTelemetry: isTelemetryIncluded = false,
-  throwOnError: isThrowingOnError = false,
+  isTelemetryIncluded = false,
+  isThrowingOnError = false,
 }: {
   device?: Device | null
   /**
@@ -1206,8 +1208,8 @@ export async function currentSession({
   timeoutMs?: number
   playQueueID?: number | string | null
   userUuid?: string | null
-  includeTelemetry?: boolean
-  throwOnError?: boolean
+  isTelemetryIncluded?: boolean
+  isThrowingOnError?: boolean
 } = {}): Promise<CurrentSession | null> {
   let data: PlexReqJson
   try {
@@ -1537,6 +1539,7 @@ export async function verifyAccount(
 async function playerCommandOnDevice(
   verb: "stop" | "pause" | "play" | "skipNext",
   device: Device | null = null,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types
 ): Promise<{ ok: boolean; error?: string }> {
   if (adb.usesModernPlayback(device))
     return adb.modernPlayerCommand(verb)
@@ -1591,6 +1594,7 @@ export async function stopPlayback(
 export async function transport(
   action: "stop" | "pause" | "resume" | "next",
   device: Device | null = null,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches the device-command result that test mocks build without types
 ): Promise<{ ok: boolean; error?: string }> {
   // `resume` is Companion's `play`. The app's vocabulary is pause/resume because the bar
   // shows one toggle; Plex's is pause/play. Translate here, once.

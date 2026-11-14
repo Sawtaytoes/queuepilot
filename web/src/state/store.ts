@@ -209,7 +209,7 @@ function shelvesAsQueues(
         weight: 1,
         key: it.key,
         nextEp: null,
-        pending: true,
+        isPending: true,
         // The LANE the entry is stored in. Carried through the skeleton so the Picks
         // shelf draws its Priority run, its divider and its pool run at FINAL geometry —
         // dropping it here put every entry in the set's default lane for the first paint

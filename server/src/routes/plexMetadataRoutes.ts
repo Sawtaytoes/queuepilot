@@ -621,7 +621,7 @@ export function plexMetadataRoutes(): Hono {
               context.req.param("ratingKey"),
               {
                 uuid,
-                includeSpecialChoices:
+                isIncludingSpecialChoices:
                   context.req.query("specials") ===
                   "choices",
               },

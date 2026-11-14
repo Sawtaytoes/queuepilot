@@ -35,7 +35,7 @@ export function refreshData() {
   // A click / explicit refresh has to re-read Kavita. The ETag only covers YAML
   // + cache generation, so a conditional GET would 304 and leave "Ch 35" sitting
   // after you marked it read in Kavita.
-  if (!uiBusy()) void liveRefresh({ force: true })
+  if (!uiBusy()) void liveRefresh({ isForced: true })
 }
 
 /**
@@ -93,9 +93,9 @@ async function refreshOne<TResponse>(
 }
 
 export async function liveRefresh({
-  force: isForced = false,
+  isForced = false,
 }: {
-  force?: boolean
+  isForced?: boolean
 } = {}) {
   if (uiBusy()) {
     isLivePending = true
@@ -173,7 +173,7 @@ export function startLiveUpdates() {
     void resyncNow()
     // Reconnect after a sleep has to re-read Kavita; a 304 would keep the
     // chapter you marked read in the other tab.
-    void liveRefresh({ force: true })
+    void liveRefresh({ isForced: true })
   })
 
   source.addEventListener("data", () => void liveRefresh())
@@ -231,6 +231,7 @@ export function startLiveUpdates() {
       awaiting?: string
       playback?: {
         client?: string
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
         played?: boolean
         error?: string
       }
@@ -274,7 +275,7 @@ export function startLiveUpdates() {
     if (document.visibilityState !== "visible") return
 
     void resyncNow()
-    void liveRefresh({ force: true })
+    void liveRefresh({ isForced: true })
   }
   document.addEventListener("visibilitychange", onVisible)
 

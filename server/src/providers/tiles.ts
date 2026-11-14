@@ -47,6 +47,7 @@ export type TileSetSource = {
  * frontend's `QueueItem`, which is what lets one component render either.
  */
 export interface ProviderTile {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   resolved: boolean
   ratingKey: string | null
   cover: string | null
@@ -57,6 +58,7 @@ export interface ProviderTile {
   year: number | null
   childCount: number | null
   nextEp: NextEp | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   partiallyWatched: boolean
   viewOffset: number
   duration: number

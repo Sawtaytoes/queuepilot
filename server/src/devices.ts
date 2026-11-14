@@ -56,6 +56,7 @@ type RetainedDevice = AnnouncedDevice & { seen: number }
 type Publish = (
   topic: string,
   payload: unknown,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- an mqtt.js publish option
   opts?: { retain?: boolean },
 ) => void
 

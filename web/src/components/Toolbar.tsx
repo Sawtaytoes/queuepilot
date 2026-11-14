@@ -169,6 +169,7 @@ export function Toolbar() {
 
               try {
                 const { added: isAdded, key } = await api<{
+                  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
                   added?: boolean
                   key?: string
                 }>(

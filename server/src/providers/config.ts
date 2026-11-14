@@ -62,7 +62,9 @@ export interface ProviderPublicView {
   kind: string
   label: string
   base_url: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   supported: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   configured: boolean
   delivery: Delivery
   /**
@@ -70,15 +72,16 @@ export interface ProviderPublicView {
    * control rather than offer one the backend would ignore — the same rule `delivery` follows,
    * and the reason neither is a `kind` check at the call site.
    */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   plays_sections: boolean
   vocabulary: ProviderVocabulary
 }
 
 /** The result of a secrets-file write. `changed` is deleteSecret()'s only addition. */
 export interface SecretWriteResult {
-  ok: true
+  isOk: true
   id: string
-  changed?: boolean
+  isChanged?: boolean
 }
 
 // The kinds this build knows how to instantiate. A definition naming anything else is kept
@@ -499,7 +502,7 @@ export async function writeSecret(
   await fsp.chmod(tmp, 0o600)
   await fsp.rename(tmp, PROVIDERS_SECRETS_PATH)
   await fsp.chmod(PROVIDERS_SECRETS_PATH, 0o600)
-  return { ok: true, id }
+  return { isOk: true, id }
 }
 
 /** Remove one provider's token. */
@@ -508,7 +511,7 @@ export async function deleteSecret(
 ): Promise<SecretWriteResult> {
   const current = Object.fromEntries(secretsMap())
   if (!(id in current))
-    return { ok: true, id, changed: false }
+    return { isOk: true, id, isChanged: false }
   delete current[id]
   const tmp = `${PROVIDERS_SECRETS_PATH}.tmp`
   await fsp.writeFile(tmp, stringify(current), {
@@ -517,7 +520,7 @@ export async function deleteSecret(
   await fsp.chmod(tmp, 0o600)
   await fsp.rename(tmp, PROVIDERS_SECRETS_PATH)
   await fsp.chmod(PROVIDERS_SECRETS_PATH, 0o600)
-  return { ok: true, id, changed: true }
+  return { isOk: true, id, isChanged: true }
 }
 
 /**

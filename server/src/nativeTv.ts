@@ -83,6 +83,7 @@ import * as watchedReset from "./watchedReset.js"
 export interface NativeItem extends PlexPlayItem {
   positionKey: string
   queueEntryKey?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field stored in SQLite
   queueOwnHistory?: boolean
   queueProviderViewCount?: number
   sectionStartMs?: number | null
@@ -101,10 +102,12 @@ export interface NativePlan {
   led: string[]
   cursor: number
   sequence: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field stored in SQLite
   started: boolean
   homeServerId: string | null
   target: number | null
   handed: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field stored in SQLite
   refill: boolean
   seen: string[]
   binding: {
@@ -704,7 +707,9 @@ export async function nativeEvent(
   key: string,
   event: NativeEvent,
 ): Promise<{
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   ok: true
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   duplicate?: boolean
   cursor: number
 }> {
@@ -976,6 +981,7 @@ export async function avatarBytes(
 export async function continueNativePlan(
   id: string,
   key: string,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<NativePlanResponse | { complete: true }> {
   const previous = readNativePlan(id, key)
   if (previous.cursor !== previous.items.length)
@@ -1146,6 +1152,7 @@ export async function nativeAddToQueue(
   caller: NativeCaller | string,
   add: NativeQueueAdd,
 ): Promise<{
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
   added: boolean
   key: string
   duplicateOf?: string

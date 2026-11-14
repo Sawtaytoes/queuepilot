@@ -55,6 +55,7 @@ export interface SectionCandidate extends SectionFields {
   /** Which queue LINE this item came from — see `EntryExtras.id` / `queues.entryKey()`. */
   queueEntryKey?: string | undefined
   /** True when completion belongs to QueuePilot's private ledger, not the provider's. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
   queueOwnHistory?: boolean | undefined
 }
 
@@ -99,7 +100,7 @@ export interface SectionDecision {
   index?: number
   rk?: string
   /** Set when the decline is provisional and the next read should reconsider. */
-  retry?: boolean
+  isRetryNeeded?: boolean
   /**
    * The lineup DOES window this file, and the window here is already spent.
    *
@@ -132,8 +133,8 @@ export function headStartOffsetMs(
   head: SectionFields | null | undefined,
   resumeOffsetMs: number,
   {
-    playsSections: isSectionPlaybackSupported,
-  }: { playsSections: boolean },
+    hasSectionPlayback: isSectionPlaybackSupported,
+  }: { hasSectionPlayback: boolean },
 ): number {
   const fallback = Math.max(
     0,
@@ -166,10 +167,10 @@ export function sectionPlan(
   items: readonly SectionCandidate[] | null | undefined,
   {
     isHeadStartApplied = false,
-    playsSections: isSectionPlaybackSupported = true,
+    hasSectionPlayback: isSectionPlaybackSupported = true,
   }: {
     isHeadStartApplied?: boolean
-    playsSections?: boolean
+    hasSectionPlayback?: boolean
   } = {},
 ): Map<number, SectionRow> {
   const plan = new Map<number, SectionRow>()
@@ -309,7 +310,11 @@ function locate(
   place: PlayQueuePlace | null | undefined,
 ):
   | { index: number; row: SectionRow }
-  | { index: null; reason: string; retry?: boolean } {
+  | {
+      index: null
+      reason: string
+      isRetryNeeded?: boolean
+    } {
   const named =
     place && place.index >= 0
       ? ARMED.plan.get(place.index)
@@ -340,7 +345,7 @@ function locate(
       // which is worse than not sectioning at all — so decline, and retry in case the
       // playQueue read was simply late.
       reason: `${candidates.length} windows name rk=${ratingKey} and the playQueue index did not pick one`,
-      retry: true,
+      isRetryNeeded: true,
     }
   }
   return {
@@ -371,7 +376,7 @@ export function consider(
       reason: found.reason,
       rk,
     }
-    if (found.retry) out.retry = true
+    if (found.isRetryNeeded) out.isRetryNeeded = true
     // No live row, but this lineup DOES window this file — its window here is spent. The
     // resume plan still must not touch it: a section owns its item for the whole sitting.
     else if (isWindowed(rk)) out.isSpent = true
@@ -408,7 +413,7 @@ export function consider(
     if (row.attempts < START_ATTEMPTS) {
       return {
         action: "none",
-        retry: true,
+        isRetryNeeded: true,
         index,
         rk,
         reason: `${Math.round(position / 1000)}s in, already past the ${Math.round(row.startMs / 1000)}s section start`,

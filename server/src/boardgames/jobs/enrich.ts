@@ -85,12 +85,12 @@ export async function runEnrich(
       fetchPayload: () => Promise<unknown>,
     ): Promise<{
       payload: unknown
-      fromCache: boolean
+      isFromCache: boolean
     }> => {
       const cachePath = join(directory, `${id}.json`)
       if (existsSync(cachePath) && !isForced) {
         return {
-          fromCache: true,
+          isFromCache: true,
           payload: JSON.parse(
             readFileSync(cachePath, "utf8"),
           ),
@@ -99,7 +99,7 @@ export async function runEnrich(
       const payload = await fetchPayload()
       await writeFile(cachePath, JSON.stringify(payload))
       await sleep(REQUEST_INTERVAL_MS)
-      return { fromCache: false, payload }
+      return { isFromCache: false, payload }
     }
 
     let fetched = 0
@@ -117,7 +117,7 @@ export async function runEnrich(
           () => fetchGeekdoItem(game.bggId),
         )
         payload = loaded.payload
-        if (loaded.fromCache) cached += 1
+        if (loaded.isFromCache) cached += 1
         else fetched += 1
       } catch (error) {
         // One title failing is not the run failing — a nightly that stops at the first 500
@@ -189,7 +189,7 @@ export async function runEnrich(
             matched.id,
             () => fetchGeekdoItem(matched.id, "version"),
           )
-          if (loaded.fromCache) cached += 1
+          if (loaded.isFromCache) cached += 1
           else fetched += 1
           const versionItem = parseGeekdoItem(
             loaded.payload,

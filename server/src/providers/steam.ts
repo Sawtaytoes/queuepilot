@@ -186,7 +186,7 @@ export function steamProvider({
     delivery: "pull",
     unit: "play",
     // Steam's playtime is lifetime; a queue entry's progress is not. See the header.
-    stampsQueuedAt: true,
+    isStampingQueuedAt: true,
 
     /**
      * Search the owned library.

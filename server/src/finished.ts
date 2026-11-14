@@ -186,8 +186,8 @@ export async function applyQueueWriteSide(
     await exhaustion.restartIfExhausted(setName)
   }
   await queues.sweepCompleted(setName, {
-    keepCompleted: Boolean(cfg.keep_completed),
-    reel: Boolean(cfg.reel),
+    isKeepingCompleted: Boolean(cfg.keep_completed),
+    isReel: Boolean(cfg.reel),
     removeCompletedAfter: cfg.remove_completed_after,
   })
   return { marked: isMarking ? newly.length : 0 }
@@ -208,7 +208,7 @@ export async function reconcileQueue(
     binding: EngineBinding
     token: string
   },
-): Promise<{ reconciled: boolean }> {
+): Promise<{ isReconciled: boolean }> {
   const reg = routing.loadSets()
   const cfg = reg && reg.sets[setName]
   // Only a CURATED queue has entries to mark. A rotation channel's lineup is computed, and a
@@ -223,7 +223,7 @@ export async function reconcileQueue(
     cfg.source !== "queue" ||
     cfg.reel
   )
-    return { reconciled: false }
+    return { isReconciled: false }
   try {
     const { binding, provider } =
       scope || (await scopedBinding(cfg, profileTitle))
@@ -252,12 +252,12 @@ export async function reconcileQueue(
       console.log(
         `[finished] ${setName}: marked ${marked} finished after playback`,
       )
-    return { reconciled: true }
+    return { isReconciled: true }
   } catch (error) {
     console.log(
       `[finished] reconcile of '${setName}' skipped (${errMessage(error)})`,
     )
-    return { reconciled: false }
+    return { isReconciled: false }
   }
 }
 
@@ -320,6 +320,7 @@ function announceFinished(): void {
       played,
       power_off: Boolean(
         entry &&
+          // eslint-disable-next-line @typescript-eslint/naming-convention -- copies the YAML key of the same name
           (entry as { power_off_when_done?: boolean })
             .power_off_when_done,
       ),
@@ -351,6 +352,7 @@ export interface FinishedPayload {
   /** True when a finite target was actually reached, false when the pool simply ran dry. */
   isComplete: boolean
   /** The set asked for the room to be shut down. A REQUEST for HA, never an action here. */
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of an MQTT payload
   power_off: boolean
 }
 
@@ -358,6 +360,7 @@ interface OwnedQueueItem {
   ratingKey: string
   plexServer?: string
   queueEntryKey?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- matches `queueOwnHistory` in the stored native plan, which other types share by name
   queueOwnHistory?: boolean
   queueProviderViewCount?: number
 }
@@ -530,6 +533,7 @@ export async function adoptQueuePlayback(
   entryKey: string,
   profileTitle: string | null,
   ratingKey: string,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the app's HTTP JSON
 ): Promise<{ tracking: true; ratingKey: string }> {
   const cfg = routing.loadSets()?.sets[setName]
   if (!cfg) throw new Error(`unknown set ${setName}`)

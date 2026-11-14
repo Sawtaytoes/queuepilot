@@ -47,7 +47,7 @@ const SEGMENTED_MAX = 2
 
 export function ProviderBlock({
   block,
-  canRemove: isRemovable,
+  isRemovable,
   index,
   onChange,
   onRemove,
@@ -57,7 +57,7 @@ export function ProviderBlock({
   sharedLibraries,
 }: {
   block: ProviderBlockValue
-  canRemove: boolean
+  isRemovable: boolean
   index: number
   onChange: (next: ProviderBlockValue) => void
   onRemove: () => void
