@@ -58,12 +58,14 @@ interface DriverCtl {
   /** `[name, ...args]` per recorded primitive — read positionally by the assertions. */
   calls: unknown[][]
   foreground: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   companionUp: boolean
   switchResult: [boolean, string]
   /** `"a|b"` -> the sameProfile answer to force. */
   same: Map<string, boolean>
   playResults: {
     queued?: number
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
     played?: boolean
     mode?: string
     client?: string
@@ -75,6 +77,7 @@ interface DriverCtl {
     observedAt: number | null
   }
   observationTtlSeconds: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   awake: boolean
   onSwitch: (() => void) | null
 }

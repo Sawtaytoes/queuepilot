@@ -46,6 +46,7 @@ export interface TimeoutOptions {
 export interface ClickOptions extends TimeoutOptions {
   button?: "left" | "right" | "middle"
   clickCount?: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
   force?: boolean
   position?: { x: number; y: number }
 }
@@ -57,6 +58,7 @@ export interface WaitForSelectorOptions
 
 export interface ScreenshotOptions {
   path?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
   fullPage?: boolean
   clip?: {
     x: number
@@ -171,6 +173,7 @@ export interface Locator {
   ): Locator
   getByRole(
     role: string,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
     options?: { name?: string; exact?: boolean },
   ): Locator
   textContent(
@@ -414,10 +417,12 @@ export interface Page {
   ): Locator
   getByRole(
     role: string,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
     options?: { name?: string | RegExp; exact?: boolean },
   ): Locator
   getByText(
     text: string | RegExp,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
     options?: { exact?: boolean },
   ): Locator
   getByTestId(testId: string): Locator
@@ -529,6 +534,7 @@ export interface BrowserContext {
 export interface NewContextOptions {
   viewport?: { width: number; height: number } | null
   colorScheme?: "light" | "dark" | "no-preference"
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
   ignoreHTTPSErrors?: boolean
   deviceScaleFactor?: number
   reducedMotion?: "reduce" | "no-preference"
@@ -561,6 +567,7 @@ export interface Browser {
 }
 
 export interface LaunchOptions {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
   headless?: boolean
   args?: string[]
   ignoreDefaultArgs?: boolean | string[]
@@ -568,6 +575,7 @@ export interface LaunchOptions {
   executablePath?: string
   slowMo?: number
   timeout?: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- Playwright's own option name
   devtools?: boolean
 }
 

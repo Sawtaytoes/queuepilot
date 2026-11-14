@@ -123,7 +123,9 @@ const chaptersOf = (series: Series) =>
 interface List {
   id: number
   title: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   coverImageLocked: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   promoted: boolean
   summary: string
 }

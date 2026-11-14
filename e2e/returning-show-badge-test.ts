@@ -95,6 +95,7 @@ const child = spawnServer({
 /** One tile as this test reads it. */
 interface Tile {
   ratingKey?: string | null
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the server's /api/queues response
   done?: boolean
   isFinished?: boolean
   isRevived?: boolean

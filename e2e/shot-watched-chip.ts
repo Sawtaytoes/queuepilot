@@ -17,6 +17,7 @@ import { chromium } from "./playwright.js"
 interface QueueItem {
   key: string
   type: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the server's /api/queues response
   resolved: boolean
   nextEp?: { episode?: number } | null
 }

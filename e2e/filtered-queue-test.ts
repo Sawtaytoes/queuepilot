@@ -103,6 +103,7 @@ interface StubList {
   id: number
   title: string
   ownerUserName?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   coverImageLocked?: boolean
 }
 

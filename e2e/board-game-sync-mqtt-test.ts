@@ -52,6 +52,7 @@ const mqtt = requireClient("mqtt") as {
       handler: (
         topic: string,
         payload: Buffer,
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
         packet: { retain: boolean },
       ) => void,
     ): void
@@ -59,6 +60,7 @@ const mqtt = requireClient("mqtt") as {
     publish(
       topic: string,
       payload: string,
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
       opts: { retain: boolean },
     ): void
     end(isForced: boolean): void
@@ -136,6 +138,7 @@ const answered = Promise.race([
       (
         topic: string,
         payload: Buffer,
+        // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
         packet: { retain: boolean },
       ) =>
         resolve({

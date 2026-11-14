@@ -16,10 +16,8 @@ import { defineConfig } from "eslint/config"
 // `web` is the only package that renders markup, so it is the
 // only one the component and logical-properties rules apply to.
 // The typed rules cover every `.ts` and `.tsx` file in `web/`,
-// `server/`, and `shared/`.
-//
-// `e2e/` is not linted yet. It is about 41,000 lines of test
-// harness in its own style, and adopting it is a separate change.
+// `server/`, `shared/`, and `e2e/` (which `e2e/tsconfig.json`
+// types).
 export default defineConfig(
   ...createAppConfig({
     tsconfigRootDir: import.meta.dirname,

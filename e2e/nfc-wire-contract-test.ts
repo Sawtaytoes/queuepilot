@@ -95,6 +95,7 @@ interface MqttHandle {
   publish(
     topic: string,
     payload: string,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
     opts?: { qos?: number; retain?: boolean },
   ): void
   subscribe(topics: string[], cb: () => void): void

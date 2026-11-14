@@ -54,6 +54,7 @@ export interface FakeMqttClient {
   publish(
     topic: string,
     payload: string,
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
     opts?: { qos?: number; retain?: boolean },
     /** mqtt.js's node-style completion callback — harnesses pass a promise `resolve`. */
     cb?: (err?: Error) => void,

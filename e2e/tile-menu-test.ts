@@ -186,9 +186,12 @@ try {
       ),
     ) as {
       dragging: number
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a key of the object built in the page.evaluate source string
       gdrag: boolean
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a key of the object built in the page.evaluate source string
       menu: boolean
       rows: string[]
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a key of the object built in the page.evaluate source string
       sheet: boolean
     }
 

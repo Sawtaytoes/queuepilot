@@ -155,9 +155,12 @@ try {
         ),
       ),
     ) as {
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a key of the object built in the page.evaluate source string
       actions: boolean
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a key of the object built in the page.evaluate source string
       dialog: boolean
       heading: string
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- a key of the object built in the page.evaluate source string
       removeDone: boolean
       rows: string[]
       scopedRows: number

@@ -151,6 +151,7 @@ try {
   const items = (
     await (await fetch(`${BASE}/api/queues`)).json()
   ).sets[QUEUE].items as Array<{
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- a field of the server's /api/queues response
     done?: boolean
     queue_history_completed_count?: number
     title?: string

@@ -55,9 +55,9 @@ async function readEvents(
   const reader = res.body.getReader()
   /** A chunk, or the timeout sentinel the read is raced against. */
   type Step =
-    | { timeout: true }
+    | { isTimedOut: true }
     | (Awaited<ReturnType<typeof reader.read>> & {
-        timeout?: undefined
+        isTimedOut?: undefined
       })
   const deadline = Date.now() + ms
   try {
@@ -67,12 +67,12 @@ async function readEvents(
         reader.read(),
         new Promise<Step>((resolve) =>
           setTimeout(
-            () => resolve({ timeout: true }),
+            () => resolve({ isTimedOut: true }),
             timeLeft,
           ),
         ),
       ])
-      if (step.timeout) break
+      if (step.isTimedOut) break
       if (step.done) break
       text += decoder.decode(step.value, { stream: true })
     }

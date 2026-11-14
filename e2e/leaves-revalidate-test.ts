@@ -48,7 +48,7 @@ const state: {
   allLeavesHits: number
   aggregateHits: number
   /** Flipped mid-test to drive the offline-fallback case; absent means "aggregate is up". */
-  failAggregate?: boolean
+  isAggregateFailing?: boolean
 } = {
   leaves: [ep(1, 1), ep(2, 1), ep(3, 0)],
   updatedAt: 1000,
@@ -76,7 +76,7 @@ const srv = createServer((req, res) => {
   }
   if (url === `/library/metadata/${RK}`) {
     state.aggregateHits += 1
-    if (state.failAggregate) {
+    if (state.isAggregateFailing) {
       res.statusCode = 500
       res.end("{}")
       return
@@ -155,7 +155,7 @@ try {
 
   // 4) Offline fallback: the aggregate call fails → validator is null → the TTL path serves the
   //    last-known cached episodes (no throw, no refetch). Degraded behaviour is unchanged.
-  state.failAggregate = true
+  state.isAggregateFailing = true
   const before = state.allLeavesHits
   nextEpisode = await plex.nextEpisode(RK)
   ok(

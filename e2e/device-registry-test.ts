@@ -70,6 +70,7 @@ const devices = await import("../server/src/devices.js")
 interface PublishedMessage {
   topic: string
   payload: any
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
   opts: { retain?: boolean }
 }
 
@@ -77,6 +78,7 @@ let published: PublishedMessage[] = []
 const pub = (
   topic: string,
   payload: unknown,
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the MQTT publish option
   opts: { retain?: boolean } = {},
 ) => published.push({ topic, payload, opts })
 const round = async () => {

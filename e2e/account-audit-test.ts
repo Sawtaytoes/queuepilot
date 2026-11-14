@@ -64,11 +64,13 @@ interface Verdict {
 interface DriverCtl {
   calls: unknown[][]
   foreground: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   companionUp: boolean
   switchResult: [boolean, string]
   same: Map<string, boolean>
   playResults: {
     queued?: number
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
     played?: boolean
     error?: string
   }[]
@@ -86,6 +88,7 @@ interface DriverCtl {
     ratingKeys: string[]
     playQueueId: number | null
   }[]
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   awake: boolean
   onSwitch: (() => void) | null
   accountVerdict: Verdict | null

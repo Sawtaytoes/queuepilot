@@ -324,7 +324,7 @@ ok(
 const normalEps = (
   rk: string,
   count: number,
-  { watched: isWatched }: { watched: boolean },
+  { isWatched }: { isWatched: boolean },
 ): EpisodeLike[] =>
   Array.from({ length: count }, (_, index) =>
     s1(`${rk}${index + 1}`, index + 1, isWatched),
@@ -333,19 +333,19 @@ const normalEps = (
 // S1: 24 watched real episodes + 4 song-named ED theme songs at index 301–304 (unwatched). Those
 // four Season-0 ED leaves are what made Plex report 25/29 (inflated); filtered, S1 is 24/24.
 const s1Leaves = [
-  ...normalEps("100", 24, { watched: true }),
+  ...normalEps("100", 24, { isWatched: true }),
   s0("100e1", 301, "Seishun wa Zankoku ja Nai"),
   s0("100e2", 302, "Sai Psi Sai Kouchou!"),
   s0("100e3", 303, "Psi Desu I Like You"),
   s0("100e4", 304, "Kokoro"),
 ]
 const s2Leaves = [
-  ...normalEps("200", 26, { watched: true }),
+  ...normalEps("200", 26, { isWatched: true }),
   s0("200e1", 301, "Ending A"),
   s0("200e2", 302, "Ending B"),
 ]
-const s3Leaves = normalEps("300", 2, { watched: true })
-const s4Leaves = normalEps("400", 6, { watched: false }) // SIX real unwatched episodes
+const s3Leaves = normalEps("300", 2, { isWatched: true })
+const s4Leaves = normalEps("400", 6, { isWatched: false }) // SIX real unwatched episodes
 
 const SEEDS: [string, EpisodeLike[]][] = [
   ["100", s1Leaves],
@@ -458,7 +458,7 @@ ok(
 // A genuinely-unwatched NORMAL episode in an earlier member BLOCKS the advance: reseed S2 with
 // one real unwatched episode → next-up must stop at S2, not skip ahead to S4.
 const s2WithUnwatched = [
-  ...normalEps("200", 25, { watched: true }),
+  ...normalEps("200", 25, { isWatched: true }),
   s1("200u", 26, false),
   s0("200e1", 301, "Ending A"),
 ]

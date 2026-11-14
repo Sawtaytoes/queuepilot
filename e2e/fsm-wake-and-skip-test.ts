@@ -53,6 +53,7 @@ const driver = await import("../server/src/driver.js") // stubbed adb/playback/p
 interface AdbScript {
   /** 'wake' / 'launch', in the order adb.js issued them. */
   order: string[]
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   awake: boolean
   /** Queue of foreground activities; the last one repeats once drained. */
   foreground: (string | null)[]
@@ -62,7 +63,9 @@ interface DriverCtl {
   /** `[name, ...args]` per recorded primitive — read positionally by the assertions. */
   calls: unknown[][]
   foreground: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   onboarding: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   companionUp: boolean
   switchResult: [boolean, string]
   /** `"a|b"` -> the sameProfile answer to force. */
@@ -74,11 +77,13 @@ interface DriverCtl {
     observedAt: number | null
   }
   observationTtlSeconds: number
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   awake: boolean
   onSwitch: (() => void) | null
 }
 const ADB_SCRIPT = RAW_ADB_SCRIPT as unknown as AdbScript
 const resetScript = RAW_RESET_SCRIPT as unknown as (opts?: {
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the untyped stub state in e2e/stubs/ uses this name
   awake?: boolean
   foreground?: (string | null)[]
 }) => void

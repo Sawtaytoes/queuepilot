@@ -187,6 +187,7 @@ interface StubList {
   id: number
   title: string
   ownerUserName?: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   coverImageLocked?: boolean
 }
 interface AddedChapter {
@@ -202,18 +203,20 @@ interface UploadedCover {
 interface ListPatch {
   title: string
   summary: string
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   promoted: boolean
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- a Kavita API field
   coverImageLocked: boolean
 }
 
 function stubClient({
   existingLists = [],
-  coverFails: isCoverFailing = false,
-  renameFails: isRenameFailing = false,
+  isCoverFailing = false,
+  isRenameFailing = false,
 }: {
   existingLists?: StubList[]
-  coverFails?: boolean
-  renameFails?: boolean
+  isCoverFailing?: boolean
+  isRenameFailing?: boolean
 } = {}) {
   const lists: StubList[] = existingLists.map(
     (existingList) => ({ ...existingList }),
@@ -1217,7 +1220,7 @@ await ok(
   "a cover that fails to upload does not cost the reader their lineup",
   async () => {
     CALLS.length = 0
-    const client = stubClient({ coverFails: true })
+    const client = stubClient({ isCoverFailing: true })
     const provider = kavitaProvider({
       def: DEF,
       client: asClient(client),
@@ -1405,7 +1408,7 @@ await ok(
       existingLists: [
         { id: 42, title: "QueuePilot — reading" },
       ],
-      renameFails: true,
+      isRenameFailing: true,
     })
     const provider = kavitaProvider({
       def: DEF,

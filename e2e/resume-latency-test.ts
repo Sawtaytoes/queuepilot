@@ -219,6 +219,7 @@ async function measureOnce(
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/naming-convention -- the field of the server's SeekResult
   const seek = async (): Promise<{ seeked: true }> => {
     // The seek resolves its target too, and the byte leaves once that is done.
     clock.consume(targetCostMs)

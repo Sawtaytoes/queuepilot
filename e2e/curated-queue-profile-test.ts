@@ -184,6 +184,7 @@ const HOME_USERS: Record<
     username: string | null
     id: number | null
     uuid: string | null
+    // eslint-disable-next-line @typescript-eslint/naming-convention -- a Plex API field
     admin: boolean
   }
 > = {
