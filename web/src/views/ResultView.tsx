@@ -157,9 +157,13 @@ export function ResultView({
       .then(() => {
         if (!isCancelled) setError(null)
       })
-      .catch((e: unknown) => {
+      .catch((error: unknown) => {
         if (isCancelled) return
-        setError(e instanceof Error ? e.message : String(e))
+        setError(
+          error instanceof Error
+            ? error.message
+            : String(error),
+        )
       })
       .finally(() => {
         if (!isCancelled) setIsPending(false)
@@ -185,9 +189,9 @@ export function ResultView({
         setIsShortlistShown(false)
         writePickSession(next)
       }
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not reroll: ${(e as Error).message}`,
+        `Could not reroll: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -292,7 +296,7 @@ export function ResultView({
               <Button
                 id="result-shortlist-toggle"
                 onClick={() =>
-                  setIsShortlistShown((prev) => !prev)
+                  setIsShortlistShown((isShown) => !isShown)
                 }
                 size="lg"
               >
@@ -571,10 +575,10 @@ function QueueCard({
             className="playbtn"
             id={`${idPrefix}-go`}
             intent="accent"
-            onClick={(e) =>
+            onClick={(event) =>
               openPlayMenu({
                 anchor:
-                  e.currentTarget.getBoundingClientRect(),
+                  event.currentTarget.getBoundingClientRect(),
                 setId: pick.setId,
               })
             }

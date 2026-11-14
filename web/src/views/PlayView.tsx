@@ -124,19 +124,19 @@ function picksMeta(
 
 /** A tier-select value → `{set, profile?}` (JSON for a binding option, a bare id
  * otherwise). */
-function parseTierValue(v: string): {
+function parseTierValue(raw: string): {
   set: string
   profile?: string
 } {
-  if (v?.startsWith("{")) {
+  if (raw?.startsWith("{")) {
     try {
-      return JSON.parse(v)
+      return JSON.parse(raw)
     } catch {
       /* fall through */
     }
   }
 
-  return { set: v }
+  return { set: raw }
 }
 
 function PlayCard({
@@ -259,9 +259,9 @@ function PlayCard({
             <Button
               className="playbtn"
               intent="accent"
-              onClick={(e) =>
+              onClick={(event) =>
                 onPlay(
-                  e.currentTarget.getBoundingClientRect(),
+                  event.currentTarget.getBoundingClientRect(),
                 )
               }
             >
@@ -301,10 +301,10 @@ function ChannelCard({
   const people = usePeople()
   const isRewatch = channel.behavior === "rewatch"
   const options = channel.has_explicit_profiles
-    ? (channel.profiles || []).map((b) => ({
-        label: b.plex_user || channel.label,
+    ? (channel.profiles || []).map((binding) => ({
+        label: binding.plex_user || channel.label,
         value: JSON.stringify({
-          profile: b.plex_user,
+          profile: binding.plex_user,
           set: channel.id,
         }),
       }))
@@ -317,11 +317,12 @@ function ChannelCard({
     channel.has_explicit_profiles && channel.default_profile
       ? (channel.profiles || [])
           .filter(
-            (b) => b.plex_user === channel.default_profile,
+            (binding) =>
+              binding.plex_user === channel.default_profile,
           )
-          .map((b) =>
+          .map((binding) =>
             JSON.stringify({
-              profile: b.plex_user,
+              profile: binding.plex_user,
               set: channel.id,
             }),
           )[0]
@@ -336,7 +337,9 @@ function ChannelCard({
   // hand-edit picked up over SSE) can delete the binding this card is still holding. Falling
   // back to the current default rather than trusting the stale value is what stops the card
   // from quietly playing as an account the pool no longer has.
-  const value = options.some((o) => o.value === tierValue)
+  const value = options.some(
+    (option) => option.value === tierValue,
+  )
     ? tierValue
     : (defaultValue ?? options[0]?.value ?? channel.id)
   // The account this pool is locked to, for the meta line. Null when the tier picker is on
@@ -393,13 +396,13 @@ function ChannelCard({
       onPlay={(anchor) => {
         // With one binding the card does not ask — it plays as the account the pool is
         // configured for, which is what `tierValue` already holds.
-        const t = parseTierValue(value)
+        const parsedTier = parseTierValue(value)
 
         openPlayMenu({
           anchor,
           behavior: isRewatch ? "rewatch" : undefined,
-          profile: t.profile,
-          setId: t.set,
+          profile: parsedTier.profile,
+          setId: parsedTier.set,
         })
       }}
       tier={
@@ -439,20 +442,22 @@ function buildEntries(
   data: QueuesResponse | null,
 ): Entry[] {
   const rotations = new Set(
-    rotationChannels(reg).map((s) => s.id),
+    rotationChannels(reg).map(
+      (rotationChannel) => rotationChannel.id,
+    ),
   )
   const out: Entry[] = []
   const seen = new Set<string>()
 
   const classify = (id: string): Entry | null => {
-    const set = reg?.sets.find((s) => s.id === id)
+    const set = reg?.sets.find((set) => set.id === id)
 
     if (set && rotations.has(id))
       return { id, kind: "rules", set }
 
-    const q = data?.sets[id]
+    const queueSet = data?.sets[id]
 
-    if (q?.source !== "queue") return null
+    if (queueSet?.source !== "queue") return null
 
     // Hand-picked membership — formerly split into Ordered Queue (`movies`) and Curated
     // Pool (`anime`). Both are Picks; stored kind still drives playback until placement
@@ -461,7 +466,9 @@ function buildEntries(
   }
 
   for (const id of [
-    ...(reg?.sets ?? []).map((s) => s.id),
+    ...(reg?.sets ?? []).map(
+      (registrySet) => registrySet.id,
+    ),
     ...(data?.order ?? []),
   ]) {
     if (seen.has(id)) continue
@@ -484,7 +491,8 @@ export function PlayView() {
   const selected = parsePeople(search)
 
   const kindOf = (id: string) =>
-    reg?.sets.find((s) => s.id === id)?.provider_kind ?? ""
+    reg?.sets.find((set) => set.id === id)?.provider_kind ??
+    ""
 
   /**
    * Every set's trays, resolved to what the filter reads.
@@ -538,7 +546,7 @@ export function PlayView() {
       : peopleMatch(membersOf.get(id) ?? [], forPeople)
 
   const labelForKind = (kind: string) =>
-    reg?.sets.find((s) => s.provider_kind === kind)
+    reg?.sets.find((set) => set.provider_kind === kind)
       ?.vocabulary?.name ||
     PLEX_WORDS.name ||
     kind
@@ -586,8 +594,9 @@ export function PlayView() {
     forOnly: readonly string[],
   ) =>
     entries.filter(
-      (e) =>
-        matchOf(e.id, forPeople, forOnly).tier !== "none",
+      (entry) =>
+        matchOf(entry.id, forPeople, forOnly).tier !==
+        "none",
     ).length
   /**
    * Is there a queue that NAMES all of these people? The filter bar's dead-end test.
@@ -601,25 +610,26 @@ export function PlayView() {
     forOnly: readonly string[],
   ) =>
     entries.some(
-      (e) =>
-        (membersOf.get(e.id)?.length ?? 0) > 0 &&
-        matchOf(e.id, forPeople, forOnly).tier !== "none",
+      (entry) =>
+        (membersOf.get(entry.id)?.length ?? 0) > 0 &&
+        matchOf(entry.id, forPeople, forOnly).tier !==
+          "none",
     )
 
   /**
    * The grid in its two tiers. `shown` stays the flat list every other reader of this view
    * wants — the empty state, the reorder — and `tiers.exact.length` is where the rule goes.
    */
-  const tiers = splitByMatch(entries, (e) =>
-    matchOf(e.id, selected, only),
+  const tiers = splitByMatch(entries, (entry) =>
+    matchOf(entry.id, selected, only),
   )
   const shown = [...tiers.exact, ...tiers.also]
   /** WHO the also-in cards still want, in roster order — the divider's own sentence. */
   const alsoNames = (() => {
     const wanted = new Set(
-      tiers.also.flatMap((e) =>
+      tiers.also.flatMap((entry) =>
         missingRequiredPeople(
-          membersOf.get(e.id) ?? [],
+          membersOf.get(entry.id) ?? [],
           selected,
         ),
       ),
@@ -643,7 +653,9 @@ export function PlayView() {
     // amount of dragging, and the alternative is holding whatever `reg` was when the
     // listeners were bound.
     const state = getState()
-    const full = (state.reg?.sets ?? []).map((x) => x.id)
+    const full = (state.reg?.sets ?? []).map(
+      (registrySet) => registrySet.id,
+    )
 
     if (!full.length) return
 
@@ -655,13 +667,15 @@ export function PlayView() {
     // React last rendered it (so React reconciles against a DOM it believes), which means
     // the card visibly snaps BACK until new data arrives. Waiting for `load()` would hold
     // that snap-back for as long as `/api/queues` takes — 7-9 s warm against Plex.
-    const rank = new Map(next.map((id, i) => [id, i]))
-    const byRank = (a: string, b: string) =>
-      (rank.get(a) ?? 0) - (rank.get(b) ?? 0)
+    const rank = new Map(
+      next.map((id, index) => [id, index]),
+    )
+    const byRank = (left: string, right: string) =>
+      (rank.get(left) ?? 0) - (rank.get(right) ?? 0)
 
     if (state.reg) {
-      state.reg.sets = [...state.reg.sets].sort((a, b) =>
-        byRank(a.id, b.id),
+      state.reg.sets = [...state.reg.sets].sort(
+        (left, right) => byRank(left.id, right.id),
       )
     }
 
@@ -672,8 +686,8 @@ export function PlayView() {
     setStatus("Saving order…")
     void api("PATCH", "/api/sets-order", { ids: next })
       .then(() => setStatus("Order saved", "ok"))
-      .catch(async (e: Error) => {
-        setStatus(`Reorder failed: ${e.message}`, "err")
+      .catch(async (error: Error) => {
+        setStatus(`Reorder failed: ${error.message}`, "err")
         // The optimistic order is now a lie; re-read so the page shows what is on disk.
         await load()
       })
@@ -786,7 +800,7 @@ export function PlayView() {
       ) : null}
 
       <ul className="playgrid" id="playgrid" ref={gridRef}>
-        {shown.map((e, index) => {
+        {shown.map((entry, index) => {
           // The rule sits inside the grid, spanning every column — `useRowReorder` permutes
           // this list's children, so a wrapper per tier would stop a drag crossing the line.
           const divider =
@@ -798,13 +812,13 @@ export function PlayView() {
             ) : null
 
           return (
-            <Fragment key={e.id}>
+            <Fragment key={entry.id}>
               {divider}
-              {e.kind === "rules" ? (
+              {entry.kind === "rules" ? (
                 <ChannelCard
-                  channel={e.set}
+                  channel={entry.set}
                   duplicateNumber={
-                    numbers.get(e.id) ?? null
+                    numbers.get(entry.id) ?? null
                   }
                 />
               ) : (
@@ -815,21 +829,23 @@ export function PlayView() {
                   // the id the server falls back to.
                   label={queueTitle(
                     reg?.sets.find(
-                      (x) => x.id === e.id,
+                      (set) => set.id === entry.id,
                     ) ?? {
                       // No registry entry yet — one payload arrived before the other. All
                       // that is known is the queues payload's label, so it is treated as
                       // EXPLICIT: showing it beats showing an activity guessed from nothing.
                       activity: "watching",
                       has_explicit_label: true,
-                      label: data!.sets[e.id]!.label,
+                      label: data!.sets[entry.id]!.label,
                     },
-                    numbers.get(e.id) ?? null,
+                    numbers.get(entry.id) ?? null,
                   )}
                   // The registry entry, so a Plex Picks card and a Plex Rules card two
                   // cards apart render in the same amber rather than one of them in the
                   // neutral accent.
-                  set={reg?.sets.find((x) => x.id === e.id)}
+                  set={reg?.sets.find(
+                    (set) => set.id === entry.id,
+                  )}
                   // THE LIST INHERITS THE TRAYS, the same way the Picks page's shelves do.
                   // `usePeople` is a store slice of its own and is loaded once at start-up,
                   // so this costs the landing no extra request and no extra render on a
@@ -837,18 +853,24 @@ export function PlayView() {
                   people={
                     <PeopleRow
                       groups={people.groups}
-                      members={people.byQueue[e.id] ?? []}
+                      members={
+                        people.byQueue[entry.id] ?? []
+                      }
                       people={people.people}
                     />
                   }
                   meta={picksMeta(
-                    data!.sets[e.id]!.items.length,
-                    reg?.sets.find((x) => x.id === e.id) ??
-                      data!.sets[e.id],
+                    data!.sets[entry.id]!.items.length,
+                    reg?.sets.find(
+                      (set) => set.id === entry.id,
+                    ) ?? data!.sets[entry.id],
                   )}
-                  to={`/q/${e.id}`}
+                  to={`/q/${entry.id}`}
                   onPlay={(anchor) =>
-                    openPlayMenu({ anchor, setId: e.id })
+                    openPlayMenu({
+                      anchor,
+                      setId: entry.id,
+                    })
                   }
                 />
               )}

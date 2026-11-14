@@ -201,13 +201,13 @@ export function TonightView({
     let isCancelled = false
 
     void api<PeopleResponse>("GET", "/api/people")
-      .then((r) => {
+      .then((peopleResponse) => {
         if (isCancelled) return
-        setPeople(rosterOrder(r.people ?? []))
-        setGroups(r.groups ?? [])
+        setPeople(rosterOrder(peopleResponse.people ?? []))
+        setGroups(peopleResponse.groups ?? [])
         setPeopleError(null)
       })
-      .catch((e: unknown) => {
+      .catch((error: unknown) => {
         if (isCancelled) return
         setPeople([])
         setGroups([])
@@ -215,7 +215,9 @@ export function TonightView({
         // table yet" and "the request failed" look identical otherwise, and only one of
         // them is something to go and fix.
         setPeopleError(
-          e instanceof Error ? e.message : String(e),
+          error instanceof Error
+            ? error.message
+            : String(error),
         )
       })
 
@@ -235,16 +237,20 @@ export function TonightView({
       "GET",
       "/api/board-games/categories",
     )
-      .then((r) => {
+      .then((categoriesResponse) => {
         if (isCancelled) return
-        setBoardGameCategories(r.categories ?? [])
+        setBoardGameCategories(
+          categoriesResponse.categories ?? [],
+        )
         setBoardGameCategoriesError(null)
       })
-      .catch((e: unknown) => {
+      .catch((error: unknown) => {
         if (isCancelled) return
         setBoardGameCategories([])
         setBoardGameCategoriesError(
-          e instanceof Error ? e.message : String(e),
+          error instanceof Error
+            ? error.message
+            : String(error),
         )
       })
 
@@ -282,7 +288,7 @@ export function TonightView({
    * first option as chosen and this component has to agree with it.
    */
   const chosenQueue: TonightQueue | null =
-    matches.find((q) => q.id === queueId) ??
+    matches.find((match) => match.id === queueId) ??
     matches[0] ??
     null
 
@@ -364,9 +370,9 @@ export function TonightView({
         writePickSession(outcome.session)
         navigate("/result", { replace: true })
       })
-      .catch((e: unknown) => {
+      .catch((error: unknown) => {
         setPresetNote(
-          `Could not pick: ${e instanceof Error ? e.message : String(e)}`,
+          `Could not pick: ${error instanceof Error ? error.message : String(error)}`,
         )
         navigate(WATCH_PLAY_PATH, { replace: true })
       })
@@ -442,7 +448,9 @@ export function TonightView({
               }))}
               // The ROSTER is this group's second writer — the user's own clicks write
               // `checked`, so keying on that would remount a box under a finger.
-              seedKey={people.map((p) => p.id).join(",")}
+              seedKey={people
+                .map((person) => person.id)
+                .join(",")}
             />
           </div>
         ) : (
@@ -897,9 +905,9 @@ function GoButton({
       // component state, so leaving the card lost both.
       writePickSession(outcome.session)
       navigate("/result")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not pick: ${(e as Error).message}`,
+        `Could not pick: ${(error as Error).message}`,
         "err",
       )
     } finally {
@@ -1016,9 +1024,10 @@ function GoButton({
       className="playbtn"
       id="tonight-go"
       intent="accent"
-      onClick={(e) =>
+      onClick={(event) =>
         openPlayMenu({
-          anchor: e.currentTarget.getBoundingClientRect(),
+          anchor:
+            event.currentTarget.getBoundingClientRect(),
           setId: chosenQueue.id,
         })
       }
@@ -1068,9 +1077,9 @@ function SurpriseStep({
       }
       writePickSession(outcome.session)
       navigate("/result")
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not pick: ${(e as Error).message}`,
+        `Could not pick: ${(error as Error).message}`,
         "err",
       )
     } finally {

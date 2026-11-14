@@ -89,10 +89,14 @@ export function CollectionView() {
         setPeople(rosterOrder(roster.people ?? []))
         setError(null)
       })
-      .catch((e: unknown) => {
+      .catch((error: unknown) => {
         if (isCancelled) return
         setGames([])
-        setError(e instanceof Error ? e.message : String(e))
+        setError(
+          error instanceof Error
+            ? error.message
+            : String(error),
+        )
       })
 
     return () => {
@@ -126,7 +130,9 @@ export function CollectionView() {
               className="cfindbox"
               clearIcon={<ClearIcon />}
               id="collection-search"
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(event) =>
+                setQuery(event.target.value)
+              }
               onClear={() => setQuery("")}
               placeholder="Type part of a name"
               size="lg"
@@ -136,7 +142,7 @@ export function CollectionView() {
           <Button
             id="collection-excluded"
             onClick={() =>
-              setIsExcludedShown((prev) => !prev)
+              setIsExcludedShown((isShown) => !isShown)
             }
             size="sm"
           >
@@ -175,7 +181,9 @@ export function CollectionView() {
                   game={game}
                   knownHow={knownHow}
                   onLogged={() =>
-                    setReloadCount((n) => n + 1)
+                    setReloadCount(
+                      (previousCount) => previousCount + 1,
+                    )
                   }
                   people={people}
                 />

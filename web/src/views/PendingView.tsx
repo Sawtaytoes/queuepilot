@@ -262,11 +262,11 @@ export function PendingView() {
       setLibraries(found.libraries ?? [])
       applySelected(found.selected ?? [])
       setIsDefault(found.isDefault ?? true)
-    } catch (e) {
+    } catch (error) {
       if (ticket !== loadTicket.current) return
       setItems([])
       setStatus(
-        `Pending failed: ${(e as Error).message}`,
+        `Pending failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -295,9 +295,9 @@ export function PendingView() {
         libraries: next,
       })
       await load()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Could not save the libraries: ${(e as Error).message}`,
+        `Could not save the libraries: ${(error as Error).message}`,
         "err",
       )
       await load()
@@ -312,9 +312,9 @@ export function PendingView() {
 
   const queuesFor = (sectionId: number): RegistrySet[] =>
     (reg?.sets ?? []).filter(
-      (s) =>
-        s.source === "queue" &&
-        s.sections.includes(sectionId),
+      (registrySet) =>
+        registrySet.source === "queue" &&
+        registrySet.sections.includes(sectionId),
     )
 
   /**
@@ -346,7 +346,7 @@ export function PendingView() {
         instead would write one entry that plays one item.
       */
       const isCollection = item.type === "collection"
-      const { added, key } = await api<{
+      const { added: isAdded, key } = await api<{
         added?: boolean
         key?: string
       }>("POST", `/api/queues/${set.id}/items`, {
@@ -374,7 +374,7 @@ export function PendingView() {
       */
       const start = starts[item.ratingKey]
 
-      if (added !== false && key && start) {
+      if (isAdded !== false && key && start) {
         await api(
           "PATCH",
           `/api/queues/${set.id}/items/${encodeURIComponent(key)}/start`,
@@ -384,7 +384,7 @@ export function PendingView() {
 
       const memberDraft = memberDrafts[item.ratingKey]
 
-      if (added !== false && key && memberDraft) {
+      if (isAdded !== false && key && memberDraft) {
         const registrySet = reg?.sets.find(
           (candidate) => candidate.id === set.id,
         )
@@ -425,7 +425,7 @@ export function PendingView() {
       }
 
       setStatus(
-        added === false
+        isAdded === false
           ? `“${item.title}” is already in ${set.label}`
           : start
             ? `Added “${item.title}” to ${set.label}, starting at ${startLabel(
@@ -438,7 +438,8 @@ export function PendingView() {
       // It is covered now, so it leaves the list without a second round trip.
       setItems((prev) =>
         (prev ?? []).filter(
-          (x) => x.ratingKey !== item.ratingKey,
+          (pendingItem) =>
+            pendingItem.ratingKey !== item.ratingKey,
         ),
       )
       setStarts(
@@ -447,9 +448,9 @@ export function PendingView() {
       setMemberDrafts(
         ({ [item.ratingKey]: _gone, ...rest }) => rest,
       )
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Add failed: ${(e as Error).message}`,
+        `Add failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -486,21 +487,23 @@ export function PendingView() {
           } satisfies MenuItem,
         ]
       : compatible.map(
-          (s): MenuItem => ({
-            key: s.id,
+          (registrySet): MenuItem => ({
+            key: registrySet.id,
             // The queue's name, then WHO it is for — see `QueuePeopleBadge`. An activity
             // name alone cannot tell two of these rows apart.
             label: (
               <>
-                {s.label}
+                {registrySet.label}
                 <QueuePeopleBadge
                   groups={people.groups}
-                  members={people.byQueue[s.id] ?? []}
+                  members={
+                    people.byQueue[registrySet.id] ?? []
+                  }
                   people={people.people}
                 />
               </>
             ),
-            onSelect: () => void addTo(item, s),
+            onSelect: () => void addTo(item, registrySet),
           }),
         )),
     /*
@@ -584,7 +587,8 @@ export function PendingView() {
   const dismiss = async (item: PendingItem) => {
     setItems((prev) =>
       (prev ?? []).filter(
-        (x) => x.ratingKey !== item.ratingKey,
+        (pendingItem) =>
+          pendingItem.ratingKey !== item.ratingKey,
       ),
     )
 
@@ -596,9 +600,9 @@ export function PendingView() {
         `Removed “${item.title}” from Pending`,
         "ok",
       )
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Dismiss failed: ${(e as Error).message}`,
+        `Dismiss failed: ${(error as Error).message}`,
         "err",
       )
       await load()
@@ -619,8 +623,11 @@ export function PendingView() {
     try {
       await api("POST", "/api/pending/seen", {})
       setStatus("Marked all as seen", "ok")
-    } catch (e) {
-      setStatus(`Failed: ${(e as Error).message}`, "err")
+    } catch (error) {
+      setStatus(
+        `Failed: ${(error as Error).message}`,
+        "err",
+      )
       await load()
     }
   }
@@ -690,13 +697,13 @@ export function PendingView() {
               isChecked
                 ? [...selectedNow.current, id]
                 : selectedNow.current.filter(
-                    (x) => x !== id,
+                    (selectedId) => selectedId !== id,
                   ),
             )
           }
-          options={libraries.map((l) => ({
-            label: l.title,
-            value: l.id,
+          options={libraries.map((library) => ({
+            label: library.title,
+            value: library.id,
           }))}
           // The server re-resolves the selection on every write, and "Back to default" can
           // change every box without anyone touching one — the second writer this repo's
@@ -730,9 +737,11 @@ export function PendingView() {
                 { label: "List", value: "list" },
               ]}
               label="View"
-              onChange={(v) =>
+              onChange={(selectedDensity) =>
                 setDensity(
-                  v === "list" ? "list" : "posters",
+                  selectedDensity === "list"
+                    ? "list"
+                    : "posters",
                 )
               }
               selectedValue={density}

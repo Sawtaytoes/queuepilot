@@ -243,8 +243,8 @@ function ordinalOf(
  * they are looking.
  */
 function byFirstDate(
-  a: RegistrySet,
-  b: RegistrySet,
+  left: RegistrySet,
+  right: RegistrySet,
 ): number {
   const first = (set: RegistrySet) =>
     Math.min(
@@ -252,7 +252,7 @@ function byFirstDate(
       ordinalOf(set.reset_watched_on),
     )
 
-  return first(a) - first(b)
+  return first(left) - first(right)
 }
 
 type Draft = {
@@ -374,8 +374,8 @@ function CalendarRow({
       // agrees that it is.
       await load()
       setStatus(`${title} — dates saved`, "ok")
-    } catch (e) {
-      setStatus(String(e), "err")
+    } catch (error) {
+      setStatus(String(error), "err")
     } finally {
       setIsSaving(false)
     }

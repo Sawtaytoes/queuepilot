@@ -120,13 +120,17 @@ function shelfMatches(
 ) {
   if (!filter) return true
 
-  const f = filter.toLowerCase()
+  const lowerFilter = filter.toLowerCase()
 
-  if (names.some((name) => name.toLowerCase().includes(f)))
+  if (
+    names.some((name) =>
+      name.toLowerCase().includes(lowerFilter),
+    )
+  )
     return true
 
   return items.some((it) =>
-    (it.title || "").toLowerCase().includes(f),
+    (it.title || "").toLowerCase().includes(lowerFilter),
   )
 }
 
@@ -690,11 +694,11 @@ function Shelf({
         // over a poster so a touch long-press can arm a drag, so a right-click
         // on a shelf poster did NOTHING at all. It also carries the start-point
         // actions, which had no shelf route either.
-        onContextMenu={(e) => {
-          e.preventDefault()
+        onContextMenu={(event) => {
+          event.preventDefault()
           openTileMenu(
-            e.clientX,
-            e.clientY,
+            event.clientX,
+            event.clientY,
             queueEntryActions(setId, item),
           )
         }}
@@ -799,10 +803,10 @@ function Shelf({
                   className="shelfplay"
                   intent="accent"
                   label="Play this queue on a device"
-                  onClick={(e) =>
+                  onClick={(event) =>
                     openPlayMenu({
                       anchor:
-                        e.currentTarget.getBoundingClientRect(),
+                        event.currentTarget.getBoundingClientRect(),
                       setId,
                     })
                   }
@@ -1102,7 +1106,7 @@ export function QueuesView({
   // which is what left `Alex — Anime` and nine others listed on the Rules page instead
   // (decision `2026-08-26-a-picks-queue-lives-on-the-picks-screen-whichever-lane-it-defaults-to`).
   const setById = (id: string) =>
-    reg?.sets.find((s) => s.id === id) ?? null
+    reg?.sets.find((set) => set.id === id) ?? null
   // A FILTERED queue is drawn UNDER the queue it views, wherever the file happens to have
   // written it (`lib/filteredQueues.ts`).
   const shelfIds = nestFilteredQueues(
@@ -1219,7 +1223,7 @@ export function QueuesView({
     }
   }
   const renderShelf = (id: string) => {
-    const q = data!.sets[id]!
+    const queue = data!.sets[id]!
     const registrySet = setById(id)
     // THE NAME WHEN THERE IS ONE, the ACTIVITY when there is not. This shelf
     // printed the activity unconditionally until 2026-08-26, which renamed
@@ -1229,7 +1233,7 @@ export function QueuesView({
     // finds it even when the shelf is showing the activity.
     const title = registrySet
       ? queueTitle(registrySet, numbers.get(id) ?? null)
-      : q.label
+      : queue.label
 
     return (
       <Shelf
@@ -1244,9 +1248,13 @@ export function QueuesView({
           !hasCollapsePreference || collapsed.has(id)
         }
         isHiddenByFilter={
-          !shelfMatches(filter, [title, q.label], q.items)
+          !shelfMatches(
+            filter,
+            [title, queue.label],
+            queue.items,
+          )
         }
-        items={q.items}
+        items={queue.items}
         label={title}
         members={people.byQueue[id] ?? []}
         now={now}
@@ -1261,7 +1269,7 @@ export function QueuesView({
         // read as priority-by-default on its shelf and random-by-default on its
         // own page.
         setLane={
-          isRandomOrder(registrySet ?? q)
+          isRandomOrder(registrySet ?? queue)
             ? "random"
             : "priority"
         }

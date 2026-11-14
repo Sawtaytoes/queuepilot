@@ -114,7 +114,7 @@ export function ChannelPool({
   const [isLoading, setIsLoading] = useState(true)
   // "first load can take a minute" moves OUT of the heading into a hint that appears only
   // after 3 s — so a fast load never shows it, and a slow one explains itself.
-  const [showSlowHint, setShowSlowHint] = useState(false)
+  const [isSlowHintShown, setShowSlowHint] = useState(false)
   const reqRef = useRef(0)
   // `fresh=1` is a full reshuffle/rescan and must fire ONLY when the Resample
   // button actually bumped `resampleToken` — not on a `reloadToken` re-read, a
@@ -158,10 +158,10 @@ export function ChannelPool({
 
         if (profile) qs.set("profile", profile)
 
-        const q = qs.toString()
+        const queryString = qs.toString()
         const data = await api<PreviewResponse>(
           "GET",
-          `/api/generic/${chId}/preview${q ? `?${q}` : ""}`,
+          `/api/generic/${chId}/preview${queryString ? `?${queryString}` : ""}`,
         )
 
         // Stale-response guard: two same-target loads in flight would both render.
@@ -185,14 +185,17 @@ export function ChannelPool({
 
         const buckets = data.buckets || []
         const shows = buckets.filter(
-          (b) =>
-            !String(b.ratingKey).startsWith("section-"),
+          (bucket) =>
+            !String(bucket.ratingKey).startsWith(
+              "section-",
+            ),
         )
-        const itemBuckets = buckets.filter((b) =>
-          String(b.ratingKey).startsWith("section-"),
+        const itemBuckets = buckets.filter((bucket) =>
+          String(bucket.ratingKey).startsWith("section-"),
         )
         const itemCount = itemBuckets.reduce(
-          (n, b) => n + b.unwatched,
+          (total, itemBucket) =>
+            total + itemBucket.unwatched,
           0,
         )
 
@@ -202,13 +205,13 @@ export function ChannelPool({
               ? ` + ${itemCount} shorts`
               : ""),
         )
-      } catch (e) {
+      } catch (error) {
         if (req !== reqRef.current) return // a newer load owns the pool now
 
         setHeading("Eligible titles")
         setIsLoading(false)
         setStatus(
-          `Preview failed: ${(e as Error).message}`,
+          `Preview failed: ${(error as Error).message}`,
           "err",
         )
       }
@@ -247,9 +250,9 @@ export function ChannelPool({
       setState({ data, reg })
       setStatus(`${label} excluded`, "ok")
       onChanged()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Exclude failed: ${(e as Error).message}`,
+        `Exclude failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -275,9 +278,9 @@ export function ChannelPool({
       setState({ data, reg })
       setStatus(`${label} excluded`, "ok")
       onChanged()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Exclude failed: ${(e as Error).message}`,
+        `Exclude failed: ${(error as Error).message}`,
         "err",
       )
     }
@@ -367,24 +370,26 @@ export function ChannelPool({
   // EntryActions the modal reads, with an item shaped like a resolved show. The pool is
   // rule-derived (no stored entry), so `save` writes the set's `starts` map keyed by
   // ratingKey rather than an array slot, and `index` is unused here (-1).
-  const poolEntry = (b: PreviewBucket): EntryActions => {
+  const poolEntry = (
+    bucket: PreviewBucket,
+  ): EntryActions => {
     const start =
-      channel.starts?.[String(b.ratingKey)] ?? null
+      channel.starts?.[String(bucket.ratingKey)] ?? null
     const item: ChannelMember = {
       childCount: null,
       index: -1,
-      nextEp: b.next
+      nextEp: bucket.next
         ? {
-            episode: b.next.episode,
-            multiSeason: b.next.multiSeason,
-            season: b.next.season,
-            title: b.next.title,
+            episode: bucket.next.episode,
+            multiSeason: bucket.next.multiSeason,
+            season: bucket.next.season,
+            title: bucket.next.title,
           }
         : null,
-      ratingKey: String(b.ratingKey),
+      ratingKey: String(bucket.ratingKey),
       resolved: true,
       start,
-      title: b.show,
+      title: bucket.show,
       type: "show",
       year: null,
     }
@@ -397,7 +402,8 @@ export function ChannelPool({
         .user_uuid,
       item,
       refresh: () => onChanged(),
-      save: (s) => saveStart(b.ratingKey, s),
+      save: (startPoint) =>
+        saveStart(bucket.ratingKey, startPoint),
       setId: channel.id,
     }
   }
@@ -406,11 +412,11 @@ export function ChannelPool({
   // affordances (a clickable "next" line and, once set, a "Start …" chip). A Shorts
   // ("section-") bucket is not a series, so it carries neither. (The `items` split — one
   // tile per short — is handled by the caller before this runs.)
-  const renderShowBucket = (b: PreviewBucket) => {
-    const isSection = String(b.ratingKey).startsWith(
+  const renderShowBucket = (bucket: PreviewBucket) => {
+    const isSection = String(bucket.ratingKey).startsWith(
       "section-",
     )
-    const entry = isSection ? null : poolEntry(b)
+    const entry = isSection ? null : poolEntry(bucket)
     const start = entry?.item.start ?? null
 
     return (
@@ -423,7 +429,7 @@ export function ChannelPool({
               intent="neutral"
               size="sm"
             >
-              {`${b.unwatched} unwatched`}
+              {`${bucket.unwatched} unwatched`}
             </Badge>
             {/* Weight applies to a Shorts bucket too — "sprinkle twice as many shorts" is
                 the same question as "play this show twice as often", and the bucket is
@@ -431,17 +437,20 @@ export function ChannelPool({
             <Tip label="How often this comes up — a 3x show takes about three slots for every one a normal show takes in the rotation.">
               <span className="eps">
                 <CountPicker
-                  label={`Weight for ${b.show}`}
+                  label={`Weight for ${bucket.show}`}
                   max={WEIGHT_MAX}
-                  onChange={(n) =>
-                    void saveWeight(String(b.ratingKey), n)
+                  onChange={(weight) =>
+                    void saveWeight(
+                      String(bucket.ratingKey),
+                      weight,
+                    )
                   }
                   unit="x"
                   value={
                     channel.weights?.[
-                      String(b.ratingKey)
+                      String(bucket.ratingKey)
                     ] ??
-                    b.weight ??
+                    bucket.weight ??
                     1
                   }
                 />
@@ -454,11 +463,11 @@ export function ChannelPool({
             <Tip label="What this one does when it has nothing left to watch. Follow queue uses the queue's own setting; the other two override it for this show only.">
               <span className="eps">
                 <SelectListbox
-                  label={`When ${b.show} is finished`}
-                  onChange={(v) =>
+                  label={`When ${bucket.show} is finished`}
+                  onChange={(completion) =>
                     void saveOnComplete(
-                      String(b.ratingKey),
-                      v,
+                      String(bucket.ratingKey),
+                      completion,
                     )
                   }
                   options={[
@@ -475,7 +484,7 @@ export function ChannelPool({
                   size="sm"
                   value={
                     channel.on_complete_by_show?.[
-                      String(b.ratingKey)
+                      String(bucket.ratingKey)
                     ] ?? ""
                   }
                 />
@@ -485,9 +494,12 @@ export function ChannelPool({
               <ExcludeButton
                 label="Exclude"
                 onExclude={() =>
-                  excludeFromBlocklist(b.ratingKey, b.show)
+                  excludeFromBlocklist(
+                    bucket.ratingKey,
+                    bucket.show,
+                  )
                 }
-                title={`Exclude ${b.show} from eligible titles`}
+                title={`Exclude ${bucket.show} from eligible titles`}
               />
             )}
             {start && entry ? (
@@ -505,10 +517,10 @@ export function ChannelPool({
             ) : null}
           </>
         }
-        dataKey={String(b.ratingKey)}
-        key={b.ratingKey}
+        dataKey={String(bucket.ratingKey)}
+        key={bucket.ratingKey}
         next={
-          b.next && !isSection
+          bucket.next && !isSection
             ? {
                 // Clicking opens the same picker the queue tiles use; the label matches
                 // the queue-grid tiles (single-season anime drops the "S1").
@@ -518,10 +530,10 @@ export function ChannelPool({
                 // The SAME label the queue/member tiles wear, from the same helper —
                 // including "Ch 113" on a reading pool, where the number is a chapter.
                 text: [
-                  seLabel(b.next, b.unit),
-                  isSelfTitled(b.next)
+                  seLabel(bucket.next, bucket.unit),
+                  isSelfTitled(bucket.next)
                     ? null
-                    : b.next.title,
+                    : bucket.next.title,
                 ]
                   .filter(Boolean)
                   .join(" · "),
@@ -532,13 +544,13 @@ export function ChannelPool({
         }
         // A reading pool's artwork is its provider's, re-served by the app (see `Poster`);
         // a section bucket borrows the next-up leaf's Plex poster, which has no cover URL.
-        posterCover={isSection ? null : b.cover}
+        posterCover={isSection ? null : bucket.cover}
         posterRatingKey={
           isSection
-            ? (b.next?.ratingKey ?? null)
-            : b.ratingKey
+            ? (bucket.next?.ratingKey ?? null)
+            : bucket.ratingKey
         }
-        title={b.show}
+        title={bucket.show}
       />
     )
   }
@@ -558,7 +570,7 @@ export function ChannelPool({
       </div>
       {/* Out of the heading (a heading that changes is a CLS + a11y nuisance), and only
           after 3 s, so a fast load never shows it. */}
-      {isLoading && showSlowHint ? (
+      {isLoading && isSlowHintShown ? (
         <p className="chpool-hint">
           First load can take a minute.
         </p>
@@ -573,7 +585,7 @@ export function ChannelPool({
         {isLoading
           ? Array.from(
               { length: SKELETON_COUNT },
-              (_, i) => (
+              (_, index) => (
                 // NOT `li.tile`: the e2e suites `waitForSelector('#chpool li.tile')` to detect a
                 // LOADED pool, so a skeleton wearing that class would resolve the wait early on
                 // empty placeholders. `.skeltile` carries the same geometry, different name.
@@ -582,7 +594,7 @@ export function ChannelPool({
                   // A fixed-length run of identical placeholders: no identity to key
                   // on, and all of them are replaced at once when the real tiles arrive.
                   // biome-ignore lint/suspicious/noArrayIndexKey: see above
-                  key={`skeleton-${i}`}
+                  key={`skeleton-${index}`}
                 >
                   <div className="thumb">
                     <Skeleton
@@ -596,9 +608,9 @@ export function ChannelPool({
             )
           : isRewatch
             ? renderRewatchPool()
-            : (preview?.buckets ?? []).flatMap((b) =>
-                b.items
-                  ? b.items.map((it) => (
+            : (preview?.buckets ?? []).flatMap((bucket) =>
+                bucket.items
+                  ? bucket.items.map((it) => (
                       <PosterTile
                         badges={
                           <ExcludeButton
@@ -613,12 +625,12 @@ export function ChannelPool({
                           />
                         }
                         dataKey={String(it.ratingKey)}
-                        key={`${b.ratingKey}:${it.ratingKey}`}
+                        key={`${bucket.ratingKey}:${it.ratingKey}`}
                         posterRatingKey={it.ratingKey}
                         title={it.title}
                       />
                     ))
-                  : [renderShowBucket(b)],
+                  : [renderShowBucket(bucket)],
               )}
       </ul>
     </section>
@@ -651,27 +663,30 @@ export function ChannelPool({
       ) : null,
       ...movies
         .filter(
-          (m) =>
-            !sample || m.ratingKey !== sample.ratingKey,
+          (movy) =>
+            !sample || movy.ratingKey !== sample.ratingKey,
         )
-        .map((m) => (
+        .map((movy) => (
           <PosterTile
             badges={
               <>
-                <WatchesBadge count={m.count} />
+                <WatchesBadge count={movy.count} />
                 <ExcludeButton
                   label="Exclude"
                   onExclude={() =>
-                    excludeFromRewatch(m.ratingKey, m.title)
+                    excludeFromRewatch(
+                      movy.ratingKey,
+                      movy.title,
+                    )
                   }
                   title="Exclude from eligible titles"
                 />
               </>
             }
-            dataKey={String(m.ratingKey)}
-            key={m.ratingKey}
-            posterRatingKey={m.ratingKey}
-            title={m.title}
+            dataKey={String(movy.ratingKey)}
+            key={movy.ratingKey}
+            posterRatingKey={movy.ratingKey}
+            title={movy.title}
           />
         )),
     ]
@@ -698,8 +713,10 @@ export function patchActiveBinding(
   }
 
   const active = activeBinding(ch, currentProfile)
-  const profiles = (ch.profiles || []).map((p) =>
-    p === active ? { ...p, ...changes } : p,
+  const profiles = (ch.profiles || []).map((binding) =>
+    binding === active
+      ? { ...binding, ...changes }
+      : binding,
   )
 
   return api("PATCH", `/api/sets/${ch.id}`, {

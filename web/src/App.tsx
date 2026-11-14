@@ -555,10 +555,12 @@ function QueuePage() {
       navigate(ROUTE_PATHS.queues.replace("/*", ""))
   }, [data, navigate, setId])
 
-  const q = data?.sets[setId]
-  const registrySet = reg?.sets.find((s) => s.id === setId)
-  const label = q?.label ?? "QueuePilot"
-  const isChannel = isRandomOrder(registrySet ?? q)
+  const queueSet = data?.sets[setId]
+  const registrySet = reg?.sets.find(
+    (set) => set.id === setId,
+  )
+  const label = queueSet?.label ?? "QueuePilot"
+  const isChannel = isRandomOrder(registrySet ?? queueSet)
   // Plex's words unless the registry says otherwise, so a response that predates
   // `vocabulary` renders exactly as it always did.
   const vocab = registrySet?.vocabulary ?? {
@@ -574,7 +576,7 @@ function QueuePage() {
   const isPlayingThis = Boolean(
     playing && playing === setId,
   )
-  const n = now.now
+  const nowPlaying = now.now
 
   return (
     <Page
@@ -590,8 +592,8 @@ function QueuePage() {
       isSubHidden={isPlayingThis ? false : !isChannel}
       navigationHref={queuesPath}
       sub={
-        isPlayingThis && n
-          ? `${n.state === "paused" ? "⏸ Paused" : "▶ Now playing"}${n.title || n.showTitle ? ` — ${n.title || n.showTitle}` : ""}`
+        isPlayingThis && nowPlaying
+          ? `${nowPlaying.state === "paused" ? "⏸ Paused" : "▶ Now playing"}${nowPlaying.title || nowPlaying.showTitle ? ` — ${nowPlaying.title || nowPlaying.showTitle}` : ""}`
           : isChannel
             ? // A curated pool's members play in a shuffled order — say so, and drop the
               // ordering UI. In the PROVIDER's nouns: on a reading pool this used to promise

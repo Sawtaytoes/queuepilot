@@ -47,7 +47,7 @@ function resolveInitialProfile(
   const bindings = channel.profiles || []
   const matches = (name: string | null) =>
     Boolean(name) &&
-    bindings.some((b) => b.plex_user === name)
+    bindings.some((binding) => binding.plex_user === name)
 
   if (matches(currentProfile)) return currentProfile
   if (matches(channel.default_profile ?? null))
@@ -98,9 +98,9 @@ export function ChannelsView({
 
   const binding = activeBinding(channel, currentProfile)
   const profileOptions = channel.has_explicit_profiles
-    ? (channel.profiles || []).map((b) => ({
-        label: b.plex_user || channel.label,
-        value: `${channel.id}::${b.plex_user || ""}`,
+    ? (channel.profiles || []).map((profileBinding) => ({
+        label: profileBinding.plex_user || channel.label,
+        value: `${channel.id}::${profileBinding.plex_user || ""}`,
       }))
     : [{ label: channel.label, value: channel.id }]
   const profileValueNow = channel.has_explicit_profiles
@@ -140,15 +140,22 @@ export function ChannelsView({
               id="chprofile"
               key={channel.id}
               label="Profile"
-              onChange={(v) => {
-                const i = v.indexOf("::")
+              onChange={(selectedProfile) => {
+                const separatorIndex =
+                  selectedProfile.indexOf("::")
 
-                if (i >= 0)
+                if (separatorIndex >= 0)
                   setChannelSelection(
-                    v.slice(0, i),
-                    v.slice(i + 2) || null,
+                    selectedProfile.slice(
+                      0,
+                      separatorIndex,
+                    ),
+                    selectedProfile.slice(
+                      separatorIndex + 2,
+                    ) || null,
                   )
-                else setChannelSelection(v, null)
+                else
+                  setChannelSelection(selectedProfile, null)
               }}
               options={profileOptions}
               value={profileValueNow}
@@ -184,10 +191,10 @@ export function ChannelsView({
               className="playbtn"
               id="chplay"
               intent="accent"
-              onClick={(e) =>
+              onClick={(event) =>
                 openPlayMenu({
                   anchor:
-                    e.currentTarget.getBoundingClientRect(),
+                    event.currentTarget.getBoundingClientRect(),
                   behavior: isMovies
                     ? "rewatch"
                     : undefined,
@@ -217,7 +224,11 @@ export function ChannelsView({
           appearance="outline"
           id="chresample"
           intent="neutral"
-          onClick={() => setResampleToken((n) => n + 1)}
+          onClick={() =>
+            setResampleToken(
+              (previousToken) => previousToken + 1,
+            )
+          }
         >
           Resample
         </Button>
@@ -250,7 +261,11 @@ export function ChannelsView({
           channel={channel}
           currentProfile={currentProfile}
           key={channel.id}
-          onChanged={() => setReloadToken((n) => n + 1)}
+          onChanged={() =>
+            setReloadToken(
+              (previousToken) => previousToken + 1,
+            )
+          }
           reloadToken={reloadToken}
           resampleToken={resampleToken}
         />
@@ -259,7 +274,11 @@ export function ChannelsView({
           currentProfile={currentProfile}
           isMovies={isMovies}
           key={`${channel.id}::${currentProfile ?? ""}`}
-          onChanged={() => setReloadToken((n) => n + 1)}
+          onChanged={() =>
+            setReloadToken(
+              (previousToken) => previousToken + 1,
+            )
+          }
         />
       </div>
     </div>

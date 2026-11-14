@@ -208,19 +208,19 @@ export function QueueView({
   const [searchLibrary, setSearchLibrary] = useState("")
   const [searchYear, setSearchYear] = useState("")
   const [searchState, setSearchState] = useState("")
-  const [hideQueued, setHideQueued] = useState(false)
+  const [isQueuedHidden, setHideQueued] = useState(false)
 
-  const q = setId ? data?.sets[setId] : undefined
+  const queueSet = setId ? data?.sets[setId] : undefined
   // The REGISTRY entry (not the queue contents) — it carries `delivery`, which decides
   // whether this queue is pushed at a device or opened by a link.
   const regSet = setId
-    ? reg?.sets.find((x) => x.id === setId)
+    ? reg?.sets.find((set) => set.id === setId)
     : undefined
   const [plexSources, setPlexSources] = useState<
     PlexSource[]
   >([])
   useEffect(() => {
-    let cancelled = false
+    let isCancelled = false
     setSearchSource("")
     setSearchLibrary("")
     setPlexSources([])
@@ -230,13 +230,14 @@ export function QueueView({
       `/api/plex-sources?profile=${encodeURIComponent(regSet.requires_profile ?? "")}`,
     )
       .then((result) => {
-        if (!cancelled) setPlexSources(result.sources ?? [])
+        if (!isCancelled)
+          setPlexSources(result.sources ?? [])
       })
       .catch(() => {
-        if (!cancelled) setPlexSources([])
+        if (!isCancelled) setPlexSources([])
       })
     return () => {
-      cancelled = true
+      isCancelled = true
     }
   }, [
     regSet?.id,
@@ -248,7 +249,7 @@ export function QueueView({
   // The queue's OWN default lane — what an entry with no `placement` of its own means.
   // `isRandomOrder` already tolerates a registry row carrying only a legacy kind, so this
   // is that one answer named as a lane rather than as a boolean about order.
-  const isChannel = isRandomOrder(regSet ?? q)
+  const isChannel = isRandomOrder(regSet ?? queueSet)
   const setLane = isChannel ? "random" : "priority"
   // Pushed at a device, or opened by a link. Decides the whole start affordance — the
   // queue-level button AND every tile's ▶.
@@ -262,7 +263,7 @@ export function QueueView({
   // control here edits an ENTRY, and an entry is the same entry in both queues.
   const filteredFrom = filteredParent(
     regSet,
-    (id) => reg?.sets.find((x) => x.id === id) ?? null,
+    (id) => reg?.sets.find((set) => set.id === id) ?? null,
   )
 
   // WHAT THIS QUEUE IS CALLED, for anything that has to name it in a sentence — today the
@@ -280,7 +281,7 @@ export function QueueView({
           people.byQueue,
         ).get(regSet.id) ?? null,
       )
-    : (q?.label ?? "this queue")
+    : (queueSet?.label ?? "this queue")
 
   // Can this queue's backend play PART of an item? Plex alone today. A reading queue or a
   // board-game queue therefore carries no section tag and no section filter — nothing
@@ -313,7 +314,7 @@ export function QueueView({
   // FILE order, always. The page-wide alphabetical sort a random-order set used to get
   // here moved INTO the pool lane (`splitLanes`): it was never true of the whole page once
   // half of it is a Priority queue whose order is the thing being edited.
-  const allItems = q ? q.items : []
+  const allItems = queueSet ? queueSet.items : []
 
   // The libraries this queue actually draws from — the only ones its search can return, so
   // offering the whole server's list would be four dead options out of five. A queue that
@@ -453,7 +454,10 @@ export function QueueView({
       ...lanes.priority,
       ...lanes.random,
     ]
-      .map((i) => `${i.key}@${i.placement ?? setLane}`)
+      .map(
+        (queueItem) =>
+          `${queueItem.key}@${queueItem.placement ?? setLane}`,
+      )
       .join("|")}`,
   })
 
@@ -515,9 +519,9 @@ export function QueueView({
 
       setStatus(`Added another “${hit.title}”`, "ok")
       refreshData()
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Add failed: ${(e as Error).message}`,
+        `Add failed: ${(error as Error).message}`,
         "err",
       )
       refreshData()
@@ -694,9 +698,9 @@ export function QueueView({
             ? () => void moveEntryLane(setId, item, setLane)
             : undefined
         }
-        onContextMenu={(e) => {
-          e.preventDefault()
-          openTileMenu(e.clientX, e.clientY, entry)
+        onContextMenu={(event) => {
+          event.preventDefault()
+          openTileMenu(event.clientX, event.clientY, entry)
         }}
         // Only a RESOLVED entry can be played: an unresolved one has no library item
         // behind it, so the server would reject the start after the device menu had
@@ -861,7 +865,7 @@ export function QueueView({
       ) : null}
       <div className="add">
         <SearchDropdown<SearchHit>
-          searchKey={`${searchSource}:${searchLibrary}:${sharedScopeKey}:${searchType}:${searchYear}:${searchState}:${hideQueued}`}
+          searchKey={`${searchSource}:${searchLibrary}:${sharedScopeKey}:${searchType}:${searchYear}:${searchState}:${isQueuedHidden}`}
           doSearch={async (text) => {
             // Opt into Collection results — `collections=1` is additive; the scoped
             // add box is where "play a collection in order" is composed.
@@ -909,7 +913,7 @@ export function QueueView({
                 }
               }
               if (
-                hideQueued &&
+                isQueuedHidden &&
                 keyOfHit(hit) in queuedKeys
               ) {
                 return false
@@ -935,10 +939,10 @@ export function QueueView({
             // when you picked a duplicate.
             return [
               ...filtered.filter(
-                (h) => keyOfHit(h) in queuedKeys,
+                (hit) => keyOfHit(hit) in queuedKeys,
               ),
               ...filtered.filter(
-                (h) => !(keyOfHit(h) in queuedKeys),
+                (hit) => !(keyOfHit(hit) in queuedKeys),
               ),
             ]
           }}
@@ -1142,9 +1146,9 @@ export function QueueView({
                   // entry (its poster + ratingKey already resolve, so only nextEp
                   // fills in later).
                   refreshData()
-                } catch (e) {
+                } catch (error) {
                   setStatus(
-                    `Add failed: ${(e as Error).message}`,
+                    `Add failed: ${(error as Error).message}`,
                     "err",
                   )
                   refreshData() // re-sync so a failed optimistic tile can't linger
@@ -1265,7 +1269,7 @@ export function QueueView({
               boolean, not a member of a group. */}
           <div className="addpos">
             <Checkbox
-              isChecked={hideQueued}
+              isChecked={isQueuedHidden}
               label="Hide what’s already here"
               onChange={setHideQueued}
               size="sm"
@@ -1314,11 +1318,11 @@ export function QueueView({
                 className="playbtn"
                 id="qplay"
                 intent="accent"
-                onClick={(e) =>
+                onClick={(event) =>
                   setId &&
                   openPlayMenu({
                     anchor:
-                      e.currentTarget.getBoundingClientRect(),
+                      event.currentTarget.getBoundingClientRect(),
                     setId,
                   })
                 }
@@ -1340,8 +1344,8 @@ export function QueueView({
           className="qfilter"
           clearIcon={<ClearIcon />}
           id="qfilter"
-          onChange={(e) =>
-            view.setFilters({ text: e.target.value })
+          onChange={(event) =>
+            view.setFilters({ text: event.target.value })
           }
           onClear={() => view.setFilters({ text: "" })}
           placeholder="Filter this queue…"
@@ -1351,9 +1355,9 @@ export function QueueView({
         <SelectListbox
           id="qfiltertype"
           label="Type"
-          onChange={(v) =>
+          onChange={(filterType) =>
             view.setFilters({
-              type: v as typeof view.filters.type,
+              type: filterType as typeof view.filters.type,
             })
           }
           options={[
@@ -1368,9 +1372,10 @@ export function QueueView({
         <SelectListbox
           id="qfilterstate"
           label="State"
-          onChange={(v) =>
+          onChange={(filterState) =>
             view.setFilters({
-              state: v as typeof view.filters.state,
+              state:
+                filterState as typeof view.filters.state,
             })
           }
           options={[
@@ -1410,9 +1415,9 @@ export function QueueView({
         <SelectListbox
           id="qsort"
           label="Sort"
-          onChange={(v) =>
+          onChange={(sortOrder) =>
             view.setFilters({
-              sort: v as typeof view.filters.sort,
+              sort: sortOrder as typeof view.filters.sort,
             })
           }
           options={[
@@ -1473,8 +1478,10 @@ export function QueueView({
               { label: "List", value: "rows" },
             ]}
             label="View"
-            onChange={(v) =>
-              view.setDensity((v ?? "cards") as Density)
+            onChange={(selectedDensity) =>
+              view.setDensity(
+                (selectedDensity ?? "cards") as Density,
+              )
             }
             selectedValue={view.density}
           />
@@ -1497,7 +1504,7 @@ export function QueueView({
         id="grid"
         ref={mergeRefs(lanesRef, flipRef)}
       >
-        {!q ? null : allItems.length === 0 ? (
+        {!queueSet ? null : allItems.length === 0 ? (
           <div className="empty">
             <EmptyState
               description="Search above to add something."

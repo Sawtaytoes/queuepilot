@@ -106,12 +106,13 @@ export function ChannelMembers({
     isAnimating: isSamePaint,
     itemSelector: "li.tile",
     keyAttribute: "data-key",
-    signature: `${channel.id}:${members.map((m) => m.ratingKey ?? m.title).join("|")}`,
+    signature: `${channel.id}:${members.map((member) => member.ratingKey ?? member.title).join("|")}`,
   })
 
   const rawMembers = () =>
-    (getState().reg?.sets.find((s) => s.id === channel.id)
-      ?.members ?? []) as unknown[]
+    (getState().reg?.sets.find(
+      (set) => set.id === channel.id,
+    )?.members ?? []) as unknown[]
 
   const reload = async (chId: string) => {
     const req = ++reqRef.current
@@ -133,11 +134,11 @@ export function ChannelMembers({
       found.sort(byTitle)
       setMembers(found)
       paintedRef.current = chId
-    } catch (e) {
+    } catch (error) {
       if (req === reqRef.current) {
         setMembers([])
         setStatus(
-          `Members failed: ${(e as Error).message}`,
+          `Members failed: ${(error as Error).message}`,
           "err",
         )
       }
@@ -168,7 +169,7 @@ export function ChannelMembers({
     next: unknown[],
   ) => {
     const local = getState().reg?.sets.find(
-      (x) => x.id === chId,
+      (set) => set.id === chId,
     )
 
     if (local) local.members = next
@@ -184,9 +185,9 @@ export function ChannelMembers({
       }>("GET", "/api/sets")
 
       setState({ reg: reg as never })
-    } catch (e) {
+    } catch (error) {
       setStatus(
-        `Save failed: ${(e as Error).message}`,
+        `Save failed: ${(error as Error).message}`,
         "err",
       )
 
@@ -202,22 +203,23 @@ export function ChannelMembers({
     }
   }
 
-  const removeMember = (m: ChannelMember) => {
-    const gone = m.index
+  const removeMember = (member: ChannelMember) => {
+    const gone = member.index
 
     // Tile closures hold these objects, so removals fix up the surviving `index`
     // values IN PLACE — a stale index would edit the wrong array slot.
     setMembers((prev) => {
-      const next = prev.filter((x) => x !== m)
+      const next = prev.filter((other) => other !== member)
 
-      for (const x of next) if (x.index > gone) x.index -= 1
+      for (const survivor of next)
+        if (survivor.index > gone) survivor.index -= 1
 
       return next
     })
-    setStatus(`Removed “${m.title}”`, "ok")
+    setStatus(`Removed “${member.title}”`, "ok")
     void saveMembersLive(
       channel.id,
-      rawMembers().filter((_, i) => i !== gone),
+      rawMembers().filter((_, index) => index !== gone),
     )
   }
 
@@ -228,11 +230,11 @@ export function ChannelMembers({
    * so an untouched channel's members list keeps its plain shape on disk.
    */
   const saveMemberWeight = async (
-    m: ChannelMember,
+    member: ChannelMember,
     weight: number,
   ) => {
     const current = rawMembers().slice()
-    const value = current[m.index]
+    const value = current[member.index]
     const base: Record<string, unknown> =
       value && typeof value === "object"
         ? { ...(value as Record<string, unknown>) }
@@ -243,29 +245,35 @@ export function ChannelMembers({
     if (weight > 1) base.weight = weight
     else delete base.weight
 
-    current[m.index] = base
+    current[member.index] = base
     setMembers((prev) =>
-      prev.map((x) => (x === m ? { ...x, weight } : x)),
+      prev.map((existing) =>
+        existing === member
+          ? { ...existing, weight }
+          : existing,
+      ),
     )
     setStatus("Saving…")
     await saveMembersLive(channel.id, current)
     setStatus("Saved", "ok")
   }
 
-  const entryFor = (m: ChannelMember): EntryActions => ({
+  const entryFor = (
+    member: ChannelMember,
+  ): EntryActions => ({
     // Scope the start picker's watched marks to this channel's profile (matches the tile
     // next-up above), not the admin account.
     accountUuid,
-    item: m,
+    item: member,
     setId: channel.id,
     refresh: () => void reload(channel.id),
-    remove: () => removeMember(m),
+    remove: () => removeMember(member),
     removeLabel: "Remove this member",
     // A member's start is written by replacing the whole members array (the raw
     // entry becomes a mapping that carries it).
     save: async (start) => {
       const current = rawMembers().slice()
-      const value = current[m.index]
+      const value = current[member.index]
       const base: Record<string, unknown> =
         value && typeof value === "object"
           ? { ...(value as Record<string, unknown>) }
@@ -276,7 +284,7 @@ export function ChannelMembers({
       if (start) base.start = start
       else delete base.start
 
-      current[m.index] = base
+      current[member.index] = base
       await api("PATCH", `/api/sets/${channel.id}`, {
         members: current,
       })
@@ -299,7 +307,7 @@ export function ChannelMembers({
       </h2>
       <div className="add chmadd">
         <SearchDropdown<GroupedHit>
-          doSearch={async (q) => {
+          doSearch={async (query) => {
             // scope=all: a curated member is a manual include, not bound to the
             // channel's pool libraries — so search every library (e.g. add an Anime
             // show to a Shows-only channel).
@@ -307,7 +315,7 @@ export function ChannelMembers({
               results: SearchHit[]
             }>(
               "GET",
-              `/api/search?scope=all&set=${channel.id}&q=${encodeURIComponent(q)}&collections=1`,
+              `/api/search?scope=all&set=${channel.id}&q=${encodeURIComponent(query)}&collections=1`,
             )
 
             // Grouped HERE rather than in `rowFor`, because the order is a property of the
@@ -402,16 +410,23 @@ export function ChannelMembers({
                       ratingKey: hit.ratingKey,
                       title: label,
                     }
-                const isDuplicate = current.some((v) =>
-                  isCollection
-                    ? String(v).trim().toLowerCase() ===
-                      `collection: ${hit.title}`.toLowerCase()
-                    : String(
-                        v && typeof v === "object"
-                          ? (v as { ratingKey?: string })
-                              .ratingKey
-                          : v,
-                      ) === String(hit.ratingKey),
+                const isDuplicate = current.some(
+                  (existing) =>
+                    isCollection
+                      ? String(existing)
+                          .trim()
+                          .toLowerCase() ===
+                        `collection: ${hit.title}`.toLowerCase()
+                      : String(
+                          existing &&
+                            typeof existing === "object"
+                            ? (
+                                existing as {
+                                  ratingKey?: string
+                                }
+                              ).ratingKey
+                            : existing,
+                        ) === String(hit.ratingKey),
                 )
 
                 if (isDuplicate) {
@@ -443,7 +458,8 @@ export function ChannelMembers({
 
                 setMembers((prev) => {
                   const at = prev.findIndex(
-                    (x) => byTitle(x, optimistic) > 0,
+                    (existing) =>
+                      byTitle(existing, optimistic) > 0,
                   )
                   const next = [...prev]
 
@@ -486,15 +502,15 @@ export function ChannelMembers({
         id="chmembers"
         ref={mergeRefs(gridRef, flipRef)}
       >
-        {members.map((m) => {
-          const face = tileFace(m)
-          const entry = entryFor(m)
+        {members.map((member) => {
+          const face = tileFace(member)
+          const entry = entryFor(member)
 
           return (
             <PosterTile
               badges={
                 <>
-                  <TypeBadge face={face} item={m} />
+                  <TypeBadge face={face} item={member} />
                   {/* Which EDITION this member is — a pool that holds both cuts of one
                       film had two identical member tiles. */}
                   <EditionChip face={face} />
@@ -503,21 +519,24 @@ export function ChannelMembers({
                   <Tip label="How often this member comes up — a 3x member takes about three slots for every one a normal member takes when the eligible titles are shuffled.">
                     <span className="eps">
                       <CountPicker
-                        label={`Weight for ${m.title}`}
+                        label={`Weight for ${member.title}`}
                         max={WEIGHT_MAX}
-                        onChange={(n) =>
-                          void saveMemberWeight(m, n)
+                        onChange={(weight) =>
+                          void saveMemberWeight(
+                            member,
+                            weight,
+                          )
                         }
                         unit="x"
-                        value={m.weight ?? 1}
+                        value={member.weight ?? 1}
                       />
                     </span>
                   </Tip>
-                  {m.start ? (
+                  {member.start ? (
                     <Tip
                       label={`Manual start point${
-                        m.nextEp?.startMember
-                          ? ` — begins at “${m.nextEp.startMember}”`
+                        member.nextEp?.startMember
+                          ? ` — begins at “${member.nextEp.startMember}”`
                           : ""
                       }. Click to change it or go back to automatic.`}
                     >
@@ -530,57 +549,63 @@ export function ChannelMembers({
                         }
                         size="sm"
                       >
-                        {startLabel(m.start)}
+                        {startLabel(member.start)}
                       </BadgeButton>
                     </Tip>
                   ) : null}
                 </>
               }
               className={
-                m.resolved ? undefined : "unresolved"
+                member.resolved ? undefined : "unresolved"
               }
-              dataKey={String(m.ratingKey || m.title)}
-              key={String(m.ratingKey || m.title)}
+              dataKey={String(
+                member.ratingKey || member.title,
+              )}
+              key={String(member.ratingKey || member.title)}
               next={{
                 isDone: face.nextDone,
-                onStart: isStartable(m)
+                onStart: isStartable(member)
                   ? () => openStartModal(entry)
                   : undefined,
                 text: face.next,
                 tooltip: `${
                   face.from &&
-                  collectionOrderCount(m) != null
-                    ? `${face.next} — ${collectionOrderCount(m)} in order`
+                  collectionOrderCount(member) != null
+                    ? `${face.next} — ${collectionOrderCount(member)} in order`
                     : face.next
                 }${
-                  isStartable(m)
+                  isStartable(member)
                     ? `\nTap to choose where this ${
-                        m.type === "collection"
+                        member.type === "collection"
                           ? "collection"
                           : "show"
                       } starts`
                     : ""
                 }`,
               }}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                openTileMenu(e.clientX, e.clientY, entry)
+              onContextMenu={(event) => {
+                event.preventDefault()
+                openTileMenu(
+                  event.clientX,
+                  event.clientY,
+                  entry,
+                )
               }}
-              onRemove={() => removeMember(m)}
-              posterCover={m.cover}
+              onRemove={() => removeMember(member)}
+              posterCover={member.cover}
               // The same runtime line the queue grid carries. A member's batch is its own
               // `episodes` (1 = the channel default), so there is no set-level fallback here.
               runtime={runtimeLabel(
-                m.nextEp?.duration,
-                m.episodes ?? 1,
+                member.nextEp?.duration,
+                member.episodes ?? 1,
               )}
               posterRatingKey={
-                m.resolved ? face.ratingKey : null
+                member.resolved ? face.ratingKey : null
               }
               title={titleWithYear(face.title, face.year)}
               // The member's own page in Plex / Kavita — the same link the queue grid's
               // tiles carry, because it is the same tile component and the same entry.
-              titleHref={m.webUrl}
+              titleHref={member.webUrl}
               titleTooltip={
                 face.from
                   ? `${face.fullTitle || face.title} — from the “${face.from}” collection`
