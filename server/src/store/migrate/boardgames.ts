@@ -157,12 +157,12 @@ const EMPTY_COUNTS = Object.fromEntries(
 ) as Record<BoardGameTable, number>
 
 const report = (
-  imported: boolean,
+  isImported: boolean,
   reason: string,
   extra: Partial<BoardGameImportReport> = {},
 ): BoardGameImportReport => ({
   counts: EMPTY_COUNTS,
-  imported,
+  imported: isImported,
   problems: [],
   reason,
   seed: null,
@@ -349,10 +349,10 @@ export function readSeed(file: string): {
   let raw: unknown
   try {
     raw = parse(readFileSync(file, "utf8"))
-  } catch (e) {
+  } catch (error) {
     return {
       problems: [
-        `${file} is not valid YAML: ${errMessage(e)}`,
+        `${file} is not valid YAML: ${errMessage(error)}`,
       ],
       seed: {},
     }
@@ -444,7 +444,7 @@ const countOf = (
  * `force` skips the fingerprint check — a deliberate re-run — but never the assertions.
  */
 export function importBoardGames({
-  force = false,
+  force: isForced = false,
 }: {
   force?: boolean
 } = {}): BoardGameImportReport {
@@ -477,7 +477,7 @@ export function importBoardGames({
   }
 
   if (
-    !force &&
+    !isForced &&
     readMeta(db, "boardgames", "source_fingerprint") ===
       current
   ) {
@@ -576,10 +576,10 @@ export function importBoardGames({
       // how the next reader over-trusts it.
       const got = boardGameCounts(db)
       const assert = (
-        claim: boolean,
+        isPassing: boolean,
         message: string,
       ): void => {
-        if (!claim) problems.push(message)
+        if (!isPassing) problems.push(message)
       }
 
       assert(
@@ -715,8 +715,9 @@ export function importBoardGames({
       )
       bumpVersion(db, "boardgames")
     })
-  } catch (e) {
-    if (problems.length === 0) problems.push(errMessage(e))
+  } catch (error) {
+    if (problems.length === 0)
+      problems.push(errMessage(error))
     return report(
       false,
       "the board-game absorb failed and was rolled back",
@@ -733,7 +734,7 @@ export function importBoardGames({
 
   return report(
     true,
-    force ? "forced" : "the collection changed",
+    isForced ? "forced" : "the collection changed",
     {
       counts: boardGameCounts(db),
       seed: hasSeed ? seedFile : null,

@@ -128,9 +128,9 @@ function argFor(
   argv: readonly string[],
   name: string,
 ): string | null {
-  const i = argv.indexOf(name)
-  return i >= 0 && argv[i + 1] != null
-    ? String(argv[i + 1])
+  const index = argv.indexOf(name)
+  return index >= 0 && argv[index + 1] != null
+    ? String(argv[index + 1])
     : null
 }
 
@@ -239,9 +239,9 @@ function adoptGroup(file: string, directory: string): void {
     const target = statSync(directory)
     chownSync(file, statSync(file).uid, target.gid)
     chmodSync(file, 0o660)
-  } catch (e) {
+  } catch (error) {
     console.log(
-      `could not give ${path.basename(file)} the group of ${directory}: ${String(e)}`,
+      `could not give ${path.basename(file)} the group of ${directory}: ${String(error)}`,
     )
   }
 }
@@ -251,7 +251,7 @@ function adoptGroup(file: string, directory: string): void {
 function copyTree(
   from: string,
   to: string,
-  apply: boolean,
+  isApplying: boolean,
 ): { kept: number; written: number } {
   let kept = 0
   let written = 0
@@ -260,7 +260,8 @@ function copyTree(
     source: string,
     destination: string,
   ): void => {
-    if (apply) mkdirSync(destination, { recursive: true })
+    if (isApplying)
+      mkdirSync(destination, { recursive: true })
     for (const entry of readdirSync(source, {
       withFileTypes: true,
     })) {
@@ -276,7 +277,7 @@ function copyTree(
           kept += 1
         } else {
           written += 1
-          if (apply) copyFileSync(child, target)
+          if (isApplying) copyFileSync(child, target)
         }
       }
     }
@@ -334,11 +335,12 @@ function main(): number {
     console.log("")
     console.log("table                  live   staged")
     for (const table of SOURCE_TABLES) {
-      const agree = liveCounts[table] === copyCounts[table]
-      if (!agree) failures += 1
+      const isMatching =
+        liveCounts[table] === copyCounts[table]
+      if (!isMatching) failures += 1
       console.log(
         `${table.padEnd(20)} ${String(liveCounts[table]).padStart(6)} ` +
-          `${String(copyCounts[table]).padStart(8)}  ${agree ? "" : "  ← DISAGREE"}`,
+          `${String(copyCounts[table]).padStart(8)}  ${isMatching ? "" : "  ← DISAGREE"}`,
       )
     }
 

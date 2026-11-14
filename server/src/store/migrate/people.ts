@@ -361,14 +361,14 @@ const groupIdsInStore = (): Set<string> => {
 }
 
 const report = (
-  imported: boolean,
+  isImported: boolean,
   reason: string,
   file: string | null,
   extra: Partial<PeopleImportReport> = {},
 ): PeopleImportReport => ({
   ...EMPTY,
   file,
-  imported,
+  imported: isImported,
   reason,
   ...extra,
 })
@@ -380,7 +380,7 @@ const report = (
  * or the validation. There is no flag that writes an unconfirmed mapping, on purpose.
  */
 export function importPeople({
-  force = false,
+  force: isForced = false,
 }: {
   force?: boolean
 } = {}): PeopleImportReport {
@@ -392,13 +392,13 @@ export function importPeople({
   const text = readFileSync(file, "utf8")
   try {
     raw = parse(text)
-  } catch (e) {
+  } catch (error) {
     return report(
       false,
-      `the mapping file is not valid YAML: ${errMessage(e)}`,
+      `the mapping file is not valid YAML: ${errMessage(error)}`,
       file,
       {
-        problems: [errMessage(e)],
+        problems: [errMessage(error)],
       },
     )
   }
@@ -419,7 +419,7 @@ export function importPeople({
 
   const db = bookOfRecord()
   if (
-    !force &&
+    !isForced &&
     readPeopleMeta("mapping_fingerprint", db) ===
       fingerprint
   ) {
@@ -546,7 +546,7 @@ export function importPeople({
 
   return report(
     true,
-    force ? "forced" : "the mapping changed",
+    isForced ? "forced" : "the mapping changed",
     file,
     {
       accountCount,
@@ -559,7 +559,7 @@ export function importPeople({
 }
 
 let lastStamp: string | null = null
-let saidWaiting = false
+let hasLoggedWaiting = false
 
 /**
  * The boot hook. Cheap: it `stat`s the two candidate paths and returns before anything opens
@@ -608,9 +608,9 @@ export function ensurePeopleImported(): PeopleImportReport {
       console.log(`[people]   - ${problem}`)
   } else if (
     result.reason.startsWith("waiting") &&
-    !saidWaiting
+    !hasLoggedWaiting
   ) {
-    saidWaiting = true
+    hasLoggedWaiting = true
     console.log(`[people] ${result.reason}`)
   }
 
@@ -620,5 +620,5 @@ export function ensurePeopleImported(): PeopleImportReport {
 /** For tests: forget what this process has already looked at. */
 export function resetPeopleImportState(): void {
   lastStamp = null
-  saidWaiting = false
+  hasLoggedWaiting = false
 }

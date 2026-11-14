@@ -63,11 +63,11 @@ const { bookOfRecord, closeBookOfRecord } = await import(
  * it, and the way the gate expects to find it. */
 const writeMapping = (
   body: string,
-  { confirmed = false } = {},
+  { confirmed: isConfirmed = false } = {},
 ): void => {
   writeFileSync(
     MAPPING,
-    `${confirmed ? "confirmed: true\n" : ""}${body}`,
+    `${isConfirmed ? "confirmed: true\n" : ""}${body}`,
   )
 }
 

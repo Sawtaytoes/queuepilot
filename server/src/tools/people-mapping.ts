@@ -167,7 +167,7 @@ function readBgp(file: string): {
       knownByPlayer.set(row.player_id, Number(row.n))
     }
     const knownCount = [...knownByPlayer.values()].reduce(
-      (sum, n) => sum + n,
+      (sum, item) => sum + item,
       0,
     )
     return {
@@ -203,7 +203,7 @@ function readQueuePilotGroups(
       )) {
         const names = (
           Array.isArray(value) ? value : [value]
-        ).map((n) => String(n ?? "").trim())
+        ).map((name) => String(name ?? "").trim())
         if (names.filter(Boolean).length)
           accounts[norm(kind)] = names.filter(Boolean)
       }
@@ -647,7 +647,7 @@ function propose(argv: readonly string[]): number {
   } | null
   const check = validateMapping(
     { ...reparsed, confirmed: true },
-    new Set(groups.map((g) => g.id)),
+    new Set(groups.map((group) => group.id)),
   )
   if (check.problems.length) {
     console.log(
@@ -682,7 +682,7 @@ function propose(argv: readonly string[]): number {
       `${byConfidence("medium")} medium, ${byConfidence("low")} low. ` +
       `${proposals.filter((proposal) => proposal.group).length} group link(s). ` +
       `${ambiguous.length} ambiguous player(s), ` +
-      `${groups.length - new Set(proposals.map((p) => p.group?.id).filter(Boolean)).size} unmatched group(s).`,
+      `${groups.length - new Set(proposals.map((proposal) => proposal.group?.id).filter(Boolean)).size} unmatched group(s).`,
   )
   return 0
 }
@@ -702,13 +702,13 @@ function runImport(argv: readonly string[]): number {
     let raw: unknown
     try {
       raw = parse(readFileSync(file, "utf8"))
-    } catch (e) {
+    } catch (error) {
       console.log(
-        `${file} is not valid YAML: ${errMessage(e)}`,
+        `${file} is not valid YAML: ${errMessage(error)}`,
       )
       return 1
     }
-    const confirmed =
+    const isConfirmed =
       (raw as { confirmed?: unknown } | null)?.confirmed ===
       true
     const { mapping, problems } = validateMapping(
@@ -717,7 +717,7 @@ function runImport(argv: readonly string[]): number {
     )
     console.log(`file:      ${file}`)
     console.log(
-      `confirmed: ${confirmed ? "yes" : "NO — the import will refuse to write"}`,
+      `confirmed: ${isConfirmed ? "yes" : "NO — the import will refuse to write"}`,
     )
     console.log(
       `people:    ${(mapping.people ?? []).length}`,
@@ -736,7 +736,7 @@ function runImport(argv: readonly string[]): number {
     console.log(
       "\nvalidates. Re-run with --apply to write it.",
     )
-    return confirmed ? 0 : 1
+    return isConfirmed ? 0 : 1
   }
 
   const result = importPeople({

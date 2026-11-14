@@ -100,7 +100,8 @@ const parseCounts = (json: string | null): number[] => {
     const parsed: unknown = JSON.parse(json)
     return Array.isArray(parsed)
       ? parsed.filter(
-          (v): v is number => typeof v === "number",
+          (value): value is number =>
+            typeof value === "number",
         )
       : []
   } catch {
@@ -115,7 +116,8 @@ const parseStrings = (json: string | null): string[] => {
     const parsed: unknown = JSON.parse(json)
     return Array.isArray(parsed)
       ? parsed.filter(
-          (v): v is string => typeof v === "string",
+          (value): value is string =>
+            typeof value === "string",
         )
       : []
   } catch {
